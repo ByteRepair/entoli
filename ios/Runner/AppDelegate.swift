@@ -21,7 +21,9 @@ import UserNotifications
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "RemindersPlugin") {
       RemindersPlugin.register(with: registrar.messenger())
     }
-    AppleFmChannel.register(with: engineBridge)
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "AppleFmChannel") {
+      AppleFmChannel.register(with: registrar.messenger())
+    }
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ClipboardChannel") {
       ClipboardChannel.register(with: registrar.messenger())
     }

@@ -529,6 +529,10 @@ is `logDetail`, which is debug-only.
   build; without it an iOS build has no shell to run commands in. `git
   submodule update --init
   --recursive` fetches the source — a clone without it has an empty `src/`.
+- MLX for iOS and macOS: `tool/apple/mlx/build.sh`, which builds the
+  `EntoliMLX` XCFramework both Runners link. Needs Xcode 27 and its Metal
+  Toolchain component; not run by the app build, and without it neither
+  Apple Runner links. See "The MLX models" in `ios/AGENTS.md`.
 - The Linux model server: `tool/linux/build-llama.sh`, native (no toolbox —
   host cmake, ninja and glslc), sharing the pin in `tool/android/versions.sh`.
   Stages into `build/llama/`, which `linux/CMakeLists.txt` installs into the

@@ -294,51 +294,79 @@ A generation crosses the same channel and the same client code as the system
 model's (`FoundationModelsClient`); what differs is the route — an MLX
 generation carries `model` (the catalog id) and `directory`.
 
-### The channel contract the Swift half owes
+### The channel
 
-Not written yet; it is Mac work. `AppleFmChannel.swift` answers, beside
-`handshake`, `generate` and `cancel`:
+`AppleFmChannel.swift` answers, beside `handshake`, `generate` and `cancel`,
+the residency Dart decides:
 
 - `handshake` → `mlx: true` only where `MLXLanguageModel` exists in this
-  build and `#available(iOS 27, macOS 27)`. Gate the import on
-  `canImport(FoundationModels, _version: 2) && canImport(MLXFoundationModels)`:
-  with an older SDK the package compiles to an empty module, and
-  `canImport(MLXFoundationModels)` alone would still be true.
-- `load {model, directory}` → build an `MLXLanguageModel` with
-  `ModelConfiguration(directory: URL(fileURLWithPath: directory))`,
-  capabilities `[.guidedGeneration, .toolCalling, .reasoning]`, and a `load`
-  closure calling `loadModelContainer(from: directory, using:
-  #huggingFaceTokenizerLoader())`; keep it by `model` and `preload()` it.
-  Throw a `FlutterError` with the reason where it will not load — the
+  build and `#available(iOS 27, macOS 27)`. The import is gated on
+  `canImport(FoundationModels, _version: 2) && canImport(EntoliMLX)`: with
+  an older SDK there is no `LanguageModel` to hand a session, and
+  mlx-swift-lm compiles to an empty module that `canImport` would still
+  answer yes for.
+- `load {model, directory}` → an `MLXLanguageModel` over
+  `ModelConfiguration(directory:)`, capabilities `[.guidedGeneration,
+  .toolCalling, .reasoning]`, its `load` closure
+  `loadModelContainer(from:using: #huggingFaceTokenizerLoader())`, preloaded
+  and kept by `model` in `MlxModels` (`EntoliMLX`, below) — only once its
+  weights are in, so a failed load leaves nothing behind. A failure answers a `FlutterError` whose
   message is what the settings row shows.
-- `evict {model}` → that instance's `evict()`, and drop it; `evictAll` →
-  `MLXLanguageModel.evictAll()`, and drop them all.
-- `generate` with a `directory` → the session is built on the kept
-  instance (load it first if it is not kept); without one, the system model
-  as today. The current `MLXLanguageModel(modelID:)` call does not exist in
-  the package and is replaced by this.
-- Whether a thinking model's trace stays out of `part.content` with
-  `.reasoning` declared is the hand-run's to confirm.
+- `evict {model}` → that instance's `evict()`, and it is dropped;
+  `evictAll` → `MLXLanguageModel.evictAll()`, and all of them are.
+- `generate` with a `directory` → the session is built on the kept instance,
+  loaded first if it is not kept; without one, the system model.
 
-### The rest of the Mac work
+Still the hand-run's to confirm: whether a thinking model's trace stays out
+of `part.content` with `.reasoning` declared.
 
-- Link the packages to both Runners (File > Add Package Dependencies):
-  `https://github.com/ml-explore/mlx-swift-lm` from 3.32.3, products
-  `MLXFoundationModels`, `MLXLLM` (registers the architectures; without it a
-  load fails with `noModelFactoryAvailable`), `MLXLMCommon` and
-  `MLXHuggingFace`; and `https://github.com/huggingface/swift-transformers`
-  from 1.3.0, product `Tokenizers`, which the tokenizer macro expands to.
-- Raise the deployment targets to the package's floor: iOS 15 to 17, macOS
-  12 to 14. That drops the older OSes from the app, not just the feature.
-- Compile `AppleFmChannel.swift` into the macOS Runner too, the way
-  `RemindersShared.swift` is shared: `#if os(iOS) import Flutter` /
-  `FlutterMacOS`, `UIKit` iOS-only, every `@available`/`#available` naming
-  macOS beside iOS, and `register` taking a messenger so
-  `MainFlutterWindow` can call it.
-- Move `release-build.yml`'s macos job to the `xcode-27` image with Xcode
-  27.1 selected, as the ios job is: with an older SDK the adapter compiles
-  out and the MLX section silently never appears.
-- The licences MLX and swift-transformers ship are owed to the About page.
+### The build
+
+MLX reaches the Runners prebuilt: `tool/apple/mlx/` is a package,
+`EntoliMLX`, whose one public type is `MlxModels`, and `build.sh` builds it
+into `tool/apple/mlx/dist/EntoliMLX.xcframework`, a dynamic framework per
+platform (iOS, the simulator, macOS; arm64 alone) that both Runners link and
+embed. Not run by the app build, as iSH's is not: without it neither Runner
+links. Three reasons it is prebuilt rather than a package dependency of the
+Runners:
+
+- **`flutter build ios` always passes `-sdk`**, device or simulator, and
+  `-sdk` overrides every target's SDK — mlx-swift-lm's tokenizer macro
+  included, which has to be built for the Mac it runs on, and fails to find
+  swift-syntax when it is built for iOS. The script runs `xcodebuild` itself,
+  with a destination and no `-sdk`. macOS never hit it, host and target being
+  one platform.
+- **The macro has to be trusted**, and a release runner has nobody to click
+  Trust & Enable. The script passes `-skipMacroValidation`, which is why the
+  pins in `Package.swift` are exact and `Package.resolved` is committed and
+  enforced: what runs is the code a person chose by bumping a number.
+- **The MLX compile is minutes of C++ and Metal**, which CI caches
+  (`.github/actions/apple-mlx`) on the package, its pins, the script and the
+  Xcode build.
+
+The module is built with library evolution and its imports `internal`, so its
+interface names nothing of MLX's — `MlxModels` hands the channel an
+`any LanguageModel` — and the Runners import one module and nothing behind
+it. MLX finds its Metal kernels beside its own binary before anywhere else,
+so they travel inside the framework (`mlx.metallib` in the flat iOS one,
+`Resources/default.metallib` in the versioned macOS one) and the app copies
+nothing; the packages' resource bundles sit in the framework's resource
+directory, where their accessors look. FoundationModels is weak-linked in
+the framework as in the app.
+
+It pins mlx-swift-lm 3.32.3 (`MLXFoundationModels`, `MLXLLM` — which
+registers the architectures; without it a load fails with
+`noModelFactoryAvailable` — `MLXLMCommon` and `MLXHuggingFace`) and
+swift-transformers 1.3.0 (`Tokenizers`, which the tokenizer macro expands
+to), and needs Xcode 27 with the Metal Toolchain component
+(`xcodebuild -downloadComponent MetalToolchain`): with an older SDK the
+adapter compiles out and the MLX section silently never appears, which is
+why both release jobs run on the `xcode-27` image. The deployment targets are
+the package's floor, iOS 17 and macOS 14 — the app's, not just the
+feature's. The macOS Runner compiles `AppleFmChannel.swift` by reference, the
+way iOS compiles `RemindersShared.swift`.
+
+Still owed: the licences MLX and swift-transformers ship, on the About page.
 
 ## The rootfs
 

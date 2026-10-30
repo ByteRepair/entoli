@@ -1,2 +1,7 @@
 #include "../../Flutter/Flutter-Release.xcconfig"
 #include "Warnings.xcconfig"
+
+// FoundationModels is weak-linked: the deployment target is 14 and the
+// framework is 26's, so a plain link would stop an older Mac starting. The
+// AppleFm channel answers "os" there instead. iOS's is in Ish.xcconfig.
+OTHER_LDFLAGS = $(inherited) -weak_framework FoundationModels
