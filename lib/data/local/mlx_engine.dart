@@ -46,8 +46,10 @@ class MlxEngine extends LocalEngine {
       throw LlmException("$modelId is not downloaded on this device.");
     }
     try {
-      await (_resident[modelId] ??=
-          _load(model, maxRunning.clamp(1, maxLocalModelsAllowed)));
+      await (_resident[modelId] ??= _load(
+        model,
+        maxRunning.clamp(1, maxLocalModelsAllowed),
+      ));
     } catch (_) {
       _resident.remove(modelId);
       rethrow;
@@ -57,7 +59,10 @@ class MlxEngine extends LocalEngine {
   }
 
   Future<void> _load(DownloadedModel model, int maxRunning) async {
-    final others = [for (final state in running.value) if (state.modelId != model.id) state];
+    final others = [
+      for (final state in running.value)
+        if (state.modelId != model.id) state,
+    ];
     // Evicted before the next loads, never after: overlapping them is the
     // memory the cap exists to keep free.
     while (others.length >= maxRunning) {
@@ -67,7 +72,10 @@ class MlxEngine extends LocalEngine {
     }
     _publish([...others, _state(model, LocalLlmPhase.starting)]);
     try {
-      await appleChannel.invokeMethod("load", {"model": model.id, "directory": model.file});
+      await appleChannel.invokeMethod("load", {
+        "model": model.id,
+        "directory": model.file,
+      });
     } on PlatformException catch (e) {
       final why = e.message ?? e.code;
       _replace(model.id, _state(model, LocalLlmPhase.failed, failure: why));
@@ -84,23 +92,27 @@ class MlxEngine extends LocalEngine {
   }
 
   @override
-  LlmClient client(AppSettings Function() settings) => MlxClient(this, settings);
+  LlmClient client(AppSettings Function() settings) =>
+      MlxClient(this, settings);
 
   /// The device named the way the settings page names one, so its running row
   /// says where a model answers. The context is the model's own: MLX's cache
   /// grows as it is used rather than being sized at load.
-  static LocalLlmState _state(DownloadedModel model, LocalLlmPhase phase,
-          {String? failure}) =>
-      LocalLlmState(
-        modelId: model.id,
-        phase: phase,
-        device: "Metal",
-        contextLength: model.contextLength,
-        failure: failure,
-      );
+  static LocalLlmState _state(
+    DownloadedModel model,
+    LocalLlmPhase phase, {
+    String? failure,
+  }) => LocalLlmState(
+    modelId: model.id,
+    phase: phase,
+    device: "Metal",
+    contextLength: model.contextLength,
+    failure: failure,
+  );
 
-  void _replace(String id, LocalLlmState state) => _publish(
-      [for (final each in running.value) each.modelId == id ? state : each]);
+  void _replace(String id, LocalLlmState state) => _publish([
+    for (final each in running.value) each.modelId == id ? state : each,
+  ]);
 
   /// Most recently served last, which is what eviction reads.
   void _touch(String id) {
@@ -110,7 +122,8 @@ class MlxEngine extends LocalEngine {
     _publish([...states.where((each) => each.modelId != id), state]);
   }
 
-  void _publish(List<LocalLlmState> states) => running.value = List.unmodifiable(states);
+  void _publish(List<LocalLlmState> states) =>
+      running.value = List.unmodifiable(states);
 }
 
 /// An MLX model, asked through the channel once [MlxEngine] has it resident.
@@ -125,8 +138,10 @@ class MlxClient extends FoundationModelsClient {
 
   @override
   Future<Map<String, Object?>> route(String model) async => {
-        "model": model,
-        "directory":
-            await _engine.serve(model, maxRunning: _settings().maxLocalModels),
-      };
+    "model": model,
+    "directory": await _engine.serve(
+      model,
+      maxRunning: _settings().maxLocalModels,
+    ),
+  };
 }

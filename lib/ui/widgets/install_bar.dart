@@ -62,8 +62,11 @@ class PackageFileList extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
               children: [
-                Icon(Icons.insert_drive_file_outlined,
-                    size: 18, color: theme.colorScheme.onSurfaceVariant),
+                Icon(
+                  Icons.insert_drive_file_outlined,
+                  size: 18,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
                 const SizedBox(width: 8),
                 Expanded(child: Text(name, style: theme.textTheme.bodyMedium)),
                 if (sizeOf != null)

@@ -65,6 +65,5 @@ class ScrollFollow {
   }
 
   bool get _atEnd =>
-      controller.hasClients &&
-      controller.position.nearBottom(0.0);
+      controller.hasClients && controller.position.nearBottom(0.0);
 }

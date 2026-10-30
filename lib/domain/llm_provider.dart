@@ -79,7 +79,8 @@ class LlmProviderConfig {
   /// the LLM field, the light one for title, memory and classifier. Named
   /// here so every picker, and the backend's null-model resolution, read the
   /// same two rules rather than spelling them as lambdas at each site.
-  static String? chatDefaultOf(LlmProviderConfig config) => config.defaultModelId;
+  static String? chatDefaultOf(LlmProviderConfig config) =>
+      config.defaultModelId;
 
   static String? lightDefaultOf(LlmProviderConfig config) =>
       config.defaultLightModelId;
@@ -95,33 +96,32 @@ class LlmProviderConfig {
     String? defaultModelId,
     String? defaultLightModelId,
     List<ModelInfo>? customModels,
-  }) =>
-      LlmProviderConfig(
-        id: id ?? this.id,
-        api: api ?? this.api,
-        baseUrl: baseUrl ?? this.baseUrl,
-        name: name ?? this.name,
-        catalogId: catalogId ?? this.catalogId,
-        apiKeyEnv: apiKeyEnv ?? this.apiKeyEnv,
-        modelsEndpoint: modelsEndpoint ?? this.modelsEndpoint,
-        defaultModelId: defaultModelId ?? this.defaultModelId,
-        defaultLightModelId: defaultLightModelId ?? this.defaultLightModelId,
-        customModels: customModels ?? this.customModels,
-      );
+  }) => LlmProviderConfig(
+    id: id ?? this.id,
+    api: api ?? this.api,
+    baseUrl: baseUrl ?? this.baseUrl,
+    name: name ?? this.name,
+    catalogId: catalogId ?? this.catalogId,
+    apiKeyEnv: apiKeyEnv ?? this.apiKeyEnv,
+    modelsEndpoint: modelsEndpoint ?? this.modelsEndpoint,
+    defaultModelId: defaultModelId ?? this.defaultModelId,
+    defaultLightModelId: defaultLightModelId ?? this.defaultLightModelId,
+    customModels: customModels ?? this.customModels,
+  );
 
   Map<String, dynamic> toJson() => {
-        "id": id,
-        "api": api.name,
-        "baseUrl": baseUrl,
-        "name": displayName,
-        if (catalogId != null) "catalogId": catalogId,
-        if (apiKeyEnv != null) "apiKeyEnv": apiKeyEnv,
-        if (modelsEndpoint != null) "modelsEndpoint": modelsEndpoint,
-        if (defaultModelId != null) "defaultModelId": defaultModelId,
-        if (defaultLightModelId != null) "defaultLightModelId": defaultLightModelId,
-        if (customModels.isNotEmpty)
-          "customModels": {for (final m in customModels) m.id: m.toJson()},
-      };
+    "id": id,
+    "api": api.name,
+    "baseUrl": baseUrl,
+    "name": displayName,
+    if (catalogId != null) "catalogId": catalogId,
+    if (apiKeyEnv != null) "apiKeyEnv": apiKeyEnv,
+    if (modelsEndpoint != null) "modelsEndpoint": modelsEndpoint,
+    if (defaultModelId != null) "defaultModelId": defaultModelId,
+    if (defaultLightModelId != null) "defaultLightModelId": defaultLightModelId,
+    if (customModels.isNotEmpty)
+      "customModels": {for (final m in customModels) m.id: m.toJson()},
+  };
 
   /// Null for anything that does not name an id and a base URL: a half-written
   /// entry is worse than a missing one, because it fails at the first prompt.
@@ -129,7 +129,9 @@ class LlmProviderConfig {
     if (value is! Map) return null;
     final id = value["id"];
     final baseUrl = value["baseUrl"];
-    if (id is! String || id.isEmpty || baseUrl is! String || baseUrl.isEmpty) return null;
+    if (id is! String || id.isEmpty || baseUrl is! String || baseUrl.isEmpty) {
+      return null;
+    }
     final custom = value["customModels"];
     // An entry with no name was written by 7.0.0 or older, whose id was its
     // name and its models.dev id both.

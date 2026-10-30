@@ -97,9 +97,21 @@ const Map<String, _Tool> _tools = {
     field: "Command",
     hint: "{podman,toolbox} *   (* any arguments, {a,b} either)",
   ),
-  "read": (name: "Reading files (read)", field: "File or folder", hint: "~/Projects/x"),
-  "write": (name: "Writing files (write)", field: "File or folder", hint: "~/Projects/x"),
-  "edit": (name: "Editing files (edit)", field: "File or folder", hint: "~/Projects/x"),
+  "read": (
+    name: "Reading files (read)",
+    field: "File or folder",
+    hint: "~/Projects/x",
+  ),
+  "write": (
+    name: "Writing files (write)",
+    field: "File or folder",
+    hint: "~/Projects/x",
+  ),
+  "edit": (
+    name: "Editing files (edit)",
+    field: "File or folder",
+    hint: "~/Projects/x",
+  ),
   webfetchToolName: (
     name: "Web fetches (webfetch)",
     field: "Domain",
@@ -118,19 +130,22 @@ typedef _Option = ({String label, String help});
 const Map<PermissionDecision?, _Option> _decisions = {
   null: (
     label: "$defaultOptionLabel (the approval mode decides)",
-    help: "This rule doesn't change it: the approval mode in Settings "
+    help:
+        "This rule doesn't change it: the approval mode in Settings "
         "decides, as for any other command (ask every time, let the "
         "classifier decide, or run everything). Pick this when the rule is "
         "only about what the command can write to.",
   ),
   PermissionDecision.allow: (
     label: "Run without asking",
-    help: "Runs straight away, without the approval banner or the "
+    help:
+        "Runs straight away, without the approval banner or the "
         "classifier.",
   ),
   PermissionDecision.ask: (
     label: "Ask me first",
-    help: "Always shows the approval banner, even where the classifier or "
+    help:
+        "Always shows the approval banner, even where the classifier or "
         "another rule would have let it through.",
   ),
   PermissionDecision.deny: (
@@ -146,25 +161,28 @@ enum _Scope { workspaces, folders, anywhere }
 _Scope _scopeOf(PermissionRule rule) => rule.unconfined
     ? _Scope.anywhere
     : rule.writes.isEmpty
-        ? _Scope.workspaces
-        : _Scope.folders;
+    ? _Scope.workspaces
+    : _Scope.folders;
 
 const Map<_Scope, _Option> _scopes = {
   _Scope.workspaces: (
     label: "$defaultOptionLabel (workspaces only)",
-    help: "This rule doesn't change it: the command can write inside the "
+    help:
+        "This rule doesn't change it: the command can write inside the "
         "chat and project workspaces and the project's writable "
         "directories. Everywhere else is read-only. Reading is never "
         "blocked.",
   ),
   _Scope.folders: (
     label: "Workspaces and these folders",
-    help: "The default, plus the folders below, for the commands this rule "
+    help:
+        "The default, plus the folders below, for the commands this rule "
         "matches only.",
   ),
   _Scope.anywhere: (
     label: "Anywhere (no sandbox)",
-    help: "Runs with your full user permissions, as in your own terminal. "
+    help:
+        "Runs with your full user permissions, as in your own terminal. "
         "For tools like podman or toolbox that write to system or runtime "
         "folders.",
   ),
@@ -185,14 +203,16 @@ class _RuleDialog extends StatefulWidget {
 
 class _RuleDialogState extends State<_RuleDialog> {
   late final _pattern = TextEditingController(text: widget.rule?.pattern);
-  late final _folders =
-      TextEditingController(text: widget.rule?.writes.join(", "));
+  late final _folders = TextEditingController(
+    text: widget.rule?.writes.join(", "),
+  );
   late var _tool = widget.rule?.tool ?? bashToolName;
   late var _decision = widget.rule == null
       ? PermissionDecision.allow
       : widget.rule!.decision;
-  late var _scope =
-      widget.rule == null ? _Scope.workspaces : _scopeOf(widget.rule!);
+  late var _scope = widget.rule == null
+      ? _Scope.workspaces
+      : _scopeOf(widget.rule!);
 
   @override
   void dispose() {
@@ -204,12 +224,13 @@ class _RuleDialogState extends State<_RuleDialog> {
   /// Whether the write question applies: a command, and not a blocked one.
   /// [_scope] is kept while it does not, so switching back restores it.
   bool get _asksScope =>
-      PermissionRule.takesSandbox(_tool) && _decision != PermissionDecision.deny;
+      PermissionRule.takesSandbox(_tool) &&
+      _decision != PermissionDecision.deny;
 
   List<String> get _folderList => [
-        for (final dir in _folders.text.split(","))
-          if (dir.trim().isNotEmpty) dir.trim(),
-      ];
+    for (final dir in _folders.text.split(","))
+      if (dir.trim().isNotEmpty) dir.trim(),
+  ];
 
   bool get _foldersMissing =>
       _asksScope && _scope == _Scope.folders && _folderList.isEmpty;
@@ -262,7 +283,8 @@ class _RuleDialogState extends State<_RuleDialog> {
                   for (final MapEntry(:key, :value) in _tools.entries)
                     DropdownMenuItem(value: key, child: Text(value.name)),
                 ],
-                onChanged: (value) => setState(() => _tool = value ?? bashToolName),
+                onChanged: (value) =>
+                    setState(() => _tool = value ?? bashToolName),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -319,11 +341,13 @@ class _RuleDialogState extends State<_RuleDialog> {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel")),
+          onPressed: () => Navigator.pop(context),
+          child: const Text("Cancel"),
+        ),
         FilledButton(
-            onPressed: problem == null ? _save : null,
-            child: const Text("Save")),
+          onPressed: problem == null ? _save : null,
+          child: const Text("Save"),
+        ),
       ],
     );
   }
@@ -336,9 +360,9 @@ class _Question extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 20, bottom: 4),
-        child: Text(text, style: Theme.of(context).textTheme.titleSmall),
-      );
+    padding: const EdgeInsets.only(top: 20, bottom: 4),
+    child: Text(text, style: Theme.of(context).textTheme.titleSmall),
+  );
 }
 
 /// A dropdown of [options] whose helper line explains the one picked.
@@ -355,16 +379,16 @@ class _OptionField<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => DropdownButtonFormField<T>(
-        initialValue: value,
-        isExpanded: true,
-        decoration: InputDecoration(
-          helperText: options[value]!.help,
-          helperMaxLines: 4,
-        ),
-        items: [
-          for (final MapEntry(:key, :value) in options.entries)
-            DropdownMenuItem<T>(value: key, child: Text(value.label)),
-        ],
-        onChanged: onChanged,
-      );
+    initialValue: value,
+    isExpanded: true,
+    decoration: InputDecoration(
+      helperText: options[value]!.help,
+      helperMaxLines: 4,
+    ),
+    items: [
+      for (final MapEntry(:key, :value) in options.entries)
+        DropdownMenuItem<T>(value: key, child: Text(value.label)),
+    ],
+    onChanged: onChanged,
+  );
 }

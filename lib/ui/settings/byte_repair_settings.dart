@@ -50,7 +50,8 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
       children: [
         SectionHeader(
           "Byte Repair",
-          description: "Installs ESBMC and supporting tooling for formal "
+          description:
+              "Installs ESBMC and supporting tooling for formal "
               "verification of C code. Runs through the configured terminal "
               "environment, so it needs one with a package manager.",
         ),
@@ -70,10 +71,7 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
           if (store.prerequisite case (:final why, :final command)) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Text(
-                why,
-                style: theme.textTheme.bodySmall,
-              ),
+              child: Text(why, style: theme.textTheme.bodySmall),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -128,8 +126,9 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
               _error!,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.error),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.error,
+              ),
             ),
           ),
         ],
@@ -143,7 +142,9 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
             // The environment first: it is the half that can fail, and
             // failing before the chats are gone leaves the user something
             // to retry with.
-            final error = await ref.read(byteRepairStoreProvider).deleteEnvironment();
+            final error = await ref
+                .read(byteRepairStoreProvider)
+                .deleteEnvironment();
             if (!mounted) return;
             if (error != null) {
               setState(() => _error = error);
@@ -153,7 +154,9 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
             final project = ByteRepairProject().dir;
             final chats = await repo.listChats();
             await Future.wait(
-              chats.where((c) => c.project == project).map((c) => repo.deleteChat(c.id)),
+              chats
+                  .where((c) => c.project == project)
+                  .map((c) => repo.deleteChat(c.id)),
             );
             if (!mounted) return;
             ref.invalidate(byteRepairToolVersionsProvider);
@@ -182,28 +185,28 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
   }
 
   Future<void> _runSetup() => _run(() async {
-        final result = await ref
-            .read(byteRepairStoreProvider)
-            .install(ref.read(shellProvider));
-        if (result.returnCode != 0) {
-          return result.exceptionInfo ?? result.output.trim();
-        }
-        if (!mounted) return null;
-        ref.invalidate(byteRepairToolVersionsProvider);
-        ref.invalidate(setupCompleteProvider(ByteRepairProject().dir));
-        return null;
-      });
+    final result = await ref
+        .read(byteRepairStoreProvider)
+        .install(ref.read(shellProvider));
+    if (result.returnCode != 0) {
+      return result.exceptionInfo ?? result.output.trim();
+    }
+    if (!mounted) return null;
+    ref.invalidate(byteRepairToolVersionsProvider);
+    ref.invalidate(setupCompleteProvider(ByteRepairProject().dir));
+    return null;
+  });
 
   Future<void> _importEsbmc() => _run(() async {
-        const type = XTypeGroup(label: "ESBMC binary");
-        final file = await openFile(acceptedTypeGroups: const [type]);
-        if (file == null) return null;
-        final error = await ref.read(byteRepairStoreProvider).importEsbmc(file);
-        if (error == null && mounted) {
-          ref.invalidate(byteRepairToolVersionsProvider);
-        }
-        return error;
-      });
+    const type = XTypeGroup(label: "ESBMC binary");
+    final file = await openFile(acceptedTypeGroups: const [type]);
+    if (file == null) return null;
+    final error = await ref.read(byteRepairStoreProvider).importEsbmc(file);
+    if (error == null && mounted) {
+      ref.invalidate(byteRepairToolVersionsProvider);
+    }
+    return error;
+  });
 }
 
 class _ToolStatusList extends ConsumerWidget {
@@ -230,10 +233,7 @@ class _ToolStatusList extends ConsumerWidget {
                   children: [
                     SizedBox(
                       width: 72,
-                      child: Text(
-                        tool,
-                        style: theme.textTheme.bodySmall,
-                      ),
+                      child: Text(tool, style: theme.textTheme.bodySmall),
                     ),
                     Expanded(
                       child: Text(

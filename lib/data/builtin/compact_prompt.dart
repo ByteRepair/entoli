@@ -35,12 +35,13 @@ class CompactPrompt {
     String? instructions,
     String? priorSummary,
   }) => [
-        ...conversation,
-        LlmMessage(role: LlmRole.user, text: _request(instructions, priorSummary)),
-      ];
+    ...conversation,
+    LlmMessage(role: LlmRole.user, text: _request(instructions, priorSummary)),
+  ];
 
   static String _request(String? instructions, String? priorSummary) {
-    var text = """
+    var text =
+        """
 You will be handed a conversation and asked for one thing in return: a summary
 of it, written in <summary> tags and nothing else. This is a one-shot job —
 every tool is unavailable here, and a tool call does not run, it ends the
@@ -70,9 +71,10 @@ memory of what happened. It must carry:
 Be brief and concrete; a fact beats a paragraph. Do not write about the
 summarizing, the context, or yourself: the summary describes the work, not
 the handover that produced it."""
-        .trim();
+            .trim();
     if (priorSummary != null && priorSummary.trim().isNotEmpty) {
-      text += """
+      text +=
+          """
 
 An earlier summary of this same conversation follows. Fold it into yours:
 its goals, standing constraints and decisions stay even where the messages
@@ -86,7 +88,8 @@ $priorSummary
 </prior-summary>""";
     }
     if (instructions != null && instructions.trim().isNotEmpty) {
-      text += "\n\nThe user asked the summary to focus on this:\n${instructions.trim()}";
+      text +=
+          "\n\nThe user asked the summary to focus on this:\n${instructions.trim()}";
     }
     return text;
   }

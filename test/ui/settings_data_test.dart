@@ -42,10 +42,10 @@ void main() {
   /// A backup of everything on disk right now, made the way Export makes one,
   /// somewhere outside the data directory.
   Future<String> exported(WidgetTester tester) => io(tester, () async {
-        final path = "${tempDir().path}/backup.zip";
-        await writeBackup(app.config, path);
-        return path;
-      });
+    final path = "${tempDir().path}/backup.zip";
+    await writeBackup(app.config, path);
+    return path;
+  });
 
   /// A chat in the backup, another added since, and the confirmation up.
   Future<void> offerRestore(WidgetTester tester) async {
@@ -56,7 +56,9 @@ void main() {
     await press(tester, "Import");
   }
 
-  testWidgets("Export hands the whole data directory over as a zip", (tester) async {
+  testWidgets("Export hands the whole data directory over as a zip", (
+    tester,
+  ) async {
     await io(tester, () => app.seedChat(title: "kept"));
     await openData(tester);
 
@@ -64,8 +66,10 @@ void main() {
 
     expect(app.backups.saved, hasLength(1));
     expect(app.backups.saved.single.name, endsWith(".zip"));
-    final backup =
-        await io(tester, () => openBackup(app.backups.saved.single.path));
+    final backup = await io(
+      tester,
+      () => openBackup(app.backups.saved.single.path),
+    );
     expect(backup.chats, 1);
     expect(backup.members, contains(endsWith("state.json")));
   });
@@ -104,8 +108,9 @@ void main() {
     expect(app.restart.restarts, 1);
   });
 
-  testWidgets("a file that is not a backup is refused, and nothing is lost",
-      (tester) async {
+  testWidgets("a file that is not a backup is refused, and nothing is lost", (
+    tester,
+  ) async {
     await io(tester, () => app.seedChat(title: "still here"));
     final notBackup = File("${tempDir().path}/backup.zip")
       ..writeAsStringSync("not a backup");
@@ -122,7 +127,9 @@ void main() {
 
   // A turn appends to the log of a chat a restore is about to delete, and it
   // would carry on appending afterwards.
-  testWidgets("a running turn is refused rather than restored over", (tester) async {
+  testWidgets("a running turn is refused rather than restored over", (
+    tester,
+  ) async {
     app.backend.runningTurns.value = {"busy"};
     app.backups.scripted = await exported(tester);
     await openData(tester);
@@ -134,11 +141,16 @@ void main() {
     expect(find.text("Restore this backup?"), findsNothing);
   });
 
-  testWidgets("a restored chat is readable, attachments and all", (tester) async {
+  testWidgets("a restored chat is readable, attachments and all", (
+    tester,
+  ) async {
     final chat = await io(tester, () => app.seedChat(title: "with a file"));
     await io(tester, () async {
       final resource = await app.store.saveResource(
-          chat.state.id, "pic.png", Uint8List.fromList(onePixelPng));
+        chat.state.id,
+        "pic.png",
+        Uint8List.fromList(onePixelPng),
+      );
       expect(resource, isNotEmpty);
     });
     app.backups.scripted = await exported(tester);
@@ -152,6 +164,9 @@ void main() {
     expect((await onDisk(tester)).single.title, "with a file");
     final resources = Directory(app.config.resourcesDir(chat.state.id));
     expect(resources.listSync(), hasLength(1));
-    expect((resources.listSync().single as File).readAsBytesSync(), onePixelPng);
+    expect(
+      (resources.listSync().single as File).readAsBytesSync(),
+      onePixelPng,
+    );
   });
 }

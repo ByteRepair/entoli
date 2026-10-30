@@ -126,13 +126,14 @@ class ChatRepository {
 
   /// Which of [chats]' projects run Omada, for a paired device to style them.
   List<String> omadaProjects(Iterable<ChatState> chats) => [
-        for (final project in {for (final c in chats) c.project})
-          if (project != null &&
-              omadaFor(project,
-                  projectOmada:
-                      ProjectSettings.load(_config, project: project).omada))
+    for (final project in {for (final c in chats) c.project})
+      if (project != null &&
+          omadaFor(
             project,
-      ];
+            projectOmada: ProjectSettings.load(_config, project: project).omada,
+          ))
+        project,
+  ];
 
   /// Make a chat and write it. **Callers create one only when there is
   /// something to put in it** — the new-chat screen as the first message is
@@ -145,7 +146,11 @@ class ChatRepository {
   /// [meta] is the settings it should run its first turn under, for a caller
   /// that decided them before there was a chat to hang them on — the reminder
   /// that pins `approveMode`, and the new-chat screen's own settings page.
-  Future<Chat> createChat({String? title, String? project, ChatMeta? meta}) async {
+  Future<Chat> createChat({
+    String? title,
+    String? project,
+    ChatMeta? meta,
+  }) async {
     final base = await _backend.createChat(title: title);
     final chat = base.copyWith(state: base.state.copyWith(project: project));
     // Only where there is a meta to place: the store learns where a chat lives
@@ -201,7 +206,8 @@ class ChatRepository {
     _changes.add(Moved(chatId, project));
   }
 
-  Future<Chat> openChat(String id) async => remote?.chatOf(id) ?? await _store.load(id);
+  Future<Chat> openChat(String id) async =>
+      remote?.chatOf(id) ?? await _store.load(id);
 
   /// Write `state.json` and the directories under it. Called at the head of
   /// every turn, not only the first, and from the TTL propagation helpers when
@@ -223,7 +229,9 @@ class ChatRepository {
   /// Returns what was written, anchor and all, since it is not what was passed
   /// in and a caller showing the chat has to draw the difference.
   Future<ChatState> saveState(ChatState state, {bool reanchor = false}) async {
-    if (_mirrored(state.id)) return remote!.saveState(state, reanchor: reanchor);
+    if (_mirrored(state.id)) {
+      return remote!.saveState(state, reanchor: reanchor);
+    }
     final ttl = await _resolveTempTtl(state.id, project: state.project);
     final dur = tempChatTtlDuration(ttl);
     DateTime? since = state.tempTtlSince;
@@ -235,7 +243,10 @@ class ChatRepository {
       since = reanchor ? DateTime.now() : (since ?? DateTime.now());
       expiresAt = since.add(dur);
     }
-    final anchored = state.copyWith(tempTtlSince: since, tempTtlExpiresAt: expiresAt);
+    final anchored = state.copyWith(
+      tempTtlSince: since,
+      tempTtlExpiresAt: expiresAt,
+    );
     await _store.saveState(anchored);
     _changes.add(StateChanged(anchored));
     return anchored;
@@ -246,7 +257,8 @@ class ChatRepository {
   Future<void> reanchorProjectTtl(String? project) async {
     final chats = await listChats();
     await Future.wait([
-      for (final c in chats.where((c) => c.project == project)) saveState(c, reanchor: true),
+      for (final c in chats.where((c) => c.project == project))
+        saveState(c, reanchor: true),
     ]);
   }
 
@@ -292,7 +304,11 @@ class ChatRepository {
     if (provider == null || text.trim().isEmpty) return null;
     if (shellBypassCommand(text) != null) return null;
     if (wiredSkillFromText(text) != null) return null;
-    final answer = await _backend.ask(titlePrompt(text), model: model, provider: provider);
+    final answer = await _backend.ask(
+      titlePrompt(text),
+      model: model,
+      provider: provider,
+    );
     return answer == null ? null : cleanTitle(answer);
   }
 
@@ -310,7 +326,8 @@ class ChatRepository {
   /// The chat's raw log, in order — what [openChat] replays and discards. The
   /// sync layer streams these to a mirror asking to follow from where it
   /// already is.
-  Future<List<ChatRecord>> readRecords(String chatId) => _store.readRecords(chatId);
+  Future<List<ChatRecord>> readRecords(String chatId) =>
+      _store.readRecords(chatId);
 
   /// [chatId]'s background jobs.
   ChatShellJobs jobsOf(String chatId) => _backend.jobsOf(chatId);
@@ -320,7 +337,10 @@ class ChatRepository {
 
   /// A sub-agent's transcript: what memory holds while it runs, the file once
   /// it is over. Read whole and then followed through [subAgentAppends].
-  Future<List<ChatRecord>> subAgentRecords(String chatId, String callId) async =>
+  Future<List<ChatRecord>> subAgentRecords(
+    String chatId,
+    String callId,
+  ) async =>
       _backend.subAgents.held(chatId, callId) ??
       await _store.readSubAgentRecords(chatId, callId);
 
@@ -335,35 +355,49 @@ class ChatRepository {
   /// prompt for the reason [history] does: a separate "forget what you were
   /// told" call is one a caller can forget, and forgetting it is silent, the
   /// model answering fluently from the turn the user has just left.
-  Stream<AgentEvent> sendPrompt(String chatId, Message prompt,
-      {List<Message> history = const [],
-      List<ConversationCompaction> compactions = const [],
-      bool replaces = false,
-      String? omadaMember,
-      SteerInbox? steers}) async* {
+  Stream<AgentEvent> sendPrompt(
+    String chatId,
+    Message prompt, {
+    List<Message> history = const [],
+    List<ConversationCompaction> compactions = const [],
+    bool replaces = false,
+    String? omadaMember,
+    SteerInbox? steers,
+  }) async* {
     if (replaces) {
-      await _backend.resetSession(chatId, history: history, compactions: compactions);
-    }
-    yield* _backend.sendPrompt(chatId, prompt,
+      await _backend.resetSession(
+        chatId,
         history: history,
         compactions: compactions,
-        settings: await _turnSettings(chatId, omadaMember: omadaMember),
-        steers: steers);
+      );
+    }
+    yield* _backend.sendPrompt(
+      chatId,
+      prompt,
+      history: history,
+      compactions: compactions,
+      settings: await _turnSettings(chatId, omadaMember: omadaMember),
+      steers: steers,
+    );
   }
 
   /// Carry on the turn [history] ends in — see `AgentBackend.resumeTurn`. It
   /// runs under whatever the chat's settings are now, not whatever they were
   /// when the turn was cut off: the same rule an edit or a regenerate follows.
-  Stream<AgentEvent> resumeTurn(String chatId,
-      {List<Message> history = const [],
-      List<ConversationCompaction> compactions = const [],
-      String? omadaMember,
-      SteerInbox? steers}) async* {
-    yield* _backend.resumeTurn(chatId,
-        history: history,
-        compactions: compactions,
-        settings: await _turnSettings(chatId, omadaMember: omadaMember),
-        steers: steers);
+  Stream<AgentEvent> resumeTurn(
+    String chatId, {
+    List<Message> history = const [],
+    List<ConversationCompaction> compactions = const [],
+    String? omadaMember,
+    SteerInbox? steers,
+  }) async* {
+    yield* _backend.resumeTurn(
+      chatId,
+      history: history,
+      compactions: compactions,
+      settings: await _turnSettings(chatId, omadaMember: omadaMember),
+      steers: steers,
+    );
   }
 
   /// Summarize the conversation through the backend, resolved under the same
@@ -373,15 +407,18 @@ class ChatRepository {
   /// of. Null when nothing answered; the controller reads a log line, there
   /// being no turn to fail.
   Future<ConversationCompaction?> compact(
-      String chatId,
-      {required List<Message> history,
-      required List<ConversationCompaction> compactions,
-      required String? instructions}) async {
-    return _backend.compact(chatId,
-        history: history,
-        compactions: compactions,
-        settings: await _turnSettings(chatId),
-        instructions: instructions);
+    String chatId, {
+    required List<Message> history,
+    required List<ConversationCompaction> compactions,
+    required String? instructions,
+  }) async {
+    return _backend.compact(
+      chatId,
+      history: history,
+      compactions: compactions,
+      settings: await _turnSettings(chatId),
+      instructions: instructions,
+    );
   }
 
   /// Append the record a compaction leaves, and load back what the log now
@@ -391,11 +428,13 @@ class ChatRepository {
   /// conversation is.
   Future<Chat> appendCompaction(String chatId, ConversationCompaction marker) {
     return _rethread(
-        chatId,
-        ChatRecord.compaction(
-            upToMessageId: marker.upToMessageId,
-            summary: marker.summary,
-            chatTokens: marker.chatTokens));
+      chatId,
+      ChatRecord.compaction(
+        upToMessageId: marker.upToMessageId,
+        summary: marker.summary,
+        chatTokens: marker.chatTokens,
+      ),
+    );
   }
 
   /// The chat's own choice wins, else the app default, else whatever the
@@ -410,14 +449,19 @@ class ChatRepository {
   /// chat alone, and where the project already took it away it cannot be given
   /// it back from here. `headless` is the other: a chat nobody watches (a
   /// reminder's) drops `ask_user` and `task`, since nobody is there to answer.
-  Future<TurnSettings> _turnSettings(String chatId, {String? omadaMember}) async {
+  Future<TurnSettings> _turnSettings(
+    String chatId, {
+    String? omadaMember,
+  }) async {
     final meta = await loadMeta(chatId);
     final settings = _settings();
     final project = await projectOf(chatId);
     final builtIn = builtinProjectOf(project);
     final disabled = {...builtIn?.disabled ?? const <AgentCapability>{}};
     if (meta.headless == true) {
-      disabled..add(AgentCapability.ask)..add(AgentCapability.task);
+      disabled
+        ..add(AgentCapability.ask)
+        ..add(AgentCapability.task);
     }
     final projectSettings = ProjectSettings.load(_config, project: project);
     // Whether Omada runs, resolved once by [omadaFor]: a built-in's answer is
@@ -447,7 +491,8 @@ class ChatRepository {
       imageModel: settings.imageModelId,
       imageQuality: settings.imageQuality,
       profile: profileUnder(builtIn, appProfile: settings.profile),
-      memory: builtIn?.memory == MemoryPolicy.off ||
+      memory:
+          builtIn?.memory == MemoryPolicy.off ||
               meta.memoryOff == true ||
               projectSettings.memory == Tristate.off
           ? MemorySettings.off
@@ -463,8 +508,7 @@ class ChatRepository {
       // The project's own command variables, beside the app-level ones.
       environment: projectSettings.environment ?? const {},
       policy: () => _policyOf(chatId),
-      turnMaxSteps:
-          projectSettings.turnMaxSteps ?? settings.turnMaxSteps,
+      turnMaxSteps: projectSettings.turnMaxSteps ?? settings.turnMaxSteps,
       // The project's wording answers over the app's, like the step limit.
       tone: projectSettings.tone ?? settings.tone,
       citations: projectSettings.citations ?? settings.citations,
@@ -484,8 +528,9 @@ class ChatRepository {
     final projectSettings = ProjectSettings.load(_config, project: project);
     // The default project's rules and writable roots are the app tier: they
     // apply to every project before its own, invisibly.
-    final defaultProjectSettings =
-        project == null ? projectSettings : ProjectSettings.load(_config);
+    final defaultProjectSettings = project == null
+        ? projectSettings
+        : ProjectSettings.load(_config);
     return StandingPermissions(
       // Chat rules first, then the project's, then the default project's:
       // a later rule wins only by strength (deny over ask over allow), and
@@ -494,10 +539,12 @@ class ChatRepository {
       // and copyWith keeps the stamp through the merge.
       permissions: [
         ...meta.permissions.map((r) => r.copyWith(origin: PermissionTier.chat)),
-        ...projectSettings.permissions
-            .map((r) => r.copyWith(origin: PermissionTier.project)),
-        ...defaultProjectSettings.permissions
-            .map((r) => r.copyWith(origin: PermissionTier.defaultProject)),
+        ...projectSettings.permissions.map(
+          (r) => r.copyWith(origin: PermissionTier.project),
+        ),
+        ...defaultProjectSettings.permissions.map(
+          (r) => r.copyWith(origin: PermissionTier.defaultProject),
+        ),
       ],
       // The project's writable roots and the chat's own grants, where an
       // `add_directory` always answer lands. A rule's writes are the agent's to
@@ -507,7 +554,8 @@ class ChatRepository {
         ...projectSettings.writableDirs,
         ...defaultProjectSettings.writableDirs,
       ],
-      sandboxed: meta.sandbox ??
+      sandboxed:
+          meta.sandbox ??
           projectSettings.sandbox ??
           defaultProjectSettings.sandbox ??
           true,
@@ -522,7 +570,10 @@ class ChatRepository {
   /// until one is picked nothing in the subsystem writes. With the master
   /// off there is no store and the value carries nothing, but it is built
   /// rather than skipped: the AGENTS.md files a turn reads do not ride on it.
-  Future<MemorySettings> _resolveMemory(AppSettings settings, String? project) async {
+  Future<MemorySettings> _resolveMemory(
+    AppSettings settings,
+    String? project,
+  ) async {
     String? dir;
     if (settings.autoMemory) {
       var owner = project;
@@ -555,15 +606,18 @@ class ChatRepository {
     if (meta.tempChatTtl != null) return meta.tempChatTtl!;
     final proj = project ?? await projectOf(chatId);
     final projectSettings = ProjectSettings.load(_config, project: proj);
-    if (projectSettings.tempChatTtl != null) return projectSettings.tempChatTtl!;
+    if (projectSettings.tempChatTtl != null) {
+      return projectSettings.tempChatTtl!;
+    }
     final builtInTtl = builtinProjectOf(proj)?.tempChatTtl;
     if (builtInTtl != null) return builtInTtl;
     return _settings().tempChatTtl;
   }
 
   /// Which project a chat's files are in.
-  Future<String?> projectOf(String chatId) async =>
-      _mirrored(chatId) ? remote!.stateOf(chatId)!.project : await _store.projectOf(chatId);
+  Future<String?> projectOf(String chatId) async => _mirrored(chatId)
+      ? remote!.stateOf(chatId)!.project
+      : await _store.projectOf(chatId);
 
   /// **The one place a user's message is made.** What they typed, the files it
   /// carries, and what its `/command` and `@agent` references meant when they
@@ -575,26 +629,37 @@ class ChatRepository {
   /// [files] are already under the chat's `resources/`: the composer saves what
   /// it is holding with [saveAttachments] first, and a resend passes on the
   /// parts the message it branches from already had.
-  Message composeUserPrompt(String text,
-      {String? project, List<MessagePart> files = const []}) =>
-      Message(
-        id: const Uuid().v4(),
-        role: MessageRole.user,
-        createdAt: DateTime.now(),
-        // Files first, the order they are sent in and a resend rebuilds.
-        parts: [...files, MessagePart.text(text: text)],
-        documents: promptDocuments(text, _libraryFor(project)),
-      );
+  Message composeUserPrompt(
+    String text, {
+    String? project,
+    List<MessagePart> files = const [],
+  }) => Message(
+    id: const Uuid().v4(),
+    role: MessageRole.user,
+    createdAt: DateTime.now(),
+    // Files first, the order they are sent in and a resend rebuilds.
+    parts: [
+      ...files,
+      MessagePart.text(text: text),
+    ],
+    documents: promptDocuments(text, _libraryFor(project)),
+  );
 
   /// Save what the user attached and describe it as the parts that outlive the
   /// turn. Only the composer has bytes to save: a message being resent already
   /// has its parts and passes those along instead.
-  Future<List<MessagePart>> saveAttachments(String chatId, List<Attachment> attachments) =>
-      Future.wait(attachments.map((a) async => MessagePart.file(
-            resource: await _store.saveResource(chatId, a.filename, a.bytes),
-            filename: a.filename,
-            mimeType: a.mimeType,
-          )));
+  Future<List<MessagePart>> saveAttachments(
+    String chatId,
+    List<Attachment> attachments,
+  ) => Future.wait(
+    attachments.map(
+      (a) async => MessagePart.file(
+        resource: await _store.saveResource(chatId, a.filename, a.bytes),
+        filename: a.filename,
+        mimeType: a.mimeType,
+      ),
+    ),
+  );
 
   Future<Uint8List?> readResource(String chatId, String resource) =>
       _store.readResource(chatId, resource);
@@ -629,8 +694,11 @@ class ChatRepository {
     // A session is the conversation the model has seen, and which conversation
     // that is has just changed — markers included, since a rewind past one
     // un-applies it.
-    await _backend.resetSession(chatId,
-        history: now.messages, compactions: now.compactions);
+    await _backend.resetSession(
+      chatId,
+      history: now.messages,
+      compactions: now.compactions,
+    );
     return now;
   }
 
@@ -666,7 +734,9 @@ class ChatRepository {
   Future<ChatState> keepExpiredChat(String chatId, ChatState state) async {
     final meta = await loadMeta(chatId);
     await saveMeta(chatId, meta..tempChatTtl = TempChatTtl.off);
-    return saveState(state.copyWith(tempTtlSince: null, tempTtlExpiresAt: null));
+    return saveState(
+      state.copyWith(tempTtlSince: null, tempTtlExpiresAt: null),
+    );
   }
 
   /// Pin a chat. Pinned chats sit under a "Pinned" heading in the sidebar and
@@ -718,16 +788,23 @@ class ChatRepository {
           final meta = await _store.loadMeta(chatId);
           final grant = _grant(meta.permissions, meta.writableDirs, rule, dirs);
           if (grant != null) {
-            await _store.saveMeta(chatId, meta
-              ..permissions = grant.rules
-              ..writableDirs = grant.dirs);
+            await _store.saveMeta(
+              chatId,
+              meta
+                ..permissions = grant.rules
+                ..writableDirs = grant.dirs,
+            );
             _changes.add(MetaChanged(chatId, meta));
           }
         } else {
           final project = await projectOf(chatId);
           final settings = ProjectSettings.load(_config, project: project);
-          final grant =
-              _grant(settings.permissions, settings.writableDirs, rule, dirs);
+          final grant = _grant(
+            settings.permissions,
+            settings.writableDirs,
+            rule,
+            dirs,
+          );
           if (grant != null) {
             await (settings
                   ..permissions = grant.rules
@@ -744,24 +821,31 @@ class ChatRepository {
   /// already hold them: two banners over the same call derive the same grant,
   /// and pressing Always twice should not stack copies.
   static ({List<PermissionRule> rules, List<String> dirs})? _grant(
-      List<PermissionRule> rules,
-      List<String> dirs,
-      PermissionRule? rule,
-      List<String> newDirs) {
+    List<PermissionRule> rules,
+    List<String> dirs,
+    PermissionRule? rule,
+    List<String> newDirs,
+  ) {
     final addRule = rule != null && !rules.contains(rule);
-    final fresh = [for (final d in newDirs) if (!dirs.contains(d)) d];
+    final fresh = [
+      for (final d in newDirs)
+        if (!dirs.contains(d)) d,
+    ];
     if (!addRule && fresh.isEmpty) return null;
     return (rules: [...rules, if (addRule) rule], dirs: [...dirs, ...fresh]);
   }
 
-  Future<void> respondQuestions(String chatId, String requestId, List<String?> answers) =>
-      _backend.respondQuestions(chatId, requestId, answers);
+  Future<void> respondQuestions(
+    String chatId,
+    String requestId,
+    List<String?> answers,
+  ) => _backend.respondQuestions(chatId, requestId, answers);
 }
 
 /// The model a chat's turns run on: its own choice, else the app default.
 /// Never mixed halves: a chat's model under the app default's provider is not
 /// a combination anyone asked for. A null model is the provider's default.
 ModelChoice chatModelOf(ChatMeta meta, AppSettings settings) => (
-      modelId: meta.model ?? settings.defaultModelId,
-      providerId: meta.model != null ? meta.provider : settings.defaultProviderId,
-    );
+  modelId: meta.model ?? settings.defaultModelId,
+  providerId: meta.model != null ? meta.provider : settings.defaultProviderId,
+);

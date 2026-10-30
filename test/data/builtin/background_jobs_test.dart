@@ -47,22 +47,33 @@ void main() {
       events.whereType<ToolResultEvent>().map((e) => e.result).toList();
 
   Map<String, dynamic>? bashProperties(FakeLlmClient client) =>
-      client.calls.first.tools.firstWhere((t) => t.name == "bash").schema[
-          "properties"] as Map<String, dynamic>?;
+      client.calls.first.tools
+              .firstWhere((t) => t.name == "bash")
+              .schema["properties"]
+          as Map<String, dynamic>?;
 
   test("bash offers background only where the chat can keep a job", () async {
-    final offered = FakeLlmClient([[finish]]);
+    final offered = FakeLlmClient([
+      [finish],
+    ]);
     await agentOver(offered).run(userMessage("go")).toList();
     expect(bashProperties(offered), contains("background"));
 
-    final withheld = FakeLlmClient([[finish]]);
-    await agentOver(withheld, background: false).run(userMessage("go")).toList();
+    final withheld = FakeLlmClient([
+      [finish],
+    ]);
+    await agentOver(
+      withheld,
+      background: false,
+    ).run(userMessage("go")).toList();
     expect(bashProperties(withheld), isNot(contains("background")));
   });
 
   test("a background call answers at once with its pid and log", () async {
     final client = FakeLlmClient([
-      [bashCall("npm run dev", extra: {"background": true})],
+      [
+        bashCall("npm run dev", extra: {"background": true}),
+      ],
       [finish],
     ]);
     final agent = agentOver(client);
@@ -88,7 +99,9 @@ void main() {
 
   test("the next call hears how a job ended, once", () async {
     final client = FakeLlmClient([
-      [bashCall("serve", id: "c1", extra: {"background": true})],
+      [
+        bashCall("serve", id: "c1", extra: {"background": true}),
+      ],
       [bashCall("ls", id: "c2")],
       [bashCall("pwd", id: "c3")],
       [finish],
@@ -119,22 +132,28 @@ void main() {
     jobs = BackgroundJobs();
     shell = FakeShell((_) => ok(""), canRunInBackground: true);
     final chat = jobs.forChat("chat-1");
-    ShellRun spawn(String script) => shell.start(script,
-        cwd: "/w", home: "/w", timeout: Duration.zero);
+    ShellRun spawn(String script) =>
+        shell.start(script, cwd: "/w", home: "/w", timeout: Duration.zero);
     // Ended past reading its log, which is real I/O, and off the list after.
     final ended = chat.ended.first;
     await chat.start("a", callId: "c1", workspace: "/w", spawn: spawn);
     await ended;
     await pumpEventQueue();
     expect(chat.jobs.value, isEmpty);
-    final second =
-        await chat.start("b", callId: "c2", workspace: "/w", spawn: spawn);
+    final second = await chat.start(
+      "b",
+      callId: "c2",
+      workspace: "/w",
+      spawn: spawn,
+    );
     expect(second.id, 2);
   });
 
   test("closing a chat kills its jobs", () async {
     final client = FakeLlmClient([
-      [bashCall("serve", extra: {"background": true})],
+      [
+        bashCall("serve", extra: {"background": true}),
+      ],
       [finish],
     ]);
     final agent = agentOver(client);
@@ -157,11 +176,17 @@ void main() {
       ..writeAsStringSync("hello\n");
     shell = FakeShell((_) => ok(""), canRunInBackground: true);
     final chat = jobs.forChat("c");
-    final job = await chat.start("x",
-        callId: "c1",
-        workspace: tempDir.path,
-        spawn: (script) => shell.start(script,
-            cwd: tempDir.path, home: tempDir.path, timeout: Duration.zero));
+    final job = await chat.start(
+      "x",
+      callId: "c1",
+      workspace: tempDir.path,
+      spawn: (script) => shell.start(
+        script,
+        cwd: tempDir.path,
+        home: tempDir.path,
+        timeout: Duration.zero,
+      ),
+    );
     // The fake run has already ended, so the tail is read once and closes.
     await pumpEventQueue();
     expect(await chat.log(job).toList(), ["hello\n"]);
@@ -174,19 +199,27 @@ void main() {
     File(p.join(tempDir.path, backgroundLog("c1")))
       ..createSync(recursive: true)
       ..writeAsStringSync([for (var i = 1; i <= 15; i++) "line $i"].join("\n"));
-    shell = FakeShell((_) => ShellResult(returnCode: 3, output: ""),
-        canRunInBackground: true);
+    shell = FakeShell(
+      (_) => ShellResult(returnCode: 3, output: ""),
+      canRunInBackground: true,
+    );
     final chat = jobs.forChat("c");
     // Whether the job was still listed as its end went out: the chat must
     // never read it as neither.
     bool? listed;
     chat.ended.listen((_) => listed = chat.jobs.value.isNotEmpty);
     final ended = chat.ended.first;
-    await chat.start("x",
-        callId: "c1",
-        workspace: tempDir.path,
-        spawn: (script) => shell.start(script,
-            cwd: tempDir.path, home: tempDir.path, timeout: Duration.zero));
+    await chat.start(
+      "x",
+      callId: "c1",
+      workspace: tempDir.path,
+      spawn: (script) => shell.start(
+        script,
+        cwd: tempDir.path,
+        home: tempDir.path,
+        timeout: Duration.zero,
+      ),
+    );
     final (:callId, :end) = await ended;
     expect(callId, "c1");
     expect(end.jobId, 1);
@@ -200,8 +233,10 @@ void main() {
   group("jobTail", () {
     test("keeps the last ten lines", () {
       expect(jobTail("a\nb\nc\n"), "a\nb\nc");
-      expect(jobTail([for (var i = 0; i < 20; i++) "$i"].join("\n")),
-          [for (var i = 10; i < 20; i++) "$i"].join("\n"));
+      expect(
+        jobTail([for (var i = 0; i < 20; i++) "$i"].join("\n")),
+        [for (var i = 10; i < 20; i++) "$i"].join("\n"),
+      );
     });
 
     test("cuts from the top past a kilobyte, never inside a character", () {

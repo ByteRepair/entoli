@@ -39,14 +39,15 @@ class OpenAiClient implements LlmClient {
 
   Map<String, String> get _auth => authOf(apiKey);
 
-  static Map<String, String> authOf(String? apiKey) =>
-      {if (apiKey != null && apiKey.isNotEmpty) "authorization": "Bearer $apiKey"};
+  static Map<String, String> authOf(String? apiKey) => {
+    if (apiKey != null && apiKey.isNotEmpty) "authorization": "Bearer $apiKey",
+  };
 
   Map<String, String> get _headers => {
-        "content-type": "application/json",
-        "accept": "text/event-stream",
-        ..._auth,
-      };
+    "content-type": "application/json",
+    "accept": "text/event-stream",
+    ..._auth,
+  };
 
   @override
   void close() => _http.close();
@@ -111,7 +112,9 @@ class OpenAiClient implements LlmClient {
       // status code, which would otherwise look like an empty reply.
       final error = event["error"];
       if (error != null) {
-        throw LlmException(error is Map ? "${error["message"] ?? error}" : "$error");
+        throw LlmException(
+          error is Map ? "${error["message"] ?? error}" : "$error",
+        );
       }
 
       // Its own frame rather than something on a delta: it arrives while the
@@ -132,9 +135,11 @@ class OpenAiClient implements LlmClient {
       final rawUsage = event["usage"];
       if (rawUsage is Map<String, dynamic>) {
         final promptTokens = (rawUsage["prompt_tokens"] as num?)?.toInt();
-        final completionTokens = (rawUsage["completion_tokens"] as num?)?.toInt();
+        final completionTokens = (rawUsage["completion_tokens"] as num?)
+            ?.toInt();
         if (promptTokens != null || completionTokens != null) {
-          final details = rawUsage["prompt_tokens_details"] as Map<String, dynamic>?;
+          final details =
+              rawUsage["prompt_tokens_details"] as Map<String, dynamic>?;
           usage = LlmUsage(
             inputTokens: promptTokens ?? 0,
             outputTokens: completionTokens ?? 0,
@@ -175,7 +180,9 @@ class OpenAiClient implements LlmClient {
           call.signature ??= _thoughtSignature(raw);
           final function = raw["function"] as Map<String, dynamic>?;
           if (function == null) continue;
-          if (function["name"] is String) call.name = function["name"] as String;
+          if (function["name"] is String) {
+            call.name = function["name"] as String;
+          }
           // Arguments stream a character at a time; only the whole of it parses.
           if (function["arguments"] is String) {
             call.arguments.write(function["arguments"] as String);
@@ -211,8 +218,11 @@ class OpenAiClient implements LlmClient {
   ///
   /// [quality] is `low`, `medium` or `high`, null for the provider's default.
   /// Only the Images API takes one; the chat shape has no such field.
-  Future<List<LlmAttachment>> generateImage(String prompt,
-      {required String model, String? quality}) async {
+  Future<List<LlmAttachment>> generateImage(
+    String prompt, {
+    required String model,
+    String? quality,
+  }) async {
     final dallE = model.startsWith("dall-e");
     final imagesApi = model.startsWith("gpt-image") || dallE;
     final response = await postStream(
@@ -227,7 +237,9 @@ class OpenAiClient implements LlmClient {
               if (dallE) "response_format": "b64_json",
               // DALL·E has two grades rather than three.
               if (quality != null)
-                "quality": dallE ? (quality == "high" ? "hd" : "standard") : quality,
+                "quality": dallE
+                    ? (quality == "high" ? "hd" : "standard")
+                    : quality,
             }
           : {
               "model": model,
@@ -260,11 +272,14 @@ class OpenAiClient implements LlmClient {
 
   /// What [wav] says, through `/audio/transcriptions`.
   Future<String> transcribe(Uint8List wav, {required String model}) async {
-    final request = http.MultipartRequest("POST", under(baseUrl, "audio/transcriptions"))
-      ..headers.addAll(_auth)
-      ..fields["model"] = model
-      ..fields["response_format"] = "json"
-      ..files.add(http.MultipartFile.fromBytes("file", wav, filename: "speech.wav"));
+    final request =
+        http.MultipartRequest("POST", under(baseUrl, "audio/transcriptions"))
+          ..headers.addAll(_auth)
+          ..fields["model"] = model
+          ..fields["response_format"] = "json"
+          ..files.add(
+            http.MultipartFile.fromBytes("file", wav, filename: "speech.wav"),
+          );
     final response = await sendChecked(_http, request);
     final json = jsonDecode(await response.stream.bytesToString());
     return json is Map && json["text"] is String ? json["text"] as String : "";
@@ -273,7 +288,11 @@ class OpenAiClient implements LlmClient {
   /// [text] spoken, through `/audio/speech`. WAV is asked for, since every
   /// player here takes it; what comes back is whatever the server sent.
   /// [voice] is the provider's own name for one, and null leaves it out.
-  Future<Uint8List> speak(String text, {required String model, String? voice}) async {
+  Future<Uint8List> speak(
+    String text, {
+    required String model,
+    String? voice,
+  }) async {
     final response = await postStream(
       _http,
       under(baseUrl, "audio/speech"),
@@ -289,13 +308,13 @@ class OpenAiClient implements LlmClient {
   }
 
   Map<String, dynamic> _encodeTool(LlmTool tool) => {
-        "type": "function",
-        "function": {
-          "name": tool.name,
-          "description": tool.description,
-          "parameters": tool.schema,
-        },
-      };
+    "type": "function",
+    "function": {
+      "name": tool.name,
+      "description": tool.description,
+      "parameters": tool.schema,
+    },
+  };
 
   /// A tool message takes text alone, so the images and PDFs on a run of
   /// results go in one user message straight after it.
@@ -307,12 +326,16 @@ class OpenAiClient implements LlmClient {
       if (message.role == LlmRole.tool) {
         files.addAll(message.attachments.where((a) => a.isBlock));
       }
-      final runEnds = i + 1 == messages.length || messages[i + 1].role != LlmRole.tool;
+      final runEnds =
+          i + 1 == messages.length || messages[i + 1].role != LlmRole.tool;
       if (files.isNotEmpty && runEnds) {
         out.add({
           "role": "user",
           "content": [
-            {"type": "text", "text": "The files the tool results above returned."},
+            {
+              "type": "text",
+              "text": "The files the tool results above returned.",
+            },
             ...files.map(_block),
           ],
         });
@@ -356,7 +379,10 @@ class OpenAiClient implements LlmClient {
                 {
                   "id": call.id,
                   "type": "function",
-                  "function": {"name": call.name, "arguments": call.argumentsJson},
+                  "function": {
+                    "name": call.name,
+                    "arguments": call.argumentsJson,
+                  },
                   if ((call.signature ?? (i == 0 ? placeholder : null))
                       case final signature?)
                     "extra_content": {
@@ -367,10 +393,7 @@ class OpenAiClient implements LlmClient {
         };
       case LlmRole.system:
       case LlmRole.user:
-        return {
-          "role": message.role.name,
-          "content": _encodeContent(message),
-        };
+        return {"role": message.role.name, "content": _encodeContent(message)};
     }
   }
 
@@ -403,11 +426,13 @@ List<LlmAttachment> imagesIn(Object? images, {int start = 0}) {
       final data = UriData.parse(url);
       // `image/svg+xml` is an `.svg`.
       final ext = data.mimeType.split("/").last.split("+").first;
-      out.add(LlmAttachment(
-        filename: "image-${start + out.length}.$ext",
-        mimeType: data.mimeType,
-        bytes: data.contentAsBytes(),
-      ));
+      out.add(
+        LlmAttachment(
+          filename: "image-${start + out.length}.$ext",
+          mimeType: data.mimeType,
+          bytes: data.contentAsBytes(),
+        ),
+      );
     } on FormatException {
       continue;
     }
@@ -474,7 +499,9 @@ String inlineText(LlmMessage message) {
       buffer.writeln(attachment.asText);
       buffer.write("--- end of ${attachment.filename} ---");
     } else {
-      buffer.write("(attached: ${attachment.filename}, ${attachment.mimeType})");
+      buffer.write(
+        "(attached: ${attachment.filename}, ${attachment.mimeType})",
+      );
     }
   }
   return buffer.toString();

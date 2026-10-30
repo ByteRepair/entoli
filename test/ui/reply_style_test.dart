@@ -30,8 +30,9 @@ void main() {
   // as a background, which M3 leaves null — so inline code was the sentence in
   // another face and nothing else. Mono also runs wider than the prose beside
   // it, so an equal size reads as a larger one.
-  testWidgets("inline code is a bundled face on a surface, set smaller",
-      (tester) async {
+  testWidgets("inline code is a bundled face on a surface, set smaller", (
+    tester,
+  ) async {
     final sheet = await sheetOf(tester);
     final scheme = Theme.of(tester.element(find.byType(SizedBox))).colorScheme;
 
@@ -46,21 +47,33 @@ void main() {
     // three levels did not read as headings at all.
     testWidgets("step down and stop at the body", (tester) async {
       final sheet = await sheetOf(tester);
-      final scale =
-          [sheet.h1!, sheet.h2!, sheet.h3!, sheet.h4!, sheet.h5!, sheet.h6!]
-              .map((h) => h.fontSize)
-              .toList();
+      final scale = [
+        sheet.h1!,
+        sheet.h2!,
+        sheet.h3!,
+        sheet.h4!,
+        sheet.h5!,
+        sheet.h6!,
+      ].map((h) => h.fontSize).toList();
 
       expect(scale, [21, 18, 16, 14, 14, 14]);
       expect(scale.last, sheet.p!.fontSize);
     });
 
-    testWidgets("every level is set apart by weight, the smallest included",
-        (tester) async {
+    testWidgets("every level is set apart by weight, the smallest included", (
+      tester,
+    ) async {
       final sheet = await sheetOf(tester);
 
       final body = sheet.p!.fontWeight ?? FontWeight.normal;
-      for (final h in [sheet.h1!, sheet.h2!, sheet.h3!, sheet.h4!, sheet.h5!, sheet.h6!]) {
+      for (final h in [
+        sheet.h1!,
+        sheet.h2!,
+        sheet.h3!,
+        sheet.h4!,
+        sheet.h5!,
+        sheet.h6!,
+      ]) {
         expect(h.fontWeight!.value, greaterThan(body.value));
       }
     });
@@ -83,18 +96,25 @@ void main() {
 
   // The default is five pixels of `dividerColor` across the reply.
   testWidgets("a horizontal rule is a rule rather than a slab", (tester) async {
-    final rule = (await sheetOf(tester)).horizontalRuleDecoration! as BoxDecoration;
+    final rule =
+        (await sheetOf(tester)).horizontalRuleDecoration! as BoxDecoration;
 
     expect(rule.border!.top.width, lessThanOrEqualTo(1));
   });
 
   // A list is as much prose as a paragraph, and is the shape a reply most
   // often takes. `fromTheme` hands all four of these plain `bodyMedium`.
-  testWidgets("every prose element is looser than Material's default",
-      (tester) async {
+  testWidgets("every prose element is looser than Material's default", (
+    tester,
+  ) async {
     final sheet = await sheetOf(tester);
 
-    for (final style in [sheet.p!, sheet.listBullet!, sheet.blockquote!, sheet.tableBody!]) {
+    for (final style in [
+      sheet.p!,
+      sheet.listBullet!,
+      sheet.blockquote!,
+      sheet.tableBody!,
+    ]) {
       expect(style.height, greaterThan(1.43));
     }
   });
@@ -103,8 +123,9 @@ void main() {
   // an asset and read lazily, so a file left undeclared in pubspec would say
   // nothing at all until someone opened a licence page. The name in the text
   // is asserted so a pair swapped in fonts.dart cannot pass.
-  testWidgets("the bundled fonts' licences are registered and readable",
-      (tester) async {
+  testWidgets("the bundled fonts' licences are registered and readable", (
+    tester,
+  ) async {
     registerBundledFontLicences();
 
     final all = await LicenseRegistry.licenses.toList();

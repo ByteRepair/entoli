@@ -16,8 +16,7 @@ import "../../domain/sync/devices.dart";
 /// secrets are not: one JSON map under [pairingSecretsKey], in the keyring
 /// wherever there is one.
 class FileDeviceRegistry implements DeviceRegistry {
-  FileDeviceRegistry(this._config, this._secrets)
-      : _writer = RenameWriter();
+  FileDeviceRegistry(this._config, this._secrets) : _writer = RenameWriter();
 
   final AppConfig _config;
   final SecretStore _secrets;
@@ -39,10 +38,10 @@ class FileDeviceRegistry implements DeviceRegistry {
       _writer.write(_file, jsonEncode(json));
 
   List<PairedDevice> _devicesOf(Map<String, dynamic> json) => [
-        for (final entry
-            in (json["devices"] as List<Object?>? ?? const []).cast<Map>())
-          PairedDevice.fromJson(entry.cast<String, dynamic>()),
-      ];
+    for (final entry
+        in (json["devices"] as List<Object?>? ?? const []).cast<Map>())
+      PairedDevice.fromJson(entry.cast<String, dynamic>()),
+  ];
 
   @override
   Future<List<PairedDevice>> list() async =>
@@ -61,14 +60,18 @@ class FileDeviceRegistry implements DeviceRegistry {
     final json = await _read();
     final devices = _devicesOf(json).where((d) => d.id != device.id).toList();
     devices.add(device);
-    await _write({"devices": [for (final d in devices) d.toJson()]});
+    await _write({
+      "devices": [for (final d in devices) d.toJson()],
+    });
   }
 
   @override
   Future<void> remove(String id) async {
     final json = await _read();
     final devices = _devicesOf(json).where((d) => d.id != id).toList();
-    await _write({"devices": [for (final d in devices) d.toJson()]});
+    await _write({
+      "devices": [for (final d in devices) d.toJson()],
+    });
     await setPairingSecret(id, null);
   }
 

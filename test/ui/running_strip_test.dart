@@ -8,7 +8,8 @@ import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/room/room_state.dart";
 import "package:agent_chat/domain/shell_job.dart";
-import "package:agent_chat/ui/chat/mirror_controller.dart" show chatViewProvider;
+import "package:agent_chat/ui/chat/mirror_controller.dart"
+    show chatViewProvider;
 import "package:agent_chat/ui/chat/widgets/running_strip.dart";
 
 import "../fakes.dart";
@@ -16,12 +17,19 @@ import "../harness.dart";
 
 void main() {
   ShellJob job(int id, String command) => ShellJob(
-      id: id, callId: "c$id", command: command, logPath: "/w/.entoli-jobs/$id.log", pid: 4000 + id);
+    id: id,
+    callId: "c$id",
+    command: command,
+    logPath: "/w/.entoli-jobs/$id.log",
+    pid: 4000 + id,
+  );
 
   /// A real chat whose room feeds the strip, as the turn bar does: jobs reach
   /// it through the room, the way they do in the app.
-  Future<(TestApp, String, FakeShellJobs)> pumpStrip(WidgetTester tester,
-      {List<ChatRecord> records = const []}) async {
+  Future<(TestApp, String, FakeShellJobs)> pumpStrip(
+    WidgetTester tester, {
+    List<ChatRecord> records = const [],
+  }) async {
     final app = TestApp.create();
     addTearDown(app.dispose);
     final chatId = await io(tester, () async {
@@ -30,14 +38,15 @@ void main() {
       return chat.state.id;
     });
     await app.pump(
-        tester,
-        Scaffold(
-          body: Consumer(
-            builder: (context, ref, _) =>
-                RunningStrip(view: ref.watch(chatViewProvider(chatId))),
-          ),
+      tester,
+      Scaffold(
+        body: Consumer(
+          builder: (context, ref, _) =>
+              RunningStrip(view: ref.watch(chatViewProvider(chatId))),
         ),
-        settle: false);
+      ),
+      settle: false,
+    );
     // The room's load; nothing spins yet, so this settles.
     await settleIo(tester);
     return (app, chatId, app.backend.jobsOf(chatId));
@@ -51,26 +60,30 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
   }
 
-  testWidgets("jobs are one group, which a tap opens to a pill each and closes",
-      (tester) async {
-    final (_, _, jobs) = await pumpStrip(tester);
-    expect(find.textContaining("running"), findsNothing);
+  testWidgets(
+    "jobs are one group, which a tap opens to a pill each and closes",
+    (tester) async {
+      final (_, _, jobs) = await pumpStrip(tester);
+      expect(find.textContaining("running"), findsNothing);
 
-    jobs.jobs.value = [job(1, "npm run dev"), job(2, "make watch")];
-    await tester.pump();
-    expect(find.text("2 background tasks running"), findsOneWidget);
-    expect(find.byType(ActionChip), findsNothing);
+      jobs.jobs.value = [job(1, "npm run dev"), job(2, "make watch")];
+      await tester.pump();
+      expect(find.text("2 background tasks running"), findsOneWidget);
+      expect(find.byType(ActionChip), findsNothing);
 
-    await open(tester, "2 background tasks running");
-    expect(find.byType(ActionChip), findsNWidgets(2));
+      await open(tester, "2 background tasks running");
+      expect(find.byType(ActionChip), findsNWidgets(2));
 
-    await open(tester, "2 background tasks running");
-    expect(find.byType(ActionChip), findsNothing);
-  });
+      await open(tester, "2 background tasks running");
+      expect(find.byType(ActionChip), findsNothing);
+    },
+  );
 
   testWidgets("a mouse wheel scrolls the row sideways", (tester) async {
     final (_, _, jobs) = await pumpStrip(tester);
-    jobs.jobs.value = [for (var i = 1; i <= 12; i++) job(i, "server-$i --watch")];
+    jobs.jobs.value = [
+      for (var i = 1; i <= 12; i++) job(i, "server-$i --watch"),
+    ];
     await tester.pump();
     await open(tester, "12 background tasks running");
     final scroll = tester
@@ -78,15 +91,19 @@ void main() {
         .controller!;
     expect(scroll.offset, 0);
 
-    tester.binding.handlePointerEvent(PointerScrollEvent(
+    tester.binding.handlePointerEvent(
+      PointerScrollEvent(
         position: tester.getCenter(find.text("12 background tasks running")),
-        scrollDelta: const Offset(0, 120)));
+        scrollDelta: const Offset(0, 120),
+      ),
+    );
     await tester.pump();
     expect(scroll.offset, 120);
   });
 
-  testWidgets("a pill opens the command and its log, and Stop stops it",
-      (tester) async {
+  testWidgets("a pill opens the command and its log, and Stop stops it", (
+    tester,
+  ) async {
     final (_, _, jobs) = await pumpStrip(tester);
     jobs.jobs.value = [job(1, "npm run dev")];
     jobs.logs[1] = "listening on :3000\n";
@@ -137,34 +154,43 @@ void main() {
       createdAt: at,
       parts: const [
         ToolCallPart(
-            toolCall: ToolCall(
-                id: "c1",
-                name: "task",
-                argumentsJson: '{"agent":"explore","prompt":"find the parser"}')),
-      ],
-    );
-    final (app, chatId, jobs) = await pumpStrip(tester, records: [
-      ...recordsOf([reply]),
-      ChatRecord.turnEnd(messageId: "r1", reason: TurnEnd.done),
-    ]);
-    final chat = (await io(tester, () => app.repo.openChat(chatId)));
-    await app.pump(
-        tester,
-        Scaffold(
-          body: RunningStrip(
-            view: ChatViewState(
-              chat: chat,
-              runningJobs: {"c9": job(9, "npm run dev")},
-              runningSubAgents: {
-                "r1": [
-                  const SubAgentStartEvent(
-                      id: "c1", agent: "explore", prompt: "find the")
-                ],
-              },
-            ),
+          toolCall: ToolCall(
+            id: "c1",
+            name: "task",
+            argumentsJson: '{"agent":"explore","prompt":"find the parser"}',
           ),
         ),
-        settle: false);
+      ],
+    );
+    final (app, chatId, jobs) = await pumpStrip(
+      tester,
+      records: [
+        ...recordsOf([reply]),
+        ChatRecord.turnEnd(messageId: "r1", reason: TurnEnd.done),
+      ],
+    );
+    final chat = (await io(tester, () => app.repo.openChat(chatId)));
+    await app.pump(
+      tester,
+      Scaffold(
+        body: RunningStrip(
+          view: ChatViewState(
+            chat: chat,
+            runningJobs: {"c9": job(9, "npm run dev")},
+            runningSubAgents: {
+              "r1": [
+                const SubAgentStartEvent(
+                  id: "c1",
+                  agent: "explore",
+                  prompt: "find the",
+                ),
+              ],
+            },
+          ),
+        ),
+      ),
+      settle: false,
+    );
     expect(find.text("1 background task running"), findsOneWidget);
     expect(find.text("1 sub-agent running"), findsOneWidget);
 

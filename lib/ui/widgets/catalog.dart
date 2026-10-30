@@ -57,7 +57,10 @@ class CatalogTile extends StatelessWidget {
     final small = theme.textTheme.bodySmall;
     return ListTile(
       isThreeLine:
-          note != null || tags.isNotEmpty || failure != null || progress != null,
+          note != null ||
+          tags.isNotEmpty ||
+          failure != null ||
+          progress != null,
       title: title,
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -68,13 +71,20 @@ class CatalogTile extends StatelessWidget {
             Wrap(spacing: 6, runSpacing: 4, children: tags),
           ],
           if (note != null)
-            Text(note!, style: small?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            Text(
+              note!,
+              style: small?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
           if (failure != null)
-            Text(failure!, style: small?.copyWith(color: theme.colorScheme.error)),
+            Text(
+              failure!,
+              style: small?.copyWith(color: theme.colorScheme.error),
+            ),
           if (progress != null) ...[
             const SizedBox(height: 6),
             LinearProgressIndicator(
-                value: progress!.unpacking ? null : progress!.fraction),
+              value: progress!.unpacking ? null : progress!.fraction,
+            ),
             const SizedBox(height: 4),
             Text(
               progress!.unpacking
@@ -194,8 +204,10 @@ class InstalledPicker extends StatelessWidget {
     if (options.isEmpty && none == null) {
       return LabelledField(
         label: label,
-        child: Text("Nothing downloaded yet.",
-            style: Theme.of(context).textTheme.bodySmall),
+        child: Text(
+          "Nothing downloaded yet.",
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
       );
     }
     return LabelledField(
@@ -212,7 +224,10 @@ class InstalledPicker extends StatelessWidget {
           if (none != null)
             DropdownMenuItem<String?>(value: null, child: Text(none!)),
           for (final entry in options.entries)
-            DropdownMenuItem<String?>(value: entry.key, child: Text(entry.value)),
+            DropdownMenuItem<String?>(
+              value: entry.key,
+              child: Text(entry.value),
+            ),
         ],
         onChanged: onPick,
       ),
@@ -223,25 +238,27 @@ class InstalledPicker extends StatelessWidget {
 /// A model's facts as tags, as many as are known of it, in one order for every
 /// catalog.
 List<Widget> modelTags(ModelFacts facts) => switch (facts) {
-      (
-        :final parameters,
-        :final languages,
-        :final bytes,
-        :final quantisation,
-        :final context,
-        :final voices,
-        :final licence,
-      ) =>
-        [
+  (
+    :final parameters,
+    :final languages,
+    :final bytes,
+    :final quantisation,
+    :final context,
+    :final voices,
+    :final licence,
+  ) =>
+    [
       if (parameters != null) InfoTag(Icons.memory, "$parameters params"),
       if (languages != null) InfoTag(Icons.translate, languages),
       if (bytes != null) InfoTag(Icons.download_outlined, formatSize(bytes)),
       if (quantisation != null) InfoTag(Icons.compress, quantisation),
-      if (context != null) InfoTag(Icons.data_usage, "${tokenCount(context)} context"),
-      if (voices != null) InfoTag(Icons.record_voice_over_outlined, plural(voices, "voice")),
+      if (context != null)
+        InfoTag(Icons.data_usage, "${tokenCount(context)} context"),
+      if (voices != null)
+        InfoTag(Icons.record_voice_over_outlined, plural(voices, "voice")),
       if (licence != null) InfoTag(Icons.gavel_outlined, licence),
     ],
-    };
+};
 
 /// One fact about a thing, as a small labelled chip.
 class InfoTag extends StatelessWidget {

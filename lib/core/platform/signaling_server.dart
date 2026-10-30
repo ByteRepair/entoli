@@ -57,7 +57,9 @@ class SignalingServer implements LanSignaling {
     HttpServer? server;
     try {
       server = await HttpServer.bind(
-          InternetAddress.anyIPv4, preferredSignalingPort);
+        InternetAddress.anyIPv4,
+        preferredSignalingPort,
+      );
     } catch (_) {
       server = await HttpServer.bind(InternetAddress.anyIPv4, 0);
     }
@@ -75,9 +77,12 @@ class SignalingServer implements LanSignaling {
   /// traffic at anyone.
   Future<void> _listenForDiscovery(int httpPort) async {
     try {
-      final udp = _udp = await RawDatagramSocket.bind(
-          InternetAddress.anyIPv4, preferredSignalingPort)
-        ..broadcastEnabled = true;
+      final udp = _udp =
+          await RawDatagramSocket.bind(
+              InternetAddress.anyIPv4,
+              preferredSignalingPort,
+            )
+            ..broadcastEnabled = true;
       udp.listen((event) {
         final datagram = event == RawSocketEvent.read ? udp.receive() : null;
         if (datagram == null) return;
@@ -86,8 +91,11 @@ class SignalingServer implements LanSignaling {
               jsonDecode(utf8.decode(datagram.data)) as Map<String, dynamic>;
           final answer = _routes.answerProbe(message);
           if (answer != null) {
-            udp.send(utf8.encode(jsonEncode({...answer, "port": httpPort})),
-                datagram.address, datagram.port);
+            udp.send(
+              utf8.encode(jsonEncode({...answer, "port": httpPort})),
+              datagram.address,
+              datagram.port,
+            );
           } else {
             for (final heard in [..._discoveries]) {
               heard(datagram.address.address, message);
@@ -99,8 +107,11 @@ class SignalingServer implements LanSignaling {
         }
       });
     } catch (error) {
-      logFailure("sync", "no LAN discovery on udp $preferredSignalingPort",
-          error);
+      logFailure(
+        "sync",
+        "no LAN discovery on udp $preferredSignalingPort",
+        error,
+      );
     }
   }
 
@@ -163,13 +174,15 @@ class SignalingServer implements LanSignaling {
   Future<void> _handle(HttpRequest request) async {
     final response = request.response;
     try {
-      final reply = await _routes.handle(SignalingRequest(
-        request.method,
-        request.uri.path,
-        body: SignalingRoutes.carriesBody(request.method, request.uri.path)
-            ? await utf8.decodeStream(request)
-            : "",
-      ));
+      final reply = await _routes.handle(
+        SignalingRequest(
+          request.method,
+          request.uri.path,
+          body: SignalingRoutes.carriesBody(request.method, request.uri.path)
+              ? await utf8.decodeStream(request)
+              : "",
+        ),
+      );
       response.statusCode = reply.status;
       if (reply.body.isNotEmpty) response.write(reply.body);
     } catch (_) {

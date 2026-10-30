@@ -17,28 +17,34 @@ class Agent {
   ///
   /// Pre: no other turn of this agent runs in the room.
   /// Post: the stream closes when the turn is over.
-  Stream<AgentEvent> take(Message say,
-          {required List<Message> history,
-          required List<ConversationCompaction> compactions,
-          bool replaces = false,
-          SteerInbox? steers}) =>
-      _repo.sendPrompt(chatId, say,
-          history: history,
-          compactions: compactions,
-          replaces: replaces,
-          omadaMember: handle,
-          steers: steers);
+  Stream<AgentEvent> take(
+    Message say, {
+    required List<Message> history,
+    required List<ConversationCompaction> compactions,
+    bool replaces = false,
+    SteerInbox? steers,
+  }) => _repo.sendPrompt(
+    chatId,
+    say,
+    history: history,
+    compactions: compactions,
+    replaces: replaces,
+    omadaMember: handle,
+    steers: steers,
+  );
 
   /// Carry on the turn [history] ends in.
   ///
   /// Pre and post as [take].
-  Stream<AgentEvent> carryOn(
-          {required List<Message> history,
-          required List<ConversationCompaction> compactions,
-          SteerInbox? steers}) =>
-      _repo.resumeTurn(chatId,
-          history: history,
-          compactions: compactions,
-          omadaMember: handle,
-          steers: steers);
+  Stream<AgentEvent> carryOn({
+    required List<Message> history,
+    required List<ConversationCompaction> compactions,
+    SteerInbox? steers,
+  }) => _repo.resumeTurn(
+    chatId,
+    history: history,
+    compactions: compactions,
+    omadaMember: handle,
+    steers: steers,
+  );
 }

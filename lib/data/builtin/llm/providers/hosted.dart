@@ -5,7 +5,8 @@ import "provider.dart";
 /// they are.
 
 class GroqProvider extends OpenAiCompatibleProvider {
-  const GroqProvider([LlmProviderConfig config = preset]) : super(config, _terms);
+  const GroqProvider([LlmProviderConfig config = preset])
+    : super(config, _terms);
 
   static const preset = LlmProviderConfig(
     catalogId: "groq",
@@ -28,7 +29,8 @@ class GroqProvider extends OpenAiCompatibleProvider {
 // shortcut: not known to keep a model list behind the key; its light default
 // is free, so the completion costs nothing.
 class ZaiProvider extends OpenAiCompatibleProvider with ChecksKeyByCompletion {
-  const ZaiProvider([LlmProviderConfig config = preset]) : super(config, _terms);
+  const ZaiProvider([LlmProviderConfig config = preset])
+    : super(config, _terms);
 
   static const preset = LlmProviderConfig(
     catalogId: "zai",
@@ -44,7 +46,8 @@ class ZaiProvider extends OpenAiCompatibleProvider with ChecksKeyByCompletion {
   static const _terms = PresetTerms(
     blurb: "GLM models, some of them free.",
     prompts: PromptUse.unstated,
-    freeTier: "The GLM Flash models are free. Z.ai's terms do not say how "
+    freeTier:
+        "The GLM Flash models are free. Z.ai's terms do not say how "
         "prompts sent to the free models are handled, so treat them as not "
         "private.",
     policy: "https://docs.z.ai/legal-agreement/privacy-policy",
@@ -53,8 +56,10 @@ class ZaiProvider extends OpenAiCompatibleProvider with ChecksKeyByCompletion {
 }
 
 // shortcut: not known to keep a model list behind the key.
-class OllamaCloudProvider extends OpenAiCompatibleProvider with ChecksKeyByCompletion {
-  const OllamaCloudProvider([LlmProviderConfig config = preset]) : super(config, _terms);
+class OllamaCloudProvider extends OpenAiCompatibleProvider
+    with ChecksKeyByCompletion {
+  const OllamaCloudProvider([LlmProviderConfig config = preset])
+    : super(config, _terms);
 
   static const preset = LlmProviderConfig(
     catalogId: "ollama-cloud",

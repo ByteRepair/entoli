@@ -20,25 +20,25 @@ const _monoStyle = TextStyle(fontFamily: monoFamily, fontSize: 13);
 /// and the device's own page below share the icon and the colour — one home
 /// so the two cannot drift; the word is the page's alone, private for it.
 IconData peerStatusIcon(PeerStatus status) => switch (status) {
-      PeerStatus.online => Icons.circle,
-      PeerStatus.connecting => Icons.circle_outlined,
-      PeerStatus.offline => Icons.circle_outlined,
-      PeerStatus.error => Icons.error_outline,
-    };
+  PeerStatus.online => Icons.circle,
+  PeerStatus.connecting => Icons.circle_outlined,
+  PeerStatus.offline => Icons.circle_outlined,
+  PeerStatus.error => Icons.error_outline,
+};
 
 Color peerStatusColor(PeerStatus status, ThemeData theme) => switch (status) {
-      PeerStatus.online => Colors.green,
-      PeerStatus.connecting => theme.colorScheme.primary,
-      PeerStatus.offline => theme.colorScheme.onSurfaceVariant,
-      PeerStatus.error => theme.colorScheme.error,
-    };
+  PeerStatus.online => Colors.green,
+  PeerStatus.connecting => theme.colorScheme.primary,
+  PeerStatus.offline => theme.colorScheme.onSurfaceVariant,
+  PeerStatus.error => theme.colorScheme.error,
+};
 
 String _peerStatusWord(PeerStatus status) => switch (status) {
-      PeerStatus.online => "Connected",
-      PeerStatus.connecting => "Connecting…",
-      PeerStatus.offline => "Not connected",
-      PeerStatus.error => "Not connected",
-    };
+  PeerStatus.online => "Connected",
+  PeerStatus.connecting => "Connecting…",
+  PeerStatus.offline => "Not connected",
+  PeerStatus.error => "Not connected",
+};
 
 /// A paired device's own page, reached by clicking its row on the Sync page:
 /// the record as this device holds it — the name, the connection, when it
@@ -69,8 +69,10 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
 
   Future<void> _reload() async {
     try {
-      final device =
-          await ref.read(syncHubProvider).registry.byId(widget.deviceId);
+      final device = await ref
+          .read(syncHubProvider)
+          .registry
+          .byId(widget.deviceId);
       if (mounted) {
         setState(() {
           _device = device;
@@ -111,18 +113,20 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
     // One device's state, and only that device's: the page is rebuilt when
     // its own name, status or error moves, not when an unrelated device's
     // dial does.
-    final peer = ref
-        .watch(syncPeersProvider.select((peers) => peers[widget.deviceId]));
+    final peer = ref.watch(
+      syncPeersProvider.select((peers) => peers[widget.deviceId]),
+    );
     final device = _device;
     final theme = Theme.of(context);
     // The record's fresh half is what this page's own Connect writes — a
     // dial that ends marks the device seen. The one change worth re-reading
     // for, answered when the status settles rather than as a comment.
     ref.listen(
-        syncPeersProvider.select((peers) => peers[widget.deviceId]?.status),
-        (_, status) {
-      if (status != PeerStatus.connecting) _reload();
-    });
+      syncPeersProvider.select((peers) => peers[widget.deviceId]?.status),
+      (_, status) {
+        if (status != PeerStatus.connecting) _reload();
+      },
+    );
 
     // The header stays a category ("Paired device"); the name it would have
     // repeated sits one line down, and a title saying who this is a page
@@ -132,30 +136,34 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
       body: !_loaded
           ? const Center(child: CircularProgressIndicator())
           : device == null
-              // Revoked (there as here) while the page was open: the record
-              // went. A read that could not get through says what did not;
-              // the answer would otherwise be the same false "gone".
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: SelectableText(
-                      _readError != null
-                          ? "The record could not be read: $_readError"
-                          : "No longer paired.",
-                    ),
-                  ),
-                )
-              : ListView(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  children: _content(hub, device, peer, theme),
+          // Revoked (there as here) while the page was open: the record
+          // went. A read that could not get through says what did not;
+          // the answer would otherwise be the same false "gone".
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: SelectableText(
+                  _readError != null
+                      ? "The record could not be read: $_readError"
+                      : "No longer paired.",
                 ),
+              ),
+            )
+          : ListView(
+              padding: const EdgeInsets.only(bottom: 16),
+              children: _content(hub, device, peer, theme),
+            ),
     );
   }
 
   // The state's own context: the closures below cross async gaps, and a
   // context guarded by `mounted` is this class's to guard.
-  List<Widget> _content(SyncHub hub, PairedDevice device, PeerState? peer,
-      ThemeData theme) {
+  List<Widget> _content(
+    SyncHub hub,
+    PairedDevice device,
+    PeerState? peer,
+    ThemeData theme,
+  ) {
     final name = peer?.name ?? device.name;
     final status =
         peer?.status ?? PeerStatus.offline; // published at every startup.
@@ -177,8 +185,11 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
         ),
       ),
       ListTile(
-        leading: Icon(peerStatusIcon(status),
-            size: 20, color: peerStatusColor(status, theme)),
+        leading: Icon(
+          peerStatusIcon(status),
+          size: 20,
+          color: peerStatusColor(status, theme),
+        ),
         title: Text(_peerStatusWord(status)),
         subtitle: peer?.error == null ? null : SelectableText(peer!.error!),
         // The row's action, beside the status it acts on. Connecting is the
@@ -186,14 +197,16 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
         trailing: status == PeerStatus.connecting
             ? null
             : status == PeerStatus.online
-                ? TextButton(
-                    onPressed: () => catchAndSay(
-                        context, () => hub.disconnect(widget.deviceId)),
-                    child: const Text("Disconnect"))
-                : TextButton(
-                    onPressed: () => catchAndSay(
-                        context, () => hub.connect(widget.deviceId)),
-                    child: const Text("Connect")),
+            ? TextButton(
+                onPressed: () =>
+                    catchAndSay(context, () => hub.disconnect(widget.deviceId)),
+                child: const Text("Disconnect"),
+              )
+            : TextButton(
+                onPressed: () =>
+                    catchAndSay(context, () => hub.connect(widget.deviceId)),
+                child: const Text("Connect"),
+              ),
       ),
       ListTile(
         title: const Text("Last connected"),
@@ -212,7 +225,8 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
       // The peer's key, as this device stores it.
       SectionHeader(
         "Device fingerprint",
-        description: "The code over $name's sync key, as this device "
+        description:
+            "The code over $name's sync key, as this device "
             "received it at the pair.",
       ),
       if (peerFingerprint case final fingerprint?)
@@ -229,13 +243,14 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
         child: mutedParagraph(
-            context,
-            "A fingerprint is a code derived from a device's sync key. It is "
-            "not a secret: it identifies a key and grants nothing. "
-            "Connecting still requires a pairing code. To verify the pair, "
-            "compare the Device fingerprint above with the code $name shows "
-            "under This device on its own Sync page. Matching codes mean the "
-            "two devices are still the ones that completed the pairing."),
+          context,
+          "A fingerprint is a code derived from a device's sync key. It is "
+          "not a secret: it identifies a key and grants nothing. "
+          "Connecting still requires a pairing code. To verify the pair, "
+          "compare the Device fingerprint above with the code $name shows "
+          "under This device on its own Sync page. Matching codes mean the "
+          "two devices are still the ones that completed the pairing.",
+        ),
       ),
       // The row's destructive action, at the end of the page the way a
       // destructive action ends a page. A successful one leaves nothing for
@@ -247,12 +262,16 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
           child: TextButton.icon(
             onPressed: () async {
               final ok = await confirmRevokeDevice(
-                  context, name, () => hub.revoke(widget.deviceId));
+                context,
+                name,
+                () => hub.revoke(widget.deviceId),
+              );
               if (ok && mounted) Navigator.of(context).pop();
             },
             icon: const Icon(Icons.link_off),
             style: TextButton.styleFrom(
-                foregroundColor: theme.colorScheme.error),
+              foregroundColor: theme.colorScheme.error,
+            ),
             label: const Text("Revoke"),
           ),
         ),
@@ -275,7 +294,8 @@ Future<bool> confirmRevokeDevice(
   final ok = await confirm(
     context,
     title: "Revoke device?",
-    message: "Unpair from $name? They will keep this device until someone "
+    message:
+        "Unpair from $name? They will keep this device until someone "
         "revokes there too.",
     confirmLabel: "Revoke",
     destructive: true,
@@ -304,12 +324,13 @@ class _FingerprintLine extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          Icon(Icons.fingerprint_outlined,
-              size: 20, color: theme.colorScheme.onSurfaceVariant),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(value, style: _monoStyle),
+          Icon(
+            Icons.fingerprint_outlined,
+            size: 20,
+            color: theme.colorScheme.onSurfaceVariant,
           ),
+          const SizedBox(width: 8),
+          Expanded(child: Text(value, style: _monoStyle)),
           IconButton(
             tooltip: "Copy fingerprint",
             icon: const Icon(Icons.copy_outlined, size: 18),

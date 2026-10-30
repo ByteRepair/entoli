@@ -21,7 +21,6 @@ import "../../../domain/app_settings.dart" show SettingsEditor;
 ///
 /// `BuiltinAgent` is the one implementation: a turn is an agent running.
 abstract interface class Turn {
-
   /// The chat's own directory, where the shell starts.
   String get workspace;
 
@@ -93,10 +92,10 @@ abstract interface class Turn {
   ApproveMode get browserApprove;
 
   Future<String> Function(String path, String entryFile, {String? artifactId})?
-      get saveArtifact;
+  get saveArtifact;
   Future<List<LlmAttachment>> Function(String prompt)? get generateImage;
   Future<({String installId, String name})> Function(String path, String? name)?
-      get packageSkill;
+  get packageSkill;
   TriggerRegistry? get registerTrigger;
   ChatJobs? get backgroundJobs;
   SettingsEditor? get editSettings;

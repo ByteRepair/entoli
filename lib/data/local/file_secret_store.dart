@@ -18,8 +18,8 @@ import "../../domain/secret_store.dart";
 /// keyring; nothing else in the app can tell the difference.
 class FileSecretStore implements SecretStore {
   FileSecretStore(AppConfig config)
-      : _file = File(p.join(config.syncDir, "secrets.json")),
-        _writer = RenameWriter();
+    : _file = File(p.join(config.syncDir, "secrets.json")),
+      _writer = RenameWriter();
 
   final File _file;
   final RenameWriter _writer;
@@ -32,11 +32,18 @@ class FileSecretStore implements SecretStore {
     final values = <String, String>{};
     try {
       if (_file.existsSync()) {
-        values.addAll((jsonDecode(await _file.readAsString()) as Map).cast<String, String>());
+        values.addAll(
+          (jsonDecode(await _file.readAsString()) as Map)
+              .cast<String, String>(),
+        );
       }
     } catch (e) {
       // Unreadable is unpaired: start over rather than fail the app.
-      logFailure("secrets", "secrets.json could not be read; starting empty", e);
+      logFailure(
+        "secrets",
+        "secrets.json could not be read; starting empty",
+        e,
+      );
     }
     return values;
   }

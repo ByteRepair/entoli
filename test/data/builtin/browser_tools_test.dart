@@ -8,7 +8,12 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/browser/cdp_browser.dart"
-    show CdpBrowser, challengeNote, looksLikeChallenge, pageAddress, reapLostBrowser;
+    show
+        CdpBrowser,
+        challengeNote,
+        looksLikeChallenge,
+        pageAddress,
+        reapLostBrowser;
 import "package:agent_chat/data/browser/helium.dart";
 import "package:agent_chat/data/builtin/tools/browser_tools.dart";
 import "package:agent_chat/data/builtin/builtin_agent.dart";
@@ -101,7 +106,10 @@ class FakeBrowserTab implements BrowserTab {
   Future<String> requestUpload(int ref) {
     calls.add("request upload $ref");
     _uploading = Completer();
-    uploadRequest.value = UploadRequest(target: "[$ref] button", url: "https://example.com");
+    uploadRequest.value = UploadRequest(
+      target: "[$ref] button",
+      url: "https://example.com",
+    );
     return _uploading!.future;
   }
 
@@ -119,7 +127,9 @@ class FakeBrowserTab implements BrowserTab {
   }
 
   @override
-  final ValueNotifier<CredentialRequest?> credentialRequest = ValueNotifier(null);
+  final ValueNotifier<CredentialRequest?> credentialRequest = ValueNotifier(
+    null,
+  );
   Completer<String>? _waiting;
 
   /// What a sign-in typed into the page, as the real tab would.
@@ -171,7 +181,9 @@ class FakeBrowserTab implements BrowserTab {
 
   @override
   Future<String> drag(
-      ({double x, double y}) from, ({double x, double y}) to) async {
+    ({double x, double y}) from,
+    ({double x, double y}) to,
+  ) async {
     calls.add("drag");
     return "dragged";
   }
@@ -189,13 +201,19 @@ class FakeBrowserTab implements BrowserTab {
   }
 
   @override
-  Future<String> scroll(
-      {bool up = false, int? ref, double? x, double? y}) async {
-    calls.add([
-      up ? "scroll up" : "scroll down",
-      if (ref != null) "[$ref]",
-      if (x != null && y != null) "($x, $y)",
-    ].join(" "));
+  Future<String> scroll({
+    bool up = false,
+    int? ref,
+    double? x,
+    double? y,
+  }) async {
+    calls.add(
+      [
+        up ? "scroll up" : "scroll down",
+        if (ref != null) "[$ref]",
+        if (x != null && y != null) "($x, $y)",
+      ].join(" "),
+    );
     return "scrolled";
   }
 
@@ -208,8 +226,12 @@ class FakeBrowserTab implements BrowserTab {
   @override
   Future<BrowserShot> screenshot({int? ref, bool markClick = false}) async {
     calls.add("shot ${ref ?? "view"}${markClick ? " marked" : ""}");
-    return BrowserShot(Uint8List.fromList([1, 2, 3]),
-        left: 10, top: 20, click: markClick ? lastClick : null);
+    return BrowserShot(
+      Uint8List.fromList([1, 2, 3]),
+      left: 10,
+      top: 20,
+      click: markClick ? lastClick : null,
+    );
   }
 
   ({double x, double y})? lastClick;
@@ -229,22 +251,26 @@ class _StubClassifier implements PermissionClassifier {
   final asked = <(String, String)>[];
 
   @override
-  Future<PermissionDecision> classify(String toolName, String argumentsJson,
-      {required String workspace, List<String> alsoWritable = const []}) async {
+  Future<PermissionDecision> classify(
+    String toolName,
+    String argumentsJson, {
+    required String workspace,
+    List<String> alsoWritable = const [],
+  }) async {
     asked.add((toolName, argumentsJson));
     return decision;
   }
 }
 
 LlmCompletion call(String name, Map<String, Object?> args) => LlmCompletion(
-      message: LlmMessage(
-        role: LlmRole.assistant,
-        text: "",
-        toolCalls: [
-          LlmToolCall(id: "b-1", name: name, argumentsJson: jsonEncode(args)),
-        ],
-      ),
-    );
+  message: LlmMessage(
+    role: LlmRole.assistant,
+    text: "",
+    toolCalls: [
+      LlmToolCall(id: "b-1", name: name, argumentsJson: jsonEncode(args)),
+    ],
+  ),
+);
 
 void main() {
   final finish = saidOnly("done");
@@ -284,9 +310,10 @@ void main() {
       },
       answer: (request) => Future.value(request.unanswered),
       caps: AgentCapabilities.forTurn(
-          commands: true,
-          disabled: {if (noAsk) AgentCapability.ask},
-          browser: browser),
+        commands: true,
+        disabled: {if (noAsk) AgentCapability.ask},
+        browser: browser,
+      ),
       browser: tab,
       seesImages: seesImages,
       browserApprove: browserApprove,
@@ -299,32 +326,47 @@ void main() {
     );
   }
 
-  List<String> offered(FakeLlmClient client) =>
-      [for (final tool in client.calls.first.tools) tool.name];
+  List<String> offered(FakeLlmClient client) => [
+    for (final tool in client.calls.first.tools) tool.name,
+  ];
 
   group("what is offered", () {
-    test("the tools ride a picked browser, the screenshot a model that sees",
-        () async {
-      final seeing = FakeLlmClient([[finish]]);
-      await agentOver(seeing, tab: FakeBrowserTab())
-          .run(userMessage("hi"))
-          .toList();
-      expect(offered(seeing),
-          containsAll([browserGotoToolName, browserScreenshotToolName]));
+    test(
+      "the tools ride a picked browser, the screenshot a model that sees",
+      () async {
+        final seeing = FakeLlmClient([
+          [finish],
+        ]);
+        await agentOver(
+          seeing,
+          tab: FakeBrowserTab(),
+        ).run(userMessage("hi")).toList();
+        expect(
+          offered(seeing),
+          containsAll([browserGotoToolName, browserScreenshotToolName]),
+        );
 
-      final blind = FakeLlmClient([[finish]]);
-      await agentOver(blind, tab: FakeBrowserTab(), seesImages: false)
-          .run(userMessage("hi"))
-          .toList();
-      expect(offered(blind), contains(browserGotoToolName));
-      expect(offered(blind), isNot(contains(browserScreenshotToolName)));
-    });
+        final blind = FakeLlmClient([
+          [finish],
+        ]);
+        await agentOver(
+          blind,
+          tab: FakeBrowserTab(),
+          seesImages: false,
+        ).run(userMessage("hi")).toList();
+        expect(offered(blind), contains(browserGotoToolName));
+        expect(offered(blind), isNot(contains(browserScreenshotToolName)));
+      },
+    );
 
     test("no drag or upload where a click is a script's", () async {
-      final client = FakeLlmClient([[finish]]);
-      await agentOver(client, tab: FakeBrowserTab()..trustedInput = false)
-          .run(userMessage("hi"))
-          .toList();
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      await agentOver(
+        client,
+        tab: FakeBrowserTab()..trustedInput = false,
+      ).run(userMessage("hi")).toList();
       expect(offered(client), contains(browserClickToolName));
       expect(offered(client), isNot(contains(browserDragToolName)));
       expect(offered(client), isNot(contains(browserUploadToolName)));
@@ -332,22 +374,41 @@ void main() {
 
     test("the prompt says how to use it only where it is offered", () {
       AgentCapabilities caps(bool browser) => AgentCapabilities.forTurn(
-          commands: true, disabled: const {}, browser: browser);
-      expect(systemPrompt(platform: "linux", offer: ToolOffer(caps: caps(true))),
-          contains("## Using the browser"));
-      expect(systemPrompt(platform: "linux", offer: ToolOffer(caps: caps(false))),
-          isNot(contains("browser_")));
+        commands: true,
+        disabled: const {},
+        browser: browser,
+      );
+      expect(
+        systemPrompt(
+          platform: "linux",
+          offer: ToolOffer(caps: caps(true)),
+        ),
+        contains("## Using the browser"),
+      );
+      expect(
+        systemPrompt(
+          platform: "linux",
+          offer: ToolOffer(caps: caps(false)),
+        ),
+        isNot(contains("browser_")),
+      );
     });
 
     test("nothing without a browser, and nothing for a sub-agent", () async {
-      final off = FakeLlmClient([[finish]]);
+      final off = FakeLlmClient([
+        [finish],
+      ]);
       await agentOver(off, browser: false).run(userMessage("hi")).toList();
       expect(offered(off).where((n) => n.startsWith("browser_")), isEmpty);
 
-      final worker = FakeLlmClient([[finish]]);
-      await agentOver(worker, tab: FakeBrowserTab(), oneShot: true)
-          .run(userMessage("hi"))
-          .toList();
+      final worker = FakeLlmClient([
+        [finish],
+      ]);
+      await agentOver(
+        worker,
+        tab: FakeBrowserTab(),
+        oneShot: true,
+      ).run(userMessage("hi")).toList();
       expect(offered(worker).where((n) => n.startsWith("browser_")), isEmpty);
     });
   });
@@ -358,7 +419,9 @@ void main() {
       final classifier = _StubClassifier(PermissionDecision.deny);
       final events = await agentOver(
         FakeLlmClient([
-          [call(browserGotoToolName, {"url": "https://example.com"})],
+          [
+            call(browserGotoToolName, {"url": "https://example.com"}),
+          ],
           [finish],
         ]),
         tab: tab,
@@ -367,8 +430,10 @@ void main() {
       ).run(userMessage("go")).toList();
       expect(tab.calls, isEmpty);
       expect(classifier.asked.single.$1, "webfetch");
-      expect(events.whereType<ToolResultEvent>().first.result.exceptionInfo,
-          contains("Denied"));
+      expect(
+        events.whereType<ToolResultEvent>().first.result.exceptionInfo,
+        contains("Denied"),
+      );
     });
 
     test("a click is asked about by what it clicks, not its number", () async {
@@ -376,7 +441,9 @@ void main() {
       final asked = <ToolApproval>[];
       await agentOver(
         FakeLlmClient([
-          [call(browserClickToolName, {"ref": 7})],
+          [
+            call(browserClickToolName, {"ref": 7}),
+          ],
           [finish],
         ]),
         tab: tab,
@@ -391,7 +458,9 @@ void main() {
       final classifier = _StubClassifier(PermissionDecision.allow);
       await agentOver(
         FakeLlmClient([
-          [call(browserTypeToolName, {"ref": 3, "text": "hi", "submit": true})],
+          [
+            call(browserTypeToolName, {"ref": 3, "text": "hi", "submit": true}),
+          ],
           [finish],
         ]),
         tab: FakeBrowserTab(),
@@ -403,43 +472,60 @@ void main() {
       expect(jsonDecode(args)["action"], contains("press Enter"));
     });
 
-    test("by default nothing in the browser asks, whatever the chat's mode",
-        () async {
-      final tab = FakeBrowserTab();
-      final asked = <ToolApproval>[];
-      await agentOver(
-        FakeLlmClient([
-          [call(browserGotoToolName, {"url": "https://example.com"})],
-          [call(browserClickToolName, {"ref": 7})],
-          [call(browserTypeToolName, {"text": "hi"})],
-          [finish],
-        ]),
-        tab: tab,
-        approveMode: ApproveMode.ask,
-        asked: asked,
-      ).run(userMessage("go")).toList();
-      expect(asked, isEmpty);
-      expect(tab.calls, ["goto https://example.com", "click 7", "type null hi false"]);
-    });
+    test(
+      "by default nothing in the browser asks, whatever the chat's mode",
+      () async {
+        final tab = FakeBrowserTab();
+        final asked = <ToolApproval>[];
+        await agentOver(
+          FakeLlmClient([
+            [
+              call(browserGotoToolName, {"url": "https://example.com"}),
+            ],
+            [
+              call(browserClickToolName, {"ref": 7}),
+            ],
+            [
+              call(browserTypeToolName, {"text": "hi"}),
+            ],
+            [finish],
+          ]),
+          tab: tab,
+          approveMode: ApproveMode.ask,
+          asked: asked,
+        ).run(userMessage("go")).toList();
+        expect(asked, isEmpty);
+        expect(tab.calls, [
+          "goto https://example.com",
+          "click 7",
+          "type null hi false",
+        ]);
+      },
+    );
 
     test("a host the user denied stays denied when nothing asks", () async {
       final tab = FakeBrowserTab();
       final events = await agentOver(
         FakeLlmClient([
-          [call(browserGotoToolName, {"url": "https://blocked.example/x"})],
+          [
+            call(browserGotoToolName, {"url": "https://blocked.example/x"}),
+          ],
           [finish],
         ]),
         tab: tab,
         permissions: const [
           PermissionRule(
-              tool: "webfetch",
-              pattern: "blocked.example",
-              decision: PermissionDecision.deny),
+            tool: "webfetch",
+            pattern: "blocked.example",
+            decision: PermissionDecision.deny,
+          ),
         ],
       ).run(userMessage("go")).toList();
       expect(tab.calls, isEmpty);
-      expect(events.whereType<ToolResultEvent>().first.result.exceptionInfo,
-          contains("Denied"));
+      expect(
+        events.whereType<ToolResultEvent>().first.result.exceptionInfo,
+        contains("Denied"),
+      );
     });
 
     test("a key press carries its modifiers", () async {
@@ -464,8 +550,12 @@ void main() {
       final asked = <ToolApproval>[];
       await agentOver(
         FakeLlmClient([
-          [call(browserScrollToolName, {"direction": "up"})],
-          [call(browserPageTextToolName, {"offset": 40})],
+          [
+            call(browserScrollToolName, {"direction": "up"}),
+          ],
+          [
+            call(browserPageTextToolName, {"offset": 40}),
+          ],
           [finish],
         ]),
         tab: tab,
@@ -480,74 +570,87 @@ void main() {
       final tab = FakeBrowserTab();
       await agentOver(
         FakeLlmClient([
-          [call(browserScrollToolName, {"direction": "up", "ref": 89})],
-          [call(browserScrollToolName, {"x": 900, "y": 500})],
+          [
+            call(browserScrollToolName, {"direction": "up", "ref": 89}),
+          ],
+          [
+            call(browserScrollToolName, {"x": 900, "y": 500}),
+          ],
           [finish],
         ]),
         tab: tab,
       ).run(userMessage("read")).toList();
       expect(tab.calls, ["scroll up [89]", "scroll down (900.0, 500.0)"]);
     });
-
   });
 
   group("private input", () {
-    test("while hidden, every browser tool refuses and touches nothing",
-        () async {
-      final tab = FakeBrowserTab()..hide(const BrowserHold());
-      final events = await agentOver(
-        FakeLlmClient([
-          [call(browserGotoToolName, {"url": "https://example.com"})],
-          [call(browserScreenshotToolName, {})],
-          [finish],
-        ]),
-        tab: tab,
-      ).run(userMessage("go")).toList();
-      expect(tab.calls, isEmpty);
-      final refused = events.whereType<ToolResultEvent>().toList();
-      expect(refused, hasLength(2));
-      for (final result in refused) {
-        expect(result.result.exceptionInfo, contains("hidden the browser"));
-      }
-    });
-
-    test("a sign-in reaches the page, and nothing the agent sees holds it",
-        () async {
-      final tab = FakeBrowserTab();
-      tab.credentialRequest.addListener(() {
-        if (tab.credentialRequest.value != null) {
-          unawaited(tab.submitCredentials(["me@example.com", "hunter2"]));
+    test(
+      "while hidden, every browser tool refuses and touches nothing",
+      () async {
+        final tab = FakeBrowserTab()..hide(const BrowserHold());
+        final events = await agentOver(
+          FakeLlmClient([
+            [
+              call(browserGotoToolName, {"url": "https://example.com"}),
+            ],
+            [call(browserScreenshotToolName, {})],
+            [finish],
+          ]),
+          tab: tab,
+        ).run(userMessage("go")).toList();
+        expect(tab.calls, isEmpty);
+        final refused = events.whereType<ToolResultEvent>().toList();
+        expect(refused, hasLength(2));
+        for (final result in refused) {
+          expect(result.result.exceptionInfo, contains("hidden the browser"));
         }
-      });
-      final client = FakeLlmClient([
-        [
-          call(browserCredentialsPromptToolName, {
-            "reason": "Sign in to Example",
-            "fields": [
-              {"ref": 3, "label": "Email"},
-              {"ref": 4, "label": "Password", "secret": true},
-            ],
-            "submit": [
-              {"ref": 5},
-            ],
-          }),
-        ],
-        [finish],
-      ]);
-      final events =
-          await agentOver(client, tab: tab).run(userMessage("sign in")).toList();
-      expect(tab.typedIn, ["me@example.com", "hunter2"]);
-      final result = events.whereType<ToolResultEvent>().first.result;
-      expect(result.returnCode, 0);
-      expect(result.output, contains("page after"));
-      // Not in a single event the log could record, nor in what the model
-      // was sent next.
-      for (final event in events) {
-        expect(_describe(event), isNot(contains("hunter2")));
-      }
-      expect(client.sent.last.map((m) => m.text).join(),
-          isNot(contains("hunter2")));
-    });
+      },
+    );
+
+    test(
+      "a sign-in reaches the page, and nothing the agent sees holds it",
+      () async {
+        final tab = FakeBrowserTab();
+        tab.credentialRequest.addListener(() {
+          if (tab.credentialRequest.value != null) {
+            unawaited(tab.submitCredentials(["me@example.com", "hunter2"]));
+          }
+        });
+        final client = FakeLlmClient([
+          [
+            call(browserCredentialsPromptToolName, {
+              "reason": "Sign in to Example",
+              "fields": [
+                {"ref": 3, "label": "Email"},
+                {"ref": 4, "label": "Password", "secret": true},
+              ],
+              "submit": [
+                {"ref": 5},
+              ],
+            }),
+          ],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          tab: tab,
+        ).run(userMessage("sign in")).toList();
+        expect(tab.typedIn, ["me@example.com", "hunter2"]);
+        final result = events.whereType<ToolResultEvent>().first.result;
+        expect(result.returnCode, 0);
+        expect(result.output, contains("page after"));
+        // Not in a single event the log could record, nor in what the model
+        // was sent next.
+        for (final event in events) {
+          expect(_describe(event), isNot(contains("hunter2")));
+        }
+        expect(
+          client.sent.last.map((m) => m.text).join(),
+          isNot(contains("hunter2")),
+        );
+      },
+    );
 
     test("a declined sign-in is a failure the agent reads", () async {
       final tab = FakeBrowserTab();
@@ -568,8 +671,10 @@ void main() {
         ]),
         tab: tab,
       ).run(userMessage("sign in")).toList();
-      expect(events.whereType<ToolResultEvent>().first.result.exceptionInfo,
-          "declined");
+      expect(
+        events.whereType<ToolResultEvent>().first.result.exceptionInfo,
+        "declined",
+      );
     });
 
     test("hiding shows the reason and waits for the browser back", () async {
@@ -586,8 +691,9 @@ void main() {
       final events = await agentOver(
         FakeLlmClient([
           [
-            call(browserCredentialsHideToolName,
-                {"reason": "Please sign in to Google to proceed"}),
+            call(browserCredentialsHideToolName, {
+              "reason": "Please sign in to Google to proceed",
+            }),
           ],
           [finish],
         ]),
@@ -595,12 +701,13 @@ void main() {
       ).run(userMessage("go")).toList();
       expect(shown, "Please sign in to Google to proceed");
       expect(tab.hold.value, isNull);
-      expect(events.whereType<ToolResultEvent>().first.result.output,
-          contains("The user gave the browser back to you."));
+      expect(
+        events.whereType<ToolResultEvent>().first.result.output,
+        contains("The user gave the browser back to you."),
+      );
     });
 
-    test("what the user did reaches the next browser result, once",
-        () async {
+    test("what the user did reaches the next browser result, once", () async {
       final tab = FakeBrowserTab()
         ..notes.addAll([
           "The user went back to https://example.com/.",
@@ -615,9 +722,14 @@ void main() {
         tab: tab,
       ).run(userMessage("go")).toList();
       final results = events.whereType<ToolResultEvent>().toList();
-      expect(results.first.result.output,
-          startsWith("Since your last browser call:\n- The user went back"));
-      expect(results.first.result.output, contains("- The user quit the browser."));
+      expect(
+        results.first.result.output,
+        startsWith("Since your last browser call:\n- The user went back"),
+      );
+      expect(
+        results.first.result.output,
+        contains("- The user quit the browser."),
+      );
       expect(results.first.result.output, endsWith("scrolled"));
       expect(results.last.result.output, "scrolled");
     });
@@ -631,17 +743,26 @@ void main() {
         ]),
         tab: tab,
       ).run(userMessage("go")).toList();
-      expect(events.whereType<ToolResultEvent>().first.result.exceptionInfo,
-          contains("The user hid the browser from you."));
+      expect(
+        events.whereType<ToolResultEvent>().first.result.exceptionInfo,
+        contains("The user hid the browser from you."),
+      );
     });
 
     test("neither is offered where nobody is there to answer", () async {
-      final client = FakeLlmClient([[finish]]);
-      await agentOver(client, tab: FakeBrowserTab(), noAsk: true)
-          .run(userMessage("hi"))
-          .toList();
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      await agentOver(
+        client,
+        tab: FakeBrowserTab(),
+        noAsk: true,
+      ).run(userMessage("hi")).toList();
       expect(offered(client), contains(browserGotoToolName));
-      expect(offered(client), isNot(contains(browserCredentialsPromptToolName)));
+      expect(
+        offered(client),
+        isNot(contains(browserCredentialsPromptToolName)),
+      );
       expect(offered(client), isNot(contains(browserCredentialsHideToolName)));
     });
   });
@@ -651,53 +772,63 @@ void main() {
         File(p.join(chat, "report.pdf")).writeAsStringSync("%PDF");
 
     LlmCompletion upload() => call(browserUploadToolName, {
-          "ref": 4,
-          "paths": ["report.pdf"],
-        });
-
-    test("by default the classifier sees the whole path and the page",
-        () async {
-      final tab = FakeBrowserTab();
-      final classifier = _StubClassifier(PermissionDecision.deny);
-      final events = await agentOver(
-        FakeLlmClient([
-          [upload()],
-          [finish],
-        ]),
-        tab: tab,
-        classifier: classifier,
-        inWorkspace: report,
-      ).run(userMessage("upload it")).toList();
-      expect(tab.calls, isEmpty);
-      final (tool, args) = classifier.asked.single;
-      expect(tool, browserUploadToolName);
-      final action = jsonDecode(args)["action"] as String;
-      expect(action, contains(p.join("chats", "chat-1", "report.pdf")));
-      expect(action, contains("shop.example/cart"));
-      expect(events.whereType<ToolResultEvent>().first.result.exceptionInfo,
-          contains("Denied"));
+      "ref": 4,
+      "paths": ["report.pdf"],
     });
 
-    test("it is its own scope: clicks unasked, an upload still asked",
-        () async {
-      final tab = FakeBrowserTab();
-      final classifier = _StubClassifier(PermissionDecision.allow);
-      await agentOver(
-        FakeLlmClient([
-          [call(browserClickToolName, {"ref": 1})],
-          [upload()],
-          [finish],
-        ]),
-        tab: tab,
-        classifier: classifier,
-        inWorkspace: report,
-      ).run(userMessage("go")).toList();
-      // The click asked nobody; only the upload reached the classifier.
-      expect([for (final (tool, _) in classifier.asked) tool],
-          [browserUploadToolName]);
-      expect(tab.calls.last, startsWith("upload 4 "));
-      expect(tab.calls.last, endsWith("report.pdf"));
-    });
+    test(
+      "by default the classifier sees the whole path and the page",
+      () async {
+        final tab = FakeBrowserTab();
+        final classifier = _StubClassifier(PermissionDecision.deny);
+        final events = await agentOver(
+          FakeLlmClient([
+            [upload()],
+            [finish],
+          ]),
+          tab: tab,
+          classifier: classifier,
+          inWorkspace: report,
+        ).run(userMessage("upload it")).toList();
+        expect(tab.calls, isEmpty);
+        final (tool, args) = classifier.asked.single;
+        expect(tool, browserUploadToolName);
+        final action = jsonDecode(args)["action"] as String;
+        expect(action, contains(p.join("chats", "chat-1", "report.pdf")));
+        expect(action, contains("shop.example/cart"));
+        expect(
+          events.whereType<ToolResultEvent>().first.result.exceptionInfo,
+          contains("Denied"),
+        );
+      },
+    );
+
+    test(
+      "it is its own scope: clicks unasked, an upload still asked",
+      () async {
+        final tab = FakeBrowserTab();
+        final classifier = _StubClassifier(PermissionDecision.allow);
+        await agentOver(
+          FakeLlmClient([
+            [
+              call(browserClickToolName, {"ref": 1}),
+            ],
+            [upload()],
+            [finish],
+          ]),
+          tab: tab,
+          classifier: classifier,
+          inWorkspace: report,
+        ).run(userMessage("go")).toList();
+        // The click asked nobody; only the upload reached the classifier.
+        expect(
+          [for (final (tool, _) in classifier.asked) tool],
+          [browserUploadToolName],
+        );
+        expect(tab.calls.last, startsWith("upload 4 "));
+        expect(tab.calls.last, endsWith("report.pdf"));
+      },
+    );
 
     test("Don't ask uploads with nobody asked", () async {
       final tab = FakeBrowserTab();
@@ -727,12 +858,13 @@ void main() {
         uploads: BrowserUploadPolicy.allow,
       ).run(userMessage("upload it")).toList();
       expect(tab.calls, isEmpty);
-      expect(events.whereType<ToolResultEvent>().first.result.exceptionInfo,
-          contains("no file at report.pdf"));
+      expect(
+        events.whereType<ToolResultEvent>().first.result.exceptionInfo,
+        contains("no file at report.pdf"),
+      );
     });
 
-    test("where the user chooses, the agent names no file and waits",
-        () async {
+    test("where the user chooses, the agent names no file and waits", () async {
       final tab = FakeBrowserTab();
       tab.uploadRequest.addListener(() {
         if (tab.uploadRequest.value != null) {
@@ -740,20 +872,25 @@ void main() {
         }
       });
       final client = FakeLlmClient([
-        [call(browserUploadToolName, {"ref": 4})],
+        [
+          call(browserUploadToolName, {"ref": 4}),
+        ],
         [finish],
       ]);
-      final events = await agentOver(client,
-              tab: tab, uploads: BrowserUploadPolicy.user)
-          .run(userMessage("upload my cv"))
-          .toList();
+      final events = await agentOver(
+        client,
+        tab: tab,
+        uploads: BrowserUploadPolicy.user,
+      ).run(userMessage("upload my cv")).toList();
       final schema = client.calls.first.tools
           .firstWhere((t) => t.name == browserUploadToolName)
           .schema;
       expect((schema["properties"] as Map).containsKey("paths"), isFalse);
       expect(tab.calls, ["request upload 4"]);
-      expect(events.whereType<ToolResultEvent>().first.result.output,
-          contains("The user chose 1 file(s)"));
+      expect(
+        events.whereType<ToolResultEvent>().first.result.output,
+        contains("The user chose 1 file(s)"),
+      );
     });
 
     test("and a cancel is what the agent hears", () async {
@@ -765,70 +902,91 @@ void main() {
       });
       final events = await agentOver(
         FakeLlmClient([
-          [call(browserUploadToolName, {"ref": 4})],
+          [
+            call(browserUploadToolName, {"ref": 4}),
+          ],
           [finish],
         ]),
         tab: tab,
         uploads: BrowserUploadPolicy.user,
       ).run(userMessage("upload my cv")).toList();
-      expect(events.whereType<ToolResultEvent>().first.result.exceptionInfo,
-          contains("sent a message instead"));
+      expect(
+        events.whereType<ToolResultEvent>().first.result.exceptionInfo,
+        contains("sent a message instead"),
+      );
     });
 
     test("where the user chooses, nobody there means no tool", () async {
-      final client = FakeLlmClient([[finish]]);
-      await agentOver(client,
-              tab: FakeBrowserTab(),
-              uploads: BrowserUploadPolicy.user,
-              noAsk: true)
-          .run(userMessage("hi"))
-          .toList();
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      await agentOver(
+        client,
+        tab: FakeBrowserTab(),
+        uploads: BrowserUploadPolicy.user,
+        noAsk: true,
+      ).run(userMessage("hi")).toList();
       expect(offered(client), isNot(contains(browserUploadToolName)));
     });
 
     test("the policy is written only when not the classifier", () {
-      expect(AppSettings().toJson().containsKey("agentBrowserUploads"), isFalse);
       expect(
-          AppSettings.fromJson(
-                  AppSettings(agentBrowserUploads: BrowserUploadPolicy.user)
-                      .toJson())
-              .agentBrowserUploads,
-          BrowserUploadPolicy.user);
+        AppSettings().toJson().containsKey("agentBrowserUploads"),
+        isFalse,
+      );
+      expect(
+        AppSettings.fromJson(
+          AppSettings(agentBrowserUploads: BrowserUploadPolicy.user).toJson(),
+        ).agentBrowserUploads,
+        BrowserUploadPolicy.user,
+      );
     });
   });
 
   test("a screenshot is an image on the result, with its offset", () async {
     final events = await agentOver(
       FakeLlmClient([
-        [call(browserScreenshotToolName, {"ref": 4})],
+        [
+          call(browserScreenshotToolName, {"ref": 4}),
+        ],
         [finish],
       ]),
       tab: FakeBrowserTab(),
     ).run(userMessage("look")).toList();
-    expect(events.whereType<ImageEvent>().single.part.resource,
-        "res-screenshot.png");
-    expect(events.whereType<ToolResultEvent>().first.result.output,
-        contains("(10, 20)"));
+    expect(
+      events.whereType<ImageEvent>().single.part.resource,
+      "res-screenshot.png",
+    );
+    expect(
+      events.whereType<ToolResultEvent>().first.result.output,
+      contains("(10, 20)"),
+    );
   });
 
-  test("last_click marks the click and says where, or that there is none",
-      () async {
-    Future<String> marked(FakeBrowserTab tab) async {
-      final events = await agentOver(
-        FakeLlmClient([
-          [call(browserScreenshotToolName, {"last_click": true})],
-          [finish],
-        ]),
-        tab: tab,
-      ).run(userMessage("look")).toList();
-      expect(tab.calls, ["shot view marked"]);
-      return events.whereType<ToolResultEvent>().first.result.output;
-    }
+  test(
+    "last_click marks the click and says where, or that there is none",
+    () async {
+      Future<String> marked(FakeBrowserTab tab) async {
+        final events = await agentOver(
+          FakeLlmClient([
+            [
+              call(browserScreenshotToolName, {"last_click": true}),
+            ],
+            [finish],
+          ]),
+          tab: tab,
+        ).run(userMessage("look")).toList();
+        expect(tab.calls, ["shot view marked"]);
+        return events.whereType<ToolResultEvent>().first.result.output;
+      }
 
-    expect(await marked(FakeBrowserTab()..lastClick = (x: 535, y: 446)),
-        contains("red dot is the last click, at (535, 446)"));
-    expect(await marked(FakeBrowserTab()), contains("No click to mark"));
-  });
+      expect(
+        await marked(FakeBrowserTab()..lastClick = (x: 535, y: 446)),
+        contains("red dot is the last click, at (535, 446)"),
+      );
+      expect(await marked(FakeBrowserTab()), contains("No click to mark"));
+    },
+  );
 
   group("webfetch's hint", () {
     Future<String> fetched(ShellResult result, {required bool browser}) async {
@@ -847,10 +1005,14 @@ void main() {
 
     test("a refused fetch points at the browser where there is one", () async {
       const refused = ShellResult.failed("Fetch returned HTTP 403.");
-      expect(await fetched(refused, browser: true),
-          contains(browserGotoToolName));
-      expect(await fetched(refused, browser: false),
-          isNot(contains(browserGotoToolName)));
+      expect(
+        await fetched(refused, browser: true),
+        contains(browserGotoToolName),
+      );
+      expect(
+        await fetched(refused, browser: false),
+        isNot(contains(browserGotoToolName)),
+      );
     });
 
     test("an ordinary page is left alone", () async {
@@ -864,11 +1026,16 @@ void main() {
     expect(AppSettings().toJson().containsKey("agentBrowserVisible"), isFalse);
     expect(AppSettings().agentBrowserVisible, isFalse);
     expect(
-        AppSettings.fromJson(AppSettings(agentBrowserVisible: true).toJson())
-            .agentBrowserVisible,
-        isTrue);
+      AppSettings.fromJson(
+        AppSettings(agentBrowserVisible: true).toJson(),
+      ).agentBrowserVisible,
+      isTrue,
+    );
     final picked = AppSettings(agentBrowser: embeddedBrowserId);
-    expect(AppSettings.fromJson(picked.toJson()).agentBrowser, embeddedBrowserId);
+    expect(
+      AppSettings.fromJson(picked.toJson()).agentBrowser,
+      embeddedBrowserId,
+    );
   });
 
   test("a quit ends the hiding and any sign-in waiting on the user", () async {
@@ -882,8 +1049,12 @@ void main() {
     );
     final tab = browser.tab("chat-1");
     tab.hide(const BrowserHold(reason: "Sign in to Google"));
-    final waiting = tab.requestCredentials(const CredentialRequest(
-        reason: "Sign in", fields: [CredentialField(ref: 1, label: "Email")]));
+    final waiting = tab.requestCredentials(
+      const CredentialRequest(
+        reason: "Sign in",
+        fields: [CredentialField(ref: 1, label: "Email")],
+      ),
+    );
     // Listened to before the quit fails it, as the waiting agent is.
     final declined = expectLater(waiting, throwsA(isA<CredentialsDeclined>()));
     await browser.close();
@@ -892,68 +1063,83 @@ void main() {
     await declined;
   });
 
-  test("a browser left running on the profile is quit before a launch",
-      () async {
-    final dir = Directory.systemTemp.createTempSync("agent-browser-lost");
-    addTearDown(() => dir.deleteSync(recursive: true));
-    final profile = p.join(dir.path, "profile");
-    // `; :` keeps the shell from exec'ing sleep, which would drop the flag.
-    Future<Process> holder(String flag) =>
-        Process.start("sh", ["-c", "sleep 30; :", "sh", flag]);
-    final lost = await holder("--user-data-dir=$profile");
-    final other = await holder("--user-data-dir=${dir.path}/elsewhere");
-    addTearDown(other.kill);
-    final lock = Link(p.join(profile, "SingletonLock"))
-      ..createSync("${Platform.localHostname}-${lost.pid}", recursive: true);
+  test(
+    "a browser left running on the profile is quit before a launch",
+    () async {
+      final dir = Directory.systemTemp.createTempSync("agent-browser-lost");
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final profile = p.join(dir.path, "profile");
+      // `; :` keeps the shell from exec'ing sleep, which would drop the flag.
+      Future<Process> holder(String flag) =>
+          Process.start("sh", ["-c", "sleep 30; :", "sh", flag]);
+      final lost = await holder("--user-data-dir=$profile");
+      final other = await holder("--user-data-dir=${dir.path}/elsewhere");
+      addTearDown(other.kill);
+      final lock = Link(p.join(profile, "SingletonLock"))
+        ..createSync("${Platform.localHostname}-${lost.pid}", recursive: true);
 
-    await reapLostBrowser(profile);
-    expect(await lost.exitCode.timeout(const Duration(seconds: 5)), isNot(0));
+      await reapLostBrowser(profile);
+      expect(await lost.exitCode.timeout(const Duration(seconds: 5)), isNot(0));
 
-    lock
-      ..deleteSync()
-      ..createSync("${Platform.localHostname}-${other.pid}");
-    await reapLostBrowser(profile);
-    expect(
+      lock
+        ..deleteSync()
+        ..createSync("${Platform.localHostname}-${other.pid}");
+      await reapLostBrowser(profile);
+      expect(
         await other.exitCode
             .then<int?>((code) => code)
             .timeout(const Duration(milliseconds: 300), onTimeout: () => null),
-        isNull);
-  }, skip: Platform.isWindows);
+        isNull,
+      );
+    },
+    skip: Platform.isWindows,
+  );
 
-  test("deleting the browser's data takes the profile, not the download",
-      () async {
-    final dir = Directory.systemTemp.createTempSync("agent-browser-clear");
-    addTearDown(() => dir.deleteSync(recursive: true));
-    File("${dir.path}/profile/Default/Cookies").createSync(recursive: true);
-    File("${dir.path}/download/kept").createSync(recursive: true);
-    final browser = CdpBrowser(
-      browserDir: dir.path,
-      picked: () => null,
-      embedded: HeliumDownload(dir.path),
-      visible: () => false,
-    );
-    final tab = browser.tab("chat-1");
-    tab.hide(const BrowserHold(reason: "Sign in to Google"));
-    await browser.clearData();
-    expect(Directory("${dir.path}/profile").existsSync(), isFalse);
-    expect(File("${dir.path}/download/kept").existsSync(), isTrue);
-    expect(tab.hold.value, isNull);
-  });
+  test(
+    "deleting the browser's data takes the profile, not the download",
+    () async {
+      final dir = Directory.systemTemp.createTempSync("agent-browser-clear");
+      addTearDown(() => dir.deleteSync(recursive: true));
+      File("${dir.path}/profile/Default/Cookies").createSync(recursive: true);
+      File("${dir.path}/download/kept").createSync(recursive: true);
+      final browser = CdpBrowser(
+        browserDir: dir.path,
+        picked: () => null,
+        embedded: HeliumDownload(dir.path),
+        visible: () => false,
+      );
+      final tab = browser.tab("chat-1");
+      tab.hide(const BrowserHold(reason: "Sign in to Google"));
+      await browser.clearData();
+      expect(Directory("${dir.path}/profile").existsSync(), isFalse);
+      expect(File("${dir.path}/download/kept").existsSync(), isTrue);
+      expect(tab.hold.value, isNull);
+    },
+  );
 
   test("Helium's assets are named as its releases name them", () {
-    expect(heliumAsset(HeliumOs.linux, "0.20.1.1", arm: false),
-        "helium-0.20.1.1-x86_64.AppImage");
-    expect(heliumAsset(HeliumOs.macos, "0.20.1.1", arm: true),
-        "helium_0.20.1.1_arm64-macos.dmg");
-    expect(heliumAsset(HeliumOs.windows, "0.20.1.1", arm: false),
-        "helium_0.20.1.1_x64-windows.zip");
+    expect(
+      heliumAsset(HeliumOs.linux, "0.20.1.1", arm: false),
+      "helium-0.20.1.1-x86_64.AppImage",
+    );
+    expect(
+      heliumAsset(HeliumOs.macos, "0.20.1.1", arm: true),
+      "helium_0.20.1.1_arm64-macos.dmg",
+    );
+    expect(
+      heliumAsset(HeliumOs.windows, "0.20.1.1", arm: false),
+      "helium_0.20.1.1_x64-windows.zip",
+    );
   });
 
   test("an address with no scheme is https, or http on this machine", () {
     expect(pageAddress("example.com/a"), "https://example.com/a");
     expect(pageAddress("localhost:8080"), "http://localhost:8080");
     expect(pageAddress("127.0.0.1:3000/x"), "http://127.0.0.1:3000/x");
-    expect(pageAddress("localhost.example.com"), "https://localhost.example.com");
+    expect(
+      pageAddress("localhost.example.com"),
+      "https://localhost.example.com",
+    );
     expect(pageAddress("http://localhost:8080"), "http://localhost:8080");
     expect(pageAddress("about:blank"), "about:blank");
   });
@@ -961,12 +1147,16 @@ void main() {
   group("a challenge", () {
     test("is a challenge frame, or a page saying it is one", () {
       expect(
-          looksLikeChallenge("Shop", "", [
-            "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/x",
-          ]),
-          isTrue);
+        looksLikeChallenge("Shop", "", [
+          "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/x",
+        ]),
+        isTrue,
+      );
       expect(looksLikeChallenge("Just a moment...", "", const []), isTrue);
-      expect(looksLikeChallenge("News", "Today's headlines", const []), isFalse);
+      expect(
+        looksLikeChallenge("News", "Today's headlines", const []),
+        isFalse,
+      );
     });
 
     test("tells the model it may ask the user", () {
@@ -978,8 +1168,7 @@ void main() {
 /// An event as far as anything could record it: its call's arguments and its
 /// result's text.
 String _describe(AgentEvent event) => switch (event) {
-      ToolCallEvent(:final call) => "${call.argumentsJson} ${call.argumentsText}",
-      ToolResultEvent(:final result) =>
-        "${result.output} ${result.exceptionInfo}",
-      _ => "$event",
-    };
+  ToolCallEvent(:final call) => "${call.argumentsJson} ${call.argumentsText}",
+  ToolResultEvent(:final result) => "${result.output} ${result.exceptionInfo}",
+  _ => "$event",
+};

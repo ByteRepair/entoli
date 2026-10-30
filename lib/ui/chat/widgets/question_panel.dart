@@ -21,7 +21,11 @@ import "../../../domain/ask.dart";
 /// always the answer, and a plan's "not like this" is only useful with what
 /// to change. Typing picks it; the text is the answer.
 class QuestionPanel extends StatefulWidget {
-  const QuestionPanel({super.key, required this.request, required this.onAnswered});
+  const QuestionPanel({
+    super.key,
+    required this.request,
+    required this.onAnswered,
+  });
 
   final AskRequest request;
 
@@ -55,8 +59,8 @@ class _QuestionPanelState extends State<QuestionPanel> {
       _answers[at] != null &&
       _questions[at].options.every((o) => o.answer != _answers[at]);
 
-  void _type(String text) => setState(
-      () => _answers[_at] = text.trim().isEmpty ? null : text.trim());
+  void _type(String text) =>
+      setState(() => _answers[_at] = text.trim().isEmpty ? null : text.trim());
 
   /// The typed answer, picked again from what is already in the field.
   void _pickTyped() => _type(_typed[_at].text);
@@ -64,9 +68,9 @@ class _QuestionPanelState extends State<QuestionPanel> {
   /// Picking moves on, which is the fast path through a batch. It stops at the
   /// last question rather than submitting there.
   void _pick(AskOption option) => setState(() {
-        _answers[_at] = option.answer;
-        if (_at < _questions.length - 1) _at++;
-      });
+    _answers[_at] = option.answer;
+    if (_at < _questions.length - 1) _at++;
+  });
 
   void _goTo(int at) => setState(() => _at = at);
 
@@ -83,7 +87,9 @@ class _QuestionPanelState extends State<QuestionPanel> {
     return Container(
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
-        border: Border(top: BorderSide(color: theme.colorScheme.outlineVariant)),
+        border: Border(
+          top: BorderSide(color: theme.colorScheme.outlineVariant),
+        ),
       ),
       child: SafeArea(
         top: false,
@@ -95,8 +101,9 @@ class _QuestionPanelState extends State<QuestionPanel> {
             if (several) ...[
               Text(
                 "Question ${_at + 1} of ${_questions.length}",
-                style: theme.textTheme.labelMedium
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 8),
               _Segments(
@@ -112,8 +119,9 @@ class _QuestionPanelState extends State<QuestionPanel> {
               const SizedBox(height: 4),
               Text(
                 question.summary!,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
             const SizedBox(height: 10),
@@ -160,7 +168,9 @@ class _QuestionPanelState extends State<QuestionPanel> {
                     style: _compact,
                   ),
                   TextButton.icon(
-                    onPressed: _at < _questions.length - 1 ? () => _goTo(_at + 1) : null,
+                    onPressed: _at < _questions.length - 1
+                        ? () => _goTo(_at + 1)
+                        : null,
                     iconAlignment: IconAlignment.end,
                     icon: const Icon(Icons.arrow_forward, size: 16),
                     label: const Text("Next"),
@@ -255,7 +265,11 @@ final ButtonStyle _compact = TextButton.styleFrom(
 );
 
 class _OptionTile extends StatelessWidget {
-  const _OptionTile({required this.option, required this.isPicked, required this.onTap});
+  const _OptionTile({
+    required this.option,
+    required this.isPicked,
+    required this.onTap,
+  });
 
   final AskOption option;
 
@@ -289,15 +303,17 @@ class _OptionTile extends StatelessWidget {
                     children: [
                       Text(
                         option.label,
-                        style: theme.textTheme.bodyMedium
-                            ?.copyWith(fontWeight: FontWeight.w600),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       if (option.detail != null) ...[
                         const SizedBox(height: 2),
                         Text(
                           option.detail!,
-                          style: theme.textTheme.bodySmall
-                              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ],
                     ],
@@ -308,7 +324,11 @@ class _OptionTile extends StatelessWidget {
                 // nothing by.
                 if (isPicked) ...[
                   const SizedBox(width: 8),
-                  Icon(Icons.check, size: 18, color: theme.colorScheme.onPrimaryContainer),
+                  Icon(
+                    Icons.check,
+                    size: 18,
+                    color: theme.colorScheme.onPrimaryContainer,
+                  ),
                 ],
               ],
             ),
@@ -370,7 +390,11 @@ class _TypedTile extends StatelessWidget {
               ),
               if (isPicked) ...[
                 const SizedBox(width: 8),
-                Icon(Icons.check, size: 18, color: theme.colorScheme.onPrimaryContainer),
+                Icon(
+                  Icons.check,
+                  size: 18,
+                  color: theme.colorScheme.onPrimaryContainer,
+                ),
               ],
             ],
           ),

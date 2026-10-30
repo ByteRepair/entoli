@@ -106,7 +106,9 @@ class ApprovalGate {
   Future<StandingPermissions> _read() async {
     final read = await policy();
     return StandingPermissions(
-      permissions: [for (final rule in read.permissions) rule.withPaths(_tilde)],
+      permissions: [
+        for (final rule in read.permissions) rule.withPaths(_tilde),
+      ],
       writableDirs: [
         for (final dir in read.writableDirs) _tilde(dir),
         ..._runtimeDirs,
@@ -156,11 +158,15 @@ class ApprovalGate {
     final sandbox = _sandboxFor(permissions);
     if (sandbox == null) return null;
     final ruled = rulesSandbox(
-        permissions.permissions, analysis.modelableSegments ?? const []);
+      permissions.permissions,
+      analysis.modelableSegments ?? const [],
+    );
     if (ruled.unconfined) return null;
     return ruled.writes.isEmpty
         ? sandbox
-        : sandbox.copyWith(extraWrites: [...sandbox.extraWrites, ...ruled.writes]);
+        : sandbox.copyWith(
+            extraWrites: [...sandbox.extraWrites, ...ruled.writes],
+          );
   }
 
   /// Run [run] gated by the rules, then the mode, into [outcome]. Rules are
@@ -193,10 +199,13 @@ class ApprovalGate {
     final policy = await permissions();
     final rules = policy.permissions;
     final turnMode = approveMode ?? policy.approveMode;
-    final verdict = rulesDecideTraced(rules, toolName,
-        path: ruleSubject,
-        url: ruleSubject,
-        segments: analysis?.modelableSegments);
+    final verdict = rulesDecideTraced(
+      rules,
+      toolName,
+      path: ruleSubject,
+      url: ruleSubject,
+      segments: analysis?.modelableSegments,
+    );
     switch (verdict?.decision) {
       case PermissionDecision.deny:
         outcome.decision = (
@@ -251,11 +260,23 @@ class ApprovalGate {
     }
     switch (mode ?? turnMode) {
       case ApproveMode.ask:
-        yield* _ask(call, toolName, run, outcome, argumentsText,
-            unsandboxed: unsandboxed);
+        yield* _ask(
+          call,
+          toolName,
+          run,
+          outcome,
+          argumentsText,
+          unsandboxed: unsandboxed,
+        );
       case ApproveMode.auto:
-        yield* _classify(call, toolName, run, outcome, argumentsText,
-            unsandboxed: unsandboxed);
+        yield* _classify(
+          call,
+          toolName,
+          run,
+          outcome,
+          argumentsText,
+          unsandboxed: unsandboxed,
+        );
       case ApproveMode.never when unsandboxed:
         // Nobody to ask, and the sandbox is the one guard an unwatched turn
         // has: only a rule takes it away.
@@ -286,10 +307,20 @@ class ApprovalGate {
     List<String> granted = const [],
     String? ruleSubject,
   }) async* {
-    if (outsideWorkspaces(path, workspace, projectWorkspace,
-        granted: granted)) {
-      yield* decide(call, toolName, () => _guarded(run), outcome,
-          argumentsText: path, ruleSubject: ruleSubject);
+    if (outsideWorkspaces(
+      path,
+      workspace,
+      projectWorkspace,
+      granted: granted,
+    )) {
+      yield* decide(
+        call,
+        toolName,
+        () => _guarded(run),
+        outcome,
+        argumentsText: path,
+        ruleSubject: ruleSubject,
+      );
     } else {
       outcome.result = await _guarded(run);
     }
@@ -298,7 +329,9 @@ class ApprovalGate {
   /// Answer what [run] throws as a failed result, so an unexpected failure —
   /// a decode, a full disk, a write that could not land — is one the model
   /// reads and works around rather than one that ends the turn.
-  static Future<ShellResult> _guarded(Future<ShellResult> Function() run) async {
+  static Future<ShellResult> _guarded(
+    Future<ShellResult> Function() run,
+  ) async {
     try {
       return await run();
     } catch (e) {
@@ -339,8 +372,9 @@ class ApprovalGate {
       decided: allowed ? PermissionDecision.allow : PermissionDecision.deny,
     );
     outcome.byPerson = true;
-    outcome.result =
-        allowed ? await run() : const ShellResult.failed(_deniedByUser);
+    outcome.result = allowed
+        ? await run()
+        : const ShellResult.failed(_deniedByUser);
   }
 
   /// Classify the call, then allow (run), deny (refuse), or ask (escalate to
@@ -354,20 +388,29 @@ class ApprovalGate {
     bool unsandboxed = false,
   }) async* {
     if (_autoPaused) {
-      yield* _ask(call, toolName, run, outcome, argumentsText,
-          unsandboxed: unsandboxed);
+      yield* _ask(
+        call,
+        toolName,
+        run,
+        outcome,
+        argumentsText,
+        unsandboxed: unsandboxed,
+      );
       return;
     }
 
     // Raced with a stop: a turn outliving its abort ran on into the next
     // turn, clearing its banner and rewriting the session under it.
     final decision = await Future.any([
-      (classifier ?? const NoClassifier()).classify(toolName, call.argumentsJson,
-          workspace: workspace,
-          alsoWritable: [
-            if (projectWorkspace != workspace) projectWorkspace,
-            ...(await permissions()).writableDirs,
-          ]),
+      (classifier ?? const NoClassifier()).classify(
+        toolName,
+        call.argumentsJson,
+        workspace: workspace,
+        alsoWritable: [
+          if (projectWorkspace != workspace) projectWorkspace,
+          ...(await permissions()).writableDirs,
+        ],
+      ),
       stopped.then((_) => PermissionDecision.ask),
     ]);
     if (cancelled()) {
@@ -388,29 +431,41 @@ class ApprovalGate {
         outcome.result = await run();
       case PermissionDecision.deny:
         outcome.result = const ShellResult.failed(
-            "Denied by auto mode as dangerous. Do not retry this command; "
-            "tell the user what you were trying to do and let them decide.");
+          "Denied by auto mode as dangerous. Do not retry this command; "
+          "tell the user what you were trying to do and let them decide.",
+        );
       case PermissionDecision.ask:
         _consecutiveAsks++;
         _totalAsks++;
         if (_consecutiveAsks >= 3 || _totalAsks >= 20) {
           _autoPaused = true;
-          yield InfoEvent("Auto mode paused: too many uncertain commands. "
-              "Asking for every command for the rest of this turn.");
+          yield InfoEvent(
+            "Auto mode paused: too many uncertain commands. "
+            "Asking for every command for the rest of this turn.",
+          );
         }
-        yield* _ask(call, toolName, run, outcome, argumentsText,
-            unsandboxed: unsandboxed);
+        yield* _ask(
+          call,
+          toolName,
+          run,
+          outcome,
+          argumentsText,
+          unsandboxed: unsandboxed,
+        );
     }
   }
 
-  static const _deniedByUser = "The user denied this command. Ask them what "
+  static const _deniedByUser =
+      "The user denied this command. Ask them what "
       "to do instead, or try something else.";
 
-  static const _unsandboxedRefused = "Running this outside the sandbox needs "
+  static const _unsandboxedRefused =
+      "Running this outside the sandbox needs "
       "the user's approval, and nobody is here to give it. Do it inside the "
       "workspaces, or tell the user what needs to run unsandboxed.";
 
-  static const _deniedByRule = "Denied by a permission rule you set. Do not "
+  static const _deniedByRule =
+      "Denied by a permission rule you set. Do not "
       "retry this command; tell the user what you were trying to do and let "
       "them decide.";
 
@@ -456,8 +511,11 @@ class ApprovalGate {
           // covers the tool and the fetcher commands alike — with the
           // segment's host as the subject. A fetch whose host no rule speaks
           // for is uncovered, wherever the mode asks about it next.
-          final network =
-              rulesDecideTraced(rules, webfetchToolName, url: profile.url);
+          final network = rulesDecideTraced(
+            rules,
+            webfetchToolName,
+            url: profile.url,
+          );
           switch (network?.decision) {
             case PermissionDecision.deny:
               return (

@@ -34,7 +34,11 @@ class InstructionsActivity extends LabelledActivity {
         title: "Instructions",
         sections: [
           for (final ref in files)
-            (label: instructionKindPhrase(ref.kind), body: ref.path, isError: false),
+            (
+              label: instructionKindPhrase(ref.kind),
+              body: ref.path,
+              isError: false,
+            ),
         ],
       ),
     );

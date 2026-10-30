@@ -11,5 +11,6 @@ const endTurnToolName = "end_turn";
 bool endedSilently(Message message) =>
     message.role == MessageRole.assistant &&
     !message.hasText &&
-    message.parts
-        .any((p) => p is ToolCallPart && p.toolCall.name == endTurnToolName);
+    message.parts.any(
+      (p) => p is ToolCallPart && p.toolCall.name == endTurnToolName,
+    );

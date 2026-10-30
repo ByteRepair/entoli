@@ -15,10 +15,11 @@ import "package:agent_chat/domain/frontmatter.dart";
 import "package:path/path.dart" as p;
 
 final _semverRe = RegExp(
-    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
-    r"(-((0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)"
-    r"(\.(0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?"
-    r"(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$");
+  r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+  r"(-((0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)"
+  r"(\.(0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?"
+  r"(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$",
+);
 
 const _agentAllowedFiles = {"README.md", "PROMPT.md", "profile.png"};
 const _requiredFiles = {
@@ -103,8 +104,11 @@ Map<String, Set<String>> _slugsFromDiff(String diff, String dataRoot) {
   return _dropFullyRemoved(touched, kept, dataRoot);
 }
 
-Map<String, Set<String>> _dropFullyRemoved(Map<String, Set<String>> touched,
-    Map<String, Set<String>> kept, String dataRoot) {
+Map<String, Set<String>> _dropFullyRemoved(
+  Map<String, Set<String>> touched,
+  Map<String, Set<String>> kept,
+  String dataRoot,
+) {
   final result = <String, Set<String>>{};
   for (final section in ["skills", "agents"]) {
     final slugs = touched[section] ?? {};
@@ -119,11 +123,7 @@ Map<String, Set<String>> _dropFullyRemoved(Map<String, Set<String>> touched,
 Set<String> _discoverSlugs(String dataRoot, String section) {
   final dir = Directory("$dataRoot/$section");
   if (!dir.existsSync()) return {};
-  return dir
-      .listSync()
-      .whereType<Directory>()
-      .map(_basename)
-      .toSet();
+  return dir.listSync().whereType<Directory>().map(_basename).toSet();
 }
 
 List<String> _validateEntry(String dataRoot, String section, String slug) {
@@ -141,12 +141,14 @@ List<String> _validateEntry(String dataRoot, String section, String slug) {
   }
   final file = File(path);
   if (file.existsSync()) {
-    problems.addAll(_validateDocument(
-      section: section,
-      slug: slug,
-      source: file.readAsStringSync(),
-      path: path,
-    ));
+    problems.addAll(
+      _validateDocument(
+        section: section,
+        slug: slug,
+        source: file.readAsStringSync(),
+        path: path,
+      ),
+    );
   }
   if (section == "agents") {
     final png = File("$base/profile.png");
@@ -185,8 +187,12 @@ List<String> _validateDocument({
     // skillFrontmatterProblems validates the frontmatter name (or its folder
     // fallback) against the slug and the spec caps; only the missing-name
     // rule is added here, which the shared validator masks by that fallback.
-    problems.addAll(skillFrontmatterProblems(parsed, slug).map((p) => "$path: $p"));
-    if (parsed.name == null) problems.add("$path: missing 'name' in the frontmatter");
+    problems.addAll(
+      skillFrontmatterProblems(parsed, slug).map((p) => "$path: $p"),
+    );
+    if (parsed.name == null) {
+      problems.add("$path: missing 'name' in the frontmatter");
+    }
   } else {
     for (final key in parsed.scalars.keys) {
       if (key == "description" || key == "metadata") continue;
@@ -194,8 +200,9 @@ List<String> _validateDocument({
         problems.add("$path: an agent's name is its file name; no 'name' key");
       } else {
         problems.add(
-            "$path: unexpected frontmatter key \"$key\" (an agent carries only "
-            "description and metadata)");
+          "$path: unexpected frontmatter key \"$key\" (an agent carries only "
+          "description and metadata)",
+        );
       }
     }
     if (parsed.description == null || parsed.description!.trim().isEmpty) {
@@ -210,13 +217,20 @@ List<String> _validateDocument({
   }
   final version = metadata["version"];
   if (version != null && !_semverRe.hasMatch(version)) {
-    problems.add("$path: metadata 'version' must be a SemVer string (got \"$version\")");
+    problems.add(
+      "$path: metadata 'version' must be a SemVer string (got \"$version\")",
+    );
   }
   final tags = metadata["tags"];
   if (tags != null) {
-    final parts = tags.split(",").map((t) => t.trim()).where((t) => t.isNotEmpty);
+    final parts = tags
+        .split(",")
+        .map((t) => t.trim())
+        .where((t) => t.isNotEmpty);
     if (tags.trim().startsWith("[") || tags.trim().endsWith("]")) {
-      problems.add('$path: metadata "tags" must be a comma-separated string, not a list');
+      problems.add(
+        '$path: metadata "tags" must be a comma-separated string, not a list',
+      );
     } else if (parts.toSet().length != parts.length) {
       problems.add("$path: metadata 'tags' contains duplicates");
     }

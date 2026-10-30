@@ -10,16 +10,19 @@ import "message_text.dart" show MessageText;
 /// read. A mirrored chat's is asked of its home device over the sync channel.
 /// Read again when [planRevision] moves rather than watched, since every
 /// write to the file lands in the conversation as a result.
-final planProvider =
-    FutureProvider.autoDispose.family<List<PlanSection>?, String>((ref, chatId) async {
-  ref.watch(chatViewProvider(chatId)
-      .select((view) => planRevision(view.chat?.messages ?? const [])));
-  final text = ref.watch(isMirroredChatProvider(chatId))
-      ? await ref.read(syncHubProvider).planText(chatId)
-      : await ref.read(chatRepositoryProvider).readPlan(chatId);
-  final sections = planSectionsFrom(text);
-  return sections.isEmpty ? null : sections;
-});
+final planProvider = FutureProvider.autoDispose
+    .family<List<PlanSection>?, String>((ref, chatId) async {
+      ref.watch(
+        chatViewProvider(
+          chatId,
+        ).select((view) => planRevision(view.chat?.messages ?? const [])),
+      );
+      final text = ref.watch(isMirroredChatProvider(chatId))
+          ? await ref.read(syncHubProvider).planText(chatId)
+          : await ref.read(chatRepositoryProvider).readPlan(chatId);
+      final sections = planSectionsFrom(text);
+      return sections.isEmpty ? null : sections;
+    });
 
 /// The plan's tasks under their headings, each opening to its details. The
 /// headings show only where the plan has more than one.
@@ -38,9 +41,12 @@ class PlanTaskList extends StatelessWidget {
           if (sections.length > 1)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Text(section.heading,
-                  style: theme.textTheme.labelLarge
-                      ?.copyWith(color: theme.colorScheme.primary)),
+              child: Text(
+                section.heading,
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: theme.colorScheme.primary,
+                ),
+              ),
             ),
           for (final task in section.tasks) _PlanTaskTile(task: task),
         ],
@@ -60,11 +66,22 @@ class _PlanTaskTile extends StatelessWidget {
     final scheme = theme.colorScheme;
     final (icon, colour, status) = switch (task.status) {
       PlanTaskStatus.done => (Icons.check_circle, scheme.primary, "Done"),
-      PlanTaskStatus.inProgress => (Icons.timelapse, scheme.tertiary, "In progress"),
-      PlanTaskStatus.pending => (Icons.radio_button_unchecked, scheme.outline, "To do"),
+      PlanTaskStatus.inProgress => (
+        Icons.timelapse,
+        scheme.tertiary,
+        "In progress",
+      ),
+      PlanTaskStatus.pending => (
+        Icons.radio_button_unchecked,
+        scheme.outline,
+        "To do",
+      ),
     };
     final title = Text("${task.index}. ${task.text}");
-    final leading = Tooltip(message: status, child: Icon(icon, color: colour));
+    final leading = Tooltip(
+      message: status,
+      child: Icon(icon, color: colour),
+    );
     if (task.details.isEmpty) {
       return ListTile(leading: leading, title: title);
     }
@@ -78,7 +95,11 @@ class _PlanTaskTile extends StatelessWidget {
       children: [
         SelectionArea(
           child: MessageText(
-              text: task.details, isError: false, isWaiting: false, caret: false),
+            text: task.details,
+            isError: false,
+            isWaiting: false,
+            caret: false,
+          ),
         ),
       ],
     );

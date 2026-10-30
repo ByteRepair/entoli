@@ -32,8 +32,9 @@ class TempChatTtlField extends ConsumerWidget {
     return InheritableDropdown<TempChatTtl>(
       label: "Temporary chat",
       value: value,
-      inherited: (projectTtl ?? builtinProjectOf(project)?.tempChatTtl ?? appTtl)
-          .label,
+      inherited:
+          (projectTtl ?? builtinProjectOf(project)?.tempChatTtl ?? appTtl)
+              .label,
       options: tempChatTtlLabels,
       onChanged: onChanged,
     );

@@ -33,13 +33,13 @@ class PairedDevice {
   /// on the record, so a rename is this replacement — every other fact
   /// carried over whole — rather than a field write.
   PairedDevice withName(String name) => PairedDevice(
-        id: id,
-        name: name,
-        publicKey: publicKey,
-        addedAt: addedAt,
-        lastSeenAt: lastSeenAt,
-        addresses: addresses,
-      );
+    id: id,
+    name: name,
+    publicKey: publicKey,
+    addedAt: addedAt,
+    lastSeenAt: lastSeenAt,
+    addresses: addresses,
+  );
 
   /// The fingerprint over this record's stored key, or null where it will
   /// not decode. A record this app wrote, so only a hand-edit breaks one;
@@ -54,26 +54,27 @@ class PairedDevice {
   }
 
   Map<String, dynamic> toJson() => {
-        "id": id,
-        "name": name,
-        "publicKey": publicKey,
-        "addedAt": addedAt.toIso8601String(),
-        "lastSeenAt": lastSeenAt.toIso8601String(),
-        if (addresses.isNotEmpty) "addresses": addresses,
-      };
+    "id": id,
+    "name": name,
+    "publicKey": publicKey,
+    "addedAt": addedAt.toIso8601String(),
+    "lastSeenAt": lastSeenAt.toIso8601String(),
+    if (addresses.isNotEmpty) "addresses": addresses,
+  };
 
   static PairedDevice fromJson(Map<String, dynamic> json) => PairedDevice(
-        id: json["id"] as String,
-        name: json["name"] as String,
-        publicKey: json["publicKey"] as String,
-        addedAt: DateTime.parse(json["addedAt"] as String),
-        lastSeenAt: json["lastSeenAt"] == null
-            ? null
-            : DateTime.parse(json["lastSeenAt"] as String),
-        // `lastAddress` is the one address a record held before it held all.
-        addresses: (json["addresses"] as List<Object?>?)?.cast<String>() ??
-            [?json["lastAddress"] as String?],
-      );
+    id: json["id"] as String,
+    name: json["name"] as String,
+    publicKey: json["publicKey"] as String,
+    addedAt: DateTime.parse(json["addedAt"] as String),
+    lastSeenAt: json["lastSeenAt"] == null
+        ? null
+        : DateTime.parse(json["lastSeenAt"] as String),
+    // `lastAddress` is the one address a record held before it held all.
+    addresses:
+        (json["addresses"] as List<Object?>?)?.cast<String>() ??
+        [?json["lastAddress"] as String?],
+  );
 }
 
 /// The devices this one may talk to, and where their pairing secrets live.

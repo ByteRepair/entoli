@@ -97,8 +97,12 @@ final _highlight = Highlight()..registerLanguages(_grammars);
 ({String name, Mode mode})? grammarOfFile(String fileName) {
   final base = fileName.split("/").last.toLowerCase();
   final dot = base.lastIndexOf(".");
-  final key = _grammarByName[base] ??
-      (dot > 0 ? _grammarByExtension[base.substring(dot + 1)] ?? base.substring(dot + 1) : null);
+  final key =
+      _grammarByName[base] ??
+      (dot > 0
+          ? _grammarByExtension[base.substring(dot + 1)] ??
+                base.substring(dot + 1)
+          : null);
   final mode = key == null ? null : _highlight.getLanguage(key);
   if (mode == null) return null;
   for (final MapEntry(key: name, value: grammar) in _grammars.entries) {
@@ -130,7 +134,9 @@ const _grammarByExtension = {
 /// What `MarkdownBody` is given. One for the app rather than one per message:
 /// the builder holds nothing and is read only while markdown is parsed, and
 /// sharing it is also what lets the highlighted spans below be shared.
-final codeBlockBuilders = <String, MarkdownElementBuilder>{"pre": CodeBlockBuilder()};
+final codeBlockBuilders = <String, MarkdownElementBuilder>{
+  "pre": CodeBlockBuilder(),
+};
 
 /// Highlighted spans, kept because the same block is highlighted again far
 /// more often than it changes. `MarkdownBody` re-parses whenever its style
@@ -141,9 +147,11 @@ final codeBlockBuilders = <String, MarkdownElementBuilder>{"pre": CodeBlockBuild
 /// Bounded by count and evicted oldest-first, since what it holds is the text
 /// of every block in it: a cache that grew with the conversation would be a
 /// second copy of the chat, in a process that already holds one.
-final _spans = <
-    ({String code, String? language, TextStyle style, Brightness brightness}),
-    TextSpan>{};
+final _spans =
+    <
+      ({String code, String? language, TextStyle style, Brightness brightness}),
+      TextSpan
+    >{};
 const _spanCacheLimit = 16;
 
 /// Draws a fenced code block: what it was fenced as, a button that copies it,
@@ -217,7 +225,9 @@ class CodeBlockBuilder extends MarkdownElementBuilder {
     Brightness brightness,
   ) {
     final plain = TextSpan(text: code, style: style);
-    if (language == null || _highlight.getLanguage(language) == null) return plain;
+    if (language == null || _highlight.getLanguage(language) == null) {
+      return plain;
+    }
 
     final result = _highlight.highlight(code: code, language: language);
     if (result.errorRaised != null) return plain;
@@ -239,12 +249,12 @@ class CodeBlockBuilder extends MarkdownElementBuilder {
 /// What both code styles below are built on, so the two can only differ in
 /// what each of them adds. See `monoFamily` for why the face is bundled.
 TextStyle _codeFont(ThemeData theme) => TextStyle(
-      fontFamily: monoFamily,
-      // Mono faces run wider than the prose beside them, so matching the body
-      // size makes inline code look larger than the sentence holding it.
-      fontSize: theme.textTheme.bodyMedium!.fontSize! * 0.85,
-      color: theme.colorScheme.onSurface,
-    );
+  fontFamily: monoFamily,
+  // Mono faces run wider than the prose beside them, so matching the body
+  // size makes inline code look larger than the sentence holding it.
+  fontSize: theme.textTheme.bodyMedium!.fontSize! * 0.85,
+  color: theme.colorScheme.onSurface,
+);
 
 /// What inline `code` adds: a surface, so a word in a sentence reads as code
 /// rather than as the same sentence in another face. `fromTheme` asks for
@@ -255,24 +265,25 @@ TextStyle _codeFont(ThemeData theme) => TextStyle(
 /// which is what a block gets — but a block is one thing on a line of its own,
 /// while inline code has to wrap with the sentence, and a `WidgetSpan` cannot
 /// break across lines.
-TextStyle inlineCodeStyle(ThemeData theme) => _codeFont(theme).copyWith(
-      backgroundColor: theme.colorScheme.surfaceContainerHighest,
-    );
+TextStyle inlineCodeStyle(ThemeData theme) => _codeFont(
+  theme,
+).copyWith(backgroundColor: theme.colorScheme.surfaceContainerHighest);
 
 /// What a block adds: room between the lines, because a block is read as lines
 /// where an inline span is read as part of a sentence. Public because the
 /// composer sets its field in it while a `!` command is being typed, so what is
 /// about to run looks like what it is.
-TextStyle codeBlockStyle(ThemeData theme) => _codeFont(theme).copyWith(height: 1.45);
+TextStyle codeBlockStyle(ThemeData theme) =>
+    _codeFont(theme).copyWith(height: 1.45);
 
 /// The surface a code block sits on, above the page behind it. It belongs to
 /// the markdown style sheet rather than to the block: `pre` is wrapped in the
 /// sheet's `codeblockDecoration` whether or not a builder drew what is inside.
 BoxDecoration codeBlockDecoration(ThemeData theme) => BoxDecoration(
-      color: theme.colorScheme.surfaceContainer,
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: theme.colorScheme.outlineVariant),
-    );
+  color: theme.colorScheme.surfaceContainer,
+  borderRadius: BorderRadius.circular(8),
+  border: Border.all(color: theme.colorScheme.outlineVariant),
+);
 
 /// One fenced block, already highlighted: [CodeBlockBuilder] does that while
 /// the markdown is parsed, so a scroll frame redraws the block without running
@@ -295,18 +306,21 @@ class CodeBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // The bar is the block's chrome rather than anything the model said,
-          // so a drag across the reply must not put the language name on the
-          // clipboard — the rule the labels above the bubble already keep.
-          SelectionContainer.disabled(child: _bar(context)),
-          _CodeScroll(
-              child: Text.rich(
-                  span ?? CodeBlockBuilder.cachedSpanOf(code, language, Theme.of(context)))),
-        ],
-      );
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      // The bar is the block's chrome rather than anything the model said,
+      // so a drag across the reply must not put the language name on the
+      // clipboard — the rule the labels above the bubble already keep.
+      SelectionContainer.disabled(child: _bar(context)),
+      _CodeScroll(
+        child: Text.rich(
+          span ??
+              CodeBlockBuilder.cachedSpanOf(code, language, Theme.of(context)),
+        ),
+      ),
+    ],
+  );
 
   Widget _bar(BuildContext context) {
     final theme = Theme.of(context);
@@ -319,8 +333,9 @@ class CodeBlock extends StatelessWidget {
           Expanded(
             child: Text(
               language ?? "",
-              style: theme.textTheme.labelSmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
           // The snack bar copying a message already shows, rather than an icon
@@ -329,7 +344,8 @@ class CodeBlock extends StatelessWidget {
           ActionIcon(
             icon: Icons.copy_outlined,
             tooltip: "Copy code",
-            onPressed: () => copyToClipboard(context, code, said: "Code copied"),
+            onPressed: () =>
+                copyToClipboard(context, code, said: "Code copied"),
           ),
         ],
       ),
@@ -360,12 +376,12 @@ class _CodeScrollState extends State<_CodeScroll> {
 
   @override
   Widget build(BuildContext context) => Scrollbar(
-        controller: _controller,
-        child: SingleChildScrollView(
-          controller: _controller,
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-          child: widget.child,
-        ),
-      );
+    controller: _controller,
+    child: SingleChildScrollView(
+      controller: _controller,
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      child: widget.child,
+    ),
+  );
 }

@@ -15,8 +15,10 @@ class AppleChannelMock {
   /// What a call is answered with; throwing is how Swift refuses one.
   Object? Function(MethodCall call) answer = (_) => null;
 
-  void install() => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(appleChannel, (call) async {
+  void install() => TestDefaultBinaryMessengerBinding
+      .instance
+      .defaultBinaryMessenger
+      .setMockMethodCallHandler(appleChannel, (call) async {
         asked.add(call);
         return answer(call);
       });
@@ -32,10 +34,10 @@ class AppleChannelMock {
   Future<void> incoming(String method, [Object? arguments]) async {
     await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .handlePlatformMessage(
-      appleChannel.name,
-      appleChannel.codec.encodeMethodCall(MethodCall(method, arguments)),
-      (_) {},
-    );
+          appleChannel.name,
+          appleChannel.codec.encodeMethodCall(MethodCall(method, arguments)),
+          (_) {},
+        );
     // The delivery's chain is microtasks through the broadcast; one zero
     // timer is the flush.
     await breathe();
@@ -48,7 +50,11 @@ class AppleChannelMock {
   /// Breathes until Dart has called [method], for a request that sits behind
   /// other channel round trips.
   Future<void> until(String method) async {
-    for (var i = 0; i < 20 && !asked.any((call) => call.method == method); i++) {
+    for (
+      var i = 0;
+      i < 20 && !asked.any((call) => call.method == method);
+      i++
+    ) {
       await breathe();
     }
   }

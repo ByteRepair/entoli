@@ -14,8 +14,13 @@ import "package:collection/collection.dart";
 
 class BundledPromptFile {
   const BundledPromptFile(
-      this.project, this.name, this.relativePath, this.sha256, this.content,
-      {this.binary = false});
+    this.project,
+    this.name,
+    this.relativePath,
+    this.sha256,
+    this.content, {
+    this.binary = false,
+  });
   final String project;
   final String name;
   final String relativePath;
@@ -28,8 +33,7 @@ class BundledPromptFile {
   final String content;
   final bool binary;
 
-  List<int> get bytes =>
-      binary ? base64Decode(content) : utf8.encode(content);
+  List<int> get bytes => binary ? base64Decode(content) : utf8.encode(content);
 }
 
 /// Every entry of [files] tagged [name] for [project] — a skill's files
@@ -38,7 +42,10 @@ class BundledPromptFile {
 /// generators tag their lists for, which [bundledPromptFileOf] is the
 /// single-entry form of.
 List<BundledPromptFile> bundledPromptFilesOf(
-    List<BundledPromptFile> files, String? project, String name) {
+  List<BundledPromptFile> files,
+  String? project,
+  String name,
+) {
   for (final tag in [
     if (project != null && project != "default") project,
     "default",
@@ -55,5 +62,7 @@ List<BundledPromptFile> bundledPromptFilesOf(
 /// The entry of [files] tagged [name] for [project], `default`'s standing in
 /// where the project ships none of its own. Null where neither has one.
 BundledPromptFile? bundledPromptFileOf(
-        List<BundledPromptFile> files, String? project, String name) =>
-    bundledPromptFilesOf(files, project, name).firstOrNull;
+  List<BundledPromptFile> files,
+  String? project,
+  String name,
+) => bundledPromptFilesOf(files, project, name).firstOrNull;

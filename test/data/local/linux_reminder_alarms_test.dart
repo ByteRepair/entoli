@@ -12,15 +12,20 @@ class FakeNotificationsBus implements NotificationsBus {
   /// would leave it.
   Object? failWith;
 
-  final posted = <({String title, String body, List<String> actions, int replacesId})>[];
+  final posted =
+      <({String title, String body, List<String> actions, int replacesId})>[];
   final _actions = StreamController<(int, String)>.broadcast();
 
   /// The id the last [notify] was answered with, or 0 where none was.
   int get lastId => nextId - 1;
 
   @override
-  Future<int> notify(String title, String body, List<String> actions,
-      {int replacesId = 0}) async {
+  Future<int> notify(
+    String title,
+    String body,
+    List<String> actions, {
+    int replacesId = 0,
+  }) async {
     final failure = failWith;
     if (failure != null) throw failure;
     posted.add((
@@ -53,23 +58,34 @@ void main() {
     expect(alarms.schedules, isFalse);
   });
 
-  test("posting a reminder's completion carries its chat id as the tap", () async {
-    await alarms.notify(title: "Morning sweep", body: "Finished.", chatId: "c1");
+  test(
+    "posting a reminder's completion carries its chat id as the tap",
+    () async {
+      await alarms.notify(
+        title: "Morning sweep",
+        body: "Finished.",
+        chatId: "c1",
+      );
 
-    expect(bus.posted.single.title, "Morning sweep");
-    expect(bus.posted.single.body, "Finished.");
-    // A pair of (key, label), the spec's shape — a lone key registers no
-    // action, and the body's click arrives as "default".
-    expect(bus.posted.single.actions, ["default", "Open"]);
-    expect(bus.posted.single.replacesId, 0);
+      expect(bus.posted.single.title, "Morning sweep");
+      expect(bus.posted.single.body, "Finished.");
+      // A pair of (key, label), the spec's shape — a lone key registers no
+      // action, and the body's click arrives as "default".
+      expect(bus.posted.single.actions, ["default", "Open"]);
+      expect(bus.posted.single.replacesId, 0);
 
-    // Nothing to open: no action offers itself.
-    await alarms.notify(title: "Entoli", body: "The turn failed.");
-    expect(bus.posted.last.actions, isEmpty);
-  });
+      // Nothing to open: no action offers itself.
+      await alarms.notify(title: "Entoli", body: "The turn failed.");
+      expect(bus.posted.last.actions, isEmpty);
+    },
+  );
 
   test("a tap arrives through both halves the port splits into", () async {
-    await alarms.notify(title: "Morning sweep", body: "Finished.", chatId: "c1");
+    await alarms.notify(
+      title: "Morning sweep",
+      body: "Finished.",
+      chatId: "c1",
+    );
 
     final pushed = <String>[];
     final sub = alarms.openChat.listen(pushed.add);
@@ -84,7 +100,11 @@ void main() {
 
     // Another notification's action is not an open, and neither is a tap
     // against one that was never posted.
-    await alarms.notify(title: "Morning sweep", body: "Finished.", chatId: "c1");
+    await alarms.notify(
+      title: "Morning sweep",
+      body: "Finished.",
+      chatId: "c1",
+    );
     bus.invoke(bus.lastId, "dismiss");
     await Future<void>.delayed(Duration.zero);
     expect(pushed, ["c1"]);
@@ -97,38 +117,46 @@ void main() {
     await sub.cancel();
   });
 
-  test("a repost for the same chat replaces the notification in the tray",
-      () async {
-    await alarms.notify(title: "One", body: "", chatId: "c1");
-    await alarms.notify(title: "Two", body: "", chatId: "c1");
+  test(
+    "a repost for the same chat replaces the notification in the tray",
+    () async {
+      await alarms.notify(title: "One", body: "", chatId: "c1");
+      await alarms.notify(title: "Two", body: "", chatId: "c1");
 
-    // The second post names the first's id, so the daemon swaps it out
-    // rather than piling a second one beside it; the tap then names the
-    // newest id.
-    expect(bus.posted, hasLength(2));
-    expect(bus.posted[1].replacesId, bus.posted[0].replacesId + 1);
-    await alarms.notify(title: "Three", body: "", chatId: "c2");
-    bus.invoke(bus.lastId, "default");
-    await Future<void>.delayed(Duration.zero);
+      // The second post names the first's id, so the daemon swaps it out
+      // rather than piling a second one beside it; the tap then names the
+      // newest id.
+      expect(bus.posted, hasLength(2));
+      expect(bus.posted[1].replacesId, bus.posted[0].replacesId + 1);
+      await alarms.notify(title: "Three", body: "", chatId: "c2");
+      bus.invoke(bus.lastId, "default");
+      await Future<void>.delayed(Duration.zero);
 
-    expect(await alarms.takeOpenChat(), "c2");
-  });
+      expect(await alarms.takeOpenChat(), "c2");
+    },
+  );
 
-  test("a tap retires the id, so a later post starts a fresh notification",
-      () async {
-    await alarms.notify(title: "One", body: "", chatId: "c1");
-    bus.invoke(bus.lastId, "default");
-    await Future<void>.delayed(Duration.zero);
-    await alarms.notify(title: "Two", body: "", chatId: "c1");
+  test(
+    "a tap retires the id, so a later post starts a fresh notification",
+    () async {
+      await alarms.notify(title: "One", body: "", chatId: "c1");
+      bus.invoke(bus.lastId, "default");
+      await Future<void>.delayed(Duration.zero);
+      await alarms.notify(title: "Two", body: "", chatId: "c1");
 
-    expect(bus.posted[1].replacesId, 0);
-  });
+      expect(bus.posted[1].replacesId, 0);
+    },
+  );
 
   test("a failed post is carried, not thrown", () async {
     final failing = FakeNotificationsBus()..failWith = StateError("no daemon");
     final alarms = LinuxReminderAlarms(bus: failing);
 
-    await alarms.notify(title: "Morning sweep", body: "Finished.", chatId: "c1");
+    await alarms.notify(
+      title: "Morning sweep",
+      body: "Finished.",
+      chatId: "c1",
+    );
 
     expect(await alarms.takeOpenChat(), isNull);
   });

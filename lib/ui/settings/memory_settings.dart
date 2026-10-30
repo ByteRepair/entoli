@@ -21,7 +21,8 @@ class InstructionsSection extends ConsumerWidget {
       title: "Excluded files",
       initial: ref.read(appSettingsProvider).instructionExcludes.join("\n"),
       confirmLabel: "Save",
-      hint: "One glob per line. ** spans directories, * and ? do not; a "
+      hint:
+          "One glob per line. ** spans directories, * and ? do not; a "
           "pattern without a / matches a file name.",
       maxLines: 5,
     );
@@ -44,7 +45,8 @@ class InstructionsSection extends ConsumerWidget {
       children: [
         const SectionHeader(
           "Instructions",
-          description: "The AGENTS.md files are read into every turn: yours, "
+          description:
+              "The AGENTS.md files are read into every turn: yours, "
               "at the root of the data directory, and the project's, in its "
               "workspace: rules the user wrote down once. The rows below reach "
               "further than those two, or keep one of them out.",
@@ -52,18 +54,22 @@ class InstructionsSection extends ConsumerWidget {
         SwitchListTile(
           title: const Text("Follow @file imports"),
           subtitle: const Text(
-              "An @path inside an AGENTS.md pulls in the file it names."),
+            "An @path inside an AGENTS.md pulls in the file it names.",
+          ),
           value: settings.instructionImports,
-          onChanged: (value) =>
-              ref.read(appSettingsProvider.notifier).setInstructionImports(value),
+          onChanged: (value) => ref
+              .read(appSettingsProvider.notifier)
+              .setInstructionImports(value),
         ),
         SwitchListTile(
           title: const Text("Nested AGENTS.md"),
           subtitle: const Text(
-              "Reading a file pulls in the AGENTS.md of every directory above it."),
+            "Reading a file pulls in the AGENTS.md of every directory above it.",
+          ),
           value: settings.nestedInstructions,
-          onChanged: (value) =>
-              ref.read(appSettingsProvider.notifier).setNestedInstructions(value),
+          onChanged: (value) => ref
+              .read(appSettingsProvider.notifier)
+              .setNestedInstructions(value),
         ),
         EditableRow(
           title: "Excluded files",
@@ -93,13 +99,15 @@ class AutoMemorySection extends ConsumerWidget {
       children: [
         const SectionHeader(
           "Auto memory",
-          description: "A per-project store of short facts the agent reads into "
+          description:
+              "A per-project store of short facts the agent reads into "
               "relevant turns and writes from finished ones.",
         ),
         SwitchListTile(
           title: const Text("Keep memories"),
           subtitle: const Text(
-              "Off, the agent keeps no memories and recalls none."),
+            "Off, the agent keeps no memories and recalls none.",
+          ),
           value: on,
           onChanged: (value) =>
               ref.read(appSettingsProvider.notifier).setAutoMemory(value),
@@ -107,32 +115,39 @@ class AutoMemorySection extends ConsumerWidget {
         SwitchListTile(
           title: const Text("Recall relevant memories"),
           subtitle: const Text(
-              "Each turn is offered the memories its prompt is about."),
+            "Each turn is offered the memories its prompt is about.",
+          ),
           value: on && settings.memoryRecall,
           onChanged: on
-              ? (value) => ref.read(appSettingsProvider.notifier).setMemoryRecall(value)
+              ? (value) => ref
+                    .read(appSettingsProvider.notifier)
+                    .setMemoryRecall(value)
               : null,
         ),
         SwitchListTile(
           title: const Text("Write memories after a turn"),
           subtitle: const Text(
-              "A background model keeps the facts a finished turn leaves "
-              "behind. Needs a model below."),
+            "A background model keeps the facts a finished turn leaves "
+            "behind. Needs a model below.",
+          ),
           value: on && settings.memoryExtraction,
           onChanged: on
-              ? (value) =>
-                  ref.read(appSettingsProvider.notifier).setMemoryExtraction(value)
+              ? (value) => ref
+                    .read(appSettingsProvider.notifier)
+                    .setMemoryExtraction(value)
               : null,
         ),
         SwitchListTile(
           title: const Text("Memory tools"),
           subtitle: const Text(
-              "The agent can save a memory it judges worth keeping, and "
-              "search the store while a turn runs."),
+            "The agent can save a memory it judges worth keeping, and "
+            "search the store while a turn runs.",
+          ),
           value: on && settings.memoryAgentTool,
           onChanged: on
-              ? (value) =>
-                  ref.read(appSettingsProvider.notifier).setMemoryAgentTool(value)
+              ? (value) => ref
+                    .read(appSettingsProvider.notifier)
+                    .setMemoryAgentTool(value)
               : null,
         ),
         if (on)
@@ -142,7 +157,8 @@ class AutoMemorySection extends ConsumerWidget {
               nullLabel: "Off",
               defaultOf: LlmProviderConfig.lightDefaultOf,
               role: ModelRole.text,
-              helperOffText: "What writes memories in the background. Off, "
+              helperOffText:
+                  "What writes memories in the background. Off, "
                   "extraction is inert and the store only ever holds what the "
                   "agent or you saved.",
               choice: (

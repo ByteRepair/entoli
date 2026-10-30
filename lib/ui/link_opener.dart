@@ -39,7 +39,7 @@ bool isOpenableLink(Uri url) =>
 /// sync running": the local paths answer.
 class PlatformLinkOpener implements LinkOpener {
   PlatformLinkOpener(this._store, [this._hub])
-      : _remote = _hub == null ? null : RemoteArtifacts(_hub);
+    : _remote = _hub == null ? null : RemoteArtifacts(_hub);
 
   final ChatStore _store;
 
@@ -65,9 +65,9 @@ class PlatformLinkOpener implements LinkOpener {
       return;
     }
     if (isAndroid && (url.scheme == "http" || url.scheme == "https")) {
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => _WebViewPage(url: url)),
-      );
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute<void>(builder: (_) => _WebViewPage(url: url)));
       return;
     }
     await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -83,8 +83,13 @@ class PlatformLinkOpener implements LinkOpener {
   }) async {
     // A mirrored chat's artifact is fetched from its home device first; the
     // remote arm says which directory it landed in and whether to clean up.
-    if (await _remoteArtifact(context, chatId, artifactId,
-        entryFile: entryFile, title: title)) {
+    if (await _remoteArtifact(
+      context,
+      chatId,
+      artifactId,
+      entryFile: entryFile,
+      title: title,
+    )) {
       return;
     }
     final dir = await _store.artifactPath(chatId, artifactId);
@@ -95,7 +100,8 @@ class PlatformLinkOpener implements LinkOpener {
     if (!context.mounted) return;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => _ArtifactWebViewPage(dir: dir, entryFile: entryFile, title: title),
+        builder: (_) =>
+            _ArtifactWebViewPage(dir: dir, entryFile: entryFile, title: title),
       ),
     );
   }
@@ -116,21 +122,28 @@ class PlatformLinkOpener implements LinkOpener {
     final dir = await remote.fetch(chatId, artifactId, entryFile: entryFile);
     if (dir == null) {
       if (!context.mounted) return true;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("Could not open the artifact — the device it was "
-              "made on is away, or it is no longer there.")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Could not open the artifact — the device it was "
+            "made on is away, or it is no longer there.",
+          ),
+        ),
+      );
       return true;
     }
     if (!_inAppArtifacts) {
-      await launchUrl(Uri.file("$dir/$entryFile"),
-          mode: LaunchMode.externalApplication);
+      await launchUrl(
+        Uri.file("$dir/$entryFile"),
+        mode: LaunchMode.externalApplication,
+      );
       return true;
     }
     if (!context.mounted) return true;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => _ArtifactWebViewPage(
-            dir: dir, entryFile: entryFile, title: title),
+        builder: (_) =>
+            _ArtifactWebViewPage(dir: dir, entryFile: entryFile, title: title),
       ),
     );
     return true;
@@ -145,13 +158,19 @@ class PlatformLinkOpener implements LinkOpener {
   /// The remote arm opens out of a staged directory whose entry file the
   /// port has already checked, so it launches straight away instead.
   Future<void> _openDesktopArtifact(
-      String chatId, String artifactId, String dir, String entryFile) async {
+    String chatId,
+    String artifactId,
+    String dir,
+    String entryFile,
+  ) async {
     if (!File("$dir/$entryFile").existsSync()) {
       logFailure("open", "Artifact entry file missing: $dir/$entryFile");
       return;
     }
-    await launchUrl(Uri.file("$dir/$entryFile"),
-        mode: LaunchMode.externalApplication);
+    await launchUrl(
+      Uri.file("$dir/$entryFile"),
+      mode: LaunchMode.externalApplication,
+    );
   }
 }
 
@@ -163,7 +182,9 @@ Widget _webView(WebViewController controller) {
   return WebViewWidget.fromPlatformCreationParams(
     params: platform is AndroidWebViewController
         ? AndroidWebViewWidgetCreationParams(
-            controller: platform, displayWithHybridComposition: true)
+            controller: platform,
+            displayWithHybridComposition: true,
+          )
         : PlatformWebViewWidgetCreationParams(controller: platform),
   );
 }
@@ -213,35 +234,37 @@ class _WebViewPageState extends State<_WebViewPage> {
       ..loadRequest(widget.url);
   }
 
-  Future<void> _openExternally() => launchUrl(_url, mode: LaunchMode.externalApplication);
+  Future<void> _openExternally() =>
+      launchUrl(_url, mode: LaunchMode.externalApplication);
 
-  Future<void> _copyLink() => copyToClipboard(context, _url.toString(), said: "Copied link");
+  Future<void> _copyLink() =>
+      copyToClipboard(context, _url.toString(), said: "Copied link");
 
   @override
   Widget build(BuildContext context) => PopScope(
-        canPop: !_canGoBack,
-        onPopInvokedWithResult: (didPop, _) async {
-          if (!didPop && _canGoBack) await _controller.goBack();
-        },
-        child: Scaffold(
-          appBar: AppBar(
-            title: Text(_title, overflow: TextOverflow.ellipsis),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.copy),
-                tooltip: "Copy link",
-                onPressed: _copyLink,
-              ),
-              IconButton(
-                icon: const Icon(Icons.open_in_browser),
-                tooltip: "Open in browser",
-                onPressed: _openExternally,
-              ),
-            ],
+    canPop: !_canGoBack,
+    onPopInvokedWithResult: (didPop, _) async {
+      if (!didPop && _canGoBack) await _controller.goBack();
+    },
+    child: Scaffold(
+      appBar: AppBar(
+        title: Text(_title, overflow: TextOverflow.ellipsis),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.copy),
+            tooltip: "Copy link",
+            onPressed: _copyLink,
           ),
-          body: _webView(_controller),
-        ),
-      );
+          IconButton(
+            icon: const Icon(Icons.open_in_browser),
+            tooltip: "Open in browser",
+            onPressed: _openExternally,
+          ),
+        ],
+      ),
+      body: _webView(_controller),
+    ),
+  );
 }
 
 /// An artifact viewer that serves the artifact's files over a local HTTP
@@ -250,7 +273,11 @@ class _WebViewPageState extends State<_WebViewPage> {
 /// is on screen — which is why this one has no Copy link or Open in browser:
 /// its URL is a port that is gone by the time anything else could follow it.
 class _ArtifactWebViewPage extends StatefulWidget {
-  const _ArtifactWebViewPage({required this.dir, required this.entryFile, this.title});
+  const _ArtifactWebViewPage({
+    required this.dir,
+    required this.entryFile,
+    this.title,
+  });
   final String dir;
   final String entryFile;
   final String? title;
@@ -323,9 +350,7 @@ class _ArtifactWebViewPageState extends State<_ArtifactWebViewPage> {
         if (!didPop && _canGoBack) await controller.goBack();
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: Text(_title, overflow: TextOverflow.ellipsis),
-        ),
+        appBar: AppBar(title: Text(_title, overflow: TextOverflow.ellipsis)),
         body: _webView(controller),
       ),
     );

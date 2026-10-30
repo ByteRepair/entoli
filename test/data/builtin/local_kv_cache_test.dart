@@ -4,7 +4,11 @@ import "package:flutter_test/flutter_test.dart";
 
 void main() {
   const tools = [
-    LlmTool(name: "bash", description: "run a command", schema: {"type": "object"}),
+    LlmTool(
+      name: "bash",
+      description: "run a command",
+      schema: {"type": "object"},
+    ),
   ];
   LlmMessage sys(String t) => LlmMessage(role: LlmRole.system, text: t);
   LlmMessage user(String t) => LlmMessage(role: LlmRole.user, text: t);
@@ -18,12 +22,25 @@ void main() {
         kvNamespace(modelId: "qwen", contextLength: 8192, device: "HTP0"),
       );
 
-      final base = kvNamespace(modelId: "qwen", contextLength: 8192, device: null);
+      final base = kvNamespace(
+        modelId: "qwen",
+        contextLength: 8192,
+        device: null,
+      );
       // A different model, context, or device makes another namespace — which is
       // the whole of the invalidation: the dump lands where nothing looks.
-      expect(kvNamespace(modelId: "llama", contextLength: 8192, device: null), isNot(base));
-      expect(kvNamespace(modelId: "qwen", contextLength: 4096, device: null), isNot(base));
-      expect(kvNamespace(modelId: "qwen", contextLength: 8192, device: "HTP0"), isNot(base));
+      expect(
+        kvNamespace(modelId: "llama", contextLength: 8192, device: null),
+        isNot(base),
+      );
+      expect(
+        kvNamespace(modelId: "qwen", contextLength: 4096, device: null),
+        isNot(base),
+      );
+      expect(
+        kvNamespace(modelId: "qwen", contextLength: 8192, device: "HTP0"),
+        isNot(base),
+      );
     });
   });
 
@@ -68,7 +85,12 @@ void main() {
         file("ns.b.bin", 2),
         file("ns.c.bin", 3),
       ];
-      final doomed = kvEvictions(files, namespace: "ns", count: 2, budgetBytes: 1 << 30);
+      final doomed = kvEvictions(
+        files,
+        namespace: "ns",
+        count: 2,
+        budgetBytes: 1 << 30,
+      );
       expect(doomed, {"ns.a.bin"});
     });
 
@@ -78,7 +100,12 @@ void main() {
         file("ns.b.bin", 2),
         file("other.x.bin", 1),
       ];
-      final doomed = kvEvictions(files, namespace: "ns", count: 1, budgetBytes: 1 << 30);
+      final doomed = kvEvictions(
+        files,
+        namespace: "ns",
+        count: 1,
+        budgetBytes: 1 << 30,
+      );
       // Only this namespace's older dump goes; the other model's stays.
       expect(doomed, {"ns.a.bin"});
     });
@@ -91,7 +118,12 @@ void main() {
       ];
       // Room for two of the three: the single oldest survivor is dropped, and it
       // belongs to the abandoned namespace the count never looks at.
-      final doomed = kvEvictions(files, namespace: "ns", count: 10, budgetBytes: 200);
+      final doomed = kvEvictions(
+        files,
+        namespace: "ns",
+        count: 10,
+        budgetBytes: 200,
+      );
       expect(doomed, {"other.old.bin"});
     });
   });

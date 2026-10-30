@@ -19,13 +19,13 @@ void main() {
     String? token,
     String sdp = "v=0 offer",
     String method = "POST",
-  }) =>
-      routes.handle(SignalingRequest(method, "/entoli/offer",
-          body: jsonEncode({
-            "code": ?code,
-            "token": ?token,
-            "sdp": sdp,
-          })));
+  }) => routes.handle(
+    SignalingRequest(
+      method,
+      "/entoli/offer",
+      body: jsonEncode({"code": ?code, "token": ?token, "sdp": sdp}),
+    ),
+  );
 
   /// The host's half: answer the first offer that arrives.
   void answerWith(String sdp) =>
@@ -34,16 +34,18 @@ void main() {
   String sdpOf(SignalingReply reply) =>
       (jsonDecode(reply.body) as Map<String, dynamic>)["sdp"] as String;
 
-  test("an armed code lets an offer through and carries the answer back",
-      () async {
-    routes.arm("123456");
-    answerWith("v=0 answer");
+  test(
+    "an armed code lets an offer through and carries the answer back",
+    () async {
+      routes.arm("123456");
+      answerWith("v=0 answer");
 
-    final reply = await offer(code: "123456");
+      final reply = await offer(code: "123456");
 
-    expect(reply.status, 200);
-    expect(sdpOf(reply), "v=0 answer");
-  });
+      expect(reply.status, 200);
+      expect(sdpOf(reply), "v=0 answer");
+    },
+  );
 
   test("the offer arrives as the joiner sent it", () async {
     routes.arm("123456");
@@ -135,18 +137,26 @@ void main() {
     expect(sdpOf(await second), "for second");
   });
 
-  test("an offer nobody answers gives up rather than waiting forever",
-      () async {
-    routes = SignalingRoutes(patience: const Duration(milliseconds: 50));
-    routes.arm("123456");
+  test(
+    "an offer nobody answers gives up rather than waiting forever",
+    () async {
+      routes = SignalingRoutes(patience: const Duration(milliseconds: 50));
+      routes.arm("123456");
 
-    await expectLater(offer(code: "123456"), throwsA(isA<TimeoutException>()));
-  });
+      await expectLater(
+        offer(code: "123456"),
+        throwsA(isA<TimeoutException>()),
+      );
+    },
+  );
 
   test("closing fails an offer still waiting rather than leaving it", () async {
     routes.arm("123456");
     // Watched before the close, or the error lands with nothing holding it.
-    final failed = expectLater(offer(code: "123456"), throwsA(isA<StateError>()));
+    final failed = expectLater(
+      offer(code: "123456"),
+      throwsA(isA<StateError>()),
+    );
     await pumpEventQueue();
 
     await routes.close();
@@ -157,11 +167,15 @@ void main() {
   test("a POST that carries no body is not drained for one", () {
     // The server asks before reading: it binds a well-known port on every
     // interface, so a POST to a path that is not here is the ordinary case.
-    expect(SignalingRoutes.carriesBody("POST", SignalingRoutes.offerPath),
-        isTrue);
+    expect(
+      SignalingRoutes.carriesBody("POST", SignalingRoutes.offerPath),
+      isTrue,
+    );
     expect(SignalingRoutes.carriesBody("POST", "/wp-login.php"), isFalse);
-    expect(SignalingRoutes.carriesBody("GET", SignalingRoutes.offerPath),
-        isFalse);
+    expect(
+      SignalingRoutes.carriesBody("GET", SignalingRoutes.offerPath),
+      isFalse,
+    );
   });
 
   test("an offer sent as anything but a POST is refused", () async {
@@ -171,23 +185,28 @@ void main() {
   });
 
   group("the probe", () {
-    Future<SignalingReply> probe(String token, String nonce) =>
-        routes.handle(SignalingRequest("POST", SignalingRoutes.probePath,
-            body: jsonEncode({
-              "nonce": nonce,
-              "proof": SignalingRoutes.proof(token, "probe", nonce),
-            })));
+    Future<SignalingReply> probe(String token, String nonce) => routes.handle(
+      SignalingRequest(
+        "POST",
+        SignalingRoutes.probePath,
+        body: jsonEncode({
+          "nonce": nonce,
+          "proof": SignalingRoutes.proof(token, "probe", nonce),
+        }),
+      ),
+    );
 
     test("proves a token it holds, under the host's label", () async {
       routes.allowReconnect("tok");
       final reply = await probe("tok", "n1");
       expect(reply.status, 200);
-      expect(jsonDecode(reply.body)["proof"],
-          SignalingRoutes.proof("tok", "host", "n1"));
+      expect(
+        jsonDecode(reply.body)["proof"],
+        SignalingRoutes.proof("tok", "host", "n1"),
+      );
     });
 
-    test("a dialler's probe is answered only by a host holding its token",
-        () {
+    test("a dialler's probe is answered only by a host holding its token", () {
       routes.allowReconnect("tok");
       final (:probe, :isAnswer) = SignalingRoutes.probeFor("tok");
       expect(isAnswer(routes.answerProbe(probe)), isTrue);
@@ -208,6 +227,8 @@ void main() {
 
   test("a path that is not one of the routes is a 404", () async {
     expect(
-        (await routes.handle(const SignalingRequest("GET", "/"))).status, 404);
+      (await routes.handle(const SignalingRequest("GET", "/"))).status,
+      404,
+    );
   });
 }

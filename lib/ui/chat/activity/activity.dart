@@ -20,7 +20,8 @@ abstract interface class ActivityCatalog {
 /// The [ActivityCatalog] the app draws replies with; `main` and the test
 /// harness bind it.
 final activityCatalogProvider = Provider<ActivityCatalog>(
-    (ref) => throw UnimplementedError("bound where the app is assembled"));
+  (ref) => throw UnimplementedError("bound where the app is assembled"),
+);
 
 /// Anything drawn among the activities above a reply: a tool run, a thinking
 /// block, an instruction file read, a permission answered, an artifact. One
@@ -71,11 +72,16 @@ abstract class LabelledActivity extends Activity {
   /// Opens [run]'s drawer. It follows the run's message through [source], or
   /// the [ActivitySource] above [context]; with neither it shows the run as
   /// it was opened.
-  Future<void> open(BuildContext context, Run run,
-      {ProviderListenable<LiveMessage>? source}) {
+  Future<void> open(
+    BuildContext context,
+    Run run, {
+    ProviderListenable<LiveMessage>? source,
+  }) {
     final from = source ?? ActivitySource.of(context);
     return showActivityCard<void>(
-        context, (_) => _RunCard(activity: this, run: run, source: from));
+      context,
+      (_) => _RunCard(activity: this, run: run, source: from),
+    );
   }
 }
 
@@ -125,7 +131,13 @@ class Run {
 
   /// As a drawer with nothing to follow shows it: done arriving.
   Run get settled => Run(
-      chatId: chatId, callId: callId, call: call, result: result, part: part, at: at);
+    chatId: chatId,
+    callId: callId,
+    call: call,
+    result: result,
+    part: part,
+    at: at,
+  );
 }
 
 /// An activity on screen: the one-line label in the reply, and the drawer
@@ -205,7 +217,11 @@ class RunLabel extends ConsumerWidget {
 }
 
 class _RunCard extends ConsumerWidget {
-  const _RunCard({required this.activity, required this.run, required this.source});
+  const _RunCard({
+    required this.activity,
+    required this.run,
+    required this.source,
+  });
 
   final LabelledActivity activity;
   final Run run;
@@ -215,8 +231,8 @@ class _RunCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final from = source;
     final message = from == null ? null : ref.watch(from);
-    final now = (message == null ? null : activity.follow(run, message)) ??
-        run.settled;
+    final now =
+        (message == null ? null : activity.follow(run, message)) ?? run.settled;
     final drawn = activity.view(ref, now);
     final shown = drawn.drawer(ref);
     return ActivityCard(

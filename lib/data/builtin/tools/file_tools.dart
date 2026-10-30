@@ -44,7 +44,8 @@ String? readBlockTypeOf(Uint8List bytes) {
 
 const _pathArg = {
   "type": "string",
-  "description": "Workspace-relative path, `project:` + path for the project "
+  "description":
+      "Workspace-relative path, `project:` + path for the project "
       "workspace, or an absolute path (asked of the user).",
 };
 
@@ -58,9 +59,17 @@ String _readOnlyAttachment(String path) =>
 
 /// Why [path] may not be changed yet — never read, or changed since — or
 /// null where it may.
-Future<String?> _unread(Turn turn, String path, String shownPath, String tool) =>
-    unreadFileProblem(path,
-        shownPath: shownPath, toolName: tool, readFiles: turn.readFiles);
+Future<String?> _unread(
+  Turn turn,
+  String path,
+  String shownPath,
+  String tool,
+) => unreadFileProblem(
+  path,
+  shownPath: shownPath,
+  toolName: tool,
+  readFiles: turn.readFiles,
+);
 
 /// What the model wrote or read is what it has seen, so the next edit needs
 /// no read.
@@ -73,13 +82,24 @@ Future<void> _stamp(Turn turn, String path) async {
 /// went: the workspaces and what was granted run, the machine is asked.
 /// [ruleSubject] is what the rules match: the path, for `read`, `write` and
 /// `edit`; for any other tool they match the tool alone.
-Stream<AgentEvent> gatedFileRun(Turn turn, LlmToolCall call, String path,
-    String tool, Future<ShellResult> Function() run,
-    {String? ruleSubject}) async* {
+Stream<AgentEvent> gatedFileRun(
+  Turn turn,
+  LlmToolCall call,
+  String path,
+  String tool,
+  Future<ShellResult> Function() run, {
+  String? ruleSubject,
+}) async* {
   final outcome = GateOutcome();
-  yield* turn.gate.path(call, path, tool, run, outcome,
-      granted: (await turn.gate.permissions()).writableDirs,
-      ruleSubject: ruleSubject);
+  yield* turn.gate.path(
+    call,
+    path,
+    tool,
+    run,
+    outcome,
+    granted: (await turn.gate.permissions()).writableDirs,
+    ruleSubject: ruleSubject,
+  );
   yield ToolResultEvent(outcome.resultOf(call));
 }
 
@@ -102,14 +122,16 @@ class ReadTool extends AgentTool {
   String get name => readToolName;
 
   @override
-  String get fragment => "`read`/`write`/`edit` to work with files in the "
+  String get fragment =>
+      "`read`/`write`/`edit` to work with files in the "
       "workspace";
 
   @override
   String get section => systemProse("files");
 
   @override
-  String get description => "Read a file from the workspace and return its "
+  String get description =>
+      "Read a file from the workspace and return its "
       "contents with line numbers. Paths are relative to the workspace; "
       "prefix with `project:` to read from the project workspace; an absolute "
       "path reads the machine directly, and the user is asked before it runs. "
@@ -120,28 +142,31 @@ class ReadTool extends AgentTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "path": _pathArg,
-          "offset": {
-            "type": "integer",
-            "description": "Line number to start reading from (1-indexed). "
-                "Defaults to 1.",
-          },
-          "limit": {
-            "type": "integer",
-            "description": "Maximum number of lines to read.",
-          },
-        },
-        "required": ["path"],
-      };
+    "type": "object",
+    "properties": {
+      "path": _pathArg,
+      "offset": {
+        "type": "integer",
+        "description":
+            "Line number to start reading from (1-indexed). "
+            "Defaults to 1.",
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Maximum number of lines to read.",
+      },
+    },
+    "required": ["path"],
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
     final args = readArgsFrom(call.argumentsJson);
     if (args == null) {
-      yield* toolRejected(call,
-          'The $readToolName tool takes {"path": "..."}; that argument was missing.');
+      yield* toolRejected(
+        call,
+        'The $readToolName tool takes {"path": "..."}; that argument was missing.',
+      );
       return;
     }
     final path = turn.resolvePath(args.path);
@@ -159,31 +184,40 @@ class ReadTool extends AgentTool {
       // needs to do what this model cannot.
       if (!(pdf ? turn.seesPdfs : turn.seesImages) || !turn.savesResources) {
         return ShellResult(
-            returnCode: 0,
-            output: pdf
-                ? "${args.path} is a PDF, which this model cannot read "
+          returnCode: 0,
+          output: pdf
+              ? "${args.path} is a PDF, which this model cannot read "
                     "directly. Read it with a command at that path instead, "
                     "such as `pdftotext`."
-                : "${args.path} is an image, which this model cannot view. "
-                    "A command can work with it at that path.");
+              : "${args.path} is an image, which this model cannot view. "
+                    "A command can work with it at that path.",
+        );
       }
       final limit = pdf ? pdfBudgetBytes : maxReadImageBytes;
       if (bytes.length > limit) {
-        return ShellResult.failed("${args.path} is ${formatSize(bytes.length)}, "
-            "over the ${formatSize(limit)} a request can carry. "
-            "${pdf ? "Split it" : "Downscale it"} with a command, then read the result.");
+        return ShellResult.failed(
+          "${args.path} is ${formatSize(bytes.length)}, "
+          "over the ${formatSize(limit)} a request can carry. "
+          "${pdf ? "Split it" : "Downscale it"} with a command, then read the result.",
+        );
       }
-      attached = await turn.saved(LlmAttachment(
-          filename: p.basename(path), mimeType: type, bytes: bytes));
+      attached = await turn.saved(
+        LlmAttachment(filename: p.basename(path), mimeType: type, bytes: bytes),
+      );
       return ShellResult(
-          returnCode: 0, output: "${pdf ? "PDF" : "Image"} ${args.path} attached.");
+        returnCode: 0,
+        output: "${pdf ? "PDF" : "Image"} ${args.path} attached.",
+      );
     }
 
     Future<ShellResult> run() async {
       final file = File(path);
       if (!file.existsSync()) {
         return ShellResult(
-            returnCode: -1, output: "", exceptionInfo: "File not found: ${args.path}");
+          returnCode: -1,
+          output: "",
+          exceptionInfo: "File not found: ${args.path}",
+        );
       }
       final bytes = await file.readAsBytes();
       final type = readBlockTypeOf(bytes);
@@ -193,10 +227,12 @@ class ReadTool extends AgentTool {
         content = utf8.decode(bytes);
       } on FormatException {
         return ShellResult(
-            returnCode: -1,
-            output: "",
-            exceptionInfo: "Not a UTF-8 text file (binary?): ${args.path}. "
-                "Inspect binary files with a command instead of $readToolName.");
+          returnCode: -1,
+          output: "",
+          exceptionInfo:
+              "Not a UTF-8 text file (binary?): ${args.path}. "
+              "Inspect binary files with a command instead of $readToolName.",
+        );
       }
       final lines = content.split("\n");
       final offset = (args.offset ?? 1).clamp(1, lines.length + 1);
@@ -211,7 +247,8 @@ class ReadTool extends AgentTool {
       nested = turn.memory.nested
           ? [
               // An AGENTS.md read on purpose is already in front of the model.
-              for (final file in await findNestedInstructions(path,
+              for (final file in await findNestedInstructions(
+                path,
                 alreadyLoaded: turn.loadedInstructions,
                 excludes: turn.memory.excludes,
               ))
@@ -225,12 +262,18 @@ class ReadTool extends AgentTool {
     }
 
     final outcome = GateOutcome();
-    yield* turn.gate.path(call, path, readToolName, run, outcome,
-        granted: [
-          ...(await turn.gate.permissions()).writableDirs,
-          ?turn.attachmentsDir,
-        ],
-        ruleSubject: path);
+    yield* turn.gate.path(
+      call,
+      path,
+      readToolName,
+      run,
+      outcome,
+      granted: [
+        ...(await turn.gate.permissions()).writableDirs,
+        ?turn.attachmentsDir,
+      ],
+      ruleSubject: path,
+    );
     // Between the call and its result, which is where the projection looks
     // for a tool's files.
     if (attached != null) yield attached!;
@@ -259,7 +302,8 @@ class WriteTool extends AgentTool {
   String get name => writeToolName;
 
   @override
-  String get description => "Write a file to the workspace, creating or "
+  String get description =>
+      "Write a file to the workspace, creating or "
       "overwriting it. Paths are relative to the workspace; prefix with "
       "`project:` to write to the project workspace; an absolute path writes "
       "the machine directly, and the user is asked before it runs. The "
@@ -269,21 +313,23 @@ class WriteTool extends AgentTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "path": _pathArg,
-          "content": {"type": "string", "description": "The full file content."},
-        },
-        "required": ["path", "content"],
-      };
+    "type": "object",
+    "properties": {
+      "path": _pathArg,
+      "content": {"type": "string", "description": "The full file content."},
+    },
+    "required": ["path", "content"],
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
     final args = writeArgsFrom(call.argumentsJson);
     if (args == null) {
-      yield* toolRejected(call,
-          'The $writeToolName tool takes {"path": "...", "content": "..."}; '
-          "those arguments were missing.");
+      yield* toolRejected(
+        call,
+        'The $writeToolName tool takes {"path": "...", "content": "..."}; '
+        "those arguments were missing.",
+      );
       return;
     }
     final path = turn.resolvePath(args.path);
@@ -292,22 +338,32 @@ class WriteTool extends AgentTool {
       return;
     }
     // Asked before the gate too, so a refusal raises no banner first.
-    if (await _unread(turn, path, args.path, writeToolName) case final problem?) {
+    if (await _unread(turn, path, args.path, writeToolName)
+        case final problem?) {
       yield* toolRejected(call, problem);
       return;
     }
     yield toolCalled(call, args.path);
-    yield* gatedFileRun(turn, call, path, writeToolName, ruleSubject: path,
-        () async {
-      if (await _unread(turn, path, args.path, writeToolName) case final problem?) {
-        return ShellResult.failed(problem);
-      }
-      await Directory(p.dirname(path)).create(recursive: true);
-      await File(path).writeAsString(args.content);
-      await _stamp(turn, path);
-      return ShellResult(
-          returnCode: 0, output: "Wrote ${args.content.length} bytes to ${args.path}");
-    });
+    yield* gatedFileRun(
+      turn,
+      call,
+      path,
+      writeToolName,
+      ruleSubject: path,
+      () async {
+        if (await _unread(turn, path, args.path, writeToolName)
+            case final problem?) {
+          return ShellResult.failed(problem);
+        }
+        await Directory(p.dirname(path)).create(recursive: true);
+        await File(path).writeAsString(args.content);
+        await _stamp(turn, path);
+        return ShellResult(
+          returnCode: 0,
+          output: "Wrote ${args.content.length} bytes to ${args.path}",
+        );
+      },
+    );
   }
 }
 
@@ -322,7 +378,8 @@ class EditTool extends AgentTool {
   String get name => editToolName;
 
   @override
-  String get description => "Edit a file by replacing `old_string` with "
+  String get description =>
+      "Edit a file by replacing `old_string` with "
       "`new_string`. The `old_string` must appear exactly once in the file, "
       "or set `replace_all` to replace every occurrence. Paths are relative "
       "to the workspace; prefix with `project:` to edit in the project "
@@ -333,33 +390,36 @@ class EditTool extends AgentTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "path": _pathArg,
-          "old_string": {
-            "type": "string",
-            "description": "The exact string to find in the file.",
-          },
-          "new_string": {
-            "type": "string",
-            "description": "The string to replace it with.",
-          },
-          "replace_all": {
-            "type": "boolean",
-            "description": "Replace every occurrence of `old_string` instead "
-                "of requiring it to be unique. Defaults to false.",
-          },
-        },
-        "required": ["path", "old_string", "new_string"],
-      };
+    "type": "object",
+    "properties": {
+      "path": _pathArg,
+      "old_string": {
+        "type": "string",
+        "description": "The exact string to find in the file.",
+      },
+      "new_string": {
+        "type": "string",
+        "description": "The string to replace it with.",
+      },
+      "replace_all": {
+        "type": "boolean",
+        "description":
+            "Replace every occurrence of `old_string` instead "
+            "of requiring it to be unique. Defaults to false.",
+      },
+    },
+    "required": ["path", "old_string", "new_string"],
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
     final args = editArgsFrom(call.argumentsJson);
     if (args == null) {
-      yield* toolRejected(call,
-          'The $editToolName tool takes {"path": "...", "old_string": "...", '
-          '"new_string": "..."}; those arguments were missing.');
+      yield* toolRejected(
+        call,
+        'The $editToolName tool takes {"path": "...", "old_string": "...", '
+        '"new_string": "..."}; those arguments were missing.',
+      );
       return;
     }
     final path = turn.resolvePath(args.path);
@@ -367,42 +427,60 @@ class EditTool extends AgentTool {
       yield* toolRejected(call, _readOnlyAttachment(args.path));
       return;
     }
-    if (await _unread(turn, path, args.path, editToolName) case final problem?) {
+    if (await _unread(turn, path, args.path, editToolName)
+        case final problem?) {
       yield* toolRejected(call, problem);
       return;
     }
     yield toolCalled(call, args.path);
-    yield* gatedFileRun(turn, call, path, editToolName, ruleSubject: path,
-        () async {
-      final file = File(path);
-      if (!file.existsSync()) {
-        return ShellResult(
-            returnCode: -1, output: "", exceptionInfo: "File not found: ${args.path}");
-      }
-      if (await _unread(turn, path, args.path, editToolName) case final problem?) {
-        return ShellResult.failed(problem);
-      }
-      final content = await file.readAsString();
-      final count = content.split(args.oldString).length - 1;
-      if (count == 0) {
-        return ShellResult(returnCode: -1, output: "",
-            exceptionInfo: "old_string not found in ${args.path}");
-      }
-      if (!args.replaceAll && count > 1) {
-        return ShellResult(
+    yield* gatedFileRun(
+      turn,
+      call,
+      path,
+      editToolName,
+      ruleSubject: path,
+      () async {
+        final file = File(path);
+        if (!file.existsSync()) {
+          return ShellResult(
             returnCode: -1,
             output: "",
-            exceptionInfo: "old_string appears $count times in ${args.path}; "
-                "add context to make it unique or set replace_all.");
-      }
-      final updated = args.replaceAll
-          ? content.replaceAll(args.oldString, args.newString)
-          : content.replaceFirst(args.oldString, args.newString);
-      await file.writeAsString(updated);
-      await _stamp(turn, path);
-      return ShellResult(
-          returnCode: 0, output: "Edited ${args.path}: replaced $count occurrence(s).");
-    });
+            exceptionInfo: "File not found: ${args.path}",
+          );
+        }
+        if (await _unread(turn, path, args.path, editToolName)
+            case final problem?) {
+          return ShellResult.failed(problem);
+        }
+        final content = await file.readAsString();
+        final count = content.split(args.oldString).length - 1;
+        if (count == 0) {
+          return ShellResult(
+            returnCode: -1,
+            output: "",
+            exceptionInfo: "old_string not found in ${args.path}",
+          );
+        }
+        if (!args.replaceAll && count > 1) {
+          return ShellResult(
+            returnCode: -1,
+            output: "",
+            exceptionInfo:
+                "old_string appears $count times in ${args.path}; "
+                "add context to make it unique or set replace_all.",
+          );
+        }
+        final updated = args.replaceAll
+            ? content.replaceAll(args.oldString, args.newString)
+            : content.replaceFirst(args.oldString, args.newString);
+        await file.writeAsString(updated);
+        await _stamp(turn, path);
+        return ShellResult(
+          returnCode: 0,
+          output: "Edited ${args.path}: replaced $count occurrence(s).",
+        );
+      },
+    );
   }
 }
 
@@ -423,7 +501,8 @@ class AttachmentSaveTool extends AgentTool {
   bool get offered => offer.attachments;
 
   @override
-  String get description => "Copy an attachment into the workspace so it can "
+  String get description =>
+      "Copy an attachment into the workspace so it can "
       "be changed. Attachments are read-only: change nothing at their paths, "
       "with this tool or any command. `path` is the attachment's path as the "
       "conversation gave it. The copy goes to `dest`, by default "
@@ -431,42 +510,47 @@ class AttachmentSaveTool extends AgentTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "The attachment's path, as the conversation gave it.",
-          },
-          "dest": {
-            "type": "string",
-            "description": "Where the copy goes: workspace-relative, or "
-                "`project:` + path for the project workspace. Defaults to "
-                "`attachments/<its name>`.",
-          },
-        },
-        "required": ["path"],
-      };
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string",
+        "description": "The attachment's path, as the conversation gave it.",
+      },
+      "dest": {
+        "type": "string",
+        "description":
+            "Where the copy goes: workspace-relative, or "
+            "`project:` + path for the project workspace. Defaults to "
+            "`attachments/<its name>`.",
+      },
+    },
+    "required": ["path"],
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
     final source = stringArg(call.argumentsJson, "path");
     if (source == null) {
-      yield* toolRejected(call,
-          'The $attachmentSaveToolName tool takes {"path": "..."}; that '
-          "argument was missing.");
+      yield* toolRejected(
+        call,
+        'The $attachmentSaveToolName tool takes {"path": "..."}; that '
+        "argument was missing.",
+      );
       return;
     }
     final from = turn.resolvePath(source);
     if (!_inAttachments(turn, from)) {
-      yield* toolRejected(call,
-          "$source is not an attachment. $attachmentSaveToolName copies "
-          "the files attached to this chat; copy anything else with a "
-          "command.");
+      yield* toolRejected(
+        call,
+        "$source is not an attachment. $attachmentSaveToolName copies "
+        "the files attached to this chat; copy anything else with a "
+        "command.",
+      );
       return;
     }
     final name = attachmentFilename(p.basename(from));
-    final dest = stringArg(call.argumentsJson, "dest") ??
-        p.join("attachments", name);
+    final dest =
+        stringArg(call.argumentsJson, "dest") ?? p.join("attachments", name);
     final to = turn.resolvePath(dest);
     if (_inAttachments(turn, to)) {
       yield* toolRejected(call, _readOnlyAttachment(dest));
@@ -480,7 +564,8 @@ class AttachmentSaveTool extends AgentTool {
       }
       if (File(to).existsSync()) {
         return ShellResult.failed(
-            "$dest already exists. Pass another dest, or change that one.");
+          "$dest already exists. Pass another dest, or change that one.",
+        );
       }
       await Directory(p.dirname(to)).create(recursive: true);
       await File(to).writeAsBytes(await file.readAsBytes());
@@ -488,7 +573,9 @@ class AttachmentSaveTool extends AgentTool {
       // next needs no read of a file the model has not seen as text.
       await _stamp(turn, to);
       return ShellResult(
-          returnCode: 0, output: "Copied $source to $dest, which you can change.");
+        returnCode: 0,
+        output: "Copied $source to $dest, which you can change.",
+      );
     });
   }
 }

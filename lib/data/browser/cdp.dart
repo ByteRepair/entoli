@@ -6,13 +6,21 @@ import "dart:io";
 /// multiplexed over it (`Target.attachToTarget` with `flatten`).
 class CdpConnection {
   CdpConnection._(this._socket) {
-    _socket.listen(_receive,
-        onDone: _finish, onError: (_) => _finish(), cancelOnError: true);
+    _socket.listen(
+      _receive,
+      onDone: _finish,
+      onError: (_) => _finish(),
+      cancelOnError: true,
+    );
   }
 
   static Future<CdpConnection> connect(Uri url, {HttpClient? client}) async =>
-      CdpConnection._(await WebSocket.connect(url.toString(), customClient: client)
-          .timeout(const Duration(seconds: 15)));
+      CdpConnection._(
+        await WebSocket.connect(
+          url.toString(),
+          customClient: client,
+        ).timeout(const Duration(seconds: 15)),
+      );
 
   final WebSocket _socket;
   var _nextId = 0;
@@ -39,16 +47,21 @@ class CdpConnection {
     final id = ++_nextId;
     final reply = Completer<Map<String, dynamic>>();
     _pending[id] = reply;
-    _socket.add(jsonEncode({
-      "id": id,
-      "method": method,
-      "params": params,
-      "sessionId": ?sessionId,
-    }));
-    return reply.future.timeout(timeout, onTimeout: () {
-      _pending.remove(id);
-      throw CdpException("$method took longer than ${timeout.inSeconds}s.");
-    });
+    _socket.add(
+      jsonEncode({
+        "id": id,
+        "method": method,
+        "params": params,
+        "sessionId": ?sessionId,
+      }),
+    );
+    return reply.future.timeout(
+      timeout,
+      onTimeout: () {
+        _pending.remove(id);
+        throw CdpException("$method took longer than ${timeout.inSeconds}s.");
+      },
+    );
   }
 
   void _receive(dynamic data) {
@@ -69,17 +82,20 @@ class CdpConnection {
         reply.completeError(CdpException("${error["message"]}"));
       } else {
         reply.complete(
-            (message["result"] as Map?)?.cast<String, dynamic>() ?? const {});
+          (message["result"] as Map?)?.cast<String, dynamic>() ?? const {},
+        );
       }
       return;
     }
     final method = message["method"];
     if (method is String) {
-      _events.add(CdpEvent(
-        method,
-        (message["params"] as Map?)?.cast<String, dynamic>() ?? const {},
-        message["sessionId"] as String?,
-      ));
+      _events.add(
+        CdpEvent(
+          method,
+          (message["params"] as Map?)?.cast<String, dynamic>() ?? const {},
+          message["sessionId"] as String?,
+        ),
+      );
     }
   }
 

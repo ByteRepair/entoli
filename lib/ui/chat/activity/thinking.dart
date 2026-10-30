@@ -28,8 +28,8 @@ class ThinkingActivity extends LabelledActivity {
           // Neither streamed nor timed: an older conversation, or an aborted
           // turn.
           : ms == null
-              ? "View thinking"
-              : "Thought for ${formatThinkingTime(ms)}",
+          ? "View thinking"
+          : "Thought for ${formatThinkingTime(ms)}",
       drawer: (_) => RunDrawer(
         title: run.going ? "Thinking…" : "Thinking",
         sections: [(label: null, body: part.text, isError: false)],
@@ -46,10 +46,11 @@ class ThinkingActivity extends LabelledActivity {
     final part = parts[at];
     if (part is! ReasoningPart) return null;
     return Run(
-        chatId: run.chatId,
-        part: part,
-        at: at,
-        going: now.running && part.durationMs == null);
+      chatId: run.chatId,
+      part: part,
+      at: at,
+      going: now.running && part.durationMs == null,
+    );
   }
 
   @override
@@ -99,7 +100,12 @@ class _ThoughtTail extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(labelPadX + labelIcon + labelGap, 0, labelPadX, 6),
+        padding: const EdgeInsets.fromLTRB(
+          labelPadX + labelIcon + labelGap,
+          0,
+          labelPadX,
+          6,
+        ),
         child: ShaderMask(
           shaderCallback: (bounds) => const LinearGradient(
             begin: Alignment.topCenter,
@@ -123,4 +129,3 @@ class _ThoughtTail extends StatelessWidget {
     );
   }
 }
-

@@ -39,20 +39,23 @@ void main() {
   group("latestTagOf", () {
     test("the segment after the redirect's tag/ is the tag", () {
       final location = Uri.parse(
-          "https://github.com/$updateRepo/releases/tag/v1.2.4");
+        "https://github.com/$updateRepo/releases/tag/v1.2.4",
+      );
       expect(latestTagOf(location), "v1.2.4");
     });
 
     test("a trailing slash stays out of the tag", () {
       final location = Uri.parse(
-          "https://github.com/$updateRepo/releases/tag/v1.2.4/");
+        "https://github.com/$updateRepo/releases/tag/v1.2.4/",
+      );
       expect(latestTagOf(location), "v1.2.4");
     });
 
     test("nothing else on GitHub is a release", () {
       expect(
-          latestTagOf(Uri.parse("https://github.com/$updateRepo/releases")),
-          isNull);
+        latestTagOf(Uri.parse("https://github.com/$updateRepo/releases")),
+        isNull,
+      );
       expect(latestTagOf(Uri.parse("https://github.com/$updateRepo")), isNull);
     });
   });
@@ -63,14 +66,20 @@ void main() {
     expect(assetFor(UpdateFlavour.windows), "entoli-installer.msi");
   });
 
-  test("a download URL puts the tag and the asset where a release puts them",
-      () {
-    expect(assetDownloadUrl("v1.2.4", appImageAsset),
-        "https://github.com/$updateRepo/releases/download/v1.2.4/$appImageAsset");
-  });
+  test(
+    "a download URL puts the tag and the asset where a release puts them",
+    () {
+      expect(
+        assetDownloadUrl("v1.2.4", appImageAsset),
+        "https://github.com/$updateRepo/releases/download/v1.2.4/$appImageAsset",
+      );
+    },
+  );
 
   test("the check asks the page's own latest-release URL, not the API", () {
-    expect(latestReleaseUrl(),
-        Uri.parse("https://github.com/$updateRepo/releases/latest"));
+    expect(
+      latestReleaseUrl(),
+      Uri.parse("https://github.com/$updateRepo/releases/latest"),
+    );
   });
 }

@@ -31,7 +31,8 @@ class VoiceSection extends ConsumerWidget {
       children: [
         const SectionHeader(
           "Voice mode",
-          description: "What listens and what speaks. A model on this device "
+          description:
+              "What listens and what speaks. A model on this device "
               "keeps what is said here; a provider's is sent the recording, "
               "or the reply, to turn into the other.",
         ),
@@ -41,7 +42,8 @@ class VoiceSection extends ConsumerWidget {
           _VoicePicker(
             label: "Recognition model",
             role: ModelRole.transcription,
-            off: "Nothing to listen with: voice mode stays off. Read-aloud "
+            off:
+                "Nothing to listen with: voice mode stays off. Read-aloud "
                 "needs only a speech model.",
             choice: voiceRecognitionChoice(settings),
             onChanged: notifier.setVoiceRecognition,
@@ -82,16 +84,16 @@ class _VoicePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => LabelledField(
-        label: label,
-        child: ModelPicker(
-          role: role,
-          nullLabel: "None",
-          defaultOf: (_) => null,
-          helperOffText: off,
-          choice: choice,
-          onChanged: onChanged,
-        ),
-      );
+    label: label,
+    child: ModelPicker(
+      role: role,
+      nullLabel: "None",
+      defaultOf: (_) => null,
+      helperOffText: off,
+      choice: choice,
+      onChanged: onChanged,
+    ),
+  );
 }
 
 /// The provider's name for the voice its speech model reads in. Free text:
@@ -103,7 +105,9 @@ class _VoiceNameField extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (ref.watch(pickedSpeechProvider)?.namesVoices != true) return const SizedBox.shrink();
+    if (ref.watch(pickedSpeechProvider)?.namesVoices != true) {
+      return const SizedBox.shrink();
+    }
     final name = settings.voiceSpeechVoice;
     final playing = ref.watch(readAloudProvider) == previewId;
     return LabelledField(
@@ -111,8 +115,10 @@ class _VoiceNameField extends ConsumerWidget {
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16),
         title: Text(name ?? "None sent"),
-        subtitle: const Text("The provider's own name for one, such as alloy "
-            "for OpenAI. Some providers refuse a request without one."),
+        subtitle: const Text(
+          "The provider's own name for one, such as alloy "
+          "for OpenAI. Some providers refuse a request without one.",
+        ),
         onTap: () async {
           final text = await promptForText(
             context,
@@ -132,7 +138,9 @@ class _VoiceNameField extends ConsumerWidget {
           onPressed: ref.watch(speechReadyProvider)
               ? () => readAloud(context, ref, previewId, previewSpeech)
               : null,
-          icon: Icon(playing ? Icons.stop_circle_outlined : Icons.play_circle_outline),
+          icon: Icon(
+            playing ? Icons.stop_circle_outlined : Icons.play_circle_outline,
+          ),
           tooltip: playing ? "Stop" : "Hear this voice",
         ),
       ),
@@ -157,9 +165,10 @@ class _TouchToSpeak extends ConsumerWidget {
     return SwitchListTile(
       title: const Text("Touch to speak"),
       subtitle: const Text(
-          "Open the microphone only while the Talk button is held, instead of "
-          "listening the whole time. For noisy rooms, where anything loud "
-          "enough is transcribed and answered."),
+        "Open the microphone only while the Talk button is held, instead of "
+        "listening the whole time. For noisy rooms, where anything loud "
+        "enough is transcribed and answered.",
+      ),
       value: on,
       onChanged: ref.read(appSettingsProvider.notifier).setVoicePushToTalk,
     );
@@ -187,7 +196,8 @@ class _MissingEngines extends StatelessWidget {
   final Set<String> installed;
 
   static final _rhVoice = Uri.parse(
-      "https://f-droid.org/packages/com.github.olga_yakovleva.rhvoice.android/");
+    "https://f-droid.org/packages/com.github.olga_yakovleva.rhvoice.android/",
+  );
   static final _futo = Uri.parse("https://voiceinput.futo.tech/");
 
   @override
@@ -205,25 +215,29 @@ class _MissingEngines extends StatelessWidget {
         children: [
           if (!hears)
             mutedParagraph(
-                context,
-                "This device has nothing to hear with. Android gives a "
-                "recognizer the microphone only where it is the one set as the "
-                "system's voice-input service — set one there "
-                "(Settings → Apps → Default apps → Digital assistant app → "
-                "Voice input), or download a model in Settings > On-device."),
+              context,
+              "This device has nothing to hear with. Android gives a "
+              "recognizer the microphone only where it is the one set as the "
+              "system's voice-input service — set one there "
+              "(Settings → Apps → Default apps → Digital assistant app → "
+              "Voice input), or download a model in Settings > On-device.",
+            ),
           if (!speaks)
             mutedParagraph(
-                context,
-                "This device has nothing to speak with. Voice mode uses the "
-                "engines the platform provides, and one without the usual "
-                "speech apps may have none installed. Either of these adds one, "
-                "and works for every app rather than only this one:"),
+              context,
+              "This device has nothing to speak with. Voice mode uses the "
+              "engines the platform provides, and one without the usual "
+              "speech apps may have none installed. Either of these adds one, "
+              "and works for every app rather than only this one:",
+            ),
           const SizedBox(height: 8),
           if (!speaks)
             _EngineLink(label: "RHVoice — speech synthesis", url: _rhVoice),
           if (!hears)
             _EngineLink(
-                label: "FUTO Voice Input — speech recognition", url: _futo),
+              label: "FUTO Voice Input — speech recognition",
+              url: _futo,
+            ),
         ],
       ),
     );
@@ -280,14 +294,16 @@ class _SpeakerField extends ConsumerWidget {
                 for (var i = 0; i < speakers; i++)
                   DropdownMenuItem(value: i, child: Text("Voice ${i + 1}")),
               ],
-              onChanged: (picked) =>
-                  ref.read(appSettingsProvider.notifier).setVoiceSpeaker(picked ?? 0),
+              onChanged: (picked) => ref
+                  .read(appSettingsProvider.notifier)
+                  .setVoiceSpeaker(picked ?? 0),
             ),
           ),
           IconButton(
             onPressed: () => readAloud(context, ref, previewId, previewSpeech),
             icon: Icon(
-                playing ? Icons.stop_circle_outlined : Icons.play_circle_outline),
+              playing ? Icons.stop_circle_outlined : Icons.play_circle_outline,
+            ),
             tooltip: playing ? "Stop" : "Hear this voice",
           ),
         ],
@@ -310,7 +326,8 @@ class _LanguageField extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final native = ref.watch(pickedRecognitionProvider)?.systemEngine == true ||
+    final native =
+        ref.watch(pickedRecognitionProvider)?.systemEngine == true ||
         ref.watch(pickedSpeechProvider)?.systemEngine == true;
     if (!native) return const SizedBox.shrink();
     final offered = ref.watch(systemVoiceLanguagesProvider).value ?? const [];
@@ -325,10 +342,10 @@ class _LanguageField extends ConsumerWidget {
         // A settings file carried off another phone names a language this one
         // has no entry for. Kept and named by its tag rather than reset to the
         // device's: the phone it came from is the one that knows what it meant.
-        if (picked != null && !offered.any((l) => l.tag == picked)) picked: picked,
+        if (picked != null && !offered.any((l) => l.tag == picked))
+          picked: picked,
       },
       onPick: ref.read(appSettingsProvider.notifier).setVoiceLanguage,
     );
   }
 }
-

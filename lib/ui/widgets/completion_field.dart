@@ -43,23 +43,28 @@ CompletionToken? activeCompletionToken(TextEditingValue value) {
 
   final query = value.text.substring(start + 1, caret);
   return switch (value.text[start]) {
-    "/" when start == 0 => (kind: CompletionKind.skill, start: start, query: query),
+    "/" when start == 0 => (
+      kind: CompletionKind.skill,
+      start: start,
+      query: query,
+    ),
     "@" => (kind: CompletionKind.agent, start: start, query: query),
     _ => null,
   };
 }
 
 /// Space, tab, newline — every break a typed message can hold.
-bool _isSpace(int codeUnit) => codeUnit == 0x20 || codeUnit == 0x09 || codeUnit == 0x0A;
+bool _isSpace(int codeUnit) =>
+    codeUnit == 0x20 || codeUnit == 0x09 || codeUnit == 0x0A;
 
 /// Where [kind]'s trigger goes: a skill's at the start of the message, since
 /// that is the only place `prompt_library.dart`'s `_skillReference` reads one
 /// from, and a mention's wherever the caret is.
 int _triggerAt(TextEditingValue value, CompletionKind kind) => switch (kind) {
-      CompletionKind.skill => 0,
-      CompletionKind.agent =>
-        value.selection.isValid ? value.selection.baseOffset : value.text.length,
-    };
+  CompletionKind.skill => 0,
+  CompletionKind.agent =>
+    value.selection.isValid ? value.selection.baseOffset : value.text.length,
+};
 
 /// Type a whole completion into [controller] — the trigger, the name, and the
 /// trailing space that makes what follows arguments rather than more name.
@@ -99,8 +104,9 @@ List<PopupMenuItem<VoidCallback>> completionInsertItems(
             const SizedBox(width: 24),
             Text(
               kind.trigger,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -224,7 +230,9 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
       widget.controller.selection = const TextSelection.collapsed(offset: 1);
     } else {
       final at = _triggerAt(value, kind);
-      final space = at > 0 && !_isSpace(value.text.codeUnitAt(at - 1)) ? " " : "";
+      final space = at > 0 && !_isSpace(value.text.codeUnitAt(at - 1))
+          ? " "
+          : "";
       _replace(at, at, "$space${kind.trigger}");
     }
     // A caret already in place notifies nothing, so a menu that was dismissed
@@ -252,8 +260,11 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
     final token = _token;
     if (token == null) return;
     // The trailing space makes what follows arguments rather than more name.
-    _replace(token.start, widget.controller.selection.baseOffset,
-        "${token.kind.trigger}${option.name} ");
+    _replace(
+      token.start,
+      widget.controller.selection.baseOffset,
+      "${token.kind.trigger}${option.name} ",
+    );
   }
 
   void _replace(int start, int end, String text) =>
@@ -277,11 +288,16 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
         // Only while the menu has something to pick: otherwise these keys have
         // to keep doing what they do in a text box.
         if (matches.isNotEmpty) ...{
-          const SingleActivator(LogicalKeyboardKey.arrowDown): const _MoveIntent(1),
-          const SingleActivator(LogicalKeyboardKey.arrowUp): const _MoveIntent(-1),
-          const SingleActivator(LogicalKeyboardKey.enter): const _AcceptIntent(),
+          const SingleActivator(LogicalKeyboardKey.arrowDown):
+              const _MoveIntent(1),
+          const SingleActivator(LogicalKeyboardKey.arrowUp): const _MoveIntent(
+            -1,
+          ),
+          const SingleActivator(LogicalKeyboardKey.enter):
+              const _AcceptIntent(),
           const SingleActivator(LogicalKeyboardKey.tab): const _AcceptIntent(),
-          const SingleActivator(LogicalKeyboardKey.escape): const _DismissIntent(),
+          const SingleActivator(LogicalKeyboardKey.escape):
+              const _DismissIntent(),
         },
       },
       child: Actions(
@@ -324,7 +340,10 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
     );
   }
 
-  List<CompletionOption> _matching(List<CompletionOption> options, String query) {
+  List<CompletionOption> _matching(
+    List<CompletionOption> options,
+    String query,
+  ) {
     if (query.isEmpty) return options;
     final needle = query.toLowerCase();
     return options.where((o) => o.name.toLowerCase().contains(needle)).toList();
@@ -347,7 +366,10 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
     );
   }
 
-  Widget _list(CompletionKind kind, List<CompletionOption> matches) => ListView.builder(
+  Widget _list(
+    CompletionKind kind,
+    List<CompletionOption> matches,
+  ) => ListView.builder(
     controller: _scroll,
     shrinkWrap: true,
     itemExtent: _rowHeight,
@@ -365,54 +387,57 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
           alignment: Alignment.centerLeft,
           // The name and hint keep their width up to most of the row and are
           // cut past it; the description has what is left.
-          child: LayoutBuilder(builder: (context, box) => Row(
-            children: [
-              ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: box.maxWidth * 0.7),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        "${kind.trigger}${option.name}",
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium
-                            ?.copyWith(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    if (option.argumentHint != null) ...[
-                      const SizedBox(width: 8),
+          child: LayoutBuilder(
+            builder: (context, box) => Row(
+              children: [
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: box.maxWidth * 0.7),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                       Flexible(
                         child: Text(
-                          option.argumentHint!,
+                          "${kind.trigger}${option.name}",
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            fontStyle: FontStyle.italic,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
+                      if (option.argumentHint != null) ...[
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            option.argumentHint!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
-                ),
-              ),
-              if (option.description != null) ...[
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    option.description!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
                   ),
                 ),
+                if (option.description != null) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      option.description!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
               ],
-            ],
-          )),
+            ),
+          ),
         ),
       );
     },

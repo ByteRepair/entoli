@@ -101,7 +101,7 @@ Shell platformShell({
       platformDescription: () => rootfsDir() != null
           ? rootfsById(rootfsId?.call())!.describe("ios")
           : "iOS, with no Linux installed. Install one from the Terminal "
-              "settings to run commands.",
+                "settings to run commands.",
     );
   }
   return LocalShell(environment: environment, driver: driver);
@@ -133,8 +133,9 @@ ShellDriver? platformDriver({
   String? loginPath,
 }) {
   final rootfs = rootfsById(rootfsId);
-  final baseDir =
-      rootfs != null && store != null ? store.directoryOfSync(rootfs.id) : null;
+  final baseDir = rootfs != null && store != null
+      ? store.directoryOfSync(rootfs.id)
+      : null;
   final isolated =
       project != null && builtinProjectOf(project)?.rootfsIsolation == true;
   if (rootfs != null && proot != null && baseDir != null) {
@@ -160,26 +161,27 @@ ShellDriver? platformDriver({
     );
   }
   return LocalShell.hostDriver(
-      tools: tools,
-      projectHome: Platform.isAndroid,
-      environment: isolated && byteRepairBinDir != null
-          ? {
-              "PATH": "$byteRepairBinDir${LocalShell.listSeparator()}"
-                  "${loginPath ?? Platform.environment["PATH"] ?? ""}",
-            }
-          : null,
-      sandboxHelper: Platform.isLinux && config != null
-          ? LandlockSandboxHelper(cacheDir: landlockCacheDir(config))
-          : null,
-      // A desktop launch's inherited PATH misses what the user's profile adds
-      // (`~/.local/bin`); null leaves the inherited one standing.
-      loginPath: loginPath);
+    tools: tools,
+    projectHome: Platform.isAndroid,
+    environment: isolated && byteRepairBinDir != null
+        ? {
+            "PATH":
+                "$byteRepairBinDir${LocalShell.listSeparator()}"
+                "${loginPath ?? Platform.environment["PATH"] ?? ""}",
+          }
+        : null,
+    sandboxHelper: Platform.isLinux && config != null
+        ? LandlockSandboxHelper(cacheDir: landlockCacheDir(config))
+        : null,
+    // A desktop launch's inherited PATH misses what the user's profile adds
+    // (`~/.local/bin`); null leaves the inherited one standing.
+    loginPath: loginPath,
+  );
 }
 
 /// Where the Landlock helper is compiled: the data directory rather than the
 /// OS cache, so a cache clear does not cost the compile again.
-String landlockCacheDir(AppConfig config) =>
-    p.join(config.dataDir, "landlock");
+String landlockCacheDir(AppConfig config) => p.join(config.dataDir, "landlock");
 
 /// The per-project rootfs copy, or null where it has not been made yet.
 String? _projectRootfsDir(AppConfig config, String project, String rootfsId) {
@@ -197,17 +199,17 @@ Future<String?> deviceAbi() =>
 Confinement hostConfinement() => Platform.isLinux
     ? Confinement.landlock
     : Platform.isAndroid || Platform.isIOS
-        ? Confinement.appSandbox
-        : Confinement.none;
+    ? Confinement.appSandbox
+    : Confinement.none;
 
 AppUpdateHost createAppUpdateHost(String cacheDir) {
   final flavour = Platform.isLinux
       ? UpdateFlavour.linux
       : Platform.isMacOS
-          ? UpdateFlavour.macos
-          : Platform.isWindows
-              ? UpdateFlavour.windows
-              : null;
+      ? UpdateFlavour.macos
+      : Platform.isWindows
+      ? UpdateFlavour.windows
+      : null;
   return flavour == null
       ? const UnavailableAppUpdateHost()
       : DesktopUpdater(flavour: flavour, cacheDir: cacheDir);
@@ -223,25 +225,26 @@ AgentBrowser createAgentBrowser(AppConfig config, String cacheDir) {
     picked: () => AppSettings.load(config).agentBrowser,
     visible: () => AppSettings.load(config).agentBrowserVisible,
     embedded: HeliumDownload(dir, client: tlsClient),
-    webViews:
-        Platform.isAndroid || Platform.isIOS
-            ? const MethodChannel("agent_chat/browser")
-            : null,
+    webViews: Platform.isAndroid || Platform.isIOS
+        ? const MethodChannel("agent_chat/browser")
+        : null,
   );
 }
 
 /// On iOS the unpack is iSH's fakefsify, not the system tar, which the exec
 /// ban denies.
-RootfsStore createRootfsStore(String cacheDir) =>
-    Platform.isIOS
-        ? FileRootfsStore(p.join(cacheDir, "rootfs"), tar: _ishFakefsify)
-        : FileRootfsStore(p.join(cacheDir, "rootfs"));
+RootfsStore createRootfsStore(String cacheDir) => Platform.isIOS
+    ? FileRootfsStore(p.join(cacheDir, "rootfs"), tar: _ishFakefsify)
+    : FileRootfsStore(p.join(cacheDir, "rootfs"));
 
 /// Installs into the guest's `/usr/local/bin` on the phones (proot, iSH) and
 /// the app's own bin directory on the desktops. A guest's `apk` installs in
 /// minutes; a host install fetches a 240 MB ESBMC zip and wants the half hour.
 ByteRepairStore createByteRepairStore(
-    AppConfig config, String cacheDir, RootfsStore? rootfs) {
+  AppConfig config,
+  String cacheDir,
+  RootfsStore? rootfs,
+) {
   final guest = Platform.isAndroid || Platform.isIOS;
   final project = ByteRepairProject().dir;
   return ByteRepairStore(
@@ -260,8 +263,8 @@ ByteRepairStore createByteRepairStore(
 /// they cannot disagree.
 String? byteRepairBinDir(String cacheDir) =>
     Platform.isLinux || Platform.isMacOS || Platform.isWindows
-        ? p.join(cacheDir, "byte-repair", "bin")
-        : null;
+    ? p.join(cacheDir, "byte-repair", "bin")
+    : null;
 
 /// Whether a project's `.setup-complete` marker is there. Synchronous because
 /// the chat page asks it in a build.
@@ -299,7 +302,12 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
   if (Platform.isIOS || Platform.isMacOS) {
     final probe = await _appleProbe();
     return probe != null && probe.mlx
-        ? MlxEngine(FileLocalModelStore(p.join(cacheDir, "llm"), format: const MlxFormat()))
+        ? MlxEngine(
+            FileLocalModelStore(
+              p.join(cacheDir, "llm"),
+              format: const MlxFormat(),
+            ),
+          )
         : const NoLocalEngine();
   }
   if (!Platform.isAndroid && !Platform.isLinux) return const NoLocalEngine();
@@ -311,7 +319,10 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
   if (!File(server).existsSync()) {
     return const NoLocalEngine(missingFromBuild: true);
   }
-  final store = FileLocalModelStore(p.join(cacheDir, "llm"), format: const GgufFormat());
+  final store = FileLocalModelStore(
+    p.join(cacheDir, "llm"),
+    format: const GgufFormat(),
+  );
   final pool = LlamaServerPool(
     LlamaBinaries(server: server, libDir: libDir),
     store,
@@ -336,19 +347,21 @@ Future<AppleFm?> createAppleFm() async {
 /// The channel's handshake, asked once for both the Apple model and the MLX
 /// engine: null where there is no channel to ask.
 Future<AppleFmProbe?> _appleProbe() => _appleHandshake ??= () async {
-      if (!Platform.isIOS && !Platform.isMacOS) return null;
-      try {
-        final answer = await appleChannel
-            .invokeMethod<Object?>("handshake")
-            .timeout(const Duration(seconds: 3));
-        final handshake = answer as Map<Object?, Object?>? ?? const {};
-        return AppleFmProbe(handshake["reason"] as String? ?? "other",
-            mlx: handshake["mlx"] as bool? ?? false);
-      } catch (e) {
-        logFailure("apple-fm", "handshake failed", e);
-        return null;
-      }
-    }();
+  if (!Platform.isIOS && !Platform.isMacOS) return null;
+  try {
+    final answer = await appleChannel
+        .invokeMethod<Object?>("handshake")
+        .timeout(const Duration(seconds: 3));
+    final handshake = answer as Map<Object?, Object?>? ?? const {};
+    return AppleFmProbe(
+      handshake["reason"] as String? ?? "other",
+      mlx: handshake["mlx"] as bool? ?? false,
+    );
+  } catch (e) {
+    logFailure("apple-fm", "handshake failed", e);
+    return null;
+  }
+}();
 
 Future<AppleFmProbe?>? _appleHandshake;
 
@@ -369,9 +382,7 @@ FileHandoff createFileHandoff() =>
 
 /// Android has no save dialog; a backup leaves through the share sheet.
 BackupHandoff createBackupHandoff(FileHandoff handoff) =>
-    Platform.isAndroid
-        ? SharedBackup(handoff)
-        : const FileSelectorBackup();
+    Platform.isAndroid ? SharedBackup(handoff) : const FileSelectorBackup();
 
 AssistantLaunch createAssistantLaunch() => Platform.isAndroid
     ? AndroidAssistantLaunch()
@@ -402,8 +413,8 @@ Future<String> dataDir() async {
 
 String get _dirLeaf =>
     (Platform.isLinux || Platform.isMacOS || Platform.isWindows) && kDebugMode
-        ? "entoli-debug"
-        : "entoli";
+    ? "entoli-debug"
+    : "entoli";
 
 Future<String> _resolveBase() async {
   if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
@@ -431,7 +442,9 @@ Future<String> cacheDir() async {
   }
   if (Platform.isMacOS) return p.join(_home, "Library", "Caches", _dirLeaf);
   if (Platform.isWindows) {
-    final local = Platform.environment["LOCALAPPDATA"] ?? p.join(_home, "AppData", "Local");
+    final local =
+        Platform.environment["LOCALAPPDATA"] ??
+        p.join(_home, "AppData", "Local");
     return p.join(local, _dirLeaf, "Cache");
   }
   return p.join((await getApplicationSupportDirectory()).path, "entoli");
@@ -440,10 +453,9 @@ Future<String> cacheDir() async {
 /// Silero's detector ships inside the app, so its licence does too.
 void registerVoiceLicences() {
   LicenseRegistry.addLicense(() async* {
-    yield LicenseEntryWithLineBreaks(
-      const ["silero-vad"],
-      await rootBundle.loadString("assets/models/silero-vad-LICENSE.txt"),
-    );
+    yield LicenseEntryWithLineBreaks(const [
+      "silero-vad",
+    ], await rootBundle.loadString("assets/models/silero-vad-LICENSE.txt"));
   });
 }
 
@@ -472,9 +484,11 @@ Voice createVoice(VoiceModelStore store, String cacheDir) {
 String? processEnv(String name) =>
     Platform.isIOS ? _getenv(name) : Platform.environment[name];
 
-final _libcGetenv = DynamicLibrary.process().lookupFunction<
-    Pointer<Utf8> Function(Pointer<Utf8>),
-    Pointer<Utf8> Function(Pointer<Utf8>)>("getenv");
+final _libcGetenv = DynamicLibrary.process()
+    .lookupFunction<
+      Pointer<Utf8> Function(Pointer<Utf8>),
+      Pointer<Utf8> Function(Pointer<Utf8>)
+    >("getenv");
 
 String? _getenv(String name) {
   final key = name.toNativeUtf8();
@@ -506,9 +520,12 @@ Future<String?> captureLoginPath() async {
   }
   if (!File(login).existsSync()) return null;
   try {
-    final process = await Process.start(login, ["-l", "-c", r'echo "$PATH"'],
-        environment: {"HOME": home, "PATH": "/usr/bin:/bin"},
-        includeParentEnvironment: false);
+    final process = await Process.start(
+      login,
+      ["-l", "-c", r'echo "$PATH"'],
+      environment: {"HOME": home, "PATH": "/usr/bin:/bin"},
+      includeParentEnvironment: false,
+    );
     final stdout = process.stdout.transform(systemEncoding.decoder).join();
     unawaited(process.stderr.drain<void>());
     final int code;
@@ -549,23 +566,27 @@ Future<String?> deviceHostname() async {
 /// process for `tar`). The FFI call blocks, so it runs on its own isolate.
 Future<ProcessResult> _ishFakefsify(String archive, String into) =>
     Isolate.run(() {
-    final fn = ishFakefsifyFn;
-    if (fn == null) {
-      return ProcessResult(
-          1, 1, "", "iSH fakefsify is not linked into this build.");
-    }
-    final archivePtr = archive.toNativeUtf8();
-    final intoPtr = into.toNativeUtf8();
-    try {
-      final rc = fn(archivePtr, intoPtr);
-      return rc == 0
-          ? ProcessResult(0, 0, "", "")
-          : ProcessResult(1, rc, "", "fakefsify failed (errno $rc)");
-    } finally {
-      malloc.free(archivePtr);
-      malloc.free(intoPtr);
-    }
-  });
+      final fn = ishFakefsifyFn;
+      if (fn == null) {
+        return ProcessResult(
+          1,
+          1,
+          "",
+          "iSH fakefsify is not linked into this build.",
+        );
+      }
+      final archivePtr = archive.toNativeUtf8();
+      final intoPtr = into.toNativeUtf8();
+      try {
+        final rc = fn(archivePtr, intoPtr);
+        return rc == 0
+            ? ProcessResult(0, 0, "", "")
+            : ProcessResult(1, rc, "", "fakefsify failed (errno $rc)");
+      } finally {
+        malloc.free(archivePtr);
+        malloc.free(intoPtr);
+      }
+    });
 
 /// The app's read-only directories, one manager per path. See
 /// `core/read_only_dirs.dart`.

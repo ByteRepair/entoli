@@ -53,15 +53,19 @@ void main() {
   buf.writeln("// The bundled skills and agents, embedded so the app is the");
   buf.writeln("// source of truth for presets. Regenerate with prepare.sh.");
   buf.writeln();
-  buf.writeln('import "../../domain/bundled_prompt_file.dart" '
-      'show BundledPromptFile;');
+  buf.writeln(
+    'import "../../domain/bundled_prompt_file.dart" '
+    'show BundledPromptFile;',
+  );
   buf.writeln();
 
   emitPromptFileList(buf, "bundledSkillFiles", skills);
   emitPromptFileList(buf, "bundledAgentFiles", agents);
 
   writeGenerated("lib/data/prompts/bundled_skill_data.dart", buf);
-  stdout.writeln("(${skills.length} skill files, ${agents.length} agent files).");
+  stdout.writeln(
+    "(${skills.length} skill files, ${agents.length} agent files).",
+  );
 }
 
 /// Collects every file under one skill folder: [skillDir] is the folder the
@@ -71,8 +75,7 @@ void main() {
 /// failure rather than a silent one. A file that is not text at all — a
 /// font, an archive — is embedded base64 with [BundledPromptFile.binary],
 /// where `readAsStringSync` could only have thrown or mangled it.
-List<BundledPromptFile> _collectSkill(
-    Directory skillDir, String project) {
+List<BundledPromptFile> _collectSkill(Directory skillDir, String project) {
   final skillName = basename(skillDir.path);
   final entries = <BundledPromptFile>[];
   final skillMd = File("${skillDir.path}/SKILL.md");
@@ -81,8 +84,9 @@ List<BundledPromptFile> _collectSkill(
     final problems = skillFrontmatterProblems(parsed, skillName);
     if (problems.isNotEmpty) {
       stderr.writeln(
-          "bundled skill $project/$skillName does not conform to the "
-          "Agent Skills spec:");
+        "bundled skill $project/$skillName does not conform to the "
+        "Agent Skills spec:",
+      );
       for (final problem in problems) {
         stderr.writeln("  - $problem");
       }
@@ -95,12 +99,20 @@ List<BundledPromptFile> _collectSkill(
     final binary = _isBinary(bytes);
     // CRs come out before the hash and the embed both, so the sha256 the
     // const carries describes the bytes it is paired with (normalizeCr).
-    final content =
-        binary ? base64Encode(bytes) : normalizeCr(utf8.decode(bytes));
+    final content = binary
+        ? base64Encode(bytes)
+        : normalizeCr(utf8.decode(bytes));
     final sha = binary ? sha256OfBytes(bytes) : sha256Of(content);
-    entries.add(BundledPromptFile(
-        project, skillName, relative, sha, content,
-        binary: binary));
+    entries.add(
+      BundledPromptFile(
+        project,
+        skillName,
+        relative,
+        sha,
+        content,
+        binary: binary,
+      ),
+    );
   }
   return entries;
 }
@@ -130,8 +142,9 @@ List<BundledPromptFile> _collectAgents(Directory agentsRoot, String project) {
     // As the skills' collect: the hash and the embed read one normalized
     // text (normalizeCr).
     final content = normalizeCr(entity.readAsStringSync());
-    entries.add(BundledPromptFile(project, name, "", sha256Of(content),
-        content));
+    entries.add(
+      BundledPromptFile(project, name, "", sha256Of(content), content),
+    );
   }
   return entries;
 }

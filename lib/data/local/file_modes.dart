@@ -12,13 +12,15 @@ import "package:ffi/ffi.dart";
 ///
 /// [executable] gives every file its execute bit on the way to read-only,
 /// for a skill's scripts, which arrive from embedded data with none.
-Future<void> setTreeWritable(List<String> paths,
-        {required bool writable, bool executable = false}) =>
-    Isolate.run(() {
-      for (final path in paths) {
-        _walk(path, writable: writable, executable: executable);
-      }
-    });
+Future<void> setTreeWritable(
+  List<String> paths, {
+  required bool writable,
+  bool executable = false,
+}) => Isolate.run(() {
+  for (final path in paths) {
+    _walk(path, writable: writable, executable: executable);
+  }
+});
 
 void _walk(String root, {required bool writable, required bool executable}) {
   final top = Directory(root);
@@ -30,8 +32,12 @@ void _walk(String root, {required bool writable, required bool executable}) {
   if (!writable && !windows && top.statSync().mode & 0x92 == 0) return;
   void set(FileSystemEntity entity, bool isDir) => windows
       ? _setWindows(entity.path, isDir: isDir, writable: writable)
-      : _setPosix(entity.path,
-          isDir: isDir, writable: writable, executable: executable);
+      : _setPosix(
+          entity.path,
+          isDir: isDir,
+          writable: writable,
+          executable: executable,
+        );
   // The root first when unlocking, so a later listing can never be what
   // fails; listing itself only needs read and execute, which a lock keeps.
   if (writable) set(top, true);
@@ -46,14 +52,20 @@ void _walk(String root, {required bool writable, required bool executable}) {
 typedef _ChmodC = Int32 Function(Pointer<Utf8>, Uint32);
 typedef _ChmodDart = int Function(Pointer<Utf8>, int);
 
-final _chmod =
-    DynamicLibrary.process().lookupFunction<_ChmodC, _ChmodDart>("chmod");
+final _chmod = DynamicLibrary.process().lookupFunction<_ChmodC, _ChmodDart>(
+  "chmod",
+);
 
-void _setPosix(String path,
-    {required bool isDir, required bool writable, required bool executable}) {
+void _setPosix(
+  String path, {
+  required bool isDir,
+  required bool writable,
+  required bool executable,
+}) {
   final mode = FileStat.statSync(path).mode & 0x1ff;
   final next = writable
-      ? mode | 0x80 // u+w
+      ? mode |
+            0x80 // u+w
       : (mode & ~0x92) | (isDir || executable ? 0x49 : 0); // a-w, a+x
   if (next == mode) return;
   final native = path.toNativeUtf8();
@@ -73,10 +85,12 @@ const _readOnly = 0x1;
 const _invalid = 0xFFFFFFFF;
 
 final _kernel32 = DynamicLibrary.open("kernel32.dll");
-final _getAttrs =
-    _kernel32.lookupFunction<_GetAttrsC, _GetAttrsDart>("GetFileAttributesW");
-final _setAttrs =
-    _kernel32.lookupFunction<_SetAttrsC, _SetAttrsDart>("SetFileAttributesW");
+final _getAttrs = _kernel32.lookupFunction<_GetAttrsC, _GetAttrsDart>(
+  "GetFileAttributesW",
+);
+final _setAttrs = _kernel32.lookupFunction<_SetAttrsC, _SetAttrsDart>(
+  "SetFileAttributesW",
+);
 
 /// Files only: Windows reads a directory's read-only bit as "has a custom
 /// icon", and refuses no write for it.

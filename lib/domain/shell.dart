@@ -36,9 +36,9 @@ class ShellResult {
   });
 
   const ShellResult.failed(this.exceptionInfo, {this.output = ""})
-      : returnCode = -1,
-        cwd = null,
-        jobId = null;
+    : returnCode = -1,
+      cwd = null,
+      jobId = null;
 
   final int returnCode;
   final String output;
@@ -116,11 +116,11 @@ class CommandSandbox {
   /// This one with [extraWrites] replacing its own — the rules' folders
   /// composed on the run's sandbox.
   CommandSandbox copyWith({List<String>? extraWrites}) => CommandSandbox(
-        workspace: workspace,
-        tmp: tmp,
-        home: home,
-        extraWrites: extraWrites ?? this.extraWrites,
-      );
+    workspace: workspace,
+    tmp: tmp,
+    home: home,
+    extraWrites: extraWrites ?? this.extraWrites,
+  );
 }
 
 /// Whether [path] is [root] or under it, compared by components so `/w/x`
@@ -139,15 +139,18 @@ bool pathsOverlap(String a, String b) {
   bool named(String x, String y) => pathInside(x, y) || pathInside(y, x);
   if (named(a, b)) return true;
   try {
-    return named(File(a).resolveSymbolicLinksSync(),
-        File(b).resolveSymbolicLinksSync());
+    return named(
+      File(a).resolveSymbolicLinksSync(),
+      File(b).resolveSymbolicLinksSync(),
+    );
   } on FileSystemException {
     return false;
   }
 }
 
-String _trimSlash(String path) =>
-    path.length > 1 && path.endsWith("/") ? path.substring(0, path.length - 1) : path;
+String _trimSlash(String path) => path.length > 1 && path.endsWith("/")
+    ? path.substring(0, path.length - 1)
+    : path;
 
 /// What turns a command into one that enforces [sandbox] on itself, by the
 /// helper the OS driver owns. Null where this build has no confinement for
@@ -221,8 +224,8 @@ class ShellDriver {
   /// workspace at a clean path and sets `-w` to the guest path, and binds
   /// each of `readOnly` at its own host path, its root kept from writing
   /// there; a host driver returns the same list regardless.
-  final List<String> Function(String cwd, String home,
-      {List<String> readOnly}) commandFor;
+  final List<String> Function(String cwd, String home, {List<String> readOnly})
+  commandFor;
 
   /// The environment the shell starts with, below the app's and the project's
   /// variables, which still win over it. A guest's, where [commandFor] reaches
@@ -329,16 +332,18 @@ abstract class Shell {
   /// [readOnly] are host directories the command may read and must not
   /// write, the chat's attachments among them: a guest binds them in, and
   /// they are read-only on disk already wherever the machine is the shell.
-  ShellRun start(String command,
-      {required String cwd,
-      required String home,
-      required Duration timeout,
-      Map<String, String>? environment,
-      bool oneShot = false,
-      bool restart = false,
-      String? project,
-      CommandSandbox? sandbox,
-      List<String> readOnly = const []});
+  ShellRun start(
+    String command, {
+    required String cwd,
+    required String home,
+    required Duration timeout,
+    Map<String, String>? environment,
+    bool oneShot = false,
+    bool restart = false,
+    String? project,
+    CommandSandbox? sandbox,
+    List<String> readOnly = const [],
+  });
 
   /// What the model is told it is operating on, e.g. `Linux 6.11.0 x86_64`.
   /// The agent's system prompt names it, so a command can be written for the
@@ -428,25 +433,27 @@ class UnavailableShell extends Shell {
   bool get canRunCommands => false;
 
   @override
-  ShellRun start(String command,
-          {required String cwd,
-          required String home,
-          required Duration timeout,
-          Map<String, String>? environment,
-          bool oneShot = false,
-          bool restart = false,
-          String? project,
-          CommandSandbox? sandbox,
-          List<String> readOnly = const []}) =>
-      const _Unavailable();
+  ShellRun start(
+    String command, {
+    required String cwd,
+    required String home,
+    required Duration timeout,
+    Map<String, String>? environment,
+    bool oneShot = false,
+    bool restart = false,
+    String? project,
+    CommandSandbox? sandbox,
+    List<String> readOnly = const [],
+  }) => const _Unavailable();
 }
 
 class _Unavailable extends ShellRun {
   const _Unavailable();
 
   @override
-  Future<ShellResult> get result async =>
-      const ShellResult.failed("There is no shell here to execute commands in.");
+  Future<ShellResult> get result async => const ShellResult.failed(
+    "There is no shell here to execute commands in.",
+  );
 
   @override
   ValueListenable<String?>? get output => null;
@@ -477,7 +484,8 @@ const guestHome = "/root";
 /// The guest's own `PATH`: a non-login ash falls back to its compiled-in
 /// default, which does not name `/usr/local/bin`, where a setup's installs
 /// land.
-const guestPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+const guestPath =
+    "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 
 /// The persistent-shell dispatcher script, templated on a per-session token.
 /// Both the host shell ([LocalShell]) and the in-process emulator
@@ -491,10 +499,8 @@ const guestPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 /// `IshShell`'s guest runs this inside iSH's `/bin/sh`, so a `cd` or an
 /// `export` in one emulated command sticks for the next, the same way it does
 /// on a real child process.
-String dispatcherScript(String token) => _dispatcherTemplate.replaceAll(
-      "@TOKEN@",
-      token,
-    );
+String dispatcherScript(String token) =>
+    _dispatcherTemplate.replaceAll("@TOKEN@", token);
 
 const _dispatcherTemplate = r"""
 trap 'true' INT

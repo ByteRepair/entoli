@@ -60,8 +60,9 @@ void main() {
     expect(tile(SettingsCategory.providers.label), findsOneWidget);
   });
 
-  testWidgets("where it can run one, the catalog is offered with its size",
-      (tester) async {
+  testWidgets("where it can run one, the catalog is offered with its size", (
+    tester,
+  ) async {
     app = TestApp.create(localLlm: FakeLocalLlm());
     await pumpOnDevice(tester);
 
@@ -75,10 +76,7 @@ void main() {
 
   testWidgets("there is no model picker — every downloaded one is offered "
       "wherever a model is chosen", (tester) async {
-    app = TestApp.create(
-      localLlm: FakeLocalLlm(),
-      localModels: {model.id},
-    );
+    app = TestApp.create(localLlm: FakeLocalLlm(), localModels: {model.id});
     await pumpLlmSettings(tester);
 
     // The pick used to live here, and having moved it there must be nothing
@@ -93,10 +91,7 @@ void main() {
   });
 
   testWidgets("the cap on how many run at once is stored", (tester) async {
-    app = TestApp.create(
-      localLlm: FakeLocalLlm(),
-      localModels: {model.id},
-    );
+    app = TestApp.create(localLlm: FakeLocalLlm(), localModels: {model.id});
     await pumpLlmSettings(tester);
 
     await tester.tap(find.text("One at a time"));
@@ -111,16 +106,19 @@ void main() {
     expect(app.localLlm.stops, 0);
   });
 
-  testWidgets("an accelerator is offered by the name the server gave it",
-      (tester) async {
+  testWidgets("an accelerator is offered by the name the server gave it", (
+    tester,
+  ) async {
     app = TestApp.create(
-      localLlm: FakeLocalLlm(devicesFound: const [
-        LocalDevice(
-          name: "HTP0",
-          description: "Hexagon NPU",
-          compute: LocalCompute.npu,
-        ),
-      ]),
+      localLlm: FakeLocalLlm(
+        devicesFound: const [
+          LocalDevice(
+            name: "HTP0",
+            description: "Hexagon NPU",
+            compute: LocalCompute.npu,
+          ),
+        ],
+      ),
       localModels: {model.id},
     );
     await pumpLlmSettings(tester);
@@ -139,17 +137,18 @@ void main() {
 
   testWidgets("a phone with no accelerator is told so rather than offered a "
       "dropdown of one", (tester) async {
-    app = TestApp.create(
-      localLlm: FakeLocalLlm(),
-      localModels: {model.id},
-    );
+    app = TestApp.create(localLlm: FakeLocalLlm(), localModels: {model.id});
     await pumpLlmSettings(tester);
 
-    expect(find.textContaining("no accelerator on this device"), findsOneWidget);
+    expect(
+      find.textContaining("no accelerator on this device"),
+      findsOneWidget,
+    );
   });
 
-  testWidgets("a loaded model says where it is actually running",
-      (tester) async {
+  testWidgets("a loaded model says where it is actually running", (
+    tester,
+  ) async {
     final llm = FakeLocalLlm();
     app = TestApp.create(localLlm: llm, localModels: {model.id});
     await io(tester, () => llm.serve(model.id, device: "Vulkan0"));
@@ -157,11 +156,15 @@ void main() {
 
     // The resolved device, not the setting: Auto is decided when the model
     // loads, so this row is the only place the answer appears.
-    expect(find.textContaining("Answering on the GPU (Vulkan0)"), findsOneWidget);
+    expect(
+      find.textContaining("Answering on the GPU (Vulkan0)"),
+      findsOneWidget,
+    );
   });
 
-  testWidgets("a model on the CPU says so rather than naming a device",
-      (tester) async {
+  testWidgets("a model on the CPU says so rather than naming a device", (
+    tester,
+  ) async {
     final llm = FakeLocalLlm();
     app = TestApp.create(localLlm: llm, localModels: {model.id});
     await io(tester, () => llm.serve(model.id, device: LocalDevice.cpu));
@@ -170,12 +173,10 @@ void main() {
     expect(find.textContaining("Answering on the CPU"), findsOneWidget);
   });
 
-  testWidgets("a model that will not load says why, beside the others",
-      (tester) async {
-    final llm = FakeLocalLlm(
-      ready: false,
-      failure: "not enough memory",
-    );
+  testWidgets("a model that will not load says why, beside the others", (
+    tester,
+  ) async {
+    final llm = FakeLocalLlm(ready: false, failure: "not enough memory");
     app = TestApp.create(localLlm: llm, localModels: {model.id});
     // A turn asked for it and it would not come up, which is the only way this
     // row is reached now that the settings page starts nothing. The throw is
@@ -239,69 +240,81 @@ void main() {
     expect(app.localLlm.stops, greaterThan(0));
   });
 
-  testWidgets("a download in flight shows what it is doing, and can be stopped",
-      (tester) async {
-    app = TestApp.create(localLlm: FakeLocalLlm());
-    app.localModels.installing = Completer<void>();
-    await pumpOnDevice(tester);
+  testWidgets(
+    "a download in flight shows what it is doing, and can be stopped",
+    (tester) async {
+      app = TestApp.create(localLlm: FakeLocalLlm());
+      app.localModels.installing = Completer<void>();
+      await pumpOnDevice(tester);
 
-    await tester.tap(find.byTooltip("Download").first);
-    await settleIo(tester);
+      await tester.tap(find.byTooltip("Download").first);
+      await settleIo(tester);
 
-    expect(find.byType(LinearProgressIndicator), findsOneWidget);
-    expect(find.byTooltip("Cancel"), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.byTooltip("Cancel"), findsOneWidget);
 
-    await tester.tap(find.byTooltip("Cancel"));
-    await settleIo(tester);
+      await tester.tap(find.byTooltip("Cancel"));
+      await settleIo(tester);
 
-    expect(find.byType(LinearProgressIndicator), findsNothing);
-    expect(app.container.read(installedLocalModelsProvider), isEmpty);
-  });
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(app.container.read(installedLocalModelsProvider), isEmpty);
+    },
+  );
 
-  testWidgets("a download landing, and a delete, both refresh what the pickers offer",
-      (tester) async {
-    // The on-device provider lists what is on disk, so a list built before
-    // the download would leave the model out of every picker.
-    app = TestApp.create(localLlm: FakeLocalLlm());
-    await pumpOnDevice(tester);
-    final before = app.container.read(availableModelsProvider);
+  testWidgets(
+    "a download landing, and a delete, both refresh what the pickers offer",
+    (tester) async {
+      // The on-device provider lists what is on disk, so a list built before
+      // the download would leave the model out of every picker.
+      app = TestApp.create(localLlm: FakeLocalLlm());
+      await pumpOnDevice(tester);
+      final before = app.container.read(availableModelsProvider);
 
-    await tester.tap(find.byTooltip("Download").first);
-    await settleIo(tester);
-    final downloaded = app.container.read(availableModelsProvider);
-    expect(identical(before, downloaded), isFalse);
+      await tester.tap(find.byTooltip("Download").first);
+      await settleIo(tester);
+      final downloaded = app.container.read(availableModelsProvider);
+      expect(identical(before, downloaded), isFalse);
 
-    await tester.tap(find.byTooltip("Delete"));
-    await settleIo(tester);
-    await tester.tap(find.text("Delete").last);
-    await settleIo(tester);
-    expect(identical(downloaded, app.container.read(availableModelsProvider)), isFalse);
-  });
+      await tester.tap(find.byTooltip("Delete"));
+      await settleIo(tester);
+      await tester.tap(find.text("Delete").last);
+      await settleIo(tester);
+      expect(
+        identical(downloaded, app.container.read(availableModelsProvider)),
+        isFalse,
+      );
+    },
+  );
 
-  testWidgets("a downloaded model the catalog does not offer is a row, and deletable",
-      (tester) async {
-    // One added by link, or one an older catalog offered: either way it is the
-    // gigabytes it always was, and only this row can reach them.
-    app = TestApp.create(
-        localLlm: FakeLocalLlm(), localModels: {"qwen3.5-2b-q4_0"});
-    await pumpOnDevice(tester);
+  testWidgets(
+    "a downloaded model the catalog does not offer is a row, and deletable",
+    (tester) async {
+      // One added by link, or one an older catalog offered: either way it is the
+      // gigabytes it always was, and only this row can reach them.
+      app = TestApp.create(
+        localLlm: FakeLocalLlm(),
+        localModels: {"qwen3.5-2b-q4_0"},
+      );
+      await pumpOnDevice(tester);
 
-    expect(find.text("qwen3.5-2b-q4_0"), findsOneWidget);
-    expect(find.text("Q4_0"), findsWidgets);
+      expect(find.text("qwen3.5-2b-q4_0"), findsOneWidget);
+      expect(find.text("Q4_0"), findsWidgets);
 
-    await tester.tap(find.byTooltip("Delete"));
-    await settleIo(tester);
-    expect(find.textContaining("can be downloaded again"), findsNothing);
-    await tester.tap(find.text("Delete").last);
-    await settleIo(tester);
+      await tester.tap(find.byTooltip("Delete"));
+      await settleIo(tester);
+      expect(find.textContaining("can be downloaded again"), findsNothing);
+      await tester.tap(find.text("Delete").last);
+      await settleIo(tester);
 
-    expect(app.localModels.deleted, ["qwen3.5-2b-q4_0"]);
-    expect(app.container.read(installedLocalModelsProvider), isEmpty);
-    expect(find.text("qwen3.5-2b-q4_0"), findsNothing);
-  });
+      expect(app.localModels.deleted, ["qwen3.5-2b-q4_0"]);
+      expect(app.container.read(installedLocalModelsProvider), isEmpty);
+      expect(find.text("qwen3.5-2b-q4_0"), findsNothing);
+    },
+  );
 
-  testWidgets("a model is added by its link alone, and lands in the list",
-      (tester) async {
+  testWidgets("a model is added by its link alone, and lands in the list", (
+    tester,
+  ) async {
     app = TestApp.create(localLlm: FakeLocalLlm());
     await pumpOnDevice(tester);
 
@@ -311,22 +324,24 @@ void main() {
     final download = find.widgetWithText(FilledButton, "Download");
     expect(tester.widget<FilledButton>(download).onPressed, isNull);
 
-    await tester.enterText(find.widgetWithText(TextField, "Link"),
-        "https://example.com/models/My-Model-Q8_0.gguf");
+    await tester.enterText(
+      find.widgetWithText(TextField, "Link"),
+      "https://example.com/models/My-Model-Q8_0.gguf",
+    );
     await tester.enterText(find.widgetWithText(TextField, "Name"), "My model");
     await tester.pump();
     await tester.tap(download);
     await settleIo(tester);
 
-    expect(app.container.read(installedLocalModelsProvider), contains("my-model-q8_0"));
+    expect(
+      app.container.read(installedLocalModelsProvider),
+      contains("my-model-q8_0"),
+    );
     expect(find.text("My model"), findsOneWidget);
   });
 
   testWidgets("turning the KV cache off is stored", (tester) async {
-    app = TestApp.create(
-      localLlm: FakeLocalLlm(),
-      localModels: {model.id},
-    );
+    app = TestApp.create(localLlm: FakeLocalLlm(), localModels: {model.id});
     await pumpLlmSettings(tester);
 
     // On by default: the field leads with the ten it resolves to.
@@ -340,10 +355,7 @@ void main() {
   });
 
   testWidgets("the KV cache is counted in prompts, not chats", (tester) async {
-    app = TestApp.create(
-      localLlm: FakeLocalLlm(),
-      localModels: {model.id},
-    );
+    app = TestApp.create(localLlm: FakeLocalLlm(), localModels: {model.id});
     await pumpLlmSettings(tester);
 
     // A dump is one request to the model and a turn writes one per step, so
@@ -359,21 +371,24 @@ void main() {
     expect(find.text("30 chats"), findsNothing);
   });
 
-  testWidgets("the cores slider is drawn only where there is more than one core",
-      (tester) async {
-    app = TestApp.create(
-      localLlm: FakeLocalLlm(maxThreads: 8),
-      localModels: {model.id},
-    );
-    await pumpLlmSettings(tester);
+  testWidgets(
+    "the cores slider is drawn only where there is more than one core",
+    (tester) async {
+      app = TestApp.create(
+        localLlm: FakeLocalLlm(maxThreads: 8),
+        localModels: {model.id},
+      );
+      await pumpLlmSettings(tester);
 
-    expect(find.text("CPU cores"), findsOneWidget);
-    // The default is every core, and that is what the row says until it is moved.
-    expect(find.textContaining("All 8 cores"), findsOneWidget);
-  });
+      expect(find.text("CPU cores"), findsOneWidget);
+      // The default is every core, and that is what the row says until it is moved.
+      expect(find.textContaining("All 8 cores"), findsOneWidget);
+    },
+  );
 
-  testWidgets("a machine that answered with one core has no slider to draw",
-      (tester) async {
+  testWidgets("a machine that answered with one core has no slider to draw", (
+    tester,
+  ) async {
     app = TestApp.create(
       localLlm: FakeLocalLlm(maxThreads: 1),
       localModels: {model.id},

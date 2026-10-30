@@ -159,10 +159,7 @@ void main() {
         SegmentReach.other,
       );
       // An unquoted body runs its substitutions.
-      expect(
-        profileSegment("cat <<EOF\n\$(rm x)\nEOF").modelable,
-        isFalse,
-      );
+      expect(profileSegment("cat <<EOF\n\$(rm x)\nEOF").modelable, isFalse);
     });
   });
 
@@ -197,7 +194,10 @@ void main() {
         );
       }
       expect(profileSegment("curl example.com/x").url, "http://example.com/x");
-      expect(profileSegment("http api.local:8080").url, "http://api.local:8080");
+      expect(
+        profileSegment("http api.local:8080").url,
+        "http://api.local:8080",
+      );
     });
 
     test("a fetcher with no nameable URL is not network", () {

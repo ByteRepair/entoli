@@ -10,7 +10,7 @@ const askToolName = "ask_user";
 /// One answer the user can pick.
 class AskOption {
   const AskOption({required this.label, String? value, this.detail})
-      : answer = value ?? label;
+    : answer = value ?? label;
 
   /// What the user reads on the button.
   final String label;
@@ -24,7 +24,11 @@ class AskOption {
 }
 
 class AskQuestion {
-  const AskQuestion({required this.question, this.summary, required this.options});
+  const AskQuestion({
+    required this.question,
+    this.summary,
+    required this.options,
+  });
 
   final String question;
 
@@ -39,8 +43,11 @@ class AskQuestion {
 /// One `ask_user` call, under the tool call's id — which is what its answers
 /// travel back with.
 class AskRequest {
-  const AskRequest(
-      {required this.id, required this.questions, this.argumentsJson});
+  const AskRequest({
+    required this.id,
+    required this.questions,
+    this.argumentsJson,
+  });
 
   final String id;
   final List<AskQuestion> questions;
@@ -84,7 +91,8 @@ String askAnswers(List<AskQuestion> questions, List<String?> answers) {
   return const JsonEncoder.withIndent("  ").convert({
     "answers": pairs,
     if (pairs.every((pair) => pair["answer"] == null))
-      "note": "The user answered nothing. Carry on with what you already have, "
+      "note":
+          "The user answered nothing. Carry on with what you already have, "
           "or say what you still need and finish the turn — do not ask again.",
   });
 }
@@ -107,7 +115,12 @@ AskQuestion? _question(Object? raw) {
   if (text == null || options.isEmpty) return null;
   return AskQuestion(
     question: text,
-    summary: _string(raw, const ["summary", "context", "detail", "description"]),
+    summary: _string(raw, const [
+      "summary",
+      "context",
+      "detail",
+      "description",
+    ]),
     options: options,
   );
 }
@@ -121,14 +134,28 @@ List<AskOption> _options(Map raw) {
 }
 
 AskOption? _option(Object? raw) {
-  if (raw is String) return raw.trim().isEmpty ? null : AskOption(label: raw.trim());
+  if (raw is String) {
+    return raw.trim().isEmpty ? null : AskOption(label: raw.trim());
+  }
   if (raw is! Map) return null;
-  final label = _string(raw, const ["label", "title", "name", "option", "answer", "value"]);
+  final label = _string(raw, const [
+    "label",
+    "title",
+    "name",
+    "option",
+    "answer",
+    "value",
+  ]);
   if (label == null) return null;
   return AskOption(
     label: label,
     value: _string(raw, const ["value", "query", "answer"]),
-    detail: _string(raw, const ["detail", "rationale", "description", "reason"]),
+    detail: _string(raw, const [
+      "detail",
+      "rationale",
+      "description",
+      "reason",
+    ]),
   );
 }
 

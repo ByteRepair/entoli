@@ -39,7 +39,8 @@ class WebFetchUI extends ToolUI {
 /// arguments, and what came back behind the drawer.
 RunView _webView(Run run) {
   final search = run.call?.name == websearchToolName;
-  final what = stringArg(run.call?.argumentsJson, search ? "query" : "url") ?? "";
+  final what =
+      stringArg(run.call?.argumentsJson, search ? "query" : "url") ?? "";
   final result = run.result;
   final verb = search
       ? (result == null ? "Searching" : "Searched")
@@ -54,7 +55,11 @@ RunView _webView(Run run) {
       mono: true,
       sections: [
         (label: search ? "Query" : "URL", body: what, isError: false),
-        (label: search ? "Results" : "Content", body: result?.output, isError: false),
+        (
+          label: search ? "Results" : "Content",
+          body: result?.output,
+          isError: false,
+        ),
         (label: "Error", body: result?.exceptionInfo, isError: true),
       ],
     ),

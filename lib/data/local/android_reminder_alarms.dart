@@ -31,10 +31,16 @@ class AndroidReminderAlarms extends ChannelReminderAlarms {
   Future<void> requestExact() => platform.invokeMethod("requestExact");
 
   @override
-  Future<void> schedule(int requestCode, DateTime at,
-          {String? calendar, String? label, String? chatId}) =>
-      run("schedule", {"code": requestCode, "at": at.millisecondsSinceEpoch},
-          "schedule $requestCode");
+  Future<void> schedule(
+    int requestCode,
+    DateTime at, {
+    String? calendar,
+    String? label,
+    String? chatId,
+  }) => run("schedule", {
+    "code": requestCode,
+    "at": at.millisecondsSinceEpoch,
+  }, "schedule $requestCode");
 
   @override
   Future<void> cancel(int requestCode) =>

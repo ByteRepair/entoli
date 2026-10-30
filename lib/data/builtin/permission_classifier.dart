@@ -27,8 +27,12 @@ class LlmClassifier implements PermissionClassifier {
     required String workspace,
     List<String> alsoWritable = const [],
   }) async {
-    final prompt = _classifierPrompt(toolName, argumentsJson,
-        workspace: workspace, alsoWritable: alsoWritable);
+    final prompt = _classifierPrompt(
+      toolName,
+      argumentsJson,
+      workspace: workspace,
+      alsoWritable: alsoWritable,
+    );
     try {
       final chunks = await client
           .stream([
@@ -132,8 +136,7 @@ that must never run. A write you are merely unsure about is ask.
       browserTypeToolName ||
       browserPressToolName ||
       browserDragToolName ||
-      browserUploadToolName =>
-        "action",
+      browserUploadToolName => "action",
       _ => null,
     };
     if (key == null) return argumentsJson;

@@ -34,8 +34,9 @@ class SubAgentTranscriptNotifier extends Notifier<SubAgentTranscript> {
     if (ref.watch(isMirroredChatProvider(chatId))) {
       final hub = ref.watch(syncHubProvider);
       hub.followSubAgent(chatId, callId);
-      final sub = hub.subAgentUpdates.where((u) => u == call).listen(
-          (_) => _set(hub.subAgentRecords(chatId, callId) ?? const []));
+      final sub = hub.subAgentUpdates
+          .where((u) => u == call)
+          .listen((_) => _set(hub.subAgentRecords(chatId, callId) ?? const []));
       ref.onDispose(() {
         sub.cancel();
         hub.unfollowSubAgent(chatId, callId);
@@ -47,9 +48,9 @@ class SubAgentTranscriptNotifier extends Notifier<SubAgentTranscript> {
     final sub = repo.subAgentAppends
         .where((a) => a.chatId == chatId && a.callId == callId)
         .listen((a) {
-      final grown = growTranscript(_records, a.from, a.records);
-      grown == null ? unawaited(_read(repo)) : _set(grown);
-    });
+          final grown = growTranscript(_records, a.from, a.records);
+          grown == null ? unawaited(_read(repo)) : _set(grown);
+        });
     ref.onDispose(sub.cancel);
     unawaited(_read(repo));
     return _of(const []);
@@ -68,26 +69,28 @@ class SubAgentTranscriptNotifier extends Notifier<SubAgentTranscript> {
   }
 
   static SubAgentTranscript _of(List<ChatRecord> records) => (
-        message: replay(records).lastOrNull,
-        ended: records.lastOrNull is TurnEndRecord,
-      );
+    message: replay(records).lastOrNull,
+    ended: records.lastOrNull is TurnEndRecord,
+  );
 }
 
 final subAgentTranscriptProvider = NotifierProvider.autoDispose
     .family<SubAgentTranscriptNotifier, SubAgentTranscript, SubAgentCall>(
-        SubAgentTranscriptNotifier.new);
+      SubAgentTranscriptNotifier.new,
+    );
 
 /// The transcript as a message a drawer can follow, for the labels inside it.
 /// Live while its log is open and its chat has a turn running: a log left
 /// open by a killed process is not a sub-agent still going.
-final subAgentLiveProvider =
-    Provider.autoDispose.family<LiveMessage, SubAgentCall>((ref, call) {
-  final transcript = ref.watch(subAgentTranscriptProvider(call));
-  final running =
-      ref.watch(chatViewProvider(call.chatId).select((v) => v.isRunning));
-  return (
-    message: transcript.message,
-    shellOutput: null,
-    running: running && !transcript.ended,
-  );
-});
+final subAgentLiveProvider = Provider.autoDispose
+    .family<LiveMessage, SubAgentCall>((ref, call) {
+      final transcript = ref.watch(subAgentTranscriptProvider(call));
+      final running = ref.watch(
+        chatViewProvider(call.chatId).select((v) => v.isRunning),
+      );
+      return (
+        message: transcript.message,
+        shellOutput: null,
+        running: running && !transcript.ended,
+      );
+    });

@@ -32,7 +32,9 @@ void main() {
     // after it shifted.
     expect(reader.read(Uint8List.sublistView(whole, 0, 3)), hasLength(1));
     expect(
-      reader.read(Uint8List.sublistView(whole, 3)).map((v) => (v * 32768).round()),
+      reader
+          .read(Uint8List.sublistView(whole, 3))
+          .map((v) => (v * 32768).round()),
       [-2000, 3000],
     );
   });
@@ -43,7 +45,9 @@ void main() {
     expect(reader.read(Uint8List.sublistView(whole, 0, 1)), isEmpty);
     expect(reader.read(Uint8List(0)), isEmpty);
     expect(
-      reader.read(Uint8List.sublistView(whole, 1)).map((v) => (v * 32768).round()),
+      reader
+          .read(Uint8List.sublistView(whole, 1))
+          .map((v) => (v * 32768).round()),
       [-1234],
     );
   });

@@ -18,7 +18,8 @@ const _fontsHead = """
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@200;300;400;700;900&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&display=swap" rel="stylesheet">""";
 
-const _baseCss = """
+const _baseCss =
+    """
 $_baseMarker
 <style>
 :root {

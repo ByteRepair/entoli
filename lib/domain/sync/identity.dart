@@ -36,7 +36,8 @@ class SyncIdentity {
   static String fingerprintOf(List<int> publicKey) {
     final digest = digestOf(publicKey);
     return [
-      for (var i = 0; i + 4 <= digest.length; i += 4) digest.substring(i, i + 4),
+      for (var i = 0; i + 4 <= digest.length; i += 4)
+        digest.substring(i, i + 4),
     ].join(" ");
   }
 

@@ -35,20 +35,24 @@ void main() {
     WidgetTester tester, {
     EdgeInsets bars = EdgeInsets.zero,
     Widget? beside,
-  }) =>
-      app.pump(
-        tester,
-        underSystemBars(
-          bars,
-          Row(children: [
-            const SizedBox(width: sidebarWidth, child: Sidebar()),
-            if (beside != null) Expanded(child: beside),
-          ]),
-        ),
-      );
+  }) => app.pump(
+    tester,
+    underSystemBars(
+      bars,
+      Row(
+        children: [
+          const SizedBox(width: sidebarWidth, child: Sidebar()),
+          if (beside != null) Expanded(child: beside),
+        ],
+      ),
+    ),
+  );
 
   /// The narrow layout: the sidebar is a drawer over the chat.
-  Future<void> pumpAsDrawer(WidgetTester tester, {EdgeInsets bars = EdgeInsets.zero}) async {
+  Future<void> pumpAsDrawer(
+    WidgetTester tester, {
+    EdgeInsets bars = EdgeInsets.zero,
+  }) async {
     await app.pump(
       tester,
       underSystemBars(
@@ -73,8 +77,9 @@ void main() {
 
   // The button goes to the new-chat screen rather than making anything: what
   // it does is drop the selection, and nothing selected is that screen.
-  testWidgets("the new chat button drops the selection and writes nothing",
-      (tester) async {
+  testWidgets("the new chat button drops the selection and writes nothing", (
+    tester,
+  ) async {
     await io(tester, app.openSomeChat);
     await pumpBeside(tester);
 
@@ -112,8 +117,9 @@ void main() {
     expect(await io(tester, () => app.repo.listChats()), hasLength(1));
   });
 
-  testWidgets("the new chat button closes the drawer it was pressed in",
-      (tester) async {
+  testWidgets("the new chat button closes the drawer it was pressed in", (
+    tester,
+  ) async {
     await io(tester, app.openSomeChat);
     await pumpAsDrawer(tester);
 
@@ -124,7 +130,9 @@ void main() {
     expect(find.byType(Drawer), findsNothing);
   });
 
-  testWidgets("tapping an existing chat in the drawer closes it too", (tester) async {
+  testWidgets("tapping an existing chat in the drawer closes it too", (
+    tester,
+  ) async {
     await io(tester, () => app.seedChat());
     await pumpAsDrawer(tester);
 
@@ -135,7 +143,9 @@ void main() {
     expect(find.byType(Drawer), findsNothing);
   });
 
-  testWidgets("selecting beside the chat pane leaves the sidebar in place", (tester) async {
+  testWidgets("selecting beside the chat pane leaves the sidebar in place", (
+    tester,
+  ) async {
     await io(tester, () => app.seedChat());
     await pumpBeside(tester);
 
@@ -146,8 +156,9 @@ void main() {
     expect(find.byType(Sidebar), findsOneWidget);
   });
 
-  testWidgets("a chat with a turn running spins, and its title does not move",
-      (tester) async {
+  testWidgets("a chat with a turn running spins, and its title does not move", (
+    tester,
+  ) async {
     final chat = await io(tester, () => app.seedChat());
     await pumpBeside(tester);
     final idle = tester.getRect(find.text("old chat"));
@@ -170,13 +181,16 @@ void main() {
     Future<void> seedDated(WidgetTester tester, String title, int daysAgo) =>
         io(tester, () async {
           final chat = await app.repo.createChat(title: title);
-          await app.repo.saveState(chat.state.copyWith(
-            updatedAt: DateTime.now().subtract(Duration(days: daysAgo)),
-          ));
+          await app.repo.saveState(
+            chat.state.copyWith(
+              updatedAt: DateTime.now().subtract(Duration(days: daysAgo)),
+            ),
+          );
         });
 
-    testWidgets("chats sit under a heading for when they were last touched",
-        (tester) async {
+    testWidgets("chats sit under a heading for when they were last touched", (
+      tester,
+    ) async {
       await seedDated(tester, "this one", 0);
       await seedDated(tester, "that one", 1);
       await seedDated(tester, "the old one", 12);
@@ -187,16 +201,18 @@ void main() {
       expect(find.text("Previous 30 days"), findsOneWidget);
     });
 
-    testWidgets("a project with nothing in it says so and offers no search",
-        (tester) async {
+    testWidgets("a project with nothing in it says so and offers no search", (
+      tester,
+    ) async {
       await pumpBeside(tester);
 
       expect(find.text("No chats in this project yet."), findsOneWidget);
       expect(find.byType(TextField), findsNothing);
     });
 
-    testWidgets("typing in the search box leaves only what matches",
-        (tester) async {
+    testWidgets("typing in the search box leaves only what matches", (
+      tester,
+    ) async {
       await io(tester, () => app.seedChat(title: "porting the shell"));
       await io(tester, () => app.seedChat(title: "the icon"));
       await pumpBeside(tester);
@@ -208,8 +224,9 @@ void main() {
       expect(find.text("the icon"), findsNothing);
     });
 
-    testWidgets("a search nothing answers says so rather than going blank",
-        (tester) async {
+    testWidgets("a search nothing answers says so rather than going blank", (
+      tester,
+    ) async {
       await io(tester, () => app.seedChat(title: "the icon"));
       await pumpBeside(tester);
 
@@ -230,11 +247,16 @@ void main() {
       await tester.enterText(find.byType(TextField), "shell");
       await tester.pump();
 
-      app.container.read(selectedProjectProvider.notifier).select(localProject("work"));
+      app.container
+          .read(selectedProjectProvider.notifier)
+          .select(localProject("work"));
       await settleIo(tester);
 
       expect(find.text("at work"), findsOneWidget);
-      expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, isEmpty);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        isEmpty,
+      );
     });
 
     testWidgets("clearing the search puts the rest back", (tester) async {
@@ -263,7 +285,9 @@ void main() {
     expect(sidebar.bottom - bottom.bottom, greaterThanOrEqualTo(bars.bottom));
   }
 
-  testWidgets("beside the chat pane it stays clear of the system bars", (tester) async {
+  testWidgets("beside the chat pane it stays clear of the system bars", (
+    tester,
+  ) async {
     await pumpBeside(tester, bars: bars);
 
     expectClearOfBars(tester);
@@ -278,7 +302,11 @@ void main() {
   group("projects", () {
     /// Open the switcher at the top of the sidebar, whatever it currently says.
     Future<void> openProjectMenu(WidgetTester tester) async {
-      await tester.tap(find.text(projectLabel(app.container.read(selectedProjectProvider).project)));
+      await tester.tap(
+        find.text(
+          projectLabel(app.container.read(selectedProjectProvider).project),
+        ),
+      );
       await settleIo(tester);
     }
 
@@ -298,7 +326,9 @@ void main() {
     // The slot beside the switcher is whatever the project it names can be
     // asked about: a named one has a settings page, the default one has only
     // its workspace.
-    testWidgets("the default project's button goes to its workspace", (tester) async {
+    testWidgets("the default project's button goes to its workspace", (
+      tester,
+    ) async {
       await pumpBeside(tester);
 
       expect(find.byTooltip("Project settings"), findsNothing);
@@ -311,7 +341,9 @@ void main() {
 
     // A built-in project is in the menu like any other, but it is not one the
     // user made, so there is nothing to delete it with.
-    testWidgets("a built-in project is offered, and not deletable", (tester) async {
+    testWidgets("a built-in project is offered, and not deletable", (
+      tester,
+    ) async {
       await pumpBeside(tester);
       await openProjectMenu(tester);
 
@@ -319,55 +351,88 @@ void main() {
       expect(find.text("Delete project…"), findsNothing);
     });
 
-    testWidgets("the palette rules off the user's projects and counts chats",
-        (tester) async {
+    testWidgets("the palette rules off the user's projects and counts chats", (
+      tester,
+    ) async {
       await io(tester, () => app.seedChat(title: "at work", project: "work"));
       await pumpBeside(tester);
       await openProjectMenu(tester);
 
       final palette = find.byType(ProjectPalette);
-      expect(find.descendant(of: palette, matching: find.byType(Divider)),
-          findsWidgets);
+      expect(
+        find.descendant(of: palette, matching: find.byType(Divider)),
+        findsWidgets,
+      );
       final work = find.ancestor(
-          of: find.descendant(of: palette, matching: find.text("work")),
-          matching: find.byType(Row));
-      expect(find.descendant(of: work.first, matching: find.text("1")),
-          findsOneWidget);
+        of: find.descendant(of: palette, matching: find.text("work")),
+        matching: find.byType(Row),
+      );
+      expect(
+        find.descendant(of: work.first, matching: find.text("1")),
+        findsOneWidget,
+      );
     });
 
-    testWidgets("searching lists projects, then chats tagged with theirs",
-        (tester) async {
-      await io(tester, () => app.seedChat(title: "work notes", project: "work"));
+    testWidgets("searching lists projects, then chats tagged with theirs", (
+      tester,
+    ) async {
+      await io(
+        tester,
+        () => app.seedChat(title: "work notes", project: "work"),
+      );
       await pumpBeside(tester);
       await openProjectMenu(tester);
 
       await tester.enterText(
-          find.descendant(
-              of: find.byType(ProjectPalette), matching: find.byType(TextField)),
-          "work");
+        find.descendant(
+          of: find.byType(ProjectPalette),
+          matching: find.byType(TextField),
+        ),
+        "work",
+      );
       await settleIo(tester);
 
       final palette = find.byType(ProjectPalette);
-      expect(find.descendant(of: palette, matching: find.text("Projects")),
-          findsOneWidget);
-      expect(find.descendant(of: palette, matching: find.text("work notes")),
-          findsOneWidget);
+      expect(
+        find.descendant(of: palette, matching: find.text("Projects")),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: palette, matching: find.text("work notes")),
+        findsOneWidget,
+      );
       // The project row and the chat's tag, the field's own text aside.
       expect(
-          find.descendant(
-              of: find.descendant(
-                  of: palette, matching: find.byType(SingleChildScrollView)),
-              matching: find.text("work")),
-          findsNWidgets(2));
+        find.descendant(
+          of: find.descendant(
+            of: palette,
+            matching: find.byType(SingleChildScrollView),
+          ),
+          matching: find.text("work"),
+        ),
+        findsNWidgets(2),
+      );
       expect(
-          tester.getTopLeft(find.descendant(
-                  of: palette, matching: find.text("Projects"))).dy <
-              tester.getTopLeft(find.descendant(
-                  of: palette, matching: find.text("work notes"))).dy,
-          isTrue);
+        tester
+                .getTopLeft(
+                  find.descendant(of: palette, matching: find.text("Projects")),
+                )
+                .dy <
+            tester
+                .getTopLeft(
+                  find.descendant(
+                    of: palette,
+                    matching: find.text("work notes"),
+                  ),
+                )
+                .dy,
+        isTrue,
+      );
     });
 
-    testWidgets("with nothing typed, chats follow the projects", (tester) async {
+    testWidgets("with nothing typed, chats follow the projects", (
+      tester,
+    ) async {
       await io(tester, () => app.seedChat(title: "at work", project: "work"));
       await pumpBeside(tester);
       await openProjectMenu(tester);
@@ -376,31 +441,49 @@ void main() {
       final chat = find.descendant(of: palette, matching: find.text("at work"));
       expect(chat, findsOneWidget);
       expect(
-          tester.getTopLeft(find.descendant(
-                  of: palette, matching: find.text("work")).first).dy <
-              tester.getTopLeft(chat).dy,
-          isTrue);
+        tester
+                .getTopLeft(
+                  find
+                      .descendant(of: palette, matching: find.text("work"))
+                      .first,
+                )
+                .dy <
+            tester.getTopLeft(chat).dy,
+        isTrue,
+      );
     });
 
     test("running chats sort ahead of newer ones", () {
       ChatState chat(String id, int year) => ChatState(
-          id: id, title: id, createdAt: DateTime(year), updatedAt: DateTime(year));
+        id: id,
+        title: id,
+        createdAt: DateTime(year),
+        updatedAt: DateTime(year),
+      );
       final sorted = chatsByRecency(
-          [chat("a", 2025), chat("b", 2023), chat("c", 2024)], {"b"});
+        [chat("a", 2025), chat("b", 2023), chat("c", 2024)],
+        {"b"},
+      );
       expect(sorted.map((c) => c.id), ["b", "a", "c"]);
     });
 
     // A chat the sidebar does not list would be open with nothing saying so.
-    testWidgets("picking a found chat opens it in its own project",
-        (tester) async {
-      final chat =
-          await io(tester, () => app.seedChat(title: "work notes", project: "work"));
+    testWidgets("picking a found chat opens it in its own project", (
+      tester,
+    ) async {
+      final chat = await io(
+        tester,
+        () => app.seedChat(title: "work notes", project: "work"),
+      );
       await pumpBeside(tester);
       await openProjectMenu(tester);
       await tester.enterText(
-          find.descendant(
-              of: find.byType(ProjectPalette), matching: find.byType(TextField)),
-          "notes");
+        find.descendant(
+          of: find.byType(ProjectPalette),
+          matching: find.byType(TextField),
+        ),
+        "notes",
+      );
       await settleIo(tester);
 
       await tester.tap(find.text("work notes"));
@@ -421,14 +504,18 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.go);
       await settleIo(tester);
 
-      expect(app.container.read(selectedProjectProvider).project,
-          builtinProjects.first.dir);
+      expect(
+        app.container.read(selectedProjectProvider).project,
+        builtinProjects.first.dir,
+      );
     });
 
     // Anonymous has neither a settings page nor a shared workspace, so the
     // slot beside the switcher holds nothing for it. Byte Repair has both,
     // since its spec ships a note and reads the user's files on top of it.
-    testWidgets("anonymous has no settings page or workspace button", (tester) async {
+    testWidgets("anonymous has no settings page or workspace button", (
+      tester,
+    ) async {
       await pumpBeside(tester);
       await switchTo(tester, anonProjectLabel);
 
@@ -437,12 +524,16 @@ void main() {
       expect(find.byTooltip("Default workspace"), findsNothing);
     });
 
-    testWidgets("Byte Repair has a settings gear that opens its page",
-        (tester) async {
+    testWidgets("Byte Repair has a settings gear that opens its page", (
+      tester,
+    ) async {
       await pumpBeside(tester);
       await switchTo(tester, byteRepairProjectLabel);
 
-      expect(app.container.read(selectedProjectProvider).project, "byte-repair");
+      expect(
+        app.container.read(selectedProjectProvider).project,
+        "byte-repair",
+      );
       expect(find.byTooltip("Project settings"), findsOneWidget);
       await tester.tap(find.byTooltip("Project settings"));
       await settleIo(tester);
@@ -462,7 +553,9 @@ void main() {
       expect(find.byType(ProjectSettingsPage), findsOneWidget);
     });
 
-    testWidgets("only the chats of the project shown are listed", (tester) async {
+    testWidgets("only the chats of the project shown are listed", (
+      tester,
+    ) async {
       await io(tester, () => app.seedChat(title: "at home"));
       await io(tester, () => app.seedChat(title: "at work", project: "work"));
       await pumpBeside(tester);
@@ -477,7 +570,9 @@ void main() {
     });
 
     // A chat of the project just left is not in the list any more.
-    testWidgets("switching projects deselects the chat that was open", (tester) async {
+    testWidgets("switching projects deselects the chat that was open", (
+      tester,
+    ) async {
       await io(tester, () => app.seedChat(title: "at home"));
       await io(tester, () => app.repo.createProject("work"));
       await pumpBeside(tester);
@@ -493,7 +588,9 @@ void main() {
 
     // The switcher says where the next chat goes, and the next chat is made by
     // the first thing said on the screen switching to it lands on.
-    testWidgets("a new chat is created in the project being shown", (tester) async {
+    testWidgets("a new chat is created in the project being shown", (
+      tester,
+    ) async {
       await io(tester, () => app.repo.createProject("work"));
       await pumpBeside(tester, beside: const ChatPage());
       await switchTo(tester, "work");
@@ -501,22 +598,38 @@ void main() {
       await sendMessage(tester, "hello");
       await pumpUntil(tester, listed("New chat"));
 
-      expect((await io(tester, () => app.repo.listChats())).single.project, "work");
+      expect(
+        (await io(tester, () => app.repo.listChats())).single.project,
+        "work",
+      );
     });
 
-    testWidgets("creating one names it, lays it down and switches to it", (tester) async {
+    testWidgets("creating one names it, lays it down and switches to it", (
+      tester,
+    ) async {
       await pumpBeside(tester);
       await openProjectMenu(tester);
 
       await tester.tap(find.text("New Project"));
       await settleIo(tester);
-      await tester.enterText(find.widgetWithText(TextField, "Name"), "My Side Project");
+      await tester.enterText(
+        find.widgetWithText(TextField, "Name"),
+        "My Side Project",
+      );
       await tester.pump();
       await tester.tap(find.text("Create"));
       await settleIo(tester, least: 20);
 
-      expect(app.container.read(selectedProjectProvider).project, "My-Side-Project");
-      expect(Directory(app.config.projectWorkspaceDir(project: "My-Side-Project")).existsSync(), isTrue);
+      expect(
+        app.container.read(selectedProjectProvider).project,
+        "My-Side-Project",
+      );
+      expect(
+        Directory(
+          app.config.projectWorkspaceDir(project: "My-Side-Project"),
+        ).existsSync(),
+        isTrue,
+      );
     });
 
     testWidgets("creating one with a description sets it", (tester) async {
@@ -528,18 +641,24 @@ void main() {
       await tester.enterText(find.widgetWithText(TextField, "Name"), "notes");
       await tester.pump();
       await tester.enterText(
-          find.widgetWithText(TextField, "Description"), "What are we writing?");
+        find.widgetWithText(TextField, "Description"),
+        "What are we writing?",
+      );
       await tester.tap(find.text("Create"));
       await settleIo(tester, least: 20);
 
       await io(tester, () async {});
       expect(app.container.read(selectedProjectProvider).project, "notes");
-      expect(ProjectSettings.load(app.config, project: "notes").description,
-          "What are we writing?");
+      expect(
+        ProjectSettings.load(app.config, project: "notes").description,
+        "What are we writing?",
+      );
     });
 
     // Left blank it is the default question, not a project that asks nothing.
-    testWidgets("creating one without a description leaves it unset", (tester) async {
+    testWidgets("creating one without a description leaves it unset", (
+      tester,
+    ) async {
       await pumpBeside(tester);
       await openProjectMenu(tester);
 
@@ -552,32 +671,38 @@ void main() {
 
       await io(tester, () async {});
       expect(app.container.read(selectedProjectProvider).project, "plain");
-      expect(ProjectSettings.load(app.config, project: "plain").description,
-          isNull);
+      expect(
+        ProjectSettings.load(app.config, project: "plain").description,
+        isNull,
+      );
     });
 
-    testWidgets("back from the new project page is the palette, not out of it",
-        (tester) async {
-      await pumpBeside(tester);
-      await openProjectMenu(tester);
-      await tester.tap(find.text("New Project"));
-      await settleIo(tester);
-      expect(find.text("New project"), findsOneWidget);
+    testWidgets(
+      "back from the new project page is the palette, not out of it",
+      (tester) async {
+        await pumpBeside(tester);
+        await openProjectMenu(tester);
+        await tester.tap(find.text("New Project"));
+        await settleIo(tester);
+        expect(find.text("New project"), findsOneWidget);
 
-      await tester.tap(find.byTooltip("Back"));
-      await settleIo(tester);
-      expect(find.byType(ProjectPalette), findsOneWidget);
-      expect(find.text("New project"), findsNothing);
+        await tester.tap(find.byTooltip("Back"));
+        await settleIo(tester);
+        expect(find.byType(ProjectPalette), findsOneWidget);
+        expect(find.text("New project"), findsNothing);
 
-      await tester.tap(find.text("New Project"));
-      await settleIo(tester);
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await settleIo(tester);
-      expect(find.byType(ProjectPalette), findsOneWidget);
-      expect(find.text("New project"), findsNothing);
-    });
+        await tester.tap(find.text("New Project"));
+        await settleIo(tester);
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await settleIo(tester);
+        expect(find.byType(ProjectPalette), findsOneWidget);
+        expect(find.text("New project"), findsNothing);
+      },
+    );
 
-    testWidgets("creating one with the switch on writes the Omada flag", (tester) async {
+    testWidgets("creating one with the switch on writes the Omada flag", (
+      tester,
+    ) async {
       await pumpBeside(tester);
       await openProjectMenu(tester);
 
@@ -591,13 +716,12 @@ void main() {
       await settleIo(tester, least: 20);
 
       await io(tester, () async {});
-      expect(
-        ProjectSettings.load(app.config, project: "Team").omada,
-        isTrue,
-      );
+      expect(ProjectSettings.load(app.config, project: "Team").omada, isTrue);
     });
 
-    testWidgets("creating one with the switch off leaves Omada off", (tester) async {
+    testWidgets("creating one with the switch off leaves Omada off", (
+      tester,
+    ) async {
       await pumpBeside(tester);
       await openProjectMenu(tester);
 
@@ -611,25 +735,32 @@ void main() {
       expect(ProjectSettings.load(app.config, project: "Plain").omada, isFalse);
     });
 
-    testWidgets("an Omada project's name is italic in the menu, a plain one is not", (tester) async {
-      await io(tester, () => app.repo.createProject("work"));
-      await io(tester, () async {
-        await app.repo.createProject("team");
-        await app.container
-            .read(projectSettingsProvider("team").notifier)
-            .setOmada(true);
-      });
-      await pumpBeside(tester);
-      await openProjectMenu(tester);
+    testWidgets(
+      "an Omada project's name is italic in the menu, a plain one is not",
+      (tester) async {
+        await io(tester, () => app.repo.createProject("work"));
+        await io(tester, () async {
+          await app.repo.createProject("team");
+          await app.container
+              .read(projectSettingsProvider("team").notifier)
+              .setOmada(true);
+        });
+        await pumpBeside(tester);
+        await openProjectMenu(tester);
 
-      // The menu rows live below `find.byType(PopupMenuItem)`'s reach once
-      // `settleIo` has run — read the text widget itself.
-      expect(tester.widget<Text>(find.text("team")).style?.fontStyle,
-          FontStyle.italic);
-      expect(tester.widget<Text>(find.text("work")).style?.fontStyle, isNull);
-    });
+        // The menu rows live below `find.byType(PopupMenuItem)`'s reach once
+        // `settleIo` has run — read the text widget itself.
+        expect(
+          tester.widget<Text>(find.text("team")).style?.fontStyle,
+          FontStyle.italic,
+        );
+        expect(tester.widget<Text>(find.text("work")).style?.fontStyle, isNull);
+      },
+    );
 
-    testWidgets("the selected button's label is italic for an Omada project", (tester) async {
+    testWidgets("the selected button's label is italic for an Omada project", (
+      tester,
+    ) async {
       await io(tester, () async {
         await app.repo.createProject("team");
         await app.container
@@ -648,7 +779,9 @@ void main() {
       expect(tester.widget<Text>(label).style?.fontStyle, FontStyle.italic);
     });
 
-    testWidgets("the settings page's toggle reveals the ordering section", (tester) async {
+    testWidgets("the settings page's toggle reveals the ordering section", (
+      tester,
+    ) async {
       await io(tester, () => app.repo.createProject("research"));
       await app.pump(tester, ProjectSettingsPage(project: "research"));
 
@@ -674,23 +807,27 @@ void main() {
       expect(settings.omadaOrdering, OmadaOrdering.parallel);
     });
 
-    testWidgets("a built-in's settings page has no Omada toggle or Description row", (tester) async {
-      await app.pump(
-        tester,
-        ProjectSettingsPage(project: byteRepairProjectLabel.toLowerCase()),
-      );
+    testWidgets(
+      "a built-in's settings page has no Omada toggle or Description row",
+      (tester) async {
+        await app.pump(
+          tester,
+          ProjectSettingsPage(project: byteRepairProjectLabel.toLowerCase()),
+        );
 
-      // A built-in's answer is its spec: the page says it, rather than
-      // offering a toggle to change it. The ordering rows ride the same
-      // answer — My Team's page shows them, Byte Repair's shows nothing.
-      expect(find.text("Omada"), findsOneWidget);
-      expect(find.text("Round order"), findsNothing);
-      // And the Description row is the named projects' alone.
-      expect(find.text("Description"), findsNothing);
-    });
+        // A built-in's answer is its spec: the page says it, rather than
+        // offering a toggle to change it. The ordering rows ride the same
+        // answer — My Team's page shows them, Byte Repair's shows nothing.
+        expect(find.text("Omada"), findsOneWidget);
+        expect(find.text("Round order"), findsNothing);
+        // And the Description row is the named projects' alone.
+        expect(find.text("Description"), findsNothing);
+      },
+    );
 
-    testWidgets("My Team's settings page shows the Omada state, not a toggle",
-        (tester) async {
+    testWidgets("My Team's settings page shows the Omada state, not a toggle", (
+      tester,
+    ) async {
       await app.pump(tester, ProjectSettingsPage(project: "my-team"));
 
       // The card sections sit above it, so the row is below the fold.
@@ -705,7 +842,8 @@ void main() {
       // is its spec, so the state is shown, not offered. The ordering rows
       // ride the same answer and are offered.
       final toggle = tester.widget<SwitchListTile>(
-          find.widgetWithText(SwitchListTile, "Omada"));
+        find.widgetWithText(SwitchListTile, "Omada"),
+      );
       expect(toggle.value, isTrue);
       expect(toggle.onChanged, isNull);
       expect(find.text("Round order"), findsOneWidget);
@@ -733,14 +871,17 @@ void main() {
 
       await io(tester, () async {});
       expect(
-          ProjectSettings.load(app.config, project: "research").description,
-          "What are we building?");
+        ProjectSettings.load(app.config, project: "research").description,
+        "What are we building?",
+      );
       expect(find.text("What are we building?"), findsOneWidget);
     });
 
     // Empty is saved as it stands — the screen asks nothing — and the reset
     // button, not a blank save, is what puts the default back.
-    testWidgets("an empty save clears the question and reset restores it", (tester) async {
+    testWidgets("an empty save clears the question and reset restores it", (
+      tester,
+    ) async {
       await io(tester, () async {
         await app.repo.createProject("research");
         await app.container
@@ -756,21 +897,27 @@ void main() {
       await settleIo(tester, least: 10);
 
       await io(tester, () async {});
-      expect(ProjectSettings.load(app.config, project: "research").description,
-          "");
+      expect(
+        ProjectSettings.load(app.config, project: "research").description,
+        "",
+      );
       expect(find.text("Empty"), findsOneWidget);
 
       await tester.tap(find.byTooltip("Reset to default"));
       await settleIo(tester, least: 10);
 
       await io(tester, () async {});
-      expect(ProjectSettings.load(app.config, project: "research").description,
-          isNull);
+      expect(
+        ProjectSettings.load(app.config, project: "research").description,
+        isNull,
+      );
       expect(find.text("Empty"), findsNothing);
       expect(find.text("What would you like to discuss?"), findsOneWidget);
     });
 
-    testWidgets("deleting one takes its chats and goes back to the default", (tester) async {
+    testWidgets("deleting one takes its chats and goes back to the default", (
+      tester,
+    ) async {
       await io(tester, () => app.seedChat(title: "at work", project: "work"));
       await pumpBeside(tester);
       await switchTo(tester, "work");
@@ -785,10 +932,15 @@ void main() {
 
       expect(app.container.read(selectedProjectProvider).project, isNull);
       expect(await io(tester, () => app.repo.listChats()), isEmpty);
-      expect(Directory(app.config.projectDir(project: "work")).existsSync(), isFalse);
+      expect(
+        Directory(app.config.projectDir(project: "work")).existsSync(),
+        isFalse,
+      );
     });
 
-    testWidgets("deleting one the assistant opens in unpicks it", (tester) async {
+    testWidgets("deleting one the assistant opens in unpicks it", (
+      tester,
+    ) async {
       await io(tester, () async {
         await app.repo.createProject("work");
         await app.container
@@ -811,7 +963,9 @@ void main() {
       expect(AppSettings.load(app.config).assistantProject, isNull);
     });
 
-    testWidgets("moving a chat follows it into the project it went to", (tester) async {
+    testWidgets("moving a chat follows it into the project it went to", (
+      tester,
+    ) async {
       final chat = await io(tester, () => app.seedChat(title: "at home"));
       await io(tester, () => app.repo.createProject("work"));
       await pumpBeside(tester);
@@ -828,8 +982,10 @@ void main() {
       // read again after it, so both are waited for rather than counted: the
       // title alone was on screen before the move landed.
       await settleUntil(
-          tester, () => app.container.read(selectedProjectProvider).project == "work",
-          what: "the sidebar following the chat into work");
+        tester,
+        () => app.container.read(selectedProjectProvider).project == "work",
+        what: "the sidebar following the chat into work",
+      );
       await pumpUntil(tester, find.text("at home"));
       expect(find.text("at home"), findsOneWidget);
     });
@@ -837,8 +993,9 @@ void main() {
     // The open controller held the chat as it was when it read it — project
     // included — so a move disposes it and the page reloads from where the
     // chat now is. The title bar names the new project from the next read.
-    testWidgets("moving the open chat reloads its page in the new project",
-        (tester) async {
+    testWidgets("moving the open chat reloads its page in the new project", (
+      tester,
+    ) async {
       await io(tester, () async {
         final chat = await app.seedChat(title: "at home");
         app.container
@@ -885,11 +1042,17 @@ void main() {
   group("pinning", () {
     // One round trip: the menu's word, the heading the chat moves under, and
     // the TTL override pinning writes and unpinning leaves.
-    testWidgets("pin and unpin move the chat and keep it non-temporary",
-        (tester) async {
+    testWidgets("pin and unpin move the chat and keep it non-temporary", (
+      tester,
+    ) async {
       final chat = await io(tester, () => app.seedChat(title: "to pin"));
-      await io(tester, () => app.seedChatMeta(chat.state.id,
-          ChatMeta(tempChatTtl: TempChatTtl.hours24)));
+      await io(
+        tester,
+        () => app.seedChatMeta(
+          chat.state.id,
+          ChatMeta(tempChatTtl: TempChatTtl.hours24),
+        ),
+      );
       await pumpBeside(tester);
 
       await openMenu(tester);
@@ -898,22 +1061,31 @@ void main() {
       await pumpUntil(tester, find.text(pinnedHeading));
       // The date group it was in goes when the list is read again, after the
       // heading — waited for rather than counted.
-      await settleUntil(tester, () => find.text("Today").evaluate().isEmpty,
-          what: "the chat leaving its date group");
+      await settleUntil(
+        tester,
+        () => find.text("Today").evaluate().isEmpty,
+        what: "the chat leaving its date group",
+      );
       expect(find.text("to pin"), findsOneWidget);
-      expect((await io(tester, () => app.savedMeta(chat.state.id))).tempChatTtl,
-          TempChatTtl.off);
+      expect(
+        (await io(tester, () => app.savedMeta(chat.state.id))).tempChatTtl,
+        TempChatTtl.off,
+      );
 
       await openMenu(tester);
       expect(find.text("Pin"), findsNothing);
       await tester.tap(find.text("Unpin"));
       await pumpUntil(tester, find.text("Today"));
       await settleUntil(
-          tester, () => find.text(pinnedHeading).evaluate().isEmpty,
-          what: "the pinned group going");
+        tester,
+        () => find.text(pinnedHeading).evaluate().isEmpty,
+        what: "the pinned group going",
+      );
       expect(find.text("to pin"), findsOneWidget);
-      expect((await io(tester, () => app.savedMeta(chat.state.id))).tempChatTtl,
-          TempChatTtl.off);
+      expect(
+        (await io(tester, () => app.savedMeta(chat.state.id))).tempChatTtl,
+        TempChatTtl.off,
+      );
     });
 
     testWidgets("pinning a temporary chat clears its expiry", (tester) async {
@@ -938,32 +1110,44 @@ void main() {
     // The countdown is drawn from the open chat's own state, which the sidebar
     // does not go through — so pinning used to leave the bar counting down to
     // an expiry that had just been cleared, until the chat was opened again.
-    testWidgets("pinning the open chat stops its title bar counting down",
-        (tester) async {
+    testWidgets("pinning the open chat stops its title bar counting down", (
+      tester,
+    ) async {
       final chat = await io(tester, () => app.seedChat(title: "temp"));
       await io(tester, () => app.makeTemporary(chat.state));
       app.container.read(selectedChatIdProvider.notifier).select(chat.state.id);
       await pumpBeside(tester, beside: const ChatPage());
       final bar = find.byType(AppBar);
-      expect(find.descendant(of: bar, matching: find.byIcon(Icons.hourglass_empty)),
-          findsOneWidget);
+      expect(
+        find.descendant(of: bar, matching: find.byIcon(Icons.hourglass_empty)),
+        findsOneWidget,
+      );
 
       await openMenu(tester);
       await tester.tap(find.text("Pin"));
       await pumpUntil(tester, find.text(pinnedHeading));
       await settleIo(tester);
 
-      expect(find.descendant(of: bar, matching: find.byIcon(Icons.hourglass_empty)),
-          findsNothing);
-      expect(find.descendant(of: bar, matching: find.text("Pinned")), findsOneWidget);
+      expect(
+        find.descendant(of: bar, matching: find.byIcon(Icons.hourglass_empty)),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: bar, matching: find.text("Pinned")),
+        findsOneWidget,
+      );
     });
   });
   group("deleting", () {
     Future<void> confirmDelete(WidgetTester tester) async {
       await tester.tap(find.text("Delete"));
       await pumpUntil(tester, find.text("Delete chat?"));
-      await tester.tap(find.descendant(
-          of: find.byType(AlertDialog), matching: find.text("Delete")));
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text("Delete"),
+        ),
+      );
       await settleIo(tester);
     }
 
@@ -972,8 +1156,9 @@ void main() {
     // nothing reacted to the repo's Deleted event locally. When that invalidate
     // did not take hold the row stayed in the list pointing at a chat whose data
     // was gone.
-    testWidgets("deleting the open chat drops it from the list and closes it",
-        (tester) async {
+    testWidgets("deleting the open chat drops it from the list and closes it", (
+      tester,
+    ) async {
       await io(tester, app.openSomeChat);
       await pumpBeside(tester, beside: const ChatPage());
       expect(listed("old chat"), findsOneWidget);
@@ -989,23 +1174,26 @@ void main() {
     // The controller is not auto-disposed, so before the fix it stayed alive
     // holding the deleted chat in memory: selecting its id again opened the
     // cached conversation rather than an empty page.
-    testWidgets("re-selecting the deleted chat's id does not open its cached view",
-        (tester) async {
-      final chat = await io(tester, app.openSomeChat);
-      await pumpBeside(tester, beside: const ChatPage());
-      await openMenu(tester);
-      await confirmDelete(tester);
+    testWidgets(
+      "re-selecting the deleted chat's id does not open its cached view",
+      (tester) async {
+        final chat = await io(tester, app.openSomeChat);
+        await pumpBeside(tester, beside: const ChatPage());
+        await openMenu(tester);
+        await confirmDelete(tester);
 
-      app.container
-          .read(selectedChatIdProvider.notifier)
-          .select(chat.state.id);
-      await tester.pump();
+        app.container
+            .read(selectedChatIdProvider.notifier)
+            .select(chat.state.id);
+        await tester.pump();
 
-      final pane = find.byType(ChatPage);
-      expect(
+        final pane = find.byType(ChatPage);
+        expect(
           find.descendant(of: pane, matching: find.text("old chat")),
-          findsNothing);
-    });
+          findsNothing,
+        );
+      },
+    );
   });
   group("a project's permission pages", () {
     Future<void> open(WidgetTester tester, String project) async {
@@ -1024,12 +1212,12 @@ void main() {
       await io(tester, () => app.repo.createProject("research"));
       await open(tester, "research");
 
-      expect(
-          find.textContaining("The app's own permissions"), findsOneWidget);
+      expect(find.textContaining("The app's own permissions"), findsOneWidget);
     });
 
-    testWidgets("the writable directories section saves what is added",
-        (tester) async {
+    testWidgets("the writable directories section saves what is added", (
+      tester,
+    ) async {
       await io(tester, () => app.repo.createProject("research"));
       await open(tester, "research");
 
@@ -1050,20 +1238,25 @@ void main() {
       expect(find.text("Add rule"), findsOneWidget);
     });
 
-    testWidgets("the Landlock switch overrides the app default",
-        (tester) async {
+    testWidgets("the Landlock switch overrides the app default", (
+      tester,
+    ) async {
       await io(tester, () => app.repo.createProject("research"));
       await open(tester, "research");
 
       final row = find.text("Sandbox commands (Landlock)");
-      await tester.scrollUntilVisible(row, 200,
-          scrollable: find.byType(Scrollable).last);
+      await tester.scrollUntilVisible(
+        row,
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
       await tester.tap(row);
       await settleIo(tester, least: 10);
 
-      expect(ProjectSettings.load(app.config, project: "research").sandbox,
-          isFalse);
+      expect(
+        ProjectSettings.load(app.config, project: "research").sandbox,
+        isFalse,
+      );
     });
   });
-
 }

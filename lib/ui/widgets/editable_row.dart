@@ -21,14 +21,14 @@ class EditableRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListTile(
-        dense: true,
-        title: Text(title),
-        subtitle: Text(subtitle),
-        onTap: onTap,
-        trailing: IconButton(
-          icon: const Icon(Icons.close),
-          tooltip: removeLabel,
-          onPressed: onRemove,
-        ),
-      );
+    dense: true,
+    title: Text(title),
+    subtitle: Text(subtitle),
+    onTap: onTap,
+    trailing: IconButton(
+      icon: const Icon(Icons.close),
+      tooltip: removeLabel,
+      onPressed: onRemove,
+    ),
+  );
 }

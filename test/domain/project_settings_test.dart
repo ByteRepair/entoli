@@ -60,8 +60,10 @@ void main() {
   });
 
   test("a value of the wrong shape is dropped, not the file", () async {
-    await config.documents.write(config.projectSettingsFile(project: "work"),
-        '{"omada": true, "omadaOrdering": "sideways", "environment": {"PORT": 8080}}');
+    await config.documents.write(
+      config.projectSettingsFile(project: "work"),
+      '{"omada": true, "omadaOrdering": "sideways", "environment": {"PORT": 8080}}',
+    );
     final loaded = load();
     expect(loaded.omada, true);
     expect(loaded.omadaOrdering, isNull);

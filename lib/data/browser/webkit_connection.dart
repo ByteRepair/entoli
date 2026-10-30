@@ -17,7 +17,9 @@ import "cdp.dart";
 class WebKitConnection implements CdpConnection {
   WebKitConnection(this._channel) {
     _channel.setMethodCallHandler((call) async {
-      if (call.method == "event") _event((call.arguments as Map).cast<String, Object?>());
+      if (call.method == "event") {
+        _event((call.arguments as Map).cast<String, Object?>());
+      }
     });
   }
 
@@ -51,13 +53,18 @@ class WebKitConnection implements CdpConnection {
     if (isClosed) {
       return Future.error(const CdpException("The browser has closed."));
     }
-    return _send(method, params, sessionId ?? "").timeout(timeout,
-        onTimeout: () =>
-            throw CdpException("$method took longer than ${timeout.inSeconds}s."));
+    return _send(method, params, sessionId ?? "").timeout(
+      timeout,
+      onTimeout: () =>
+          throw CdpException("$method took longer than ${timeout.inSeconds}s."),
+    );
   }
 
   Future<Map<String, dynamic>> _send(
-      String method, Map<String, dynamic> params, String chat) async {
+    String method,
+    Map<String, dynamic> params,
+    String chat,
+  ) async {
     try {
       switch (method) {
         case "Page.enable":
@@ -67,13 +74,18 @@ class WebKitConnection implements CdpConnection {
         case "Page.createIsolatedWorld":
           return {"executionContextId": _world};
         case "Target.getTargets":
-          final pages = await _channel.invokeListMethod<Map>("targets") ?? const [];
+          final pages =
+              await _channel.invokeListMethod<Map>("targets") ?? const [];
           return {
             "targetInfos": [
               for (final page in pages) ...[
                 // The address the tab finds its page by; the page's own is
                 // what the page script reads.
-                {"targetId": page["chat"], "type": "page", "url": "about:blank?entoli=${page["chat"]}"},
+                {
+                  "targetId": page["chat"],
+                  "type": "page",
+                  "url": "about:blank?entoli=${page["chat"]}",
+                },
                 for (final url in page["frames"] as List)
                   {"type": "iframe", "parentFrameId": page["chat"], "url": url},
               ],
@@ -83,16 +95,23 @@ class WebKitConnection implements CdpConnection {
           try {
             return {
               "result": {
-                "value": await _eval(chat, params["expression"] as String,
-                    isolated: params["contextId"] == _world),
+                "value": await _eval(
+                  chat,
+                  params["expression"] as String,
+                  isolated: params["contextId"] == _world,
+                ),
               },
             };
           } on PlatformException catch (e) {
             if (e.code != "exception") rethrow;
-            return {"exceptionDetails": {"text": e.message}};
+            return {
+              "exceptionDetails": {"text": e.message},
+            };
           }
         case "Page.navigate":
-          return {"errorText": await _call("navigate", chat, {"url": params["url"]})};
+          return {
+            "errorText": await _call("navigate", chat, {"url": params["url"]}),
+          };
         case "Page.getNavigationHistory":
           final history = await _call("history", chat) as Map;
           return {
@@ -122,12 +141,14 @@ class WebKitConnection implements CdpConnection {
           // The clip is in the document; a snapshot is of the viewport.
           final clip = params["clip"] as Map;
           final [x as num, y as num, _, _] = await _viewport(chat);
-          final png = await _call("snapshot", chat, {
-            "x": (clip["x"] as num) - x,
-            "y": (clip["y"] as num) - y,
-            "width": clip["width"],
-            "height": clip["height"],
-          }) as Uint8List;
+          final png =
+              await _call("snapshot", chat, {
+                    "x": (clip["x"] as num) - x,
+                    "y": (clip["y"] as num) - y,
+                    "width": clip["width"],
+                    "height": clip["height"],
+                  })
+                  as Uint8List;
           return {"data": base64Encode(png)};
         case "Page.startScreencast":
           unawaited(_cast(chat));
@@ -145,9 +166,11 @@ class WebKitConnection implements CdpConnection {
           await _eval(chat, "($_key)(${jsonEncode(params)})", isolated: true);
           return const {};
         case "Input.insertText":
-          await _eval(chat,
-              "document.execCommand('insertText', false, ${jsonEncode(params["text"])})",
-              isolated: true);
+          await _eval(
+            chat,
+            "document.execCommand('insertText', false, ${jsonEncode(params["text"])})",
+            isolated: true,
+          );
           return const {};
         default:
           throw CdpException("$method is not available on iOS.");
@@ -157,18 +180,23 @@ class WebKitConnection implements CdpConnection {
     }
   }
 
-  Future<Object?> _call(String method, String chat,
-          [Map<String, Object?> args = const {}]) =>
-      _channel.invokeMethod(method, {"chat": chat, ...args});
+  Future<Object?> _call(
+    String method,
+    String chat, [
+    Map<String, Object?> args = const {},
+  ]) => _channel.invokeMethod(method, {"chat": chat, ...args});
 
   Future<Object?> _eval(String chat, String js, {required bool isolated}) =>
       _call("eval", chat, {"js": js, "isolated": isolated});
 
   Future<List<Object?>> _viewport(String chat) async =>
-      await _eval(chat,
-          "[visualViewport.pageLeft, visualViewport.pageTop, "
-          "visualViewport.width, visualViewport.height]",
-          isolated: true) as List<Object?>;
+      await _eval(
+            chat,
+            "[visualViewport.pageLeft, visualViewport.pageTop, "
+            "visualViewport.width, visualViewport.height]",
+            isolated: true,
+          )
+          as List<Object?>;
 
   /// Chrome sends a frame on each repaint; WebKit has no such stream, so the
   /// page is snapshotted a few times a second, each frame waiting on the ack
@@ -179,18 +207,24 @@ class WebKitConnection implements CdpConnection {
     for (var n = 1; _acks.containsKey(chat) && !isClosed; n++) {
       try {
         final [_, _, width, height] = await _viewport(chat);
-        final jpeg = await _call("snapshot", chat,
-            {"x": 0, "y": 0, "width": width, "height": height, "jpeg": true}) as Uint8List;
+        final jpeg =
+            await _call("snapshot", chat, {
+                  "x": 0,
+                  "y": 0,
+                  "width": width,
+                  "height": height,
+                  "jpeg": true,
+                })
+                as Uint8List;
         if (!_acks.containsKey(chat) || isClosed) return;
         final ack = _acks[chat] = Completer<void>();
-        _events.add(CdpEvent(
-            "Page.screencastFrame",
-            {
-              "data": base64Encode(jpeg),
-              "sessionId": n,
-              "metadata": {"deviceWidth": width, "deviceHeight": height},
-            },
-            chat));
+        _events.add(
+          CdpEvent("Page.screencastFrame", {
+            "data": base64Encode(jpeg),
+            "sessionId": n,
+            "metadata": {"deviceWidth": width, "deviceHeight": height},
+          }, chat),
+        );
         await ack.future;
       } catch (e) {
         logFailure("browser", "the screencast of $chat stopped", e);
@@ -207,13 +241,23 @@ class WebKitConnection implements CdpConnection {
     final (method, params) = switch (event["type"]) {
       "started" => ("Page.frameStartedLoading", {"frameId": chat}),
       "loaded" => ("Page.loadEventFired", const <String, Object?>{}),
-      "navigated" => ("Page.frameNavigated", {"frame": {"id": chat, "url": event["url"]}}),
+      "navigated" => (
+        "Page.frameNavigated",
+        {
+          "frame": {"id": chat, "url": event["url"]},
+        },
+      ),
       "closed" => ("Target.targetDestroyed", {"targetId": chat}),
       _ => (null, null),
     };
     if (method == null) return;
-    _events.add(CdpEvent(method, params!.cast<String, dynamic>(),
-        method == "Target.targetDestroyed" ? null : chat));
+    _events.add(
+      CdpEvent(
+        method,
+        params!.cast<String, dynamic>(),
+        method == "Target.targetDestroyed" ? null : chat,
+      ),
+    );
   }
 
   @override

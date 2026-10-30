@@ -48,12 +48,13 @@ enum SettingsCategory {
   /// holds the model server's downloads and the voice models', so a build with
   /// neither has no page to offer.
   bool offered(WidgetRef ref) => switch (this) {
-        agentBrowser => ref.watch(agentBrowserProvider).available,
-        triggers => ref.watch(reminderAlarmsProvider).available,
-        onDevice =>
-          ref.watch(localEngineProvider).available || ref.watch(voiceProvider).hasModelCatalog,
-        _ => true,
-      };
+    agentBrowser => ref.watch(agentBrowserProvider).available,
+    triggers => ref.watch(reminderAlarmsProvider).available,
+    onDevice =>
+      ref.watch(localEngineProvider).available ||
+          ref.watch(voiceProvider).hasModelCatalog,
+    _ => true,
+  };
 }
 
 /// The route Settings is reached by, registered once with the app's
@@ -67,7 +68,10 @@ const settingsRoute = "/settings";
 typedef SettingsArgs = ({SettingsCategory? category, bool focus});
 
 /// Open Settings, at [category] where there is one.
-Future<void> openSettings(BuildContext context,
-        {SettingsCategory? category, bool focus = false}) =>
-    Navigator.of(context).pushNamed(settingsRoute,
-        arguments: (category: category, focus: focus));
+Future<void> openSettings(
+  BuildContext context, {
+  SettingsCategory? category,
+  bool focus = false,
+}) => Navigator.of(
+  context,
+).pushNamed(settingsRoute, arguments: (category: category, focus: focus));

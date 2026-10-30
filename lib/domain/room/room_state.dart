@@ -84,8 +84,8 @@ class ChatViewState {
   RoomPhase get roomPhase => questions.values.any((q) => q.isNotEmpty)
       ? RoomPhase.waitingOnYou
       : isRunning
-          ? RoomPhase.agentSpeaking
-          : RoomPhase.open;
+      ? RoomPhase.agentSpeaking
+      : RoomPhase.open;
 
   ChatViewState copyWith({
     Chat? chat,
@@ -102,23 +102,22 @@ class ChatViewState {
     Map<String, String>? shellOutput,
     List<Message>? steering,
     Map<String, ShellJob>? runningJobs,
-  }) =>
-      ChatViewState(
-        chat: chat ?? this.chat,
-        isRunning: isRunning ?? this.isRunning,
-        approvals: approvals ?? this.approvals,
-        questions: questions ?? this.questions,
-        runningSubAgents: runningSubAgents ?? this.runningSubAgents,
-        retry: clearRetry ? null : (retry ?? this.retry),
-        status: clearStatus ? null : (status ?? this.status),
-        unfinishedNotice: clearUnfinishedNotice
-            ? null
-            : (unfinishedNotice ?? this.unfinishedNotice),
-        shellOutput: shellOutput ?? this.shellOutput,
-        steering: steering ?? this.steering,
-        runningJobs: runningJobs ?? this.runningJobs,
-        mirrored: mirrored,
-      );
+  }) => ChatViewState(
+    chat: chat ?? this.chat,
+    isRunning: isRunning ?? this.isRunning,
+    approvals: approvals ?? this.approvals,
+    questions: questions ?? this.questions,
+    runningSubAgents: runningSubAgents ?? this.runningSubAgents,
+    retry: clearRetry ? null : (retry ?? this.retry),
+    status: clearStatus ? null : (status ?? this.status),
+    unfinishedNotice: clearUnfinishedNotice
+        ? null
+        : (unfinishedNotice ?? this.unfinishedNotice),
+    shellOutput: shellOutput ?? this.shellOutput,
+    steering: steering ?? this.steering,
+    runningJobs: runningJobs ?? this.runningJobs,
+    mirrored: mirrored,
+  );
 }
 
 /// Who may speak in the room — see [ChatViewState.roomPhase].

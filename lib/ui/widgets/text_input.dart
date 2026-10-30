@@ -3,7 +3,12 @@ import "package:flutter/services.dart";
 
 /// Writes [text] over [start]..[end] of [controller], leaving the caret after
 /// it.
-void replaceIn(TextEditingController controller, int start, int end, String text) {
+void replaceIn(
+  TextEditingController controller,
+  int start,
+  int end,
+  String text,
+) {
   controller.value = TextEditingValue(
     text: controller.text.replaceRange(start, end, text),
     selection: TextSelection.collapsed(offset: start + text.length),
@@ -36,7 +41,7 @@ class TabIndents extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => CallbackShortcuts(
-        bindings: {const SingleActivator(LogicalKeyboardKey.tab): _indent},
-        child: child,
-      );
+    bindings: {const SingleActivator(LogicalKeyboardKey.tab): _indent},
+    child: child,
+  );
 }

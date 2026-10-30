@@ -31,8 +31,9 @@ typedef ProjectRef = ({String? device, String? project});
 /// This device's [project].
 ProjectRef localProject(String? project) => (device: null, project: project);
 
-String projectLabel(String? project) =>
-    project == null ? defaultProjectLabel : builtinProjectOf(project)?.label ?? project;
+String projectLabel(String? project) => project == null
+    ? defaultProjectLabel
+    : builtinProjectOf(project)?.label ?? project;
 
 /// The style an Omada project's label is drawn in, wherever a project name is
 /// shown. Null is the label's own style.
@@ -64,8 +65,11 @@ String? emptyChatQuestionFor(String? project, {required String? description}) {
 /// Every project there is, the default one first, then the built-in ones, then
 /// the user's — the order the menus offer them in, and the order a chat is
 /// looked for in.
-List<String?> everyProject(List<String> named) =>
-    [null, for (final builtIn in builtinProjects) builtIn.dir, ...named];
+List<String?> everyProject(List<String> named) => [
+  null,
+  for (final builtIn in builtinProjects) builtIn.dir,
+  ...named,
+];
 
 /// A stored project name read against the projects there are: one that has
 /// since been deleted is the default project. A setting holds a name rather
@@ -75,8 +79,8 @@ List<String?> everyProject(List<String> named) =>
 /// without asking [existing].
 String? projectOrDefault(String? named, List<String> existing) =>
     named != null && (isBuiltinProject(named) || existing.contains(named))
-        ? named
-        : null;
+    ? named
+    : null;
 
 /// One directory under `projects/` and nothing else: the shape a project
 /// directory may have. The default project's and the built-in projects' names

@@ -58,7 +58,9 @@ void main() async {
   // Built here rather than by the root, so the platform's splash covers the
   // first read of the data directory instead of a blank frame.
   final relaunch = AppRelaunch();
-  runApp(AppRoot(session: await AppSession.start(relaunch), relaunch: relaunch));
+  runApp(
+    AppRoot(session: await AppSession.start(relaunch), relaunch: relaunch),
+  );
 }
 
 /// Whether the automatic update check has run. It belongs to the process, not
@@ -122,11 +124,16 @@ class AppSession {
     // The bundled roots were locked by the install; this covers the user's
     // `skills/` and `agents/` beside them, which the app writes only through
     // their managers. Every project's tiers, the shared ones once.
-    await Future.wait({
-      for (final project in projects) ...promptDirsOf(config, project: project),
-    }.map((dir) => platform.readOnlyDirs
-        .of(dir.path, executable: dir.executable)
-        .lock()));
+    await Future.wait(
+      {
+        for (final project in projects)
+          ...promptDirsOf(config, project: project),
+      }.map(
+        (dir) => platform.readOnlyDirs
+            .of(dir.path, executable: dir.executable)
+            .lock(),
+      ),
+    );
     final store = platform.createChatStore(config);
     // One library per project: the default's is the base set every other
     // project inherits, and a project's own overrides same-named default
@@ -134,9 +141,18 @@ class AppSession {
     // downstream waits on disk; see "Skills and agents" in
     // `lib/domain/AGENTS.md`. The builds read independent project dirs, so
     // they overlap rather than serialise.
-    final libraries = Map.fromEntries(await Future.wait(projects.map((project) async =>
-        MapEntry(project,
-            await PromptLibrary.from(platform.createPromptSources(config, project: project))))));
+    final libraries = Map.fromEntries(
+      await Future.wait(
+        projects.map(
+          (project) async => MapEntry(
+            project,
+            await PromptLibrary.from(
+              platform.createPromptSources(config, project: project),
+            ),
+          ),
+        ),
+      ),
+    );
     final handoff = platform.createFileHandoff();
     final cache = await cacheDir;
     final rootfs = platform.createRootfsStore(cache);
@@ -170,19 +186,31 @@ class AppSession {
     final voiceModels = platform.createVoiceModelStore(cache);
     final voice = platform.createVoice(voiceModels, cache);
     final apple = await appleFm;
-    final backend = platform.createBackend(config, libraries, store,
-        tools: toolset, rootfs: rootfs, abi: await abi,
-        byteRepairBinDir: byteRepairBin, secrets: secrets,
-        loginPath: await loginPath,
-        triggerRegistry: (chatId, project) => triggerRegistry(chatId, project),
-        editSettings: (change) => editSettings(change),
-        endpoints: () => endpoints(),
-        cutsUtterances: voice.hasModelCatalog,
-        browser: browser);
+    final backend = platform.createBackend(
+      config,
+      libraries,
+      store,
+      tools: toolset,
+      rootfs: rootfs,
+      abi: await abi,
+      byteRepairBinDir: byteRepairBin,
+      secrets: secrets,
+      loginPath: await loginPath,
+      triggerRegistry: (chatId, project) => triggerRegistry(chatId, project),
+      editSettings: (change) => editSettings(change),
+      endpoints: () => endpoints(),
+      cutsUtterances: voice.hasModelCatalog,
+      browser: browser,
+    );
     // One instance, shared: the prefill's notification and every other
     // foreground hold go through the same service.
     final foreground = ForegroundService();
-    final prefill = platform.createLocalPrefill(backend, engine, foreground, config);
+    final prefill = platform.createLocalPrefill(
+      backend,
+      engine,
+      foreground,
+      config,
+    );
     // Both started before either is awaited: one is a disk scan and the other
     // a channel round trip, and neither needs the other's answer.
     final scan = voiceModels.installed();
@@ -202,7 +230,10 @@ class AppSession {
     // started when the page opens would draw every row as "not installed"
     // first. Both at once — they are two directories and neither needs the
     // other.
-    final scans = await Future.wait([rootfs.installed(), engine.store.installed()]);
+    final scans = await Future.wait([
+      rootfs.installed(),
+      engine.store.installed(),
+    ]);
     final triggers = await FileTriggerStore(config).load();
     // Started before the identity load and awaited below, so the session-bus
     // connect on Linux overlaps it rather than serialising behind it; nothing
@@ -240,43 +271,55 @@ class AppSession {
         // Seed every project's library at startup: each family member gets its
         // own seeded library, so nothing downstream waits on disk.
         promptLibraryProvider.overrideWith2(
-            (project) => PromptLibraryNotifier(project, libraries[project])),
+          (project) => PromptLibraryNotifier(project, libraries[project]),
+        ),
         launcherIconsProvider.overrideWithValue(const LauncherAliases()),
         systemAccentProvider.overrideWithValue(await accent),
-        linkOpenerProvider
-            .overrideWithValue(PlatformLinkOpener(store, syncHub)),
+        linkOpenerProvider.overrideWithValue(
+          PlatformLinkOpener(store, syncHub),
+        ),
         marketplaceClientProvider.overrideWithValue(tlsClient()),
         backgroundWorkProvider.overrideWithValue(foreground),
         fileHandoffProvider.overrideWithValue(handoff),
-        assistantLaunchProvider.overrideWithValue(platform.createAssistantLaunch()),
+        assistantLaunchProvider.overrideWithValue(
+          platform.createAssistantLaunch(),
+        ),
         reminderAlarmsProvider.overrideWithValue(await alarms),
         triggersProvider.overrideWith(() => Triggers(triggers)),
-        triggerTurnDriverProvider
-            .overrideWith((ref) => ChatControllerTriggerTurnDriver(ref)),
-        backupHandoffProvider
-            .overrideWithValue(platform.createBackupHandoff(handoff)),
+        triggerTurnDriverProvider.overrideWith(
+          (ref) => ChatControllerTriggerTurnDriver(ref),
+        ),
+        backupHandoffProvider.overrideWithValue(
+          platform.createBackupHandoff(handoff),
+        ),
         appRestartProvider.overrideWithValue(relaunch),
         voiceModelStoreProvider.overrideWithValue(voiceModels),
         voiceProvider.overrideWithValue(voice),
-        installedVoiceModelsProvider
-            .overrideWith(() => InstalledVoiceModels(installed, system: system)),
+        installedVoiceModelsProvider.overrideWith(
+          () => InstalledVoiceModels(installed, system: system),
+        ),
         rootfsStoreProvider.overrideWithValue(rootfs),
         byteRepairStoreProvider.overrideWithValue(
-            platform.createByteRepairStore(config, cache, rootfs)),
+          platform.createByteRepairStore(config, cache, rootfs),
+        ),
         byteRepairBinDirProvider.overrideWithValue(byteRepairBin),
-        installedRootfsProvider.overrideWith(() => InstalledRootfs(scans.first)),
+        installedRootfsProvider.overrideWith(
+          () => InstalledRootfs(scans.first),
+        ),
         deviceAbiProvider.overrideWithValue(await abi),
         appVersionProvider.overrideWithValue(await version),
         prootAvailableProvider.overrideWithValue(toolset?.proot != null),
         hostConfinementProvider.overrideWithValue(platform.hostConfinement()),
-        appUpdateHostProvider
-            .overrideWithValue(platform.createAppUpdateHost(cache)),
+        appUpdateHostProvider.overrideWithValue(
+          platform.createAppUpdateHost(cache),
+        ),
         agentBrowserProvider.overrideWithValue(browser),
         localEngineProvider.overrideWithValue(engine),
         appleFmProvider.overrideWithValue(apple),
         localPrefillProvider.overrideWithValue(prefill),
-        installedLocalModelsProvider
-            .overrideWith(() => InstalledLocalModels(scans.last)),
+        installedLocalModelsProvider.overrideWith(
+          () => InstalledLocalModels(scans.last),
+        ),
         syncHubProvider.overrideWithValue(syncHub),
       ],
     );
@@ -304,27 +347,37 @@ class AppSession {
     // root notes — so its timing is the network's to decide.
     if (!_updateChecked) {
       _updateChecked = true;
-      unawaited(container.read(appUpdateHostProvider).check(
-            version: container.read(appVersionProvider),
-            enabled: container.read(appSettingsProvider).autoUpdate,
-          ));
+      unawaited(
+        container
+            .read(appUpdateHostProvider)
+            .check(
+              version: container.read(appVersionProvider),
+              enabled: container.read(appSettingsProvider).autoUpdate,
+            ),
+      );
     }
     // The model catalog, read from its cache and refreshed in the background.
     // Only a hosted provider sends anything there: on-device models are
     // described by the app itself.
     void loadCatalog() {
       final client = tlsClient();
-      unawaited(loadModelCatalog(config, client,
-              fetch: container.read(appSettingsProvider).llmProviders.isNotEmpty)
-          .whenComplete(client.close));
+      unawaited(
+        loadModelCatalog(
+          config,
+          client,
+          fetch: container.read(appSettingsProvider).llmProviders.isNotEmpty,
+        ).whenComplete(client.close),
+      );
     }
 
     loadCatalog();
     // The first provider fetches it then: the welcome tour adds one.
-    container.listen(appSettingsProvider.select((s) => s.llmProviders.isNotEmpty),
-        (was, now) {
-      if (now && was == false) loadCatalog();
-    });
+    container.listen(
+      appSettingsProvider.select((s) => s.llmProviders.isNotEmpty),
+      (was, now) {
+        if (now && was == false) loadCatalog();
+      },
+    );
     // Sweep expired temporary chats on startup, then every 30 minutes. The
     // timer is in-process and dies with the session: a chat expiring while the
     // app is closed is caught at the next launch. Skips the currently-open
@@ -449,11 +502,11 @@ class _Stopped extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: appTitle,
-        theme: entoliTheme(Brightness.light),
-        darkTheme: entoliTheme(Brightness.dark),
-        home: const Scaffold(body: Center(child: CircularProgressIndicator())),
-      );
+    title: appTitle,
+    theme: entoliTheme(Brightness.light),
+    darkTheme: entoliTheme(Brightness.dark),
+    home: const Scaffold(body: Center(child: CircularProgressIndicator())),
+  );
 }
 
 class AgentChatApp extends ConsumerStatefulWidget {
@@ -479,7 +532,9 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       },
       // What a turn failure notification is gated on, written where the state
       // is known for the app's whole life rather than asked per chat.
-      onStateChange: (state) => ref.read(appHiddenProvider.notifier).set(
+      onStateChange: (state) => ref
+          .read(appHiddenProvider.notifier)
+          .set(
             state == AppLifecycleState.hidden ||
                 state == AppLifecycleState.detached,
           ),

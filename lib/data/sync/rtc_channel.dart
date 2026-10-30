@@ -29,9 +29,11 @@ class RtcLink {
   /// networks and wrong for none that works without them anyway.
   static Future<RtcLink> create({List<Map<String, Object>>? iceServers}) async {
     final pc = await webrtc.createPeerConnection({
-      "iceServers": iceServers ?? [
-        for (final url in defaultStun) {"urls": url},
-      ],
+      "iceServers":
+          iceServers ??
+          [
+            for (final url in defaultStun) {"urls": url},
+          ],
       "sdpSemantics": "unified-plan",
     });
     return RtcLink._(pc);
@@ -54,7 +56,8 @@ class RtcLink {
   /// remote offer and this returns the answer to send.
   Future<String> answer(String remoteSdp) async {
     await _pc.setRemoteDescription(
-        webrtc.RTCSessionDescription(remoteSdp, "offer"));
+      webrtc.RTCSessionDescription(remoteSdp, "offer"),
+    );
     _pc.onDataChannel = (channel) => _watch(channel);
     return _localDescription(() => _pc.createAnswer({}));
   }
@@ -62,11 +65,13 @@ class RtcLink {
   /// Completes the joiner once the initiator's answer arrives.
   Future<void> acceptAnswer(String remoteSdp) async {
     await _pc.setRemoteDescription(
-        webrtc.RTCSessionDescription(remoteSdp, "answer"));
+      webrtc.RTCSessionDescription(remoteSdp, "answer"),
+    );
   }
 
   Future<String> _localDescription(
-      Future<webrtc.RTCSessionDescription> Function() make) async {
+    Future<webrtc.RTCSessionDescription> Function() make,
+  ) async {
     final description = await make();
     await _pc.setLocalDescription(description);
     final gathering = Completer<void>();
@@ -81,7 +86,10 @@ class RtcLink {
     // Gathering usually finishes in well under a second on a LAN; the timer
     // is for networks where a candidate never resolves and waiting forever is
     // the one outcome worse than an address that would have worked.
-    await gathering.future.timeout(const Duration(seconds: 4), onTimeout: () {});
+    await gathering.future.timeout(
+      const Duration(seconds: 4),
+      onTimeout: () {},
+    );
     _pc.onIceGatheringState = null;
     final local = await _pc.getLocalDescription();
     return local?.sdp ?? description.sdp ?? "";

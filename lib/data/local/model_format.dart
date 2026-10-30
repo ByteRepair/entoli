@@ -63,14 +63,18 @@ class MlxFormat extends ModelFormat {
   @override
   DownloadedModel describe(String id, String directory, [LocalModel? from]) {
     final config = File(p.join(directory, "config.json"));
-    if (!config.existsSync()) throw const FormatException("it has no config.json");
+    if (!config.existsSync()) {
+      throw const FormatException("it has no config.json");
+    }
     final Object? json;
     try {
       json = jsonDecode(config.readAsStringSync());
     } on FormatException {
       throw const FormatException("its config.json is not JSON");
     }
-    if (json is! Map) throw const FormatException("its config.json is not an object");
+    if (json is! Map) {
+      throw const FormatException("its config.json is not an object");
+    }
     // A model that also sees images keeps the language model's own numbers
     // under `text_config`.
     final text = json["text_config"] is Map ? json["text_config"] as Map : json;
@@ -79,7 +83,8 @@ class MlxFormat extends ModelFormat {
     final context = number("max_position_embeddings");
     final heads = number("num_attention_heads");
     final kvHeads = number("num_key_value_heads") ?? heads;
-    final headDim = number("head_dim") ??
+    final headDim =
+        number("head_dim") ??
         switch ((number("hidden_size"), heads)) {
           (final hidden?, final heads?) when heads > 0 => hidden ~/ heads,
           _ => null,
@@ -89,8 +94,13 @@ class MlxFormat extends ModelFormat {
     final layers = layerTypes is List
         ? layerTypes.where((type) => type == "full_attention").length
         : number("num_hidden_layers");
-    if (context == null || kvHeads == null || headDim == null || layers == null) {
-      throw const FormatException("its config.json does not say what its context costs");
+    if (context == null ||
+        kvHeads == null ||
+        headDim == null ||
+        layers == null) {
+      throw const FormatException(
+        "its config.json does not say what its context costs",
+      );
     }
 
     final bits = (json["quantization"] as Map?)?["bits"];

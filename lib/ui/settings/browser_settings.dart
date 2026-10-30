@@ -67,7 +67,8 @@ class EmbeddedBrowserDownloads extends Downloads<String> {
 
 final embeddedBrowserDownloadsProvider =
     NotifierProvider<EmbeddedBrowserDownloads, DownloadState>(
-        EmbeddedBrowserDownloads.new);
+      EmbeddedBrowserDownloads.new,
+    );
 
 /// Settings > Agent Browser: which browser the `browser_*` tools drive, and
 /// the embedded one to download. Drawn only where [AgentBrowser.available].
@@ -83,8 +84,9 @@ class AgentBrowserSection extends ConsumerStatefulWidget {
 const _choose = "\u0000choose";
 
 class _AgentBrowserSectionState extends ConsumerState<AgentBrowserSection> {
-  late final Future<List<FoundBrowser>> _found =
-      ref.read(agentBrowserProvider).detect();
+  late final Future<List<FoundBrowser>> _found = ref
+      .read(agentBrowserProvider)
+      .detect();
   bool _verifying = false;
   String? _problem;
 
@@ -111,23 +113,28 @@ class _AgentBrowserSectionState extends ConsumerState<AgentBrowserSection> {
   }
 
   Future<void> _clearData() async {
-    final sure = await confirm(context,
-        title: "Delete browser data?",
-        message: "The browser quits, and its cookies, logins, history and "
-            "site data are deleted. Every site the agent signed into is "
-            "signed out.",
-        confirmLabel: "Delete",
-        destructive: true);
+    final sure = await confirm(
+      context,
+      title: "Delete browser data?",
+      message:
+          "The browser quits, and its cookies, logins, history and "
+          "site data are deleted. Every site the agent signed into is "
+          "signed out.",
+      confirmLabel: "Delete",
+      destructive: true,
+    );
     if (!sure || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(agentBrowserProvider).clearData();
       messenger.showSnackBar(
-          const SnackBar(content: Text("Browser data deleted.")));
+        const SnackBar(content: Text("Browser data deleted.")),
+      );
     } catch (e) {
       logFailure("browser", "deleting the profile", e);
       messenger.showSnackBar(
-          SnackBar(content: Text("Could not delete browser data: $e")));
+        SnackBar(content: Text("Could not delete browser data: $e")),
+      );
     }
   }
 
@@ -145,7 +152,8 @@ class _AgentBrowserSectionState extends ConsumerState<AgentBrowserSection> {
       children: [
         const SectionHeader(
           "Agent browser",
-          description: "A browser window the agent opens pages in, clicks and "
+          description:
+              "A browser window the agent opens pages in, clicks and "
               "types into, for pages that need JavaScript or a login. It runs "
               "with a profile of its own, so what it logs into stays logged in "
               "and your own browser's profile is never touched.",
@@ -154,78 +162,90 @@ class _AgentBrowserSectionState extends ConsumerState<AgentBrowserSection> {
         if (browser.inApp)
           SwitchListTile(
             title: const Text("Let the agent use a browser"),
-            subtitle: const Text("A WebView kept off screen. The chat's "
-                "browser card shows its page."),
+            subtitle: const Text(
+              "A WebView kept off screen. The chat's "
+              "browser card shows its page.",
+            ),
             value: picked != null,
             onChanged: (on) => ref
                 .read(appSettingsProvider.notifier)
                 .setAgentBrowser(on ? webViewBrowserId : null),
           )
         else ...[
-        FutureBuilder<List<FoundBrowser>>(
-          future: _found,
-          builder: (context, snapshot) {
-            final found = snapshot.data ?? const <FoundBrowser>[];
-            final custom = picked != null &&
-                picked != embeddedBrowserId &&
-                !found.any((b) => b.path == picked);
-            return LabelledField(
-              label: "Browser",
-              child: DropdownButtonFormField<String?>(
-                key: ValueKey(picked),
-                initialValue: picked == embeddedBrowserId && installed == null
-                    ? null
-                    : picked,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  helperText: _verifying
-                      ? "Starting it to check it can be driven…"
-                      : picked == null
-                          ? "Off: the agent has no browser tools."
-                          : "Only Chromium-family browsers can be driven.",
-                  errorText: _problem,
-                  errorMaxLines: 4,
-                ),
-                items: [
-                  const DropdownMenuItem(value: null, child: Text("Off")),
-                  if (installed != null)
-                    DropdownMenuItem(
-                      value: embeddedBrowserId,
-                      child: Text("Embedded (Helium $installed)"),
-                    ),
-                  for (final found in found)
-                    DropdownMenuItem(value: found.path, child: Text(found.name)),
-                  if (custom)
-                    DropdownMenuItem(
-                      value: picked,
-                      child: Text(picked, overflow: TextOverflow.ellipsis),
-                    ),
-                  const DropdownMenuItem(
-                    value: _choose,
-                    child: Text("Choose a browser…"),
+          FutureBuilder<List<FoundBrowser>>(
+            future: _found,
+            builder: (context, snapshot) {
+              final found = snapshot.data ?? const <FoundBrowser>[];
+              final custom =
+                  picked != null &&
+                  picked != embeddedBrowserId &&
+                  !found.any((b) => b.path == picked);
+              return LabelledField(
+                label: "Browser",
+                child: DropdownButtonFormField<String?>(
+                  key: ValueKey(picked),
+                  initialValue: picked == embeddedBrowserId && installed == null
+                      ? null
+                      : picked,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    helperText: _verifying
+                        ? "Starting it to check it can be driven…"
+                        : picked == null
+                        ? "Off: the agent has no browser tools."
+                        : "Only Chromium-family browsers can be driven.",
+                    errorText: _problem,
+                    errorMaxLines: 4,
                   ),
-                ],
-                onChanged: _verifying ? null : (value) => unawaited(_pick(value)),
-              ),
-            );
-          },
-        ),
-        SwitchListTile(
-          title: const Text("Show the browser window"),
-          subtitle: const Text("Off, it runs hidden. The agent can still "
-              "open a window when it needs you to finish a check."),
-          value: ref.watch(appSettingsProvider).agentBrowserVisible,
-          onChanged: (value) async {
-            await ref
-                .read(appSettingsProvider.notifier)
-                .setAgentBrowserVisible(value);
-            // The running one is in the other mode; the next call starts
-            // one in this.
-            await browser.close(
-                why: "The browser restarted because the user changed "
-                    "whether it shows a window.");
-          },
-        ),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text("Off")),
+                    if (installed != null)
+                      DropdownMenuItem(
+                        value: embeddedBrowserId,
+                        child: Text("Embedded (Helium $installed)"),
+                      ),
+                    for (final found in found)
+                      DropdownMenuItem(
+                        value: found.path,
+                        child: Text(found.name),
+                      ),
+                    if (custom)
+                      DropdownMenuItem(
+                        value: picked,
+                        child: Text(picked, overflow: TextOverflow.ellipsis),
+                      ),
+                    const DropdownMenuItem(
+                      value: _choose,
+                      child: Text("Choose a browser…"),
+                    ),
+                  ],
+                  onChanged: _verifying
+                      ? null
+                      : (value) => unawaited(_pick(value)),
+                ),
+              );
+            },
+          ),
+          SwitchListTile(
+            title: const Text("Show the browser window"),
+            subtitle: const Text(
+              "Off, it runs hidden. The agent can still "
+              "open a window when it needs you to finish a check.",
+            ),
+            value: ref.watch(appSettingsProvider).agentBrowserVisible,
+            onChanged: (value) async {
+              await ref
+                  .read(appSettingsProvider.notifier)
+                  .setAgentBrowserVisible(value);
+              // The running one is in the other mode; the next call starts
+              // one in this.
+              await browser.close(
+                why:
+                    "The browser restarted because the user changed "
+                    "whether it shows a window.",
+              );
+            },
+          ),
         ],
         LabelledField(
           label: "Before the agent acts",
@@ -233,18 +253,24 @@ class _AgentBrowserSectionState extends ConsumerState<AgentBrowserSection> {
             initialValue: ref.watch(appSettingsProvider).agentBrowserApproval,
             isExpanded: true,
             decoration: const InputDecoration(
-              helperText: "Opening a page, clicking, typing and dragging. A "
+              helperText:
+                  "Opening a page, clicking, typing and dragging. A "
                   "site you have denied in a permission rule stays denied.",
               helperMaxLines: 3,
             ),
             items: const [
               DropdownMenuItem(
-                  value: BrowserApproval.never, child: Text("Don't ask")),
+                value: BrowserApproval.never,
+                child: Text("Don't ask"),
+              ),
               DropdownMenuItem(
-                  value: BrowserApproval.classifier,
-                  child: Text("Let the classifier decide")),
+                value: BrowserApproval.classifier,
+                child: Text("Let the classifier decide"),
+              ),
               DropdownMenuItem(
-                  value: BrowserApproval.always, child: Text("Ask every time")),
+                value: BrowserApproval.always,
+                child: Text("Ask every time"),
+              ),
             ],
             onChanged: (value) {
               if (value != null) {
@@ -256,43 +282,50 @@ class _AgentBrowserSectionState extends ConsumerState<AgentBrowserSection> {
           ),
         ),
         if (browser.trustedInput)
-        LabelledField(
-          label: "File uploads",
-          child: DropdownButtonFormField<BrowserUploadPolicy>(
-            initialValue: ref.watch(appSettingsProvider).agentBrowserUploads,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              helperText: "Who picks a file the agent uploads to a page. "
-                  "Apart from the setting above: take uploads from the agent "
-                  "and leave it the rest.",
-              helperMaxLines: 3,
-            ),
-            items: const [
-              DropdownMenuItem(
+          LabelledField(
+            label: "File uploads",
+            child: DropdownButtonFormField<BrowserUploadPolicy>(
+              initialValue: ref.watch(appSettingsProvider).agentBrowserUploads,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                helperText:
+                    "Who picks a file the agent uploads to a page. "
+                    "Apart from the setting above: take uploads from the agent "
+                    "and leave it the rest.",
+                helperMaxLines: 3,
+              ),
+              items: const [
+                DropdownMenuItem(
                   value: BrowserUploadPolicy.classifier,
-                  child: Text("Let the classifier decide")),
-              DropdownMenuItem(
-                  value: BrowserUploadPolicy.allow, child: Text("Don't ask")),
-              DropdownMenuItem(
+                  child: Text("Let the classifier decide"),
+                ),
+                DropdownMenuItem(
+                  value: BrowserUploadPolicy.allow,
+                  child: Text("Don't ask"),
+                ),
+                DropdownMenuItem(
                   value: BrowserUploadPolicy.user,
-                  child: Text("I choose the file")),
-            ],
-            onChanged: (value) {
-              if (value != null) {
-                ref
-                    .read(appSettingsProvider.notifier)
-                    .setAgentBrowserUploads(value);
-              }
-            },
+                  child: Text("I choose the file"),
+                ),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  ref
+                      .read(appSettingsProvider.notifier)
+                      .setAgentBrowserUploads(value);
+                }
+              },
+            ),
           ),
-        ),
         ValueListenableBuilder<bool>(
           valueListenable: browser.running,
           builder: (context, running, _) => ListTile(
             title: const Text("Browser process"),
-            subtitle: Text(running
-                ? "Running. It quits by itself after ten idle minutes."
-                : "Not running. It starts when the agent opens a page."),
+            subtitle: Text(
+              running
+                  ? "Running. It quits by itself after ten idle minutes."
+                  : "Not running. It starts when the agent opens a page.",
+            ),
             trailing: OutlinedButton(
               onPressed: running ? () => unawaited(browser.close()) : null,
               child: const Text("Quit"),
@@ -301,70 +334,82 @@ class _AgentBrowserSectionState extends ConsumerState<AgentBrowserSection> {
         ),
         ListTile(
           title: const Text("Browser data"),
-          subtitle: const Text("The cookies, logins and history of the "
-              "browser's own profile, whichever browser is picked."),
+          subtitle: const Text(
+            "The cookies, logins and history of the "
+            "browser's own profile, whichever browser is picked.",
+          ),
           trailing: OutlinedButton(
             onPressed: () => unawaited(_clearData()),
             child: const Text("Delete"),
           ),
         ),
         if (!browser.inApp) ...[
-        const Divider(),
-        const SectionHeader(
-          "Embedded browser",
-          description: "Helium, a Chromium browser that ships with uBlock "
-              "Origin: the pages the agent opens come without ads or "
-              "trackers, and with fewer scripts that try to talk it into "
-              "something. Downloaded from Helium's GitHub releases.",
-        ),
-        ListTile(
-          title: const Text("Helium"),
-          subtitle: progress != null
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(progress.unpacking
-                        ? "Installing…"
-                        : progress.total > 0
-                            ? "Downloading · ${progress.received >> 20} of "
-                                "${progress.total >> 20} MB"
-                            : "Downloading…"),
-                    const SizedBox(height: 4),
-                    LinearProgressIndicator(
-                        value: progress.unpacking ? null : progress.fraction),
-                  ],
-                )
-              : Text(failure ??
-                  (installed == null ? "Not downloaded" : "Version $installed")),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (progress != null)
-                TextButton(
-                  onPressed: () => ref
-                      .read(embeddedBrowserDownloadsProvider.notifier)
-                      .cancel(EmbeddedBrowserDownloads.id),
-                  child: const Text("Cancel"),
-                )
-              else ...[
-                if (installed != null)
-                  IconButton(
-                    tooltip: "Delete",
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: () => unawaited(ref
-                        .read(embeddedBrowserDownloadsProvider.notifier)
-                        .delete(EmbeddedBrowserDownloads.id)),
-                  ),
-                FilledButton.tonal(
-                  onPressed: () => ref
-                      .read(embeddedBrowserDownloadsProvider.notifier)
-                      .install(EmbeddedBrowserDownloads.id),
-                  child: Text(installed == null ? "Download" : "Update"),
-                ),
-              ],
-            ],
+          const Divider(),
+          const SectionHeader(
+            "Embedded browser",
+            description:
+                "Helium, a Chromium browser that ships with uBlock "
+                "Origin: the pages the agent opens come without ads or "
+                "trackers, and with fewer scripts that try to talk it into "
+                "something. Downloaded from Helium's GitHub releases.",
           ),
-        ),
+          ListTile(
+            title: const Text("Helium"),
+            subtitle: progress != null
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        progress.unpacking
+                            ? "Installing…"
+                            : progress.total > 0
+                            ? "Downloading · ${progress.received >> 20} of "
+                                  "${progress.total >> 20} MB"
+                            : "Downloading…",
+                      ),
+                      const SizedBox(height: 4),
+                      LinearProgressIndicator(
+                        value: progress.unpacking ? null : progress.fraction,
+                      ),
+                    ],
+                  )
+                : Text(
+                    failure ??
+                        (installed == null
+                            ? "Not downloaded"
+                            : "Version $installed"),
+                  ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (progress != null)
+                  TextButton(
+                    onPressed: () => ref
+                        .read(embeddedBrowserDownloadsProvider.notifier)
+                        .cancel(EmbeddedBrowserDownloads.id),
+                    child: const Text("Cancel"),
+                  )
+                else ...[
+                  if (installed != null)
+                    IconButton(
+                      tooltip: "Delete",
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => unawaited(
+                        ref
+                            .read(embeddedBrowserDownloadsProvider.notifier)
+                            .delete(EmbeddedBrowserDownloads.id),
+                      ),
+                    ),
+                  FilledButton.tonal(
+                    onPressed: () => ref
+                        .read(embeddedBrowserDownloadsProvider.notifier)
+                        .install(EmbeddedBrowserDownloads.id),
+                    child: Text(installed == null ? "Download" : "Update"),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ],
       ],
     );

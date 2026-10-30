@@ -21,7 +21,8 @@ class TurnKeepAlive {
   final BackgroundWork _work;
   late final StreamSubscription<void> _stops;
 
-  void _changed() => unawaited(_work.running(_backend.runningTurns.value.length));
+  void _changed() =>
+      unawaited(_work.running(_backend.runningTurns.value.length));
 
   Future<void> _stopAll() =>
       Future.wait(_backend.runningTurns.value.map(_backend.abort));

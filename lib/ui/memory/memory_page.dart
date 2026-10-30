@@ -26,15 +26,27 @@ class MemoryTile extends StatelessWidget {
       subtitle: const Text("Browse, add, pin, delete"),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => MemoryPage(project: project, title: title)),
+        MaterialPageRoute(
+          builder: (_) => MemoryPage(project: project, title: title),
+        ),
       ),
     );
   }
 }
 
 const _months = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
 ];
 const _weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -134,13 +146,13 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
       } else {
         // Counted over the whole store: a search is a window, and a pin made
         // inside it must not slip past the limit the full list would show.
-        final pinned =
-            (await store.entries()).where((e) => e.pinned).length;
+        final pinned = (await store.entries()).where((e) => e.pinned).length;
         if (pinned >= pinnedLimit) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text("Four is the most that can be pinned.")),
+              content: Text("Four is the most that can be pinned."),
+            ),
           );
           return;
         }
@@ -157,7 +169,9 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
   }
 
   Future<void> _delete(MemoryEntry entry) async {
-    final shown = entry.text.length > 80 ? "${entry.text.substring(0, 80)}…" : entry.text;
+    final shown = entry.text.length > 80
+        ? "${entry.text.substring(0, 80)}…"
+        : entry.text;
     if (!await confirm(
       context,
       title: "Delete memory?",
@@ -231,81 +245,87 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
       body: AbsorbPointer(
         absorbing: frozen,
         child: Column(
-        children: [
-          if (widget.project.device != null)
-            if (ref.watch(syncPeersProvider)[widget.project.device]?.name ?? "The device"
-                case final name)
-              frozen ? MirrorStrip.offline(deviceName: name) : MirrorStrip.remote(deviceName: name),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: TextField(
-              controller: _search,
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                hintText: "Search memories",
+          children: [
+            if (widget.project.device != null)
+              if (ref.watch(syncPeersProvider)[widget.project.device]?.name ??
+                      "The device"
+                  case final name)
+                frozen
+                    ? MirrorStrip.offline(deviceName: name)
+                    : MirrorStrip.remote(deviceName: name),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: TextField(
+                controller: _search,
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search),
+                  hintText: "Search memories",
+                ),
               ),
             ),
-          ),
-          Expanded(
-            child: entries == null
-                ? const Center(child: CircularProgressIndicator())
-                : entries.isEmpty
-                    ? EmptyPane(
-                        icon: Icons.psychology_outlined,
-                        title: query.isEmpty ? "No memories yet" : "No memories match",
-                        detail: query.isEmpty
-                            ? "Facts the agent keeps, and ones you add, land here."
-                            : "Nothing the store holds is about “$query”.",
-                        action: query.isEmpty
-                            ? FilledButton(
-                                onPressed: _add,
-                                child: const Text("Add a memory"),
-                              )
-                            : null,
-                      )
-                    : ListView.separated(
-                        padding: const EdgeInsets.only(bottom: 72),
-                        itemCount: entries.length,
-                        separatorBuilder: (_, _) => const Divider(height: 1),
-                        itemBuilder: (context, i) {
-                          final entry = entries[i];
-                          return ListTile(
-                            title: Text(
-                              entry.text,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Text(
-                              "${_when(entry.at)} · "
-                              "${entry.chat == null ? "added by you" : "kept by the agent"}"
-                              "${entry.pinned ? " · pinned" : ""}",
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: Icon(
-                                    entry.pinned
-                                        ? Icons.push_pin
-                                        : Icons.push_pin_outlined,
-                                  ),
-                                  tooltip:
-                                      entry.pinned ? "Unpin" : "Pin: in every turn",
-                                  onPressed: () => _togglePin(entry),
+            Expanded(
+              child: entries == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : entries.isEmpty
+                  ? EmptyPane(
+                      icon: Icons.psychology_outlined,
+                      title: query.isEmpty
+                          ? "No memories yet"
+                          : "No memories match",
+                      detail: query.isEmpty
+                          ? "Facts the agent keeps, and ones you add, land here."
+                          : "Nothing the store holds is about “$query”.",
+                      action: query.isEmpty
+                          ? FilledButton(
+                              onPressed: _add,
+                              child: const Text("Add a memory"),
+                            )
+                          : null,
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.only(bottom: 72),
+                      itemCount: entries.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (context, i) {
+                        final entry = entries[i];
+                        return ListTile(
+                          title: Text(
+                            entry.text,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            "${_when(entry.at)} · "
+                            "${entry.chat == null ? "added by you" : "kept by the agent"}"
+                            "${entry.pinned ? " · pinned" : ""}",
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: Icon(
+                                  entry.pinned
+                                      ? Icons.push_pin
+                                      : Icons.push_pin_outlined,
                                 ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline),
-                                  tooltip: "Delete memory",
-                                  onPressed: () => _delete(entry),
-                                ),
-                              ],
-                            ),
-                            onTap: () => _view(entry),
-                          );
-                        },
-                      ),
-          ),
-        ],
+                                tooltip: entry.pinned
+                                    ? "Unpin"
+                                    : "Pin: in every turn",
+                                onPressed: () => _togglePin(entry),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline),
+                                tooltip: "Delete memory",
+                                onPressed: () => _delete(entry),
+                              ),
+                            ],
+                          ),
+                          onTap: () => _view(entry),
+                        );
+                      },
+                    ),
+            ),
+          ],
         ),
       ),
     );

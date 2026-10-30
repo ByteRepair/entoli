@@ -49,8 +49,12 @@ class _RunningStripState extends ConsumerState<RunningStrip> {
     GestureBinding.instance.pointerSignalResolver.register(event, (event) {
       final delta = (event as PointerScrollEvent).scrollDelta;
       final position = _scroll.position;
-      position.jumpTo((position.pixels + delta.dy + delta.dx)
-          .clamp(position.minScrollExtent, position.maxScrollExtent));
+      position.jumpTo(
+        (position.pixels + delta.dy + delta.dx).clamp(
+          position.minScrollExtent,
+          position.maxScrollExtent,
+        ),
+      );
     });
   }
 
@@ -68,14 +72,14 @@ class _RunningStripState extends ConsumerState<RunningStrip> {
       }
     }
     Widget pill(RunningThing thing) => Builder(
-          builder: (context) => RunningPill(
-            label: thing.label,
-            tooltip: thing.tooltip,
-            icon: thing.icon,
-            mono: thing.mono,
-            onPressed: () => thing.open(context),
-          ),
-        );
+      builder: (context) => RunningPill(
+        label: thing.label,
+        tooltip: thing.tooltip,
+        icon: thing.icon,
+        mono: thing.mono,
+        onPressed: () => thing.open(context),
+      ),
+    );
     return Listener(
       onPointerSignal: _wheel,
       child: SingleChildScrollView(
@@ -94,7 +98,10 @@ class _RunningStripState extends ConsumerState<RunningStrip> {
                 label: "${plural(things.length, kind)} running",
                 open: _open.contains(kind),
                 onToggle: () => setState(
-                    () => _open.contains(kind) ? _open.remove(kind) : _open.add(kind)),
+                  () => _open.contains(kind)
+                      ? _open.remove(kind)
+                      : _open.add(kind),
+                ),
                 children: [for (final thing in things) pill(thing)],
               ),
           ],
@@ -136,15 +143,22 @@ class _Group extends StatelessWidget {
           children: [
             runningSpinner(scheme.primary),
             const SizedBox(width: 8),
-            Text(label,
-                style: theme.textTheme.labelMedium
-                    ?.copyWith(fontWeight: FontWeight.w500)),
+            Text(
+              label,
+              style: theme.textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.w500,
+              ),
+            ),
             // Points the way the pills open, and back once they have.
             AnimatedRotation(
               turns: open ? 0.5 : 0,
               duration: _duration,
               curve: _curve,
-              child: Icon(Icons.chevron_right, size: 18, color: scheme.onSurfaceVariant),
+              child: Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: scheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -179,7 +193,10 @@ class _Group extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   for (final child in children)
-                    Padding(padding: const EdgeInsets.only(right: 4), child: child),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: child,
+                    ),
                 ],
               ),
             ),

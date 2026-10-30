@@ -20,29 +20,32 @@ class PlanPage extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text("Plan")),
       body: switch (plan) {
-        AsyncValue(isLoading: true, hasValue: false) =>
-          const Center(child: CircularProgressIndicator()),
-        _ when sections == null =>
-          const Center(child: Text("This chat has no plan.")),
+        AsyncValue(isLoading: true, hasValue: false) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+        _ when sections == null => const Center(
+          child: Text("This chat has no plan."),
+        ),
         _ => ListView(
-            padding: const EdgeInsets.only(bottom: 24),
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text("$done of $total tasks done",
-                        style: Theme.of(context).textTheme.titleSmall),
-                    const SizedBox(height: 8),
-                    LinearProgressIndicator(
-                        value: total == 0 ? 0 : done / total),
-                  ],
-                ),
+          padding: const EdgeInsets.only(bottom: 24),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "$done of $total tasks done",
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(value: total == 0 ? 0 : done / total),
+                ],
               ),
-              PlanTaskList(sections: sections),
-            ],
-          ),
+            ),
+            PlanTaskList(sections: sections),
+          ],
+        ),
       },
     );
   }
@@ -62,9 +65,9 @@ class PlanButton extends ConsumerWidget {
     return IconButton(
       tooltip: "Plan, $done of $total done",
       icon: const Icon(Icons.checklist),
-      onPressed: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => PlanPage(chatId: chatId)),
-      ),
+      onPressed: () => Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => PlanPage(chatId: chatId))),
     );
   }
 }

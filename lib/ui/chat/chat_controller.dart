@@ -35,8 +35,11 @@ abstract interface class TurnDriver {
 
   Future<void> resume();
   Future<void> abort();
-  Future<void> respondApproval(String approvalId, ApprovalResponse r,
-      {ToolApproval? approval});
+  Future<void> respondApproval(
+    String approvalId,
+    ApprovalResponse r, {
+    ToolApproval? approval,
+  });
   Future<void> answerQuestions(String requestId, List<String?> answers);
   Future<void> editAndResend(String messageId, String text);
   Future<void> regenerate(String messageId);
@@ -70,7 +73,9 @@ class ChatController extends Notifier<ChatViewState>
     _room = ChatRoom(chatId, ref.read(chatRepositoryProvider), this);
     final room = _room;
     // The provider is not auto-disposed: clear a controller that outlived its page, or its id re-opens the deleted chat from memory.
-    final deletionSub = ref.read(chatRepositoryProvider).changes.listen((event) {
+    final deletionSub = ref.read(chatRepositoryProvider).changes.listen((
+      event,
+    ) {
       if (event is Deleted && event.chatId == chatId) room.reset();
     });
     ref.onDispose(() {
@@ -84,8 +89,9 @@ class ChatController extends Notifier<ChatViewState>
 
   @override
   Roster roster(String? project) => Roster(
-      omada: ref.read(omadaOnProvider(project)),
-      library: ref.read(promptLibraryProvider(project)));
+    omada: ref.read(omadaOnProvider(project)),
+    library: ref.read(promptLibraryProvider(project)),
+  );
 
   /// The project's pick, else the app default, else relay.
   @override
@@ -137,9 +143,11 @@ class ChatController extends Notifier<ChatViewState>
   void applyTitle(String title) => _room.applyTitle(title);
 
   @override
-  Future<void> send(String text,
-          {List<Attachment> attachments = const [], bool queue = false}) =>
-      _room.send(text, attachments: attachments, queue: queue);
+  Future<void> send(
+    String text, {
+    List<Attachment> attachments = const [],
+    bool queue = false,
+  }) => _room.send(text, attachments: attachments, queue: queue);
 
   @override
   Future<void> queueSteer(String id) => _room.queueSteer(id);
@@ -245,7 +253,8 @@ class ChatController extends Notifier<ChatViewState>
     // no marker, so the next settle may retry).
     final chat = state.chat;
     if (chat == null || state.isRunning) return;
-    if (chat.compactions.lastOrNull?.upToMessageId == chat.messages.lastOrNull?.id) {
+    if (chat.compactions.lastOrNull?.upToMessageId ==
+        chat.messages.lastOrNull?.id) {
       return;
     }
     try {
@@ -277,11 +286,14 @@ class ChatController extends Notifier<ChatViewState>
 
   /// A chat nobody watches — a reminder's — is the scheduler's to notify.
   Future<bool> _isHeadless() async =>
-      (await ref.read(chatRepositoryProvider).loadMeta(chatId)).headless == true;
+      (await ref.read(chatRepositoryProvider).loadMeta(chatId)).headless ==
+      true;
 }
 
 final chatControllerProvider =
-    NotifierProvider.family<ChatController, ChatViewState, String>(ChatController.new);
+    NotifierProvider.family<ChatController, ChatViewState, String>(
+      ChatController.new,
+    );
 
 /// Stop whatever turns are running the way the app going away stops them:
 /// **interrupted rather than aborted**. See "Carrying on an interrupted turn"

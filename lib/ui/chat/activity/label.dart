@@ -2,12 +2,12 @@ import "package:flutter/material.dart";
 
 /// The icon of a label whose run is still going.
 Widget labelSpinner(BuildContext context) => Padding(
-      padding: const EdgeInsets.all(1),
-      child: CircularProgressIndicator(
-        strokeWidth: 2,
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
-    );
+  padding: const EdgeInsets.all(1),
+  child: CircularProgressIndicator(
+    strokeWidth: 2,
+    color: Theme.of(context).colorScheme.onSurfaceVariant,
+  ),
+);
 
 /// The one line every activity above a reply is drawn as, frameless so it
 /// reads as a label until it is tapped.
@@ -33,7 +33,9 @@ class ActivityLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = isError ? theme.colorScheme.error : theme.colorScheme.onSurfaceVariant;
+    final color = isError
+        ? theme.colorScheme.error
+        : theme.colorScheme.onSurfaceVariant;
     return Align(
       alignment: Alignment.centerLeft,
       child: TextButton(
@@ -48,9 +50,15 @@ class ActivityLabel extends StatelessWidget {
             ),
             const SizedBox(width: labelGap),
             // One line: the label names what happened, the drawer says it.
-            Flexible(child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis)),
+            Flexible(
+              child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
             const SizedBox(width: 4),
-            Icon(Icons.chevron_right, size: 16, color: color.withValues(alpha: 0.6)),
+            Icon(
+              Icons.chevron_right,
+              size: 16,
+              color: color.withValues(alpha: 0.6),
+            ),
           ],
         ),
       ),
@@ -70,14 +78,13 @@ const double labelPadX = 10;
 
 /// The frameless, one-line button every label above a reply is drawn as.
 ButtonStyle labelStyle(Color color, TextStyle? text) => TextButton.styleFrom(
-      foregroundColor: color,
-      textStyle: text,
-      padding: const EdgeInsets.symmetric(horizontal: labelPadX, vertical: 7),
-      minimumSize: const Size(0, 34),
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-    );
-
+  foregroundColor: color,
+  textStyle: text,
+  padding: const EdgeInsets.symmetric(horizontal: labelPadX, vertical: 7),
+  minimumSize: const Size(0, 34),
+  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+);
 
 /// A run of consecutive activities none of which is important (see
 /// `Activity.important`), gathered by `MessageBubble._rows` and shown behind a single
@@ -111,9 +118,17 @@ class _ActivityGroupState extends State<ActivityGroup> {
             alignment: Alignment.center,
             child: TextButton.icon(
               onPressed: () => setState(() => _collapsed = !_collapsed),
-              icon: Icon(_collapsed ? Icons.expand_more : Icons.expand_less, size: 16),
-              label: Text(_collapsed ? "Expand activities" : "Collapse activities"),
-              style: labelStyle(theme.colorScheme.onSurfaceVariant, labelText(theme)),
+              icon: Icon(
+                _collapsed ? Icons.expand_more : Icons.expand_less,
+                size: 16,
+              ),
+              label: Text(
+                _collapsed ? "Expand activities" : "Collapse activities",
+              ),
+              style: labelStyle(
+                theme.colorScheme.onSurfaceVariant,
+                labelText(theme),
+              ),
             ),
           ),
           if (!_collapsed) ...widget.children,
@@ -122,4 +137,3 @@ class _ActivityGroupState extends State<ActivityGroup> {
     );
   }
 }
-

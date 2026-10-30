@@ -59,8 +59,11 @@ class Handshake {
   /// sends its first framed message the instant the handshake completes, so a
   /// reader cancelled here and replaced afterwards drops whatever landed in
   /// between. Whoever opened it closes it.
-  Future<SessionKeys> run(ByteChannel raw,
-      {required bool initiator, required ChannelReader reader}) async {
+  Future<SessionKeys> run(
+    ByteChannel raw, {
+    required bool initiator,
+    required ChannelReader reader,
+  }) async {
     final eph = await X25519().newKeyPair();
     final ephPub = Uint8List.fromList((await eph.extractPublicKey()).bytes);
     final hello = {
@@ -72,15 +75,23 @@ class Handshake {
       "name": name,
     };
     Future<Map<String, dynamic>> receive({bool hello = true}) async {
-      final line = utf8.decode(await reader.next().timeout(timeout, onTimeout: _timedOut));
+      final line = utf8.decode(
+        await reader.next().timeout(timeout, onTimeout: _timedOut),
+      );
       try {
         return parse(line, hello: hello);
       } on ProtocolMismatchException {
         // Said back before giving up, so the other side reads a mismatch
         // too rather than waiting out its timeout. It may be gone already.
         try {
-          await raw.send(utf8.encode(jsonEncode(
-              {"v": SyncIdentity.protocolVersion, "role": initiator ? "i" : "j"})));
+          await raw.send(
+            utf8.encode(
+              jsonEncode({
+                "v": SyncIdentity.protocolVersion,
+                "role": initiator ? "i" : "j",
+              }),
+            ),
+          );
         } catch (_) {}
         rethrow;
       }
@@ -107,18 +118,22 @@ class Handshake {
     // Fixed order by role, so both sides hash the same bytes — local
     // first would have each side signing its own ordering.
     List<int> transcript() => [
-          ...utf8.encode(_sigContext),
-          ...(initiator ? ephPub : remoteEph),
-          ...(initiator ? remoteEph : ephPub),
-          ...(initiator ? _local.publicKey : remotePk),
-          ...(initiator ? remotePk : _local.publicKey),
-        ];
+      ...utf8.encode(_sigContext),
+      ...(initiator ? ephPub : remoteEph),
+      ...(initiator ? remoteEph : ephPub),
+      ...(initiator ? _local.publicKey : remotePk),
+      ...(initiator ? remotePk : _local.publicKey),
+    ];
 
-    Signature signatureOf(List<int> bytes) => Signature(bytes,
-        publicKey: SimplePublicKey(remotePk, type: KeyPairType.ed25519));
+    Signature signatureOf(List<int> bytes) => Signature(
+      bytes,
+      publicKey: SimplePublicKey(remotePk, type: KeyPairType.ed25519),
+    );
 
-    Future<bool> verify(Object? sig) =>
-        Ed25519().verify(transcript(), signature: signatureOf(base64Decode(sig as String)));
+    Future<bool> verify(Object? sig) => Ed25519().verify(
+      transcript(),
+      signature: signatureOf(base64Decode(sig as String)),
+    );
 
     Future<List<int>> sign() async =>
         (await Ed25519().sign(transcript(), keyPair: _local.keyPair)).bytes;
@@ -128,15 +143,20 @@ class Handshake {
       if (!await verify(remote["sig"])) {
         throw const HandshakeException("joiner signature invalid");
       }
-      await raw.send(utf8.encode(jsonEncode({
-        "v": SyncIdentity.protocolVersion,
-        "role": "i",
-        "sig": base64Encode(await sign()),
-      })));
+      await raw.send(
+        utf8.encode(
+          jsonEncode({
+            "v": SyncIdentity.protocolVersion,
+            "role": "i",
+            "sig": base64Encode(await sign()),
+          }),
+        ),
+      );
       keys = await _keys(initiator: true, eph: eph, remoteEph: remoteEph);
     } else {
-      await raw.send(utf8.encode(
-          jsonEncode({...hello, "sig": base64Encode(await sign())})));
+      await raw.send(
+        utf8.encode(jsonEncode({...hello, "sig": base64Encode(await sign())})),
+      );
       final last = await receive(hello: false);
       if (last["role"] != "i" || !await verify(last["sig"])) {
         throw const HandshakeException("initiator signature invalid");
@@ -156,10 +176,11 @@ class Handshake {
     }
   }
 
-  Future<SessionKeys> _keys(
-      {required bool initiator,
-      required SimpleKeyPair eph,
-      required List<int> remoteEph}) async {
+  Future<SessionKeys> _keys({
+    required bool initiator,
+    required SimpleKeyPair eph,
+    required List<int> remoteEph,
+  }) async {
     final shared = await X25519().sharedSecretKey(
       keyPair: eph,
       remotePublicKey: SimplePublicKey(remoteEph, type: KeyPairType.x25519),
@@ -170,16 +191,22 @@ class Handshake {
     // refuses a length that is not a multiple of four — which every real
     // secret is, being 32 bytes. `normalize` also accepts either alphabet, so
     // a secret that came through a QR and one typed by hand agree.
-    final ikm = Uint8List.fromList(
-        [...dh, ...base64Url.decode(base64Url.normalize(pairingSecret))]);
+    final ikm = Uint8List.fromList([
+      ...dh,
+      ...base64Url.decode(base64Url.normalize(pairingSecret)),
+    ]);
 
     // `Hmac` on Android is `javax.crypto`, which refuses the empty-salt key
     // HKDF's extract step builds ("Empty key"); `DartHmac` keeps it in Dart.
-    Future<SecretKey> derive(String suffix) => Hkdf(hmac: DartHmac.sha256(), outputLength: 32)
-        .deriveKey(secretKey: SecretKey(ikm), info: utf8.encode("$info/$suffix"));
+    Future<SecretKey> derive(String suffix) => Hkdf(
+      hmac: DartHmac.sha256(),
+      outputLength: 32,
+    ).deriveKey(secretKey: SecretKey(ikm), info: utf8.encode("$info/$suffix"));
 
-    final sasSeed = await Hkdf(hmac: DartHmac.sha256(), outputLength: 5)
-        .deriveKey(secretKey: SecretKey(ikm), info: utf8.encode(_sasInfo));
+    final sasSeed = await Hkdf(
+      hmac: DartHmac.sha256(),
+      outputLength: 5,
+    ).deriveKey(secretKey: SecretKey(ikm), info: utf8.encode(_sasInfo));
     _sasText = formatSas(await sasSeed.extractBytes());
 
     // Labels are fixed to roles, not sides: a2b is always the initiator's
@@ -200,7 +227,11 @@ class Handshake {
     if (json.containsKey("v") && json["v"] != SyncIdentity.protocolVersion) {
       throw ProtocolMismatchException(json["v"]);
     }
-    for (final field in ["v", "role", if (hello) ...["id", "pk", "eph"]]) {
+    for (final field in [
+      "v",
+      "role",
+      if (hello) ...["id", "pk", "eph"],
+    ]) {
       if (!json.containsKey(field)) {
         throw HandshakeException("handshake message missing $field");
       }
@@ -217,7 +248,8 @@ class Handshake {
     const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
     final bits = bytes.take(5).fold(0, (held, b) => (held << 8) | b);
     final text = [
-      for (var shift = 35; shift >= 0; shift -= 5) alphabet[(bits >> shift) & 31],
+      for (var shift = 35; shift >= 0; shift -= 5)
+        alphabet[(bits >> shift) & 31],
     ].join();
     return "${text.substring(0, 4)}-${text.substring(4)}";
   }
@@ -255,6 +287,8 @@ class HandshakeException implements Exception {
 /// the pairing page and the device's row show.
 class ProtocolMismatchException extends HandshakeException {
   ProtocolMismatchException(Object? theirs)
-      : super("Protocol version mismatch, please update Entoli on both devices "
-            "(this one speaks ${SyncIdentity.protocolVersion}, the other $theirs).");
+    : super(
+        "Protocol version mismatch, please update Entoli on both devices "
+        "(this one speaks ${SyncIdentity.protocolVersion}, the other $theirs).",
+      );
 }

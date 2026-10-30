@@ -86,24 +86,38 @@ abstract class ChatStore {
   /// every reader of the artifact sees the styled page and the desktop
   /// opener can open the file itself.
   Future<String> createArtifact(
-      String chatId, String sourceDir, String entryFile,
-      {String? project});
+    String chatId,
+    String sourceDir,
+    String entryFile, {
+    String? project,
+  });
 
   /// Replace the contents of an existing `artifacts/<id>/` with the files at
   /// [sourceDir]. Used when the model re-publishes with an `artifact_id`.
   Future<void> updateArtifact(
-      String chatId, String artifactId, String sourceDir, String entryFile,
-      {String? project});
+    String chatId,
+    String artifactId,
+    String sourceDir,
+    String entryFile, {
+    String? project,
+  });
 
   /// The whole artifact as one zip, entries named relative to the artifact's
   /// own root. Null where the artifact is not there. What a mirror fetches
   /// when its user opens an artifact whose files live on the home device.
-  Future<Uint8List?> readArtifactZip(String chatId, String artifactId,
-      {String? project});
+  Future<Uint8List?> readArtifactZip(
+    String chatId,
+    String artifactId, {
+    String? project,
+  });
 
   /// The artifact's directory, for building a `file://` URL or serving over
   /// HTTP. Returns the path whether or not the directory exists.
-  Future<String> artifactPath(String chatId, String artifactId, {String? project});
+  Future<String> artifactPath(
+    String chatId,
+    String artifactId, {
+    String? project,
+  });
 
   /// The chat's `PLAN.md`, out of its workspace. Null where there is none.
   /// What the plan card and page read, here and on a mirror.
@@ -133,7 +147,7 @@ String resourceName(String filename) {
 /// made it unique: what a copy of it is called.
 String attachmentFilename(String resource) {
   final unique = RegExp(
-          r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-")
-      .firstMatch(resource);
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-",
+  ).firstMatch(resource);
   return unique == null ? resource : resource.substring(unique.end);
 }

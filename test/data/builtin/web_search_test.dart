@@ -29,26 +29,27 @@ void main() {
     FakeLlmClient client, {
     WebSearch? webSearch,
     bool useDefaultWeb = true,
-  }) =>
-      BuiltinAgent(
-        session: session,
-        client: client,
-        shell: shell,
-        workspace: "/tmp/workspace",
-        projectWorkspace: "/tmp/project",
-        model: "fake-model",
-        options: const BuiltinOptions(),
-        approveMode: ApproveMode.never,
-        approve: (_) async => ApprovalResponse.allow,
-        answer: (request) async => request.unanswered,
-        webSearch: useDefaultWeb ? (webSearch ?? web) : webSearch,
-      );
+  }) => BuiltinAgent(
+    session: session,
+    client: client,
+    shell: shell,
+    workspace: "/tmp/workspace",
+    projectWorkspace: "/tmp/project",
+    model: "fake-model",
+    options: const BuiltinOptions(),
+    approveMode: ApproveMode.never,
+    approve: (_) async => ApprovalResponse.allow,
+    answer: (request) async => request.unanswered,
+    webSearch: useDefaultWeb ? (webSearch ?? web) : webSearch,
+  );
 
   group("BuiltinAgent with websearch/webfetch", () {
     final finish = saidOnly("done");
 
     test("websearch and webfetch are offered alongside bash", () async {
-      final client = FakeLlmClient([[finish]]);
+      final client = FakeLlmClient([
+        [finish],
+      ]);
       await agentWith(client).run(userMessage("hi")).toList();
 
       final tools = client.calls.first.tools.map((t) => t.name).toSet();
@@ -56,8 +57,13 @@ void main() {
     });
 
     test("websearch/webfetch are not offered when nothing is wired", () async {
-      final client = FakeLlmClient([[finish]]);
-      await agentWith(client, useDefaultWeb: false).run(userMessage("hi")).toList();
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      await agentWith(
+        client,
+        useDefaultWeb: false,
+      ).run(userMessage("hi")).toList();
       final tools = client.calls.first.tools.map((t) => t.name).toSet();
       expect(tools, isNot(contains("websearch")));
       expect(tools, isNot(contains("webfetch")));
@@ -69,7 +75,11 @@ void main() {
             role: LlmRole.assistant,
             toolCalls: [
               for (final (id, name, args) in each)
-                LlmToolCall(id: id, name: name, argumentsJson: jsonEncode(args)),
+                LlmToolCall(
+                  id: id,
+                  name: name,
+                  argumentsJson: jsonEncode(args),
+                ),
             ],
           ),
         );
@@ -77,7 +87,8 @@ void main() {
     Future<Map<String, ToolResult>> resultsOf(FakeLlmClient client) async {
       final events = await agentWith(client).run(userMessage("go")).toList();
       return {
-        for (final e in events.whereType<ToolResultEvent>()) e.result.callId: e.result,
+        for (final e in events.whereType<ToolResultEvent>())
+          e.result.callId: e.result,
       };
     }
 
@@ -87,15 +98,16 @@ void main() {
           calls([
             ("s1", "websearch", {"query": "flutter dart"}),
             ("f1", "webfetch", {"url": "https://example.com"}),
-          ])
+          ]),
         ],
         [finish],
       ]);
       web.searchResult = (q) => const ShellResult(
-          returnCode: 0,
-          output: "1. Flutter\n   https://flutter.dev\n   A framework.");
-      web.fetchResult = (url) => const ShellResult(
-          returnCode: 0, output: "Example Domain");
+        returnCode: 0,
+        output: "1. Flutter\n   https://flutter.dev\n   A framework.",
+      );
+      web.fetchResult = (url) =>
+          const ShellResult(returnCode: 0, output: "Example Domain");
       final results = await resultsOf(client);
 
       expect(web.searched, ["flutter dart"]);
@@ -104,7 +116,9 @@ void main() {
       expect(results["s1"]!.output, contains("https://flutter.dev"));
       expect(results["f1"]!.returnCode, 0);
       expect(results["f1"]!.output, contains("Example Domain"));
-      final toolMessages = session.messages.where((m) => m.role == LlmRole.tool);
+      final toolMessages = session.messages.where(
+        (m) => m.role == LlmRole.tool,
+      );
       expect(toolMessages.map((m) => m.toolCallId).toList(), ["s1", "f1"]);
     });
 
@@ -114,7 +128,7 @@ void main() {
           calls([
             ("s1", "websearch", {"query": ""}),
             ("f1", "webfetch", {}),
-          ])
+          ]),
         ],
         [finish],
       ]);
@@ -134,7 +148,7 @@ void main() {
           calls([
             ("s1", "websearch", {"query": "fail"}),
             ("f1", "webfetch", {"url": "https://broken.example"}),
-          ])
+          ]),
         ],
         [finish],
       ]);

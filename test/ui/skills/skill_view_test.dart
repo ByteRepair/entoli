@@ -12,8 +12,12 @@ void main() {
   setUp(() => app = TestApp.create());
   tearDown(() => app.dispose());
 
-  Future<void> openSkill(WidgetTester tester, String name,
-      {String? project, String origin = "Bundled"}) async {
+  Future<void> openSkill(
+    WidgetTester tester,
+    String name, {
+    String? project,
+    String origin = "Bundled",
+  }) async {
     await app.pump(
       tester,
       SkillViewPage(name: name, project: project, origin: origin),
@@ -21,10 +25,13 @@ void main() {
     await settleIo(tester);
   }
 
-  testWidgets("a conforming skill shows its body rendered and its files",
-      (tester) async {
-    await io(tester,
-        () => writeSkill(app, "letterbox", metadata: {"author": "me"}));
+  testWidgets("a conforming skill shows its body rendered and its files", (
+    tester,
+  ) async {
+    await io(
+      tester,
+      () => writeSkill(app, "letterbox", metadata: {"author": "me"}),
+    );
 
     await openSkill(tester, "letterbox");
 
@@ -44,11 +51,14 @@ void main() {
       "carries them", (tester) async {
     await io(tester, () async {
       final dir = File(
-          "${app.config.promptsDir(CompletionKind.skill)}/letterbox/SKILL.md");
+        "${app.config.promptsDir(CompletionKind.skill)}/letterbox/SKILL.md",
+      );
       await dir.create(recursive: true);
-      await dir.writeAsString("---\nname: letterbox\ndescription: do letterbox\n"
-          "license: MIT\ncompatibility: Requires git\n"
-          "allowed-tools: Bash(git:*)\n---\n\nDo letterbox.\n");
+      await dir.writeAsString(
+        "---\nname: letterbox\ndescription: do letterbox\n"
+        "license: MIT\ncompatibility: Requires git\n"
+        "allowed-tools: Bash(git:*)\n---\n\nDo letterbox.\n",
+      );
     });
 
     await openSkill(tester, "letterbox");
@@ -58,36 +68,45 @@ void main() {
     expect(find.text("Allowed tools: Bash(git:*)"), findsOneWidget);
   });
 
-  testWidgets("a bundled skill's entries come from the embedded const",
-      (tester) async {
+  testWidgets("a bundled skill's entries come from the embedded const", (
+    tester,
+  ) async {
     await openSkill(tester, "artifact");
 
     expect(find.text("artifact"), findsOneWidget);
-    expect(find.textContaining("Present a result as an interactive HTML"),
-        findsOneWidget);
+    expect(
+      find.textContaining("Present a result as an interactive HTML"),
+      findsOneWidget,
+    );
     // skill-creator ships scripts; artifact ships none.
     expect(find.text("Files"), findsNothing);
   });
 
-  testWidgets("a non-conformant folder says the problems, with the way out",
-      (tester) async {
+  testWidgets("a non-conformant folder says the problems, with the way out", (
+    tester,
+  ) async {
     await io(tester, () async {
       final dir = File(
-          "${app.config.promptsDir(CompletionKind.skill)}/Bad-Name/SKILL.md");
+        "${app.config.promptsDir(CompletionKind.skill)}/Bad-Name/SKILL.md",
+      );
       await dir.create(recursive: true);
       await dir.writeAsString("---\nname: Bad-Name\n---\n\nBody.\n");
     });
 
     await openSkill(tester, "Bad-Name", origin: "Not loaded");
 
-    expect(find.textContaining("Not loaded — does not conform"), findsOneWidget);
+    expect(
+      find.textContaining("Not loaded — does not conform"),
+      findsOneWidget,
+    );
     expect(find.textContaining("name \"Bad-Name\""), findsOneWidget);
     expect(find.textContaining("no description"), findsOneWidget);
     expect(find.textContaining("Fix the SKILL.md"), findsOneWidget);
   });
 
-  testWidgets("a folder with no SKILL.md is said, not rendered as empty",
-      (tester) async {
+  testWidgets("a folder with no SKILL.md is said, not rendered as empty", (
+    tester,
+  ) async {
     await openSkill(tester, "nowhere-at-all", origin: "Not loaded");
 
     expect(find.textContaining("could not be read"), findsOneWidget);

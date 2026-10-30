@@ -56,12 +56,19 @@ class RemoteTurnDriver implements RemoteTurns {
       }
     }
     for (final project in served) {
-      _projects.putIfAbsent(project, () => [
-            _ref.listen<ProjectSettings>(
-                projectSettingsProvider(project), (_, _) => _hub.publishProject(project)),
-            _ref.listen<PromptLibrary>(
-                promptLibraryProvider(project), (_, _) => _hub.publishPrompts(project)),
-          ]);
+      _projects.putIfAbsent(
+        project,
+        () => [
+          _ref.listen<ProjectSettings>(
+            projectSettingsProvider(project),
+            (_, _) => _hub.publishProject(project),
+          ),
+          _ref.listen<PromptLibrary>(
+            promptLibraryProvider(project),
+            (_, _) => _hub.publishPrompts(project),
+          ),
+        ],
+      );
     }
   }
 
@@ -101,12 +108,8 @@ class RemoteTurnDriver implements RemoteTurns {
   }
 
   void _publish(String chatId, ChatViewState view) {
-    final approvals = [
-      for (final list in view.approvals.values) ...list
-    ];
-    final asks = [
-      for (final asked in view.questions.values) ...asked,
-    ];
+    final approvals = [for (final list in view.approvals.values) ...list];
+    final asks = [for (final asked in view.questions.values) ...asked];
     final signature = [
       view.isRunning,
       view.status,
@@ -130,9 +133,12 @@ class RemoteTurnDriver implements RemoteTurns {
   }
 
   @override
-  void prompt(String chatId, String text,
-          {List<Attachment> attachments = const [], bool queue = false}) =>
-      _of(chatId).send(text, attachments: attachments, queue: queue);
+  void prompt(
+    String chatId,
+    String text, {
+    List<Attachment> attachments = const [],
+    bool queue = false,
+  }) => _of(chatId).send(text, attachments: attachments, queue: queue);
 
   @override
   void resume(String chatId) => _of(chatId).resume();
@@ -141,9 +147,11 @@ class RemoteTurnDriver implements RemoteTurns {
   void abort(String chatId) => _of(chatId).abort();
 
   @override
-  void approve(String chatId, String approvalId, bool allow) => _of(chatId)
-      .respondApproval(
-          approvalId, allow ? ApprovalResponse.allow : ApprovalResponse.deny);
+  void approve(String chatId, String approvalId, bool allow) =>
+      _of(chatId).respondApproval(
+        approvalId,
+        allow ? ApprovalResponse.allow : ApprovalResponse.deny,
+      );
 
   @override
   void answer(String chatId, String requestId, List<String?> answers) =>
@@ -175,14 +183,19 @@ class RemoteTurnDriver implements RemoteTurns {
       _ref.exists(chatControllerProvider(chatId)) ? _of(chatId) : null;
 
   @override
-  Future<void> saveState(String chatId, ChatState state, {required bool reanchor}) async {
+  Future<void> saveState(
+    String chatId,
+    ChatState state, {
+    required bool reanchor,
+  }) async {
     final written = await _repo.saveState(state, reanchor: reanchor);
     _openOf(chatId)?.applyState(written);
     _ref.invalidate(chatListProvider);
   }
 
   @override
-  Future<void> saveMeta(String chatId, ChatMeta meta) => _repo.saveMeta(chatId, meta);
+  Future<void> saveMeta(String chatId, ChatMeta meta) =>
+      _repo.saveMeta(chatId, meta);
 
   @override
   Future<void> retitle(String chatId, String title) async {
@@ -244,7 +257,8 @@ class RemoteTurnDriver implements RemoteTurns {
   }
 
   @override
-  PromptLibrary library(String? project) => _ref.read(promptLibraryProvider(project));
+  PromptLibrary library(String? project) =>
+      _ref.read(promptLibraryProvider(project));
 
   @override
   Memories memories(String? project) {

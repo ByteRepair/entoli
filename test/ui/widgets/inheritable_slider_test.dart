@@ -32,8 +32,9 @@ void main() {
   double positionOf(WidgetTester tester) =>
       tester.widget<Slider>(find.byType(Slider)).value;
 
-  testWidgets("the track sits on the value, or the inherited one",
-      (tester) async {
+  testWidgets("the track sits on the value, or the inherited one", (
+    tester,
+  ) async {
     await pump(tester);
     // 20 is the third of four stops.
     expect(positionOf(tester), 2);
@@ -42,16 +43,18 @@ void main() {
     expect(positionOf(tester), 3);
   });
 
-  testWidgets("a value no stop carries reads as the nearest one",
-      (tester) async {
+  testWidgets("a value no stop carries reads as the nearest one", (
+    tester,
+  ) async {
     // 6 is a file's answer, not a stop: the slider shows 5 rather than
     // asserting.
     await pump(tester, value: 6, inherited: 10);
     expect(positionOf(tester), 0);
   });
 
-  testWidgets("the reset reports the inherited stop and answers null",
-      (tester) async {
+  testWidgets("the reset reports the inherited stop and answers null", (
+    tester,
+  ) async {
     int? picked;
     await pump(tester, value: 40, inherited: 20, onChanged: (v) => picked = v);
 
@@ -70,7 +73,9 @@ void main() {
     final right = tester.getTopRight(find.byType(Slider));
     // Three divisions over four stops: the far end is the last one.
     await tester.dragFrom(
-        Offset(left.dx + (right.dx - left.dx) * 0.95, track.dy), Offset.zero);
+      Offset(left.dx + (right.dx - left.dx) * 0.95, track.dy),
+      Offset.zero,
+    );
     await tester.pumpAndSettle();
     expect(picked, 40);
   });

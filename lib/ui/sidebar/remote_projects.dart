@@ -13,12 +13,18 @@ typedef RemoteEntry = ({ProjectRef scope, String label, bool omada, int count});
 
 /// Every project of every paired device, one entry each, device first: what
 /// the device last listed, whether or not anything of it is mirrored here.
-List<RemoteEntry> remoteEntries(List<RemoteChatEntry> remotes,
-    Map<String, List<String>> projects, Map<String, PeerState> peers) {
+List<RemoteEntry> remoteEntries(
+  List<RemoteChatEntry> remotes,
+  Map<String, List<String>> projects,
+  Map<String, PeerState> peers,
+) {
   final counts = <ProjectRef, int>{};
   final omada = <ProjectRef>{};
   for (final entry in remotes) {
-    final ProjectRef scope = (device: entry.deviceId, project: entry.state.project);
+    final ProjectRef scope = (
+      device: entry.deviceId,
+      project: entry.state.project,
+    );
     counts[scope] = (counts[scope] ?? 0) + 1;
     if (entry.omada) omada.add(scope);
   }
@@ -33,6 +39,8 @@ List<RemoteEntry> remoteEntries(List<RemoteChatEntry> remotes,
             count: counts[scope] ?? 0,
           ),
   ];
-  entries.sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
+  entries.sort(
+    (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
+  );
   return entries;
 }

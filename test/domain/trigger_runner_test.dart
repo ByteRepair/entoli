@@ -28,13 +28,19 @@ void main() {
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 
-  ChatRepository repo() => ChatRepository(FileChatStore(config),
-      FakeBackend(), () => AppSettings(defaultProviderId: "anthropic", defaultModelId: "claude"), config);
+  ChatRepository repo() => ChatRepository(
+    FileChatStore(config),
+    FakeBackend(),
+    () => AppSettings(defaultProviderId: "anthropic", defaultModelId: "claude"),
+    config,
+  );
 
   /// The runner with its two callbacks and the fake driver captured, so a test
   /// can assert what it stamped, when it told the sidebar, and what it drove.
-  (TriggerRunner, List<Trigger>, List<String>, FakeTriggerTurnDriver)
-      runner(ChatRepository repository, {ReminderAlarms? alarms}) {
+  (TriggerRunner, List<Trigger>, List<String>, FakeTriggerTurnDriver) runner(
+    ChatRepository repository, {
+    ReminderAlarms? alarms,
+  }) {
     final stamped = <Trigger>[];
     final listed = <String>[];
     final driver = FakeTriggerTurnDriver();
@@ -57,8 +63,7 @@ void main() {
         id: "r1",
         name: "Morning sweep",
         prompt: "Check the builds",
-        source: source ??
-            ScheduleSource(at: DateTime(2026, 8, 22, 9)),
+        source: source ?? ScheduleSource(at: DateTime(2026, 8, 22, 9)),
         chatId: chatId,
         member: member,
       );
@@ -84,49 +89,56 @@ void main() {
     await repository.createProject("work");
     final (run, _, _, _) = runner(repository);
     final result = await run.run(
-        Trigger(
-            id: "r1",
-            name: "n",
-            prompt: "p",
-            source: ScheduleSource(at: DateTime.now()),
-            project: "work"),
-        "",
-        const ["work"]);
+      Trigger(
+        id: "r1",
+        name: "n",
+        prompt: "p",
+        source: ScheduleSource(at: DateTime.now()),
+        project: "work",
+      ),
+      "",
+      const ["work"],
+    );
 
     final chat = await repository.openChat(result.chatId);
     expect(chat.state.project, "work");
   });
 
-  test("writes meta.json with headless, approveMode never, and the TTL", () async {
-    final repository = repo();
-    final (run, _, _, _) = runner(repository);
-    final result = await run.run(
-      Trigger(
-        id: "r1",
-        name: "n",
-        prompt: "p",
-        source: ScheduleSource(at: DateTime(2026, 8, 22, 9)),
-        tempChatTtl: TempChatTtl.off,
-      ),
-      "",
-      const [],
-    );
+  test(
+    "writes meta.json with headless, approveMode never, and the TTL",
+    () async {
+      final repository = repo();
+      final (run, _, _, _) = runner(repository);
+      final result = await run.run(
+        Trigger(
+          id: "r1",
+          name: "n",
+          prompt: "p",
+          source: ScheduleSource(at: DateTime(2026, 8, 22, 9)),
+          tempChatTtl: TempChatTtl.off,
+        ),
+        "",
+        const [],
+      );
 
-    final meta =
-        ChatMeta.parse(File(config.metaFile(result.chatId)).readAsStringSync());
-    expect(meta.approveMode, ApproveMode.never);
-    expect(meta.headless, true);
-    expect(meta.tempChatTtl, TempChatTtl.off);
-    expect(File(config.stateFile(result.chatId)).existsSync(), isTrue);
-  });
+      final meta = ChatMeta.parse(
+        File(config.metaFile(result.chatId)).readAsStringSync(),
+      );
+      expect(meta.approveMode, ApproveMode.never);
+      expect(meta.headless, true);
+      expect(meta.tempChatTtl, TempChatTtl.off);
+      expect(File(config.stateFile(result.chatId)).existsSync(), isTrue);
+    },
+  );
 
   test("no TTL of its own leaves the chat's to inherit", () async {
     final repository = repo();
     final (run, _, _, _) = runner(repository);
     final result = await run.run(trigger(), "", const []);
 
-    final meta =
-        ChatMeta.parse(File(config.metaFile(result.chatId)).readAsStringSync());
+    final meta = ChatMeta.parse(
+      File(config.metaFile(result.chatId)).readAsStringSync(),
+    );
     expect(meta.tempChatTtl, isNull);
   });
 
@@ -167,7 +179,11 @@ void main() {
       final repository = repo();
       final chat = await repository.createChat(title: "workshop");
       final (run, stamped, listed, driver) = runner(repository);
-      final result = await run.run(trigger(chatId: chat.state.id), "", const []);
+      final result = await run.run(
+        trigger(chatId: chat.state.id),
+        "",
+        const [],
+      );
 
       expect(result.chatId, chat.state.id);
       expect(driver.calls.single.chatId, chat.state.id);
@@ -186,32 +202,40 @@ void main() {
       final repository = repo();
       final chat = await repository.createChat(title: "workshop");
       final (run, _, _, driver) = runner(repository);
-      await run.run(trigger(chatId: chat.state.id), "file build.log changed", const []);
+      await run.run(
+        trigger(chatId: chat.state.id),
+        "file build.log changed",
+        const [],
+      );
 
-      expect(driver.calls.single.prompt,
-          "Check the builds\n\n(file build.log changed)");
+      expect(
+        driver.calls.single.prompt,
+        "Check the builds\n\n(file build.log changed)",
+      );
     });
 
-    test("a chat that has been deleted answers gone and runs nothing",
-        () async {
-      final repository = repo();
-      final chat = await repository.createChat(title: "brief");
-      final chatId = chat.state.id;
-      await repository.deleteChat(chatId);
-      final alarms = FakeReminderAlarms();
-      final (run, stamped, _, driver) = runner(repository, alarms: alarms);
-      final result = await run.run(trigger(chatId: chatId), "", const []);
+    test(
+      "a chat that has been deleted answers gone and runs nothing",
+      () async {
+        final repository = repo();
+        final chat = await repository.createChat(title: "brief");
+        final chatId = chat.state.id;
+        await repository.deleteChat(chatId);
+        final alarms = FakeReminderAlarms();
+        final (run, stamped, _, driver) = runner(repository, alarms: alarms);
+        final result = await run.run(trigger(chatId: chatId), "", const []);
 
-      // No turn ran, and the notification is worded — the manager owns the
-      // disarm itself (targetGone), from the fire's own copy.
-      expect(driver.calls, isEmpty);
-      expect(result.targetGone, isTrue);
-      expect(result.outcome, TriggerOutcome.error);
-      expect(alarms.posted.single.body, contains("no longer exists"));
-      // No stamp mid-run: nothing fired, lastFiredAt is the manager's to
-      // decide with.
-      expect(stamped, isEmpty);
-    });
+        // No turn ran, and the notification is worded — the manager owns the
+        // disarm itself (targetGone), from the fire's own copy.
+        expect(driver.calls, isEmpty);
+        expect(result.targetGone, isTrue);
+        expect(result.outcome, TriggerOutcome.error);
+        expect(alarms.posted.single.body, contains("no longer exists"));
+        // No stamp mid-run: nothing fired, lastFiredAt is the manager's to
+        // decide with.
+        expect(stamped, isEmpty);
+      },
+    );
   });
 
   group("a trigger naming a member", () {
@@ -229,14 +253,17 @@ void main() {
       final chat = await repository.createChat(title: "room");
       final (run, _, _, driver) = runner(repository);
       await run.run(
-          trigger(chatId: chat.state.id, member: "researcher"),
-          "schedule: 9:00",
-          const []);
+        trigger(chatId: chat.state.id, member: "researcher"),
+        "schedule: 9:00",
+        const [],
+      );
 
       // Both targets one path — the mention, the prompt, the reason.
       expect(driver.calls.single.chatId, chat.state.id);
-      expect(driver.calls.single.prompt,
-          "@researcher\n\nCheck the builds\n\n(schedule: 9:00)");
+      expect(
+        driver.calls.single.prompt,
+        "@researcher\n\nCheck the builds\n\n(schedule: 9:00)",
+      );
     });
   });
 }

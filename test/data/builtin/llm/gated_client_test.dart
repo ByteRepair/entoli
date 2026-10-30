@@ -13,27 +13,44 @@ void main() {
   group("GatedLlmClient", () {
     test("stream() holds the concurrency cap", () async {
       final inner = FakeLlmClient([
-        for (var i = 0; i < 6; i++) [const LlmCompletion(message: LlmMessage(role: LlmRole.assistant, text: "ok"))],
+        for (var i = 0; i < 6; i++)
+          [
+            const LlmCompletion(
+              message: LlmMessage(role: LlmRole.assistant, text: "ok"),
+            ),
+          ],
       ]);
       final tracking = ConcurrentFakeLlmClient(inner);
       final gate = RateLimitGate(maxConcurrent: 2);
       final client = GatedLlmClient(tracking, gate);
 
-      await Future.wait(List.generate(6, (_) => client.stream(
-        const [], model: "m",
-      ).forEach((_) {})));
+      await Future.wait(
+        List.generate(
+          6,
+          (_) => client.stream(const [], model: "m").forEach((_) {}),
+        ),
+      );
 
       expect(tracking.maxConcurrent, lessThanOrEqualTo(2));
     });
 
     test("releases the slot on a thrown LlmException", () async {
-      final inner = FakeLlmClient([
-        // turn 0 fails; turn 1 succeeds. The failure map makes the first
-        // stream() throw before yielding anything.
-        const [],
-        [const LlmCompletion(message: LlmMessage(role: LlmRole.assistant, text: "ok"))],
-      ])
-        ..failures[0] = const LlmException("boom", statusCode: 500, retryable: false);
+      final inner =
+          FakeLlmClient([
+              // turn 0 fails; turn 1 succeeds. The failure map makes the first
+              // stream() throw before yielding anything.
+              const [],
+              [
+                const LlmCompletion(
+                  message: LlmMessage(role: LlmRole.assistant, text: "ok"),
+                ),
+              ],
+            ])
+            ..failures[0] = const LlmException(
+              "boom",
+              statusCode: 500,
+              retryable: false,
+            );
       final gate = RateLimitGate(maxConcurrent: 1);
       final client = GatedLlmClient(inner, gate);
 
@@ -56,15 +73,23 @@ void main() {
       final seen = <LlmChunk>[];
       final sub = client.stream(const [], model: "m").listen(seen.add);
       // Mid-stream, not pre-acquire: a chunk has crossed before the cancel.
-      controller.add(const LlmCompletion(message: LlmMessage(role: LlmRole.assistant, text: "first chunk")));
+      controller.add(
+        const LlmCompletion(
+          message: LlmMessage(role: LlmRole.assistant, text: "first chunk"),
+        ),
+      );
       await waitFor(() => seen.isNotEmpty, what: "the first chunk to cross");
       await sub.cancel();
 
       // No release to poll: the slot's fate is answered by the one below —
       // if it were not released, this acquire would never come back.
-      final next = _SingleCallClient(Stream.fromIterable(
-        const [LlmCompletion(message: LlmMessage(role: LlmRole.assistant, text: "ok"))],
-      ));
+      final next = _SingleCallClient(
+        Stream.fromIterable(const [
+          LlmCompletion(
+            message: LlmMessage(role: LlmRole.assistant, text: "ok"),
+          ),
+        ]),
+      );
       final client2 = GatedLlmClient(next, gate);
       await client2.stream(const [], model: "m").forEach((_) {});
       await controller.close();
@@ -94,8 +119,7 @@ class _SingleCallClient implements LlmClient {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
-  }) =>
-      _stream;
+  }) => _stream;
 
   @override
   void close() {}

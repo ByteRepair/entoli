@@ -160,7 +160,11 @@ class LocalPrefill {
     // cache only ever helped a chat, and every launch paid the prompt.
     try {
       if (kv != null &&
-          await kv.cache.warm(endpoint, namespace: kv.namespace, keys: kv.keys)) {
+          await kv.cache.warm(
+            endpoint,
+            namespace: kv.namespace,
+            keys: kv.keys,
+          )) {
         return;
       }
     } catch (_) {

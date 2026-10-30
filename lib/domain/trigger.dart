@@ -71,8 +71,7 @@ class ScheduleSource extends TriggerSource {
   final ScheduleRepeat repeat;
 
   @override
-  DateTime? nextAfter(DateTime after) =>
-      occurrenceAfter(repeat, at, after);
+  DateTime? nextAfter(DateTime after) => occurrenceAfter(repeat, at, after);
 
   @override
   String describe({DateTime? now}) {
@@ -85,16 +84,19 @@ class ScheduleSource extends TriggerSource {
 
   @override
   Map<String, dynamic> toJson() => {
-        "kind": "schedule",
-        "at": at.toIso8601String(),
-        if (repeat != ScheduleRepeat.off) "repeat": repeat.name,
-      };
+    "kind": "schedule",
+    "at": at.toIso8601String(),
+    if (repeat != ScheduleRepeat.off) "repeat": repeat.name,
+  };
 
   /// Calendar arithmetic, not fixed durations: a daily one stays at its
   /// wall-clock time across a DST shift. Bounded walk — every step moves
   /// forward one whole period, so this ends.
   static DateTime? occurrenceAfter(
-      ScheduleRepeat repeat, DateTime at, DateTime after) {
+    ScheduleRepeat repeat,
+    DateTime at,
+    DateTime after,
+  ) {
     if (repeat == ScheduleRepeat.off) {
       return after.isBefore(at) ? at : null;
     }
@@ -102,12 +104,27 @@ class ScheduleSource extends TriggerSource {
     var t = at;
     while (true) {
       t = switch (repeat) {
-        ScheduleRepeat.hourly =>
-          DateTime(t.year, t.month, t.day, t.hour + 1, at.minute),
-        ScheduleRepeat.daily =>
-          DateTime(t.year, t.month, t.day + 1, at.hour, at.minute),
-        ScheduleRepeat.weekly =>
-          DateTime(t.year, t.month, t.day + 7, at.hour, at.minute),
+        ScheduleRepeat.hourly => DateTime(
+          t.year,
+          t.month,
+          t.day,
+          t.hour + 1,
+          at.minute,
+        ),
+        ScheduleRepeat.daily => DateTime(
+          t.year,
+          t.month,
+          t.day + 1,
+          at.hour,
+          at.minute,
+        ),
+        ScheduleRepeat.weekly => DateTime(
+          t.year,
+          t.month,
+          t.day + 7,
+          at.hour,
+          at.minute,
+        ),
         ScheduleRepeat.monthly => _monthAfter(t, at),
         ScheduleRepeat.off => throw StateError("unreachable"),
       };
@@ -175,17 +192,15 @@ class TimerSource extends TriggerSource {
     }
     final hours = duration.inHours;
     final leftover = minutes % 60;
-    return leftover == 0
-        ? "In $hours hours"
-        : "In $hours h $leftover min";
+    return leftover == 0 ? "In $hours hours" : "In $hours h $leftover min";
   }
 
   @override
   Map<String, dynamic> toJson() => {
-        "kind": "timer",
-        "seconds": duration.inSeconds,
-        "registeredAt": registeredAt.toIso8601String(),
-      };
+    "kind": "timer",
+    "seconds": duration.inSeconds,
+    "registeredAt": registeredAt.toIso8601String(),
+  };
 }
 
 /// A change under one or more paths. Fires only while the process runs — a
@@ -226,13 +241,13 @@ class FileSource extends TriggerSource {
 
   @override
   Map<String, dynamic> toJson() => {
-        "kind": "file",
-        "paths": paths,
-        if (events.length != FileEvent.values.length)
-          "events": [for (final e in events) e.name],
-        if (cooldown != const Duration(seconds: 5))
-          "cooldownSeconds": cooldown.inSeconds,
-      };
+    "kind": "file",
+    "paths": paths,
+    if (events.length != FileEvent.values.length)
+      "events": [for (final e in events) e.name],
+    if (cooldown != const Duration(seconds: 5))
+      "cooldownSeconds": cooldown.inSeconds,
+  };
 }
 
 /// One trigger: a prompt run at a moment, after a countdown, or on a file
@@ -322,10 +337,10 @@ class Trigger {
   /// every turn on it drops `ask_user` and `task`. A trigger pointed at an
   /// existing chat is watched; its turns run under that chat's own meta.
   ChatMeta get meta => ChatMeta(
-        approveMode: ApproveMode.never,
-        tempChatTtl: tempChatTtl,
-        headless: true,
-      );
+    approveMode: ApproveMode.never,
+    tempChatTtl: tempChatTtl,
+    headless: true,
+  );
 
   /// What a completion notification titles where the trigger carries no
   /// name. One copy of the fallback, so the wording of a nameless trigger
@@ -351,22 +366,21 @@ class Trigger {
     DateTime? nextFireAt,
     bool clearNextFireAt = false,
     int? requestCode,
-  }) =>
-      Trigger(
-        id: id,
-        name: name ?? this.name,
-        prompt: prompt ?? this.prompt,
-        source: source ?? this.source,
-        chatId: chatId,
-        member: clearMember ? null : (member ?? this.member),
-        project: project ?? this.project,
-        tempChatTtl: clearTempChatTtl ? null : (tempChatTtl ?? this.tempChatTtl),
-        enabled: enabled ?? this.enabled,
-        byAgent: byAgent,
-        lastFiredAt: lastFiredAt ?? this.lastFiredAt,
-        nextFireAt: clearNextFireAt ? null : (nextFireAt ?? this.nextFireAt),
-        requestCode: requestCode ?? this.requestCode,
-      );
+  }) => Trigger(
+    id: id,
+    name: name ?? this.name,
+    prompt: prompt ?? this.prompt,
+    source: source ?? this.source,
+    chatId: chatId,
+    member: clearMember ? null : (member ?? this.member),
+    project: project ?? this.project,
+    tempChatTtl: clearTempChatTtl ? null : (tempChatTtl ?? this.tempChatTtl),
+    enabled: enabled ?? this.enabled,
+    byAgent: byAgent,
+    lastFiredAt: lastFiredAt ?? this.lastFiredAt,
+    nextFireAt: clearNextFireAt ? null : (nextFireAt ?? this.nextFireAt),
+    requestCode: requestCode ?? this.requestCode,
+  );
 
   factory Trigger.fromJson(Map<String, dynamic> json) {
     // The source is a map this build wrote, or the flat `at`/`repeat` keys an
@@ -385,7 +399,8 @@ class Trigger {
       chatId: json["chatId"] as String?,
       member: json["member"] as String?,
       project: json["project"] as String?,
-      tempChatTtl: TempChatTtl.values.asNameMap()[json["tempChatTtl"]] ??
+      tempChatTtl:
+          TempChatTtl.values.asNameMap()[json["tempChatTtl"]] ??
           // `temporary` is what a build before the TTL field wrote, and false
           // there meant the one TTL a bool could name.
           ((json["temporary"] as bool? ?? true) ? null : TempChatTtl.off),
@@ -401,7 +416,8 @@ class Trigger {
       ScheduleSource(
         at: _date(json["at"]) ?? DateTime(2026),
         // An unknown name is a later build's: fall back, not lose the list.
-        repeat: ScheduleRepeat.values.asNameMap()[json["repeat"]] ??
+        repeat:
+            ScheduleRepeat.values.asNameMap()[json["repeat"]] ??
             ScheduleRepeat.off,
       );
 
@@ -409,9 +425,9 @@ class Trigger {
     final kind = json["kind"] as String?;
     return switch (kind) {
       "timer" => TimerSource(
-          duration: Duration(seconds: json["seconds"] as int? ?? 0),
-          registeredAt: _date(json["registeredAt"]) ?? DateTime(2026),
-        ),
+        duration: Duration(seconds: json["seconds"] as int? ?? 0),
+        registeredAt: _date(json["registeredAt"]) ?? DateTime(2026),
+      ),
       "file" => _fileSourceFrom(json),
       // An unknown kind is a file written by a later build: schedule is
       // what a trigger used to be, and a fall back beats a lost list.
@@ -437,27 +453,28 @@ class Trigger {
                   FileEvent.values.asNameMap()[e] ?? FileEvent.change,
             },
       cooldown: Duration(
-          seconds: json["cooldownSeconds"] is int
-              ? json["cooldownSeconds"] as int
-              : const Duration(seconds: 5).inSeconds),
+        seconds: json["cooldownSeconds"] is int
+            ? json["cooldownSeconds"] as int
+            : const Duration(seconds: 5).inSeconds,
+      ),
     );
   }
 
   Map<String, dynamic> toJson() => {
-        "id": id,
-        "name": name,
-        "prompt": prompt,
-        "source": source.toJson(),
-        if (chatId != null) "chatId": chatId,
-        if (member != null) "member": member,
-        if (project != null) "project": project,
-        if (tempChatTtl != null) "tempChatTtl": tempChatTtl!.name,
-        if (byAgent) "byAgent": true,
-        if (!enabled) "enabled": false,
-        if (lastFiredAt != null) "lastFiredAt": lastFiredAt!.toIso8601String(),
-        if (nextFireAt != null) "nextFireAt": nextFireAt!.toIso8601String(),
-        if (requestCode != null) "requestCode": requestCode,
-      };
+    "id": id,
+    "name": name,
+    "prompt": prompt,
+    "source": source.toJson(),
+    if (chatId != null) "chatId": chatId,
+    if (member != null) "member": member,
+    if (project != null) "project": project,
+    if (tempChatTtl != null) "tempChatTtl": tempChatTtl!.name,
+    if (byAgent) "byAgent": true,
+    if (!enabled) "enabled": false,
+    if (lastFiredAt != null) "lastFiredAt": lastFiredAt!.toIso8601String(),
+    if (nextFireAt != null) "nextFireAt": nextFireAt!.toIso8601String(),
+    if (requestCode != null) "requestCode": requestCode,
+  };
 
   static DateTime? _date(Object? value) =>
       value == null ? null : DateTime.tryParse(value as String);
@@ -472,8 +489,8 @@ class Trigger {
 /// from the registering moment only, so neither is ever past.
 String? triggerScheduleProblem(TriggerSource source, DateTime now) =>
     source is ScheduleSource &&
-            source.repeat == ScheduleRepeat.off &&
-            !source.at.isAfter(now)
-        ? "a one-shot at or before now would never fire; schedule it for a "
-            "future moment"
-        : null;
+        source.repeat == ScheduleRepeat.off &&
+        !source.at.isAfter(now)
+    ? "a one-shot at or before now would never fire; schedule it for a "
+          "future moment"
+    : null;

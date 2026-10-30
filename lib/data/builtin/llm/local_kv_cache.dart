@@ -65,9 +65,9 @@ String kvNamespace({
   required String modelId,
   required int contextLength,
   String? device,
-}) =>
-    _hash("$modelId\u0000$contextLength\u0000${device ?? ''}\u0000q8")
-        .substring(0, 16);
+}) => _hash(
+  "$modelId\u0000$contextLength\u0000${device ?? ''}\u0000q8",
+).substring(0, 16);
 
 /// One key per message boundary of [messages], longest prefix first, each over
 /// that prefix plus the [tools] that head every request. The longest is the
@@ -166,8 +166,9 @@ String? _namespaceOf(String filename) {
 String _hash(String input) => sha256.convert(utf8.encode(input)).toString();
 
 String _encodeTools(List<LlmTool> tools) => jsonEncode([
-      for (final tool in tools) {"n": tool.name, "d": tool.description, "s": tool.schema},
-    ]);
+  for (final tool in tools)
+    {"n": tool.name, "d": tool.description, "s": tool.schema},
+]);
 
 /// Deterministic, and only the fields that reach the rendered prompt — so the
 /// same conversation always hashes the same across a reload, and two different
@@ -175,17 +176,18 @@ String _encodeTools(List<LlmTool> tools) => jsonEncode([
 /// a dump that turns out not to be a real token-prefix is caught and reprocessed
 /// by the server, so the key only has to be stable, not exact.
 String _encodeMessage(LlmMessage m) => jsonEncode({
-      "r": m.role.index,
-      "t": m.text,
-      if (m.reasoning != null) "th": m.reasoning,
-      if (m.toolCallId != null) "ti": m.toolCallId,
-      if (m.toolCalls.isNotEmpty)
-        "c": [
-          for (final c in m.toolCalls) {"i": c.id, "n": c.name, "a": c.argumentsJson},
-        ],
-      if (m.attachments.isNotEmpty)
-        "at": [
-          for (final a in m.attachments)
-            {"f": a.filename, "m": a.mimeType, "l": a.bytes.length},
-        ],
-    });
+  "r": m.role.index,
+  "t": m.text,
+  if (m.reasoning != null) "th": m.reasoning,
+  if (m.toolCallId != null) "ti": m.toolCallId,
+  if (m.toolCalls.isNotEmpty)
+    "c": [
+      for (final c in m.toolCalls)
+        {"i": c.id, "n": c.name, "a": c.argumentsJson},
+    ],
+  if (m.attachments.isNotEmpty)
+    "at": [
+      for (final a in m.attachments)
+        {"f": a.filename, "m": a.mimeType, "l": a.bytes.length},
+    ],
+});

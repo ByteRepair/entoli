@@ -55,7 +55,8 @@ class LandlockSandboxHelper implements SandboxHelper {
     return [
       binary,
       "exec",
-      "--workspace", sandbox.workspace,
+      "--workspace",
+      sandbox.workspace,
       if (sandbox.tmp != null) ...["--tmp", sandbox.tmp!],
       if (sandbox.home != null) ...["--home", sandbox.home!],
       for (final dir in sandbox.extraWrites) ...["--write", dir],
@@ -77,7 +78,12 @@ class LandlockSandboxHelper implements SandboxHelper {
       if (!dir.existsSync()) dir.createSync(recursive: true);
       final sourcePath = "$binaryPath.c";
       File(sourcePath).writeAsStringSync(helperSource);
-      final result = await Process.run("cc", ["-O2", "-o", binaryPath, sourcePath]);
+      final result = await Process.run("cc", [
+        "-O2",
+        "-o",
+        binaryPath,
+        sourcePath,
+      ]);
       if (result.exitCode != 0 || !File(binaryPath).existsSync()) return null;
       _binary = binaryPath;
       return binaryPath;

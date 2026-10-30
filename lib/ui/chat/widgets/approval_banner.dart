@@ -83,8 +83,9 @@ class ApprovalBanner extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
-                  style: theme.textTheme.titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w600),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               Text(
@@ -141,12 +142,14 @@ class ApprovalBanner extends StatelessWidget {
               ),
               if (onAlwaysAllowChat != null)
                 OutlinedButton(
-                    onPressed: onAlwaysAllowChat,
-                    child: const Text("Always in chat")),
+                  onPressed: onAlwaysAllowChat,
+                  child: const Text("Always in chat"),
+                ),
               if (onAlwaysAllowProject != null)
                 OutlinedButton(
-                    onPressed: onAlwaysAllowProject,
-                    child: const Text("Always in project")),
+                  onPressed: onAlwaysAllowProject,
+                  child: const Text("Always in project"),
+                ),
               if (onAllow != null)
                 FilledButton(onPressed: onAllow, child: const Text("Allow")),
             ],

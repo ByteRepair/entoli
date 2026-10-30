@@ -32,7 +32,8 @@ class SyncSection extends ConsumerWidget {
       children: [
         SectionHeader(
           "Sync",
-          description: "Pair with another device to mirror chats and take "
+          description:
+              "Pair with another device to mirror chats and take "
               "remote control. Chats stay on their home device; a mirror is "
               "RAM-only and never written to disk.",
         ),
@@ -68,15 +69,17 @@ class SyncSection extends ConsumerWidget {
           title: const Text("Internet relay"),
           subtitle: Text(settings.syncRelayUrl ?? "Not set"),
           trailing: const Icon(Icons.chevron_right),
-          onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const RelaySettingsPage())),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const RelaySettingsPage())),
         ),
         ListTile(
           title: const Text("TURN server"),
           subtitle: Text(settings.turnUrl ?? "Not set"),
           trailing: const Icon(Icons.chevron_right),
-          onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const TurnSettingsPage())),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const TurnSettingsPage())),
         ),
       ],
     );
@@ -109,10 +112,11 @@ class RelaySettingsPage extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
             child: mutedParagraph(
-                context,
-                "A WebSocket relay for pairing when the devices are not on "
-                "the same network. Both dial the same room, derived from the "
-                "pairing secret, so the relay sees nothing readable."),
+              context,
+              "A WebSocket relay for pairing when the devices are not on "
+              "the same network. Both dial the same room, derived from the "
+              "pairing secret, so the relay sees nothing readable.",
+            ),
           ),
           LabelledField(
             label: "Relay URL",
@@ -130,11 +134,12 @@ class RelaySettingsPage extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: mutedParagraph(
-                context,
-                "Any relay that speaks the room protocol works; "
-                "tool/sync/sync_relay_server.dart is a reference one. Leave "
-                "empty when the devices meet over the local network or "
-                "manual paste."),
+              context,
+              "Any relay that speaks the room protocol works; "
+              "tool/sync/sync_relay_server.dart is a reference one. Leave "
+              "empty when the devices meet over the local network or "
+              "manual paste.",
+            ),
           ),
         ],
       ),
@@ -160,10 +165,11 @@ class TurnSettingsPage extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
             child: mutedParagraph(
-                context,
-                "For NAT traversal. Bring your own, a self-hosted coturn is "
-                "recommended. Without one, symmetric-NAT pairs fail "
-                "honestly."),
+              context,
+              "For NAT traversal. Bring your own, a self-hosted coturn is "
+              "recommended. Without one, symmetric-NAT pairs fail "
+              "honestly.",
+            ),
           ),
           LabelledField(
             label: "TURN URL",
@@ -197,8 +203,8 @@ class TurnSettingsPage extends ConsumerWidget {
               initialValue: secrets.turnPassword ?? "",
               obscureText: true,
               decoration: const InputDecoration(isDense: true),
-              onChanged: (value) => secrets
-                  .setTurnPassword(value.isEmpty ? null : value),
+              onChanged: (value) =>
+                  secrets.setTurnPassword(value.isEmpty ? null : value),
             ),
           ),
         ],
@@ -268,43 +274,51 @@ class _PairedDeviceRow extends StatelessWidget {
     final status = peer.status;
     final theme = Theme.of(context);
     final failure = peer.error;
-    void tried(Future<void> Function() work) =>
-        catchAndSay(context, work);
+    void tried(Future<void> Function() work) => catchAndSay(context, work);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: InkWell(
         // The row is the device's page's way in: clicking it anywhere that
         // is not a button opens the device's own screen.
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => PairedDevicePage(deviceId: peer.deviceId),
-        )),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PairedDevicePage(deviceId: peer.deviceId),
+          ),
+        ),
         borderRadius: const BorderRadius.all(Radius.circular(12)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(peerStatusIcon(status),
-                    size: 16, color: peerStatusColor(status, theme)),
+                Icon(
+                  peerStatusIcon(status),
+                  size: 16,
+                  color: peerStatusColor(status, theme),
+                ),
                 const SizedBox(width: 8),
                 Expanded(child: Text(peer.name)),
                 if (status == PeerStatus.online)
                   TextButton(
-                      onPressed: () =>
-                          tried(() => hub.disconnect(peer.deviceId)),
-                      child: const Text("Disconnect"))
+                    onPressed: () => tried(() => hub.disconnect(peer.deviceId)),
+                    child: const Text("Disconnect"),
+                  )
                 else
                   TextButton(
-                      onPressed: status == PeerStatus.connecting
-                          ? null
-                          : () => tried(() => hub.connect(peer.deviceId)),
-                      child: const Text("Connect")),
+                    onPressed: status == PeerStatus.connecting
+                        ? null
+                        : () => tried(() => hub.connect(peer.deviceId)),
+                    child: const Text("Connect"),
+                  ),
                 TextButton(
-                  onPressed: () =>
-                      confirmRevokeDevice(context, peer.name,
-                          () => hub.revoke(peer.deviceId)),
+                  onPressed: () => confirmRevokeDevice(
+                    context,
+                    peer.name,
+                    () => hub.revoke(peer.deviceId),
+                  ),
                   style: TextButton.styleFrom(
-                      foregroundColor: theme.colorScheme.error),
+                    foregroundColor: theme.colorScheme.error,
+                  ),
                   child: const Text("Revoke"),
                 ),
               ],
@@ -314,8 +328,9 @@ class _PairedDeviceRow extends StatelessWidget {
                 padding: const EdgeInsets.only(left: 24, right: 8),
                 child: SelectableText(
                   failure,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.error),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
                 ),
               ),
           ],
@@ -354,7 +369,8 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
       children: [
         SectionHeader(
           "Pair a new device",
-          description: "Open a window and show the code, or paste a code "
+          description:
+              "Open a window and show the code, or paste a code "
               "from another device.",
         ),
         Padding(
@@ -398,10 +414,7 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
                 ),
               ],
               const SizedBox(width: 8),
-              FilledButton(
-                onPressed: _join,
-                child: const Text("Pair"),
-              ),
+              FilledButton(onPressed: _join, child: const Text("Pair")),
             ],
           ),
         ),
@@ -413,9 +426,11 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
     try {
       final blob = await widget.hub.createManualInvite();
       if (mounted) {
-        await Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => ManualInvitePage(hub: widget.hub, offer: blob),
-        ));
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ManualInvitePage(hub: widget.hub, offer: blob),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) say(context, e);
@@ -428,16 +443,18 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
     // The pairing runs on its own screen: this push opens it, and the pairing
     // is started from there — it shows the wait, the codes and the paired or
     // failed end. Nothing here is hidden while any of it goes on.
-    await Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => PairingJoinPage(hub: widget.hub, code: text),
-    ));
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PairingJoinPage(hub: widget.hub, code: text),
+      ),
+    );
     _joinController.clear();
   }
 
   Future<void> _scan() async {
-    final scanned = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const _ScanQrPage()),
-    );
+    final scanned = await Navigator.of(
+      context,
+    ).push<String>(MaterialPageRoute(builder: (_) => const _ScanQrPage()));
     if (mounted && scanned != null && scanned.isNotEmpty) _join(scanned);
   }
 }
@@ -447,17 +464,19 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
 /// activity notifier's listeners hear it — and then the pop completes. The
 /// cancel verb is the screen's: the joiner's is `cancelPairing`, the window's
 /// adds its teardown, the invite's drops the held link with it.
-PopScope _cancelOnBack(BuildContext context, VoidCallback cancel,
-        {required Widget child}) =>
-    PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        cancel();
-        Navigator.of(context).pop();
-      },
-      child: child,
-    );
+PopScope _cancelOnBack(
+  BuildContext context,
+  VoidCallback cancel, {
+  required Widget child,
+}) => PopScope(
+  canPop: false,
+  onPopInvokedWithResult: (didPop, _) {
+    if (didPop) return;
+    cancel();
+    Navigator.of(context).pop();
+  },
+  child: child,
+);
 
 /// The joiner's own screen: pushed by Pair, for a pasted code or a scanned
 /// one. A pairing this device did not open a window for still gets a screen —
@@ -508,7 +527,10 @@ class _PairingJoinPageState extends State<PairingJoinPage> {
       child: Scaffold(
         appBar: AppBar(title: const Text("Pairing")),
         body: _PairingStageView.watching(
-            context, hub, "Waiting for the other device…"),
+          context,
+          hub,
+          "Waiting for the other device…",
+        ),
       ),
     );
   }
@@ -537,14 +559,14 @@ class _PairingStageView extends StatelessWidget {
     return switch (activity.stage) {
       PairingStage.connecting => connecting,
       PairingStage.confirming => Padding(
-          padding: const EdgeInsets.all(24),
-          child: _SasConfirm(pairing: activity, hub: hub),
-        ),
+        padding: const EdgeInsets.all(24),
+        child: _SasConfirm(pairing: activity, hub: hub),
+      ),
       PairingStage.done => _PairedView(
-          pairing: activity,
-          onPairAnother: onPairAnother,
-          onDone: onDone,
-        ),
+        pairing: activity,
+        onPairAnother: onPairAnother,
+        onDone: onDone,
+      ),
       PairingStage.failed => _pairingFailed(context, activity.error),
     };
   }
@@ -555,8 +577,7 @@ class _PairingStageView extends StatelessWidget {
   /// here — "Pair another device" is a fresh window pushed over this screen,
   /// and Done cancels what is left of the pairing on the way back to the
   /// Sync page.
-  static Widget watching(
-      BuildContext context, SyncHub hub, String waitLabel) {
+  static Widget watching(BuildContext context, SyncHub hub, String waitLabel) {
     return ValueListenableBuilder<PairingActivity?>(
       valueListenable: hub.pairing,
       builder: (context, pairing, _) {
@@ -587,15 +608,15 @@ class _PairingWait extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            Text(label),
-          ],
-        ),
-      );
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const CircularProgressIndicator(),
+        const SizedBox(height: 16),
+        Text(label),
+      ],
+    ),
+  );
 }
 
 /// The pairing-is-done screen: which device was just paired, and the two ways
@@ -622,8 +643,11 @@ class _PairedView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.check_circle_outline,
-                size: 40, color: theme.colorScheme.primary),
+            Icon(
+              Icons.check_circle_outline,
+              size: 40,
+              color: theme.colorScheme.primary,
+            ),
             const SizedBox(height: 16),
             Text(
               (name == null || name.isEmpty)
@@ -633,10 +657,11 @@ class _PairedView extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             mutedParagraph(
-                context,
-                "Either device can now dial the other without re-pairing, "
-                "and it is listed under Paired devices.",
-                textAlign: TextAlign.center),
+              context,
+              "Either device can now dial the other without re-pairing, "
+              "and it is listed under Paired devices.",
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,
@@ -672,9 +697,9 @@ class PairingWindowPage extends StatefulWidget {
     try {
       await hub.startPairingWindow();
       if (context.mounted) {
-        await Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => PairingWindowPage(hub: hub),
-        ));
+        await Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => PairingWindowPage(hub: hub)));
       }
     } catch (e) {
       if (context.mounted) say(context, e);
@@ -706,34 +731,36 @@ class _PairingWindowPageState extends State<PairingWindowPage> {
   @override
   Widget build(BuildContext context) {
     final hub = widget.hub;
-    return _cancelOnBack(context, hub.cancelPairingWindow,
-        child: Scaffold(
-          appBar: AppBar(title: const Text("Pairing window")),
-          body: ValueListenableBuilder<PairingActivity?>(
-            valueListenable: hub.pairing,
-            builder: (context, pairing, _) {
-              if (pairing == null) {
-                return _busy
-                    ? const Center(child: CircularProgressIndicator())
-                    : const Center(child: Text("Pairing cancelled."));
-              }
-              return _PairingStageView(
-                hub: hub,
-                activity: pairing,
-                // The window's own connecting arm: the thing to do while
-                // waiting is show the code.
-                connecting: _PairingCodeBody(activity: pairing),
-                // "Pair another" is a window again, on this page: the
-                // activity notifier moves it back to the QR.
-                onPairAnother: () => unawaited(_openWindow(context)),
-                onDone: () {
-                  hub.cancelPairingWindow();
-                  Navigator.of(context).pop();
-                },
-              );
-            },
-          ),
+    return _cancelOnBack(
+      context,
+      hub.cancelPairingWindow,
+      child: Scaffold(
+        appBar: AppBar(title: const Text("Pairing window")),
+        body: ValueListenableBuilder<PairingActivity?>(
+          valueListenable: hub.pairing,
+          builder: (context, pairing, _) {
+            if (pairing == null) {
+              return _busy
+                  ? const Center(child: CircularProgressIndicator())
+                  : const Center(child: Text("Pairing cancelled."));
+            }
+            return _PairingStageView(
+              hub: hub,
+              activity: pairing,
+              // The window's own connecting arm: the thing to do while
+              // waiting is show the code.
+              connecting: _PairingCodeBody(activity: pairing),
+              // "Pair another" is a window again, on this page: the
+              // activity notifier moves it back to the QR.
+              onPairAnother: () => unawaited(_openWindow(context)),
+              onDone: () {
+                hub.cancelPairingWindow();
+                Navigator.of(context).pop();
+              },
+            );
+          },
         ),
+      ),
     );
   }
 }
@@ -772,8 +799,8 @@ class _PairingCodeBody extends StatelessWidget {
           child: TextButton.icon(
             icon: const Icon(Icons.copy_outlined),
             label: const Text("Copy code"),
-            onPressed: () => copyToClipboard(context, code,
-                said: "Pairing code copied"),
+            onPressed: () =>
+                copyToClipboard(context, code, said: "Pairing code copied"),
           ),
         ),
         if (activity.code != null) ...[
@@ -781,8 +808,11 @@ class _PairingCodeBody extends StatelessWidget {
           Center(
             child: Text(
               "One-time code: ${activity.code}",
-              style: const TextStyle(fontFamily: "monospace", fontSize: 16,
-                  letterSpacing: 2),
+              style: const TextStyle(
+                fontFamily: "monospace",
+                fontSize: 16,
+                letterSpacing: 2,
+              ),
             ),
           ),
         ],
@@ -851,8 +881,11 @@ class _ManualInvitePageState extends State<ManualInvitePage> {
           child: TextButton.icon(
             icon: const Icon(Icons.copy_outlined),
             label: const Text("Copy invite"),
-            onPressed: () => copyToClipboard(context, widget.offer,
-                said: "Invite code copied"),
+            onPressed: () => copyToClipboard(
+              context,
+              widget.offer,
+              said: "Invite code copied",
+            ),
           ),
         ),
         const SizedBox(height: 24),
@@ -868,18 +901,18 @@ class _ManualInvitePageState extends State<ManualInvitePage> {
           ),
         ),
         const SizedBox(height: 12),
-        FilledButton(
-          onPressed: _complete,
-          child: const Text("Pair"),
-        ),
+        FilledButton(onPressed: _complete, child: const Text("Pair")),
       ],
     );
   }
 
   /// The reply accepted: how the pairing goes is all that is left on this
   /// page, drawn by the same stages every pairing screen ends on.
-  Widget _watchingBody() =>
-      _PairingStageView.watching(context, widget.hub, "Completing the pairing…");
+  Widget _watchingBody() => _PairingStageView.watching(
+    context,
+    widget.hub,
+    "Completing the pairing…",
+  );
 
   Future<void> _complete() async {
     final text = _replyController.text.trim();
@@ -904,27 +937,27 @@ class _ManualInvitePageState extends State<ManualInvitePage> {
 /// manual invite page, which were two copies of the same container.
 // ignore: non_constant_identifier_names
 Widget _CodeBox(BuildContext context, String text) => Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(color: Theme.of(context).dividerColor),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: SelectableText(
-        text,
-        style: const TextStyle(fontFamily: "monospace", fontSize: 11),
-      ),
-    );
+  padding: const EdgeInsets.all(12),
+  decoration: BoxDecoration(
+    border: Border.all(color: Theme.of(context).dividerColor),
+    borderRadius: BorderRadius.circular(8),
+  ),
+  child: SelectableText(
+    text,
+    style: const TextStyle(fontFamily: "monospace", fontSize: 11),
+  ),
+);
 
 /// The failure row, selectable so the error can be copied into an issue.
 /// Drawn by both the window page and the inline status, so the styling lives
 /// once rather than twice.
 Widget _pairingFailed(BuildContext context, String? error) => Padding(
-      padding: const EdgeInsets.all(24),
-      child: SelectableText(
-        "Failed: ${error ?? "unknown"}",
-        style: TextStyle(color: Theme.of(context).colorScheme.error),
-      ),
-    );
+  padding: const EdgeInsets.all(24),
+  child: SelectableText(
+    "Failed: ${error ?? "unknown"}",
+    style: TextStyle(color: Theme.of(context).colorScheme.error),
+  ),
+);
 
 /// The camera scanner for a pairing code, on the phones alone by the button
 /// that opens it ([_canScan]). Pops with the scanned text on a successful detect.
@@ -960,9 +993,11 @@ class _ScanQrPageState extends State<_ScanQrPage> {
         controller: _controller,
         errorBuilder: (context, error) =>
             error.errorCode == MobileScannerErrorCode.permissionDenied
-                ? const _CameraRefused()
-                : _pairingFailed(context, error.errorDetails?.message ??
-                    error.errorCode.message),
+            ? const _CameraRefused()
+            : _pairingFailed(
+                context,
+                error.errorDetails?.message ?? error.errorCode.message,
+              ),
         onDetect: (capture) {
           if (_done) return;
           for (final barcode in capture.barcodes) {
@@ -994,15 +1029,17 @@ class _SasConfirm extends StatelessWidget {
         const Text("Confirm the codes match on both devices:"),
         if (pairing.peerName case final name? when name.isNotEmpty) ...[
           const SizedBox(height: 4),
-          mutedParagraph(
-              context, 'The other device calls itself "$name".'),
+          mutedParagraph(context, 'The other device calls itself "$name".'),
         ],
         const SizedBox(height: 8),
         Center(
           child: Text(
             pairing.sas ?? "",
-            style: const TextStyle(fontFamily: "monospace", fontSize: 24,
-                letterSpacing: 4),
+            style: const TextStyle(
+              fontFamily: "monospace",
+              fontSize: 24,
+              letterSpacing: 4,
+            ),
           ),
         ),
         const SizedBox(height: 8),
@@ -1017,7 +1054,8 @@ class _SasConfirm extends StatelessWidget {
             TextButton(
               onPressed: () => hub.confirmPairing(false),
               style: TextButton.styleFrom(
-                  foregroundColor: Theme.of(context).colorScheme.error),
+                foregroundColor: Theme.of(context).colorScheme.error,
+              ),
               child: const Text("Don't match"),
             ),
           ],
@@ -1034,32 +1072,33 @@ class _CameraRefused extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text("Entoli can't use the camera."),
-            const SizedBox(height: 8),
-            mutedParagraph(
-                context,
-                _iOS
-                    ? "Allow it under Settings, Entoli, Camera, or go back and "
-                        "paste the pairing code instead."
-                    : "Allow it when Entoli asks. If it no longer asks, "
-                        "allow it under Settings, Apps, Entoli, Permissions, "
-                        "Camera, or go back and paste the pairing code "
-                        "instead."),
-            if (_iOS) ...[
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: () => unawaited(_openSettings()),
-                child: const Text("Open Settings"),
-              ),
-            ],
-          ],
+    padding: const EdgeInsets.all(24),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text("Entoli can't use the camera."),
+        const SizedBox(height: 8),
+        mutedParagraph(
+          context,
+          _iOS
+              ? "Allow it under Settings, Entoli, Camera, or go back and "
+                    "paste the pairing code instead."
+              : "Allow it when Entoli asks. If it no longer asks, "
+                    "allow it under Settings, Apps, Entoli, Permissions, "
+                    "Camera, or go back and paste the pairing code "
+                    "instead.",
         ),
-      );
+        if (_iOS) ...[
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: () => unawaited(_openSettings()),
+            child: const Text("Open Settings"),
+          ),
+        ],
+      ],
+    ),
+  );
 
   // UIApplication.openSettingsURLString, which url_launcher opens like any
   // other URL; it lands on this app's own page.

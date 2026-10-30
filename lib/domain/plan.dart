@@ -34,15 +34,17 @@ int planRevision(List<Message> messages) {
   final writers = {
     for (final message in messages)
       for (final part in message.parts)
-        if (part case ToolCallPart(:final toolCall)
-            when _planWriters.contains(toolCall.name))
+        if (part case ToolCallPart(
+          :final toolCall,
+        ) when _planWriters.contains(toolCall.name))
           toolCall.id,
   };
   var revision = 0;
   for (final message in messages) {
     for (final part in message.parts) {
-      if (part case ToolResultPart(:final result)
-          when writers.contains(result.callId)) {
+      if (part case ToolResultPart(
+        :final result,
+      ) when writers.contains(result.callId)) {
         revision++;
       }
     }
@@ -123,12 +125,14 @@ List<PlanSection> planSectionsFrom(String? text) {
 
   void closeTask() {
     if (open == null) return;
-    tasks.add(PlanTask(
-      index: ++index,
-      status: open!.status,
-      text: open!.text ?? "(untitled task)",
-      details: _dedent(details),
-    ));
+    tasks.add(
+      PlanTask(
+        index: ++index,
+        status: open!.status,
+        text: open!.text ?? "(untitled task)",
+        details: _dedent(details),
+      ),
+    );
     open = null;
     details.clear();
   }
@@ -140,7 +144,8 @@ List<PlanSection> planSectionsFrom(String? text) {
   }
 
   for (final line in text.split("\n")) {
-    if (open != null && (line.trim().isEmpty || line.startsWith(RegExp(r"\s")))) {
+    if (open != null &&
+        (line.trim().isEmpty || line.startsWith(RegExp(r"\s")))) {
       details.add(line);
       continue;
     }
@@ -158,15 +163,16 @@ List<PlanSection> planSectionsFrom(String? text) {
 }
 
 /// The tasks of a plan file's text, in file order, numbering from 1.
-List<PlanTask> planTasksFrom(String? text) =>
-    [for (final section in planSectionsFrom(text)) ...section.tasks];
+List<PlanTask> planTasksFrom(String? text) => [
+  for (final section in planSectionsFrom(text)) ...section.tasks,
+];
 
 String _dedent(List<String> lines) => [
-      for (final line in lines)
-        line.startsWith(_detailIndent)
-            ? line.substring(_detailIndent.length)
-            : line.trimLeft(),
-    ].join("\n").trim();
+  for (final line in lines)
+    line.startsWith(_detailIndent)
+        ? line.substring(_detailIndent.length)
+        : line.trimLeft(),
+].join("\n").trim();
 
 ({PlanTaskStatus status, String? text})? _taskLine(String line) {
   final bullet = _bullet.firstMatch(line);
@@ -202,9 +208,9 @@ String _dedent(List<String> lines) => [
     progressOf([for (final s in sections) ...s.tasks]);
 
 /// The first task neither done nor in progress, or null.
-PlanTask? planNext(String? text) => planTasksFrom(text)
-    .where((t) => t.status == PlanTaskStatus.pending)
-    .firstOrNull;
+PlanTask? planNext(String? text) => planTasksFrom(
+  text,
+).where((t) => t.status == PlanTaskStatus.pending).firstOrNull;
 
 /// [task] as the model named it — the number [planNext] reported, or enough
 /// of the task's text to identify it — matched against the plan's tasks.
@@ -217,8 +223,9 @@ PlanTask? planFind(String? text, String task) {
   final n = int.tryParse(trimmed);
   if (n != null) return n < 1 || n > tasks.length ? null : tasks[n - 1];
   final needle = trimmed.toLowerCase();
-  final hits =
-      tasks.where((t) => t.text.toLowerCase().startsWith(needle)).toList();
+  final hits = tasks
+      .where((t) => t.text.toLowerCase().startsWith(needle))
+      .toList();
   return hits.length == 1 ? hits.single : null;
 }
 
@@ -228,16 +235,20 @@ PlanTask? planFind(String? text, String task) {
 List<PlanTask> planCandidates(String? text, String task) {
   final needle = task.trim().toLowerCase();
   if (needle.isEmpty) return const [];
-  return planTasksFrom(text)
-      .where((t) => t.text.toLowerCase().contains(needle))
-      .toList();
+  return planTasksFrom(
+    text,
+  ).where((t) => t.text.toLowerCase().contains(needle)).toList();
 }
 
 /// Add [task] to the end of [section], with [details] indented under it,
 /// creating the heading where neither the section nor the file exists yet.
 /// The rest of the file stands, since the prose in it is not ours to rewrite.
-String planAddTask(String? text, String task,
-    {String? section, String details = ""}) {
+String planAddTask(
+  String? text,
+  String task, {
+  String? section,
+  String details = "",
+}) {
   final body = text ?? "";
   final named = section?.trim() ?? "";
   final heading = named.isEmpty ? planDefaultSection : named;
@@ -267,13 +278,7 @@ String planAddTask(String? text, String task,
     // heading.
     if (at == i + 1) {
       final rest = lines.sublist(at).skipWhile((l) => l.trim().isEmpty);
-      return [
-        ...lines.sublist(0, at),
-        "",
-        ...entry,
-        "",
-        ...rest,
-      ].join("\n");
+      return [...lines.sublist(0, at), "", ...entry, "", ...rest].join("\n");
     }
     break;
   }
@@ -282,11 +287,7 @@ String planAddTask(String? text, String task,
   if (at < 0) {
     return "${body.trimRight()}\n\n## $heading\n\n${entry.join("\n")}\n";
   }
-  return [
-    ...lines.sublist(0, at),
-    ...entry,
-    ...lines.sublist(at),
-  ].join("\n");
+  return [...lines.sublist(0, at), ...entry, ...lines.sublist(at)].join("\n");
 }
 
 /// Set the task at [index] (1-based, as [planTasksFrom] numbers them) to
@@ -324,9 +325,9 @@ String planAddResult(String task, (int done, int total) progress) =>
 /// The `plan_next` tool's result: the task and the plan written for it, so
 /// the work starts from what the user approved.
 String planNextResult(PlanTask task, (int done, int total) progress) => [
-      "Task ${task.index} of ${progress.$2}: ${task.text}",
-      if (task.details.isNotEmpty) task.details,
-    ].join("\n\n");
+  "Task ${task.index} of ${progress.$2}: ${task.text}",
+  if (task.details.isNotEmpty) task.details,
+].join("\n\n");
 
 /// The `plan_done` tool's result.
 String planDoneResult(PlanTask task, (int done, int total) progress) =>
@@ -340,52 +341,52 @@ String planDoneResult(PlanTask task, (int done, int total) progress) =>
 /// "request changes" button used to be the other option, and it ended the
 /// question with nothing said about what to change.
 AskQuestion planApprovalQuestion(String? title) => AskQuestion(
-      question: title == null || title.isEmpty
-          ? "Approve this plan?"
-          : "Approve the plan \"$title\"?",
-      summary: "The plan is in the chat above; tap a task to read its plan. "
-          "Go starts the work; to change it, type what to adjust.",
-      options: const [AskOption(label: "Go", value: "go")],
-    );
+  question: title == null || title.isEmpty
+      ? "Approve this plan?"
+      : "Approve the plan \"$title\"?",
+  summary:
+      "The plan is in the chat above; tap a task to read its plan. "
+      "Go starts the work; to change it, type what to adjust.",
+  options: const [AskOption(label: "Go", value: "go")],
+);
 
 /// The question as another device reads it off a `present_plan` call's
 /// arguments, in the one shape `askQuestionsFrom` round-trips. The call's
 /// arguments are not questions — they name a title — so the questions, not
 /// the tool args, are what travels as `AskRequest.argumentsJson`.
-String planApprovalQuestionsJson(String? title) => const JsonEncoder()
-    .convert({
-      "questions": [
-        for (final question in [planApprovalQuestion(title)])
-          {
-            "question": question.question,
-            "summary": question.summary,
-            "options": [
-              for (final option in question.options)
-                {
-                  "label": option.label,
-                  "value": option.answer,
-                  if (option.detail != null) "detail": option.detail,
-                },
-            ],
-          },
-      ],
-    });
+String planApprovalQuestionsJson(String? title) => const JsonEncoder().convert({
+  "questions": [
+    for (final question in [planApprovalQuestion(title)])
+      {
+        "question": question.question,
+        "summary": question.summary,
+        "options": [
+          for (final option in question.options)
+            {
+              "label": option.label,
+              "value": option.answer,
+              if (option.detail != null) "detail": option.detail,
+            },
+        ],
+      },
+  ],
+});
 
 /// What `present_plan` reports, from the verdict the panel handed back. It
 /// rides in the tool result, so the projection words it the same way whether
 /// the turn is running now or being read back out of the log.
 String planVerdict(String? verdict) => switch (verdict) {
-      "go" =>
-        "Approved: the user pressed Go. Start working through the plan with "
+  "go" =>
+    "Approved: the user pressed Go. Start working through the plan with "
         "$planNextToolName and $planDoneToolName, one task at a time.",
-      null =>
-        "No verdict was reached. Finish the turn; do not start executing "
+  null =>
+    "No verdict was reached. Finish the turn; do not start executing "
         "the plan.",
-      final changes =>
-        "The user asked for changes: \"$changes\". Revise the plan "
+  final changes =>
+    "The user asked for changes: \"$changes\". Revise the plan "
         "(edit $planFileName, or add tasks with $planAddToolName) and "
         "present it again. Do not start executing until the answer is Go.",
-    };
+};
 
 /// A `present_plan` call's title, the plan's name in the chat and on the
 /// question. Everything is optional, so only a body that is not an object at

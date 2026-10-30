@@ -29,7 +29,10 @@ class InstallDestination extends ConsumerWidget {
       items: [
         const DropdownMenuItem<String?>(value: null, child: Text("Global")),
         for (final project in projects)
-          DropdownMenuItem<String?>(value: project, child: Text(projectLabel(project))),
+          DropdownMenuItem<String?>(
+            value: project,
+            child: Text(projectLabel(project)),
+          ),
       ],
       onChanged: onChanged,
     );

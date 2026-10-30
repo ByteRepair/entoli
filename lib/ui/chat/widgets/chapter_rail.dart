@@ -47,7 +47,12 @@ List<Chapter> chaptersOf(Chat chat) {
     final at = prompt;
     if (at != null && threads > chapters[at].threads) {
       final p = chapters[at];
-      chapters[at] = (id: p.id, row: p.row, preview: p.preview, threads: threads);
+      chapters[at] = (
+        id: p.id,
+        row: p.row,
+        preview: p.preview,
+        threads: threads,
+      );
     }
     for (final part in message.parts) {
       if (part case SteerPart(message: final said)) {
@@ -137,30 +142,33 @@ class _ChapterRailState extends State<ChapterRail> {
     if (chapters.isEmpty) return const SizedBox.shrink();
     return SizedBox(
       width: ChapterRail.width,
-      child: LayoutBuilder(builder: (context, constraints) {
-        final room = constraints.maxHeight - _pad * 2;
-        final pitch = (room / chapters.length).clamp(_minPitch, _pitch);
-        return Center(
-          child: Listener(
-            behavior: HitTestBehavior.opaque,
-            onPointerDown: (e) => _press(e, pitch, scrubbing: false),
-            onPointerMove: (e) => _press(e, pitch, scrubbing: true),
-            onPointerUp: (_) => _pressed = null,
-            onPointerCancel: (_) => _pressed = null,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final (i, chapter) in chapters.indexed)
-                  _Tick(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final room = constraints.maxHeight - _pad * 2;
+          final pitch = (room / chapters.length).clamp(_minPitch, _pitch);
+          return Center(
+            child: Listener(
+              behavior: HitTestBehavior.opaque,
+              onPointerDown: (e) => _press(e, pitch, scrubbing: false),
+              onPointerMove: (e) => _press(e, pitch, scrubbing: true),
+              onPointerUp: (_) => _pressed = null,
+              onPointerCancel: (_) => _pressed = null,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final (i, chapter) in chapters.indexed)
+                    _Tick(
                       chapter: chapter,
                       index: i,
                       current: widget.current,
-                      height: pitch),
-              ],
+                      height: pitch,
+                    ),
+                ],
+              ),
             ),
-          ),
-        );
-      }),
+          );
+        },
+      ),
     );
   }
 }
@@ -248,10 +256,12 @@ class _TickState extends State<_Tick> {
               SizedBox(
                 width: 20,
                 child: branched
-                    ? Icon(Icons.call_split,
+                    ? Icon(
+                        Icons.call_split,
                         key: const ValueKey("branched"),
                         size: math.min(13, widget.height),
-                        color: colour)
+                        color: colour,
+                      )
                     : null,
               ),
               AnimatedContainer(

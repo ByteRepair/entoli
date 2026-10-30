@@ -28,7 +28,10 @@ void main() {
   }
 
   Future<void> open(WidgetTester tester) async {
-    await app.pump(tester, MemoryPage(project: localProject(null), title: "Memories"));
+    await app.pump(
+      tester,
+      MemoryPage(project: localProject(null), title: "Memories"),
+    );
     await pumpUntil(tester, find.byType(ListTile));
     await settleIo(tester);
   }
@@ -58,8 +61,12 @@ void main() {
       await open(tester);
 
       final tiles = tester
-          .widgetList<ListTile>(find.descendant(
-              of: find.byType(ListView), matching: find.byType(ListTile)))
+          .widgetList<ListTile>(
+            find.descendant(
+              of: find.byType(ListView),
+              matching: find.byType(ListTile),
+            ),
+          )
           .map((t) => (t.title! as Text).data)
           .toList();
       expect(tiles, ["deploy runs on fridays", "the project uses pnpm"]);
@@ -68,7 +75,10 @@ void main() {
     });
 
     testWidgets("an empty store says so and offers to add one", (tester) async {
-      await app.pump(tester, MemoryPage(project: localProject(null), title: "Memories"));
+      await app.pump(
+        tester,
+        MemoryPage(project: localProject(null), title: "Memories"),
+      );
       await pumpUntil(tester, find.text("No memories yet"));
 
       expect(find.text("Add a memory"), findsOneWidget);
@@ -82,7 +92,10 @@ void main() {
       await tester.tap(find.byTooltip("Add a memory"));
       await settleIo(tester);
       await tester.enterText(
-        find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)),
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        ),
         text,
       );
       await tester.tap(find.widgetWithText(FilledButton, "Save"));
@@ -94,7 +107,9 @@ void main() {
       await pumpUntil(tester, find.text(text));
     }
 
-    testWidgets("a typed memory lands in the store and the list", (tester) async {
+    testWidgets("a typed memory lands in the store and the list", (
+      tester,
+    ) async {
       await open(tester);
       await typeAndSave(tester, "the user prefers dark mode");
 
@@ -126,7 +141,9 @@ void main() {
       await settled(tester);
     }
 
-    testWidgets("a confirmed delete leaves a tombstone, not a gap", (tester) async {
+    testWidgets("a confirmed delete leaves a tombstone, not a gap", (
+      tester,
+    ) async {
       final entry = await seed(tester, "a learned detail");
       await open(tester);
 
@@ -159,7 +176,9 @@ void main() {
   group("pinning", () {
     setUp(start);
 
-    testWidgets("a pin marks the memory and lands in the store", (tester) async {
+    testWidgets("a pin marks the memory and lands in the store", (
+      tester,
+    ) async {
       final entry = await seed(tester, "the deploy runs on fridays");
       await open(tester);
 
@@ -183,8 +202,9 @@ void main() {
       expect((await io(tester, () => store.entries())).single.pinned, isFalse);
     });
 
-    testWidgets("a pin past the limit is refused, the standing four hold",
-        (tester) async {
+    testWidgets("a pin past the limit is refused, the standing four hold", (
+      tester,
+    ) async {
       for (var i = 0; i < pinnedLimit + 1; i++) {
         final entry = await seed(tester, "a standing rule $i");
         await io(tester, () => store.pin(entry.id));
@@ -216,8 +236,9 @@ void main() {
       expect(find.text("the project uses pnpm"), findsNothing);
     });
 
-    testWidgets("nothing matching says so rather than showing an empty list",
-        (tester) async {
+    testWidgets("nothing matching says so rather than showing an empty list", (
+      tester,
+    ) async {
       await seed(tester, "the project uses pnpm");
       await open(tester);
 
@@ -239,8 +260,9 @@ void main() {
       await tester.tap(find.byType(ListTile).first);
       await settleIo(tester);
 
-      final shown = find
-          .byWidgetPredicate((w) => w is SelectableText && w.data == long);
+      final shown = find.byWidgetPredicate(
+        (w) => w is SelectableText && w.data == long,
+      );
       expect(shown, findsOneWidget);
       expect(
         find.descendant(
@@ -255,7 +277,9 @@ void main() {
   group("getting there", () {
     setUp(start);
 
-    testWidgets("the sidebar opens the default project's memories", (tester) async {
+    testWidgets("the sidebar opens the default project's memories", (
+      tester,
+    ) async {
       await seed(tester, "shared by every default-project chat");
 
       await app.pump(tester, const SizedBox(width: 280, child: Sidebar()));
@@ -263,12 +287,19 @@ void main() {
       await settleIo(tester);
 
       expect(find.text("Memories"), findsOneWidget);
-      expect(find.textContaining("shared by every default-project chat"), findsOneWidget);
+      expect(
+        find.textContaining("shared by every default-project chat"),
+        findsOneWidget,
+      );
     });
 
-    testWidgets("the project settings page opens the project's own", (tester) async {
+    testWidgets("the project settings page opens the project's own", (
+      tester,
+    ) async {
       await io(tester, () => app.repo.createProject("research"));
-      final projectStore = MemoryStore(app.config.memoryDir(project: "research"));
+      final projectStore = MemoryStore(
+        app.config.memoryDir(project: "research"),
+      );
       await io(tester, () => projectStore.add("research keeps its own"));
 
       await app.pump(tester, const ProjectSettingsPage(project: "research"));
@@ -286,8 +317,9 @@ void main() {
       expect(find.textContaining("research keeps its own"), findsOneWidget);
     });
 
-    testWidgets("the built-in project's page has no instructions to edit",
-        (tester) async {
+    testWidgets("the built-in project's page has no instructions to edit", (
+      tester,
+    ) async {
       await io(tester, () => app.repo.createProject("research"));
 
       await app.pump(tester, const ProjectSettingsPage(project: "research"));
@@ -319,8 +351,9 @@ void main() {
       expect(find.text("Delete project"), findsNothing);
     });
 
-    testWidgets("a project can keep its own rather than the default's",
-        (tester) async {
+    testWidgets("a project can keep its own rather than the default's", (
+      tester,
+    ) async {
       await io(tester, () => app.repo.createProject("research"));
 
       await app.pump(tester, const ProjectSettingsPage(project: "research"));
@@ -328,8 +361,7 @@ void main() {
       await tester.tap(find.text("On"));
       await settleIo(tester);
 
-      final settings =
-          app.container.read(projectSettingsProvider("research"));
+      final settings = app.container.read(projectSettingsProvider("research"));
       expect(settings.memory, Tristate.on);
     });
   });
@@ -340,7 +372,9 @@ void main() {
     setUp(() => app = TestApp.create());
     tearDown(() => app.dispose());
 
-    testWidgets("holds the instructions and the auto-memory sections", (tester) async {
+    testWidgets("holds the instructions and the auto-memory sections", (
+      tester,
+    ) async {
       app.seedSettings(AppSettings(autoMemory: false, memoryRecall: true));
       await pumpSettings(tester, app, SettingsCategory.memory);
 
@@ -349,8 +383,10 @@ void main() {
       // The model picker is behind the master: off, it is not drawn.
       expect(find.text("Memory LLM"), findsNothing);
       // The sub-gates are dead while the master is off.
-      final switchTile =
-          find.widgetWithText(SwitchListTile, "Recall relevant memories");
+      final switchTile = find.widgetWithText(
+        SwitchListTile,
+        "Recall relevant memories",
+      );
       expect(tester.widget<SwitchListTile>(switchTile).onChanged, isNull);
       expect(
         app.container.read(appSettingsProvider).memoryRecall,
@@ -359,8 +395,9 @@ void main() {
       );
     });
 
-    testWidgets("turning the master on offers the sub-gates and the model",
-        (tester) async {
+    testWidgets("turning the master on offers the sub-gates and the model", (
+      tester,
+    ) async {
       app.seedSettings(AppSettings(autoMemory: true));
       await pumpSettings(tester, app, SettingsCategory.memory);
 

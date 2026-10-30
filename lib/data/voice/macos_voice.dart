@@ -25,7 +25,7 @@ class MacosVoice extends AndroidVoice {
   /// The on-device intersection, as on iOS, and as slow to sweep.
   @override
   Future<List<VoiceLanguage>> systemLanguages() => nativeLanguages(
-        timeout: const Duration(seconds: 10),
-        failure: "the Mac would not say what it can hear and speak",
-      );
+    timeout: const Duration(seconds: 10),
+    failure: "the Mac would not say what it can hear and speak",
+  );
 }

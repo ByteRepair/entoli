@@ -91,7 +91,9 @@ Future<List<LlmMessage>> projectionOf(
   // unique on a thread, so the newest marker's boundary is where its message
   // sits.
   final ids = {for (final m in messages) m.id};
-  final marker = compactions.lastWhereOrNull((c) => ids.contains(c.upToMessageId));
+  final marker = compactions.lastWhereOrNull(
+    (c) => ids.contains(c.upToMessageId),
+  );
   final from = marker == null
       ? 0
       : messages.lastIndexWhere((m) => m.id == marker.upToMessageId) + 1;
@@ -99,16 +101,20 @@ Future<List<LlmMessage>> projectionOf(
   // conversation's reads overlap rather than queue. Only the verbatim half's bytes
   // are read — the summarized span's are what the summary replaced.
   // A reply's are the images its tools made, which ride their results.
-  final files = await Future.wait(messages.asMap().entries.map((e) =>
-      e.key >= from && _filesOf(e.value).isNotEmpty
+  final files = await Future.wait(
+    messages.asMap().entries.map(
+      (e) => e.key >= from && _filesOf(e.value).isNotEmpty
           ? attachmentsOf(e.value, load)
-          : _noFiles));
+          : _noFiles,
+    ),
+  );
   final projected = <LlmMessage>[];
   // Whether the viewer's first mail has gone by: the dress is once per walk.
   var myMailSeen = false;
   if (marker != null) {
-    projected.add(LlmMessage(
-        role: LlmRole.user, text: summarizedTurnText(marker.summary)));
+    projected.add(
+      LlmMessage(role: LlmRole.user, text: summarizedTurnText(marker.summary)),
+    );
   }
   for (final (index, message) in messages.indexed) {
     // Before the marker: summarized, and the attachments with it — the bytes
@@ -123,21 +129,29 @@ Future<List<LlmMessage>> projectionOf(
         // message, and a fragment (first false) dresses nothing.
         final mine = addressedTo(message, viewer);
         final wording = mine
-            ? userTurnText(text, at: message.createdAt, first: first && !myMailSeen)
+            ? userTurnText(
+                text,
+                at: message.createdAt,
+                first: first && !myMailSeen,
+              )
             // Somebody else's mail: who it was for rides the wording, the
             // way a peer reply's author does — a member reading the house's
             // mail sees (main agent) where the say addressed nobody.
-            : addressedUserTurnText(text,
+            : addressedUserTurnText(
+                text,
                 to: message.addressees.isEmpty
                     ? mainAgentLabel
                     : message.addressees.join(", "),
-                at: message.createdAt);
+                at: message.createdAt,
+              );
         if (mine) myMailSeen = true;
-        projected.add(LlmMessage(
-          role: LlmRole.user,
-          text: wording,
-          attachments: files[index].values.toList(),
-        ));
+        projected.add(
+          LlmMessage(
+            role: LlmRole.user,
+            text: wording,
+            attachments: files[index].values.toList(),
+          ),
+        );
       case MessageRole.assistant:
         // Someone else's reply reaches this viewer labeled as theirs: an
         // assistant message is, by provider convention, the model's own words,
@@ -152,18 +166,23 @@ Future<List<LlmMessage>> projectionOf(
           if (endedSilently(message)) continue;
           final said = _saidText(message);
           if (said != null) {
-            projected.add(LlmMessage(
-              role: LlmRole.user,
-              text: peerTurnText(said,
+            projected.add(
+              LlmMessage(
+                role: LlmRole.user,
+                text: peerTurnText(
+                  said,
                   by: theirs,
                   at: message.createdAt,
                   to: [
                     for (final a in message.addressees)
                       if (nameOf(a) != viewer) a,
                   ],
-                  toYou: viewer != null &&
-                      message.addressees.map(nameOf).contains(viewer)),
-            ));
+                  toYou:
+                      viewer != null &&
+                      message.addressees.map(nameOf).contains(viewer),
+                ),
+              ),
+            );
           }
           // A peer reply's tool calls are its own session's business: the
           // viewer reads what was said, not the commands behind it.
@@ -192,8 +211,11 @@ Future<Uint8List?> noResources(String resource) async => null;
 
 /// A message no log will hold: the reply a `!` turn writes, a sub-agent's task.
 /// The id is the one field [projectionOf] does not read.
-Message unloggedMessage(MessageRole role, DateTime at, List<MessagePart> parts) =>
-    Message(id: "", role: role, createdAt: at, parts: parts);
+Message unloggedMessage(
+  MessageRole role,
+  DateTime at,
+  List<MessagePart> parts,
+) => Message(id: "", role: role, createdAt: at, parts: parts);
 
 /// Expanded first, decorated second. The other order hands `$ARGUMENTS` the
 /// `(attached: …)` note, so `/review` with a file attached would substitute the
@@ -207,11 +229,15 @@ String _userText(Message message, String? resourcesDir) {
   final text = expandedPrompt(message.plainText, message.documents).trim();
   if (message.files.isEmpty) return text;
   final files = message.files
-      .map((f) => resourcesDir == null
-          ? f.filename
-          : "${f.filename} at ${p.join(resourcesDir, f.resource)}")
+      .map(
+        (f) => resourcesDir == null
+            ? f.filename
+            : "${f.filename} at ${p.join(resourcesDir, f.resource)}",
+      )
       .join(", ");
-  final note = resourcesDir == null ? "(attached: $files)" : "(attached, read-only: $files)";
+  final note = resourcesDir == null
+      ? "(attached: $files)"
+      : "(attached, read-only: $files)";
   return text.isEmpty ? note : "$text\n\n$note";
 }
 
@@ -226,14 +252,25 @@ Iterable<FilePart> _filesOf(Message message) sync* {
 }
 
 /// By resource name, which is how a reply's [FilePart] finds its bytes.
-Future<Map<String, LlmAttachment>> attachmentsOf(Message message, ResourceLoader load) async {
-  final loaded = await Future.wait(_filesOf(message).map((file) async {
-    final bytes = await load(file.resource);
-    return bytes == null
-        ? null
-        : MapEntry(file.resource,
-            LlmAttachment(filename: file.filename, mimeType: file.mimeType, bytes: bytes));
-  }));
+Future<Map<String, LlmAttachment>> attachmentsOf(
+  Message message,
+  ResourceLoader load,
+) async {
+  final loaded = await Future.wait(
+    _filesOf(message).map((file) async {
+      final bytes = await load(file.resource);
+      return bytes == null
+          ? null
+          : MapEntry(
+              file.resource,
+              LlmAttachment(
+                filename: file.filename,
+                mimeType: file.mimeType,
+                bytes: bytes,
+              ),
+            );
+    }),
+  );
   return Map.fromEntries(loaded.nonNulls);
 }
 
@@ -244,10 +281,15 @@ Future<Map<String, LlmAttachment>> attachmentsOf(Message message, ResourceLoader
 ///
 /// [files] are the bytes of the reply's [FilePart]s by resource, which a live
 /// turn holds already and a reload reads first.
-Iterable<LlmMessage> assistantMessages(List<MessagePart> parts,
-        {Map<String, LlmAttachment> files = const {}, String? resourcesDir}) =>
-    _assistant(unloggedMessage(MessageRole.assistant, _noDate, parts), files,
-        resourcesDir);
+Iterable<LlmMessage> assistantMessages(
+  List<MessagePart> parts, {
+  Map<String, LlmAttachment> files = const {},
+  String? resourcesDir,
+}) => _assistant(
+  unloggedMessage(MessageRole.assistant, _noDate, parts),
+  files,
+  resourcesDir,
+);
 
 /// What another participant said in a reply, worded for a different viewer:
 /// the plain text of it, which is what one agent owes another. Thinking and
@@ -262,8 +304,11 @@ String? _saidText(Message message) {
 /// assembled has none to give.
 final _noDate = DateTime.fromMillisecondsSinceEpoch(0);
 
-Iterable<LlmMessage> _assistant(Message message,
-    Map<String, LlmAttachment> files, String? resourcesDir) sync* {
+Iterable<LlmMessage> _assistant(
+  Message message,
+  Map<String, LlmAttachment> files,
+  String? resourcesDir,
+) sync* {
   // Over the whole message rather than per response: a result is paired to its
   // call by id, and one that landed in a later response than the call it
   // answers must not be read as missing.
@@ -318,26 +363,30 @@ Iterable<LlmMessage> _assistant(Message message,
           text.write(part.text);
         case ToolCallPart(:final toolCall):
           lastCall = toolCall.id;
-          calls.add(LlmToolCall(
-            id: toolCall.id,
-            name: toolCall.name,
-            argumentsJson: toolCall.argumentsJson ?? "{}",
-            signature: toolCall.signature,
-          ));
+          calls.add(
+            LlmToolCall(
+              id: toolCall.id,
+              name: toolCall.name,
+              argumentsJson: toolCall.argumentsJson ?? "{}",
+              signature: toolCall.signature,
+            ),
+          );
         case ShellRunPart():
           // The user's own command, worded as what the app did for them. It is
           // the whole of its turn, so there is nothing else in this response
           // for it to run into.
-          text.write(noted(
-            shellRunTranscript(
-              command: part.command,
-              returnCode: part.returnCode,
-              output: part.output,
-              exceptionInfo: part.exceptionInfo,
-              violations: part.violations,
+          text.write(
+            noted(
+              shellRunTranscript(
+                command: part.command,
+                returnCode: part.returnCode,
+                output: part.output,
+                exceptionInfo: part.exceptionInfo,
+                violations: part.violations,
+              ),
+              part.cwd,
             ),
-            part.cwd,
-          ));
+          );
         case FilePart(:final resource):
           final image = files[resource];
           if (lastCall != null && image != null) {
@@ -399,15 +448,17 @@ Iterable<LlmMessage> _assistant(Message message,
   }
 }
 
-Iterable<LlmMessage> _steered(List<Message> steers,
-        Map<String, LlmAttachment> files, String? resourcesDir) =>
-    steers.map((said) => LlmMessage(
-          role: LlmRole.user,
-          text: steerTurnText(_userText(said, resourcesDir), at: said.createdAt),
-          attachments: [
-            for (final file in said.files) ?files[file.resource],
-          ],
-        ));
+Iterable<LlmMessage> _steered(
+  List<Message> steers,
+  Map<String, LlmAttachment> files,
+  String? resourcesDir,
+) => steers.map(
+  (said) => LlmMessage(
+    role: LlmRole.user,
+    text: steerTurnText(_userText(said, resourcesDir), at: said.createdAt),
+    attachments: [for (final file in said.files) ?files[file.resource]],
+  ),
+);
 
 /// The parts of one turn, split into the responses they came out of. A part
 /// naming no response — a result, an error — continues the one before it, since
@@ -430,21 +481,19 @@ List<List<MessagePart>> _responses(List<MessagePart> parts) {
 /// and is not named here groups into the response before it, which is a wrong
 /// answer no test would ask about. See "One accumulation".
 String? _responseIdOf(MessagePart part) => switch (part) {
-      TextPart(:final responseId) ||
-      ReasoningPart(:final responseId) ||
-      ToolCallPart(:final responseId) =>
-        responseId,
-      ToolResultPart() ||
-      ShellRunPart() ||
-      FilePart() ||
-      ArtifactPart() ||
-      SkillInstallPart() ||
-      ApprovalPart() ||
-      InstructionsPart() ||
-      SteerPart() ||
-      ErrorPart() =>
-        null,
-    };
+  TextPart(:final responseId) ||
+  ReasoningPart(:final responseId) ||
+  ToolCallPart(:final responseId) => responseId,
+  ToolResultPart() ||
+  ShellRunPart() ||
+  FilePart() ||
+  ArtifactPart() ||
+  SkillInstallPart() ||
+  ApprovalPart() ||
+  InstructionsPart() ||
+  SteerPart() ||
+  ErrorPart() => null,
+};
 
 /// **How a tool's outcome is worded for a model, and the only place it is.**
 /// A turn reports its results and nothing else: the model is answered with this,
@@ -456,8 +505,9 @@ String? _responseIdOf(MessagePart part) => switch (part) {
 /// is in `exceptionInfo` and the answers are empty, so it reads as any other
 /// failure would.
 String _toolResultText(String tool, ToolResult result) {
-  final text =
-      tool == askToolName && result.returnCode == 0 ? result.output : _observed(result);
+  final text = tool == askToolName && result.returnCode == 0
+      ? result.output
+      : _observed(result);
   return result.notes.isEmpty ? text : "${result.notes.join("\n")}\n\n$text";
 }
 
@@ -472,11 +522,11 @@ String _toolResultText(String tool, ToolResult result) {
 /// one, and it is the one that does not depend on which tool was called, so
 /// the result alone is the whole of the key.
 String _observed(ToolResult result) => _observations[result] ??= observation(
-      returnCode: result.returnCode,
-      output: result.output,
-      exceptionInfo: result.exceptionInfo,
-      violations: result.violations,
-    );
+  returnCode: result.returnCode,
+  output: result.output,
+  exceptionInfo: result.exceptionInfo,
+  violations: result.violations,
+);
 
 final _observations = Expando<String>("observation");
 
@@ -489,12 +539,14 @@ final _observations = Expando<String>("observation");
 String _interruptedText(String tool) =>
     tool == askToolName ? _askInterrupted : _interrupted;
 
-const _askInterrupted = "The turn was interrupted before these questions reached "
+const _askInterrupted =
+    "The turn was interrupted before these questions reached "
     "the user, so nothing was answered.";
 
 final _interrupted = observation(
   returnCode: -1,
   output: "",
-  exceptionInfo: "The turn was interrupted before this returned, so its result "
+  exceptionInfo:
+      "The turn was interrupted before this returned, so its result "
       "was never recorded. It may or may not have run — check rather than assume.",
 );

@@ -21,9 +21,9 @@ import "skill_package.dart" show packageSkillBytes;
 /// What the exported file is called: a `.skill` zip for a skill — the format
 /// `parseSkillPackage` reads — and the agent's own `.md` otherwise.
 String promptExportName(CompletionKind kind, String name) => switch (kind) {
-      CompletionKind.skill => "$name.skill",
-      CompletionKind.agent => "$name.md",
-    };
+  CompletionKind.skill => "$name.skill",
+  CompletionKind.agent => "$name.md",
+};
 
 /// The bytes a row's Export saves, in the order the library serves the entry:
 /// the page project's own directory, then the default project's — the entry a
@@ -46,9 +46,11 @@ Future<Uint8List?> exportPromptBytes(
     final entries = await skillSourceEntries(config, name, project: project);
     return entries == null
         ? null
-        : packageSkillBytes(SkillPackage(name, [
-            for (final (path, data) in entries) ("$name/$path", data),
-          ]));
+        : packageSkillBytes(
+            SkillPackage(name, [
+              for (final (path, data) in entries) ("$name/$path", data),
+            ]),
+          );
   }
   for (final tier in _ownThenDefault(project)) {
     final file = File(agentFilePath(config, name, project: tier));
@@ -60,9 +62,9 @@ Future<Uint8List?> exportPromptBytes(
 
 /// The page project's own directory, then the default project's.
 List<String?> _ownThenDefault(String? project) => [
-      project,
-      if (project != null && project != defaultProjectDir) defaultProjectDir,
-    ];
+  project,
+  if (project != null && project != defaultProjectDir) defaultProjectDir,
+];
 
 /// Resolve, name and hand off an export — the whole flow both settings
 /// pages' Export buttons run, so the route out and the refusal are said
@@ -80,7 +82,9 @@ Future<void> exportAndSave(
     throw const SkillImportException("its file could not be read");
   }
   await handoff.save(
-      promptExportName(kind, name), (path) => File(path).writeAsBytes(bytes));
+    promptExportName(kind, name),
+    (path) => File(path).writeAsBytes(bytes),
+  );
 }
 
 /// The skill's files as they sit inside its own directory, resolved the way
@@ -100,7 +104,10 @@ Future<List<(String, Uint8List)>?> skillSourceEntries(
   if (bundled == null) return null;
   return [
     for (final file in bundledPromptFilesOf(
-        bundledSkillFiles, bundled.project, bundled.name))
+      bundledSkillFiles,
+      bundled.project,
+      bundled.name,
+    ))
       (file.relativePath, Uint8List.fromList(file.bytes)),
   ];
 }

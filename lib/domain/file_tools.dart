@@ -73,10 +73,15 @@ EditArgs? editArgsFrom(String? json) {
   final path = m["path"];
   final oldString = m["old_string"];
   final newString = m["new_string"];
-  if (path is! String || path.isEmpty || oldString is! String || newString is! String) {
+  if (path is! String ||
+      path.isEmpty ||
+      oldString is! String ||
+      newString is! String) {
     return null;
   }
-  final replaceAll = m["replace_all"] is bool ? m["replace_all"] as bool : false;
+  final replaceAll = m["replace_all"] is bool
+      ? m["replace_all"] as bool
+      : false;
   return EditArgs(
     path: path,
     oldString: oldString,
@@ -101,10 +106,12 @@ FileStamp? fileStampOf(String path) {
 /// existing file must have been read, and not changed since: the model edits
 /// what it saw, and what it saw has to be what is there. A file that does not
 /// exist is a `write` creating it, which needs no read.
-Future<String?> unreadFileProblem(String path,
-    {required String shownPath,
-    required String toolName,
-    required Map<String, FileStamp> readFiles}) async {
+Future<String?> unreadFileProblem(
+  String path, {
+  required String shownPath,
+  required String toolName,
+  required Map<String, FileStamp> readFiles,
+}) async {
   final now = fileStampOf(path);
   if (now == null) return null;
   final read = readFiles[path];
@@ -129,10 +136,9 @@ String guestWorkspacePath(
   String projectWorkspace,
   String workspace,
 ) {
-  final suffix =
-      workspace.length > projectWorkspace.length
-          ? workspace.substring(projectWorkspace.length)
-          : "";
+  final suffix = workspace.length > projectWorkspace.length
+      ? workspace.substring(projectWorkspace.length)
+      : "";
   return "$guestRoot$suffix";
 }
 
@@ -161,8 +167,8 @@ String resolveWorkspacePath(
   var rest = project
       ? path.substring("project:".length)
       : path.startsWith("chat:")
-          ? path.substring("chat:".length)
-          : path;
+      ? path.substring("chat:".length)
+      : path;
   final base = project ? projectWorkspace : workspace;
   if (rest.startsWith("~/")) {
     rest = p.join(homePath ?? projectWorkspace, rest.substring(2));
@@ -173,9 +179,7 @@ String resolveWorkspacePath(
   // the host filesystem — can find what the model named inside the guest.
   if (guestRoot != null && rest.startsWith(guestRoot)) {
     final suffix = rest.substring(guestRoot.length);
-    rest = suffix.isEmpty
-        ? projectWorkspace
-        : p.join(projectWorkspace, suffix);
+    rest = suffix.isEmpty ? projectWorkspace : p.join(projectWorkspace, suffix);
   }
   if (!p.isAbsolute(rest)) {
     return p.join(base, safeRelativePath(rest));
@@ -207,4 +211,3 @@ bool outsideWorkspaces(
   }
   return !granted.any((dir) => isUnder(path, dir));
 }
-

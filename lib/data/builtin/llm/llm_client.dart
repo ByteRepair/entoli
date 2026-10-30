@@ -9,8 +9,12 @@ import "package:collection/collection.dart";
 enum LlmRole { system, user, assistant, tool }
 
 class LlmToolCall {
-  const LlmToolCall(
-      {required this.id, required this.name, required this.argumentsJson, this.signature});
+  const LlmToolCall({
+    required this.id,
+    required this.name,
+    required this.argumentsJson,
+    this.signature,
+  });
 
   final String id;
   final String name;
@@ -40,7 +44,11 @@ class LlmToolCall {
 /// named, because a model that cannot read it is better told it exists than
 /// handed bytes.
 class LlmAttachment {
-  LlmAttachment({required this.filename, required this.mimeType, required this.bytes});
+  LlmAttachment({
+    required this.filename,
+    required this.mimeType,
+    required this.bytes,
+  });
 
   final String filename;
   final String mimeType;
@@ -61,7 +69,8 @@ class LlmAttachment {
     return pages > 0 ? pages : bytes.length ~/ 100000 + 1;
   }();
 
-  bool get isText => mimeType.startsWith("text/") || mimeType == "application/json";
+  bool get isText =>
+      mimeType.startsWith("text/") || mimeType == "application/json";
 
   /// Encoded once and kept. An attachment stays in the session for the life of
   /// the chat, and every step of every later turn resends the whole
@@ -102,12 +111,16 @@ int _pageObjects(Uint8List bytes) {
   for (var i = bytes.indexOf(0x2f); i >= 0; i = bytes.indexOf(0x2f, i + 1)) {
     if (!at(i, type)) continue;
     var j = i + type.length;
-    while (j < bytes.length && const [0x20, 0x0a, 0x0d, 0x09].contains(bytes[j])) {
+    while (j < bytes.length &&
+        const [0x20, 0x0a, 0x0d, 0x09].contains(bytes[j])) {
       j++;
     }
     if (!at(j, page)) continue;
     final next = j + page.length;
-    final letter = next < bytes.length && (bytes[next] | 0x20) >= 0x61 && (bytes[next] | 0x20) <= 0x7a;
+    final letter =
+        next < bytes.length &&
+        (bytes[next] | 0x20) >= 0x61 &&
+        (bytes[next] | 0x20) <= 0x7a;
     if (!letter) count++;
   }
   return count;
@@ -144,12 +157,16 @@ class LlmMessage {
 /// parameter and the Apple bridge's instructions both make: the system roles
 /// in order, empty texts dropped, blank lines between.
 String joinedSystemText(List<LlmMessage> messages) => [
-      for (final message in messages)
-        if (message.role == LlmRole.system && message.text.isNotEmpty) message.text,
-    ].join("\n\n");
+  for (final message in messages)
+    if (message.role == LlmRole.system && message.text.isNotEmpty) message.text,
+].join("\n\n");
 
 class LlmTool {
-  const LlmTool({required this.name, required this.description, required this.schema});
+  const LlmTool({
+    required this.name,
+    required this.description,
+    required this.schema,
+  });
 
   final String name;
   final String description;
@@ -206,7 +223,8 @@ class LlmPromptProgress extends LlmChunk {
 
   /// Null where the provider said the prompt was empty, rather than a division
   /// by zero or a confident 100%.
-  double? get fraction => total <= 0 ? null : (processed / total).clamp(0.0, 1.0);
+  double? get fraction =>
+      total <= 0 ? null : (processed / total).clamp(0.0, 1.0);
 }
 
 class LlmCompletion extends LlmChunk {
@@ -259,7 +277,8 @@ class LlmException implements Exception {
   final bool retryable;
 
   @override
-  String toString() => statusCode == null ? message : "HTTP $statusCode: $message";
+  String toString() =>
+      statusCode == null ? message : "HTTP $statusCode: $message";
 }
 
 abstract class LlmClient {

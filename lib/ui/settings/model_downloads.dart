@@ -31,7 +31,9 @@ class ModelDownloads extends Downloads<Installable> {
   Future<void> rescan() async {
     await ref.read(installedVoiceModelsProvider.notifier).refresh();
     await ref.read(installedLocalModelsProvider.notifier).refresh();
-    ref.read(addedLocalModelsProvider.notifier).drop(ref.read(installedLocalModelsProvider));
+    ref
+        .read(addedLocalModelsProvider.notifier)
+        .drop(ref.read(installedLocalModelsProvider));
   }
 
   /// One added by link and stopped before it arrived goes with its row.
@@ -62,15 +64,18 @@ class ModelDownloads extends Downloads<Installable> {
       await settings.setVoiceSpeechModel(null);
     }
     final engine = ref.read(localEngineProvider);
-    if (engine.running.value.any((each) => each.modelId == model.id)) await engine.stopAll();
+    if (engine.running.value.any((each) => each.modelId == model.id)) {
+      await engine.stopAll();
+    }
   }
 
   @override
   Future<void> erase(Installable model) => model.delete();
 }
 
-final modelDownloadsProvider =
-    NotifierProvider<ModelDownloads, DownloadState>(ModelDownloads.new);
+final modelDownloadsProvider = NotifierProvider<ModelDownloads, DownloadState>(
+  ModelDownloads.new,
+);
 
 /// Models added by link this session that are not on disk yet: a row each,
 /// with its bar, until the download lands or is cancelled. A failed one stays
@@ -83,7 +88,10 @@ class AddedLocalModels extends Notifier<List<LocalModel>> {
 
   void drop(Set<String> ids) {
     if (state.any((model) => ids.contains(model.id))) {
-      state = [for (final model in state) if (!ids.contains(model.id)) model];
+      state = [
+        for (final model in state)
+          if (!ids.contains(model.id)) model,
+      ];
     }
   }
 }

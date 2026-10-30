@@ -23,9 +23,14 @@ class LinkedInstructionsStore {
       final file = File(_config.linkedInstructionsFile);
       if (!file.existsSync()) return const LinkedInstructions();
       return LinkedInstructions.fromJson(
-          jsonDecode(await file.readAsString()) as Map<String, dynamic>);
+        jsonDecode(await file.readAsString()) as Map<String, dynamic>,
+      );
     } catch (e) {
-      logFailure("instructions", "the linked instruction files could not be read", e);
+      logFailure(
+        "instructions",
+        "the linked instruction files could not be read",
+        e,
+      );
       return const LinkedInstructions();
     }
   }
@@ -38,7 +43,9 @@ class LinkedInstructionsStore {
       // would otherwise be made only to say so.
       if (identical(updated, current)) return;
       await _write.write(
-          _config.linkedInstructionsFile, jsonEncode(updated.toJson()));
+        _config.linkedInstructionsFile,
+        jsonEncode(updated.toJson()),
+      );
     });
     _queue = next.catchError((_) {});
     return next;

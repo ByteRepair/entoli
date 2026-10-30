@@ -45,7 +45,9 @@ class _TriggersSectionState extends ConsumerState<TriggersSection> {
     super.initState();
     // The rows lead to the system settings, where the answers can change while
     // the app is behind, so the page re-asks every time it comes back.
-    _lifecycle = AppLifecycleListener(onResume: () => unawaited(_loadPermissions()));
+    _lifecycle = AppLifecycleListener(
+      onResume: () => unawaited(_loadPermissions()),
+    );
     unawaited(_loadPermissions());
   }
 
@@ -67,8 +69,8 @@ class _TriggersSectionState extends ConsumerState<TriggersSection> {
   }
 
   Future<void> _openEditor([Trigger? trigger]) => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => TriggerEditorPage(trigger: trigger)),
-      );
+    MaterialPageRoute(builder: (_) => TriggerEditorPage(trigger: trigger)),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -82,13 +84,13 @@ class _TriggersSectionState extends ConsumerState<TriggersSection> {
           "Triggers",
           description: alarms.schedules
               ? "A trigger sends its prompt to a chat: at a time you pick, "
-                  "after a countdown, or when a file changes. A schedule "
-                  "fires even when the app is closed; a countdown or a file "
-                  "change needs it running."
+                    "after a countdown, or when a file changes. A schedule "
+                    "fires even when the app is closed; a countdown or a file "
+                    "change needs it running."
               : "A trigger sends its prompt to a chat: at a time you pick, "
-                  "after a countdown, or when a file changes. The app has to "
-                  "be running for one to fire; one missed while it was closed "
-                  "is caught up at the next launch.",
+                    "after a countdown, or when a file changes. The app has to "
+                    "be running for one to fire; one missed while it was closed "
+                    "is caught up at the next launch.",
         ),
         if (_notificationsAllowed == false)
           ListTile(
@@ -96,8 +98,9 @@ class _TriggersSectionState extends ConsumerState<TriggersSection> {
             title: const Text("Notifications are off"),
             subtitle: const Text("Allow them to see when a trigger finishes."),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () =>
-                unawaited(ref.read(reminderAlarmsProvider).requestNotifications()),
+            onTap: () => unawaited(
+              ref.read(reminderAlarmsProvider).requestNotifications(),
+            ),
           ),
         if (_exactAllowed == false)
           ListTile(
@@ -108,7 +111,8 @@ class _TriggersSectionState extends ConsumerState<TriggersSection> {
               "be cut short while the app is closed.",
             ),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => unawaited(ref.read(reminderAlarmsProvider).requestExact()),
+            onTap: () =>
+                unawaited(ref.read(reminderAlarmsProvider).requestExact()),
           ),
         for (final trigger in triggers)
           _TriggerTile(
@@ -158,8 +162,8 @@ class _TriggerTile extends ConsumerWidget {
     final subtitle = summary.isNotEmpty
         ? summary
         : trigger.lastFiredAt == null
-            ? "Never fired"
-            : "Last fired ${shortDate(trigger.lastFiredAt!)}";
+        ? "Never fired"
+        : "Last fired ${shortDate(trigger.lastFiredAt!)}";
 
     return ListTile(
       title: Text(trigger.label),
@@ -251,7 +255,8 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
           // The agent's trigger is the switch and the delete: anything else
           // saved here would rewrite what its conversation armed (source,
           // anchor, re-enable) from a page whose prompt it refuses to touch.
-          if (!registered) TextButton(onPressed: _save, child: const Text("Save")),
+          if (!registered)
+            TextButton(onPressed: _save, child: const Text("Save")),
         ],
       ),
       body: ListView(
@@ -268,7 +273,10 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
             child: SegmentedButton<_SourceKind>(
               segments: const [
                 ButtonSegment(value: _SourceKind.schedule, label: Text("Time")),
-                ButtonSegment(value: _SourceKind.timer, label: Text("Countdown")),
+                ButtonSegment(
+                  value: _SourceKind.timer,
+                  label: Text("Countdown"),
+                ),
                 ButtonSegment(value: _SourceKind.file, label: Text("Files")),
               ],
               selected: {_kindOf(_source)},
@@ -284,7 +292,11 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
           ),
           ..._sourceFields(editable: !registered),
           _memberField(!registered),
-          _PromptPreview(prompt: _prompt, onEdit: _editPrompt, editable: !registered),
+          _PromptPreview(
+            prompt: _prompt,
+            onEdit: _editPrompt,
+            editable: !registered,
+          ),
           const Divider(height: 1),
           if (!registered) ...[
             TempChatTtlField(
@@ -300,7 +312,9 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
                 items: [
                   for (final project in everyProject(named))
                     DropdownMenuItem(
-                        value: project, child: Text(projectLabel(project))),
+                      value: project,
+                      child: Text(projectLabel(project)),
+                    ),
                 ],
                 onChanged: (project) => setState(() => _project = project),
               ),
@@ -320,10 +334,10 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
   }
 
   _SourceKind _kindOf(TriggerSource source) => switch (source) {
-        ScheduleSource() => _SourceKind.schedule,
-        TimerSource() => _SourceKind.timer,
-        FileSource() => _SourceKind.file,
-      };
+    ScheduleSource() => _SourceKind.schedule,
+    TimerSource() => _SourceKind.timer,
+    FileSource() => _SourceKind.file,
+  };
 
   /// The member row, both targets one shape: a chatless fire makes its new
   /// chat with the member as the first speaker, a same-chat one queues on
@@ -349,10 +363,15 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
             isExpanded: true,
             decoration: const InputDecoration(hintText: "The whole room"),
             items: [
-              const DropdownMenuItem(value: null, child: Text("The whole room")),
+              const DropdownMenuItem(
+                value: null,
+                child: Text("The whole room"),
+              ),
               if (vanished)
                 DropdownMenuItem(
-                    value: _member, child: Text("@$_member (deleted)")),
+                  value: _member,
+                  child: Text("@$_member (deleted)"),
+                ),
               for (final member in members)
                 DropdownMenuItem(value: member, child: Text("@$member")),
             ],
@@ -360,8 +379,9 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
             // re-picked from a list that no longer names it — and where the
             // trigger is the agent's, nothing here may rewrite what it
             // registered.
-            onChanged:
-                editable ? (member) => setState(() => _member = member) : null,
+            onChanged: editable
+                ? (member) => setState(() => _member = member)
+                : null,
           ),
         ),
         if (vanished)
@@ -396,7 +416,9 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
     return switch (kind) {
       _SourceKind.schedule => ScheduleSource(at: _defaultAt()),
       _SourceKind.timer => TimerSource(
-          duration: const Duration(minutes: 30), registeredAt: _clock.now()),
+        duration: const Duration(minutes: 30),
+        registeredAt: _clock.now(),
+      ),
       _SourceKind.file => const FileSource(paths: []),
     };
   }
@@ -404,67 +426,71 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
   /// The rows the kind picked needs: date and time, countdown minutes, or
   /// paths and their events. Read-only where the trigger is the agent's —
   /// the switch and the delete are what is left.
-  List<Widget> _sourceFields({required bool editable}) => switch (_kindOf(_source)) {
+  List<Widget> _sourceFields({required bool editable}) =>
+      switch (_kindOf(_source)) {
         _SourceKind.schedule => [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: editable ? _pickDate : null,
-                      icon: const Icon(Icons.event_outlined, size: 18),
-                      label: Text(shortDate((_source as ScheduleSource).at)),
-                    ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: editable ? _pickDate : null,
+                    icon: const Icon(Icons.event_outlined, size: 18),
+                    label: Text(shortDate((_source as ScheduleSource).at)),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: editable ? _pickTime : null,
-                      icon: const Icon(Icons.schedule_outlined, size: 18),
-                      label: Text(timeOfDay((_source as ScheduleSource).at)),
-                    ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: editable ? _pickTime : null,
+                    icon: const Icon(Icons.schedule_outlined, size: 18),
+                    label: Text(timeOfDay((_source as ScheduleSource).at)),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            LabelledField(
-              label: "Repeat",
-              child: DropdownButtonFormField<ScheduleRepeat>(
-                initialValue: (_source as ScheduleSource).repeat,
-                isExpanded: true,
-                items: [
-                  for (final repeat in ScheduleRepeat.values)
-                    DropdownMenuItem(value: repeat, child: Text(repeat.label)),
-                ],
-                onChanged: editable
-                    ? (repeat) => setState(() => _source =
-                        ScheduleSource(
-                            at: (_source as ScheduleSource).at,
-                            repeat: repeat ?? ScheduleRepeat.off))
-                    : null,
-              ),
+          ),
+          LabelledField(
+            label: "Repeat",
+            child: DropdownButtonFormField<ScheduleRepeat>(
+              initialValue: (_source as ScheduleSource).repeat,
+              isExpanded: true,
+              items: [
+                for (final repeat in ScheduleRepeat.values)
+                  DropdownMenuItem(value: repeat, child: Text(repeat.label)),
+              ],
+              onChanged: editable
+                  ? (repeat) => setState(
+                      () => _source = ScheduleSource(
+                        at: (_source as ScheduleSource).at,
+                        repeat: repeat ?? ScheduleRepeat.off,
+                      ),
+                    )
+                  : null,
             ),
-          ],
+          ),
+        ],
         _SourceKind.timer => [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.timer_outlined, size: 18),
-                title: Text((_source as TimerSource).describe()),
-                subtitle: const Text("Countdown from being registered"),
-                onTap: editable ? _pickDuration : null,
-              ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.timer_outlined, size: 18),
+              title: Text((_source as TimerSource).describe()),
+              subtitle: const Text("Countdown from being registered"),
+              onTap: editable ? _pickDuration : null,
             ),
-          ],
+          ),
+        ],
         _SourceKind.file => [
-            _FileSourceField(
-              source: _source as FileSource,
-              onChanged:
-                  editable ? (source) => setState(() => _source = source) : null,
-            ),
-          ],
+          _FileSourceField(
+            source: _source as FileSource,
+            onChanged: editable
+                ? (source) => setState(() => _source = source)
+                : null,
+          ),
+        ],
       };
 
   Future<void> _pickDuration() async {
@@ -479,14 +505,19 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
     if (!mounted || minutes == null) return;
     final parsed = int.tryParse(minutes);
     if (parsed == null || parsed <= 0) return;
-    setState(() => _source = TimerSource(
-        duration: Duration(minutes: parsed), registeredAt: _clock.now()));
+    setState(
+      () => _source = TimerSource(
+        duration: Duration(minutes: parsed),
+        registeredAt: _clock.now(),
+      ),
+    );
   }
 
   Future<void> _editPrompt() async {
     final edited = await Navigator.of(context).push<String>(
       MaterialPageRoute(
-          builder: (_) => TriggerPromptPage(prompt: _prompt, project: _project)),
+        builder: (_) => TriggerPromptPage(prompt: _prompt, project: _project),
+      ),
     );
     if (edited == null || !mounted) return;
     setState(() => _prompt = edited);
@@ -504,20 +535,24 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
     if (picked == null || !mounted) return;
     setState(() {
       _source = ScheduleSource(
-          at: DateTime(picked.year, picked.month, picked.day, at.hour, at.minute),
-          repeat: (_source as ScheduleSource).repeat);
+        at: DateTime(picked.year, picked.month, picked.day, at.hour, at.minute),
+        repeat: (_source as ScheduleSource).repeat,
+      );
     });
   }
 
   Future<void> _pickTime() async {
     final at = (_source as ScheduleSource).at;
-    final picked =
-        await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(at));
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(at),
+    );
     if (picked == null || !mounted) return;
     setState(() {
       _source = ScheduleSource(
-          at: DateTime(at.year, at.month, at.day, picked.hour, picked.minute),
-          repeat: (_source as ScheduleSource).repeat);
+        at: DateTime(at.year, at.month, at.day, picked.hour, picked.minute),
+        repeat: (_source as ScheduleSource).repeat,
+      );
     });
   }
 
@@ -576,14 +611,14 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
   }
 
   Trigger _newTrigger(String prompt) => Trigger(
-        id: const Uuid().v4(),
-        name: "",
-        prompt: prompt,
-        source: _source,
-        project: _project,
-        member: _member,
-        tempChatTtl: _tempChatTtl,
-      );
+    id: const Uuid().v4(),
+    name: "",
+    prompt: prompt,
+    source: _source,
+    project: _project,
+    member: _member,
+    tempChatTtl: _tempChatTtl,
+  );
 
   Future<void> _delete() async {
     final ok = await confirm(
@@ -648,8 +683,9 @@ class _FileSourceFieldState extends State<_FileSourceField> {
               IconButton(
                 icon: const Icon(Icons.add),
                 tooltip: "Add path",
-                onPressed:
-                    widget.onChanged == null ? null : () => _add(_path.text),
+                onPressed: widget.onChanged == null
+                    ? null
+                    : () => _add(_path.text),
               ),
             ],
           ),
@@ -664,8 +700,8 @@ class _FileSourceFieldState extends State<_FileSourceField> {
                 : IconButton(
                     icon: const Icon(Icons.close),
                     tooltip: "Remove path",
-                    onPressed: () => _emit(
-                        paths: [...source.paths]..remove(path)),
+                    onPressed: () =>
+                        _emit(paths: [...source.paths]..remove(path)),
                   ),
           ),
         LabelledField(
@@ -682,7 +718,8 @@ class _FileSourceFieldState extends State<_FileSourceField> {
                       : (on) => _emit(
                           events: on
                               ? {...source.events, event}
-                              : ({...source.events}..remove(event))),
+                              : ({...source.events}..remove(event)),
+                        ),
                 ),
             ],
           ),
@@ -700,20 +737,26 @@ class _FileSourceFieldState extends State<_FileSourceField> {
 
   void _emit({List<String>? paths, Set<FileEvent>? events}) {
     final source = widget.source;
-    widget.onChanged?.call(FileSource(
+    widget.onChanged?.call(
+      FileSource(
         paths: paths ?? source.paths,
         events: events ?? source.events,
-        cooldown: source.cooldown));
+        cooldown: source.cooldown,
+      ),
+    );
   }
 }
-
 
 /// The prompt as the chat will render it, over the button that changes it.
 /// Formatted rather than raw: what a trigger sends is a message, and a
 /// message is read as markdown everywhere else in the app — so a prompt with a
 /// list in it is checked here rather than in the chat it eventually runs in.
 class _PromptPreview extends StatelessWidget {
-  const _PromptPreview({required this.prompt, required this.onEdit, this.editable = true});
+  const _PromptPreview({
+    required this.prompt,
+    required this.onEdit,
+    this.editable = true,
+  });
 
   final String prompt;
   final VoidCallback onEdit;
@@ -740,8 +783,9 @@ class _PromptPreview extends StatelessWidget {
               child: prompt.trim().isEmpty
                   ? Text(
                       "What should the agent do?",
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     )
                   : MarkdownBody(
                       data: prompt,
@@ -789,8 +833,9 @@ class TriggerPromptPage extends StatefulWidget {
 
 class _TriggerPromptPageState extends State<TriggerPromptPage> {
   final GlobalKey<CompletionFieldState> _field = GlobalKey();
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.prompt);
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.prompt,
+  );
 
   @override
   void dispose() {
@@ -857,7 +902,10 @@ class _TriggerPromptPageState extends State<TriggerPromptPage> {
               hintText: "What should the agent do?",
               alignLabelWithHint: true,
               border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
+              ),
             ),
             // The box is the page, so the menu goes under it — where the
             // composer's is, which is against the edge the field is on.

@@ -11,8 +11,11 @@ void main() {
   Widget chip(String name) =>
       SizedBox(key: ValueKey("$name-chip"), width: 100, height: 40);
 
-  Future<void> pumpRow(WidgetTester tester, List<String> names,
-      {bool settled = false}) async {
+  Future<void> pumpRow(
+    WidgetTester tester,
+    List<String> names, {
+    bool settled = false,
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -40,7 +43,10 @@ void main() {
   /// moves, since the chip's own box is full size from the first frame.
   RenderFloatingPosition slotOf(WidgetTester tester, String name) =>
       tester.renderObject<RenderFloatingPosition>(
-        find.ancestor(of: chipOf(name), matching: find.byType(FloatingPosition)),
+        find.ancestor(
+          of: chipOf(name),
+          matching: find.byType(FloatingPosition),
+        ),
       );
 
   testWidgets("the first build grows in from nothing", (tester) async {
@@ -57,7 +63,9 @@ void main() {
     expect(chipOf("b"), findsOneWidget);
   });
 
-  testWidgets("a settled row shows full size on its first build", (tester) async {
+  testWidgets("a settled row shows full size on its first build", (
+    tester,
+  ) async {
     await pumpRow(tester, ["a", "b"], settled: true);
     await tester.pump(const Duration(milliseconds: 60));
 
@@ -116,8 +124,9 @@ void main() {
     expect(chipOf("b"), findsOneWidget);
   });
 
-  testWidgets("a kept entry glides as its neighbours open and shut around it",
-      (tester) async {
+  testWidgets("a kept entry glides as its neighbours open and shut around it", (
+    tester,
+  ) async {
     // Two chips in the row: "a" settles centre-left at 46.
     await pumpRow(tester, ["a", "b"]);
     await tester.pumpAndSettle(const Duration(milliseconds: 16));

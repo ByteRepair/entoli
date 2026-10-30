@@ -20,7 +20,9 @@ class ChatControllerTriggerTurnDriver implements TriggerTurnDriver {
 
   @override
   Future<({TriggerOutcome outcome, String snippet})> send(
-      String chatId, String prompt) async {
+    String chatId,
+    String prompt,
+  ) async {
     final controller = _ref.read(chatControllerProvider(chatId).notifier);
     // Not the turn this send will start: whatever is running now. One await
     // covers a fan-out, the way the runner's own completion does.

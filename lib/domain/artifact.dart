@@ -12,7 +12,12 @@ const artifactToolName = "artifact";
 /// on the artifact card. [artifactId] is optional; if present, the artifact
 /// is updated in place rather than created anew.
 class ArtifactArgs {
-  const ArtifactArgs({required this.path, required this.entryFile, required this.title, this.artifactId});
+  const ArtifactArgs({
+    required this.path,
+    required this.entryFile,
+    required this.title,
+    this.artifactId,
+  });
 
   final String path;
   final String entryFile;
@@ -30,11 +35,20 @@ ArtifactArgs? artifactArgsFrom(String? argumentsJson) {
   final path = decoded["path"];
   if (path is! String || path.isEmpty) return null;
   final title = decoded["title"] is String ? decoded["title"] as String : "";
-  final artifactId = decoded["artifact_id"] is String ? decoded["artifact_id"] as String : null;
+  final artifactId = decoded["artifact_id"] is String
+      ? decoded["artifact_id"] as String
+      : null;
 
-  final entryFile =
-      path.split(RegExp(r"[/\\]")).where((s) => s.isNotEmpty).lastOrNull;
+  final entryFile = path
+      .split(RegExp(r"[/\\]"))
+      .where((s) => s.isNotEmpty)
+      .lastOrNull;
   if (entryFile == null) return null;
 
-  return ArtifactArgs(path: path, entryFile: entryFile, title: title, artifactId: artifactId);
+  return ArtifactArgs(
+    path: path,
+    entryFile: entryFile,
+    title: title,
+    artifactId: artifactId,
+  );
 }

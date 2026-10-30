@@ -81,9 +81,11 @@ class RateLimitGate {
     if (alreadyPaused) return _pausedUntil!.difference(now);
     _episode++;
     final ms = initialBackoff.inMilliseconds * (1 << (_episode - 1));
-    final backoff = Duration(milliseconds: ms > maxBackoff.inMilliseconds
-        ? maxBackoff.inMilliseconds
-        : ms);
+    final backoff = Duration(
+      milliseconds: ms > maxBackoff.inMilliseconds
+          ? maxBackoff.inMilliseconds
+          : ms,
+    );
     _pausedUntil = now.add(backoff);
     return backoff;
   }

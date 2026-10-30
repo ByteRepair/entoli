@@ -30,7 +30,8 @@ class PromptDocument {
 
   /// Whether the `/` menu offers it. False is the model's half alone: a skill
   /// the user can only reach by the model deciding to load it.
-  bool get userInvocable => metadata["user-invocable"]?.toLowerCase() != "false";
+  bool get userInvocable =>
+      metadata["user-invocable"]?.toLowerCase() != "false";
 
   /// Whether the model may load it through the `skill` tool. False is the
   /// user's half alone: the tool refuses it, reserved for `/name`.
@@ -48,17 +49,21 @@ class PromptDocument {
   bool get isCallback => metadata["invocation"] == "callback";
 
   CompletionOption get option => CompletionOption(
-        name: name,
-        description: description,
-        argumentHint: argumentHint,
-      );
+    name: name,
+    description: description,
+    argumentHint: argumentHint,
+  );
 
   /// Only the top-level scalars and one nested `metadata:` map are read,
   /// because `description`, an agent's `tools` and the metadata keys are all
   /// the menu and the tool gates need. Everything else — lists of maps,
   /// deeper maps — is dropped. The parsing lives in [Frontmatter], its own file so the
   /// build-time generators can share it without the freezed models.
-  factory PromptDocument.parse(CompletionKind kind, String name, String source) {
+  factory PromptDocument.parse(
+    CompletionKind kind,
+    String name,
+    String source,
+  ) {
     final parsed = Frontmatter.parse(source);
     return PromptDocument(
       kind: kind,
@@ -71,20 +76,20 @@ class PromptDocument {
 
   /// The wire's shape, for a paired device's library.
   Map<String, dynamic> toJson() => {
-        "kind": kind.name,
-        "name": name,
-        "frontmatter": frontmatter,
-        "metadata": metadata,
-        "body": body,
-      };
+    "kind": kind.name,
+    "name": name,
+    "frontmatter": frontmatter,
+    "metadata": metadata,
+    "body": body,
+  };
 
   factory PromptDocument.fromJson(Map<String, dynamic> json) => PromptDocument(
-        kind: CompletionKind.values.byName(json["kind"] as String),
-        name: json["name"] as String,
-        frontmatter: (json["frontmatter"] as Map).cast<String, String>(),
-        metadata: (json["metadata"] as Map).cast<String, String>(),
-        body: json["body"] as String,
-      );
+    kind: CompletionKind.values.byName(json["kind"] as String),
+    name: json["name"] as String,
+    frontmatter: (json["frontmatter"] as Map).cast<String, String>(),
+    metadata: (json["metadata"] as Map).cast<String, String>(),
+    body: json["body"] as String,
+  );
 }
 
 /// Somewhere prompt files come from — the app's own assets, or a directory the
@@ -131,14 +136,17 @@ class PromptLibrary {
   /// applies to agents as well as skills, since a prompt file either belongs
   /// in a menu or it does not.
   List<CompletionOption> options(CompletionKind kind) => [
-        for (final document in entries(kind))
-          if (document.userInvocable) document.option,
-      ];
+    for (final document in entries(kind))
+      if (document.userInvocable) document.option,
+  ];
 
-  PromptDocument? find(CompletionKind kind, String name) => _byKind[kind]?[name];
+  PromptDocument? find(CompletionKind kind, String name) =>
+      _byKind[kind]?[name];
 
   /// Every entry, each kind in turn.
-  List<PromptDocument> get all => [for (final kind in CompletionKind.values) ...entries(kind)];
+  List<PromptDocument> get all => [
+    for (final kind in CompletionKind.values) ...entries(kind),
+  ];
 }
 
 /// A message that is nothing but `/name` plus arguments runs that skill. The
@@ -161,21 +169,21 @@ final _mention = RegExp(r"(?<![\w.-])@([\w.-]+)");
 /// of the same name do not collide. A name the library does not know is left
 /// out: it is more likely a path, or prose, than a document nobody defined.
 Map<String, String> promptDocuments(String text, PromptLibrary? library) => {
-      // A wired callback is not a thing the model is told what it meant: the
-      // turn runs code, and the skill's body is the user-facing note —
-      // expanded into the conversation it would be prose the model reads
-      // where no model is reading. The document in hand is what answers, and
-      // this is where it is in hand: the reload-staleness hazard the
-      // documents map exists for does not apply at composition time.
-      if (skillReference.firstMatch(text.trim())?.group(1) case final name?)
-        if (library?.find(CompletionKind.skill, name)
-            case final document? when !document.isCallback)
-          "${CompletionKind.skill.trigger}$name": document.body,
-      for (final match in _mention.allMatches(text))
-        if (library?.find(CompletionKind.agent, match.group(1)!)
-            case final document?)
-          "${CompletionKind.agent.trigger}${match.group(1)}": document.body,
-    };
+  // A wired callback is not a thing the model is told what it meant: the
+  // turn runs code, and the skill's body is the user-facing note —
+  // expanded into the conversation it would be prose the model reads
+  // where no model is reading. The document in hand is what answers, and
+  // this is where it is in hand: the reload-staleness hazard the
+  // documents map exists for does not apply at composition time.
+  if (skillReference.firstMatch(text.trim())?.group(1) case final name?)
+    if (library?.find(CompletionKind.skill, name) case final document?
+        when !document.isCallback)
+      "${CompletionKind.skill.trigger}$name": document.body,
+  for (final match in _mention.allMatches(text))
+    if (library?.find(CompletionKind.agent, match.group(1)!)
+        case final document?)
+      "${CompletionKind.agent.trigger}${match.group(1)}": document.body,
+};
 
 /// The task the model is given: a skill's template with the arguments in it,
 /// or the message unchanged where it names no skill this one recorded.
@@ -194,17 +202,19 @@ String expandedPrompt(String text, Map<String, String> documents) {
 /// `skill` tool's result — so the model reads the same words whichever route
 /// it arrived by.
 String withArguments(String body, String arguments) {
-  if (body.contains(r"$ARGUMENTS")) return body.replaceAll(r"$ARGUMENTS", arguments);
+  if (body.contains(r"$ARGUMENTS")) {
+    return body.replaceAll(r"$ARGUMENTS", arguments);
+  }
   return arguments.isEmpty ? body : "$body\n\n$arguments";
 }
 
 /// What the message's `@agent` references meant, keyed as written. The one
 /// sweep of the agent half of a documents map, which both readers below walk.
 Map<String, String> agentEntriesFrom(Map<String, String> documents) => {
-      for (final entry in documents.entries)
-        if (entry.key.startsWith(CompletionKind.agent.trigger))
-          entry.key: entry.value,
-    };
+  for (final entry in documents.entries)
+    if (entry.key.startsWith(CompletionKind.agent.trigger))
+      entry.key: entry.value,
+};
 
 /// The agents the message asked to hand the work to, sigils off, in the order
 /// they were written — who a direct chat's main agent is told to delegate to.
@@ -212,9 +222,9 @@ Map<String, String> agentEntriesFrom(Map<String, String> documents) => {
 /// Off the record rather than the text: the mentions were resolved when the
 /// message was composed, and a name mentioned twice was recorded once.
 List<String> mentionedAgents(Map<String, String> documents) => [
-      for (final key in agentEntriesFrom(documents).keys)
-        key.substring(CompletionKind.agent.trigger.length),
-    ];
+  for (final key in agentEntriesFrom(documents).keys)
+    key.substring(CompletionKind.agent.trigger.length),
+];
 
 /// The member [documents] shows addressed, as typed — the first agent key in
 /// write order. Null where the message names no member at all. A message that
@@ -226,7 +236,8 @@ List<String> mentionedAgents(Map<String, String> documents) => [
 /// addresses one member and names another as a handoff target ("check X, then
 /// hand it to @reviewer") is still addressed to one: the first mention is the
 /// addressee, the later one the routing the reply will carry out.
-String? authorFrom(Map<String, String> documents) => authorKeys(documents).firstOrNull;
+String? authorFrom(Map<String, String> documents) =>
+    authorKeys(documents).firstOrNull;
 
 /// The members [documents] address, in the order they were written — the
 /// agent keys as typed, sigil on. Empty where the message names no member.
@@ -235,12 +246,11 @@ List<String> authorKeys(Map<String, String> documents) =>
 
 /// The member name an author stamp carries — the sigil off, the library's
 /// name for them. An unnamed stamp names nothing.
-String? nameOf(String? author) =>
-    author == null
-        ? null
-        : author.startsWith(CompletionKind.agent.trigger)
-            ? author.substring(CompletionKind.agent.trigger.length)
-            : null;
+String? nameOf(String? author) => author == null
+    ? null
+    : author.startsWith(CompletionKind.agent.trigger)
+    ? author.substring(CompletionKind.agent.trigger.length)
+    : null;
 
 /// Whether the room sent [message] to the participant called [viewer]: the
 /// house for null, a member's bare name otherwise. A say addressed away from
@@ -270,10 +280,9 @@ String? singleAgentMention(String text, PromptLibrary library) {
 /// library does not know is prose, not an address — a member signing their own
 /// reply (`@scout reporting`) is not addressed by their own signature. The
 /// empty list is no address at all.
-List<String> mentionsIn(String text, PromptLibrary library) =>
-    _mention
-        .allMatches(text)
-        .map((m) => m.group(1)!)
-        .where((name) => library.find(CompletionKind.agent, name) != null)
-        .toSet()
-        .toList();
+List<String> mentionsIn(String text, PromptLibrary library) => _mention
+    .allMatches(text)
+    .map((m) => m.group(1)!)
+    .where((name) => library.find(CompletionKind.agent, name) != null)
+    .toSet()
+    .toList();

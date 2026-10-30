@@ -43,7 +43,8 @@ class DefaultsSection extends ConsumerWidget {
             nullLabel: "Off",
             defaultOf: LlmProviderConfig.lightDefaultOf,
             role: ModelRole.title,
-            helperOffText: "Names a chat from its first message. Off, chats "
+            helperOffText:
+                "Names a chat from its first message. Off, chats "
                 "stay \"New chat\" until you rename them.",
             choice: (
               providerId: settings.titleProviderId,
@@ -77,7 +78,8 @@ class ImageSection extends ConsumerWidget {
             nullLabel: "Off",
             defaultOf: (config) => providerOf(config).imageModel,
             role: ModelRole.image,
-            helperOffText: "Lets the agent make images, shown in the chat. "
+            helperOffText:
+                "Lets the agent make images, shown in the chat. "
                 "Each one is a paid request to the image model. OpenAI and "
                 "OpenRouter have defaults.",
             choice: (
@@ -94,7 +96,8 @@ class ImageSection extends ConsumerWidget {
               initialValue: settings.imageQuality,
               isExpanded: true,
               decoration: const InputDecoration(
-                helperText: "Sent to OpenAI's image models; higher costs more "
+                helperText:
+                    "Sent to OpenAI's image models; higher costs more "
                     "and takes longer. OpenRouter's image models take no "
                     "quality and ignore it.",
                 helperMaxLines: 3,
@@ -152,8 +155,7 @@ class _MaxStepsField extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final steps = ref.watch(
-        appSettingsProvider.select((s) => s.turnMaxSteps));
+    final steps = ref.watch(appSettingsProvider.select((s) => s.turnMaxSteps));
     return InheritableSlider(
       label: "Max steps per turn",
       value: steps,
@@ -174,10 +176,10 @@ class _AutoCompactField extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final on = ref.watch(appSettingsProvider.select((s) => s.autoCompact));
-    final percent =
-        ref.watch(appSettingsProvider.select((s) => s.autoCompactPercent));
-    final total =
-        ref.watch(appSettingsProvider.select((s) => s.totalContext));
+    final percent = ref.watch(
+      appSettingsProvider.select((s) => s.autoCompactPercent),
+    );
+    final total = ref.watch(appSettingsProvider.select((s) => s.totalContext));
     return LabelledField(
       label: "Auto-compact",
       child: Column(
@@ -198,7 +200,9 @@ class _AutoCompactField extends ConsumerWidget {
               inherited: AppSettings.defaultAutoCompactPercent,
               onChanged: (v) => ref
                   .read(appSettingsProvider.notifier)
-                  .setAutoCompactPercent(v ?? AppSettings.defaultAutoCompactPercent),
+                  .setAutoCompactPercent(
+                    v ?? AppSettings.defaultAutoCompactPercent,
+                  ),
             ),
             Text(
               "When a chat's context reaches $percent% of ${total.inK} tokens "
@@ -248,7 +252,12 @@ class _TotalContextField extends ConsumerWidget {
             if (parsed == null) return;
             ref
                 .read(appSettingsProvider.notifier)
-                .setTotalContext(parsed.clamp(AppSettings.minTotalContext, AppSettings.maxTotalContext));
+                .setTotalContext(
+                  parsed.clamp(
+                    AppSettings.minTotalContext,
+                    AppSettings.maxTotalContext,
+                  ),
+                );
           },
         ),
       ),
@@ -263,8 +272,7 @@ class _RetryTurnsField extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final retries = ref.watch(
-        appSettingsProvider.select((s) => s.turnRetries));
+    final retries = ref.watch(appSettingsProvider.select((s) => s.turnRetries));
     final on = retries > 0;
     return LabelledField(
       label: "Retry failed turns",
@@ -304,5 +312,6 @@ class _RetryTurnsField extends ConsumerWidget {
 }
 
 extension on int {
-  String get inK => this >= 1000 && this % 1000 == 0 ? "${this ~/ 1000}k" : "$this";
+  String get inK =>
+      this >= 1000 && this % 1000 == 0 ? "${this ~/ 1000}k" : "$this";
 }

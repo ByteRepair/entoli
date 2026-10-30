@@ -24,8 +24,8 @@ class TaskUI extends ToolUI {
 
   @override
   RunView view(WidgetRef ref, Run run) => SubAgentActivity(
-          agent: stringArg(run.call?.argumentsJson, "agent") ?? "task")
-      .view(ref, run);
+    agent: stringArg(run.call?.argumentsJson, "agent") ?? "task",
+  ).view(ref, run);
 }
 
 /// A sub-agent's run: the sub-agent that ran, and behind the drawer its own
@@ -88,23 +88,26 @@ class SubAgentActivity extends LabelledActivity {
 /// The sub-agents still running, a pill each, opening the drawer its label in
 /// the reply opens and following the turn the same way.
 List<RunningThing> subAgentsRunning(
-        WidgetRef ref, ChatViewState view, String chatId) =>
-    [
-      for (final MapEntry(key: replyId, value: agents)
-          in view.runningSubAgents.entries)
-        for (final agent in agents)
-          RunningThing(
-            group: "sub-agent",
-            label: "@${agent.agent}",
-            tooltip: "Sub-agent @${agent.agent}",
-            // The event's prompt is cut for the pill; the call, followed
-            // once it is written, has all of it.
-            open: (context) =>
-                SubAgentActivity(agent: agent.agent, prompt: agent.prompt).open(
+  WidgetRef ref,
+  ChatViewState view,
+  String chatId,
+) => [
+  for (final MapEntry(key: replyId, value: agents)
+      in view.runningSubAgents.entries)
+    for (final agent in agents)
+      RunningThing(
+        group: "sub-agent",
+        label: "@${agent.agent}",
+        tooltip: "Sub-agent @${agent.agent}",
+        // The event's prompt is cut for the pill; the call, followed
+        // once it is written, has all of it.
+        open: (context) =>
+            SubAgentActivity(agent: agent.agent, prompt: agent.prompt).open(
               context,
               Run(chatId: chatId, callId: agent.id),
-              source: chatViewProvider(chatId)
-                  .select((v) => liveMessageOf(v, replyId)),
+              source: chatViewProvider(
+                chatId,
+              ).select((v) => liveMessageOf(v, replyId)),
             ),
-          ),
-    ];
+      ),
+];

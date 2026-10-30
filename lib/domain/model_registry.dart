@@ -33,11 +33,15 @@ class ModelCatalog {
       if (models is! Map) continue;
       providers[id] = {
         for (final MapEntry(key: model, value: info) in models.entries)
-          if (model is String && info is Map) model: ModelInfo.fromJson(model, info),
+          if (model is String && info is Map)
+            model: ModelInfo.fromJson(model, info),
       };
     }
     return ModelCatalog._(
-        providers, apis, DateTime.tryParse("${json[fetchedKey] ?? ""}"));
+      providers,
+      apis,
+      DateTime.tryParse("${json[fetchedKey] ?? ""}"),
+    );
   }
 
   /// When the copy this was read from came from models.dev. Null for the
@@ -106,5 +110,7 @@ ModelInfo? modelInfoOf(LlmProviderConfig? provider, String? modelId) {
         ? const ModelInfo(id: appleModelId, context: 8192)
         : null;
   }
-  return modelId == null ? null : ModelCatalog.current.lookup(provider, modelId);
+  return modelId == null
+      ? null
+      : ModelCatalog.current.lookup(provider, modelId);
 }

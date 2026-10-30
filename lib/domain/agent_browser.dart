@@ -201,8 +201,7 @@ abstract class BrowserTab {
   Future<String> click({int? ref, double? x, double? y});
 
   /// Press at [from] and release at [to], moving between: a slider.
-  Future<String> drag(
-      ({double x, double y}) from, ({double x, double y}) to);
+  Future<String> drag(({double x, double y}) from, ({double x, double y}) to);
 
   /// Replace the text in [ref] with [text], and press Enter after if
   /// [submit]. With no [ref], type [text] at whatever has focus, key by key,
@@ -244,8 +243,11 @@ class BrowserPage {
   final String title;
   final int opened;
 
-  BrowserPage copyWith({String? url, String? title}) =>
-      BrowserPage(url: url ?? this.url, title: title ?? this.title, opened: opened);
+  BrowserPage copyWith({String? url, String? title}) => BrowserPage(
+    url: url ?? this.url,
+    title: title ?? this.title,
+    opened: opened,
+  );
 }
 
 /// One frame of a tab's screencast: a JPEG, and the viewport size it shows.
@@ -271,7 +273,11 @@ class BrowserHold {
 /// description, and what the user is asked for. [secret] obscures what they
 /// type.
 class CredentialField {
-  const CredentialField({required this.ref, required this.label, this.secret = false});
+  const CredentialField({
+    required this.ref,
+    required this.label,
+    this.secret = false,
+  });
 
   final int ref;
   final String label;
@@ -307,7 +313,11 @@ enum BrowserUploadPolicy { allow, classifier, user }
 
 /// A file chooser the page opened, waiting on the user's files.
 class UploadRequest {
-  const UploadRequest({required this.target, required this.url, this.multiple = false});
+  const UploadRequest({
+    required this.target,
+    required this.url,
+    this.multiple = false,
+  });
 
   /// The element that opened it, as a page description names it.
   final String target;
@@ -371,7 +381,11 @@ enum BrowserApproval { never, classifier, always }
   final digit = RegExp(r"^[0-9]$").hasMatch(name);
   return (
     key: name,
-    code: letter ? "Key$upper" : digit ? "Digit$name" : "",
+    code: letter
+        ? "Key$upper"
+        : digit
+        ? "Digit$name"
+        : "",
     keyCode: letter || digit ? upper.codeUnitAt(0) : 0,
     text: name,
   );

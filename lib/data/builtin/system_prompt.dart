@@ -36,7 +36,8 @@ String systemPrompt({
       ? substitute(systemProse("shell"), {
           "tools": calls,
           "shell": systemProse(
-              offer.oneShot ? "shell-oneshot" : "shell-persistent"),
+            offer.oneShot ? "shell-oneshot" : "shell-persistent",
+          ),
           "sections": [
             ...sections,
             systemProse("finish"),
@@ -48,8 +49,8 @@ String systemPrompt({
       // app's own filesystem, so a device without one can still produce files
       // and artifacts. The turn ends the same way, on a reply with no call.
       : "You are a helpful assistant.\n\n"
-          "${substitute(systemProse("no-shell"), {"tools": calls})}\n\n"
-          "${sections.join("\n\n")}\n";
+            "${substitute(systemProse("no-shell"), {"tools": calls})}\n\n"
+            "${sections.join("\n\n")}\n";
   return body + profileSection(profile) + styleSection(tone, citations);
 }
 
@@ -57,5 +58,7 @@ String systemPrompt({
 String _either(List<String> items) {
   if (items.length <= 1) return items.join();
   final head = items.sublist(0, items.length - 1).join(", ");
-  return items.length == 2 ? "$head or ${items.last}" : "$head, or ${items.last}";
+  return items.length == 2
+      ? "$head or ${items.last}"
+      : "$head, or ${items.last}";
 }

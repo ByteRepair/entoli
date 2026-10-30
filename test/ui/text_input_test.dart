@@ -13,19 +13,21 @@ void main() {
   /// The field under a second one, so a Tab that traversed rather than
   /// indented has somewhere to land.
   Future<void> pump(WidgetTester tester) async {
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: Column(
-          children: [
-            TabIndents(
-              controller: controller,
-              child: TextField(controller: controller),
-            ),
-            const TextField(),
-          ],
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              TabIndents(
+                controller: controller,
+                child: TextField(controller: controller),
+              ),
+              const TextField(),
+            ],
+          ),
         ),
       ),
-    ));
+    );
     await tester.tap(find.byType(TextField).first);
     await tester.pump();
   }
@@ -59,7 +61,9 @@ void main() {
     expect(controller.selection, const TextSelection.collapsed(offset: 3));
   });
 
-  testWidgets("a second tab indents again rather than moving on", (tester) async {
+  testWidgets("a second tab indents again rather than moving on", (
+    tester,
+  ) async {
     await pump(tester);
     await tester.enterText(find.byType(TextField).first, "hello");
 

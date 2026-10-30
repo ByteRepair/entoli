@@ -33,10 +33,10 @@ class SettingsCard extends StatelessWidget {
     required this.title,
     required String value,
     required String said,
-  })  : subtitle = value,
-        onTap = null,
-        trailing = null,
-        _copySaid = said;
+  }) : subtitle = value,
+       onTap = null,
+       trailing = null,
+       _copySaid = said;
 
   final IconData icon;
   final String title;
@@ -53,19 +53,22 @@ class SettingsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final copy = _copySaid;
-    final action = onTap ??
+    final action =
+        onTap ??
         (copy == null
             ? null
             : () => copyToClipboard(context, subtitle, said: copy));
-    final ending = trailing ??
+    final ending =
+        trailing ??
         (action == null
             ? null
             : copy == null
-                ? const Icon(Icons.arrow_right)
-                : const Icon(Icons.copy));
+            ? const Icon(Icons.arrow_right)
+            : const Icon(Icons.copy));
     final style = copy == null
-        ? theme.textTheme.bodySmall
-            ?.copyWith(color: theme.colorScheme.onSurfaceVariant)
+        ? theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          )
         : _mono;
     // Clipped, so the ink takes the card's own shape at every corner radius.
     return Card(
@@ -80,8 +83,11 @@ class SettingsCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(icon,
-                      size: 20, color: theme.colorScheme.onSurfaceVariant),
+                  Icon(
+                    icon,
+                    size: 20,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                   const Spacer(),
                   ?ending,
                 ],
@@ -117,18 +123,20 @@ class SettingsCardRow extends StatelessWidget {
     // The constraints are already inside the padding.
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: LayoutBuilder(builder: (context, constraints) {
-        const gap = 8.0;
-        final width = ((constraints.maxWidth - gap) / 2).clamp(160.0, 240.0);
-        return Wrap(
-          spacing: gap,
-          runSpacing: gap,
-          children: [
-            for (final child in children)
-              SizedBox(width: width, child: child),
-          ],
-        );
-      }),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          const gap = 8.0;
+          final width = ((constraints.maxWidth - gap) / 2).clamp(160.0, 240.0);
+          return Wrap(
+            spacing: gap,
+            runSpacing: gap,
+            children: [
+              for (final child in children)
+                SizedBox(width: width, child: child),
+            ],
+          );
+        },
+      ),
     );
   }
 }

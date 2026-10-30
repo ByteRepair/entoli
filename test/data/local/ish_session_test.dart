@@ -31,12 +31,12 @@ void main() {
   }
 
   IshShell ishShell(IshTransport transport) => IshShell(
-        rootfsDir: () => "/rootfs",
-        dataDir: "/data",
-        environment: () => {},
-        platformDescription: () => "iSH",
-        transport: transport,
-      );
+    rootfsDir: () => "/rootfs",
+    dataDir: "/data",
+    environment: () => {},
+    platformDescription: () => "iSH",
+    transport: transport,
+  );
 
   group("a session command", () {
     test("the cwd row is seeded with the guest's words, not the host path", () {
@@ -47,37 +47,47 @@ void main() {
       expect(notifier!.value, "/root/chats/x");
     });
 
-    test("what must stay read-only reaches the bridge, session and one-shot",
-        () {
-      fakeAsync((async) {
-        final fake = FakeIshTransport();
-        final shell = ishShell(fake);
-        const resources = "/data/projects/default/chats/x/resources";
-        shell.start("ls",
+    test(
+      "what must stay read-only reaches the bridge, session and one-shot",
+      () {
+        fakeAsync((async) {
+          final fake = FakeIshTransport();
+          final shell = ishShell(fake);
+          const resources = "/data/projects/default/chats/x/resources";
+          shell.start(
+            "ls",
             cwd: cwd,
             home: home,
             timeout: const Duration(minutes: 5),
-            readOnly: const [resources]);
-        shell.start("ls",
+            readOnly: const [resources],
+          );
+          shell.start(
+            "ls",
             cwd: cwd,
             home: home,
             timeout: const Duration(minutes: 5),
             oneShot: true,
-            readOnly: const [resources]);
-        async.flushMicrotasks();
-        expect(fake.initReadOnly, [
-          [resources],
-          [resources],
-        ]);
-      });
-    });
+            readOnly: const [resources],
+          );
+          async.flushMicrotasks();
+          expect(fake.initReadOnly, [
+            [resources],
+            [resources],
+          ]);
+        });
+      },
+    );
 
     test("a stop is delivered while the run is pending, and ends it", () {
       fakeAsync((async) {
         final fake = FakeIshTransport();
         final shell = ishShell(fake);
-        final run = shell.start("sleep 60",
-            cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+        final run = shell.start(
+          "sleep 60",
+          cwd: cwd,
+          home: home,
+          timeout: const Duration(minutes: 5),
+        );
         async.flushMicrotasks();
         expect(fake.runs.single, base64.encode(utf8.encode("sleep 60")));
         final handle = fake.lastHandle!;
@@ -98,8 +108,12 @@ void main() {
       fakeAsync((async) {
         final fake = FakeIshTransport()..interruptEnds = false;
         final shell = ishShell(fake);
-        final run = shell.start("trap '' INT; sleep 60",
-            cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+        final run = shell.start(
+          "trap '' INT; sleep 60",
+          cwd: cwd,
+          home: home,
+          timeout: const Duration(minutes: 5),
+        );
         async.flushMicrotasks();
         final handle = fake.lastHandle!;
         final session = fake.lastSession!;
@@ -123,8 +137,12 @@ void main() {
       fakeAsync((async) {
         final fake = FakeIshTransport()..interruptEnds = false;
         final shell = ishShell(fake);
-        final run = shell.start("sleep 60",
-            cwd: cwd, home: home, timeout: const Duration(seconds: 2));
+        final run = shell.start(
+          "sleep 60",
+          cwd: cwd,
+          home: home,
+          timeout: const Duration(seconds: 2),
+        );
         async.flushMicrotasks();
         final handle = fake.lastHandle!;
 
@@ -142,8 +160,12 @@ void main() {
       fakeAsync((async) {
         final fake = FakeIshTransport();
         final shell = ishShell(fake);
-        final run = shell.start("sleep 60",
-            cwd: cwd, home: home, timeout: const Duration(seconds: 2));
+        final run = shell.start(
+          "sleep 60",
+          cwd: cwd,
+          home: home,
+          timeout: const Duration(seconds: 2),
+        );
         async.flushMicrotasks();
         // The guest answered within the escalation's second: rc 130, the
         // trap's doing, the interrupt honoured.
@@ -159,8 +181,12 @@ void main() {
         expect(fake.hangups, isEmpty);
         expect(fake.destroys, isEmpty);
         // The next command is served by that same session, not a cold start.
-        shell.start("echo hi",
-            cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+        shell.start(
+          "echo hi",
+          cwd: cwd,
+          home: home,
+          timeout: const Duration(minutes: 5),
+        );
         async.flushMicrotasks();
         expect(fake.inits.length, 1);
         expect(fake.runs.length, 2);
@@ -171,14 +197,22 @@ void main() {
       fakeAsync((async) {
         final fake = FakeIshTransport()..interruptEnds = false;
         final shell = ishShell(fake);
-        shell.start("sleep 60",
-            cwd: cwd, home: home, timeout: const Duration(seconds: 2));
+        shell.start(
+          "sleep 60",
+          cwd: cwd,
+          home: home,
+          timeout: const Duration(seconds: 2),
+        );
         async.flushMicrotasks();
         async.elapse(const Duration(seconds: 3));
         expect(fake.destroys, isNotEmpty);
 
-        shell.start("echo hi",
-            cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+        shell.start(
+          "echo hi",
+          cwd: cwd,
+          home: home,
+          timeout: const Duration(minutes: 5),
+        );
         async.flushMicrotasks();
         expect(fake.inits.length, 2);
         expect(fake.runs.length, 2);
@@ -189,8 +223,12 @@ void main() {
       fakeAsync((async) {
         final fake = FakeIshTransport();
         final shell = ishShell(fake);
-        final run = shell.start("echo hello",
-            cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+        final run = shell.start(
+          "echo hello",
+          cwd: cwd,
+          home: home,
+          timeout: const Duration(minutes: 5),
+        );
         async.flushMicrotasks();
         final output = run.output;
         expect(output, isNotNull);
@@ -211,8 +249,12 @@ void main() {
       fakeAsync((async) {
         final fake = FakeIshTransport();
         final shell = ishShell(fake);
-        final run = shell.start("echo hello",
-            cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+        final run = shell.start(
+          "echo hello",
+          cwd: cwd,
+          home: home,
+          timeout: const Duration(minutes: 5),
+        );
         async.flushMicrotasks();
         fake.emit(fake.lastSession!, "hello");
         async.flushMicrotasks();
@@ -227,30 +269,44 @@ void main() {
       fakeAsync((async) {
         final fake = FakeIshTransport()..initError = "no rootfs";
         final shell = ishShell(fake);
-        final run = shell.start("echo hi",
-            cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+        final run = shell.start(
+          "echo hi",
+          cwd: cwd,
+          home: home,
+          timeout: const Duration(minutes: 5),
+        );
         final result = resultOf(async, run);
         expect(result.exceptionInfo, contains("no rootfs"));
       });
     });
 
-    test("a session command says so where no iSH is linked, and stays cold",
-        () async {
-      final fake = FakeIshTransport()..answersNotLinked = true;
-      final shell = ishShell(fake);
-      final run = shell.start("echo hi",
-          cwd: cwd, home: home, timeout: const Duration(minutes: 5));
-      final result = await run.result;
-      expect(result.exceptionInfo, contains("not available"));
-      expect(fake.runs, isEmpty);
-      expect(fake.destroys, isEmpty);
-      // Nothing was taken for an id, so a next command inits again rather
-      // than reusing one the worker never had.
-      shell.start("echo hi",
-          cwd: cwd, home: home, timeout: const Duration(minutes: 5));
-      await Future<void>.delayed(Duration.zero);
-      expect(fake.inits.length, 2);
-    });
+    test(
+      "a session command says so where no iSH is linked, and stays cold",
+      () async {
+        final fake = FakeIshTransport()..answersNotLinked = true;
+        final shell = ishShell(fake);
+        final run = shell.start(
+          "echo hi",
+          cwd: cwd,
+          home: home,
+          timeout: const Duration(minutes: 5),
+        );
+        final result = await run.result;
+        expect(result.exceptionInfo, contains("not available"));
+        expect(fake.runs, isEmpty);
+        expect(fake.destroys, isEmpty);
+        // Nothing was taken for an id, so a next command inits again rather
+        // than reusing one the worker never had.
+        shell.start(
+          "echo hi",
+          cwd: cwd,
+          home: home,
+          timeout: const Duration(minutes: 5),
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(fake.inits.length, 2);
+      },
+    );
   });
 
   group("close", () {
@@ -258,10 +314,18 @@ void main() {
       fakeAsync((async) {
         final fake = FakeIshTransport();
         final shell = ishShell(fake);
-        final first = shell.start("a", cwd: cwd, home: home,
-            timeout: const Duration(minutes: 5));
-        final second = shell.start("b", cwd: cwd, home: home,
-            timeout: const Duration(minutes: 5));
+        final first = shell.start(
+          "a",
+          cwd: cwd,
+          home: home,
+          timeout: const Duration(minutes: 5),
+        );
+        final second = shell.start(
+          "b",
+          cwd: cwd,
+          home: home,
+          timeout: const Duration(minutes: 5),
+        );
         async.flushMicrotasks();
         final session = fake.lastSession!;
 
@@ -280,8 +344,12 @@ void main() {
       fakeAsync((async) {
         final fake = FakeIshTransport();
         final shell = ishShell(fake);
-        shell.start("sleep 60",
-            cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+        shell.start(
+          "sleep 60",
+          cwd: cwd,
+          home: home,
+          timeout: const Duration(minutes: 5),
+        );
         async.flushMicrotasks();
         final handle = fake.lastHandle!;
         shell.closeSession(cwd);
@@ -292,11 +360,17 @@ void main() {
     test("an idle session is not hung up", () async {
       final fake = FakeIshTransport();
       final shell = ishShell(fake);
-      final run = shell.start("true",
-          cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+      final run = shell.start(
+        "true",
+        cwd: cwd,
+        home: home,
+        timeout: const Duration(minutes: 5),
+      );
       await Future<void>.delayed(Duration.zero);
-      fake._settle(fake.pendingSessions.single,
-          const ShellResult(returnCode: 0, output: ""));
+      fake._settle(
+        fake.pendingSessions.single,
+        const ShellResult(returnCode: 0, output: ""),
+      );
       await run.result;
       shell.closeSession(cwd);
       expect(fake.hangups, isEmpty);
@@ -308,47 +382,73 @@ void main() {
     const otherHome = "/ws2";
     const otherCwd = "$otherHome/chats/b";
 
-    test("another project closes the idle sessions and binds its own", () async {
-      final fake = FakeIshTransport();
-      final shell = ishShell(fake);
-      final first = shell.start("true",
-          cwd: cwd, home: home, timeout: const Duration(minutes: 5));
-      await Future<void>.delayed(Duration.zero);
-      final firstSession = fake.pendingSessions.single;
-      fake._settle(firstSession, const ShellResult(returnCode: 0, output: ""));
-      await first.result;
+    test(
+      "another project closes the idle sessions and binds its own",
+      () async {
+        final fake = FakeIshTransport();
+        final shell = ishShell(fake);
+        final first = shell.start(
+          "true",
+          cwd: cwd,
+          home: home,
+          timeout: const Duration(minutes: 5),
+        );
+        await Future<void>.delayed(Duration.zero);
+        final firstSession = fake.pendingSessions.single;
+        fake._settle(
+          firstSession,
+          const ShellResult(returnCode: 0, output: ""),
+        );
+        await first.result;
 
-      shell.start("true",
-          cwd: otherCwd, home: otherHome, timeout: const Duration(minutes: 5));
-      await Future<void>.delayed(Duration.zero);
-      expect(fake.destroys, [firstSession]);
-      expect(fake.initHomes, [home, otherHome]);
-    });
+        shell.start(
+          "true",
+          cwd: otherCwd,
+          home: otherHome,
+          timeout: const Duration(minutes: 5),
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(fake.destroys, [firstSession]);
+        expect(fake.initHomes, [home, otherHome]);
+      },
+    );
 
-    test("another project waits while the bound one has a command running",
-        () async {
-      final fake = FakeIshTransport();
-      final shell = ishShell(fake);
-      shell.start("sleep 30",
-          cwd: cwd, home: home, timeout: const Duration(minutes: 5));
-      await Future<void>.delayed(Duration.zero);
+    test(
+      "another project waits while the bound one has a command running",
+      () async {
+        final fake = FakeIshTransport();
+        final shell = ishShell(fake);
+        shell.start(
+          "sleep 30",
+          cwd: cwd,
+          home: home,
+          timeout: const Duration(minutes: 5),
+        );
+        await Future<void>.delayed(Duration.zero);
 
-      final refused = await shell
-          .start("true",
+        final refused = await shell
+            .start(
+              "true",
               cwd: otherCwd,
               home: otherHome,
-              timeout: const Duration(minutes: 5))
-          .result;
-      expect(refused.exceptionInfo, contains("another project"));
-      expect(fake.destroys, isEmpty);
-      expect(fake.initHomes, [home]);
+              timeout: const Duration(minutes: 5),
+            )
+            .result;
+        expect(refused.exceptionInfo, contains("another project"));
+        expect(fake.destroys, isEmpty);
+        expect(fake.initHomes, [home]);
 
-      // Another chat of the bound project is not held back.
-      shell.start("true",
-          cwd: "$home/chats/c", home: home, timeout: const Duration(minutes: 5));
-      await Future<void>.delayed(Duration.zero);
-      expect(fake.initHomes, [home, home]);
-    });
+        // Another chat of the bound project is not held back.
+        shell.start(
+          "true",
+          cwd: "$home/chats/c",
+          home: home,
+          timeout: const Duration(minutes: 5),
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(fake.initHomes, [home, home]);
+      },
+    );
   });
 
   test("a rootfs changed after the guest booted is refused", () async {
@@ -361,11 +461,21 @@ void main() {
       platformDescription: () => "iSH",
       transport: fake,
     );
-    shell.start("true", cwd: cwd, home: home, timeout: const Duration(minutes: 5));
+    shell.start(
+      "true",
+      cwd: cwd,
+      home: home,
+      timeout: const Duration(minutes: 5),
+    );
     await Future<void>.delayed(Duration.zero);
     rootfs = "/rootfs2";
     final result = await shell
-        .start("true", cwd: cwd, home: home, timeout: const Duration(minutes: 5))
+        .start(
+          "true",
+          cwd: cwd,
+          home: home,
+          timeout: const Duration(minutes: 5),
+        )
         .result;
     expect(result.exceptionInfo, contains("Restart"));
     expect(fake.inits, hasLength(1));
@@ -376,11 +486,13 @@ void main() {
       fakeAsync((async) {
         final fake = FakeIshTransport()..interruptEnds = false;
         final shell = ishShell(fake);
-        final run = shell.start("sleep 60",
-            cwd: cwd,
-            home: home,
-            timeout: const Duration(minutes: 5),
-            oneShot: true);
+        final run = shell.start(
+          "sleep 60",
+          cwd: cwd,
+          home: home,
+          timeout: const Duration(minutes: 5),
+          oneShot: true,
+        );
         async.flushMicrotasks();
         final handle = fake.lastHandle!;
 
@@ -399,11 +511,13 @@ void main() {
       fakeAsync((async) {
         final fake = FakeIshTransport()..answersNotLinked = true;
         final shell = ishShell(fake);
-        final run = shell.start("echo hi",
-            cwd: cwd,
-            home: home,
-            timeout: const Duration(minutes: 5),
-            oneShot: true);
+        final run = shell.start(
+          "echo hi",
+          cwd: cwd,
+          home: home,
+          timeout: const Duration(minutes: 5),
+          oneShot: true,
+        );
         final result = resultOf(async, run);
         expect(result.exceptionInfo, contains("not available"));
         expect(fake.runs, isEmpty);
@@ -456,8 +570,11 @@ void main() {
     });
 
     test("a foreign token's line is dropped with the line it ends on", () {
-      buf.add(Uint8List.fromList(
-          utf8.encode("keep\n@@EFOREIGN rc=1 cwd=/x@@\nafter")));
+      buf.add(
+        Uint8List.fromList(
+          utf8.encode("keep\n@@EFOREIGN rc=1 cwd=/x@@\nafter"),
+        ),
+      );
       buf.finish();
       // The output before the line and after the line both streamed; the
       // foreign marker's own words did not.
@@ -523,61 +640,72 @@ void main() {
   });
 
   group("two sessions", () {
-    test("another chat's command answers while a run holds the first",
-        () async {
-      final fake = FakeIshTransport();
-      final shell = ishShell(fake);
-      final a = shell.start("sleep 30",
+    test(
+      "another chat's command answers while a run holds the first",
+      () async {
+        final fake = FakeIshTransport();
+        final shell = ishShell(fake);
+        final a = shell.start(
+          "sleep 30",
           cwd: "$home/chats/a",
           home: home,
-          timeout: const Duration(minutes: 5));
-      final b = shell.start("echo hi",
+          timeout: const Duration(minutes: 5),
+        );
+        final b = shell.start(
+          "echo hi",
           cwd: "$home/chats/b",
           home: home,
-          timeout: const Duration(minutes: 5));
-      await Future<void>.delayed(Duration.zero);
-      // Both sessions were served: two guests, two inits, two pending runs.
-      expect(fake.pendingSessions.length, 2);
-      final bId = fake.pendingSessions.last;
-      fake._settle(bId, const ShellResult(returnCode: 0, output: "hi"));
-      expect((await b.result).returnCode, 0);
-      // A's run was never touched by B's answer.
-      expect(fake.pendingSessions.length, 1);
-      fake._settle(fake.pendingSessions.single,
-          const ShellResult(returnCode: 130, output: ""));
-      expect((await a.result).returnCode, 130);
-    });
+          timeout: const Duration(minutes: 5),
+        );
+        await Future<void>.delayed(Duration.zero);
+        // Both sessions were served: two guests, two inits, two pending runs.
+        expect(fake.pendingSessions.length, 2);
+        final bId = fake.pendingSessions.last;
+        fake._settle(bId, const ShellResult(returnCode: 0, output: "hi"));
+        expect((await b.result).returnCode, 0);
+        // A's run was never touched by B's answer.
+        expect(fake.pendingSessions.length, 1);
+        fake._settle(
+          fake.pendingSessions.single,
+          const ShellResult(returnCode: 130, output: ""),
+        );
+        expect((await a.result).returnCode, 130);
+      },
+    );
 
-    test("closing one session destroys its guest and not the other's",
-        () async {
-      final fake = FakeIshTransport();
-      final shell = ishShell(fake);
-      shell.start("sleep 30",
+    test(
+      "closing one session destroys its guest and not the other's",
+      () async {
+        final fake = FakeIshTransport();
+        final shell = ishShell(fake);
+        shell.start(
+          "sleep 30",
           cwd: "$home/chats/a",
           home: home,
-          timeout: const Duration(minutes: 5));
-      final b = shell.start("echo hi",
+          timeout: const Duration(minutes: 5),
+        );
+        final b = shell.start(
+          "echo hi",
           cwd: "$home/chats/b",
           home: home,
-          timeout: const Duration(minutes: 5));
-      await Future<void>.delayed(Duration.zero);
-      final bId = fake.pendingSessions.last;
+          timeout: const Duration(minutes: 5),
+        );
+        await Future<void>.delayed(Duration.zero);
+        final bId = fake.pendingSessions.last;
 
-      shell.closeSession("$home/chats/a");
-      expect(fake.destroys, isNot(contains(bId)));
-      expect(fake.pendingSessions, [bId]);
-      fake._settle(bId, const ShellResult(returnCode: 0, output: ""));
-      expect((await b.result).returnCode, 0);
-    });
+        shell.closeSession("$home/chats/a");
+        expect(fake.destroys, isNot(contains(bId)));
+        expect(fake.pendingSessions, [bId]);
+        fake._settle(bId, const ShellResult(returnCode: 0, output: ""));
+        expect((await b.result).returnCode, 0);
+      },
+    );
   });
 
   group("a worker isolate", () {
     test("one spawn answers two concurrent first users", () async {
       final worker = IshWorker();
-      await Future.wait([
-        worker.ensureStarted(),
-        worker.ensureStarted(),
-      ]);
+      await Future.wait([worker.ensureStarted(), worker.ensureStarted()]);
       expect(worker.spawnCount, 1);
     });
   });
@@ -620,10 +748,10 @@ class FakeIshTransport implements IshTransport {
   int? lastHandle;
 
   ShellResult hungUp(int sessionId) => ShellResult(
-        returnCode: -1,
-        output: "",
-        exceptionInfo: "The command did not complete.",
-      );
+    returnCode: -1,
+    output: "",
+    exceptionInfo: "The command did not complete.",
+  );
 
   void _settle(int sessionId, ShellResult result) {
     final c = pending.remove(sessionId);
@@ -678,7 +806,8 @@ class FakeIshTransport implements IshTransport {
     interrupts.add(handle);
     if (interruptEnds) {
       pending.keys.toList().forEach(
-          (id) => _settle(id, const ShellResult(returnCode: 130, output: "")));
+        (id) => _settle(id, const ShellResult(returnCode: 130, output: "")),
+      );
     }
   }
 

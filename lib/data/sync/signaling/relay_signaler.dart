@@ -61,12 +61,16 @@ class RelaySignaler implements RelaySignaling {
     required String role,
     Duration timeout = const Duration(seconds: 15),
   }) async {
-    final channel = await tlsWebSocketChannel(Uri.parse(relayUrl), readyTimeout: timeout);
+    final channel = await tlsWebSocketChannel(
+      Uri.parse(relayUrl),
+      readyTimeout: timeout,
+    );
     return RelaySignaler(
-        incoming: channel.stream,
-        outgoing: channel.sink,
-        room: room,
-        role: role);
+      incoming: channel.stream,
+      outgoing: channel.sink,
+      room: room,
+      role: role,
+    );
   }
 
   @override
@@ -77,11 +81,11 @@ class RelaySignaler implements RelaySignaling {
       outgoing.add(jsonEncode(json));
 
   @override
-  Future<Map<String, dynamic>> waitFor(String field,
-      {Duration timeout = const Duration(seconds: 45)}) async {
-    return messages
-        .firstWhere((m) => m.containsKey(field))
-        .timeout(timeout);
+  Future<Map<String, dynamic>> waitFor(
+    String field, {
+    Duration timeout = const Duration(seconds: 45),
+  }) async {
+    return messages.firstWhere((m) => m.containsKey(field)).timeout(timeout);
   }
 
   @override

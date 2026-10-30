@@ -98,10 +98,12 @@ BuiltinBackend createBackend(
       driver: ({String? project}) => platformDriver(
         defaultSkillsBundledDir: config.bundledSkillsDir(),
         defaultUserSkillsDir: config.promptsDir(CompletionKind.skill),
-        projectSkillsBundledDir:
-            project == null ? null : config.bundledSkillsDir(project: project),
-        projectUserSkillsDir:
-            project == null ? null : config.promptsDir(CompletionKind.skill, project: project),
+        projectSkillsBundledDir: project == null
+            ? null
+            : config.bundledSkillsDir(project: project),
+        projectUserSkillsDir: project == null
+            ? null
+            : config.promptsDir(CompletionKind.skill, project: project),
         tools: tools,
         proot: tools?.proot,
         store: rootfs,
@@ -138,7 +140,8 @@ BuiltinBackend createBackend(
     // Read fresh per turn rather than captured: the slider is a setting, and
     // an edit reaches the next turn the way the environment does.
     options: BuiltinOptions(
-        stepLimit: settings().turnMaxSteps ?? AppSettings.defaultTurnMaxSteps),
+      stepLimit: settings().turnMaxSteps ?? AppSettings.defaultTurnMaxSteps,
+    ),
   );
   for (final entry in libraries.entries) {
     backend.setLibrary(entry.key, entry.value);
@@ -189,7 +192,8 @@ LocalPrefill? createLocalPrefill(
         // The same skills a turn's prompt lists, off the same library the
         // backend holds — a warm-up built without them caches a prefix no
         // chat ever sends.
-        skills: backend.libraryFor(null)?.entries(CompletionKind.skill) ?? const [],
+        skills:
+            backend.libraryFor(null)?.entries(CompletionKind.skill) ?? const [],
         // A default turn has auto-memory off, so the warmed prefix carries no
         // memory tools; a turn with them misses the cache rather than the
         // cache serving a list no turn sends. Every top-level chat has a
@@ -234,6 +238,6 @@ ChatStore createChatStore(AppConfig config) =>
 /// The presets and the user's own beside them. [project]'s overrides are
 /// layered on the default set; `null` is the default project.
 List<PromptSource> createPromptSources(AppConfig config, {String? project}) => [
-      BundledPrompts(config: config, project: project),
-      DirectoryPrompts(config, project: project),
-    ];
+  BundledPrompts(config: config, project: project),
+  DirectoryPrompts(config, project: project),
+];

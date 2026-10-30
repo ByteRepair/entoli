@@ -85,8 +85,12 @@ class SubAgentFeed {
     held.addAll(records);
     if (records.any((r) => r is TurnEndRecord)) _held.remove(key);
     if (!_appends.isClosed) {
-      _appends.add(
-          (chatId: chatId, callId: callId, from: from, records: records));
+      _appends.add((
+        chatId: chatId,
+        callId: callId,
+        from: from,
+        records: records,
+      ));
     }
   }
 
@@ -96,7 +100,10 @@ class SubAgentFeed {
 /// [held] with an append numbered from [from] added: what it already has is
 /// skipped, and null is a gap — records were missed, so read it again.
 List<ChatRecord>? growTranscript(
-    List<ChatRecord> held, int from, List<ChatRecord> records) {
+  List<ChatRecord> held,
+  int from,
+  List<ChatRecord> records,
+) {
   if (from > held.length) return null;
   final skip = held.length - from;
   if (skip >= records.length) return held;

@@ -25,7 +25,9 @@ String viewerMime(String path) {
 String attachmentMime(String name, Uint8List bytes, {String? declared}) {
   final type = declared ?? sniffMime(bytes, name: name);
   if (type != null && type != "application/octet-stream") return type;
-  return bytes.take(4096).contains(0) ? "application/octet-stream" : "text/plain";
+  return bytes.take(4096).contains(0)
+      ? "application/octet-stream"
+      : "text/plain";
 }
 
 /// A pasted file as an attachment. A paste without a name, an image copied on
@@ -33,14 +35,17 @@ String attachmentMime(String name, Uint8List bytes, {String? declared}) {
 Attachment pastedAttachment(Uint8List bytes, {String? name, String? declared}) {
   final type = attachmentMime(name ?? "", bytes, declared: declared);
   return Attachment(
-      filename: name ?? "pasted.${extensionFromMime(type) ?? "bin"}",
-      mimeType: type,
-      bytes: bytes);
+    filename: name ?? "pasted.${extensionFromMime(type) ?? "bin"}",
+    mimeType: type,
+    bytes: bytes,
+  );
 }
 
 /// What [bytes] are by their magic number, then by [name]'s extension where
 /// one is given. Null where neither says.
-String? sniffMime(Uint8List bytes, {String name = ""}) => lookupMimeType(name,
-    headerBytes: bytes.length > defaultMagicNumbersMaxLength
-        ? Uint8List.sublistView(bytes, 0, defaultMagicNumbersMaxLength)
-        : bytes);
+String? sniffMime(Uint8List bytes, {String name = ""}) => lookupMimeType(
+  name,
+  headerBytes: bytes.length > defaultMagicNumbersMaxLength
+      ? Uint8List.sublistView(bytes, 0, defaultMagicNumbersMaxLength)
+      : bytes,
+);

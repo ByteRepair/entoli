@@ -44,12 +44,12 @@ class BashTool extends AgentTool {
   @override
   String get description => offer.oneShot
       ? "Execute a bash command. Every command runs in a fresh subshell that "
-          "starts in the workspace directory, so a `cd` or an export does not "
-          "carry over to the next command: prefix what it needs, or use "
-          "absolute paths."
+            "starts in the workspace directory, so a `cd` or an export does not "
+            "carry over to the next command: prefix what it needs, or use "
+            "absolute paths."
       : "Execute a bash command in the chat's persistent shell, which starts "
-          "in the workspace directory and keeps its state between commands: a "
-          "`cd` or an export made by one command is still there for the next.";
+            "in the workspace directory and keeps its state between commands: a "
+            "`cd` or an export made by one command is still there for the next.";
 
   /// Whether a call may ask to leave the sandbox: only where there is one to
   /// leave, and a person to approve leaving it.
@@ -60,15 +60,15 @@ class BashTool extends AgentTool {
 
   @override
   Map<String, dynamic> get schema => {
-        "type": "object",
-        "properties": {
-          ..._common,
-          if (!offer.oneShot) ..._restart,
-          if (leavesSandbox) ..._unsandboxed,
-          if (!offer.oneShot && offer.background) ..._background,
-        },
-        "required": ["command"],
-      };
+    "type": "object",
+    "properties": {
+      ..._common,
+      if (!offer.oneShot) ..._restart,
+      if (leavesSandbox) ..._unsandboxed,
+      if (!offer.oneShot && offer.background) ..._background,
+    },
+    "required": ["command"],
+  };
 
   static const _common = {
     "command": {"type": "string", "description": "The bash command to execute"},
@@ -128,15 +128,18 @@ class BashTool extends AgentTool {
     final command = stringArg(call.argumentsJson, "command");
     if (command == null) {
       yield* toolRejected(
-          call,
-          "The bash tool takes {\"command\": \"...\"}; that argument was missing "
-          "or was not valid JSON.");
+        call,
+        "The bash tool takes {\"command\": \"...\"}; that argument was missing "
+        "or was not valid JSON.",
+      );
       return;
     }
     // One parse carried the whole way: the rule gate reads its segments, the
     // deterministic tier its answer, and the run's confinement its words.
-    final analysis = ShellCommandAnalysis.parse(command,
-        isWindows: turn.shell.platformIsWindows);
+    final analysis = ShellCommandAnalysis.parse(
+      command,
+      isWindows: turn.shell.platformIsWindows,
+    );
     yield toolCalled(call, command);
     if (refusalOf(analysis) case final refused?) {
       yield toolFailed(call, refused);
@@ -148,21 +151,29 @@ class BashTool extends AgentTool {
     final escaping = leave && await turn.gate.confinementOf(analysis) != null;
     final outcome = GateOutcome();
     yield* turn.gate.decide(
-        call,
-        bashToolName,
-        () => _execute(turn, call, command, analysis, outcome, unconfined: leave),
-        outcome,
-        argumentsText: command,
-        analysis: analysis,
-        unsandboxed: escaping);
+      call,
+      bashToolName,
+      () => _execute(turn, call, command, analysis, outcome, unconfined: leave),
+      outcome,
+      argumentsText: command,
+      analysis: analysis,
+      unsandboxed: escaping,
+    );
     yield ToolResultEvent(outcome.resultOf(call));
   }
 
-  Future<ShellResult> _execute(Turn turn, LlmToolCall call, String command,
-      ShellCommandAnalysis analysis, GateOutcome outcome,
-      {bool unconfined = false}) async {
+  Future<ShellResult> _execute(
+    Turn turn,
+    LlmToolCall call,
+    String command,
+    ShellCommandAnalysis analysis,
+    GateOutcome outcome, {
+    bool unconfined = false,
+  }) async {
     if (turn.cancelled) {
-      return const ShellResult.failed("The turn was stopped before this command ran.");
+      return const ShellResult.failed(
+        "The turn was stopped before this command ran.",
+      );
     }
     // The model's own bound for this command, capped at what the chat allows:
     // a small model's estimate of a build is as likely to be too short as too
@@ -170,8 +181,9 @@ class BashTool extends AgentTool {
     final cap = turn.options.commandTimeout.inMilliseconds;
     final requested = intArg(call.argumentsJson, "timeout");
     final timeout = Duration(
-      milliseconds:
-          requested == null || requested <= 0 ? cap : requested.clamp(0, cap),
+      milliseconds: requested == null || requested <= 0
+          ? cap
+          : requested.clamp(0, cap),
     );
     // What the command parses to, decided before anything asks a model about
     // it. The parse answers for the deterministic safe side — reads, and
@@ -199,17 +211,20 @@ class BashTool extends AgentTool {
       return _startBackground(turn, jobs, call.id, command, sandbox);
     }
     return turn.track(
-        call,
-        turn.shell.start(command,
-            cwd: turn.workspace,
-            home: turn.projectWorkspace,
-            timeout: timeout,
-            environment: turn.environment,
-            oneShot: offer.oneShot,
-            restart: boolArg(call.argumentsJson, "restart"),
-            project: turn.project,
-            sandbox: sandbox,
-            readOnly: turn.readOnlyDirs));
+      call,
+      turn.shell.start(
+        command,
+        cwd: turn.workspace,
+        home: turn.projectWorkspace,
+        timeout: timeout,
+        environment: turn.environment,
+        oneShot: offer.oneShot,
+        restart: boolArg(call.argumentsJson, "restart"),
+        project: turn.project,
+        sandbox: sandbox,
+        readOnly: turn.readOnlyDirs,
+      ),
+    );
   }
 
   /// Start [command] as a background job and answer with where it went. A
@@ -217,34 +232,44 @@ class BashTool extends AgentTool {
   /// gate decided; its streams are its log and nothing, which is what lets a
   /// `toolbox run` or a server in it stop holding anything open.
   Future<ShellResult> _startBackground(
-      Turn turn, ChatJobs jobs, String callId, String command,
-      CommandSandbox? sandbox) async {
-    final job = await jobs.start(command,
-        callId: callId,
-        workspace: turn.workspace,
-        spawn: (script) => turn.shell.start(script,
-            cwd: turn.workspace,
-            home: turn.projectWorkspace,
-            timeout: BackgroundJobs.timeout,
-            environment: turn.environment,
-            oneShot: true,
-            project: turn.project,
-            sandbox: sandbox,
-            readOnly: turn.readOnlyDirs));
+    Turn turn,
+    ChatJobs jobs,
+    String callId,
+    String command,
+    CommandSandbox? sandbox,
+  ) async {
+    final job = await jobs.start(
+      command,
+      callId: callId,
+      workspace: turn.workspace,
+      spawn: (script) => turn.shell.start(
+        script,
+        cwd: turn.workspace,
+        home: turn.projectWorkspace,
+        timeout: BackgroundJobs.timeout,
+        environment: turn.environment,
+        oneShot: true,
+        project: turn.project,
+        sandbox: sandbox,
+        readOnly: turn.readOnlyDirs,
+      ),
+    );
     final log = backgroundLog(callId);
     final where = turn.shell.guestRoot == null ? " (${job.logPath})" : "";
     final pid = job.pid;
     final stop = pid == null
         ? ""
         : " Its process id is $pid, the leader of its group: "
-            "`kill -- -$pid` stops it and everything it started.";
+              "`kill -- -$pid` stops it and everything it started.";
     return ShellResult(
-        returnCode: 0,
-        jobId: job.id,
-        output: "Started in the background as job ${job.id}.$stop Its output "
-            "goes to $log in the chat workspace$where: read it with `tail` or "
-            "the read tool at chat:$log. Your next call after it exits says "
-            "how it ended.");
+      returnCode: 0,
+      jobId: job.id,
+      output:
+          "Started in the background as job ${job.id}.$stop Its output "
+          "goes to $log in the chat workspace$where: read it with `tail` or "
+          "the read tool at chat:$log. Your next call after it exits says "
+          "how it ended.",
+    );
   }
 }
 
@@ -272,7 +297,8 @@ class ReadOnlyBashTool extends BashTool {
   bool get leavesSandbox => false;
 
   @override
-  String get description => "${super.description} Read-only: only commands "
+  String get description =>
+      "${super.description} Read-only: only commands "
       "that change nothing run — reading, listing and searching (ls, find, "
       "grep, rg, cat, head, git log, git diff and the like). A command that "
       "writes a file, installs, fetches or cannot be checked is refused.";

@@ -20,12 +20,18 @@ class ShareTargetPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final config = ref.watch(appConfigProvider);
-    final projects = everyProject(ref.watch(projectListProvider).value ?? const []);
+    final projects = everyProject(
+      ref.watch(projectListProvider).value ?? const [],
+    );
     final chats = ref.watch(chatListProvider).value ?? const [];
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(files.length == 1 ? "Share 1 file to" : "Share ${files.length} files to"),
+        title: Text(
+          files.length == 1
+              ? "Share 1 file to"
+              : "Share ${files.length} files to",
+        ),
       ),
       body: ListView(
         children: [
@@ -71,11 +77,15 @@ class ShareTargetPage extends ConsumerWidget {
       return;
     }
     navigator.pop();
-    messenger.showSnackBar(SnackBar(
-      content: Text(files.length == 1
-          ? "Saved ${files.single.path} to $title"
-          : "Saved ${files.length} files to $title"),
-    ));
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          files.length == 1
+              ? "Saved ${files.single.path} to $title"
+              : "Saved ${files.length} files to $title",
+        ),
+      ),
+    );
   }
 }
 
@@ -90,10 +100,9 @@ class _Heading extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
       child: Text(
         text,
-        style: Theme.of(context)
-            .textTheme
-            .labelMedium
-            ?.copyWith(color: Theme.of(context).colorScheme.primary),
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: Theme.of(context).colorScheme.primary,
+        ),
       ),
     );
   }

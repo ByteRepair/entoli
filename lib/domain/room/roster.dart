@@ -1,6 +1,12 @@
 import "../models.dart";
 import "../prompt_library.dart"
-    show authorFrom, authorKeys, mentionsIn, nameOf, singleAgentMention, PromptLibrary;
+    show
+        authorFrom,
+        authorKeys,
+        mentionsIn,
+        nameOf,
+        singleAgentMention,
+        PromptLibrary;
 import "../shell.dart" show shellBypassCommand;
 import "../wired_skill.dart";
 
@@ -22,7 +28,9 @@ class Roster {
   /// not an address. Null is the main agent. Not gated on [omada]: a reply a
   /// member wrote is carried on by that member after the toggle went off.
   String? known(String? name) =>
-      name == null || library.find(CompletionKind.agent, name) == null ? null : name;
+      name == null || library.find(CompletionKind.agent, name) == null
+      ? null
+      : name;
 
   /// The members [message] addresses, in the order it names them, sigils off
   /// — a user prompt through what composing wrote into its documents, a
@@ -34,20 +42,22 @@ class Roster {
     if (!omada || _notSaid(message)) return const [];
     return message.role == MessageRole.user
         ? authorKeys(message.documents)
-            .map(nameOf)
-            .whereType<String>()
-            .where((name) => known(name) != null)
-            .toList()
-        : mentionsIn(message.plainText, library)
-            .where((name) => name != nameOf(message.author))
-            .toList();
+              .map(nameOf)
+              .whereType<String>()
+              .where((name) => known(name) != null)
+              .toList()
+        : mentionsIn(
+            message.plainText,
+            library,
+          ).where((name) => name != nameOf(message.author)).toList();
   }
 
   /// The routing record a say carries, `Message.addressees`: [mentioned],
   /// sigils on — the dialect author stamps and the projection read.
   List<String> addressees(Message message) => [
-        for (final member in mentioned(message)) "${CompletionKind.agent.trigger}$member",
-      ];
+    for (final member in mentioned(message))
+      "${CompletionKind.agent.trigger}$member",
+  ];
 
   /// The author a turn opened on [prompt] is stamped with: the one member it
   /// addresses. Never in a direct chat — a label on the house's voice would

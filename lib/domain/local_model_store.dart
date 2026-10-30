@@ -64,25 +64,25 @@ class InstallableLocalModel implements Installable {
 
   @override
   ModelFacts get facts => switch (store.downloadedOfSync(id)) {
-        final DownloadedModel d => (
-            parameters: d.parameters,
-            languages: null,
-            bytes: d.bytes,
-            quantisation: d.quantisation,
-            context: d.contextLength,
-            voices: null,
-            licence: d.licence,
-          ),
-        null => (
-            parameters: model.parameters,
-            languages: null,
-            bytes: model.bytes,
-            quantisation: null,
-            context: null,
-            voices: null,
-            licence: model.licence,
-          ),
-      };
+    final DownloadedModel d => (
+      parameters: d.parameters,
+      languages: null,
+      bytes: d.bytes,
+      quantisation: d.quantisation,
+      context: d.contextLength,
+      voices: null,
+      licence: d.licence,
+    ),
+    null => (
+      parameters: model.parameters,
+      languages: null,
+      bytes: model.bytes,
+      quantisation: null,
+      context: null,
+      voices: null,
+      licence: model.licence,
+    ),
+  };
 
   @override
   String? get note => null;

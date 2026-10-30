@@ -114,7 +114,11 @@ class ContextEvent extends AgentEvent {
 /// produced it is what the conversation keeps, and this is the one extra part
 /// that carries the artifact identity.
 class ArtifactEvent extends AgentEvent {
-  const ArtifactEvent({required this.artifactId, required this.entryFile, required this.title});
+  const ArtifactEvent({
+    required this.artifactId,
+    required this.entryFile,
+    required this.title,
+  });
   final String artifactId;
   final String entryFile;
   final String title;
@@ -132,10 +136,7 @@ class ImageEvent extends AgentEvent {
 /// the install card. The `.skill` package is staged under the chat's directory,
 /// so it is deleted with the chat.
 class SkillInstallEvent extends AgentEvent {
-  const SkillInstallEvent({
-    required this.installId,
-    required this.title,
-  });
+  const SkillInstallEvent({required this.installId, required this.title});
   final String installId;
   final String title;
 }
@@ -170,7 +171,11 @@ class DoneEvent extends AgentEvent {
 const taskToolName = "task";
 
 class SubAgentStartEvent extends AgentEvent {
-  const SubAgentStartEvent({required this.id, required this.agent, required this.prompt});
+  const SubAgentStartEvent({
+    required this.id,
+    required this.agent,
+    required this.prompt,
+  });
   final String id;
   final String agent;
   final String prompt;
@@ -567,7 +572,11 @@ abstract class AgentBackend {
   /// model is set as a provider without naming one. Null when the provider is
   /// not configured or says nothing — the caller wants a convenience, and
   /// there is no turn to report a failure on.
-  Future<String?> ask(String prompt, {required String? model, required String? provider});
+  Future<String?> ask(
+    String prompt, {
+    required String? model,
+    required String? provider,
+  });
 
   /// Summarize [history] so the model can carry on from less of it. One call,
   /// no tools, no session — [ask] with the conversation in front of it.
@@ -609,28 +618,35 @@ abstract class AgentBackend {
   ///
   /// [steers] is what the user says to the turn while it runs, read at each
   /// step boundary.
-  Stream<AgentEvent> sendPrompt(String chatId, Message prompt,
-      {List<Message> history,
-      List<ConversationCompaction> compactions,
-      TurnSettings settings,
-      SteerInbox? steers});
+  Stream<AgentEvent> sendPrompt(
+    String chatId,
+    Message prompt, {
+    List<Message> history,
+    List<ConversationCompaction> compactions,
+    TurnSettings settings,
+    SteerInbox? steers,
+  });
 
   /// Carry on the turn [history] ends in. No prompt, because there is no new
   /// thing to say: the model is handed back what it had already done. Unlike
   /// [sendPrompt] this rebuilds the session from [history] whether or not one
   /// is already held.
-  Stream<AgentEvent> resumeTurn(String chatId,
-      {List<Message> history,
-      List<ConversationCompaction> compactions,
-      TurnSettings settings,
-      SteerInbox? steers});
+  Stream<AgentEvent> resumeTurn(
+    String chatId, {
+    List<Message> history,
+    List<ConversationCompaction> compactions,
+    TurnSettings settings,
+    SteerInbox? steers,
+  });
 
   /// Drop the chat's live session so the next prompt starts a clean one,
   /// seeded with [history]. [compactions] say where the conversation is
   /// summarized: the rebuild puts the summary where the log put it.
-  Future<void> resetSession(String chatId,
-      {List<Message> history = const [],
-      List<ConversationCompaction> compactions = const []});
+  Future<void> resetSession(
+    String chatId, {
+    List<Message> history = const [],
+    List<ConversationCompaction> compactions = const [],
+  });
 
   /// Release everything this backend holds. Called when the app exits.
   Future<void> shutdown();
@@ -638,11 +654,18 @@ abstract class AgentBackend {
   Future<void> abort(String chatId);
 
   Future<void> respondApproval(
-      String chatId, String approvalId, ApprovalResponse response);
+    String chatId,
+    String approvalId,
+    ApprovalResponse response,
+  );
 
   /// Answer the questions of [requestId]: one entry per question, in the order
   /// they were asked, null where the user answered nothing.
-  Future<void> respondQuestions(String chatId, String requestId, List<String?> answers);
+  Future<void> respondQuestions(
+    String chatId,
+    String requestId,
+    List<String?> answers,
+  );
 
   /// Release resources for a chat (keeps on-disk data).
   Future<void> disposeChat(String chatId);

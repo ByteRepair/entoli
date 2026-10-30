@@ -23,7 +23,9 @@ class ModelInfo {
     final modalities = json["modalities"];
     // A side not named is text, the ordinary case.
     bool has(String side, String kind) =>
-        (modalities is Map ? modalities[side] as List? : null)?.contains(kind) ??
+        (modalities is Map ? modalities[side] as List? : null)?.contains(
+          kind,
+        ) ??
         kind == "text";
     final limit = json["limit"] is Map ? json["limit"] as Map : const {};
     final cost = json["cost"] is Map ? json["cost"] as Map : const {};
@@ -40,10 +42,12 @@ class ModelInfo {
       talks: has("input", "text") && has("output", "text"),
       // Speech in, text out, and nothing else in: a chat model that also hears
       // (Gemini, gpt-audio) answers chat completions, not transcriptions.
-      transcribes: has("input", "audio") &&
+      transcribes:
+          has("input", "audio") &&
           !has("input", "text") &&
           has("output", "text"),
-      speaks: has("output", "audio") &&
+      speaks:
+          has("output", "audio") &&
           !has("output", "text") &&
           has("input", "text"),
       context: positive(limit["context"]),
@@ -96,24 +100,24 @@ class ModelInfo {
   bool get answersTurns => talks && toolCall;
 
   Map<String, dynamic> toJson() => {
-        if (name != null) "name": name,
-        "reasoning": reasoning,
-        "tool_call": toolCall,
-        "modalities": {
-          "input": [
-            if (talks || speaks) "text",
-            if (transcribes) "audio",
-            if (readsImages) "image",
-            if (readsPdfs) "pdf",
-          ],
-          "output": [
-            if (talks || transcribes) "text",
-            if (speaks) "audio",
-            if (makesImages) "image",
-          ],
-        },
-        "limit": {"context": ?context, "output": ?output},
-        if (inputCost != null || outputCost != null)
-          "cost": {"input": ?inputCost, "output": ?outputCost},
-      };
+    if (name != null) "name": name,
+    "reasoning": reasoning,
+    "tool_call": toolCall,
+    "modalities": {
+      "input": [
+        if (talks || speaks) "text",
+        if (transcribes) "audio",
+        if (readsImages) "image",
+        if (readsPdfs) "pdf",
+      ],
+      "output": [
+        if (talks || transcribes) "text",
+        if (speaks) "audio",
+        if (makesImages) "image",
+      ],
+    },
+    "limit": {"context": ?context, "output": ?output},
+    if (inputCost != null || outputCost != null)
+      "cost": {"input": ?inputCost, "output": ?outputCost},
+  };
 }

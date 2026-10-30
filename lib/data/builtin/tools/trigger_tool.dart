@@ -38,7 +38,8 @@ const _setSchema = {
     },
     "prompt": {
       "type": "string",
-      "description": "The message to send into this chat when it fires. "
+      "description":
+          "The message to send into this chat when it fires. "
           "When the trigger fires, the reason it fired is appended below "
           "this message as one parenthetical line — write the prompt so a "
           "sentence in that shape makes sense.",
@@ -49,7 +50,8 @@ const _setSchema = {
     },
     "member": {
       "type": "string",
-      "description": "Optional member of this project's Omada room to "
+      "description":
+          "Optional member of this project's Omada room to "
           "address the fire to — the agent's name without the @. The fire "
           "is sent as a message naming them, so the room routes it onto "
           "their turn the way any mention does; in a project with Omada "
@@ -58,7 +60,8 @@ const _setSchema = {
     },
     "at": {
       "type": "string",
-      "description": "schedule: the wall-clock time to fire at, ISO 8601 "
+      "description":
+          "schedule: the wall-clock time to fire at, ISO 8601 "
           "(with an offset, or local time where there is none).",
     },
     "repeat": {
@@ -73,7 +76,8 @@ const _setSchema = {
     "paths": {
       "type": "array",
       "items": {"type": "string"},
-      "description": "file: the paths to watch, the shapes the read tool "
+      "description":
+          "file: the paths to watch, the shapes the read tool "
           "takes (workspace-relative, project:-prefixed). Everything "
           "under a path is in its reach.",
     },
@@ -83,12 +87,14 @@ const _setSchema = {
         "type": "string",
         "enum": ["create", "change", "delete", "move"],
       },
-      "description": "file: which changes fire; every kind where not "
+      "description":
+          "file: which changes fire; every kind where not "
           "given. A build log wants change; a drop folder wants create.",
     },
     "cooldownSeconds": {
       "type": "integer",
-      "description": "file: how long the trigger stays quiet after it "
+      "description":
+          "file: how long the trigger stays quiet after it "
           "fired, so a burst of writes is one turn. Default 5.",
     },
   },
@@ -110,11 +116,13 @@ class TriggerSetTool extends _TriggerTool {
   String get runningLabel => "Setting a trigger";
 
   @override
-  String get fragment => "`$triggerSetName`/`$triggerListName`/"
+  String get fragment =>
+      "`$triggerSetName`/`$triggerListName`/"
       "`$triggerRemoveName` to set what sends a message into this chat later";
 
   @override
-  String get description => "Set a trigger that sends a message into this "
+  String get description =>
+      "Set a trigger that sends a message into this "
       "chat later, so the work continues on its own. Sources: schedule (a "
       "wall-clock time, repeating or not), timer (a countdown from now), file "
       "(when paths change — fires only while the app runs). Use it to pick "
@@ -134,7 +142,9 @@ class TriggerSetTool extends _TriggerTool {
     final draft = triggerDraftFromArgs(args: args);
     if (draft == null) {
       yield* toolRejected(
-          call, triggerSetProblem(stringArg(call.argumentsJson, "source")));
+        call,
+        triggerSetProblem(stringArg(call.argumentsJson, "source")),
+      );
       return;
     }
     // A file watch is never asked before it fires (and a fire's headless
@@ -145,16 +155,20 @@ class TriggerSetTool extends _TriggerTool {
     if (draft.source case FileSource(:final paths)) {
       final outside = [
         for (final path in paths)
-          if (outsideWorkspaces(turn.resolvePath(path), turn.workspace,
-              turn.projectWorkspace))
+          if (outsideWorkspaces(
+            turn.resolvePath(path),
+            turn.workspace,
+            turn.projectWorkspace,
+          ))
             path,
       ];
       if (outside.isNotEmpty) {
         yield* toolRejected(
-            call,
-            "A file trigger watches the workspaces: give workspace-relative "
-            "or project:-prefixed paths (${outside.join(", ")} reach past "
-            "them).");
+          call,
+          "A file trigger watches the workspaces: give workspace-relative "
+          "or project:-prefixed paths (${outside.join(", ")} reach past "
+          "them).",
+        );
         return;
       }
     }
@@ -165,10 +179,11 @@ class TriggerSetTool extends _TriggerTool {
     yield toolCalled(call, label);
     try {
       final stored = await turn.registerTrigger!.register(
-          source: draft.source,
-          prompt: draft.prompt,
-          name: draft.name,
-          member: draft.member);
+        source: draft.source,
+        prompt: draft.prompt,
+        name: draft.name,
+        member: draft.member,
+      );
       yield toolOk(call, _setAnswer(stored));
     } catch (e) {
       yield toolFailed(call, "The trigger could not be set: $e");
@@ -195,34 +210,40 @@ class TriggerRemoveTool extends _TriggerTool {
   String get name => triggerRemoveName;
 
   @override
-  String get description => "Remove one of this chat's own triggers, by the "
+  String get description =>
+      "Remove one of this chat's own triggers, by the "
       "id trigger_list answered. Only what this chat registered is removable "
       "here.";
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "id": {"type": "string", "description": "The id trigger_list answered."},
-        },
-        "required": ["id"],
-      };
+    "type": "object",
+    "properties": {
+      "id": {"type": "string", "description": "The id trigger_list answered."},
+    },
+    "required": ["id"],
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
     final registry = turn.registerTrigger!;
     final id = stringArg(call.argumentsJson, "id");
     if (id == null) {
-      yield* toolRejected(call,
-          'The $triggerRemoveName tool takes {"id": "<trigger id>"}; that '
-          "argument was missing.");
+      yield* toolRejected(
+        call,
+        'The $triggerRemoveName tool takes {"id": "<trigger id>"}; that '
+        "argument was missing.",
+      );
       return;
     }
     yield toolCalled(call, id);
     final own = (await registry.own()).where((t) => t.id == id).toList();
     if (own.isEmpty) {
-      yield toolFailed(call, "No trigger with that id was registered by this "
-          "chat. $triggerListName lists what may be removed.");
+      yield toolFailed(
+        call,
+        "No trigger with that id was registered by this "
+        "chat. $triggerListName lists what may be removed.",
+      );
       return;
     }
     await registry.remove(id);
@@ -238,12 +259,12 @@ class TriggerListTool extends _TriggerTool {
   String get name => triggerListName;
 
   @override
-  String get description => "List the triggers this chat registered, with "
+  String get description =>
+      "List the triggers this chat registered, with "
       "their ids and next fires. What may be removed named here.";
 
   @override
-  Map<String, dynamic> get schema =>
-      const {"type": "object", "properties": {}};
+  Map<String, dynamic> get schema => const {"type": "object", "properties": {}};
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
@@ -353,7 +374,10 @@ TriggerSource? _timerSource(Map<String, dynamic> args) {
   if (seconds is! int || seconds <= 0) return null;
   // The anchor is the registry's to set (its registering moment); the parse
   // spells the duration and nothing else — no fabricated moment to patch.
-  return TimerSource(duration: Duration(seconds: seconds), registeredAt: _draftAnchor);
+  return TimerSource(
+    duration: Duration(seconds: seconds),
+    registeredAt: _draftAnchor,
+  );
 }
 
 /// The parse's placeholder for a timer's anchor: the epoch, a moment no

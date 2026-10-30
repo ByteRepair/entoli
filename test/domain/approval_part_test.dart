@@ -8,11 +8,15 @@ import "package:agent_chat/domain/turn_recorder.dart";
 void main() {
   test("a banner is recorded asked and superseded with the answer", () async {
     final written = <List<ChatRecord>>[];
-    final recorder =
-        TurnRecorder(append: (records) async => written.add(records));
+    final recorder = TurnRecorder(
+      append: (records) async => written.add(records),
+    );
     recorder.open("reply-1");
-    recorder.handle(const ApprovalRequestEvent(ToolApproval(
-        id: "a-1", toolName: "bash", argumentsText: "git status")));
+    recorder.handle(
+      const ApprovalRequestEvent(
+        ToolApproval(id: "a-1", toolName: "bash", argumentsText: "git status"),
+      ),
+    );
     recorder.recordApprovalAnswer("a-1", "alwaysAllowProject");
     await recorder.close();
 
@@ -30,13 +34,17 @@ void main() {
   });
 
   test("the approval part reads back from the log", () {
-    final part = MessagePart.fromJson(MessagePart.approval(
-            approvalId: "a-2",
-            toolName: "bash",
-            argumentsText: "writing /x",
-            deniedDirs: const ["/x"],
-            answer: "alwaysAllowChat")
-        .toJson()) as ApprovalPart;
+    final part =
+        MessagePart.fromJson(
+              MessagePart.approval(
+                approvalId: "a-2",
+                toolName: "bash",
+                argumentsText: "writing /x",
+                deniedDirs: const ["/x"],
+                answer: "alwaysAllowChat",
+              ).toJson(),
+            )
+            as ApprovalPart;
     expect(part.approvalId, "a-2");
     expect(part.deniedDirs, ["/x"]);
     expect(part.answer, "alwaysAllowChat");

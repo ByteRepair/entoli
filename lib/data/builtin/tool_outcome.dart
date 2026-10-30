@@ -13,15 +13,18 @@ typedef Decision = ({
 /// ran, one that was refused, one that was never reached. The directory the
 /// shell was left in rides on it as a fact, and [decision] — what let it run
 /// or refused it — beside it.
-ToolResult toolRan(LlmToolCall call, ShellResult result, {Decision? decision}) =>
-    ToolResult(
-      callId: call.id,
-      returnCode: result.returnCode,
-      output: result.output,
-      exceptionInfo: result.exceptionInfo,
-      cwd: result.cwd,
-      jobId: result.jobId,
-      decidedBy: decision?.source,
-      decidedTier: decision?.tiers ?? const [],
-      decided: decision?.decided,
-    );
+ToolResult toolRan(
+  LlmToolCall call,
+  ShellResult result, {
+  Decision? decision,
+}) => ToolResult(
+  callId: call.id,
+  returnCode: result.returnCode,
+  output: result.output,
+  exceptionInfo: result.exceptionInfo,
+  cwd: result.cwd,
+  jobId: result.jobId,
+  decidedBy: decision?.source,
+  decidedTier: decision?.tiers ?? const [],
+  decided: decision?.decided,
+);

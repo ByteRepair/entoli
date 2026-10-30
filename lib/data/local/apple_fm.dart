@@ -65,16 +65,18 @@ class AppleFmProbe {
   final bool mlx;
 
   LlmException get unavailable => switch (reason) {
-        "not-enabled" => const LlmException(
-            "Apple Intelligence is not enabled. It is a system setting, not "
-            "this app's: set it in Settings, and the next turn reaches this "
-            "model."),
-        "not-ready" => const LlmException(
-            "The Apple on-device model is not ready yet; the system is still "
-            "fetching it.",
-            retryable: true),
-        _ => const LlmException("The Apple on-device model is unavailable."),
-      };
+    "not-enabled" => const LlmException(
+      "Apple Intelligence is not enabled. It is a system setting, not "
+      "this app's: set it in Settings, and the next turn reaches this "
+      "model.",
+    ),
+    "not-ready" => const LlmException(
+      "The Apple on-device model is not ready yet; the system is still "
+      "fetching it.",
+      retryable: true,
+    ),
+    _ => const LlmException("The Apple on-device model is unavailable."),
+  };
 }
 
 /// The port: what the handshake said, and the provider composed from it.
@@ -84,16 +86,16 @@ class AppleFm {
   final AppleFmProbe probe;
 
   LlmProviderConfig get provider => LlmProviderConfig(
-        id: appleProviderId,
-        name: "Apple on-device",
-        api: LlmApi.openai,
-        // Empty, and it has to be: there is nothing here a URL could reach,
-        // the endpoint carries its own client, and an empty string keeps the
-        // registry's cache signature still. The shape rides out of habit
-        // rather than need.
-        baseUrl: "",
-        defaultModelId: appleModelId,
-      );
+    id: appleProviderId,
+    name: "Apple on-device",
+    api: LlmApi.openai,
+    // Empty, and it has to be: there is nothing here a URL could reach,
+    // the endpoint carries its own client, and an empty string keeps the
+    // registry's cache signature still. The shape rides out of habit
+    // rather than need.
+    baseUrl: "",
+    defaultModelId: appleModelId,
+  );
 
   LlmProvider get endpoint => AppleFmProvider(provider, probe);
 }
@@ -107,8 +109,10 @@ class AppleFmProvider extends LlmProvider with KeyFree {
   LlmClient client(String? apiKey) => AppleFmClient(probe);
 
   @override
-  Future<List<String>> listModels(String? apiKey, {http.Client? httpClient}) async =>
-      [appleModelId];
+  Future<List<String>> listModels(
+    String? apiKey, {
+    http.Client? httpClient,
+  }) async => [appleModelId];
 }
 
 /// Everything the channel says, broadcast — the `NativeVoiceBridge` shape:
@@ -207,11 +211,13 @@ abstract class FoundationModelsClient implements LlmClient {
             }
           case "toolCall":
             final args = call.arguments as Map?;
-            calls.add(LlmToolCall(
-              id: "c${calls.length}",
-              name: args?["name"] as String? ?? "",
-              argumentsJson: args?["arguments"] as String? ?? "{}",
-            ));
+            calls.add(
+              LlmToolCall(
+                id: "c${calls.length}",
+                name: args?["name"] as String? ?? "",
+                argumentsJson: args?["arguments"] as String? ?? "{}",
+              ),
+            );
             // The handoff is the whole protocol here: the framework reports
             // one call and stops, so the reply is complete now. Waiting for a
             // `done` that may never come — a cancelled framework does not
@@ -305,7 +311,9 @@ String _promptText(LlmMessage message) {
     if (attachment.isText) {
       text.writeln("\n${attachment.filename}:\n${attachment.asText}");
     } else {
-      text.writeln("\n[Attached file, not readable by this model: ${attachment.filename}]");
+      text.writeln(
+        "\n[Attached file, not readable by this model: ${attachment.filename}]",
+      );
     }
   }
   return text.toString().trim();
@@ -332,21 +340,21 @@ List<Map<String, String>> _transcript(List<LlmMessage> messages) {
                 "[Called ${call.name} with ${call.argumentsJson}]",
             ].join("\n"),
           },
-        LlmRole.assistant => {"role": "assistant", "text": message.text},
-        LlmRole.user => {"role": "user", "text": _promptText(message)},
-        LlmRole.tool => {
+          LlmRole.assistant => {"role": "assistant", "text": message.text},
+          LlmRole.user => {"role": "user", "text": _promptText(message)},
+          LlmRole.tool => {
             "role": "user",
             "text": _toolResultText(message, names),
           },
-      },
+        },
   ];
 }
 
 /// Each tool call's name by its id, for wording the results that answer them.
 Map<String, String> _toolNames(List<LlmMessage> messages) => {
-      for (final message in messages)
-        for (final call in message.toolCalls) call.id: call.name,
-    };
+  for (final message in messages)
+    for (final call in message.toolCalls) call.id: call.name,
+};
 
 String _toolResultText(LlmMessage message, Map<String, String> names) =>
     "[Result of the ${names[message.toolCallId] ?? "tool"} call:]\n"
@@ -357,18 +365,26 @@ String _toolResultText(LlmMessage message, Map<String, String> names) =>
 /// re-sent is the same refusal, and the turn's honest answer is the wording
 /// — the compaction ladder, which bounds its own asks and halves on any
 /// error, is what recovers the session.
-LlmException _errorOf(String label, String code, String message) => switch (code) {
-      "context" => LlmException(
-          "The conversation has outgrown the $label's context window. Compact "
-          "the chat, or lower Total Context under Settings > LLMs."),
-      "guardrail" => LlmException("The $label's guardrails refused this request."),
-      "rate-limit" => LlmException("The $label is rate limited.", retryable: true),
-      "assets" => LlmException(
-          "The $label's assets are not ready; the system is still fetching them.",
-          retryable: true),
-      "language" => LlmException(
-          "The $label does not support this conversation's language."),
-      "resources" => LlmException("The $label ran short of device resources."),
-      _ => LlmException(
-          message.isEmpty ? "The $label failed." : "The $label failed: $message"),
-    };
+LlmException _errorOf(
+  String label,
+  String code,
+  String message,
+) => switch (code) {
+  "context" => LlmException(
+    "The conversation has outgrown the $label's context window. Compact "
+    "the chat, or lower Total Context under Settings > LLMs.",
+  ),
+  "guardrail" => LlmException("The $label's guardrails refused this request."),
+  "rate-limit" => LlmException("The $label is rate limited.", retryable: true),
+  "assets" => LlmException(
+    "The $label's assets are not ready; the system is still fetching them.",
+    retryable: true,
+  ),
+  "language" => LlmException(
+    "The $label does not support this conversation's language.",
+  ),
+  "resources" => LlmException("The $label ran short of device resources."),
+  _ => LlmException(
+    message.isEmpty ? "The $label failed." : "The $label failed: $message",
+  ),
+};

@@ -48,7 +48,8 @@ class LlamaEngine extends LocalEngine {
   int? get maxThreads => llm.maxThreads;
 
   @override
-  LocalModel Function(ModelLink link) get fromLink => (link) => GgufModel(
+  LocalModel Function(ModelLink link) get fromLink =>
+      (link) => GgufModel(
         id: link.id,
         name: link.name,
         url: link.url,

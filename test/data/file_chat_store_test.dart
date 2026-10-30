@@ -30,27 +30,33 @@ void main() {
         ..removeWhere((line) => line.isEmpty);
 
   Message userMessage(String id, String text) => Message(
-        id: id,
-        role: MessageRole.user,
-        createdAt: DateTime.utc(2026, 1, 1),
-        parts: [MessagePart.text(text: text)],
-      );
+    id: id,
+    role: MessageRole.user,
+    createdAt: DateTime.utc(2026, 1, 1),
+    parts: [MessagePart.text(text: text)],
+  );
 
   test("save writes state.json and a log of records", () async {
-    await writeChatTo(store, Chat(state: makeState("c1"), messages: [userMessage("m1", "hello")]));
+    await writeChatTo(
+      store,
+      Chat(state: makeState("c1"), messages: [userMessage("m1", "hello")]),
+    );
 
     expect(File(config.stateFile("c1")).existsSync(), isTrue);
     expect(File(config.convFile("c1")).existsSync(), isTrue);
     expect(Directory(config.resourcesDir("c1")).existsSync(), isTrue);
     expect(Directory(config.workspaceDir("c1")).existsSync(), isTrue);
 
-    final stateJson = jsonDecode(File(config.stateFile("c1")).readAsStringSync()) as Map<String, dynamic>;
+    final stateJson =
+        jsonDecode(File(config.stateFile("c1")).readAsStringSync())
+            as Map<String, dynamic>;
     expect(stateJson["id"], "c1");
     expect(stateJson["title"], "Test chat c1");
 
     // One line per record: the message, then the part it holds.
-    final lines = logLines("c1").map(
-        (line) => jsonDecode(line) as Map<String, dynamic>).toList();
+    final lines = logLines(
+      "c1",
+    ).map((line) => jsonDecode(line) as Map<String, dynamic>).toList();
     expect(lines, hasLength(2));
     expect(lines[0]["runtimeType"], "message");
     expect(lines[0]["role"], "user");
@@ -66,14 +72,23 @@ void main() {
   });
 
   test("append adds to the log without rewriting what is there", () async {
-    await writeChatTo(store, Chat(state: makeState("c1"), messages: [userMessage("m1", "hello")]));
+    await writeChatTo(
+      store,
+      Chat(state: makeState("c1"), messages: [userMessage("m1", "hello")]),
+    );
     final before = logLines("c1");
 
     await store.append("c1", [
       ChatRecord.message(
-          id: "m2", role: MessageRole.assistant, createdAt: DateTime.utc(2026, 1, 1)),
+        id: "m2",
+        role: MessageRole.assistant,
+        createdAt: DateTime.utc(2026, 1, 1),
+      ),
       const ChatRecord.part(
-          messageId: "m2", index: 0, part: MessagePart.text(text: "hi")),
+        messageId: "m2",
+        index: 0,
+        part: MessagePart.text(text: "hi"),
+      ),
     ]);
 
     expect(logLines("c1").take(before.length), before);
@@ -84,17 +99,24 @@ void main() {
     expect((loaded.messages[1].parts.single as TextPart).text, "hi");
   });
 
-  test("a line left half-written by a kill is dropped, and the rest stands", () async {
-    await writeChatTo(store, Chat(state: makeState("c1"), messages: [userMessage("m1", "hello")]));
-    // What a process dying mid-append leaves behind.
-    File(config.convFile("c1")).writeAsStringSync(
+  test(
+    "a line left half-written by a kill is dropped, and the rest stands",
+    () async {
+      await writeChatTo(
+        store,
+        Chat(state: makeState("c1"), messages: [userMessage("m1", "hello")]),
+      );
+      // What a process dying mid-append leaves behind.
+      File(config.convFile("c1")).writeAsStringSync(
         '{"runtimeType":"message","id":"m2","role":"assis',
-        mode: FileMode.append);
+        mode: FileMode.append,
+      );
 
-    final loaded = await store.load("c1");
-    expect(loaded.messages, hasLength(1));
-    expect((loaded.messages.single.parts.single as TextPart).text, "hello");
-  });
+      final loaded = await store.load("c1");
+      expect(loaded.messages, hasLength(1));
+      expect((loaded.messages.single.parts.single as TextPart).text, "hello");
+    },
+  );
 
   test("list returns summaries sorted by updatedAt desc", () async {
     final older = ChatState(
@@ -130,29 +152,42 @@ void main() {
     expect(summaries.first.id, "real");
   });
 
-  test("delete removes the chat directory and the workspace it ran in", () async {
-    await store.saveState(makeState("c3"));
-    expect(Directory(config.chatDir("c3")).existsSync(), isTrue);
+  test(
+    "delete removes the chat directory and the workspace it ran in",
+    () async {
+      await store.saveState(makeState("c3"));
+      expect(Directory(config.chatDir("c3")).existsSync(), isTrue);
 
-    await store.delete("c3");
-    expect(Directory(config.chatDir("c3")).existsSync(), isFalse);
-    expect(Directory(config.workspaceDir("c3")).existsSync(), isFalse);
-  });
+      await store.delete("c3");
+      expect(Directory(config.chatDir("c3")).existsSync(), isFalse);
+      expect(Directory(config.workspaceDir("c3")).existsSync(), isFalse);
+    },
+  );
 
-  test("saveResource writes bytes under resources/ and reads them back", () async {
-    await store.saveState(makeState("c4"));
+  test(
+    "saveResource writes bytes under resources/ and reads them back",
+    () async {
+      await store.saveState(makeState("c4"));
 
-    final bytes = Uint8List.fromList([1, 2, 3, 4, 5]);
-    final resource = await store.saveResource("c4", "test.bin", bytes);
-    expect(resource, endsWith("test.bin"));
-    expect(File(p.join(config.resourcesDir("c4"), resource)).readAsBytesSync(), bytes);
-    expect(await store.readResource("c4", resource), bytes);
-  });
+      final bytes = Uint8List.fromList([1, 2, 3, 4, 5]);
+      final resource = await store.saveResource("c4", "test.bin", bytes);
+      expect(resource, endsWith("test.bin"));
+      expect(
+        File(p.join(config.resourcesDir("c4"), resource)).readAsBytesSync(),
+        bytes,
+      );
+      expect(await store.readResource("c4", resource), bytes);
+    },
+  );
 
   test("saveResource sanitizes unsafe filename characters", () async {
     await store.saveState(makeState("c5"));
 
-    final resource = await store.saveResource("c5", "../bad name.txt", Uint8List(0));
+    final resource = await store.saveResource(
+      "c5",
+      "../bad name.txt",
+      Uint8List(0),
+    );
     expect(resource, contains("bad_name.txt"));
     expect(resource, isNot(contains("..")));
   });
@@ -161,8 +196,16 @@ void main() {
   test("saveResource gives each attachment its own name", () async {
     await store.saveState(makeState("c5b"));
 
-    final first = await store.saveResource("c5b", "shot.png", Uint8List.fromList([1]));
-    final second = await store.saveResource("c5b", "shot.png", Uint8List.fromList([2]));
+    final first = await store.saveResource(
+      "c5b",
+      "shot.png",
+      Uint8List.fromList([1]),
+    );
+    final second = await store.saveResource(
+      "c5b",
+      "shot.png",
+      Uint8List.fromList([2]),
+    );
 
     expect(first, isNot(second));
     expect(await store.readResource("c5b", first), [1]);
@@ -176,34 +219,61 @@ void main() {
   });
 
   group("resources", () {
-    test("are read-only between the store's own writes, and go with the chat",
-        () async {
-      final locked = FileChatStore(config,
-          deleteTree: deleteTree, readOnlyDirs: ReadOnlyDirs(setTreeWritable));
-      await writeChatTo(locked, Chat(state: makeState("r1"), messages: const []));
-      final first = await locked.saveResource("r1", "a.pdf", Uint8List.fromList([1]));
-      final second = await locked.saveResource("r1", "b.png", Uint8List.fromList([2]));
-      final dir = config.resourcesDir("r1");
+    test(
+      "are read-only between the store's own writes, and go with the chat",
+      () async {
+        final locked = FileChatStore(
+          config,
+          deleteTree: deleteTree,
+          readOnlyDirs: ReadOnlyDirs(setTreeWritable),
+        );
+        await writeChatTo(
+          locked,
+          Chat(state: makeState("r1"), messages: const []),
+        );
+        final first = await locked.saveResource(
+          "r1",
+          "a.pdf",
+          Uint8List.fromList([1]),
+        );
+        final second = await locked.saveResource(
+          "r1",
+          "b.png",
+          Uint8List.fromList([2]),
+        );
+        final dir = config.resourcesDir("r1");
 
-      expect(() => File(p.join(dir, first)).writeAsBytesSync([9]),
-          throwsA(isA<FileSystemException>()));
-      expect(() => File(p.join(dir, "planted")).writeAsStringSync("x"),
-          throwsA(isA<FileSystemException>()));
-      await locked.deleteResource("r1", second);
-      expect(await locked.readResource("r1", second), isNull);
-      expect(await locked.readResource("r1", first), [1]);
+        expect(
+          () => File(p.join(dir, first)).writeAsBytesSync([9]),
+          throwsA(isA<FileSystemException>()),
+        );
+        expect(
+          () => File(p.join(dir, "planted")).writeAsStringSync("x"),
+          throwsA(isA<FileSystemException>()),
+        );
+        await locked.deleteResource("r1", second);
+        expect(await locked.readResource("r1", second), isNull);
+        expect(await locked.readResource("r1", first), [1]);
 
-      await locked.delete("r1");
-      expect(Directory(config.chatDir("r1")).existsSync(), isFalse);
-    }, skip: Platform.isWindows ? "modes are POSIX" : null);
+        await locked.delete("r1");
+        expect(Directory(config.chatDir("r1")).existsSync(), isFalse);
+      },
+      skip: Platform.isWindows ? "modes are POSIX" : null,
+    );
   });
 
   group("projects", () {
     test("a chat in one is written under it, not at the top level", () async {
       await store.saveState(makeState("p1", project: "work"));
 
-      expect(File(config.stateFile("p1", project: "work")).existsSync(), isTrue);
-      expect(Directory(config.workspaceDir("p1", project: "work")).existsSync(), isTrue);
+      expect(
+        File(config.stateFile("p1", project: "work")).existsSync(),
+        isTrue,
+      );
+      expect(
+        Directory(config.workspaceDir("p1", project: "work")).existsSync(),
+        isTrue,
+      );
       expect(File(config.stateFile("p1")).existsSync(), isFalse);
     });
 
@@ -211,70 +281,96 @@ void main() {
       await store.createProject("work");
 
       expect(Directory(config.chatsDir(project: "work")).existsSync(), isTrue);
-      expect(Directory(config.projectWorkspaceDir(project: "work")).existsSync(), isTrue);
+      expect(
+        Directory(config.projectWorkspaceDir(project: "work")).existsSync(),
+        isTrue,
+      );
       expect(await store.listProjects(), ["work"]);
     });
 
-    test("list returns every project's chats, each saying which it is in", () async {
-      await store.saveState(makeState("here"));
-      await store.saveState(makeState("there", project: "work"));
+    test(
+      "list returns every project's chats, each saying which it is in",
+      () async {
+        await store.saveState(makeState("here"));
+        await store.saveState(makeState("there", project: "work"));
 
-      final all = await store.list();
-      expect(all.map((c) => c.id), containsAll(["here", "there"]));
-      expect(all.firstWhere((c) => c.id == "here").project, isNull);
-      expect(all.firstWhere((c) => c.id == "there").project, "work");
-    });
+        final all = await store.list();
+        expect(all.map((c) => c.id), containsAll(["here", "there"]));
+        expect(all.firstWhere((c) => c.id == "here").project, isNull);
+        expect(all.firstWhere((c) => c.id == "there").project, "work");
+      },
+    );
 
     // A chat is addressed by its id alone, so a store that has not listed
     // anything yet still has to find one that is not in the default project.
-    test("a chat in one is found by id by a store that has never listed", () async {
-      await store.saveState(makeState("p2", project: "work"));
+    test(
+      "a chat in one is found by id by a store that has never listed",
+      () async {
+        await store.saveState(makeState("p2", project: "work"));
 
-      final fresh = FileChatStore(config);
-      expect((await fresh.load("p2")).state.project, "work");
-      expect(await fresh.projectOf("p2"), "work");
-    });
+        final fresh = FileChatStore(config);
+        expect((await fresh.load("p2")).state.project, "work");
+        expect(await fresh.projectOf("p2"), "work");
+      },
+    );
 
     test("deleting one takes its chats and its workspace with it", () async {
       await store.saveState(makeState("p3", project: "work"));
 
       await store.deleteProject("work");
 
-      expect(Directory(config.projectDir(project: "work")).existsSync(), isFalse);
+      expect(
+        Directory(config.projectDir(project: "work")).existsSync(),
+        isFalse,
+      );
       expect(await store.list(), isEmpty);
       expect(await store.listProjects(), isEmpty);
     });
 
     test("deleting one gets past its read-only skills", () async {
       await store.createProject("work");
-      final skill = Directory(p.join(config.projectDir(project: "work"), "skills", "s"))
-        ..createSync(recursive: true);
+      final skill = Directory(
+        p.join(config.projectDir(project: "work"), "skills", "s"),
+      )..createSync(recursive: true);
       File(p.join(skill.path, "SKILL.md")).writeAsStringSync("x");
       await setTreeWritable([p.dirname(skill.path)], writable: false);
 
       await FileChatStore(config, deleteTree: deleteTree).deleteProject("work");
 
-      expect(Directory(config.projectDir(project: "work")).existsSync(), isFalse);
+      expect(
+        Directory(config.projectDir(project: "work")).existsSync(),
+        isFalse,
+      );
     });
 
     test("moving a chat takes its files and its own workspace", () async {
-      await writeChatTo(store, Chat(
-        state: makeState("p4"),
-        messages: [
-          Message(
-            id: "m1",
-            role: MessageRole.user,
-            createdAt: DateTime.utc(2026, 1, 1),
-            parts: [const MessagePart.text(text: "hi")],
-          ),
-        ],
-      ));
-      final resource = await store.saveResource("p4", "note.txt", Uint8List.fromList([7]));
+      await writeChatTo(
+        store,
+        Chat(
+          state: makeState("p4"),
+          messages: [
+            Message(
+              id: "m1",
+              role: MessageRole.user,
+              createdAt: DateTime.utc(2026, 1, 1),
+              parts: [const MessagePart.text(text: "hi")],
+            ),
+          ],
+        ),
+      );
+      final resource = await store.saveResource(
+        "p4",
+        "note.txt",
+        Uint8List.fromList([7]),
+      );
 
       await store.moveChat("p4", "work");
 
       expect(Directory(config.chatDir("p4")).existsSync(), isFalse);
-      expect(Directory(config.workspaceDir("p4", project: "work")).existsSync(), isTrue);
+      expect(
+        Directory(config.workspaceDir("p4", project: "work")).existsSync(),
+        isTrue,
+      );
       final moved = await store.load("p4");
       expect(moved.state.project, "work");
       expect(moved.messages, hasLength(1));
@@ -287,8 +383,12 @@ void main() {
 
       await store.moveChat("p7", "work");
 
-      expect(File("${config.workspaceDir("p7", project: "work")}/note.txt")
-          .readAsStringSync(), "mine");
+      expect(
+        File(
+          "${config.workspaceDir("p7", project: "work")}/note.txt",
+        ).readAsStringSync(),
+        "mine",
+      );
       expect(Directory(config.workspaceDir("p7")).existsSync(), isFalse);
     });
 
@@ -296,8 +396,13 @@ void main() {
       await store.saveState(makeState("p5"));
       await store.moveChat("p5", "work");
 
-      final json = jsonDecode(File(config.stateFile("p5", project: "work")).readAsStringSync())
-          as Map<String, dynamic>;
+      final json =
+          jsonDecode(
+                File(
+                  config.stateFile("p5", project: "work"),
+                ).readAsStringSync(),
+              )
+              as Map<String, dynamic>;
       expect(json["project"], "work");
     });
 
@@ -334,7 +439,9 @@ void main() {
     test("a chat moved by hand is listed under where it ended up", () async {
       await store.saveState(makeState("p7"));
       await config.ensureProjectDirs(project: "work");
-      Directory(config.chatDir("p7")).renameSync(config.chatDir("p7", project: "work"));
+      Directory(
+        config.chatDir("p7"),
+      ).renameSync(config.chatDir("p7", project: "work"));
 
       final fresh = FileChatStore(config);
       expect((await fresh.list()).single.project, "work");
@@ -350,7 +457,11 @@ void main() {
         createdAt: DateTime.utc(2026, 1, 1),
         parts: [
           MessagePart.toolCall(
-            toolCall: const ToolCall(id: "tc1", name: "bash", argumentsText: "ls -la"),
+            toolCall: const ToolCall(
+              id: "tc1",
+              name: "bash",
+              argumentsText: "ls -la",
+            ),
           ),
         ],
       ),
@@ -360,7 +471,11 @@ void main() {
         createdAt: DateTime.utc(2026, 1, 1, 0, 0, 1),
         parts: [
           MessagePart.toolResult(
-            result: const ToolResult(callId: "tc1", returnCode: 0, output: "total 0"),
+            result: const ToolResult(
+              callId: "tc1",
+              returnCode: 0,
+              output: "total 0",
+            ),
           ),
         ],
       ),
@@ -368,9 +483,15 @@ void main() {
     await writeChatTo(store, Chat(state: state, messages: messages));
     final loaded = await store.load("c6");
     expect(loaded.messages[0].parts.first, isA<ToolCallPart>());
-    expect((loaded.messages[0].parts.first as ToolCallPart).toolCall.name, "bash");
+    expect(
+      (loaded.messages[0].parts.first as ToolCallPart).toolCall.name,
+      "bash",
+    );
     expect(loaded.messages[1].parts.first, isA<ToolResultPart>());
-    expect((loaded.messages[1].parts.first as ToolResultPart).result.output, "total 0");
+    expect(
+      (loaded.messages[1].parts.first as ToolResultPart).result.output,
+      "total 0",
+    );
   });
 
   group("artifacts", () {
@@ -382,7 +503,9 @@ void main() {
       await Directory(src).create(recursive: true);
       await File(p.join(src, "index.html")).writeAsString("<h1>hi</h1>");
       await Directory(p.join(src, "css")).create();
-      await File(p.join(src, "css", "style.css")).writeAsString("body{color:red}");
+      await File(
+        p.join(src, "css", "style.css"),
+      ).writeAsString("body{color:red}");
 
       final id = await store.createArtifact("a1", src, "index.html");
       expect(id, isNotEmpty);
@@ -392,7 +515,10 @@ void main() {
       final entry = File(p.join(dir.path, "index.html")).readAsStringSync();
       expect(entry, contains("<h1>hi</h1>"));
       expect(entry, contains("entoli-base-css"));
-      expect(File(p.join(dir.path, "css", "style.css")).readAsStringSync(), "body{color:red}");
+      expect(
+        File(p.join(dir.path, "css", "style.css")).readAsStringSync(),
+        "body{color:red}",
+      );
       // The workspace copy the model reads is untouched.
       expect(File(p.join(src, "index.html")).readAsStringSync(), "<h1>hi</h1>");
     });
@@ -406,7 +532,10 @@ void main() {
 
       final id = await store.createArtifact("a1", filePath, "index.html");
       final dir = Directory(config.artifactDir("a1", id));
-      expect(File(p.join(dir.path, "index.html")).readAsStringSync(), contains("<p>page</p>"));
+      expect(
+        File(p.join(dir.path, "index.html")).readAsStringSync(),
+        contains("<p>page</p>"),
+      );
     });
 
     test("updateArtifact replaces the contents", () async {
@@ -428,34 +557,42 @@ void main() {
       await File(p.join(src2, "new.txt")).writeAsString("new");
 
       await store.updateArtifact("a1", id, src2, "index.html");
-      expect(File(p.join(dir.path, "index.html")).readAsStringSync(), contains("v2"));
-      expect(File(p.join(dir.path, "index.html")).readAsStringSync(), contains("entoli-base-css"));
+      expect(
+        File(p.join(dir.path, "index.html")).readAsStringSync(),
+        contains("v2"),
+      );
+      expect(
+        File(p.join(dir.path, "index.html")).readAsStringSync(),
+        contains("entoli-base-css"),
+      );
       expect(File(p.join(dir.path, "new.txt")).readAsStringSync(), "new");
       expect(File(p.join(dir.path, "old.txt")).existsSync(), isFalse);
     });
 
-    test("readArtifactZip carries the files named from the artifact root",
-        () async {
-      await store.saveState(makeState("a1"));
-      final ws = config.workspaceDir("a1");
-      final src = p.join(ws, "report");
-      await Directory(src).create(recursive: true);
-      final png = Uint8List.fromList([1, 2, 3, 4]);
-      await Directory(p.join(src, "assets")).create();
-      await File(p.join(src, "assets", "logo.png")).writeAsBytes(png);
-      await File(p.join(src, "index.html")).writeAsString("<p>");
+    test(
+      "readArtifactZip carries the files named from the artifact root",
+      () async {
+        await store.saveState(makeState("a1"));
+        final ws = config.workspaceDir("a1");
+        final src = p.join(ws, "report");
+        await Directory(src).create(recursive: true);
+        final png = Uint8List.fromList([1, 2, 3, 4]);
+        await Directory(p.join(src, "assets")).create();
+        await File(p.join(src, "assets", "logo.png")).writeAsBytes(png);
+        await File(p.join(src, "index.html")).writeAsString("<p>");
 
-      final id = await store.createArtifact("a1", src, "index.html");
-      final zip = await store.readArtifactZip("a1", id);
-      expect(zip, isNotNull);
+        final id = await store.createArtifact("a1", src, "index.html");
+        final zip = await store.readArtifactZip("a1", id);
+        expect(zip, isNotNull);
 
-      final decoded = ZipDecoder().decodeBytes(zip!);
-      final names = [for (final member in decoded) member.name]..sort();
-      expect(names, ["assets/", "assets/logo.png", "index.html"]);
-      final entry = decoded.findFile("index.html")!.readBytes();
-      expect(utf8.decode(entry ?? Uint8List(0)), contains("<p>"));
-      expect(decoded.findFile("assets/logo.png")!.readBytes(), png);
-    });
+        final decoded = ZipDecoder().decodeBytes(zip!);
+        final names = [for (final member in decoded) member.name]..sort();
+        expect(names, ["assets/", "assets/logo.png", "index.html"]);
+        final entry = decoded.findFile("index.html")!.readBytes();
+        expect(utf8.decode(entry ?? Uint8List(0)), contains("<p>"));
+        expect(decoded.findFile("assets/logo.png")!.readBytes(), png);
+      },
+    );
 
     test("readArtifactZip answers null where there is no artifact", () async {
       await store.saveState(makeState("a1"));

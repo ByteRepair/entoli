@@ -9,7 +9,6 @@ final appLicence = LicenseEntryWithLineBreaks(const [appTitle], bundledLicence);
 
 /// Puts [appLicence] on the licence page About opens, beside what the app is
 /// built on.
-void registerAppLicence() =>
-    LicenseRegistry.addLicense(() async* {
-      yield appLicence;
-    });
+void registerAppLicence() => LicenseRegistry.addLicense(() async* {
+  yield appLicence;
+});

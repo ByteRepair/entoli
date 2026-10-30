@@ -34,20 +34,22 @@ class IoFileWatches implements FileWatches {
     }
     return events
         .where((event) => event.path.isNotEmpty)
-        .map((io.FileSystemEvent event) => FileWatchEvent(
-              path: event.path,
-              kind: event is io.FileSystemDeleteEvent
-                  ? FileEvent.delete
-                  : event is io.FileSystemMoveEvent
-                      ? FileEvent.move
-                      : event is io.FileSystemCreateEvent
-                          ? FileEvent.create
-                          : FileEvent.change,
-            ))
+        .map(
+          (io.FileSystemEvent event) => FileWatchEvent(
+            path: event.path,
+            kind: event is io.FileSystemDeleteEvent
+                ? FileEvent.delete
+                : event is io.FileSystemMoveEvent
+                ? FileEvent.move
+                : event is io.FileSystemCreateEvent
+                ? FileEvent.create
+                : FileEvent.change,
+          ),
+        )
         .handleError((Object _) {
-      // A watcher over a directory that has been removed since — a temp
-      // workspace swept, a project deleted — is silence, not a crash: the
-      // next registration rebuilds what the list still asks for.
-    });
+          // A watcher over a directory that has been removed since — a temp
+          // workspace swept, a project deleted — is silence, not a crash: the
+          // next registration rebuilds what the list still asks for.
+        });
   }
 }

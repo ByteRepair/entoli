@@ -23,14 +23,20 @@ void main() {
     const psk = "cGFpcmluZy1zZWNyZXQtZm9yLWEtdGVzdA";
     final a = SecureChannel.open(
       links.$1,
-      handshake: Handshake(await SyncIdentity.load(FakeSecretStore()),
-          pairingSecret: psk, name: "a"),
+      handshake: Handshake(
+        await SyncIdentity.load(FakeSecretStore()),
+        pairingSecret: psk,
+        name: "a",
+      ),
       initiator: true,
     );
     final b = SecureChannel.open(
       links.$2,
-      handshake: Handshake(await SyncIdentity.load(FakeSecretStore()),
-          pairingSecret: psk, name: "b"),
+      handshake: Handshake(
+        await SyncIdentity.load(FakeSecretStore()),
+        pairingSecret: psk,
+        name: "b",
+      ),
       initiator: false,
     );
     final both = await Future.wait([a, b]);
@@ -40,41 +46,60 @@ void main() {
   test("a different protocol version is refused, and told so", () async {
     final links = loopbackPair();
     final told = ChannelReader(links.$1);
-    final joined = Handshake(await SyncIdentity.load(FakeSecretStore()),
-            pairingSecret: "cGFpcmluZy1zZWNyZXQtZm9yLWEtdGVzdA")
-        .run(links.$2, initiator: false, reader: ChannelReader(links.$2));
+    final joined = Handshake(
+      await SyncIdentity.load(FakeSecretStore()),
+      pairingSecret: "cGFpcmluZy1zZWNyZXQtZm9yLWEtdGVzdA",
+    ).run(links.$2, initiator: false, reader: ChannelReader(links.$2));
     // A future build: the version, and a shape this one has never seen.
     await links.$1.send(utf8.encode(jsonEncode({"v": 99, "role": "i"})));
 
     await expectLater(joined, throwsA(isA<ProtocolMismatchException>()));
-    final note = jsonDecode(utf8.decode(await told.next())) as Map<String, dynamic>;
+    final note =
+        jsonDecode(utf8.decode(await told.next())) as Map<String, dynamic>;
     expect(note["v"], SyncIdentity.protocolVersion);
-    expect(() => Handshake.parse(jsonEncode(note..["v"] = 99)),
-        throwsA(isA<ProtocolMismatchException>().having(
-            (e) => e.message, "message", contains("please update"))));
+    expect(
+      () => Handshake.parse(jsonEncode(note..["v"] = 99)),
+      throwsA(
+        isA<ProtocolMismatchException>().having(
+          (e) => e.message,
+          "message",
+          contains("please update"),
+        ),
+      ),
+    );
   });
 
-  test("a peer claiming an id its key does not stand for is refused",
-      () async {
+  test("a peer claiming an id its key does not stand for is refused", () async {
     final links = loopbackPair();
     final victim = await SyncIdentity.load(FakeSecretStore());
     final attacker = await SyncIdentity.load(FakeSecretStore());
-    final joined = Handshake(await SyncIdentity.load(FakeSecretStore()),
-            pairingSecret: "cGFpcmluZy1zZWNyZXQtZm9yLWEtdGVzdA")
-        .run(links.$2, initiator: false, reader: ChannelReader(links.$2));
-    await links.$1.send(utf8.encode(jsonEncode({
-      "v": SyncIdentity.protocolVersion,
-      "role": "i",
-      "id": victim.id,
-      "pk": attacker.publicKeyB64,
-      "eph": base64Encode(List.filled(32, 9)),
-      "name": "x",
-    })));
+    final joined = Handshake(
+      await SyncIdentity.load(FakeSecretStore()),
+      pairingSecret: "cGFpcmluZy1zZWNyZXQtZm9yLWEtdGVzdA",
+    ).run(links.$2, initiator: false, reader: ChannelReader(links.$2));
+    await links.$1.send(
+      utf8.encode(
+        jsonEncode({
+          "v": SyncIdentity.protocolVersion,
+          "role": "i",
+          "id": victim.id,
+          "pk": attacker.publicKeyB64,
+          "eph": base64Encode(List.filled(32, 9)),
+          "name": "x",
+        }),
+      ),
+    );
 
     await expectLater(
-        joined,
-        throwsA(isA<HandshakeException>().having(
-            (e) => e.message, "message", "peer id does not match its key")));
+      joined,
+      throwsA(
+        isA<HandshakeException>().having(
+          (e) => e.message,
+          "message",
+          "peer id does not match its key",
+        ),
+      ),
+    );
   });
 
   test("what one end seals, the other opens", () async {
@@ -126,14 +151,24 @@ void main() {
     links.$1.watchSends(sizes.add);
     const psk = "cGFpcmluZy1zZWNyZXQtZm9yLWEtdGVzdA";
     final both = await Future.wait([
-      SecureChannel.open(links.$1,
-          handshake: Handshake(await SyncIdentity.load(FakeSecretStore()),
-              pairingSecret: psk, name: "a"),
-          initiator: true),
-      SecureChannel.open(links.$2,
-          handshake: Handshake(await SyncIdentity.load(FakeSecretStore()),
-              pairingSecret: psk, name: "b"),
-          initiator: false),
+      SecureChannel.open(
+        links.$1,
+        handshake: Handshake(
+          await SyncIdentity.load(FakeSecretStore()),
+          pairingSecret: psk,
+          name: "a",
+        ),
+        initiator: true,
+      ),
+      SecureChannel.open(
+        links.$2,
+        handshake: Handshake(
+          await SyncIdentity.load(FakeSecretStore()),
+          pairingSecret: psk,
+          name: "b",
+        ),
+        initiator: false,
+      ),
     ]);
     final (a, b) = (both[0], both[1]);
     addTearDown(a.close);

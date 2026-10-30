@@ -13,7 +13,9 @@ void main() {
         .where((l) => l.packages.contains(appTitle))
         .toList();
     expect(ours, hasLength(1));
-    expect(ours.single.paragraphs.first.text,
-        contains("GNU AFFERO GENERAL PUBLIC LICENSE"));
+    expect(
+      ours.single.paragraphs.first.text,
+      contains("GNU AFFERO GENERAL PUBLIC LICENSE"),
+    );
   });
 }

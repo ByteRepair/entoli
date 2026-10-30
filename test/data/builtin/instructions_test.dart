@@ -38,15 +38,19 @@ void main() {
     file.writeAsStringSync(content);
   }
 
-  Future<List<InstructionFile>> load(
-          {bool imports = false, List<String> excludes = const []}) =>
-      loadInstructions(projectWorkspace: projectWorkspace,
-          global: [global],
-          imports: imports,
-          excludes: excludes);
+  Future<List<InstructionFile>> load({
+    bool imports = false,
+    List<String> excludes = const [],
+  }) => loadInstructions(
+    projectWorkspace: projectWorkspace,
+    global: [global],
+    imports: imports,
+    excludes: excludes,
+  );
 
-  List<String> pathsOf(List<InstructionFile> files) =>
-      [for (final f in files) p.relative(f.path, from: dataDir)];
+  List<String> pathsOf(List<InstructionFile> files) => [
+    for (final f in files) p.relative(f.path, from: dataDir),
+  ];
 
   test("nothing loaded when there are no AGENTS.md files", () async {
     expect(await load(), isEmpty);
@@ -58,44 +62,66 @@ void main() {
 
     final files = await load();
 
-    expect(pathsOf(files), ["AGENTS.md", "projects/default/workspace/AGENTS.md"]);
+    expect(pathsOf(files), [
+      "AGENTS.md",
+      "projects/default/workspace/AGENTS.md",
+    ]);
     expect(files.first.kind, InstructionKind.global);
     expect(files.last.kind, InstructionKind.project);
   });
 
-  test("linked files load after the global one, in order, before the project's",
-      () async {
-    writeGlobal("global rules");
-    write("AGENTS.md", "project rules");
-    final claude = File(p.join(tmp.path, "home", ".claude", "CLAUDE.md"))
-      ..createSync(recursive: true)
-      ..writeAsStringSync("claude rules");
-    final other = File(p.join(tmp.path, "repo", "AGENTS.md"))
-      ..createSync(recursive: true)
-      ..writeAsStringSync("repo rules");
+  test(
+    "linked files load after the global one, in order, before the project's",
+    () async {
+      writeGlobal("global rules");
+      write("AGENTS.md", "project rules");
+      final claude = File(p.join(tmp.path, "home", ".claude", "CLAUDE.md"))
+        ..createSync(recursive: true)
+        ..writeAsStringSync("claude rules");
+      final other = File(p.join(tmp.path, "repo", "AGENTS.md"))
+        ..createSync(recursive: true)
+        ..writeAsStringSync("repo rules");
 
-    final files = await loadInstructions(projectWorkspace: projectWorkspace,
-        global: [global, other.path, claude.path, global, p.join(tmp.path, "gone.md")]);
+      final files = await loadInstructions(
+        projectWorkspace: projectWorkspace,
+        global: [
+          global,
+          other.path,
+          claude.path,
+          global,
+          p.join(tmp.path, "gone.md"),
+        ],
+      );
 
-    expect([for (final f in files) f.content], [
-      "global rules",
-      "repo rules",
-      "claude rules",
-      "project rules",
-    ]);
-    expect(files.take(3).map((f) => f.kind), everyElement(InstructionKind.global));
-  });
+      expect(
+        [for (final f in files) f.content],
+        ["global rules", "repo rules", "claude rules", "project rules"],
+      );
+      expect(
+        files.take(3).map((f) => f.kind),
+        everyElement(InstructionKind.global),
+      );
+    },
+  );
 
   test("the user's files are counted apart from the app's note", () {
     const note = InstructionFile(
-        path: "", kind: InstructionKind.bundled, content: "app note");
+      path: "",
+      kind: InstructionKind.bundled,
+      content: "app note",
+    );
     const mine = InstructionFile(
-        path: "/a/AGENTS.md", kind: InstructionKind.global, content: "mine");
+      path: "/a/AGENTS.md",
+      kind: InstructionKind.global,
+      content: "mine",
+    );
 
     expect(userInstructionChars([note]), 0);
-    expect(userInstructionChars([note, mine]),
-        renderInstructions([note, mine]).length -
-            renderInstructions([note]).length);
+    expect(
+      userInstructionChars([note, mine]),
+      renderInstructions([note, mine]).length -
+          renderInstructions([note]).length,
+    );
   });
 
   // Only the workspace root's AGENTS.md loads: the chat's own and any
@@ -111,18 +137,20 @@ void main() {
     expect(files.single.kind, InstructionKind.project);
   });
 
-  test("nothing above the project workspace is read, the global named aside",
-      () async {
-    write("AGENTS.md", "project rules");
-    File(p.join(tmp.path, "AGENTS.md")).writeAsStringSync("outside rules");
-    File(p.join(dataDir, "elsewhere", "AGENTS.md"))
-      ..createSync(recursive: true)
-      ..writeAsStringSync("a data dir file");
+  test(
+    "nothing above the project workspace is read, the global named aside",
+    () async {
+      write("AGENTS.md", "project rules");
+      File(p.join(tmp.path, "AGENTS.md")).writeAsStringSync("outside rules");
+      File(p.join(dataDir, "elsewhere", "AGENTS.md"))
+        ..createSync(recursive: true)
+        ..writeAsStringSync("a data dir file");
 
-    final files = await load();
+      final files = await load();
 
-    expect(pathsOf(files), ["projects/default/workspace/AGENTS.md"]);
-  });
+      expect(pathsOf(files), ["projects/default/workspace/AGENTS.md"]);
+    },
+  );
 
   test("an empty file is skipped", () async {
     writeGlobal("   \n  ");
@@ -142,10 +170,10 @@ void main() {
 
       final files = await load(imports: true);
 
-      expect(
-          pathsOf(files),
-          ["projects/default/workspace/AGENTS.md",
-              "projects/default/workspace/notes.md"]);
+      expect(pathsOf(files), [
+        "projects/default/workspace/AGENTS.md",
+        "projects/default/workspace/notes.md",
+      ]);
       expect(files.last.kind, InstructionKind.imported);
       expect(files.last.depth, 1);
     });
@@ -165,7 +193,10 @@ void main() {
 
       final files = await load(imports: true);
 
-      expect(pathsOf(files), ["AGENTS.md", "projects/default/workspace/AGENTS.md"]);
+      expect(pathsOf(files), [
+        "AGENTS.md",
+        "projects/default/workspace/AGENTS.md",
+      ]);
     });
 
     test("a reference outside the workspaces is refused", () async {
@@ -183,8 +214,10 @@ void main() {
     test("a chain deeper than the cap stops expanding", () async {
       write("AGENTS.md", "see @./a.md");
       for (var i = 0; i < maxImportDepth + 2; i++) {
-        write("${String.fromCharCode(97 + i)}.md",
-            "see @./${String.fromCharCode(98 + i)}.md");
+        write(
+          "${String.fromCharCode(97 + i)}.md",
+          "see @./${String.fromCharCode(98 + i)}.md",
+        );
       }
       final files = await load(imports: true);
       // The cap is on depth, not count: a chain of depth 5 loads 6 files.
@@ -196,21 +229,21 @@ void main() {
       write("a.md", "see @./b.md");
       write("b.md", "see @./a.md");
       final files = await load(imports: true);
-      expect(
-          pathsOf(files),
-          ["projects/default/workspace/AGENTS.md",
-              "projects/default/workspace/a.md",
-              "projects/default/workspace/b.md"]);
+      expect(pathsOf(files), [
+        "projects/default/workspace/AGENTS.md",
+        "projects/default/workspace/a.md",
+        "projects/default/workspace/b.md",
+      ]);
     });
 
     test("code blocks and comments are not read as references", () async {
       write("AGENTS.md", "```\n@./a.md\n```\n<!-- @./b.md -->\nsee @./c.md");
       write("c.md", "c");
       final files = await load(imports: true);
-      expect(
-          pathsOf(files),
-          ["projects/default/workspace/AGENTS.md",
-              "projects/default/workspace/c.md"]);
+      expect(pathsOf(files), [
+        "projects/default/workspace/AGENTS.md",
+        "projects/default/workspace/c.md",
+      ]);
     });
   });
 
@@ -236,28 +269,40 @@ void main() {
     test("renders the header and each file with its kind", () {
       final text = renderInstructions([
         const InstructionFile(
-            path: "/data/AGENTS.md",
-            kind: InstructionKind.global,
-            content: "global rules"),
+          path: "/data/AGENTS.md",
+          kind: InstructionKind.global,
+          content: "global rules",
+        ),
         const InstructionFile(
-            path: "/ws/AGENTS.md",
-            kind: InstructionKind.project,
-            content: "project rules"),
+          path: "/ws/AGENTS.md",
+          kind: InstructionKind.project,
+          content: "project rules",
+        ),
         const InstructionFile(
-            path: "anonymous",
-            kind: InstructionKind.bundled,
-            content: "this is an anonymous chat"),
+          path: "anonymous",
+          kind: InstructionKind.bundled,
+          content: "this is an anonymous chat",
+        ),
       ]);
       expect(text, contains("Workspace instructions are shown below."));
       expect(
-          text,
-          contains("Contents of /data/AGENTS.md "
-              "(the user's global instructions, for every project):"));
-      expect(text,
-          contains("Contents of /ws/AGENTS.md (project workspace instructions):"));
-      expect(text,
-          contains("From the app, about this kind of chat:\n\n"
-              "this is an anonymous chat"));
+        text,
+        contains(
+          "Contents of /data/AGENTS.md "
+          "(the user's global instructions, for every project):",
+        ),
+      );
+      expect(
+        text,
+        contains("Contents of /ws/AGENTS.md (project workspace instructions):"),
+      );
+      expect(
+        text,
+        contains(
+          "From the app, about this kind of chat:\n\n"
+          "this is an anonymous chat",
+        ),
+      );
       expect(text, isNot(contains("Contents of anonymous")));
       expect(text, isNot(contains("IMPORTANT")));
       expect(text, contains("global rules"));
@@ -274,35 +319,36 @@ void main() {
       final path = "/data/projects/work/workspace/vendor/lib/AGENTS.md";
       expect(isExcludedPath(path, ["**/vendor/**"]), isTrue);
       expect(isExcludedPath(path, ["**/vendor"]), isFalse);
-      expect(isExcludedPath(path,
-              ["/data/projects/*/workspace/AGENTS.md"]),
-          isFalse);
-      expect(isExcludedPath("/data/projects/work/workspace/AGENTS.md",
-              ["/data/projects/*/workspace/AGENTS.md"]),
-          isTrue);
-      expect(isExcludedPath(path, ["/data/projects/*/AGENTS.md"]),
-          isFalse);
       expect(
-          isExcludedPath(path,
-              ["/data/projects/wor?/workspace/vendor/lib/AGENTS.md"]),
-          isTrue);
+        isExcludedPath(path, ["/data/projects/*/workspace/AGENTS.md"]),
+        isFalse,
+      );
+      expect(
+        isExcludedPath("/data/projects/work/workspace/AGENTS.md", [
+          "/data/projects/*/workspace/AGENTS.md",
+        ]),
+        isTrue,
+      );
+      expect(isExcludedPath(path, ["/data/projects/*/AGENTS.md"]), isFalse);
+      expect(
+        isExcludedPath(path, [
+          "/data/projects/wor?/workspace/vendor/lib/AGENTS.md",
+        ]),
+        isTrue,
+      );
       expect(isExcludedPath(path, const []), isFalse);
       expect(isExcludedPath(path, ["", "  "]), isFalse);
     });
 
     test("a pattern without a slash names a file name, anywhere", () {
-      expect(
-          isExcludedPath("/a/b/AGENTS.md", ["AGENTS.md"]),
-          isTrue);
-      expect(isExcludedPath("/a/b/notes.md", ["AGENTS.md"]),
-          isFalse);
+      expect(isExcludedPath("/a/b/AGENTS.md", ["AGENTS.md"]), isTrue);
+      expect(isExcludedPath("/a/b/notes.md", ["AGENTS.md"]), isFalse);
       expect(isExcludedPath("/a/b/AGENTS.md", ["*.md"]), isTrue);
     });
 
     test("a project file the pattern names is not loaded", () async {
       write("AGENTS.md", "project rules");
-      final files = await load(
-          excludes: ["$projectWorkspace/AGENTS.md"]);
+      final files = await load(excludes: ["$projectWorkspace/AGENTS.md"]);
       expect(files, isEmpty);
     });
 
@@ -316,41 +362,50 @@ void main() {
     test("an import the pattern names is not expanded", () async {
       write("AGENTS.md", "see @./notes.md");
       write("notes.md", "the notes");
-      final files = await load(
-          imports: true, excludes: ["**/notes.md"]);
+      final files = await load(imports: true, excludes: ["**/notes.md"]);
       expect(pathsOf(files), ["projects/default/workspace/AGENTS.md"]);
     });
 
-    test("a nested file the pattern names is not pulled in by a read",
-        () async {
-      write("chats/chat-1/sub/AGENTS.md", "sub rules");
-      final found = await findNestedInstructions(p.join(chatWorkspace, "sub", "notes.txt"),
+    test(
+      "a nested file the pattern names is not pulled in by a read",
+      () async {
+        write("chats/chat-1/sub/AGENTS.md", "sub rules");
+        final found = await findNestedInstructions(
+          p.join(chatWorkspace, "sub", "notes.txt"),
           alreadyLoaded: {},
-          excludes: ["**/sub/AGENTS.md"]);
-      expect(found, isEmpty);
-    });
+          excludes: ["**/sub/AGENTS.md"],
+        );
+        expect(found, isEmpty);
+      },
+    );
   });
 
   group("nested", () {
     test("finds the nearest AGENTS.md above a read file", () async {
       write("chats/chat-1/sub/AGENTS.md", "sub rules");
-      final found = await findNestedInstructions(p.join(chatWorkspace, "sub", "notes.txt"),
-          alreadyLoaded: {});
+      final found = await findNestedInstructions(
+        p.join(chatWorkspace, "sub", "notes.txt"),
+        alreadyLoaded: {},
+      );
       expect(found.single.path, p.join(chatWorkspace, "sub", "AGENTS.md"));
     });
 
     test("a nested file above the project root's own loads too", () async {
       write("AGENTS.md", "project rules");
       write("chats/chat-1/sub/AGENTS.md", "sub rules");
-      final found = await findNestedInstructions(p.join(chatWorkspace, "sub", "notes.txt"),
-          alreadyLoaded: {p.join(projectWorkspace, "AGENTS.md")});
+      final found = await findNestedInstructions(
+        p.join(chatWorkspace, "sub", "notes.txt"),
+        alreadyLoaded: {p.join(projectWorkspace, "AGENTS.md")},
+      );
       expect(found.single.path, p.join(chatWorkspace, "sub", "AGENTS.md"));
     });
 
     test("skips files already loaded", () async {
       write("chats/chat-1/sub/AGENTS.md", "sub rules");
-      final found = await findNestedInstructions(p.join(chatWorkspace, "sub", "notes.txt"),
-          alreadyLoaded: {p.join(chatWorkspace, "sub", "AGENTS.md")});
+      final found = await findNestedInstructions(
+        p.join(chatWorkspace, "sub", "notes.txt"),
+        alreadyLoaded: {p.join(chatWorkspace, "sub", "AGENTS.md")},
+      );
       expect(found, isEmpty);
     });
 
@@ -358,16 +413,20 @@ void main() {
       final repo = p.join(tmp.path, "elsewhere");
       Directory(p.join(repo, "src")).createSync(recursive: true);
       File(p.join(repo, "AGENTS.md")).writeAsStringSync("repo rules");
-      final found = await findNestedInstructions(p.join(repo, "src", "notes.txt"),
-          alreadyLoaded: {});
+      final found = await findNestedInstructions(
+        p.join(repo, "src", "notes.txt"),
+        alreadyLoaded: {},
+      );
       expect(found.single.path, p.join(repo, "AGENTS.md"));
     });
 
     test("walks past the project workspace's root", () async {
       File(p.join(tmp.path, "AGENTS.md")).writeAsStringSync("above rules");
       write("chats/chat-1/sub/AGENTS.md", "sub rules");
-      final found = await findNestedInstructions(p.join(chatWorkspace, "sub", "notes.txt"),
-          alreadyLoaded: {});
+      final found = await findNestedInstructions(
+        p.join(chatWorkspace, "sub", "notes.txt"),
+        alreadyLoaded: {},
+      );
       expect(found.map((f) => f.path), [
         p.join(chatWorkspace, "sub", "AGENTS.md"),
         p.join(tmp.path, "AGENTS.md"),

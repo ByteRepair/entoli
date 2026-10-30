@@ -84,8 +84,14 @@ Future<String?> copyTree(String base, String target) async {
   final temp = await Directory.systemTemp.createTemp("agent_chat_copy_");
   try {
     final archive = p.join(temp.path, "tree.tar");
-    final create =
-        await runTar(["-cf", archive, ..._bindStubExcludes, "-C", base, "."]);
+    final create = await runTar([
+      "-cf",
+      archive,
+      ..._bindStubExcludes,
+      "-C",
+      base,
+      ".",
+    ]);
     if (create.exitCode != 0) return "${create.stderr}".trim();
     final extract = await runTar(["-xf", archive, "-C", target]);
     if (extract.exitCode != 0) return "${extract.stderr}".trim();

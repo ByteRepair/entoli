@@ -34,61 +34,104 @@ void main() {
       expect(back.meta.model, message.meta.model);
       return;
     }
-    expect(back, equals(message), reason: "${message.runtimeType} lost a field");
+    expect(
+      back,
+      equals(message),
+      reason: "${message.runtimeType} lost a field",
+    );
   }
 
   test("every handled arm survives a round trip", () {
     roundTrips(SyncMessage.welcome(chats: [state]));
     roundTrips(const SyncMessage.chatsChanged(chats: []));
     roundTrips(const SyncMessage.chatOpen(chatId: "c1", fromLine: 7));
-    roundTrips(SyncMessage.chatSnapshot(
-      chatId: "c1",
-      state: state,
-      meta: ChatMeta(model: "m", tempChatTtl: null),
-    ));
+    roundTrips(
+      SyncMessage.chatSnapshot(
+        chatId: "c1",
+        state: state,
+        meta: ChatMeta(model: "m", tempChatTtl: null),
+      ),
+    );
     roundTrips(SyncMessage.recordAppend(chatId: "c1", records: [record]));
     roundTrips(SyncMessage.stateDiff(chatId: "c1", state: state));
     roundTrips(SyncMessage.metaPatch(chatId: "c1", meta: ChatMeta()));
     roundTrips(const SyncMessage.chatDeleted(chatId: "c1"));
     roundTrips(const SyncMessage.chatMoved(chatId: "c1", project: "other"));
-    roundTrips(const SyncMessage.resourceRequest(
-        id: "r0", chatId: "c1", resource: "img.png"));
-    roundTrips(const SyncMessage.resourceChunk(
-        id: "r0", bytesB64: "aGk=", done: true));
+    roundTrips(
+      const SyncMessage.resourceRequest(
+        id: "r0",
+        chatId: "c1",
+        resource: "img.png",
+      ),
+    );
+    roundTrips(
+      const SyncMessage.resourceChunk(id: "r0", bytesB64: "aGk=", done: true),
+    );
     roundTrips(const SyncMessage.ping());
     roundTrips(const SyncMessage.pong());
   });
 
   test("defaults survive omission", () {
-    final open =
-        SyncMessage.fromJson({"runtimeType": "chatOpen", "chatId": "c1"});
+    final open = SyncMessage.fromJson({
+      "runtimeType": "chatOpen",
+      "chatId": "c1",
+    });
     expect(open, equals(const SyncMessage.chatOpen(chatId: "c1")));
-    final chunk = SyncMessage.fromJson(
-        {"runtimeType": "resourceChunk", "id": "r0", "bytesB64": ""});
-    expect(chunk,
-        equals(const SyncMessage.resourceChunk(id: "r0", bytesB64: "")));
+    final chunk = SyncMessage.fromJson({
+      "runtimeType": "resourceChunk",
+      "id": "r0",
+      "bytesB64": "",
+    });
+    expect(
+      chunk,
+      equals(const SyncMessage.resourceChunk(id: "r0", bytesB64: "")),
+    );
   });
 
   test("the driving arms travel too", () {
-    roundTrips(const SyncMessage.promptSend(requestId: "q1", chatId: "c1", text: "hi"));
-    roundTrips(const SyncMessage.reply(requestId: "q1", ok: false, entries: [{"id": "m1"}]));
-    roundTrips(const SyncMessage.approvalRespond(
-        chatId: "c1", approvalId: "a", allow: false));
-    roundTrips(const SyncMessage.questionsRespond(
-        chatId: "c1", requestId: "q", answers: [null]));
+    roundTrips(
+      const SyncMessage.promptSend(requestId: "q1", chatId: "c1", text: "hi"),
+    );
+    roundTrips(
+      const SyncMessage.reply(
+        requestId: "q1",
+        ok: false,
+        entries: [
+          {"id": "m1"},
+        ],
+      ),
+    );
+    roundTrips(
+      const SyncMessage.approvalRespond(
+        chatId: "c1",
+        approvalId: "a",
+        allow: false,
+      ),
+    );
+    roundTrips(
+      const SyncMessage.questionsRespond(
+        chatId: "c1",
+        requestId: "q",
+        answers: [null],
+      ),
+    );
     roundTrips(const SyncMessage.turnAbort(chatId: "c1"));
     roundTrips(const SyncMessage.turnResume(chatId: "c1"));
   });
 
   test("a turn's pending work travels whole", () {
     roundTrips(const SyncMessage.turnState(chatId: "c1"));
-    roundTrips(const SyncMessage.turnState(
-      chatId: "c1",
-      running: true,
-      approvals: [ToolApproval(id: "a1", toolName: "bash", argumentsText: "ls")],
-      asks: [SyncAsk(id: "q1", argumentsJson: '{"question":"which?"}')],
-      status: "Thinking",
-      retry: "attempt 2",
-    ));
+    roundTrips(
+      const SyncMessage.turnState(
+        chatId: "c1",
+        running: true,
+        approvals: [
+          ToolApproval(id: "a1", toolName: "bash", argumentsText: "ls"),
+        ],
+        asks: [SyncAsk(id: "q1", argumentsJson: '{"question":"which?"}')],
+        status: "Thinking",
+        retry: "attempt 2",
+      ),
+    );
   });
 }

@@ -36,7 +36,8 @@ class SkillTool extends AgentTool {
   String get section => skillsSection(offer.skills);
 
   @override
-  String get description => "Load a skill's instructions. The skills "
+  String get description =>
+      "Load a skill's instructions. The skills "
       "available to you are listed under Skills in the system prompt; call "
       "this with one's name to read what it says before doing what it "
       "describes. Its files, where it has any, are under the base directory "
@@ -44,20 +45,21 @@ class SkillTool extends AgentTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "skill": {
-            "type": "string",
-            "description": "The name of the skill to load.",
-          },
-          "args": {
-            "type": "string",
-            "description": "Optional arguments for the skill: the subject it "
-                "is being applied to.",
-          },
-        },
-        "required": ["skill"],
-      };
+    "type": "object",
+    "properties": {
+      "skill": {
+        "type": "string",
+        "description": "The name of the skill to load.",
+      },
+      "args": {
+        "type": "string",
+        "description":
+            "Optional arguments for the skill: the subject it "
+            "is being applied to.",
+      },
+    },
+    "required": ["skill"],
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
@@ -93,8 +95,9 @@ class SkillTool extends AgentTool {
 /// The skills the model may load itself, as the system prompt lists them.
 /// Empty produces nothing.
 String skillsSection(List<PromptDocument> skills) {
-  final usable =
-      skills.where((s) => s.modelInvocable && !s.isCallback).toList();
+  final usable = skills
+      .where((s) => s.modelInvocable && !s.isCallback)
+      .toList();
   if (usable.isEmpty) return "";
   final listed = [
     for (final skill in usable)

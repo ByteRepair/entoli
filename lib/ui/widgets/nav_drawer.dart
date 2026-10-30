@@ -14,7 +14,8 @@ const double compactWidth = 600.0;
 /// is sitting over the thing it is revealing. Takes the tapped tile's own
 /// context, which is the one below the Scaffold; docked, and with nothing open,
 /// `closeDrawer` is already a no-op.
-void closeNavDrawer(BuildContext context) => Scaffold.maybeOf(context)?.closeDrawer();
+void closeNavDrawer(BuildContext context) =>
+    Scaffold.maybeOf(context)?.closeDrawer();
 
 /// A navigation panel as a page's drawer, taking the whole screen where a panel
 /// of the usual width would leave a sliver of the page behind, and closed by

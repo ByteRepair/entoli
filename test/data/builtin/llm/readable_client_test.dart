@@ -13,9 +13,17 @@ void main() {
     final notes = file("notes.txt", "text/plain");
     final messages = [
       const LlmMessage(role: LlmRole.user, text: "plain"),
-      LlmMessage(role: LlmRole.user, text: "look", attachments: [file("a.png", "image/png"), notes]),
-      LlmMessage(role: LlmRole.tool, toolCallId: "c1", text: "made",
-          attachments: [file("b.png", "image/png")]),
+      LlmMessage(
+        role: LlmRole.user,
+        text: "look",
+        attachments: [file("a.png", "image/png"), notes],
+      ),
+      LlmMessage(
+        role: LlmRole.tool,
+        toolCallId: "c1",
+        text: "made",
+        attachments: [file("b.png", "image/png")],
+      ),
     ];
 
     final sent = readable(messages, images: false, pdfs: false);
@@ -34,8 +42,13 @@ void main() {
       LlmMessage(role: LlmRole.user, text: "read", attachments: [spec]),
     ];
 
-    expect(identical(readable(messages, images: true, pdfs: true).single, messages.single),
-        isTrue);
+    expect(
+      identical(
+        readable(messages, images: true, pdfs: true).single,
+        messages.single,
+      ),
+      isTrue,
+    );
     final named = readable(messages, images: true, pdfs: false).single;
     expect(named.attachments, isEmpty);
     expect(named.text, contains("spec.pdf"));
@@ -45,10 +58,16 @@ void main() {
   test("PDFs over the budget go oldest first", () {
     final half = pdfBudgetBytes ~/ 2 + 1;
     final messages = [
-      LlmMessage(role: LlmRole.user, text: "one",
-          attachments: [file("old.pdf", "application/pdf", half)]),
-      LlmMessage(role: LlmRole.user, text: "two",
-          attachments: [file("new.pdf", "application/pdf", half)]),
+      LlmMessage(
+        role: LlmRole.user,
+        text: "one",
+        attachments: [file("old.pdf", "application/pdf", half)],
+      ),
+      LlmMessage(
+        role: LlmRole.user,
+        text: "two",
+        attachments: [file("new.pdf", "application/pdf", half)],
+      ),
     ];
 
     final sent = readable(messages, images: true, pdfs: true);
@@ -58,14 +77,20 @@ void main() {
     expect(identical(sent[1], messages[1]), isTrue);
   });
 
-  test("a PDF's pages are counted off its page objects, not its page tree",
-      () {
+  test("a PDF's pages are counted off its page objects, not its page tree", () {
     LlmAttachment pdf(String body) => LlmAttachment(
-        filename: "a.pdf",
-        mimeType: "application/pdf",
-        bytes: Uint8List.fromList(body.codeUnits));
-    expect(pdf("<</Type /Pages>> <</Type/Page>> <</Type\n/Page /X>>").pdfPages, 2);
-    expect(pdf("no markers here").pdfPages, 1,
-        reason: "one in a compressed stream is guessed at by size");
+      filename: "a.pdf",
+      mimeType: "application/pdf",
+      bytes: Uint8List.fromList(body.codeUnits),
+    );
+    expect(
+      pdf("<</Type /Pages>> <</Type/Page>> <</Type\n/Page /X>>").pdfPages,
+      2,
+    );
+    expect(
+      pdf("no markers here").pdfPages,
+      1,
+      reason: "one in a compressed stream is guessed at by size",
+    );
   });
 }

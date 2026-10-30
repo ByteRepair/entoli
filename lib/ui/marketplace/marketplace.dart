@@ -33,8 +33,8 @@ class MarketplaceLocation {
   /// One of [files] at the published ref. "HEAD" reads the default branch,
   /// which is also how an unpinned ref is meant to drift.
   Uri file(String name) => Uri.parse(
-        "https://raw.githubusercontent.com/$repo/${ref ?? "HEAD"}/$dir/$name",
-      );
+    "https://raw.githubusercontent.com/$repo/${ref ?? "HEAD"}/$dir/$name",
+  );
 
   /// Strict: [fetchMarketplaceEntries] throws on anything it cannot read, so
   /// an ext record missing a piece is an unreachable marketplace rather than
@@ -95,10 +95,10 @@ class MarketplaceEntry {
   /// The line under the description wherever the entry is drawn — the list's
   /// row and the preview's header alike read it, so the two cannot drift.
   String get metaLine => [
-        if (author.isNotEmpty) author,
-        if (version != null) "v$version",
-        ...tags,
-      ].join(" · ");
+    if (author.isNotEmpty) author,
+    if (version != null) "v$version",
+    ...tags,
+  ].join(" · ");
 
   /// The name an agent installs under: the slug's last segment — an ext key
   /// carries its manifest's name ahead of the entry's own, and the
@@ -115,16 +115,15 @@ class MarketplaceEntry {
     String slug,
     Map<String, Object?> json, {
     MarketplaceLocation? location,
-  }) =>
-      MarketplaceEntry(
-        slug: slug,
-        name: (json["name"] as String?) ?? slug,
-        description: (json["description"] as String?) ?? "",
-        author: (json["author"] as String?) ?? "",
-        version: json["version"] as String?,
-        tags: (json["tags"] as List<Object?>?)?.cast<String>() ?? const [],
-        location: location,
-      );
+  }) => MarketplaceEntry(
+    slug: slug,
+    name: (json["name"] as String?) ?? slug,
+    description: (json["description"] as String?) ?? "",
+    author: (json["author"] as String?) ?? "",
+    version: json["version"] as String?,
+    tags: (json["tags"] as List<Object?>?)?.cast<String>() ?? const [],
+    location: location,
+  );
 }
 
 /// The marketplace's list for [kind]: the site's section index, joined where
@@ -137,8 +136,10 @@ Future<List<MarketplaceEntry>> fetchMarketplaceEntries(
   CompletionKind kind,
 ) async {
   final index = Uri.parse("$marketplaceBaseUrl/${kind.folder}/index.json");
-  final (body, locations) =
-      await (_get(client, index), _fetchLocations(client, kind)).wait;
+  final (body, locations) = await (
+    _get(client, index),
+    _fetchLocations(client, kind),
+  ).wait;
   // A missing index is a site that cannot be read, not an empty one.
   if (body == null) throw http.ClientException("HTTP 404", index);
   final json = jsonDecode(utf8.decode(body)) as Map<String, Object?>;

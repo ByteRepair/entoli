@@ -2,7 +2,8 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/sync/peers.dart" show PeerState, PeerStatus;
-import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry, RemoteProject;
+import "package:agent_chat/data/sync/sync_hub.dart"
+    show RemoteChatEntry, RemoteProject;
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/project.dart" show ProjectRef;
@@ -22,7 +23,8 @@ import "../harness.dart";
 void main() {
   const ProjectRef work = (device: "device-1", project: "work");
 
-  TestApp appWith({required bool online, bool answered = true}) => TestApp.create(
+  TestApp appWith({required bool online, bool answered = true}) =>
+      TestApp.create(
         remotes: [
           RemoteChatEntry(
             chatId: "remote-1",
@@ -41,15 +43,17 @@ void main() {
         remoteProjects: {
           if (answered)
             work: RemoteProject(
-                ProjectSettings(description: "Asked on the desktop", omada: true),
-                AppSettings(),
-                PromptLibrary([
-                  PromptDocument(
-                      kind: CompletionKind.skill,
-                      name: "deploy",
-                      frontmatter: const {},
-                      body: ""),
-                ])),
+              ProjectSettings(description: "Asked on the desktop", omada: true),
+              AppSettings(),
+              PromptLibrary([
+                PromptDocument(
+                  kind: CompletionKind.skill,
+                  name: "deploy",
+                  frontmatter: const {},
+                  body: "",
+                ),
+              ]),
+            ),
         },
       );
 
@@ -58,35 +62,55 @@ void main() {
 
   testWidgets("it waits for the device to answer", (tester) async {
     app = appWith(online: true, answered: false);
-    await app.pump(tester, const ProjectSettingsPage(project: "work", device: "device-1"),
-        settle: false);
+    await app.pump(
+      tester,
+      const ProjectSettingsPage(project: "work", device: "device-1"),
+      settle: false,
+    );
     await tester.pump();
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.text("Project name"), findsNothing);
   });
 
-  testWidgets("a project the device no longer lists says so rather than wait",
-      (tester) async {
+  testWidgets("a project the device no longer lists says so rather than wait", (
+    tester,
+  ) async {
     app = appWith(online: true);
-    await app.pump(tester, const ProjectSettingsPage(project: "gone", device: "device-1"));
+    await app.pump(
+      tester,
+      const ProjectSettingsPage(project: "gone", device: "device-1"),
+    );
 
-    expect(find.text("This project is no longer on that device."), findsOneWidget);
+    expect(
+      find.text("This project is no longer on that device."),
+      findsOneWidget,
+    );
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
-  testWidgets("it reads the device's settings, less what is on its disk",
-      (tester) async {
+  testWidgets("it reads the device's settings, less what is on its disk", (
+    tester,
+  ) async {
     app = appWith(online: true);
-    await app.pump(tester, const ProjectSettingsPage(project: "work", device: "device-1"));
+    await app.pump(
+      tester,
+      const ProjectSettingsPage(project: "work", device: "device-1"),
+    );
     await settleIo(tester);
 
     expect(find.text("Asked on the desktop"), findsOneWidget);
     expect(find.text("Chats"), findsOneWidget);
-    await tester.scrollUntilVisible(find.byType(MemoryTile), 200,
-        scrollable: find.byType(Scrollable).first);
-    await tester.scrollUntilVisible(find.text("Round order"), 200,
-        scrollable: find.byType(Scrollable).first);
+    await tester.scrollUntilVisible(
+      find.byType(MemoryTile),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.scrollUntilVisible(
+      find.text("Round order"),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text("Round order"), findsOneWidget);
     for (final local in ["Path", "Project workspace", "Instructions"]) {
       expect(find.text(local), findsNothing, reason: local);
@@ -96,10 +120,14 @@ void main() {
   });
 
   // Its library is the device's: listed, and nothing here to open or export.
-  testWidgets("its skills are the device's, shown and not changed",
-      (tester) async {
+  testWidgets("its skills are the device's, shown and not changed", (
+    tester,
+  ) async {
     app = appWith(online: true);
-    await app.pump(tester, const ProjectSettingsPage(project: "work", device: "device-1"));
+    await app.pump(
+      tester,
+      const ProjectSettingsPage(project: "work", device: "device-1"),
+    );
     await settleIo(tester);
 
     await tester.tap(find.text("Skills"));
@@ -111,19 +139,25 @@ void main() {
 
   testWidgets("with the device away it is read, not written", (tester) async {
     app = appWith(online: false);
-    await app.pump(tester, const ProjectSettingsPage(project: "work", device: "device-1"));
+    await app.pump(
+      tester,
+      const ProjectSettingsPage(project: "work", device: "device-1"),
+    );
     await settleIo(tester);
 
     expect(find.byType(MirrorStrip), findsOneWidget);
     expect(find.text("Asked on the desktop"), findsOneWidget);
     expect(
-        tester
-            .widgetList<AbsorbPointer>(find.byType(AbsorbPointer))
-            .any((pointer) => pointer.absorbing),
-        isTrue);
+      tester
+          .widgetList<AbsorbPointer>(find.byType(AbsorbPointer))
+          .any((pointer) => pointer.absorbing),
+      isTrue,
+    );
   });
 
-  testWidgets("the sidebar opens it from that device's project", (tester) async {
+  testWidgets("the sidebar opens it from that device's project", (
+    tester,
+  ) async {
     app = appWith(online: true);
     app.container.read(selectedProjectProvider.notifier).select(work);
     await app.pump(tester, const Sidebar());
@@ -136,12 +170,19 @@ void main() {
   });
 
   test("every project a device names is listed, mirrored or not", () {
-    final entries = remoteEntries(const [], {
-      "device-1": ["work"],
-    }, {
-      "device-1": PeerState(
-          deviceId: "device-1", name: "Desktop", status: PeerStatus.online),
-    });
+    final entries = remoteEntries(
+      const [],
+      {
+        "device-1": ["work"],
+      },
+      {
+        "device-1": PeerState(
+          deviceId: "device-1",
+          name: "Desktop",
+          status: PeerStatus.online,
+        ),
+      },
+    );
     final labels = [for (final e in entries) e.label];
 
     expect(labels, containsAll(["Desktop", "Desktop · work"]));

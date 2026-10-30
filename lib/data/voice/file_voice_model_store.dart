@@ -68,40 +68,41 @@ class FileVoiceModelStore extends VoiceModelStore {
   /// whole.
   @override
   Stream<DownloadProgress> install(VoiceModel model) => DownloadRun(
-        client: client,
-        discard: () => delete(model),
-        run: (run) async {
-          // Whatever an earlier attempt left: partial files under a name we are
-          // about to write, which is worse than starting again.
-          await delete(model);
-          final dir = Directory(directoryFor(model))..createSync(recursive: true);
+    client: client,
+    discard: () => delete(model),
+    run: (run) async {
+      // Whatever an earlier attempt left: partial files under a name we are
+      // about to write, which is worse than starting again.
+      await delete(model);
+      final dir = Directory(directoryFor(model))..createSync(recursive: true);
 
-          var received = 0;
-          final total = model.bytes;
-          run.report(DownloadProgress(received: 0, total: total));
+      var received = 0;
+      final total = model.bytes;
+      run.report(DownloadProgress(received: 0, total: total));
 
-          for (final download in model.downloads) {
-            final target = switch (download) {
-              VoiceFile(:final path) => p.join(dir.path, path),
-              VoiceArchive() => p.join(dir.path, "_archive.tar.bz2"),
-            };
-            received += await run.fetch(
-              url: download.url,
-              to: target,
-              total: total,
-              done: received,
-            );
-            if (run.cancelled) return;
-            if (download is VoiceArchive) {
-              run.report(DownloadProgress(
-                  received: received, total: total, unpacking: true));
-              await _unpackOffThread(target, dir.path);
-            }
-          }
-          if (run.cancelled) return;
-          await File(p.join(dir.path, _marker)).writeAsString("");
-        },
-      ).stream;
+      for (final download in model.downloads) {
+        final target = switch (download) {
+          VoiceFile(:final path) => p.join(dir.path, path),
+          VoiceArchive() => p.join(dir.path, "_archive.tar.bz2"),
+        };
+        received += await run.fetch(
+          url: download.url,
+          to: target,
+          total: total,
+          done: received,
+        );
+        if (run.cancelled) return;
+        if (download is VoiceArchive) {
+          run.report(
+            DownloadProgress(received: received, total: total, unpacking: true),
+          );
+          await _unpackOffThread(target, dir.path);
+        }
+      }
+      if (run.cancelled) return;
+      await File(p.join(dir.path, _marker)).writeAsString("");
+    },
+  ).stream;
 
   /// Off the UI thread, because bz2 in Dart runs at about 8 MB/s and Kokoro is
   /// a minute of solid CPU. Its own method so that the closure handed to the
@@ -155,7 +156,10 @@ class FileVoiceModelStore extends VoiceModelStore {
   /// someone else's writing, and it can carry a backslash, a control character
   /// or a name Windows will not take as readily as it can carry `..`.
   static String? _strip(String name) {
-    final parts = p.posix.split(name).where((s) => s.isNotEmpty && s != ".").toList();
+    final parts = p.posix
+        .split(name)
+        .where((s) => s.isNotEmpty && s != ".")
+        .toList();
     if (parts.length < 2) return null;
     return safeRelativePath(p.posix.joinAll(parts.skip(1)));
   }

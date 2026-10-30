@@ -8,6 +8,7 @@ import "../../domain/reminder_alarms.dart";
 /// What a session-bus round trip may take before it is said to have failed:
 /// the probe one shot at launch; a post's patience is the port's.
 const _probeTimeout = Duration(seconds: 5);
+
 /// What the notifications half of the session bus does, as far as the alarms
 /// care: post one, and hear when one of its actions was taken. The port keeps
 /// the rest of `org.freedesktop.Notifications` behind this seam, which is what
@@ -17,8 +18,12 @@ abstract interface class NotificationsBus {
   /// against. [actions] is the wire list, pairs of (key, label); empty is a
   /// notification with nothing to click. [replacesId] beyond zero names a
   /// notification to swap out rather than add beside.
-  Future<int> notify(String title, String body, List<String> actions,
-      {int replacesId = 0});
+  Future<int> notify(
+    String title,
+    String body,
+    List<String> actions, {
+    int replacesId = 0,
+  });
 
   /// (notification id, action key) pairs, in the order they were taken.
   Stream<(int, String)> get actionInvoked;
@@ -41,37 +46,37 @@ class _DBusNotifications implements NotificationsBus {
   );
 
   @override
-  Future<int> notify(String title, String body, List<String> actions,
-      {int replacesId = 0}) async {
+  Future<int> notify(
+    String title,
+    String body,
+    List<String> actions, {
+    int replacesId = 0,
+  }) async {
     // The interface must be named: a call without it carries no INTERFACE
     // header, and GJS — GNOME's daemon — dispatches on it.
-    final response = await _object.callMethod(
-      "org.freedesktop.Notifications",
-      "Notify",
-      [
-        const DBusString("Entoli"),
-        DBusUint32(replacesId),
-        const DBusString(""),
-        DBusString(title),
-        DBusString(body),
-        DBusArray.string(actions),
-        DBusDict.stringVariant(const {}),
-        const DBusInt32(-1),
-      ],
-    );
+    final response = await _object
+        .callMethod("org.freedesktop.Notifications", "Notify", [
+          const DBusString("Entoli"),
+          DBusUint32(replacesId),
+          const DBusString(""),
+          DBusString(title),
+          DBusString(body),
+          DBusArray.string(actions),
+          DBusDict.stringVariant(const {}),
+          const DBusInt32(-1),
+        ]);
     return response.returnValues.first.asUint32();
   }
 
   @override
   Stream<(int, String)> get actionInvoked => DBusRemoteObjectSignalStream(
-        object: _object,
-        interface: "org.freedesktop.Notifications",
-        name: "ActionInvoked",
-        // A signal in another shape is refused here — and lands as an
-        // error on the stream, which the reader below catches.
-        signature: DBusSignature("us"),
-      ).map((signal) =>
-          (signal.values[0].asUint32(), signal.values[1].asString()));
+    object: _object,
+    interface: "org.freedesktop.Notifications",
+    name: "ActionInvoked",
+    // A signal in another shape is refused here — and lands as an
+    // error on the stream, which the reader below catches.
+    signature: DBusSignature("us"),
+  ).map((signal) => (signal.values[0].asUint32(), signal.values[1].asString()));
 }
 
 /// Connect to the session bus, answering [UnavailableReminderAlarms] where
@@ -105,9 +110,11 @@ class LinuxReminderAlarms implements ReminderAlarms {
   LinuxReminderAlarms({required NotificationsBus bus}) : _bus = bus {
     // A signal a daemon sends in another shape, or a bus that dies, must not
     // become an unhandled zone error: the subscription lasts the process.
-    bus.actionInvoked.listen(_onAction,
-        onError: (Object error) =>
-            logFailure("reminders", "action signal unreadable", error));
+    bus.actionInvoked.listen(
+      _onAction,
+      onError: (Object error) =>
+          logFailure("reminders", "action signal unreadable", error),
+    );
   }
 
   final NotificationsBus _bus;
@@ -166,8 +173,13 @@ class LinuxReminderAlarms implements ReminderAlarms {
   Future<void> requestNotifications() async {}
 
   @override
-  Future<void> schedule(int requestCode, DateTime at,
-      {String? calendar, String? label, String? chatId}) async {}
+  Future<void> schedule(
+    int requestCode,
+    DateTime at, {
+    String? calendar,
+    String? label,
+    String? chatId,
+  }) async {}
 
   @override
   Future<void> cancel(int requestCode) async {}
@@ -194,10 +206,13 @@ class LinuxReminderAlarms implements ReminderAlarms {
     // one. No channel to pick — the desktop's notification daemon has no
     // per-channel switches to honour. The wire wants (key, label) pairs, the
     // label ours to supply: a lone key registers no action at all.
-    final actions = [if (chatId != null) ...["default", "Open"]];
+    final actions = [
+      if (chatId != null) ...["default", "Open"],
+    ];
     try {
       final replacesId = chatId == null ? 0 : (_ids[chatId] ?? 0);
-      final id = await _bus.notify(title, body, actions, replacesId: replacesId)
+      final id = await _bus
+          .notify(title, body, actions, replacesId: replacesId)
           // A bus that accepts and never answers would hold the scheduler's
           // fire path forever; said rather than waited for.
           .timeout(ReminderAlarms.notifyTimeout);

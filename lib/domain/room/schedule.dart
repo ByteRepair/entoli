@@ -9,8 +9,10 @@ import "../project_settings.dart" show OmadaOrdering;
 /// up counts against the cap.
 class ScheduledItem {
   ScheduledItem({this.userPrompt, this.reply, required this.generation})
-      : assert((userPrompt == null) != (reply == null),
-            "an item is a prompt or a handoff, never both or neither");
+    : assert(
+        (userPrompt == null) != (reply == null),
+        "an item is a prompt or a handoff, never both or neither",
+      );
 
   final Message? userPrompt;
   final Message? reply;
@@ -49,11 +51,15 @@ class Schedule {
   /// nobody.
   void addPrompt(List<String> members, Message prompt) {
     if (members.isEmpty) {
-      (_queues[null] ??= []).add(ScheduledItem(userPrompt: prompt, generation: 0));
+      (_queues[null] ??= []).add(
+        ScheduledItem(userPrompt: prompt, generation: 0),
+      );
       return;
     }
     for (final member in members) {
-      (_queues[member] ??= []).add(ScheduledItem(userPrompt: prompt, generation: 0));
+      (_queues[member] ??= []).add(
+        ScheduledItem(userPrompt: prompt, generation: 0),
+      );
     }
   }
 
@@ -63,8 +69,12 @@ class Schedule {
   /// unprompted, so it queues nothing.
   ///
   /// Post: each of [members] holds exactly one waiting handoff.
-  void addHandoff(List<String> members, Message reply,
-      {required int generation, required List<Message> thread}) {
+  void addHandoff(
+    List<String> members,
+    Message reply, {
+    required int generation,
+    required List<Message> thread,
+  }) {
     for (final member in members) {
       final queue = _queues[member] ??= [];
       final waiting = queue.indexWhere((item) => item.reply != null);
@@ -72,11 +82,13 @@ class Schedule {
       // The later of the two in the thread is the one kept: the turn's
       // history stops before its prompt, so the earlier must be inside it.
       final held = waiting < 0 ? null : queue[waiting].reply!;
-      final later =
-          held != null && thread.indexOf(held) > thread.indexOf(reply) ? held : reply;
+      final later = held != null && thread.indexOf(held) > thread.indexOf(reply)
+          ? held
+          : reply;
       final next = ScheduledItem(
-          reply: later,
-          generation: deeper > generation + 1 ? deeper : generation + 1);
+        reply: later,
+        generation: deeper > generation + 1 ? deeper : generation + 1,
+      );
       if (waiting < 0) {
         queue.add(next);
       } else {
@@ -147,7 +159,9 @@ class Schedule {
         continue;
       }
       if (!ordering.admits(
-          started: started, memberBusy: busy().contains(member))) {
+        started: started,
+        memberBusy: busy().contains(member),
+      )) {
         continue;
       }
       items.removeAt(0);
@@ -159,7 +173,8 @@ class Schedule {
 
   /// [replyId]'s turn has left the table at [generation]: the depth its
   /// handoff will land one past.
-  void finished(String replyId, int generation) => _finished[replyId] = generation;
+  void finished(String replyId, int generation) =>
+      _finished[replyId] = generation;
 
   /// A reply that finished while a sibling still speaks waits for the wave.
   void park(String replyId) => _parked.add(replyId);

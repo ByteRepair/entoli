@@ -56,9 +56,14 @@ abstract class LlmProvider {
   Map<String, String> authOf(String? apiKey) => OpenAiClient.authOf(apiKey);
 
   /// [modelsUrl]'s models where one is set, else [models] from models.dev.
-  Future<List<String>> listModels(String? apiKey, {http.Client? httpClient}) async {
+  Future<List<String>> listModels(
+    String? apiKey, {
+    http.Client? httpClient,
+  }) async {
     final url = modelsUrl;
-    if (url == null) return [for (final m in models(ModelCatalog.current)) m.id];
+    if (url == null) {
+      return [for (final m in models(ModelCatalog.current)) m.id];
+    }
     final client = httpClient ?? tlsClient();
     try {
       return await listModelIds(client, url, headers: authOf(apiKey));
@@ -80,7 +85,9 @@ abstract class LlmProvider {
       ...?catalog
           .entryOf(config)
           ?.values
-          .where((m) => !own.containsKey(m.id) && !retiredModels.contains(m.id)),
+          .where(
+            (m) => !own.containsKey(m.id) && !retiredModels.contains(m.id),
+          ),
     ];
   }
 
@@ -89,19 +96,24 @@ abstract class LlmProvider {
   /// made before the catalog arrived, a model only its own list names — is
   /// taken to be anything the API answers, since it was picked for that.
   List<Model> serve(String id, ModelInfo? info, ModelHost host) => [
-        if (info?.talks ?? true)
-          HostedChatModel((providerId: this.id, modelId: id), info ?? ModelInfo(id: id)),
-      ];
+    if (info?.talks ?? true)
+      HostedChatModel((
+        providerId: this.id,
+        modelId: id,
+      ), info ?? ModelInfo(id: id)),
+  ];
 
   /// Every model it describes, as what each can do.
-  Iterable<Model> offered(ModelCatalog catalog, ModelHost host) =>
-      [for (final m in models(catalog)) ...serve(m.id, m, host)];
+  Iterable<Model> offered(ModelCatalog catalog, ModelHost host) => [
+    for (final m in models(catalog)) ...serve(m.id, m, host),
+  ];
 
   /// [modelId] as a [T], where this provider serves one.
-  T? resolve<T extends Model>(String modelId, ModelHost host) =>
-      serve(modelId, ModelCatalog.current.lookup(config, modelId), host)
-          .whereType<T>()
-          .firstOrNull;
+  T? resolve<T extends Model>(String modelId, ModelHost host) => serve(
+    modelId,
+    ModelCatalog.current.lookup(config, modelId),
+    host,
+  ).whereType<T>().firstOrNull;
 
   /// [request] sent with the key on it, answered by its status: success is
   /// yes, one of [rejecting] is no. A spent balance or a rate limit is a key
@@ -116,7 +128,9 @@ abstract class LlmProvider {
       final response = await sendOrUnreachable(client, request);
       final status = response.statusCode;
       await response.stream.drain<void>();
-      if (status >= 200 && status < 300 || status == 402 || status == 429) return true;
+      if (status >= 200 && status < 300 || status == 402 || status == 429) {
+        return true;
+      }
       if (rejecting.contains(status)) return false;
       throw LlmException("Could not check the key", statusCode: status);
     } finally {
@@ -127,8 +141,11 @@ abstract class LlmProvider {
 
 /// [ref] as a [T] from the first of [providers] with its id, the one that
 /// shadows any later, made with what [host] gives that provider.
-T? resolveIn<T extends Model>(Iterable<LlmProvider> providers, ModelRef ref,
-    ModelHost Function(LlmProvider provider) host) {
+T? resolveIn<T extends Model>(
+  Iterable<LlmProvider> providers,
+  ModelRef ref,
+  ModelHost Function(LlmProvider provider) host,
+) {
   final provider = providers.where((p) => p.id == ref.providerId).firstOrNull;
   return provider?.resolve<T>(ref.modelId, host(provider));
 }
@@ -149,7 +166,8 @@ class OpenAiCompatibleProvider extends LlmProvider {
   const OpenAiCompatibleProvider(super.config, [super.terms]);
 
   @override
-  OpenAiClient client(String? apiKey) => OpenAiClient(baseUrl: baseUrl, apiKey: apiKey);
+  OpenAiClient client(String? apiKey) =>
+      OpenAiClient(baseUrl: baseUrl, apiKey: apiKey);
 
   @override
   List<Model> serve(String id, ModelInfo? info, ModelHost host) {
@@ -160,13 +178,26 @@ class OpenAiCompatibleProvider extends LlmProvider {
     return [
       ...super.serve(id, info, host),
       if (info?.makesImages ?? true)
-        HostedImageModel(ref, known, ({quality}) => (prompt) =>
-            client().generateImage(prompt, model: id, quality: quality)),
+        HostedImageModel(
+          ref,
+          known,
+          ({quality}) =>
+              (prompt) =>
+                  client().generateImage(prompt, model: id, quality: quality),
+        ),
       if (transcribes(id, info) && host.cutsUtterances)
-        HostedTranscriptionModel(ref, known, (wav) => client().transcribe(wav, model: id)),
+        HostedTranscriptionModel(
+          ref,
+          known,
+          (wav) => client().transcribe(wav, model: id),
+        ),
       if (info?.speaks ?? true)
-        HostedSynthesisModel(ref, known,
-            ({voice}) => (text) => client().speak(text, model: id, voice: voice)),
+        HostedSynthesisModel(
+          ref,
+          known,
+          ({voice}) =>
+              (text) => client().speak(text, model: id, voice: voice),
+        ),
     ];
   }
 
@@ -182,7 +213,8 @@ class OpenAiCompatibleProvider extends LlmProvider {
   Set<int> get refusingStatuses => const {401, 403};
 
   @override
-  Future<bool> checkKey(String apiKey, {http.Client? httpClient}) => LlmProvider.askWith(
+  Future<bool> checkKey(String apiKey, {http.Client? httpClient}) =>
+      LlmProvider.askWith(
         http.Request("GET", under(baseUrl, keyCheckPath))
           ..headers.addAll(authOf(apiKey)),
         httpClient: httpClient,

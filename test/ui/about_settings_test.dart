@@ -29,8 +29,10 @@ void main() {
     await tester.tap(find.text("Source on GitHub"));
     await settleIo(tester);
 
-    expect(app.linkOpener.opened.single.toString(),
-        "https://github.com/ByteRepair/entoli");
+    expect(
+      app.linkOpener.opened.single.toString(),
+      "https://github.com/ByteRepair/entoli",
+    );
   });
 
   testWidgets("the libraries are the licence page", (tester) async {

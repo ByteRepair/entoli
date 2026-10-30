@@ -25,7 +25,6 @@ class WritableDirsSection extends StatefulWidget {
 }
 
 class _WritableDirsSectionState extends State<WritableDirsSection> {
-
   Future<void> _edit({String? existing}) async {
     final dir = await promptForText(
       context,

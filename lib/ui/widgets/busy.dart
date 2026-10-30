@@ -14,12 +14,12 @@ class BusyBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder(
-        valueListenable: busy,
-        builder: (context, running, _) => SizedBox(
-          height: 2,
-          child: running ? const LinearProgressIndicator(minHeight: 2) : null,
-        ),
-      );
+    valueListenable: busy,
+    builder: (context, running, _) => SizedBox(
+      height: 2,
+      child: running ? const LinearProgressIndicator(minHeight: 2) : null,
+    ),
+  );
 }
 
 /// Run [work] with [busy] raised, one at a time, saying what went wrong rather
@@ -37,8 +37,9 @@ Future<void> whileBusy(
     await work();
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("That did not work: $e")));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("That did not work: $e")));
     }
   } finally {
     if (context.mounted) busy.value = false;

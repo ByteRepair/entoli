@@ -127,11 +127,11 @@ class _ChipRowState extends State<ChipRow> {
               // Under the entry's key: it is how the wrap's children match up
               // across builds, and it is the caller's identity for the chip.
               key: entry.key,
-            child: _EnterExit(
-              exiting: entry.exiting,
-              settled: entry.settled,
-              child: entry.child,
-            ),
+              child: _EnterExit(
+                exiting: entry.exiting,
+                settled: entry.settled,
+                child: entry.child,
+              ),
             ),
         ],
       ),
@@ -145,7 +145,11 @@ class _ChipRowState extends State<ChipRow> {
 /// neighbours glide rather than jump; the scale is the tween too, so painted
 /// size follows slot size and what appears from nothing is the child itself.
 class _EnterExit extends StatelessWidget {
-  const _EnterExit({required this.child, this.exiting = false, this.settled = false});
+  const _EnterExit({
+    required this.child,
+    this.exiting = false,
+    this.settled = false,
+  });
 
   final Widget child;
   final bool exiting;

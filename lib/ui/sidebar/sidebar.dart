@@ -64,48 +64,53 @@ class _SidebarState extends ConsumerState<Sidebar> {
   /// spec says it has a page worth opening; a user's project its settings
   /// page. The gear visibility is one predicate across every kind — see
   /// `projectHasSettingsPage`. A paired device's has no workspace here.
-  List<Widget> _projectButtons(BuildContext context, WidgetRef ref, ProjectRef at) {
+  List<Widget> _projectButtons(
+    BuildContext context,
+    WidgetRef ref,
+    ProjectRef at,
+  ) {
     final project = at.project;
     final local = at.device == null;
     final spec = builtinProjectOf(project);
     Widget workspace() => IconButton(
-          icon: const Icon(Icons.folder_outlined),
-          tooltip: "${projectLabel(project)} workspace",
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => WorkspacePage(
-                root: ref
-                    .read(appConfigProvider)
-                    .projectWorkspaceDir(project: project),
-                title: "${projectLabel(project)} workspace",
-              ),
-            ),
+      icon: const Icon(Icons.folder_outlined),
+      tooltip: "${projectLabel(project)} workspace",
+      onPressed: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => WorkspacePage(
+            root: ref
+                .read(appConfigProvider)
+                .projectWorkspaceDir(project: project),
+            title: "${projectLabel(project)} workspace",
           ),
-        );
+        ),
+      ),
+    );
     // The app's own store: what the default project shows beside its workspace
     // in place of a settings page, and what a built-in with [MemoryPolicy.app]
     // shows for the same reason.
     Widget memories() => IconButton(
-          icon: const Icon(Icons.psychology_outlined),
-          tooltip: "Memories",
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => MemoryPage(
-                project: (device: at.device, project: null),
-                title: "Memories",
-              ),
-            ),
+      icon: const Icon(Icons.psychology_outlined),
+      tooltip: "Memories",
+      onPressed: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => MemoryPage(
+            project: (device: at.device, project: null),
+            title: "Memories",
           ),
-        );
+        ),
+      ),
+    );
     Widget settingsGear() => IconButton(
-          icon: const Icon(Icons.settings),
-          tooltip: "Project settings",
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => ProjectSettingsPage(project: project!, device: at.device),
-            ),
-          ),
-        );
+      icon: const Icon(Icons.settings),
+      tooltip: "Project settings",
+      onPressed: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) =>
+              ProjectSettingsPage(project: project!, device: at.device),
+        ),
+      ),
+    );
     if (project == null) return [if (local) workspace(), memories()];
     return [
       if (local && (spec?.sharedWorkspace ?? true)) workspace(),
@@ -138,9 +143,16 @@ class _SidebarState extends ConsumerState<Sidebar> {
             ),
             Expanded(
               child: selected.device != null
-                  ? _RemoteChatList(scope: selected, query: _query, search: _search)
+                  ? _RemoteChatList(
+                      scope: selected,
+                      query: _query,
+                      search: _search,
+                    )
                   : _LocalChatList(
-                      project: selected.project, query: _query, search: _search),
+                      project: selected.project,
+                      query: _query,
+                      search: _search,
+                    ),
             ),
             const Divider(height: 1),
             Stack(
@@ -153,14 +165,18 @@ class _SidebarState extends ConsumerState<Sidebar> {
                       leading: const Icon(Icons.person_outline),
                       title: const Text("Profile"),
                       onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const ProfilePage(project: null)),
+                        MaterialPageRoute(
+                          builder: (_) => const ProfilePage(project: null),
+                        ),
                       ),
                     ),
                     ListTile(
                       leading: const Icon(Icons.storefront_outlined),
                       title: const Text("Marketplace"),
                       onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const MarketplacePage()),
+                        MaterialPageRoute(
+                          builder: (_) => const MarketplacePage(),
+                        ),
                       ),
                     ),
                     ListTile(
@@ -207,7 +223,9 @@ class _LocalChatList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return ref.watch(chatListProvider).when(
+    return ref
+        .watch(chatListProvider)
+        .when(
           data: (all) {
             // Expired chats are hidden here and deleted by the sweep; showing
             // one in the list that is about to vanish reads as a deletion on
@@ -221,7 +239,9 @@ class _LocalChatList extends ConsumerWidget {
             return Column(
               children: [
                 _SearchField(controller: search, query: query),
-                Expanded(child: _ChatList(chats: chats, query: query)),
+                Expanded(
+                  child: _ChatList(chats: chats, query: query),
+                ),
               ],
             );
           },
@@ -253,12 +273,16 @@ class _RemoteChatList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final chats = ref.watch(remoteChatsProvider)
-        .where((entry) =>
-            entry.deviceId == scope.device &&
-            entry.state.project == scope.project)
-        .toList()
-      ..sort((a, b) => b.state.updatedAt.compareTo(a.state.updatedAt));
+    final chats =
+        ref
+            .watch(remoteChatsProvider)
+            .where(
+              (entry) =>
+                  entry.deviceId == scope.device &&
+                  entry.state.project == scope.project,
+            )
+            .toList()
+          ..sort((a, b) => b.state.updatedAt.compareTo(a.state.updatedAt));
     if (chats.isEmpty) {
       return const Nothing("Nothing mirrored from this device yet.");
     }
@@ -287,13 +311,19 @@ class _RemoteChatList extends ConsumerWidget {
                       chat: entry.state,
                       mutable: entry.online,
                       remote: true,
-                      selected: ref.watch(selectedChatIdProvider
-                          .select((id) => id == entry.chatId)),
+                      selected: ref.watch(
+                        selectedChatIdProvider.select(
+                          (id) => id == entry.chatId,
+                        ),
+                      ),
                       subtitle: entry.online
                           ? null
-                          : Text("offline",
-                              style: theme.textTheme.bodySmall
-                                  ?.copyWith(color: theme.colorScheme.error)),
+                          : Text(
+                              "offline",
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.error,
+                              ),
+                            ),
                     ),
                   );
                 },
@@ -332,7 +362,10 @@ class _SearchField extends StatelessWidget {
             fillColor: theme.colorScheme.surfaceContainerHighest,
             hintText: "Search chats",
             prefixIcon: const Icon(Icons.search, size: 20),
-            prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 36),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 40,
+              minHeight: 36,
+            ),
             suffixIcon: text.isEmpty
                 ? null
                 : IconButton(
@@ -340,7 +373,10 @@ class _SearchField extends StatelessWidget {
                     tooltip: "Clear search",
                     onPressed: controller.clear,
                   ),
-            suffixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            suffixIconConstraints: const BoxConstraints(
+              minWidth: 36,
+              minHeight: 36,
+            ),
             contentPadding: const EdgeInsets.symmetric(vertical: 10),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(24),
@@ -376,7 +412,10 @@ class _ChatList extends ConsumerWidget {
         // fields of which exactly one is ever set.
         return CustomScrollView(
           slivers: [
-            for (final group in groupChatsByDate(found, now: DateTime.now())) ...[
+            for (final group in groupChatsByDate(
+              found,
+              now: DateTime.now(),
+            )) ...[
               SliverToBoxAdapter(child: _Heading(group.heading)),
               SliverList.builder(
                 itemCount: group.chats.length,
@@ -469,43 +508,55 @@ class _ChatTile extends ConsumerWidget {
         trailing: !mutable
             ? null
             : Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (chat.tempTtlExpiresAt != null)
-              Icon(
-                Icons.hourglass_empty,
-                size: 14,
-                color: theme.colorScheme.onSurfaceVariant,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (chat.tempTtlExpiresAt != null)
+                    Icon(
+                      Icons.hourglass_empty,
+                      size: 14,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (value) async {
+                      switch (value) {
+                        case "pin":
+                          await _setPinned(ref, true);
+                        case "unpin":
+                          await _setPinned(ref, false);
+                        case "rename":
+                          await _rename(context, ref);
+                        case "move":
+                          await _move(context, ref);
+                        case "delete":
+                          await _delete(context, ref);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      if (chat.pinned)
+                        const PopupMenuItem(
+                          value: "unpin",
+                          child: Text("Unpin"),
+                        )
+                      else
+                        const PopupMenuItem(value: "pin", child: Text("Pin")),
+                      const PopupMenuItem(
+                        value: "rename",
+                        child: Text("Rename"),
+                      ),
+                      if (!remote)
+                        const PopupMenuItem(
+                          value: "move",
+                          child: Text("Move to project…"),
+                        ),
+                      const PopupMenuItem(
+                        value: "delete",
+                        child: Text("Delete"),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            PopupMenuButton<String>(
-          icon: const Icon(Icons.more_vert),
-          onSelected: (value) async {
-            switch (value) {
-              case "pin":
-                await _setPinned(ref, true);
-              case "unpin":
-                await _setPinned(ref, false);
-              case "rename":
-                await _rename(context, ref);
-              case "move":
-                await _move(context, ref);
-              case "delete":
-                await _delete(context, ref);
-            }
-          },
-          itemBuilder: (context) => [
-            if (chat.pinned)
-              const PopupMenuItem(value: "unpin", child: Text("Unpin"))
-            else
-              const PopupMenuItem(value: "pin", child: Text("Pin")),
-            const PopupMenuItem(value: "rename", child: Text("Rename")),
-            if (!remote)
-              const PopupMenuItem(value: "move", child: Text("Move to project…")),
-            const PopupMenuItem(value: "delete", child: Text("Delete")),
-          ],
-        ),
-          ],
-        ),
       ),
     );
   }
@@ -545,7 +596,9 @@ class _ChatTile extends ConsumerWidget {
     // The open controller holds the chat it read when it was built — project
     // included — so it is disposed and re-read from where the chat now is.
     ref.invalidate(chatControllerProvider(chat.id));
-    ref.read(selectedProjectProvider.notifier).select(localProject(picked.project));
+    ref
+        .read(selectedProjectProvider.notifier)
+        .select(localProject(picked.project));
     ref.invalidate(chatListProvider);
   }
 
@@ -579,15 +632,26 @@ class _ProjectMenu extends ConsumerWidget {
     final label = !remote
         ? projectLabel(selected.project)
         : remoteLabel(
-            ref.watch(syncPeersProvider.select((peers) => peers[selected.device]?.name)) ??
+            ref.watch(
+                  syncPeersProvider.select(
+                    (peers) => peers[selected.device]?.name,
+                  ),
+                ) ??
                 selected.device!,
-            selected.project);
+            selected.project,
+          );
     final omada = !remote
         ? ref.watch(omadaOnProvider(selected.project))
-        : ref.watch(remoteChatsProvider.select((chats) => chats.any((e) =>
-            e.deviceId == selected.device &&
-            e.state.project == selected.project &&
-            e.omada)));
+        : ref.watch(
+            remoteChatsProvider.select(
+              (chats) => chats.any(
+                (e) =>
+                    e.deviceId == selected.device &&
+                    e.state.project == selected.project &&
+                    e.omada,
+              ),
+            ),
+          );
     return Tooltip(
       message: "Switch project",
       child: InkWell(
@@ -597,8 +661,10 @@ class _ProjectMenu extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Row(
             children: [
-              Icon(!remote ? projectGlyph(selected.project) : remoteGlyph,
-                  size: 22),
+              Icon(
+                !remote ? projectGlyph(selected.project) : remoteGlyph,
+                size: 22,
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -609,8 +675,11 @@ class _ProjectMenu extends ConsumerWidget {
                       .merge(projectLabelStyle(omada)),
                 ),
               ),
-              Icon(Icons.unfold_more,
-                  size: 20, color: theme.colorScheme.onSurfaceVariant),
+              Icon(
+                Icons.unfold_more,
+                size: 20,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ],
           ),
         ),

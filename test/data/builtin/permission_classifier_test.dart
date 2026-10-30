@@ -30,8 +30,11 @@ void main() {
       };
       for (final MapEntry(key: reply, value: decision) in cases.entries) {
         final c = classifierOver([saidOnly(reply)]);
-        expect(await c.classify("bash", '{"command": "ls"}', workspace: "/tmp"),
-            decision, reason: reply);
+        expect(
+          await c.classify("bash", '{"command": "ls"}', workspace: "/tmp"),
+          decision,
+          reason: reply,
+        );
       }
     });
 
@@ -39,7 +42,11 @@ void main() {
       client = FakeLlmClient([]);
       client.failures[0] = const LlmException("timeout", retryable: false);
       final c = LlmClassifier(client: client, model: "classifier-model");
-      final decision = await c.classify("bash", '{"command": "ls"}', workspace: "/tmp");
+      final decision = await c.classify(
+        "bash",
+        '{"command": "ls"}',
+        workspace: "/tmp",
+      );
       expect(decision, PermissionDecision.ask);
     });
 
@@ -50,32 +57,45 @@ void main() {
       expect(client.sent.single.last.text, isNot(contains('"command"')));
 
       c = classifierOver([saidOnly("allow")]);
-      await c.classify("webfetch", '{"url": "https://example.com"}', workspace: "/tmp");
+      await c.classify(
+        "webfetch",
+        '{"url": "https://example.com"}',
+        workspace: "/tmp",
+      );
       expect(client.sent.single.last.text, contains("https://example.com"));
       expect(client.sent.single.last.text, isNot(contains('"url"')));
     });
 
     test("granted directories reach the prompt as writable", () async {
       var c = classifierOver([saidOnly("allow")]);
-      await c.classify("bash", '{"command": "ls"}',
-          workspace: "/ws", alsoWritable: ["/proj", "/home/u/repo"]);
-      expect(client.sent.single.last.text,
-          contains("Also writable: /proj, /home/u/repo"));
+      await c.classify(
+        "bash",
+        '{"command": "ls"}',
+        workspace: "/ws",
+        alsoWritable: ["/proj", "/home/u/repo"],
+      );
+      expect(
+        client.sent.single.last.text,
+        contains("Also writable: /proj, /home/u/repo"),
+      );
 
       c = classifierOver([saidOnly("allow")]);
       await c.classify("bash", '{"command": "ls"}', workspace: "/ws");
       expect(client.sent.single.last.text, isNot(contains("Also writable")));
     });
 
-    test("the system prompt has the rules, anchored on workspace writes", () async {
-      final c = classifierOver([saidOnly("allow")]);
-      await c.classify("bash", '{"command": "ls"}', workspace: "/tmp");
-      final system = client.sent.single.first.text;
-      // In-workspace writes are what auto mode allows, /tmp is a write past
-      // them (ask, not deny), and deny is reserved for destruction.
-      expect(system, contains("writes only inside the workspace"));
-      expect(system, contains("output to /tmp is ask"));
-      expect(system, contains("Deny is not a stronger ask"));
-    });
+    test(
+      "the system prompt has the rules, anchored on workspace writes",
+      () async {
+        final c = classifierOver([saidOnly("allow")]);
+        await c.classify("bash", '{"command": "ls"}', workspace: "/tmp");
+        final system = client.sent.single.first.text;
+        // In-workspace writes are what auto mode allows, /tmp is a write past
+        // them (ask, not deny), and deny is reserved for destruction.
+        expect(system, contains("writes only inside the workspace"));
+        expect(system, contains("output to /tmp is ask"));
+        expect(system, contains("Deny is not a stronger ask"));
+      },
+    );
   });
 }

@@ -45,7 +45,10 @@ class ReadAloud extends Notifier<String?> {
     if (reading == id) return null;
 
     final settings = ref.read(appSettingsProvider);
-    final speaking = voicePicks(settings, ref.read(agentBackendProvider)).speaking;
+    final speaking = voicePicks(
+      settings,
+      ref.read(agentBackendProvider),
+    ).speaking;
     if (speaking == null) return "No speech model is picked.";
     final text = speakable(said);
     if (text.trim().isEmpty) return null;
@@ -76,8 +79,10 @@ class ReadAloud extends Notifier<String?> {
       // Sentence by sentence, so the first is being read while the rest is
       // still being generated. The same split the reply gets in voice mode.
       final sentences = SentenceSplitter();
-      final pieces = [...sentences.add(text), sentences.flush()]
-          .where((s) => s.trim().isNotEmpty);
+      final pieces = [
+        ...sentences.add(text),
+        sentences.flush(),
+      ].where((s) => s.trim().isNotEmpty);
       for (final sentence in pieces) {
         await session.speak(sentence);
       }
@@ -111,7 +116,11 @@ final readAloudProvider = NotifierProvider<ReadAloud, String?>(ReadAloud.new);
 /// page's, and both of the buttons that read something out want the same
 /// sentence over it.
 Future<void> readAloud(
-    BuildContext context, WidgetRef ref, String id, String said) async {
+  BuildContext context,
+  WidgetRef ref,
+  String id,
+  String said,
+) async {
   final failed = await ref.read(readAloudProvider.notifier).toggle(id, said);
   if (failed == null || !context.mounted) return;
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failed)));

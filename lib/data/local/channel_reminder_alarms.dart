@@ -79,14 +79,18 @@ abstract class ChannelReminderAlarms implements ReminderAlarms {
   }
 
   @override
-  Future<String?> takeOpenChat() => platform.invokeMethod<String>("takeOpenChat");
+  Future<String?> takeOpenChat() =>
+      platform.invokeMethod<String>("takeOpenChat");
 
   /// Never throws: the clock kind's diff awaits [schedule] and [cancel] before
   /// its watch's `started` completes, and the manager's reload holds on that.
   /// A refusal is a line; the trigger then fires as catch-up at next launch.
   @protected
-  Future<void> run(String method, Map<Object, Object?> arguments,
-      String what) async {
+  Future<void> run(
+    String method,
+    Map<Object, Object?> arguments,
+    String what,
+  ) async {
     try {
       await platform.invokeMethod(method, arguments);
     } catch (error) {

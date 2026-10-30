@@ -12,13 +12,13 @@ class ChatActivities implements ActivityCatalog {
 
   @override
   Activity? of(MessagePart part) => switch (part) {
-        ReasoningPart() => const ThinkingActivity(),
-        ToolCallPart(:final toolCall) => toolUIFor(toolCall.name),
-        ToolResultPart() => genericToolUI,
-        InstructionsPart() => const InstructionsActivity(),
-        ApprovalPart() => const ApprovalActivity(),
-        ArtifactPart() => const ArtifactActivity(),
-        SkillInstallPart() => const SkillInstallActivity(),
-        _ => null,
-      };
+    ReasoningPart() => const ThinkingActivity(),
+    ToolCallPart(:final toolCall) => toolUIFor(toolCall.name),
+    ToolResultPart() => genericToolUI,
+    InstructionsPart() => const InstructionsActivity(),
+    ApprovalPart() => const ApprovalActivity(),
+    ArtifactPart() => const ArtifactActivity(),
+    SkillInstallPart() => const SkillInstallActivity(),
+    _ => null,
+  };
 }

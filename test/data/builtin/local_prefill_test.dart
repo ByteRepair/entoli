@@ -38,8 +38,7 @@ class FakeLocalKvCache implements LocalKvCache {
     required String namespace,
     required String key,
     required int count,
-  }) async =>
-      kept.add(key);
+  }) async => kept.add(key);
 }
 
 void main() {
@@ -56,46 +55,50 @@ void main() {
       FakeBackgroundWork background, {
       LocalKvCache? kvCache,
       http.Client? server,
-    }) =>
-        LocalPrefill(
-          llm: llm,
-          background: background,
-          kvCache: kvCache,
-          // Nothing answers unless a test says so, which is what the fake
-          // `LocalLlm`'s own endpoint amounts to.
-          httpClient: server ?? FakeNetwork(const {}),
-          warmup: testWarmup(
-            kvCachePrompts: kvCache == null ? 0 : 30,
-            messages: messages,
-          ),
-        );
+    }) => LocalPrefill(
+      llm: llm,
+      background: background,
+      kvCache: kvCache,
+      // Nothing answers unless a test says so, which is what the fake
+      // `LocalLlm`'s own endpoint amounts to.
+      httpClient: server ?? FakeNetwork(const {}),
+      warmup: testWarmup(
+        kvCachePrompts: kvCache == null ? 0 : 30,
+        messages: messages,
+      ),
+    );
 
-    test("warming serves the model and brackets it with a notification",
-        () async {
-      final llm = FakeLocalLlm();
-      final background = FakeBackgroundWork();
+    test(
+      "warming serves the model and brackets it with a notification",
+      () async {
+        final llm = FakeLocalLlm();
+        final background = FakeBackgroundWork();
 
-      await make(llm, background).warm("local-model");
+        await make(llm, background).warm("local-model");
 
-      expect(llm.served.map((s) => s.modelId), ["local-model"]);
-      // Shown while it runs and taken away when it is done, even though the
-      // warm-up request itself cannot reach the fake's bogus endpoint — the
-      // notice brackets the attempt, not its success.
-      expect(background.prefills.first, isNotNull);
-      expect(background.prefills.last, isNull);
-    });
+        expect(llm.served.map((s) => s.modelId), ["local-model"]);
+        // Shown while it runs and taken away when it is done, even though the
+        // warm-up request itself cannot reach the fake's bogus endpoint — the
+        // notice brackets the attempt, not its success.
+        expect(background.prefills.first, isNotNull);
+        expect(background.prefills.last, isNull);
+      },
+    );
 
-    test("a model that will not load is silent past the first notice", () async {
-      final llm = FakeLocalLlm(ready: false);
-      final background = FakeBackgroundWork();
-      final prefill = make(llm, background);
+    test(
+      "a model that will not load is silent past the first notice",
+      () async {
+        final llm = FakeLocalLlm(ready: false);
+        final background = FakeBackgroundWork();
+        final prefill = make(llm, background);
 
-      await prefill.warm("local-model");
+        await prefill.warm("local-model");
 
-      expect(llm.served, hasLength(1));
-      expect(background.prefills.last, isNull);
-      expect(prefill.state.value, isNull);
-    });
+        expect(llm.served, hasLength(1));
+        expect(background.prefills.last, isNull);
+        expect(prefill.state.value, isNull);
+      },
+    );
 
     test("cancelling nothing does nothing", () async {
       final background = FakeBackgroundWork();
@@ -112,13 +115,17 @@ void main() {
       late FakeLocalLlm llm;
 
       setUp(() {
-        server = FakeNetwork({
-          "/v1/chat/completions": [
-            utf8.encode(
-                'data: {"prompt_progress":{"processed":1,"total":2}}\n\n'),
-            utf8.encode('data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'),
-          ],
-        }, headers: const {"content-type": "text/event-stream"});
+        server = FakeNetwork(
+          {
+            "/v1/chat/completions": [
+              utf8.encode(
+                'data: {"prompt_progress":{"processed":1,"total":2}}\n\n',
+              ),
+              utf8.encode('data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'),
+            ],
+          },
+          headers: const {"content-type": "text/event-stream"},
+        );
         llm = FakeLocalLlm(baseUrl: "${FakeNetwork.host}/v1");
       });
 
@@ -129,8 +136,12 @@ void main() {
         // Hit: a warm that hits is the warm-up, so the prompt is not sent and
         // nothing is written back over what was already there.
         final kv = FakeLocalKvCache(hit: true);
-        await make(llm, background, kvCache: kv, server: server)
-            .warm("local-model");
+        await make(
+          llm,
+          background,
+          kvCache: kv,
+          server: server,
+        ).warm("local-model");
 
         expect(server.asked, 0);
         expect(kv.warmed.single, kvPrefixKeys(messages, const []));
@@ -139,8 +150,12 @@ void main() {
 
         // A miss reads the prompt and saves the body.
         final miss = FakeLocalKvCache();
-        await make(llm, background, kvCache: miss, server: server)
-            .warm("local-model");
+        await make(
+          llm,
+          background,
+          kvCache: miss,
+          server: server,
+        ).warm("local-model");
 
         expect(server.asked, 1);
         expect(miss.kept, [kvPrefixKeys(messages, const []).last]);
@@ -157,7 +172,10 @@ void main() {
         background.stop(BackgroundJob.prefill);
         // Ends where it is rather than when the held response finally
         // answers: the request is closed, not just marked superseded.
-        await waitFor(() => prefill.state.value == null, what: "the warm-up stopping");
+        await waitFor(
+          () => prefill.state.value == null,
+          what: "the warm-up stopping",
+        );
         await warming;
 
         expect(prefill.state.value, isNull);
@@ -166,4 +184,3 @@ void main() {
     });
   });
 }
-

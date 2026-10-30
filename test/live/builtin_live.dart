@@ -41,7 +41,9 @@ void main() {
   final env = Platform.environment;
   final baseUrl = env["BUILTIN_BASE_URL"] ?? "https://ollama.com/v1";
   final model = env["BUILTIN_MODEL"];
-  final api = env["BUILTIN_API"] == "anthropic" ? LlmApi.anthropic : LlmApi.openai;
+  final api = env["BUILTIN_API"] == "anthropic"
+      ? LlmApi.anthropic
+      : LlmApi.openai;
 
   final provider = LlmProviderConfig(
     id: _providerId,
@@ -64,9 +66,9 @@ void main() {
       options: const BuiltinOptions(stepLimit: 12),
       registry: LlmRegistry(
         endpoints: () => [providerOf(provider)],
-          lookupEnv: (name) => Platform.environment[name],
-          lookupKey: (_) => null,
-        ),
+        lookupEnv: (name) => Platform.environment[name],
+        lookupKey: (_) => null,
+      ),
     );
     backend.setLibrary(null, library);
     return (backend, config);
@@ -93,11 +95,13 @@ void main() {
     // A chat gets its directories when it is first saved or first sent to;
     // this drives the backend directly, so it asks for them itself.
     await config.ensureChatDirs(chat.state.id);
-    File("${config.workspaceDir(chat.state.id)}/hello.txt")
-        .writeAsStringSync("the answer is 42\n");
+    File(
+      "${config.workspaceDir(chat.state.id)}/hello.txt",
+    ).writeAsStringSync("the answer is 42\n");
 
     final clock = Stopwatch()..start();
-    void log(String line) => stdout.writeln("[${clock.elapsedMilliseconds}ms] $line");
+    void log(String line) =>
+        stdout.writeln("[${clock.elapsedMilliseconds}ms] $line");
 
     final reply = StringBuffer();
     final thinking = StringBuffer();
@@ -109,7 +113,8 @@ void main() {
         createdAt: DateTime.now(),
         parts: const [
           MessagePart.text(
-              text: "Read hello.txt in this directory and tell me what it says.")
+            text: "Read hello.txt in this directory and tell me what it says.",
+          ),
         ],
       ),
       settings: TurnSettings(
@@ -133,7 +138,9 @@ void main() {
         case ToolResultEvent(:final result):
           log("  -> rc=${result.returnCode} ${_oneLine(result.output)}");
         case ShellRunEvent(:final run):
-          log("! ${run.command} -> rc=${run.returnCode} ${_oneLine(run.output)}");
+          log(
+            "! ${run.command} -> rc=${run.returnCode} ${_oneLine(run.output)}",
+          );
         case ShellOutputEvent(:final text):
           log("  … ${_oneLine(text)}");
         case ArtifactEvent(:final title, :final entryFile):
@@ -157,8 +164,14 @@ void main() {
         // Nobody is here to pick an answer either, and a turn left waiting on
         // one never ends.
         case QuestionRequestEvent(:final request):
-          log("asked ${request.questions.length} question(s), answering nothing");
-          await backend.respondQuestions(chat.state.id, request.id, request.unanswered);
+          log(
+            "asked ${request.questions.length} question(s), answering nothing",
+          );
+          await backend.respondQuestions(
+            chat.state.id,
+            request.id,
+            request.unanswered,
+          );
         case SubAgentStartEvent(:final agent):
           log("sub-agent @$agent started");
         case SubAgentEndEvent(:final id, :final failed):

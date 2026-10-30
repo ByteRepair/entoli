@@ -1,6 +1,7 @@
 import "dart:io";
 
-import "package:flutter/foundation.dart" show debugDefaultTargetPlatformOverride, TargetPlatform;
+import "package:flutter/foundation.dart"
+    show debugDefaultTargetPlatformOverride, TargetPlatform;
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
@@ -31,7 +32,9 @@ void main() {
       app.seedGlobalDefault(providerId: providerId, modelId: modelId);
 
   group("the categories", () {
-    testWidgets("sit beside the page where there is room for them", (tester) async {
+    testWidgets("sit beside the page where there is room for them", (
+      tester,
+    ) async {
       useWindow(tester, const Size(1200, 800));
       await app.pump(tester, const SettingsPage());
 
@@ -57,25 +60,34 @@ void main() {
     // Opened for a category, narrow as well as wide: the category is the page
     // itself, nothing behind it, so back leaves settings rather than a list
     // the link skipped.
-    testWidgets("initialCategory opens the category directly on a narrow window",
-        (tester) async {
-      await app.pump(
-          tester, const SettingsPage(initialCategory: SettingsCategory.providers));
-      await settleIo(tester);
+    testWidgets(
+      "initialCategory opens the category directly on a narrow window",
+      (tester) async {
+        await app.pump(
+          tester,
+          const SettingsPage(initialCategory: SettingsCategory.providers),
+        );
+        await settleIo(tester);
 
-      expect(find.text("Add provider"), findsOneWidget);
-      expect(find.widgetWithText(AppBar, "Settings"), findsNothing);
-    });
+        expect(find.text("Add provider"), findsOneWidget);
+        expect(find.widgetWithText(AppBar, "Settings"), findsNothing);
+      },
+    );
 
     // The same focus mode on a wide window: the tour's rows and the Byte
     // Repair bar push settings for one category, and the panel has nothing to
     // do with how they got there.
-    testWidgets("focus opens the category alone on a wide window", (tester) async {
+    testWidgets("focus opens the category alone on a wide window", (
+      tester,
+    ) async {
       useWindow(tester, const Size(1200, 800));
       await app.pump(
-          tester,
-          const SettingsPage(
-              initialCategory: SettingsCategory.providers, focus: true));
+        tester,
+        const SettingsPage(
+          initialCategory: SettingsCategory.providers,
+          focus: true,
+        ),
+      );
       await settleIo(tester);
 
       expect(find.text("Add provider"), findsOneWidget);
@@ -86,20 +98,26 @@ void main() {
 
     // A deep-link in without focus is a selection, not a replacement: the
     // panel stays, and the named category is what is showing beside it.
-    testWidgets("initialCategory without focus keeps the panel on a wide window",
-        (tester) async {
-      useWindow(tester, const Size(1200, 800));
-      await app.pump(
-          tester, const SettingsPage(initialCategory: SettingsCategory.providers));
-      await settleIo(tester);
+    testWidgets(
+      "initialCategory without focus keeps the panel on a wide window",
+      (tester) async {
+        useWindow(tester, const Size(1200, 800));
+        await app.pump(
+          tester,
+          const SettingsPage(initialCategory: SettingsCategory.providers),
+        );
+        await settleIo(tester);
 
-      expect(find.text("Add provider"), findsOneWidget);
-      expect(find.widgetWithText(AppBar, "Settings"), findsOneWidget);
-      expect(tile("General"), findsOneWidget);
-      expect(tile("Providers"), findsOneWidget);
-    });
+        expect(find.text("Add provider"), findsOneWidget);
+        expect(find.widgetWithText(AppBar, "Settings"), findsOneWidget);
+        expect(tile("General"), findsOneWidget);
+        expect(tile("Providers"), findsOneWidget);
+      },
+    );
 
-    testWidgets("a category is then a page over it, left by the back key", (tester) async {
+    testWidgets("a category is then a page over it, left by the back key", (
+      tester,
+    ) async {
       final handlesBack = frameworkHandlesBack(tester);
       await app.pump(tester, const SettingsPage());
 
@@ -119,7 +137,9 @@ void main() {
       expect(tile("Providers"), findsOneWidget);
     });
 
-    testWidgets("widening puts the open category beside the list", (tester) async {
+    testWidgets("widening puts the open category beside the list", (
+      tester,
+    ) async {
       useWindow(tester, const Size(800, 600));
       await app.pump(tester, const SettingsPage());
 
@@ -135,14 +155,18 @@ void main() {
       expect(find.text("New chats"), findsOneWidget);
     });
 
-    testWidgets("a divider stands where one group ends and another begins",
-        (tester) async {
+    testWidgets("a divider stands where one group ends and another begins", (
+      tester,
+    ) async {
       // A platform with every category, Triggers' clock included.
       app.dispose();
       app = TestApp.create(reminderAlarms: FakeReminderAlarms());
       useWindow(tester, const Size(1200, 1400));
       await app.pump(tester, const SettingsPage());
-      final panel = find.ancestor(of: tile("General"), matching: find.byType(ListView));
+      final panel = find.ancestor(
+        of: tile("General"),
+        matching: find.byType(ListView),
+      );
 
       // The whole order, dividers included: the walk of the panel reads it as
       // it is drawn. Scoped to the panel: the settings beside it are dividers
@@ -150,10 +174,14 @@ void main() {
       // is all seventeen of the categories.
       expect(
         tester
-            .widgetList<Widget>(find.descendant(
+            .widgetList<Widget>(
+              find.descendant(
                 of: panel,
                 matching: find.byWidgetPredicate(
-                    (w) => w is ListTile || w is Divider)))
+                  (w) => w is ListTile || w is Divider,
+                ),
+              ),
+            )
             .map((w) => w is ListTile ? (w.title! as Text).data! : "─"),
         [
           "General",
@@ -183,7 +211,9 @@ void main() {
     });
   });
 
-  testWidgets("each category holds the settings filed under it", (tester) async {
+  testWidgets("each category holds the settings filed under it", (
+    tester,
+  ) async {
     await pumpSettings(tester, app, SettingsCategory.general);
 
     // scrollTo ends in ensureVisible, which throws unless the finder matches
@@ -209,21 +239,25 @@ void main() {
   });
 
   group("the recommended provider", () {
-    testWidgets("stands on an empty page, with both links working", (tester) async {
+    testWidgets("stands on an empty page, with both links working", (
+      tester,
+    ) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
 
-      expect(
-          find.textContaining("We recommend Ollama Cloud"), findsOneWidget);
+      expect(find.textContaining("We recommend Ollama Cloud"), findsOneWidget);
       await tester.tap(find.text("Sign up"));
       await settleIo(tester);
       expect(
-          app.linkOpener.opened,
-          contains(Uri.parse("https://signin.ollama.com/sign-up")));
+        app.linkOpener.opened,
+        contains(Uri.parse("https://signin.ollama.com/sign-up")),
+      );
 
       await tester.tap(find.text("Ollama Cloud privacy policy"));
       await settleIo(tester);
-      expect(app.linkOpener.opened,
-          contains(Uri.parse("https://ollama.com/privacy")));
+      expect(
+        app.linkOpener.opened,
+        contains(Uri.parse("https://ollama.com/privacy")),
+      );
     });
 
     // The key box is the thing that actually configures the app: signing up
@@ -273,7 +307,9 @@ void main() {
     // A preset added through the dialog keeps the defaults the preset names:
     // the dialog is a form over the endpoint, not a second place to decide
     // them, and losing them left the picker an initialValue nothing renders.
-    testWidgets("a preset added through the dialog keeps its defaults", (tester) async {
+    testWidgets("a preset added through the dialog keeps its defaults", (
+      tester,
+    ) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addAnthropic(tester);
 
@@ -286,7 +322,9 @@ void main() {
     });
   });
 
-  testWidgets("selecting a model persists it with its provider", (tester) async {
+  testWidgets("selecting a model persists it with its provider", (
+    tester,
+  ) async {
     await pumpSettings(tester, app, SettingsCategory.llms);
 
     await openPickerFor(tester);
@@ -309,13 +347,16 @@ void main() {
     expect(find.text("Qwen 2.5"), findsOneWidget);
   });
 
-  testWidgets("a saved model the backend no longer offers does not break the page", (tester) async {
-    seedSettings(otherProvider, "");
-    await pumpSettings(tester, app, SettingsCategory.llms);
+  testWidgets(
+    "a saved model the backend no longer offers does not break the page",
+    (tester) async {
+      seedSettings(otherProvider, "");
+      await pumpSettings(tester, app, SettingsCategory.llms);
 
-    expect(tester.takeException(), isNull);
-    expect(find.text(noneOptionLabel), findsOneWidget);
-  });
+      expect(tester.takeException(), isNull);
+      expect(find.text(noneOptionLabel), findsOneWidget);
+    },
+  );
 
   group("the title model", () {
     Future<void> openTitleDropdown(WidgetTester tester) async {
@@ -325,14 +366,22 @@ void main() {
       await openPickerFor(tester, label: "Title LLM");
     }
 
-    testWidgets("is off until one is picked, and every model is offered", (tester) async {
+    testWidgets("is off until one is picked, and every model is offered", (
+      tester,
+    ) async {
       useWindow(tester, const Size(800, 1400));
       await pumpSettings(tester, app, SettingsCategory.llms);
       await openTitleDropdown(tester);
 
       // Off, then all four models by name: nothing inherits from this, so
       // there is no provider to narrow the list to.
-      const names = {"Off", "Claude Haiku 3", "Claude Sonnet 4", "Llama 3", "Qwen 2.5"};
+      const names = {
+        "Off",
+        "Claude Haiku 3",
+        "Claude Sonnet 4",
+        "Llama 3",
+        "Qwen 2.5",
+      };
       expect(catalogLabels(tester).where(names.contains), [
         "Off",
         "Claude Haiku 3",
@@ -357,7 +406,8 @@ void main() {
 
     testWidgets("turning it off drops both halves", (tester) async {
       app.seedSettings(
-          AppSettings(titleProviderId: otherProvider, titleModelId: "qwen-2.5"));
+        AppSettings(titleProviderId: otherProvider, titleModelId: "qwen-2.5"),
+      );
       await pumpSettings(tester, app, SettingsCategory.llms);
       expect(find.text("Qwen 2.5"), findsOneWidget);
 
@@ -370,8 +420,12 @@ void main() {
       expect(settings.titleModelId, isNull);
     });
 
-    testWidgets("a model the backend no longer offers reads as off", (tester) async {
-      app.seedSettings(AppSettings(titleProviderId: "gone", titleModelId: "vanished"));
+    testWidgets("a model the backend no longer offers reads as off", (
+      tester,
+    ) async {
+      app.seedSettings(
+        AppSettings(titleProviderId: "gone", titleModelId: "vanished"),
+      );
       await pumpSettings(tester, app, SettingsCategory.llms);
 
       expect(tester.takeException(), isNull);
@@ -380,11 +434,16 @@ void main() {
         of: titleLabel,
         matching: find.byType(LabelledField),
       );
-      expect(find.descendant(of: titleField, matching: find.text("Off")), findsOneWidget);
+      expect(
+        find.descendant(of: titleField, matching: find.text("Off")),
+        findsOneWidget,
+      );
     });
   });
 
-  testWidgets("delete all chats asks first and then clears them", (tester) async {
+  testWidgets("delete all chats asks first and then clears them", (
+    tester,
+  ) async {
     await pumpSettings(tester, app, SettingsCategory.general);
     final repo = app.repo;
     await io(tester, () => app.seedChat(title: "one"));
@@ -426,7 +485,9 @@ void main() {
     expect(find.text("Delete all"), findsNothing);
   });
 
-  testWidgets("the reset button puts a pinned model back on Default", (tester) async {
+  testWidgets("the reset button puts a pinned model back on Default", (
+    tester,
+  ) async {
     seedSettings(otherProvider, "qwen-2.5");
     await pumpSettings(tester, app, SettingsCategory.llms);
     expect(find.text("Qwen 2.5"), findsOneWidget);
@@ -442,7 +503,11 @@ void main() {
   });
 
   group("environment", () {
-    Future<void> addVariable(WidgetTester tester, String name, String value) async {
+    Future<void> addVariable(
+      WidgetTester tester,
+      String name,
+      String value,
+    ) async {
       await scrollTo(tester, find.text("Add variable"));
       await tester.tap(find.text("Add variable"));
       await settleIo(tester);
@@ -452,16 +517,24 @@ void main() {
       await settleIo(tester);
     }
 
-    testWidgets("a variable added here reaches the next server", (tester) async {
+    testWidgets("a variable added here reaches the next server", (
+      tester,
+    ) async {
       await pumpSettings(tester, app, SettingsCategory.general);
 
       await addVariable(tester, "ANTHROPIC_API_KEY", "sk-test");
 
-      expect(app.container.read(appSettingsProvider).environment, {"ANTHROPIC_API_KEY": "sk-test"});
-      expect(AppSettings.load(app.config).environment, {"ANTHROPIC_API_KEY": "sk-test"});
+      expect(app.container.read(appSettingsProvider).environment, {
+        "ANTHROPIC_API_KEY": "sk-test",
+      });
+      expect(AppSettings.load(app.config).environment, {
+        "ANTHROPIC_API_KEY": "sk-test",
+      });
     });
 
-    testWidgets("the value is masked, so settings can be shown to someone", (tester) async {
+    testWidgets("the value is masked, so settings can be shown to someone", (
+      tester,
+    ) async {
       await pumpSettings(tester, app, SettingsCategory.general);
       await addVariable(tester, "OPENAI_API_KEY", "sk-secret");
 
@@ -469,7 +542,9 @@ void main() {
       expect(find.text("sk-secret"), findsNothing);
     });
 
-    testWidgets("editing a variable's name does not leave the old one behind", (tester) async {
+    testWidgets("editing a variable's name does not leave the old one behind", (
+      tester,
+    ) async {
       await pumpSettings(tester, app, SettingsCategory.general);
       await addVariable(tester, "OLD_NAME", "value");
 
@@ -479,7 +554,9 @@ void main() {
       await tester.tap(find.text("Save"));
       await settleIo(tester);
 
-      expect(app.container.read(appSettingsProvider).environment, {"NEW_NAME": "value"});
+      expect(app.container.read(appSettingsProvider).environment, {
+        "NEW_NAME": "value",
+      });
     });
 
     testWidgets("removing one leaves the rest", (tester) async {
@@ -490,10 +567,14 @@ void main() {
       await tester.tap(find.byTooltip("Remove DROP"));
       await settleIo(tester);
 
-      expect(app.container.read(appSettingsProvider).environment, {"KEEP": "1"});
+      expect(app.container.read(appSettingsProvider).environment, {
+        "KEEP": "1",
+      });
     });
 
-    testWidgets("the model default survives an environment edit", (tester) async {
+    testWidgets("the model default survives an environment edit", (
+      tester,
+    ) async {
       seedSettings(otherProvider, "qwen-2.5");
       await pumpSettings(tester, app, SettingsCategory.general);
 
@@ -528,8 +609,11 @@ void main() {
     /// A target platform named per test, the way `chat_page_test.dart`'s
     /// `androidTest` does: a `testWidgets` body is Android by default, and
     /// this section is built per target platform.
-    void targetTest(String description, TargetPlatform platform,
-        Future<void> Function(WidgetTester) body) {
+    void targetTest(
+      String description,
+      TargetPlatform platform,
+      Future<void> Function(WidgetTester) body,
+    ) {
       testWidgets(description, (tester) async {
         debugDefaultTargetPlatformOverride = platform;
         try {
@@ -546,112 +630,154 @@ void main() {
     // picked the banner asks for the Linux, the buttons are not drawn, and
     // the delete stays behind a message that names only the data.
     targetTest(
-        'iOS with the "Host" env drawn the guest gate and keeps the delete',
-        TargetPlatform.iOS, (tester) async {
-      // The install dir stays the guest const the harness defaults to; the
-      // pick is what gates.
-      await pumpSettings(tester, app, SettingsCategory.byteRepair);
+      'iOS with the "Host" env drawn the guest gate and keeps the delete',
+      TargetPlatform.iOS,
+      (tester) async {
+        // The install dir stays the guest const the harness defaults to; the
+        // pick is what gates.
+        await pumpSettings(tester, app, SettingsCategory.byteRepair);
 
-      expect(find.text("Run Setup"), findsNothing);
-      expect(find.text("Import ESBMC"), findsNothing);
-      expect(find.textContaining('using the "Host" terminal environment'),
-          findsOneWidget);
+        expect(find.text("Run Setup"), findsNothing);
+        expect(find.text("Import ESBMC"), findsNothing);
+        expect(
+          find.textContaining('using the "Host" terminal environment'),
+          findsOneWidget,
+        );
 
-      expect(
+        expect(
           await deleteDialogMessage(tester),
           "This deletes the Byte Repair workspace (cloned repos, scratch "
-          "files) and all chats in the project.");
-    });
+          "files) and all chats in the project.",
+        );
+      },
+    );
 
     // The same platform with the Alpine from the Terminal settings picked:
     // the guest's destination is where the setup installs, so the buttons
     // come back — the pick, not the platform, is the gate. No per-project
     // copy is made on iOS — the iSH shell runs the base Alpine — so the
     // dialog names nothing the setup left on the host's disk.
-    targetTest("an installed Alpine puts the buttons back on iOS",
-        TargetPlatform.iOS, (tester) async {
-      app.dispose();
-      app = TestApp.create(linuxes: const {"alpine"});
-      await io(tester, () => app.container
-          .read(appSettingsProvider.notifier).setRootfs("alpine"));
-      await pumpSettings(tester, app, SettingsCategory.byteRepair);
+    targetTest(
+      "an installed Alpine puts the buttons back on iOS",
+      TargetPlatform.iOS,
+      (tester) async {
+        app.dispose();
+        app = TestApp.create(linuxes: const {"alpine"});
+        await io(
+          tester,
+          () => app.container
+              .read(appSettingsProvider.notifier)
+              .setRootfs("alpine"),
+        );
+        await pumpSettings(tester, app, SettingsCategory.byteRepair);
 
-      expect(find.text("Run Setup"), findsOneWidget);
-      expect(find.text("Import ESBMC"), findsOneWidget);
+        expect(find.text("Run Setup"), findsOneWidget);
+        expect(find.text("Import ESBMC"), findsOneWidget);
 
-      expect(
+        expect(
           await deleteDialogMessage(tester),
           "This deletes the Byte Repair workspace (cloned repos, scratch "
           "files) and all chats in the project. Run Setup to use Byte "
-          "Repair again.");
-    });
+          "Repair again.",
+        );
+      },
+    );
 
     // A mac's setup installs with Homebrew: the page says so before the
     // button is pressed, and with no Homebrew it is the command to paste,
     // drawn as a reply's code block with its copy button.
-    targetTest("a mac says Homebrew installs, and gives its install command "
-        "where it is missing", TargetPlatform.macOS, (tester) async {
-      app.dispose();
-      final bin = p.join(app.config.dataDir, "byte-repair", "bin");
-      app = TestApp.create(byteRepairInstallDir: bin);
-      await pumpSettings(tester, app, SettingsCategory.byteRepair);
+    targetTest(
+      "a mac says Homebrew installs, and gives its install command "
+      "where it is missing",
+      TargetPlatform.macOS,
+      (tester) async {
+        app.dispose();
+        final bin = p.join(app.config.dataDir, "byte-repair", "bin");
+        app = TestApp.create(byteRepairInstallDir: bin);
+        await pumpSettings(tester, app, SettingsCategory.byteRepair);
 
-      expect(find.textContaining("Run Setup uses Homebrew"), findsOneWidget);
-      expect(find.textContaining("Homebrew is not installed"), findsOneWidget);
-      expect(find.byType(CodeBlock), findsOneWidget);
-      expect(find.byTooltip("Copy code"), findsOneWidget);
-      expect(find.text("Run Setup"), findsOneWidget);
-    });
+        expect(find.textContaining("Run Setup uses Homebrew"), findsOneWidget);
+        expect(
+          find.textContaining("Homebrew is not installed"),
+          findsOneWidget,
+        );
+        expect(find.byType(CodeBlock), findsOneWidget);
+        expect(find.byTooltip("Copy code"), findsOneWidget);
+        expect(find.text("Run Setup"), findsOneWidget);
+      },
+    );
 
-    targetTest("a mac with Homebrew has no command to paste",
-        TargetPlatform.macOS, (tester) async {
-      app.dispose();
-      final bin = p.join(app.config.dataDir, "byte-repair", "bin");
-      final brew = p.join(app.config.dataDir, "brew");
-      app = TestApp.create(byteRepairInstallDir: bin, byteRepairBrewPaths: [brew]);
-      File(brew).writeAsStringSync("");
-      await pumpSettings(tester, app, SettingsCategory.byteRepair);
+    targetTest(
+      "a mac with Homebrew has no command to paste",
+      TargetPlatform.macOS,
+      (tester) async {
+        app.dispose();
+        final bin = p.join(app.config.dataDir, "byte-repair", "bin");
+        final brew = p.join(app.config.dataDir, "brew");
+        app = TestApp.create(
+          byteRepairInstallDir: bin,
+          byteRepairBrewPaths: [brew],
+        );
+        File(brew).writeAsStringSync("");
+        await pumpSettings(tester, app, SettingsCategory.byteRepair);
 
-      expect(find.textContaining("Run Setup uses Homebrew"), findsOneWidget);
-      expect(find.byType(CodeBlock), findsNothing);
-    });
+        expect(find.textContaining("Run Setup uses Homebrew"), findsOneWidget);
+        expect(find.byType(CodeBlock), findsNothing);
+      },
+    );
 
-    targetTest("the fetched tools a setup left are named, the rootfs never",
-        TargetPlatform.linux, (tester) async {
-      app.dispose();
-      final bin = p.join(app.config.dataDir, "byte-repair", "bin");
-      app = TestApp.create(byteRepairInstallDir: bin);
-      Directory(bin).createSync(recursive: true);
-      await pumpSettings(tester, app, SettingsCategory.byteRepair);
+    targetTest(
+      "the fetched tools a setup left are named, the rootfs never",
+      TargetPlatform.linux,
+      (tester) async {
+        app.dispose();
+        final bin = p.join(app.config.dataDir, "byte-repair", "bin");
+        app = TestApp.create(byteRepairInstallDir: bin);
+        Directory(bin).createSync(recursive: true);
+        await pumpSettings(tester, app, SettingsCategory.byteRepair);
 
-      expect(find.text("Run Setup"), findsOneWidget);
-      expect(find.text("Import ESBMC"), findsOneWidget);
+        expect(find.text("Run Setup"), findsOneWidget);
+        expect(find.text("Import ESBMC"), findsOneWidget);
 
-      final message = await deleteDialogMessage(tester);
-      expect(message,
-          contains("the tools the setup fetched into the app's cache directory"));
-      expect(message, contains("Run Setup to use Byte Repair again"));
-      expect(message, isNot(contains("rootfs")));
-    });
+        final message = await deleteDialogMessage(tester);
+        expect(
+          message,
+          contains(
+            "the tools the setup fetched into the app's cache directory",
+          ),
+        );
+        expect(message, contains("Run Setup to use Byte Repair again"));
+        expect(message, isNot(contains("rootfs")));
+      },
+    );
 
     // The env check passes where a rootfs is picked, so the buttons come
     // back and the message names the copy the setup made.
     targetTest(
-        "an Android rootfs env puts the buttons back, with the rootfs named",
-        TargetPlatform.android, (tester) async {
-      app.dispose();
-      app = TestApp.create(proot: true, linuxes: const {"alpine"});
-      Directory(p.join(app.config.projectDir(project: project), "rootfs"))
-          .createSync(recursive: true);
-      await io(tester, () => app.container
-          .read(appSettingsProvider.notifier).setRootfs("alpine"));
-      await pumpSettings(tester, app, SettingsCategory.byteRepair);
+      "an Android rootfs env puts the buttons back, with the rootfs named",
+      TargetPlatform.android,
+      (tester) async {
+        app.dispose();
+        app = TestApp.create(proot: true, linuxes: const {"alpine"});
+        Directory(
+          p.join(app.config.projectDir(project: project), "rootfs"),
+        ).createSync(recursive: true);
+        await io(
+          tester,
+          () => app.container
+              .read(appSettingsProvider.notifier)
+              .setRootfs("alpine"),
+        );
+        await pumpSettings(tester, app, SettingsCategory.byteRepair);
 
-      expect(find.text("Run Setup"), findsOneWidget);
+        expect(find.text("Run Setup"), findsOneWidget);
 
-      expect(
-          await deleteDialogMessage(tester), contains("the Byte Repair rootfs"));
-    });
+        expect(
+          await deleteDialogMessage(tester),
+          contains("the Byte Repair rootfs"),
+        );
+      },
+    );
 
     // The Host env cannot run a setup, the same banner Android's Host has
     // always drawn — and the delete stays, naming the workspace and the
@@ -659,16 +785,20 @@ void main() {
     // factory builds it on Android — the guest's /usr/local/bin as the
     // install dir — which is exactly why the banner asks about the pick and
     // the dialog names no host tree.
-    targetTest("Android's Host env draws the env banner and keeps the delete",
-        TargetPlatform.android, (tester) async {
-      await pumpSettings(tester, app, SettingsCategory.byteRepair);
+    targetTest(
+      "Android's Host env draws the env banner and keeps the delete",
+      TargetPlatform.android,
+      (tester) async {
+        await pumpSettings(tester, app, SettingsCategory.byteRepair);
 
-      expect(find.text("Run Setup"), findsNothing);
-      expect(
+        expect(find.text("Run Setup"), findsNothing);
+        expect(
           find.textContaining('when using the "Host" terminal environment'),
-          findsOneWidget);
+          findsOneWidget,
+        );
 
-      expect(await deleteDialogMessage(tester), isNot(contains("rootfs")));
-    });
+        expect(await deleteDialogMessage(tester), isNot(contains("rootfs")));
+      },
+    );
   });
 }

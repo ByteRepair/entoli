@@ -3,7 +3,8 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../data/builtin/llm/hosted_models.dart";
-import "../../data/builtin/llm/providers/provider.dart" show LlmProvider, resolveIn;
+import "../../data/builtin/llm/providers/provider.dart"
+    show LlmProvider, resolveIn;
 import "../../domain/llm_provider.dart";
 import "../../domain/model_capability.dart";
 import "../../domain/model_registry.dart";
@@ -67,20 +68,26 @@ class ModelPicker extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final providers = ref.watch(appSettingsProvider.select((s) => s.llmProviders));
-    final listed = ref.watch(sortedModelsProvider).value ?? const <ModelOption>[];
+    final providers = ref.watch(
+      appSettingsProvider.select((s) => s.llmProviders),
+    );
+    final listed =
+        ref.watch(sortedModelsProvider).value ?? const <ModelOption>[];
     final serving = ref.watch(modelProvidersProvider);
     final none = choice.providerId == null && choice.modelId == null;
-    final nullEntry =
-        inherited == null ? nullLabel : "$nullLabel (${_name(providers, listed, inherited!)})";
+    final nullEntry = inherited == null
+        ? nullLabel
+        : "$nullLabel (${_name(providers, listed, inherited!)})";
     final defaultEntry = _defaultEntry(providers, defaultOf);
     return ResettableField(
       resetLabel: defaultEntry == null
           ? nullLabel
           : "${defaultEntry.displayName} - Default (${defaultOf(defaultEntry)})",
-      onReset: () => onChanged(defaultEntry == null
-          ? (providerId: null, modelId: null)
-          : (providerId: defaultEntry.id, modelId: null)),
+      onReset: () => onChanged(
+        defaultEntry == null
+            ? (providerId: null, modelId: null)
+            : (providerId: defaultEntry.id, modelId: null),
+      ),
       child: InkWell(
         borderRadius: BorderRadius.circular(4),
         onTap: () async {
@@ -98,43 +105,66 @@ class ModelPicker extends ConsumerWidget {
         },
         child: InputDecorator(
           decoration: InputDecoration(
-            helperText: none ? helperOffText ?? _inheritedHelper(providers, listed) : null,
+            helperText: none
+                ? helperOffText ?? _inheritedHelper(providers, listed)
+                : null,
             helperMaxLines: 3,
             suffixIcon: const Icon(Icons.chevron_right),
           ),
-          child: Text(_label(providers, listed, serving),
-              maxLines: 1, overflow: TextOverflow.ellipsis),
+          child: Text(
+            _label(providers, listed, serving),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ),
     );
   }
 
-  String? _inheritedHelper(List<LlmProviderConfig> providers, List<ModelOption> listed) =>
-      inherited == null ? null : "Using ${_name(providers, listed, inherited!)}";
+  String? _inheritedHelper(
+    List<LlmProviderConfig> providers,
+    List<ModelOption> listed,
+  ) => inherited == null
+      ? null
+      : "Using ${_name(providers, listed, inherited!)}";
 
   /// What the field reads as. A Default whose provider is gone, or names no
   /// default, has nothing to resolve to and reads as the null entry, whose
   /// helper names what it inherits; a model
   /// is named by what the catalog calls it, its id where nothing does.
-  String _label(List<LlmProviderConfig> providers, List<ModelOption> listed,
-      List<LlmProvider> serving) {
+  String _label(
+    List<LlmProviderConfig> providers,
+    List<ModelOption> listed,
+    List<LlmProvider> serving,
+  ) {
     // A voice model is named by what its provider says of it, since no
     // endpoint lists one; nothing serving it is as good as nothing chosen.
     if (role.voice) {
       final pick = refOf(choice);
-      return (pick == null ? null : resolveIn<Model>(serving, pick, (_) => ModelHost.resolving()))
+      return (pick == null
+                  ? null
+                  : resolveIn<Model>(
+                      serving,
+                      pick,
+                      (_) => ModelHost.resolving(),
+                    ))
               ?.info
               .displayName ??
           nullLabel;
     }
-    final provider = providers.firstWhereOrNull((p) => p.id == choice.providerId);
+    final provider = providers.firstWhereOrNull(
+      (p) => p.id == choice.providerId,
+    );
     if (choice.modelId == null) {
       final model = provider == null ? null : defaultOf(provider);
-      return model == null ? nullLabel : "${provider!.displayName} - Default ($model)";
+      return model == null
+          ? nullLabel
+          : "${provider!.displayName} - Default ($model)";
     }
     // A provider gone from settings, and from the on-device endpoints, leaves
     // nothing that could answer: as good as nothing chosen.
-    final reachable = provider != null ||
+    final reachable =
+        provider != null ||
         choice.providerId == null ||
         listed.any((m) => m.providerId == choice.providerId);
     return reachable ? _name(providers, listed, choice) : nullLabel;
@@ -143,17 +173,25 @@ class ModelPicker extends ConsumerWidget {
 
 /// A chosen model by the name the catalog gives it, then the on-device list's,
 /// then its id; "the app default" where nothing is chosen.
-String _name(List<LlmProviderConfig> providers, List<ModelOption> listed, ModelChoice choice) {
+String _name(
+  List<LlmProviderConfig> providers,
+  List<ModelOption> listed,
+  ModelChoice choice,
+) {
   final provider = providers.firstWhereOrNull((p) => p.id == choice.providerId);
-  final model = choice.modelId ??
+  final model =
+      choice.modelId ??
       (provider == null ? null : LlmProviderConfig.chatDefaultOf(provider));
   if (model == null) return "the app default";
   return modelInfoOf(provider, model)?.name ??
       listed
           // A model stored without its provider, as an older chat's was.
-          .firstWhereOrNull((m) =>
-              m.modelId == model &&
-              (choice.providerId == null || m.providerId == choice.providerId))
+          .firstWhereOrNull(
+            (m) =>
+                m.modelId == model &&
+                (choice.providerId == null ||
+                    m.providerId == choice.providerId),
+          )
           ?.label ??
       model;
 }
@@ -161,6 +199,7 @@ String _name(List<LlmProviderConfig> providers, List<ModelOption> listed, ModelC
 /// The first provider whose Default entry the catalog shows, or null when
 /// none of them names one. Reset anchors here rather than on the first
 /// provider, since only providers naming one have an entry to land on.
-LlmProviderConfig? _defaultEntry(List<LlmProviderConfig> providers,
-        String? Function(LlmProviderConfig) defaultOf) =>
-    providers.firstWhereOrNull((p) => defaultOf(p) != null);
+LlmProviderConfig? _defaultEntry(
+  List<LlmProviderConfig> providers,
+  String? Function(LlmProviderConfig) defaultOf,
+) => providers.firstWhereOrNull((p) => defaultOf(p) != null);

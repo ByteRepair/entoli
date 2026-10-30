@@ -113,23 +113,25 @@ class BuiltinProject {
   /// AGENTS.md is the whole instructions.
   ({String? note, bool includesUser}) turnInstructions({required bool omada}) {
     final note = bundledInstructions;
-    if (note != null) return (note: note, includesUser: includesUserInstructions);
+    if (note != null) {
+      return (note: note, includesUser: includesUserInstructions);
+    }
     return turnInstructionsForUserProject(omada: omada);
   }
 
   /// The same for a user project — no spec of its own, so the Omada answer
   /// alone decides: the base's room contract where Omada is on, nothing
   /// otherwise, and the user's files read after the note.
-  static ({String? note, bool includesUser}) turnInstructionsForUserProject(
-          {required bool omada}) =>
-      omada
-          ? (
-              note: myTeamNote,
-              includesUser:
-                  builtinProjectOf(omadaBaseProject)?.includesUserInstructions ??
-                      true,
-            )
-          : (note: null, includesUser: false);
+  static ({String? note, bool includesUser}) turnInstructionsForUserProject({
+    required bool omada,
+  }) => omada
+      ? (
+          note: myTeamNote,
+          includesUser:
+              builtinProjectOf(omadaBaseProject)?.includesUserInstructions ??
+              true,
+        )
+      : (note: null, includesUser: false);
 
   /// Whether a turn in this project is configured from a project settings
   /// page. A user project always has one; a built-in overrides this where the
@@ -202,9 +204,11 @@ const omadaBaseProject = "my-team";
 /// ships no note of its own. Named at the top level so the repository and the
 /// tests can reach it without meeting the built-in itself; the resolution a
 /// turn actually takes is [BuiltinProject.turnInstructions].
-String? get myTeamNote =>
-    bundledPromptFileOf(bundledSystemPrompts, omadaBaseProject, "instructions")
-        ?.content;
+String? get myTeamNote => bundledPromptFileOf(
+  bundledSystemPrompts,
+  omadaBaseProject,
+  "instructions",
+)?.content;
 
 /// A chat with no profile, no project memory, and no workspace it shares
 /// with another chat: the tools and the context that would reach them are
@@ -214,21 +218,22 @@ String? get myTeamNote =>
 /// under a turn.
 class AnonymousProject extends BuiltinProject {
   const AnonymousProject()
-      : super(
-          dir: "anonymous",
-          label: anonProjectLabel,
-          icon: Icons.visibility_off,
-          profilePolicy: ProfilePolicy.none,
-          memory: MemoryPolicy.off,
-          sharedWorkspace: false,
-        );
+    : super(
+        dir: "anonymous",
+        label: anonProjectLabel,
+        icon: Icons.visibility_off,
+        profilePolicy: ProfilePolicy.none,
+        memory: MemoryPolicy.off,
+        sharedWorkspace: false,
+      );
 
   /// Anonymous chats are scratch: they live a day by default, not forever.
   @override
   TempChatTtl? get tempChatTtl => TempChatTtl.hours24;
 
   @override
-  String? get emptyChatQuestion => "What would you like to discuss anonymously?";
+  String? get emptyChatQuestion =>
+      "What would you like to discuss anonymously?";
 }
 
 /// A team room: Omada is on, and the project's agents answer the room as
@@ -240,12 +245,12 @@ class AnonymousProject extends BuiltinProject {
 /// project's.
 class MyTeamProject extends BuiltinProject {
   const MyTeamProject()
-      : super(
-          dir: omadaBaseProject,
-          label: myTeamProjectLabel,
-          icon: Icons.groups,
-          omada: true,
-        );
+    : super(
+        dir: omadaBaseProject,
+        label: myTeamProjectLabel,
+        icon: Icons.groups,
+        omada: true,
+      );
 
   /// The note is the base, not the whole: the user's instruction files are
   /// read after it, so a rule the user sets for their own team reaches the
@@ -272,13 +277,13 @@ class MyTeamProject extends BuiltinProject {
 /// instruction files, the way the anonymous one does.
 class ByteRepairProject extends BuiltinProject {
   const ByteRepairProject()
-      : super(
-          dir: "byte-repair",
-          label: byteRepairProjectLabel,
-          icon: Icons.verified_user,
-          rootfsIsolation: true,
-          requiresSetup: true,
-        );
+    : super(
+        dir: "byte-repair",
+        label: byteRepairProjectLabel,
+        icon: Icons.verified_user,
+        rootfsIsolation: true,
+        requiresSetup: true,
+      );
 
   /// The note is the base, not the whole: the user's instruction files are
   /// read after it, so a rule the user sets for Byte Repair reaches the turn
@@ -326,7 +331,8 @@ bool isBuiltinProject(String? dir) => builtinProjectOf(dir) != null;
 /// and the prompt library's inheritance rung all ask this, so they cannot
 /// answer different questions.
 bool omadaFor(String? project, {required bool projectOmada}) =>
-    builtinProjectOf(project)?.omada ?? (project == null ? false : projectOmada);
+    builtinProjectOf(project)?.omada ??
+    (project == null ? false : projectOmada);
 
 /// What [spec]'s policy makes of the app's profile. Null is no spec — a
 /// user's project, or the default one — and the policy is

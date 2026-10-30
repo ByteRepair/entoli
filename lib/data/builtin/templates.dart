@@ -27,8 +27,10 @@ String substitute(String content, Map<String, String> values) {
     result = result.replaceAll("{{$name}}", value);
   });
   if (result.contains("{{")) {
-    throw StateError("unsubstituted placeholder in prompt prose: "
-        "${RegExp(r"\{\{[^}]+\}\}").firstMatch(result)!.group(0)}");
+    throw StateError(
+      "unsubstituted placeholder in prompt prose: "
+      "${RegExp(r"\{\{[^}]+\}\}").firstMatch(result)!.group(0)}",
+    );
   }
   return result;
 }
@@ -66,13 +68,13 @@ String turnPrompt({
   const scope = "Everything you make in this conversation goes here.";
   final shared = sharedWorkspace
       ? "\n\n"
-          "It is a folder inside the project workspace, which is shared with "
-          "every other\nconversation in this project: $homeDisplay\n"
-          "Move work there only when the user wants to carry it beyond this "
-          "conversation,\nand keep working on what is already there in "
-          "place. Earlier conversations'\nworkspaces are in its `chats/` "
-          "folder, so earlier work can be found there. Write\nto it by path; "
-          "you do not have to be in it."
+            "It is a folder inside the project workspace, which is shared with "
+            "every other\nconversation in this project: $homeDisplay\n"
+            "Move work there only when the user wants to carry it beyond this "
+            "conversation,\nand keep working on what is already there in "
+            "place. Earlier conversations'\nworkspaces are in its `chats/` "
+            "folder, so earlier work can be found there. Write\nto it by path; "
+            "you do not have to be in it."
       : "";
   // What a command's home directory is, and so where `~` expands. The value
   // is [homePath], the shell's answer; the arms are wording.
@@ -97,9 +99,11 @@ String turnPrompt({
         "too, and a\nrepository cloned or a package installed by one "
         "conversation is already\nthere for the next.";
   }
+
   // Models write scratch to a literal /tmp out of habit unless told
   // otherwise. The sandbox's TMPDIR is this same directory.
-  final tmp = "\n\n"
+  final tmp =
+      "\n\n"
       "Temporary and intermediate files go in $workspaceDisplay/.entoli-tmp "
       "(make it\nif it is not there), never in `/tmp`.";
   final parts = [
@@ -166,9 +170,10 @@ String userTurnText(String text, {required DateTime at, required bool first}) =>
 /// it arrived behind. Said to be the user's, since on some providers it shares
 /// a message with those results.
 String steerTurnText(String text, {required DateTime at}) => _withNow(
-    "The user sent this while you were working. Take it into account in "
-    "what you do next:\n\n$text",
-    at);
+  "The user sent this while you were working. Take it into account in "
+  "what you do next:\n\n$text",
+  at,
+);
 
 /// What a reply written by *another participant* reads as to this viewer's
 /// model: labeled with who wrote it, and marked as another agent's words so it
@@ -179,11 +184,13 @@ String steerTurnText(String text, {required DateTime at}) => _withNow(
 /// [toYou] says the reply handed to the viewer, and [to] who else it handed
 /// to, sigils on: a reply naming only others is context for this viewer, not
 /// work. Neither words what it did before replies were routed.
-String peerTurnText(String text,
-    {required String by,
-    required DateTime at,
-    List<String> to = const [],
-    bool toYou = false}) {
+String peerTurnText(
+  String text, {
+  required String by,
+  required DateTime at,
+  List<String> to = const [],
+  bool toYou = false,
+}) {
   final others = to.join(", ");
   final addressed = switch ((toYou, to.isEmpty)) {
     (true, true) => ", addressed to you",
@@ -192,9 +199,10 @@ String peerTurnText(String text,
     (false, true) => "",
   };
   return _withNow(
-      "Message from $by (another agent in this conversation, not the "
-      "user)$addressed:\n\n$text",
-      at);
+    "Message from $by (another agent in this conversation, not the "
+    "user)$addressed:\n\n$text",
+    at,
+  );
 }
 
 /// What the user's say reads as to a participant it was not addressed to: the
@@ -203,12 +211,15 @@ String peerTurnText(String text,
 /// reply — so the addressee is worded into it the same way an author is. A
 /// user-role message for the same reason a peer's is; [to] names who it was
 /// for, sigils on as typed, the house as [mainAgentLabel] when nobody was.
-String addressedUserTurnText(String text,
-        {required String to, required DateTime at}) =>
-    _withNow(
-        "Message from the user, addressed to $to (not addressed to you):\n\n"
-        "$text",
-        at);
+String addressedUserTurnText(
+  String text, {
+  required String to,
+  required DateTime at,
+}) => _withNow(
+  "Message from the user, addressed to $to (not addressed to you):\n\n"
+  "$text",
+  at,
+);
 
 /// What a compaction summary reads as: a user-role message carrying the
 /// summary in place of the messages it stands for. Nobody said it — it says
@@ -246,7 +257,8 @@ String _withNow(String message, DateTime now) {
 
 /// The first thing the model is asked in a conversation. Upstream calls this
 /// the instance template and puts the task in it.
-String _firstTask(String task) => """
+String _firstTask(String task) =>
+    """
 The user asks:
 
 $task
@@ -276,8 +288,8 @@ String unknownTool(String name, Iterable<String> available) =>
 /// it was. See "The projection" in `lib/domain/AGENTS.md`.
 String? cwdChangedNote(String? before, String? after) =>
     (after == null || before == null || after == before)
-        ? null
-        : "Note: your current working directory is now $after.";
+    ? null
+    : "Note: your current working directory is now $after.";
 
 const _fullOutputLimit = 10000;
 const _elidedHalf = 5000;
@@ -304,7 +316,8 @@ String observation({
       "elided_chars": output.length - _fullOutputLimit,
       "warning": "Output too long.",
     },
-    if (exceptionInfo != null && exceptionInfo.isNotEmpty) "exception_info": exceptionInfo,
+    if (exceptionInfo != null && exceptionInfo.isNotEmpty)
+      "exception_info": exceptionInfo,
     if (violations.isNotEmpty)
       "sandbox_violations": CommandSandbox.violationsNote(violations).trim(),
   });
@@ -336,7 +349,8 @@ String shellRunTranscript({
 /// [fileToolReminderEvery]. The read tool is what brings in the AGENTS.md
 /// above a file, and the write and edit tools are what check the file is
 /// the one the model read, so a `cat` or a `sed -i` skips both.
-const fileToolReminder = "Reminder: use the read tool to read a file, and "
+const fileToolReminder =
+    "Reminder: use the read tool to read a file, and "
     "write or edit to change one, rather than bash. The read tool also brings "
     "in the AGENTS.md instructions of the directories above the file. Keep "
     "bash for running programs.";
@@ -386,8 +400,8 @@ String styleSection(Tone tone, bool citations) {
     ?tone.instruction,
     if (citations)
       "When a reply draws on web pages, number them in the text and list the "
-      "pages at the end of the reply, numbered to match — what was used, not "
-      "a search for more.",
+          "pages at the end of the reply, numbered to match — what was used, not "
+          "a search for more.",
   ];
   if (lines.isEmpty) return "";
   return "\n## How to reply\n\n${lines.join("\n\n")}\n";

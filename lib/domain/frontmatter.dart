@@ -16,8 +16,11 @@ import "package:yaml/yaml.dart";
 /// text after the closing fence. Only what the menu and the tool gates need
 /// is read; everything else — other lists, deeper maps — is dropped.
 class Frontmatter {
-  const Frontmatter(
-      {this.scalars = const {}, this.metadata = const {}, this.body = ""});
+  const Frontmatter({
+    this.scalars = const {},
+    this.metadata = const {},
+    this.body = "",
+  });
 
   /// Top-level scalar keys: `name`, `description`, and the rest of the spec's.
   final Map<String, String> scalars;
@@ -51,10 +54,7 @@ class Frontmatter {
     final yamlParsed = _fromYaml(block, body);
     if (yamlParsed != null) return yamlParsed;
     if (block.contains("\t")) {
-      final tabbed = _fromYaml(
-        block.replaceAll(_tabIndent, "  "),
-        body,
-      );
+      final tabbed = _fromYaml(block.replaceAll(_tabIndent, "  "), body);
       if (tabbed != null) return tabbed;
     }
     return _fromScalars(body: body, block: block);
@@ -183,7 +183,8 @@ class Frontmatter {
       if (key == "metadata") continue;
       final scalar = _unquote(value.trim());
       // A flow list the strict parse refused, as the strict path joins it.
-      scalars[key] = listKeys.contains(key) &&
+      scalars[key] =
+          listKeys.contains(key) &&
               scalar.startsWith("[") &&
               scalar.endsWith("]")
           ? scalar.substring(1, scalar.length - 1).trim()
@@ -197,8 +198,9 @@ class Frontmatter {
   /// An indented scalar under a block opener — one entry of the `metadata:`
   /// map, read at the first entry's indentation. A deeper line is a nested
   /// value and is dropped.
-  static final RegExp _indentedScalar =
-      RegExp(r"^[ \t]+([A-Za-z0-9_.-]+):[ \t]*(.*)$");
+  static final RegExp _indentedScalar = RegExp(
+    r"^[ \t]+([A-Za-z0-9_.-]+):[ \t]*(.*)$",
+  );
 
   static String _unquote(String value) {
     if (value.length < 2) return value;

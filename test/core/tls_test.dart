@@ -11,10 +11,8 @@ import "package:http/http.dart" as http;
 
 import "package:agent_chat/core/tls.dart";
 
-http.StreamedResponse _answered(String body) => http.StreamedResponse(
-      http.ByteStream.fromBytes([body.codeUnitAt(0)]),
-      200,
-    );
+http.StreamedResponse _answered(String body) =>
+    http.StreamedResponse(http.ByteStream.fromBytes([body.codeUnitAt(0)]), 200);
 
 class _AnswerClient extends http.BaseClient {
   final String body;
@@ -47,16 +45,18 @@ class _RefusingClient extends http.BaseClient {
   int sent = 0;
   int closed = 0;
 
-  _RefusingClient(
-      {this.refusal = "CERTIFICATE_VERIFY_FAILED: no root there",
-      this.finalizeRequest = false});
+  _RefusingClient({
+    this.refusal = "CERTIFICATE_VERIFY_FAILED: no root there",
+    this.finalizeRequest = false,
+  });
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     sent += 1;
     if (finalizeRequest) request.finalize();
     throw HandshakeException(
-        "Handshake error in client (OS Error:\n\t$refusal)");
+      "Handshake error in client (OS Error:\n\t$refusal)",
+    );
   }
 
   @override
@@ -68,24 +68,35 @@ class _RefusingClient extends http.BaseClient {
 http.Request _request() => http.Request("GET", Uri.parse("https://a.host/x"));
 
 void main() {
-  test("a certificate-verify refusal is retried under the bundled set", () async {
-    final moz = _AnswerClient("m");
-    final client = TlsFallbackClient(_RefusingClient(),
-        windows: true, fallback: moz);
+  test(
+    "a certificate-verify refusal is retried under the bundled set",
+    () async {
+      final moz = _AnswerClient("m");
+      final client = TlsFallbackClient(
+        _RefusingClient(),
+        windows: true,
+        fallback: moz,
+      );
 
-    final response = await client.send(_request());
-    expect(await response.stream.bytesToString(), "m");
-    expect(moz.sent, 1);
-  });
+      final response = await client.send(_request());
+      expect(await response.stream.bytesToString(), "m");
+      expect(moz.sent, 1);
+    },
+  );
 
   test("a handshake that failed for any other reason is not retried", () async {
     final primary = _RefusingClient(refusal: "WRONG_VERSION_NUMBER: no");
     final client = TlsFallbackClient(primary, windows: true);
 
     await expectLater(
-        client.send(_request()),
-        throwsA(predicate((e) =>
-            e is HandshakeException && "$e".contains("WRONG_VERSION_NUMBER"))));
+      client.send(_request()),
+      throwsA(
+        predicate(
+          (e) =>
+              e is HandshakeException && "$e".contains("WRONG_VERSION_NUMBER"),
+        ),
+      ),
+    );
     expect(primary.sent, 1);
   });
 
@@ -94,15 +105,16 @@ void main() {
     final client = TlsFallbackClient(primary, windows: false);
 
     await expectLater(
-        client.send(_request()), throwsA(isA<HandshakeException>()));
+      client.send(_request()),
+      throwsA(isA<HandshakeException>()),
+    );
     expect(primary.sent, 1);
   });
 
   test("the fallback's first answer makes it the client after", () async {
     final system = _RefusingClient();
     final moz = _AnswerClient("m");
-    final client = TlsFallbackClient(system,
-        windows: true, fallback: moz);
+    final client = TlsFallbackClient(system, windows: true, fallback: moz);
 
     await client.send(_request());
     await client.send(_request());
@@ -113,9 +125,11 @@ void main() {
   });
 
   test("the re-send is a fresh request the fallback may finalize", () async {
-    final client = TlsFallbackClient(_RefusingClient(finalizeRequest: true),
-        windows: true,
-        fallback: _AnswerClient("m", finalizeRequest: true));
+    final client = TlsFallbackClient(
+      _RefusingClient(finalizeRequest: true),
+      windows: true,
+      fallback: _AnswerClient("m", finalizeRequest: true),
+    );
 
     final response = await client.send(_request()..body = "hello");
     expect(await response.stream.bytesToString(), "m");
@@ -136,29 +150,33 @@ void main() {
     client.close();
   });
 
-  test("a fallback that refuses too leaves the original error standing",
-      () async {
-    final client = TlsFallbackClient(_RefusingClient(),
+  test(
+    "a fallback that refuses too leaves the original error standing",
+    () async {
+      final client = TlsFallbackClient(
+        _RefusingClient(),
         windows: true,
         fallback: _RefusingClient(
-            refusal: "CERTIFICATE_VERIFY_FAILED: bundled too"));
+          refusal: "CERTIFICATE_VERIFY_FAILED: bundled too",
+        ),
+      );
 
-    try {
-      await client.send(_request());
-      fail("the request did not throw");
-    } on HandshakeException catch (e) {
-      // The primary's refusal, not the fallback's own and not the StateError
-      // a finalize that cannot run again would have raised.
-      expect("$e", contains("no root there"));
-    }
-    client.close();
-  });
+      try {
+        await client.send(_request());
+        fail("the request did not throw");
+      } on HandshakeException catch (e) {
+        // The primary's refusal, not the fallback's own and not the StateError
+        // a finalize that cannot run again would have raised.
+        expect("$e", contains("no root there"));
+      }
+      client.close();
+    },
+  );
 
   test("closing closes both clients", () async {
     final system = _RefusingClient();
     final moz = _AnswerClient("m");
-    final client = TlsFallbackClient(system,
-        windows: true, fallback: moz);
+    final client = TlsFallbackClient(system, windows: true, fallback: moz);
 
     await client.send(_request());
     client.close();

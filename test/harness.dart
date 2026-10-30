@@ -38,8 +38,10 @@ import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/model_registry.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/room/room_state.dart";
-import "package:agent_chat/ui/chat/activity/activities.dart" show ChatActivities;
-import "package:agent_chat/ui/chat/activity/activity.dart" show activityCatalogProvider;
+import "package:agent_chat/ui/chat/activity/activities.dart"
+    show ChatActivities;
+import "package:agent_chat/ui/chat/activity/activity.dart"
+    show activityCatalogProvider;
 import "package:agent_chat/ui/widgets/resettable_field.dart" show LabelledField;
 import "package:agent_chat/ui/routes.dart";
 import "package:agent_chat/ui/widgets/model_picker.dart";
@@ -69,10 +71,9 @@ import "package:agent_chat/ui/settings/settings_category.dart";
 /// `canRunCommands`, so a test pretending to be Android has to answer true the
 /// way the real one would. A test pretending to be a native desktop that the
 /// two knobs cannot distinguish passes [shell] explicitly.
-Shell _defaultShell(bool proot, String? abi) =>
-    proot || abi != null
-        ? LocalShell(environment: () => const {})
-        : const UnavailableShell();
+Shell _defaultShell(bool proot, String? abi) => proot || abi != null
+    ? LocalShell(environment: () => const {})
+    : const UnavailableShell();
 
 /// The fixed "now" every test runs under, so a reminder's fire time is judged
 /// against this rather than the wall clock. Picked before every reminder fire
@@ -222,7 +223,11 @@ class TestApp {
     // warm-up, and what stopping one reaches, is all its own.
     final warmUp = prefill
         ? LocalPrefill(
-            llm: server, background: work, warmup: testWarmup(), nameOf: engine.nameOf)
+            llm: server,
+            background: work,
+            warmup: testWarmup(),
+            nameOf: engine.nameOf,
+          )
         : null;
     final system = {
       if (nativeVoice.recognition) speech.nativePicks.recognition,
@@ -258,15 +263,17 @@ class TestApp {
           chatStoreProvider.overrideWithValue(chats),
           agentBackendProvider.overrideWithValue(backend),
           activityCatalogProvider.overrideWithValue(const ChatActivities()),
-          shellProvider.overrideWithValue(
-              shell ?? _defaultShell(proot, abi)),
+          shellProvider.overrideWithValue(shell ?? _defaultShell(proot, abi)),
           appConfigProvider.overrideWithValue(config),
-          if (browser != null) agentBrowserProvider.overrideWithValue(browser(config)),
+          if (browser != null)
+            agentBrowserProvider.overrideWithValue(browser(config)),
           appSecretsProvider.overrideWithValue(appSecrets),
           attachmentPickerProvider.overrideWithValue(picker),
           clipboardFilesProvider.overrideWithValue(clipboard),
           promptLibraryProvider.overrideWith2(
-              (project) => PromptLibraryNotifier(project, library ?? testLibrary())),
+            (project) =>
+                PromptLibraryNotifier(project, library ?? testLibrary()),
+          ),
           launcherIconsProvider.overrideWithValue(launcher),
           appUpdateHostProvider.overrideWithValue(updateHost),
           systemAccentProvider.overrideWithValue(systemAccent),
@@ -284,33 +291,46 @@ class TestApp {
           // Nothing here reaches a provider: a key is accepted unless the test
           // says otherwise, and no variable is set.
           keyCheckProvider.overrideWithValue(
-              (_, key) => acceptsKey?.call(key) ?? Future.value(true)),
+            (_, key) => acceptsKey?.call(key) ?? Future.value(true),
+          ),
           processEnvProvider.overrideWithValue((_) => null),
-          marketplaceClientProvider
-              .overrideWithValue(marketplaceClient ?? http.Client()),
+          marketplaceClientProvider.overrideWithValue(
+            marketplaceClient ?? http.Client(),
+          ),
           voiceProvider.overrideWithValue(speech),
           voiceModelStoreProvider.overrideWithValue(models),
           // Seeded the way the app seeds it, before the first frame: see
           // [InstalledVoiceModels].
           installedVoiceModelsProvider.overrideWith(
-              () => InstalledVoiceModels({...voiceModels, ...system},
-                  system: system)),
+            () => InstalledVoiceModels({
+              ...voiceModels,
+              ...system,
+            }, system: system),
+          ),
           rootfsStoreProvider.overrideWithValue(linux),
-          byteRepairStoreProvider.overrideWithValue(ByteRepairStore(
+          byteRepairStoreProvider.overrideWithValue(
+            ByteRepairStore(
               config: config,
               project: ByteRepairProject().dir,
-              workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir),
+              workspace: config.projectWorkspaceDir(
+                project: ByteRepairProject().dir,
+              ),
               installDir: byteRepairInstallDir,
               rootfsStore: linux,
-              brewPaths: byteRepairBrewPaths)),
+              brewPaths: byteRepairBrewPaths,
+            ),
+          ),
           installedRootfsProvider.overrideWith(() => InstalledRootfs(linuxes)),
           localEngineProvider.overrideWithValue(engine),
           localPrefillProvider.overrideWithValue(warmUp),
-          installedLocalModelsProvider
-              .overrideWith(() => InstalledLocalModels(localModels)),
+          installedLocalModelsProvider.overrideWith(
+            () => InstalledLocalModels(localModels),
+          ),
           // A build with proot staged into it is an Android one, so [proot]
           // answers for the ABI where a test did not bother to.
-          deviceAbiProvider.overrideWithValue(abi ?? (proot ? "arm64-v8a" : null)),
+          deviceAbiProvider.overrideWithValue(
+            abi ?? (proot ? "arm64-v8a" : null),
+          ),
           prootAvailableProvider.overrideWithValue(proot),
           hostConfinementProvider.overrideWithValue(hostConfinement),
           appVersionProvider.overrideWithValue(testAppVersion),
@@ -321,27 +341,34 @@ class TestApp {
           // as they are there, online as they are, with the projects their
           // chats are in.
           if (hub == null) ...[
-            syncPeersProvider.overrideWith(() => FakePairedDevices({
-                  for (final r in remotes)
-                    r.deviceId: PeerState(
-                        deviceId: r.deviceId,
-                        name: r.deviceName,
-                        status: r.online ? PeerStatus.online : PeerStatus.offline),
-                })),
-            deviceProjectsProvider.overrideWith(() => FakeDeviceProjects({
-                  for (final r in remotes)
-                    r.deviceId: [
-                      for (final o in remotes)
-                        if (o.deviceId == r.deviceId && o.state.project != null)
-                          o.state.project!,
-                    ],
-                })),
+            syncPeersProvider.overrideWith(
+              () => FakePairedDevices({
+                for (final r in remotes)
+                  r.deviceId: PeerState(
+                    deviceId: r.deviceId,
+                    name: r.deviceName,
+                    status: r.online ? PeerStatus.online : PeerStatus.offline,
+                  ),
+              }),
+            ),
+            deviceProjectsProvider.overrideWith(
+              () => FakeDeviceProjects({
+                for (final r in remotes)
+                  r.deviceId: [
+                    for (final o in remotes)
+                      if (o.deviceId == r.deviceId && o.state.project != null)
+                        o.state.project!,
+                  ],
+              }),
+            ),
           ],
-          mirrorChatControllerProvider
-              .overrideWith2((id) => FakeMirrorChat(id, mirrors)),
+          mirrorChatControllerProvider.overrideWith2(
+            (id) => FakeMirrorChat(id, mirrors),
+          ),
           if (hub == null)
             remoteProjectProvider.overrideWith2(
-                (project) => FakeRemoteProject(project, remoteProjects)),
+              (project) => FakeRemoteProject(project, remoteProjects),
+            ),
         ],
       ),
     );
@@ -394,7 +421,9 @@ class TestApp {
 
   /// The app-level default, written the way the app writes it.
   Future<void> seedGlobalDefault({String? providerId, String? modelId}) =>
-      seedSettings(AppSettings(defaultProviderId: providerId, defaultModelId: modelId));
+      seedSettings(
+        AppSettings(defaultProviderId: providerId, defaultModelId: modelId),
+      );
 
   /// The configured providers, written the way the app writes them.
   Future<void> seedProviders(List<LlmProviderConfig> providers) =>
@@ -433,8 +462,10 @@ class TestApp {
   /// load-bearing half: without it the TTL has nothing to count from and the
   /// chat is silently not temporary, which every assertion about one then
   /// passes for the wrong reason.
-  Future<void> makeTemporary(ChatState state,
-          {TempChatTtl ttl = TempChatTtl.hours24}) async {
+  Future<void> makeTemporary(
+    ChatState state, {
+    TempChatTtl ttl = TempChatTtl.hours24,
+  }) async {
     await seedChatMeta(state.id, ChatMeta(tempChatTtl: ttl));
     await repo.saveState(state, reanchor: true);
   }
@@ -485,22 +516,25 @@ Future<SyncHub> testSyncHub({
   AppSettings Function()? settings,
   String? hostname,
   RelayDial? relayDial,
-}) async =>
-    SyncHub(
-      identity: await SyncIdentity.load(FakeSecretStore()),
-      registry: devices ?? FakeDeviceRegistry(),
-      settings: settings ?? AppSettings.new,
-      lanSignaling: () => null,
-      hostname: hostname,
-      // Nothing to dial by default, so a test that forgets one fails rather
-      // than reaching the network from whatever URL it configured.
-      relayDial: relayDial ?? FakeRelaySignaling().dial,
-    );
+}) async => SyncHub(
+  identity: await SyncIdentity.load(FakeSecretStore()),
+  registry: devices ?? FakeDeviceRegistry(),
+  settings: settings ?? AppSettings.new,
+  lanSignaling: () => null,
+  hostname: hostname,
+  // Nothing to dial by default, so a test that forgets one fails rather
+  // than reaching the network from whatever URL it configured.
+  relayDial: relayDial ?? FakeRelaySignaling().dial,
+);
 
 /// Put a whole chat on disk the way the app would have: its state, then its
 /// conversation as the records a turn would have appended. There is no
 /// whole-log write to call instead — see `ChatStore.append`.
-Future<void> writeChatTo(ChatStore store, Chat chat, {bool finished = true}) async {
+Future<void> writeChatTo(
+  ChatStore store,
+  Chat chat, {
+  bool finished = true,
+}) async {
   await store.saveState(chat.state);
   await store.append(chat.state.id, _asWritten(chat.messages, finished));
 }
@@ -508,7 +542,11 @@ Future<void> writeChatTo(ChatStore store, Chat chat, {bool finished = true}) asy
 /// The same through a [ChatRepository], which is what a UI or repository test
 /// wants: `saveState` resolves the TTL and anchors it, so a chat written
 /// straight to the store is one no turn could have produced.
-Future<void> writeChatVia(ChatRepository repo, Chat chat, {bool finished = true}) async {
+Future<void> writeChatVia(
+  ChatRepository repo,
+  Chat chat, {
+  bool finished = true,
+}) async {
   await repo.saveState(chat.state);
   await repo.append(chat.state.id, _asWritten(chat.messages, finished));
 }
@@ -517,22 +555,25 @@ Future<void> writeChatVia(ChatRepository repo, Chat chat, {bool finished = true}
 /// reads as a turn the process was killed in the middle of, which is the point
 /// of `finished: false` and a surprise everywhere else.
 List<ChatRecord> _asWritten(List<Message> messages, bool finished) => [
-      ...recordsOf(messages),
-      if (finished)
-        for (final m in messages.where((m) => m.role == MessageRole.assistant))
-          ChatRecord.turnEnd(
-              messageId: m.id, reason: TurnEnd.done, context: m.context),
-    ];
+  ...recordsOf(messages),
+  if (finished)
+    for (final m in messages.where((m) => m.role == MessageRole.assistant))
+      ChatRecord.turnEnd(
+        messageId: m.id,
+        reason: TurnEnd.done,
+        context: m.context,
+      ),
+];
 
 /// A chat's state as a store test hands it in, dated so [day] orders one
 /// against another.
 ChatState makeState(String id, {String? project, int day = 2}) => ChatState(
-      id: id,
-      title: "Test chat $id",
-      createdAt: DateTime.utc(2026, 1, 1),
-      updatedAt: DateTime.utc(2026, 1, day),
-      project: project,
-    );
+  id: id,
+  title: "Test chat $id",
+  createdAt: DateTime.utc(2026, 1, 1),
+  updatedAt: DateTime.utc(2026, 1, day),
+  project: project,
+);
 
 /// Settle, giving the app's own file I/O real time as it goes. Anything that
 /// reads the store draws a spinner until it answers, and a spinner is a running
@@ -544,17 +585,23 @@ ChatState makeState(String id, {String? project, int day = 2}) => ChatState(
 /// it landed. Past [tries], a round still follows while anything animates, up
 /// to [limit] of real time: a loaded machine's I/O outlasts any count, and a
 /// spinner handed to `pumpAndSettle` is a timeout, since it advances no I/O.
-Future<void> settleIo(WidgetTester tester,
-    {int least = 6,
-    int tries = 40,
-    Duration limit = const Duration(seconds: 20)}) async {
+Future<void> settleIo(
+  WidgetTester tester, {
+  int least = 6,
+  int tries = 40,
+  Duration limit = const Duration(seconds: 20),
+}) async {
   final end = DateTime.now().add(limit);
-  for (var i = 0;
-      i < least ||
-          (tester.binding.transientCallbackCount > 0 &&
-              (i < tries || DateTime.now().isBefore(end)));
-      i++) {
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+  for (
+    var i = 0;
+    i < least ||
+        (tester.binding.transientCallbackCount > 0 &&
+            (i < tries || DateTime.now().isBefore(end)));
+    i++
+  ) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 5)),
+    );
     await tester.pump(const Duration(milliseconds: 16));
   }
   await tester.pumpAndSettle();
@@ -565,12 +612,18 @@ Future<void> settleIo(WidgetTester tester,
 /// guess at how long the I/O takes, and a loaded CI machine outlasts it. Bound
 /// by real time, and fails rather than returning, so a slow run waits and a
 /// broken one says what never came.
-Future<void> settleUntil(WidgetTester tester, bool Function() done,
-    {String what = "it", Duration limit = const Duration(seconds: 15)}) async {
+Future<void> settleUntil(
+  WidgetTester tester,
+  bool Function() done, {
+  String what = "it",
+  Duration limit = const Duration(seconds: 15),
+}) async {
   final end = DateTime.now().add(limit);
   while (!done()) {
     if (DateTime.now().isAfter(end)) fail("$what never happened");
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 5)),
+    );
     await tester.pump(const Duration(milliseconds: 16));
   }
   await tester.pumpAndSettle();
@@ -608,9 +661,15 @@ Future<void> sendMessage(WidgetTester tester, String text) async {
 /// Pump until [until] matches, letting real file I/O run in between. A widget
 /// test's clock is fake and never advances it, so anything read off disk needs
 /// real time and a rebuild interleaved by hand.
-Future<void> pumpUntil(WidgetTester tester, Finder until, {int tries = 50}) async {
+Future<void> pumpUntil(
+  WidgetTester tester,
+  Finder until, {
+  int tries = 50,
+}) async {
   for (var i = 0; i < tries && until.evaluate().isEmpty; i++) {
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 5)),
+    );
     await tester.pump();
   }
 }
@@ -638,10 +697,16 @@ Future<String> heldTurn(
   final chat = await io(tester, () => app.repo.createChat());
   final id = chat.state.id;
   app.container.read(selectedChatIdProvider.notifier).select(id);
-  await app.pump(tester, underSystemBars(bars, const ChatPage()), settle: false);
+  await app.pump(
+    tester,
+    underSystemBars(bars, const ChatPage()),
+    settle: false,
+  );
   await pumpUntil(tester, find.byType(Composer));
-  await io(tester,
-      () => app.container.read(chatControllerProvider(id).notifier).send(prompt));
+  await io(
+    tester,
+    () => app.container.read(chatControllerProvider(id).notifier).send(prompt),
+  );
   await pumpUntil(tester, until);
   return id;
 }
@@ -680,7 +745,9 @@ List<bool> frameworkHandlesBack(WidgetTester tester) {
     }
     return null;
   });
-  addTearDown(() => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
+  addTearDown(
+    () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+  );
   messenger.handlePlatformMessage(
     "flutter/lifecycle",
     const StringCodec().encodeMessage(AppLifecycleState.resumed.toString()),
@@ -724,12 +791,11 @@ List<String> clipboard(WidgetTester tester, {List<String>? html}) {
 /// [from] — and Ctrl+C over it. The whole of what a selection-copy test
 /// varies in is the two positions; the gesture, the pump between them and
 /// the key sequence are the same every time.
-Future<void> dragCopy(
-  WidgetTester tester,
-  Offset from, {
-  Offset? to,
-}) async {
-  final gesture = await tester.startGesture(from, kind: PointerDeviceKind.mouse);
+Future<void> dragCopy(WidgetTester tester, Offset from, {Offset? to}) async {
+  final gesture = await tester.startGesture(
+    from,
+    kind: PointerDeviceKind.mouse,
+  );
   await tester.pump();
   if (to != null) await gesture.moveTo(to);
   await tester.pump();
@@ -757,6 +823,7 @@ Future<void> softKeyboard(WidgetTester tester, {required bool up}) async {
 /// another leaves voice mode reading "not ready" — and every assertion under
 /// it then takes the settings branch instead of failing.
 const voiceModelPair = (recognition: "whisper-tiny", speech: "piper-en_US-amy");
+
 /// The same pair as a set, which is the shape `TestApp.create` installs.
 final voiceModelIds = {voiceModelPair.recognition, voiceModelPair.speech};
 
@@ -769,21 +836,26 @@ const testAppVersion = "1.2.3";
 /// drawn and still hit by a tap, so its callback is the only thing that says so.
 ///
 /// `IconButton` is not a `ButtonStyleButton`, which is why this asks twice.
-bool enabled(WidgetTester tester, Finder button) => switch (tester.widget(button)) {
+bool enabled(WidgetTester tester, Finder button) =>
+    switch (tester.widget(button)) {
       IconButton(:final onPressed) => onPressed != null,
       ButtonStyleButton(:final onPressed) => onPressed != null,
       final other => throw ArgumentError("not a button: ${other.runtimeType}"),
     };
 
 /// An icon button by the tooltip on it, which is how most of them are named.
-Finder buttonTipped(String tooltip) =>
-    find.ancestor(of: find.byTooltip(tooltip), matching: find.byType(IconButton));
+Finder buttonTipped(String tooltip) => find.ancestor(
+  of: find.byTooltip(tooltip),
+  matching: find.byType(IconButton),
+);
 
 /// Whether [field] holds the caret. A `TextField` here has no `FocusNode` of its
 /// own, so the node to ask is the `EditableText`'s inside it — which is also
 /// what a `SelectableText` is built out of.
 bool holdsCaret(WidgetTester tester, Finder field) => tester
-    .widget<EditableText>(find.descendant(of: field, matching: find.byType(EditableText)))
+    .widget<EditableText>(
+      find.descendant(of: field, matching: find.byType(EditableText)),
+    )
     .focusNode
     .hasFocus;
 
@@ -799,17 +871,23 @@ void useWindow(WidgetTester tester, Size size) {
 /// The app under system bars, the way Android draws it: the window is the whole
 /// screen and what the status and navigation bars cover is [padding].
 Widget underSystemBars(EdgeInsets padding, Widget child) => Builder(
-      builder: (context) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(padding: padding, viewPadding: padding),
-        child: child,
-      ),
-    );
+  builder: (context) => MediaQuery(
+    data: MediaQuery.of(
+      context,
+    ).copyWith(padding: padding, viewPadding: padding),
+    child: child,
+  ),
+);
 
 /// Bring [target] into view. A page taller than the test window builds only
 /// the part of itself that shows, so the finders cannot see the rest.
 Future<void> scrollTo(WidgetTester tester, Finder target) async {
   if (target.evaluate().isEmpty) {
-    await tester.dragUntilVisible(target, find.byType(Scrollable).first, const Offset(0, -120));
+    await tester.dragUntilVisible(
+      target,
+      find.byType(Scrollable).first,
+      const Offset(0, -120),
+    );
     await tester.pumpAndSettle();
   }
   // Built is not the same as tappable: the drag stops as soon as the target
@@ -845,7 +923,10 @@ Future<void> pumpAppearance(WidgetTester tester, TestApp app) async {
 /// the tap only swaps what is beside it; narrow, they are the page and each
 /// category is pushed over it — so getting to another one means going back to
 /// the list first, which is what the bar's title says.
-Future<void> openCategory(WidgetTester tester, SettingsCategory category) async {
+Future<void> openCategory(
+  WidgetTester tester,
+  SettingsCategory category,
+) async {
   if (find.widgetWithText(AppBar, "Settings").evaluate().isEmpty) {
     await pressBack(tester);
   }
@@ -877,8 +958,10 @@ Future<void> openPickerFor(WidgetTester tester, {String label = "LLM"}) async {
     of: find.text(label),
     matching: find.byType(LabelledField),
   );
-  await openModelCatalog(tester,
-      field: find.descendant(of: labelField, matching: find.byType(ModelPicker)));
+  await openModelCatalog(
+    tester,
+    field: find.descendant(of: labelField, matching: find.byType(ModelPicker)),
+  );
 }
 
 /// Item labels of the open dropdown popup, which renders in its own ListView
@@ -886,17 +969,28 @@ Future<void> openPickerFor(WidgetTester tester, {String label = "LLM"}) async {
 /// Open the catalog of the [ModelPicker] [field] finds — the only one where
 /// it is null.
 Future<void> openModelCatalog(WidgetTester tester, {Finder? field}) async {
-  await tester.tap(find.descendant(
-      of: field ?? find.byType(ModelPicker), matching: find.byType(InputDecorator)));
+  await tester.tap(
+    find.descendant(
+      of: field ?? find.byType(ModelPicker),
+      matching: find.byType(InputDecorator),
+    ),
+  );
   await tester.pumpAndSettle();
 }
 
 /// Open a picker's catalog and pick the entry reading [label]: a model by
 /// its `<provider> · <id>` line, a quick pick by its title.
-Future<void> pickModel(WidgetTester tester, String label, {Finder? field}) async {
+Future<void> pickModel(
+  WidgetTester tester,
+  String label, {
+  Finder? field,
+}) async {
   await openModelCatalog(tester, field: field);
   await tester.dragUntilVisible(
-      find.text(label), find.byType(CustomScrollView), const Offset(0, -200));
+    find.text(label),
+    find.byType(CustomScrollView),
+    const Offset(0, -200),
+  );
   await tester.tap(find.text(label).last);
   await settleIo(tester);
 }
@@ -904,16 +998,22 @@ Future<void> pickModel(WidgetTester tester, String label, {Finder? field}) async
 /// The model cards and quick picks of an open catalog, top to bottom: each
 /// quick pick's title and each card's `<provider> · <id>` line.
 List<String> catalogLabels(WidgetTester tester) => [
-      for (final t in tester.widgetList<Text>(find.descendant(
-          of: find.byType(CustomScrollView), matching: find.byType(Text))))
-        ?t.data,
-    ];
+  for (final t in tester.widgetList<Text>(
+    find.descendant(
+      of: find.byType(CustomScrollView),
+      matching: find.byType(Text),
+    ),
+  ))
+    ?t.data,
+];
 
 List<String?> popupLabels(WidgetTester tester) => tester
-    .widgetList<Text>(find.descendant(
-      of: find.byType(ListView).last,
-      matching: find.byType(Text),
-    ))
+    .widgetList<Text>(
+      find.descendant(
+        of: find.byType(ListView).last,
+        matching: find.byType(Text),
+      ),
+    )
     .map((t) => t.data)
     .toList();
 
@@ -927,8 +1027,11 @@ List<String?> popupLabels(WidgetTester tester) => tester
 ///
 /// For `test`, not `testWidgets`: it waits on the real clock, which a widget
 /// test's fake one only advances when the tree is pumped.
-Future<void> waitFor(FutureOr<bool> Function() done,
-    {String what = "it", Duration limit = const Duration(seconds: 15)}) async {
+Future<void> waitFor(
+  FutureOr<bool> Function() done, {
+  String what = "it",
+  Duration limit = const Duration(seconds: 15),
+}) async {
   final end = DateTime.now().add(limit);
   while (!await done()) {
     if (DateTime.now().isAfter(end)) fail("$what never happened");
@@ -996,12 +1099,14 @@ Future<void> writeSkill(
   Map<String, String> metadata = const {},
 }) async {
   final file = File(
-      "${app.config.promptsDir(CompletionKind.skill, project: project)}/$name/SKILL.md");
+    "${app.config.promptsDir(CompletionKind.skill, project: project)}/$name/SKILL.md",
+  );
   await file.create(recursive: true);
   final metadataBlock = metadata.isEmpty
       ? ""
       : "\nmetadata:\n"
-          "${[for (final e in metadata.entries) "  ${e.key}: \"${e.value}\""].join("\n")}\n";
+            "${[for (final e in metadata.entries) "  ${e.key}: \"${e.value}\""].join("\n")}\n";
   await file.writeAsString(
-      "---\nname: $name\ndescription: do $name$metadataBlock\n---\n\nDo $name.\n");
+    "---\nname: $name\ndescription: do $name$metadataBlock\n---\n\nDo $name.\n",
+  );
 }

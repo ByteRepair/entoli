@@ -31,10 +31,16 @@ void main() {
   /// A swatch or a corner in the row labelled [row], and within it the
   /// [group] of swatches where given. Scoped because bold and pastel share
   /// some names.
-  Future<void> tapChoice(WidgetTester tester, String row, String choice,
-      {String? group}) async {
-    var scope =
-        find.ancestor(of: find.text(row), matching: find.byType(LabelledField));
+  Future<void> tapChoice(
+    WidgetTester tester,
+    String row,
+    String choice, {
+    String? group,
+  }) async {
+    var scope = find.ancestor(
+      of: find.text(row),
+      matching: find.byType(LabelledField),
+    );
     if (group != null) {
       scope = find
           .ancestor(
@@ -50,10 +56,12 @@ void main() {
   }
 
   Future<MaterialApp> pumpApp(WidgetTester tester) async {
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: app.container,
-      child: AgentChatApp(onExit: () async {}),
-    ));
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: app.container,
+        child: AgentChatApp(onExit: () async {}),
+      ),
+    );
     await settleIo(tester);
     return tester.widget<MaterialApp>(find.byType(MaterialApp));
   }
@@ -66,13 +74,14 @@ void main() {
       expect(shown(tester), AppTheme.system);
     });
 
-    testWidgets("they are offered in the order they are declared", (tester) async {
+    testWidgets("they are offered in the order they are declared", (
+      tester,
+    ) async {
       await pumpAppearance(tester, app);
 
-      expect(
-        [for (final segment in field(tester).segments) segment.value],
-        AppTheme.values,
-      );
+      expect([
+        for (final segment in field(tester).segments) segment.value,
+      ], AppTheme.values);
     });
 
     testWidgets("picking one persists it", (tester) async {
@@ -108,8 +117,9 @@ void main() {
   });
 
   group("what the app draws", () {
-    testWidgets("both palettes are built, and the setting picks between them",
-        (tester) async {
+    testWidgets("both palettes are built, and the setting picks between them", (
+      tester,
+    ) async {
       app.seedSettings(AppSettings(appTheme: AppTheme.dark));
       final materialApp = await pumpApp(tester);
 
@@ -118,8 +128,9 @@ void main() {
       expect(materialApp.darkTheme?.brightness, Brightness.dark);
     });
 
-    testWidgets("following the system is what a fresh install hands over",
-        (tester) async {
+    testWidgets("following the system is what a fresh install hands over", (
+      tester,
+    ) async {
       final materialApp = await pumpApp(tester);
 
       expect(materialApp.themeMode, ThemeMode.system);
@@ -130,7 +141,9 @@ void main() {
 
       await io(
         tester,
-        () => app.container.read(appSettingsProvider.notifier).setAppTheme(AppTheme.dark),
+        () => app.container
+            .read(appSettingsProvider.notifier)
+            .setAppTheme(AppTheme.dark),
       );
       // A pump, not a settle: the config is right on the next build, and
       // settling would sit through Material's 200ms theme cross-fade.
@@ -145,8 +158,9 @@ void main() {
 
   group("the palette", () {
     final appleBlue = ColorScheme.fromSeed(
-        seedColor: ThemeColour.apple.colour,
-        dynamicSchemeVariant: DynamicSchemeVariant.fidelity);
+      seedColor: ThemeColour.apple.colour,
+      dynamicSchemeVariant: DynamicSchemeVariant.fidelity,
+    );
 
     testWidgets("a fresh install wears the iOS / macOS theme", (tester) async {
       final materialApp = await pumpApp(tester);
@@ -155,12 +169,15 @@ void main() {
       expect(saved.primaryColour, ColourTheme.apple.primary);
       expect(saved.secondaryColour, ColourTheme.apple.secondary);
       expect(materialApp.theme?.colorScheme.primary, appleBlue.primary);
-      expect(entoliTheme(Brightness.light).colorScheme,
-          materialApp.theme!.colorScheme);
+      expect(
+        entoliTheme(Brightness.light).colorScheme,
+        materialApp.theme!.colorScheme,
+      );
     });
 
-    testWidgets("the primary colour is what the scheme is seeded from",
-        (tester) async {
+    testWidgets("the primary colour is what the scheme is seeded from", (
+      tester,
+    ) async {
       app.seedSettings(AppSettings(primaryColour: ThemeColour.teal));
       final materialApp = await pumpApp(tester);
 
@@ -170,7 +187,9 @@ void main() {
       );
     });
 
-    testWidgets("the secondary colour brings its container with it", (tester) async {
+    testWidgets("the secondary colour brings its container with it", (
+      tester,
+    ) async {
       app.seedSettings(AppSettings(secondaryColour: ThemeColour.amber));
       final scheme = (await pumpApp(tester)).theme!.colorScheme;
 
@@ -180,8 +199,9 @@ void main() {
       expect(scheme.secondaryContainer, amber.secondaryContainer);
     });
 
-    testWidgets("the corner radius reaches the shapes the theme sets",
-        (tester) async {
+    testWidgets("the corner radius reaches the shapes the theme sets", (
+      tester,
+    ) async {
       app.seedSettings(AppSettings(cornerRadius: CornerRadius.extraLarge));
       final theme = (await pumpApp(tester)).theme!;
 
@@ -196,16 +216,26 @@ void main() {
       );
     });
 
-    testWidgets("picking a colour persists it to the seed the switch names", (tester) async {
+    testWidgets("picking a colour persists it to the seed the switch names", (
+      tester,
+    ) async {
       await pumpAppearance(tester, app);
 
-      await tapChoice(tester, "Custom colours", ThemeColour.green.label,
-          group: "Pastel colours");
+      await tapChoice(
+        tester,
+        "Custom colours",
+        ThemeColour.green.label,
+        group: "Pastel colours",
+      );
       await scrollTo(tester, find.text("Secondary"));
       await tester.tap(find.text("Secondary"));
       await tester.pumpAndSettle();
-      await tapChoice(tester, "Custom colours", ThemeColour.boldGreen.label,
-          group: "Bold colours");
+      await tapChoice(
+        tester,
+        "Custom colours",
+        ThemeColour.boldGreen.label,
+        group: "Bold colours",
+      );
 
       final saved = AppSettings.load(app.config);
       expect(saved.primaryColour, ThemeColour.green);
@@ -226,51 +256,71 @@ void main() {
       expect(saved.secondaryColour, ThemeColour.adwaita);
     });
 
-    testWidgets("a bold colour keeps its chroma, where a pastel is softened",
-        (tester) async {
-      app.seedSettings(AppSettings(
-          primaryColour: ThemeColour.boldRed, secondaryColour: ThemeColour.red));
+    testWidgets("a bold colour keeps its chroma, where a pastel is softened", (
+      tester,
+    ) async {
+      app.seedSettings(
+        AppSettings(
+          primaryColour: ThemeColour.boldRed,
+          secondaryColour: ThemeColour.red,
+        ),
+      );
       final scheme = (await pumpApp(tester)).theme!.colorScheme;
 
       final bold = ColorScheme.fromSeed(
-          seedColor: ThemeColour.boldRed.colour,
-          dynamicSchemeVariant: DynamicSchemeVariant.fidelity);
+        seedColor: ThemeColour.boldRed.colour,
+        dynamicSchemeVariant: DynamicSchemeVariant.fidelity,
+      );
       final pastel = ColorScheme.fromSeed(seedColor: ThemeColour.red.colour);
       expect(scheme.primary, bold.primary);
       expect(scheme.secondary, pastel.secondary);
       expect(bold.primary, isNot(pastel.primary));
     });
 
-    testWidgets("an operating system's theme keeps its accent on grey surfaces",
-        (tester) async {
-      app.seedSettings(AppSettings(
-          primaryColour: ColourTheme.apple.primary,
-          secondaryColour: ColourTheme.apple.secondary));
-      final scheme = (await pumpApp(tester)).theme!.colorScheme;
+    testWidgets(
+      "an operating system's theme keeps its accent on grey surfaces",
+      (tester) async {
+        app.seedSettings(
+          AppSettings(
+            primaryColour: ColourTheme.apple.primary,
+            secondaryColour: ColourTheme.apple.secondary,
+          ),
+        );
+        final scheme = (await pumpApp(tester)).theme!.colorScheme;
 
-      final apple = ColorScheme.fromSeed(
+        final apple = ColorScheme.fromSeed(
           seedColor: ThemeColour.apple.colour,
-          dynamicSchemeVariant: DynamicSchemeVariant.fidelity);
-      expect(scheme.primary, apple.primary);
-      expect(scheme.surface, isNot(apple.surface));
-      for (final role in [scheme.surface, scheme.surfaceContainer, scheme.outline]) {
-        expect(role.r, role.g);
-        expect(role.g, role.b);
-      }
-    });
+          dynamicSchemeVariant: DynamicSchemeVariant.fidelity,
+        );
+        expect(scheme.primary, apple.primary);
+        expect(scheme.surface, isNot(apple.surface));
+        for (final role in [
+          scheme.surface,
+          scheme.surfaceContainer,
+          scheme.outline,
+        ]) {
+          expect(role.r, role.g);
+          expect(role.g, role.b);
+        }
+      },
+    );
 
     testWidgets("picking a corner persists it", (tester) async {
       await pumpAppearance(tester, app);
 
       await tapChoice(tester, "Corners", "20");
 
-      expect(AppSettings.load(app.config).cornerRadius, CornerRadius.largeIncreased);
+      expect(
+        AppSettings.load(app.config).cornerRadius,
+        CornerRadius.largeIncreased,
+      );
     });
   });
 
   group("Material 3 Expressive", () {
-    testWidgets("a platform with no palette of its own is not offered it",
-        (tester) async {
+    testWidgets("a platform with no palette of its own is not offered it", (
+      tester,
+    ) async {
       await pumpAppearance(tester, app);
 
       expect(find.text("Material 3 Expressive"), findsNothing);
@@ -296,9 +346,12 @@ void main() {
         expect(find.text("Custom colours"), findsNothing);
       });
 
-      testWidgets("the palette is seeded from the system's accent", (tester) async {
+      testWidgets("the palette is seeded from the system's accent", (
+        tester,
+      ) async {
         app.seedSettings(
-            AppSettings(systemPalette: true, primaryColour: ThemeColour.red));
+          AppSettings(systemPalette: true, primaryColour: ThemeColour.red),
+        );
         final materialApp = await pumpApp(tester);
 
         expect(
@@ -307,21 +360,28 @@ void main() {
         );
       });
 
-      testWidgets("turning it off returns to the colour that was picked",
-          (tester) async {
+      testWidgets("turning it off returns to the colour that was picked", (
+        tester,
+      ) async {
         app.seedSettings(
-            AppSettings(systemPalette: true, primaryColour: ThemeColour.red));
+          AppSettings(systemPalette: true, primaryColour: ThemeColour.red),
+        );
         await pumpApp(tester);
 
         await io(
           tester,
-          () =>
-              app.container.read(appSettingsProvider.notifier).setSystemPalette(false),
+          () => app.container
+              .read(appSettingsProvider.notifier)
+              .setSystemPalette(false),
         );
         await tester.pump();
 
         expect(
-          tester.widget<MaterialApp>(find.byType(MaterialApp)).theme?.colorScheme.primary,
+          tester
+              .widget<MaterialApp>(find.byType(MaterialApp))
+              .theme
+              ?.colorScheme
+              .primary,
           ColorScheme.fromSeed(seedColor: ThemeColour.red.colour).primary,
         );
       });
@@ -329,23 +389,33 @@ void main() {
   });
 
   group("the stored name", () {
-    test("a file with no theme, or one this build cannot read, follows the system",
-        () async {
-      await app.config.documents.write(app.config.settingsFile, '{"approveMode":"ask"}');
-      expect(AppSettings.load(app.config).appTheme, AppTheme.system);
+    test(
+      "a file with no theme, or one this build cannot read, follows the system",
+      () async {
+        await app.config.documents.write(
+          app.config.settingsFile,
+          '{"approveMode":"ask"}',
+        );
+        expect(AppSettings.load(app.config).appTheme, AppTheme.system);
 
-      await app.config.documents.write(app.config.settingsFile, '{"appTheme":"sepia"}');
-      expect(AppSettings.load(app.config).appTheme, AppTheme.system);
+        await app.config.documents.write(
+          app.config.settingsFile,
+          '{"appTheme":"sepia"}',
+        );
+        expect(AppSettings.load(app.config).appTheme, AppTheme.system);
 
-      // A colour or a radius this build does not offer falls back, and one it
-      // offers is kept; the fallback is per field.
-      await app.config.documents.write(app.config.settingsFile,
-          '{"primaryColour":"chartreuse","secondaryColour":"teal","cornerRadius":"sharp"}');
+        // A colour or a radius this build does not offer falls back, and one it
+        // offers is kept; the fallback is per field.
+        await app.config.documents.write(
+          app.config.settingsFile,
+          '{"primaryColour":"chartreuse","secondaryColour":"teal","cornerRadius":"sharp"}',
+        );
 
-      final saved = AppSettings.load(app.config);
-      expect(saved.primaryColour, ThemeColour.apple);
-      expect(saved.secondaryColour, ThemeColour.teal);
-      expect(saved.cornerRadius, CornerRadius.medium);
-    });
+        final saved = AppSettings.load(app.config);
+        expect(saved.primaryColour, ThemeColour.apple);
+        expect(saved.secondaryColour, ThemeColour.teal);
+        expect(saved.cornerRadius, CornerRadius.medium);
+      },
+    );
   });
 }

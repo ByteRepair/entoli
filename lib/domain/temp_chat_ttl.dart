@@ -26,9 +26,9 @@ final tempChatTtlLabels = {for (final t in TempChatTtl.values) t: t.label};
 /// a year 365, as fixed [Duration]s: the codebase's tone is "dumb is fine", and
 /// calendar arithmetic would be a second answer to one comparison.
 Duration? tempChatTtlDuration(TempChatTtl t) => switch (t) {
-      TempChatTtl.off => null,
-      TempChatTtl.hours24 => const Duration(hours: 24),
-      TempChatTtl.days7 => const Duration(days: 7),
-      TempChatTtl.month1 => const Duration(days: 30),
-      TempChatTtl.year1 => const Duration(days: 365),
-    };
+  TempChatTtl.off => null,
+  TempChatTtl.hours24 => const Duration(hours: 24),
+  TempChatTtl.days7 => const Duration(days: 7),
+  TempChatTtl.month1 => const Duration(days: 30),
+  TempChatTtl.year1 => const Duration(days: 365),
+};

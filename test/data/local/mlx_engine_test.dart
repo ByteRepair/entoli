@@ -43,9 +43,9 @@ void main() {
       MlxEngine(FakeLocalModelStore(installed: {small.id, large.id}));
 
   List<String> calls() => [
-        for (final call in asked)
-          "${call.method} ${(call.arguments as Map?)?["model"] ?? ""}".trim(),
-      ];
+    for (final call in asked)
+      "${call.method} ${(call.arguments as Map?)?["model"] ?? ""}".trim(),
+  ];
 
   test("asking for a model loads it from its directory, once", () async {
     final mlx = engine();
@@ -63,7 +63,11 @@ void main() {
 
     await mlx.serve(small.id);
     await mlx.serve(large.id);
-    expect(calls(), ["load ${small.id}", "evict ${small.id}", "load ${large.id}"]);
+    expect(calls(), [
+      "load ${small.id}",
+      "evict ${small.id}",
+      "load ${large.id}",
+    ]);
     expect(mlx.running.value.map((s) => s.modelId), [large.id]);
 
     asked.clear();
@@ -72,25 +76,35 @@ void main() {
     expect(mlx.running.value.map((s) => s.modelId), [large.id, small.id]);
   });
 
-  test("a model that will not load says why, on its row and to the turn", () async {
-    final mlx = engine();
-    refuse[small.id] = "not enough memory";
+  test(
+    "a model that will not load says why, on its row and to the turn",
+    () async {
+      final mlx = engine();
+      refuse[small.id] = "not enough memory";
 
-    await expectLater(
-      mlx.serve(small.id),
-      throwsA(isA<LlmException>()
-          .having((e) => e.message, "message", contains("not enough memory"))),
-    );
-    final row = mlx.running.value.single;
-    expect(row.phase, LocalLlmPhase.failed);
-    expect(row.failure, "not enough memory");
-  });
+      await expectLater(
+        mlx.serve(small.id),
+        throwsA(
+          isA<LlmException>().having(
+            (e) => e.message,
+            "message",
+            contains("not enough memory"),
+          ),
+        ),
+      );
+      final row = mlx.running.value.single;
+      expect(row.phase, LocalLlmPhase.failed);
+      expect(row.failure, "not enough memory");
+    },
+  );
 
-  test("a model that is not downloaded is refused before the channel is asked",
-      () async {
-    await expectLater(engine().serve("gone"), throwsA(isA<LlmException>()));
-    expect(asked, isEmpty);
-  });
+  test(
+    "a model that is not downloaded is refused before the channel is asked",
+    () async {
+      await expectLater(engine().serve("gone"), throwsA(isA<LlmException>()));
+      expect(asked, isEmpty);
+    },
+  );
 
   test("unloading everything evicts every model", () async {
     final mlx = engine();
@@ -102,23 +116,27 @@ void main() {
     expect(mlx.running.value, isEmpty);
   });
 
-  test("a generation names the model and the directory it was loaded from",
-      () async {
-    final mlx = engine();
-    final reply = mlx
-        .client(() => AppSettings())
-        .stream(const [LlmMessage(role: LlmRole.user, text: "hi")], model: small.id)
-        .toList();
-    // The load, then the generation behind it.
-    await channel.until("generate");
+  test(
+    "a generation names the model and the directory it was loaded from",
+    () async {
+      final mlx = engine();
+      final reply = mlx.client(() => AppSettings()).stream(const [
+        LlmMessage(role: LlmRole.user, text: "hi"),
+      ], model: small.id).toList();
+      // The load, then the generation behind it.
+      await channel.until("generate");
 
-    final generate = channel.outgoing("generate");
-    expect(generate["model"], small.id);
-    expect(generate["directory"], mlx.store.downloadedOfSync(small.id)!.file);
+      final generate = channel.outgoing("generate");
+      expect(generate["model"], small.id);
+      expect(generate["directory"], mlx.store.downloadedOfSync(small.id)!.file);
 
-    await channel.incoming("done", {"id": generate["id"]});
-    expect((await reply).whereType<LlmCompletion>().single.finishReason, "stop");
-  });
+      await channel.incoming("done", {"id": generate["id"]});
+      expect(
+        (await reply).whereType<LlmCompletion>().single.finishReason,
+        "stop",
+      );
+    },
+  );
 
   test("only how many may be resident is offered to set", () {
     expect(engine().controls, {LocalControl.maxRunning});

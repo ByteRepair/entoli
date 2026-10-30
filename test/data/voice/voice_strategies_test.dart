@@ -48,7 +48,11 @@ void main() {
 
   group("LoudnessGate", () {
     /// One utterance: a room, then something above it.
-    bool utterance(LoudnessGate gate, {double floor = 0, required double peak}) {
+    bool utterance(
+      LoudnessGate gate, {
+      double floor = 0,
+      required double peak,
+    }) {
       for (var i = 0; i < 60; i++) {
         gate.measure(floor);
       }
@@ -65,10 +69,16 @@ void main() {
     test("what follows is judged against it", () {
       final gate = LoudnessGate();
       expect(utterance(gate, peak: 30), isTrue);
-      expect(utterance(gate, peak: 5), isFalse,
-          reason: "a television, next to somebody talking to the phone");
-      expect(utterance(gate, peak: 25), isTrue,
-          reason: "the same person, a little quieter");
+      expect(
+        utterance(gate, peak: 5),
+        isFalse,
+        reason: "a television, next to somebody talking to the phone",
+      );
+      expect(
+        utterance(gate, peak: 25),
+        isTrue,
+        reason: "the same person, a little quieter",
+      );
     });
 
     test("a level set by the wrong thing corrects itself upward", () {
@@ -114,49 +124,56 @@ void main() {
   });
 
   group("MicrophoneListener", () {
-    test("an engine is gated by being a listener, not by remembering to be",
-        () async {
-      final engine = _Engine();
-      await engine.setListening(true);
-      final heard = <String>[];
-      engine.events
-          .where((e) => e is VoiceHeard)
-          .listen((e) => heard.add((e as VoiceHeard).text));
+    test(
+      "an engine is gated by being a listener, not by remembering to be",
+      () async {
+        final engine = _Engine();
+        await engine.setListening(true);
+        final heard = <String>[];
+        engine.events
+            .where((e) => e is VoiceHeard)
+            .listen((e) => heard.add((e as VoiceHeard).text));
 
-      // Loud enough to set the level, and trimmed on the way through.
-      room(engine, 0.003);
-      engine.measured(decibels(0.1));
-      engine.heard("  somebody talking  ");
-      await Future.delayed(Duration.zero);
-      expect(heard, ["somebody talking"]);
+        // Loud enough to set the level, and trimmed on the way through.
+        room(engine, 0.003);
+        engine.measured(decibels(0.1));
+        engine.heard("  somebody talking  ");
+        await Future.delayed(Duration.zero);
+        expect(heard, ["somebody talking"]);
 
-      room(engine, 0.003);
-      engine.measured(decibels(0.006));
-      engine.heard("a television, two rooms away");
-      await Future.delayed(Duration.zero);
-      expect(heard, ["somebody talking"], reason: "and nothing more");
+        room(engine, 0.003);
+        engine.measured(decibels(0.006));
+        engine.heard("a television, two rooms away");
+        await Future.delayed(Duration.zero);
+        expect(heard, ["somebody talking"], reason: "and nothing more");
 
-      await engine.dispose();
-    });
+        await engine.dispose();
+      },
+    );
 
-    test("the level is against the room, and falls rather than drops",
-        () async {
-      final engine = _Engine();
-      await engine.setListening(true);
+    test(
+      "the level is against the room, and falls rather than drops",
+      () async {
+        final engine = _Engine();
+        await engine.setListening(true);
 
-      room(engine, 0.003);
-      expect(engine.level.value, 0,
-          reason: "a room at any level is the level nothing is happening at");
+        room(engine, 0.003);
+        expect(
+          engine.level.value,
+          0,
+          reason: "a room at any level is the level nothing is happening at",
+        );
 
-      engine.measured(decibels(0.2));
-      expect(engine.level.value, 1);
+        engine.measured(decibels(0.2));
+        expect(engine.level.value, 1);
 
-      // The circle follows a voice instead of flickering with it.
-      engine.measured(decibels(0.003));
-      expect(engine.level.value, closeTo(0.8, 0.01));
+        // The circle follows a voice instead of flickering with it.
+        engine.measured(decibels(0.003));
+        expect(engine.level.value, closeTo(0.8, 0.01));
 
-      await engine.dispose();
-    });
+        await engine.dispose();
+      },
+    );
 
     test("a shut microphone is not the room, and is not measured", () async {
       final engine = _Engine();
@@ -198,8 +215,7 @@ void main() {
       await engine.dispose();
     });
 
-    test("opening again forgets what was measured before it was shut",
-        () async {
+    test("opening again forgets what was measured before it was shut", () async {
       final engine = _Engine();
       await engine.setListening(true);
       final heard = <String>[];
@@ -242,8 +258,11 @@ void main() {
       failures.dropped();
       failures.dropped();
       failures.spoke();
-      expect(failures.dropped(), isFalse,
-          reason: "failures straddling one that worked are separate sentences");
+      expect(
+        failures.dropped(),
+        isFalse,
+        reason: "failures straddling one that worked are separate sentences",
+      );
     });
   });
 }

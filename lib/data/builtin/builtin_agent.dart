@@ -82,8 +82,7 @@ class BuiltinSession {
   int coveredEntries = 0;
 
   /// The live tail: what the last turn appended beyond the covered prefix.
-  List<LlmMessage> get tail =>
-      conversation.sublist(coveredEntries);
+  List<LlmMessage> get tail => conversation.sublist(coveredEntries);
 
   /// The fill's bookkeeping: [messages] are the log span this conversation
   /// words, one id to a message whatever the wordings a message words.
@@ -154,17 +153,16 @@ LlmMessage agentSystemMessage({
   Tone tone = Tone.none,
   bool citations = false,
   ToolOffer offer = const ToolOffer(),
-}) =>
-    LlmMessage(
-      role: LlmRole.system,
-      text: systemPrompt(
-        platform: platform,
-        profile: profile,
-        tone: tone,
-        citations: citations,
-        offer: offer,
-      ),
-    );
+}) => LlmMessage(
+  role: LlmRole.system,
+  text: systemPrompt(
+    platform: platform,
+    profile: profile,
+    tone: tone,
+    citations: citations,
+    offer: offer,
+  ),
+);
 
 /// The agent loop: ask the model, run the command it asked for, show it the
 /// result, repeat until it says it is done.
@@ -338,9 +336,7 @@ class BuiltinAgent implements Turn {
   /// is never injected twice into a turn.
   @override
   Set<String> get loadedInstructions =>
-      _loadedInstructionPaths ??= {
-        for (final file in instructions) file.path,
-      };
+      _loadedInstructionPaths ??= {for (final file in instructions) file.path};
   Set<String>? _loadedInstructionPaths;
 
   /// The chat's own directory, and where the shell starts.
@@ -499,8 +495,12 @@ class BuiltinAgent implements Turn {
   /// [entryFile] is the file inside the copied dir the viewer opens, which
   /// the store styles at publish time.
   @override
-  final Future<String> Function(String path, String entryFile,
-      {String? artifactId})? saveArtifact;
+  final Future<String> Function(
+    String path,
+    String entryFile, {
+    String? artifactId,
+  })?
+  saveArtifact;
 
   /// Asks the image model for [prompt]. Null withholds `image_generation`:
   /// the setting is off, or the agent is a sub-agent.
@@ -516,7 +516,10 @@ class BuiltinAgent implements Turn {
   /// offer skills for install. Returns the install id.
   @override
   final Future<({String installId, String name})> Function(
-      String path, String? name)? packageSkill;
+    String path,
+    String? name,
+  )?
+  packageSkill;
 
   /// What a running command has printed, as it prints it, for the block under
   /// its label. Null where the agent is a sub-agent — a worker's commands are
@@ -554,48 +557,51 @@ class BuiltinAgent implements Turn {
   /// tool list and the dispatch share.
   bool get _customizing =>
       editSettings != null &&
-      session.messages.any((m) => m.toolCalls.any((c) =>
-          c.name == skillToolName &&
-          stringArg(c.argumentsJson, "skill") == customizationSkill));
+      session.messages.any(
+        (m) => m.toolCalls.any(
+          (c) =>
+              c.name == skillToolName &&
+              stringArg(c.argumentsJson, "skill") == customizationSkill,
+        ),
+      );
 
   /// [caps] with the platform's facts applied where [caps] cannot know them:
   /// a tool the device cannot run is not offered even if the turn was, and a
   /// sub-agent's missing [subAgents] or [saveArtifact] withholds `task`
   /// and `artifact` the way [AgentCapabilities.unattended] does from the front.
   AgentCapabilities get _offered => AgentCapabilities(
-        commands: caps.commands && shell.canRunCommands,
-        webSearch: caps.webSearch && webSearch != null,
-        ask: caps.ask,
-        // A sub-agent's work is commands; with no shell it has none to do.
-        task: caps.task && subAgents != null && shell.canRunCommands,
-        artifact: caps.artifact && saveArtifact != null,
-        createSkill: caps.createSkill && packageSkill != null,
-        trigger: caps.trigger && registerTrigger != null,
-        browser: caps.browser && browser != null && !oneShot,
-      );
-
+    commands: caps.commands && shell.canRunCommands,
+    webSearch: caps.webSearch && webSearch != null,
+    ask: caps.ask,
+    // A sub-agent's work is commands; with no shell it has none to do.
+    task: caps.task && subAgents != null && shell.canRunCommands,
+    artifact: caps.artifact && saveArtifact != null,
+    createSkill: caps.createSkill && packageSkill != null,
+    trigger: caps.trigger && registerTrigger != null,
+    browser: caps.browser && browser != null && !oneShot,
+  );
 
   /// What this turn is offered: the one value the tool list, the dispatch
   /// and the system prompt are all read from, so the prompt cannot advertise
   /// a tool the list does not carry. Read per step: `customizing` turns on
   /// mid-turn, once the skill that offers it is loaded.
   ToolOffer get offer => ToolOffer(
-        caps: _offered,
-        skills: skills,
-        memory: memoryStore != null,
-        images: generateImage != null && saveResource != null,
-        screenshots: seesImages && saveResource != null,
-        uploads: browserUploads,
-        trustedInput: browser?.trustedInput ?? true,
-        oneShot: oneShot,
-        sandboxed: gate.helper != null,
-        background: backgroundJobs != null,
-        participants: roomParticipants,
-        member: viewer != null,
-        customizing: _customizing,
-        attachments: attachmentsDir != null,
-        agent: agent,
-      );
+    caps: _offered,
+    skills: skills,
+    memory: memoryStore != null,
+    images: generateImage != null && saveResource != null,
+    screenshots: seesImages && saveResource != null,
+    uploads: browserUploads,
+    trustedInput: browser?.trustedInput ?? true,
+    oneShot: oneShot,
+    sandboxed: gate.helper != null,
+    background: backgroundJobs != null,
+    participants: roomParticipants,
+    member: viewer != null,
+    customizing: _customizing,
+    attachments: attachmentsDir != null,
+    agent: agent,
+  );
 
   /// What the model may call this step: worked out once at its head and read
   /// by the request, the context count and the dispatch alike.
@@ -620,8 +626,13 @@ class BuiltinAgent implements Turn {
   /// shell's home, so every call site carries the translation without
   /// spelling it out.
   @override
-  String resolvePath(String path) => resolveWorkspacePath(path, workspace, projectWorkspace,
-      guestRoot: shell.guestRoot, homePath: shell.homeFor(projectWorkspace));
+  String resolvePath(String path) => resolveWorkspacePath(
+    path,
+    workspace,
+    projectWorkspace,
+    guestRoot: shell.guestRoot,
+    homePath: shell.homeFor(projectWorkspace),
+  );
 
   @override
   Map<String, FileStamp> get readFiles => session.readFiles;
@@ -678,8 +689,11 @@ class BuiltinAgent implements Turn {
   ///
   /// [mentions] are the agents the message's `@agent` mentions hand the work
   /// to, for the main agent's turn.
-  Stream<AgentEvent> run(Message prompt,
-      {List<String> mentions = const [], bool mayDress = false}) async* {
+  Stream<AgentEvent> run(
+    Message prompt, {
+    List<String> mentions = const [],
+    bool mayDress = false,
+  }) async* {
     await _openTurn(prompt, mayDress, mentions);
     yield* _recorded(_loop)();
   }
@@ -706,7 +720,9 @@ class BuiltinAgent implements Turn {
     yield* session.messages.lastOrNull?.role == LlmRole.user
         ? turn()
         : session.forTurn(
-            const LlmMessage(role: LlmRole.user, text: continueTask), turn);
+            const LlmMessage(role: LlmRole.user, text: continueTask),
+            turn,
+          );
   }
 
   /// [turn]'s events, through a recorder on their way out, with the session's
@@ -726,9 +742,14 @@ class BuiltinAgent implements Turn {
         final from = session.messages.length;
         void sayWhatWasSaid() {
           said.flushDeltas();
-          session.replaceTurn(from,
-              assistantMessages(said.parts,
-                  files: _images, resourcesDir: attachmentsDir));
+          session.replaceTurn(
+            from,
+            assistantMessages(
+              said.parts,
+              files: _images,
+              resourcesDir: attachmentsDir,
+            ),
+          );
         }
 
         _sayWhatWasSaid = sayWhatWasSaid;
@@ -774,9 +795,11 @@ class BuiltinAgent implements Turn {
       yield* _query();
       if (_cancelled) break;
       if (_queryError case (:final error, :final trace)?) {
-        yield ErrorEvent("$error",
-            retryable: error is LlmException && error.retryable,
-            trace: trace?.toString());
+        yield ErrorEvent(
+          "$error",
+          retryable: error is LlmException && error.retryable,
+          trace: trace?.toString(),
+        );
         break;
       }
       final completion = _completion;
@@ -803,8 +826,9 @@ class BuiltinAgent implements Turn {
   Stream<AgentEvent> _steered() async* {
     final said = steers?.take() ?? const <Message>[];
     if (said.isEmpty) return;
-    final loaded =
-        await Future.wait(said.map((s) => attachmentsOf(s, loadResource)));
+    final loaded = await Future.wait(
+      said.map((s) => attachmentsOf(s, loadResource)),
+    );
     for (final images in loaded) {
       _images.addAll(images);
     }
@@ -814,18 +838,25 @@ class BuiltinAgent implements Turn {
   }
 
   Future<void> _openTurn(
-      Message prompt, bool mayDress, List<String> mentions) async {
+    Message prompt,
+    bool mayDress,
+    List<String> mentions,
+  ) async {
     _setSystemPrompt(mentions);
     // The wording the live turn sends is the wording a reload rebuilds: both
     // call the projection, and the dress decision — may this message dress —
     // is the caller's, computed against the history it holds: the viewer's
     // first own mail dresses, and a whole-span walk decides the same first;
     // see "The room and its participants".
-    session.messages.addAll(await projectionOf([prompt],
+    session.messages.addAll(
+      await projectionOf(
+        [prompt],
         first: mayDress,
         viewer: viewer,
         load: loadResource,
-        resourcesDir: attachmentsDir));
+        resourcesDir: attachmentsDir,
+      ),
+    );
   }
 
   /// The system prompt is rewritten every turn rather than once, so an
@@ -847,8 +878,8 @@ class BuiltinAgent implements Turn {
     final own = viewer != null && agent.document != null
         ? memberInstructions(viewer!, agent.instructions)
         : agent.instructions.isEmpty
-            ? null
-            : agent.instructions;
+        ? null
+        : agent.instructions;
     final turn = turnPrompt(
       workspace: workspace,
       projectWorkspace: projectWorkspace,
@@ -874,8 +905,9 @@ class BuiltinAgent implements Turn {
       ),
       if (turn.isNotEmpty) LlmMessage(role: LlmRole.system, text: turn),
     ];
-    final replacing =
-        session.messages.takeWhile((m) => m.role == LlmRole.system).length;
+    final replacing = session.messages
+        .takeWhile((m) => m.role == LlmRole.system)
+        .length;
     session.messages.replaceRange(0, replacing, head);
   }
 
@@ -922,7 +954,10 @@ class BuiltinAgent implements Turn {
   /// ended carried on [call]'s result: on the result, so a reload words it
   /// the same.
   Stream<AgentEvent> _withJobNotes(
-      ChatJobs jobs, LlmToolCall call, Stream<AgentEvent> events) async* {
+    ChatJobs jobs,
+    LlmToolCall call,
+    Stream<AgentEvent> events,
+  ) async* {
     await for (final event in events) {
       if (event is ToolResultEvent && event.result.callId == call.id) {
         final notes = jobs.takeNotes();
@@ -946,8 +981,13 @@ class BuiltinAgent implements Turn {
   Future<ImageEvent> saved(LlmAttachment image) async {
     final resource = await saveResource!(image.filename, image.bytes);
     _images[resource] = image;
-    return ImageEvent(FilePart(
-        resource: resource, filename: image.filename, mimeType: image.mimeType));
+    return ImageEvent(
+      FilePart(
+        resource: resource,
+        filename: image.filename,
+        mimeType: image.mimeType,
+      ),
+    );
   }
 
   /// Reports [run]'s output as it prints, each change no more than
@@ -963,7 +1003,9 @@ class BuiltinAgent implements Turn {
   /// backend calls this with its own sink. Reading [run.output] is what tells
   /// the shell the run is watched; before that it pays nothing per chunk.
   static void watchShellOutput(
-      ShellRun run, void Function(String text) report) {
+    ShellRun run,
+    void Function(String text) report,
+  ) {
     final output = run.output;
     if (output == null) return;
     Timer? timer;
@@ -976,10 +1018,12 @@ class BuiltinAgent implements Turn {
     }
 
     output.addListener(listener);
-    unawaited(run.result.whenComplete(() {
-      timer?.cancel();
-      output.removeListener(listener);
-    }));
+    unawaited(
+      run.result.whenComplete(() {
+        timer?.cancel();
+        output.removeListener(listener);
+      }),
+    );
   }
 
   static const watchInterval = Duration(milliseconds: 100);
@@ -993,8 +1037,9 @@ class BuiltinAgent implements Turn {
   /// What the request [completion] answered held, its reply counted in the
   /// chat so the estimate covers what the provider's count does.
   ContextUsage _contextOf(LlmCompletion completion) {
-    final system =
-        session.messages.takeWhile((m) => m.role == LlmRole.system).toList();
+    final system = session.messages
+        .takeWhile((m) => m.role == LlmRole.system)
+        .toList();
     final tools = [
       for (final t in _tools)
         {"name": t.name, "description": t.description, "schema": t.schema},
@@ -1080,8 +1125,9 @@ class BuiltinAgent implements Turn {
               // Thinking ended when the reply started, not when the call did.
               if (thinkingSince != null) {
                 yield ReasoningEnd(
-                    duration: DateTime.now().difference(thinkingSince),
-                    signature: signature);
+                  duration: DateTime.now().difference(thinkingSince),
+                  signature: signature,
+                );
                 thinkingSince = null;
                 reasoningClosed = true;
               }
@@ -1091,8 +1137,9 @@ class BuiltinAgent implements Turn {
               signature ??= chunk.message.reasoningSignature;
               if (thinkingSince != null) {
                 yield ReasoningEnd(
-                    duration: DateTime.now().difference(thinkingSince),
-                    signature: signature);
+                  duration: DateTime.now().difference(thinkingSince),
+                  signature: signature,
+                );
                 reasoningClosed = true;
               } else if (!reasoningClosed && chunk.message.reasoning != null) {
                 // A provider that reports thinking only once it is over still
@@ -1100,7 +1147,10 @@ class BuiltinAgent implements Turn {
                 // *as well as* streaming it: closing the block a second time
                 // writes the thinking twice, into the chat and into what goes
                 // back to the provider.
-                yield ReasoningEnd(text: chunk.message.reasoning, signature: signature);
+                yield ReasoningEnd(
+                  text: chunk.message.reasoning,
+                  signature: signature,
+                );
               }
               // Text that was in the completion but never streamed as a delta —
               // the fake client does this, and a provider may too. Without it,
@@ -1111,7 +1161,9 @@ class BuiltinAgent implements Turn {
               }
               // A model that answers with images (OpenRouter's image models).
               if (saveResource != null) {
-                for (final image in chunk.message.attachments.where((a) => a.isImage)) {
+                for (final image in chunk.message.attachments.where(
+                  (a) => a.isImage,
+                )) {
                   yield await saved(image);
                 }
               }
@@ -1127,8 +1179,10 @@ class BuiltinAgent implements Turn {
         if (_cancelled) return;
         // The stream ended without a completion: nothing was said and nothing
         // failed, which is a stall rather than a reply.
-        throw const LlmException("The provider closed the stream without a reply.",
-            retryable: true);
+        throw const LlmException(
+          "The provider closed the stream without a reply.",
+          retryable: true,
+        );
       } on LlmException catch (e) {
         // A request that produced chunks is not retried — the reply would be
         // written twice. Report it; the provider did serve it, so the gate
@@ -1172,4 +1226,5 @@ class BuiltinAgent implements Turn {
         return;
       }
     }
-  }}
+  }
+}

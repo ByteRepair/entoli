@@ -4,7 +4,8 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/chat_log.dart";
-import "package:agent_chat/domain/models.dart" show CallEvents, JobEnd, jobEndedEvent;
+import "package:agent_chat/domain/models.dart"
+    show CallEvents, JobEnd, jobEndedEvent;
 import "package:agent_chat/domain/shell_job.dart";
 import "package:agent_chat/domain/project_settings.dart" show OmadaOrdering;
 import "package:agent_chat/domain/room/chat_room.dart";
@@ -100,25 +101,37 @@ void main() {
     expect(host.states.last.chat, isNull);
   });
 
-  test("a job that ends between turns is written to the log and the chat",
-      () async {
-    final (room, host) = await openRoom();
-    await room.send("hello");
-    await room.turnDone;
-    const end = JobEnd(jobId: 1, exitCode: 0, tail: "done");
-    app.backend.jobsOf(room.chatId).endings.add((callId: "c1", end: end));
-    await waitFor(() => room.state.chat?.jobEndOf("c1") != null,
-        what: "the end on the chat");
+  test(
+    "a job that ends between turns is written to the log and the chat",
+    () async {
+      final (room, host) = await openRoom();
+      await room.send("hello");
+      await room.turnDone;
+      const end = JobEnd(jobId: 1, exitCode: 0, tail: "done");
+      app.backend.jobsOf(room.chatId).endings.add((callId: "c1", end: end));
+      await waitFor(
+        () => room.state.chat?.jobEndOf("c1") != null,
+        what: "the end on the chat",
+      );
 
-    expect(host.states.last.jobOf("c1"), const JobEnded(end));
-    // The state changes before the append lands, which is real I/O.
-    await waitFor(
-        () async => (await app.repo.readRecords(room.chatId)).last is CallEventRecord,
-        what: "the end in the log");
-    final records = await app.repo.readRecords(room.chatId);
-    expect(records.last,
-        ChatRecord.callEvent(callId: "c1", kind: jobEndedEvent, data: end.toJson()));
-  });
+      expect(host.states.last.jobOf("c1"), const JobEnded(end));
+      // The state changes before the append lands, which is real I/O.
+      await waitFor(
+        () async =>
+            (await app.repo.readRecords(room.chatId)).last is CallEventRecord,
+        what: "the end in the log",
+      );
+      final records = await app.repo.readRecords(room.chatId);
+      expect(
+        records.last,
+        ChatRecord.callEvent(
+          callId: "c1",
+          kind: jobEndedEvent,
+          data: end.toJson(),
+        ),
+      );
+    },
+  );
 
   test("a job goes from running to ended with no step between, the end "
       "landing before the backend drops it", () async {

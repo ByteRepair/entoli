@@ -21,9 +21,9 @@ class TurnRecorder {
   /// derived from the parts its own events produce rather than assembled a
   /// second way beside them — see "The projection" in `lib/domain/AGENTS.md`.
   TurnRecorder.parts()
-      : append = _writesNothing,
-        onParts = null,
-        _logs = false {
+    : append = _writesNothing,
+      onParts = null,
+      _logs = false {
     // Named rather than opened: there is no message, and no log to put one in.
     // It is set because buffered text is dropped when nothing is being
     // recorded, and here everything is — into memory.
@@ -132,7 +132,13 @@ class TurnRecorder {
       case ShellRunEvent(:final run):
         addPart(run);
       case ArtifactEvent(:final artifactId, :final entryFile, :final title):
-        addPart(MessagePart.artifact(artifactId: artifactId, entryFile: entryFile, title: title));
+        addPart(
+          MessagePart.artifact(
+            artifactId: artifactId,
+            entryFile: entryFile,
+            title: title,
+          ),
+        );
       case SkillInstallEvent(:final installId, :final title):
         addPart(MessagePart.skillInstall(installId: installId, title: title));
       case ImageEvent(:final part):
@@ -158,12 +164,15 @@ class TurnRecorder {
       case ApprovalRequestEvent(:final approval):
         // The banner is part of the turn's record now: what was asked and —
         // superseded in place when the answer lands — what was answered.
-        addPart(MessagePart.approval(
+        addPart(
+          MessagePart.approval(
             approvalId: approval.id,
             toolName: approval.toolName,
             argumentsText: approval.argumentsText,
             deniedDirs: approval.deniedDirs,
-            answer: "asked"));
+            answer: "asked",
+          ),
+        );
       case ContextEvent(:final usage):
         _context = usage;
       case QuestionRequestEvent():
@@ -207,22 +216,30 @@ class TurnRecorder {
   /// Stop recording, with [reason] closing the log or null leaving it open.
   /// The last of the reply goes in the same write, since every append is an
   /// open and a close of the file.
-  Future<void> _stop(TurnEnd? reason,
-      {List<String> addressees = const []}) async {
+  Future<void> _stop(
+    TurnEnd? reason, {
+    List<String> addressees = const [],
+  }) async {
     flushDeltas();
     _checkpoint?.cancel();
     _checkpoint = null;
     final ending = _messageId;
     if (ending == null) return;
     _messageId = null;
-    await _enqueue(() => _appendChanged(ending, then: [
+    await _enqueue(
+      () => _appendChanged(
+        ending,
+        then: [
           if (reason != null)
             ChatRecord.turnEnd(
-                messageId: ending,
-                reason: reason,
-                addressees: addressees,
-                context: _context),
-        ]));
+              messageId: ending,
+              reason: reason,
+              addressees: addressees,
+              context: _context,
+            ),
+        ],
+      ),
+    );
   }
 
   void dispose() {
@@ -240,11 +257,14 @@ class TurnRecorder {
     flushDeltas();
     final parts = List<MessagePart>.from(_parts);
     final at = parts.indexWhere(
-        (p) => p is ApprovalPart && p.approvalId == approvalId && p.answer == "asked");
+      (p) =>
+          p is ApprovalPart &&
+          p.approvalId == approvalId &&
+          p.answer == "asked",
+    );
     if (at < 0) return;
     final asked = parts[at] as ApprovalPart;
-    parts[at] =
-        asked.copyWith(answer: answer);
+    parts[at] = asked.copyWith(answer: answer);
     _publish(parts);
     checkpoint();
   }
@@ -259,7 +279,9 @@ class TurnRecorder {
 
   void checkpoint() {
     final logging = _messageId;
-    if (_logs && logging != null) unawaited(_enqueue(() => _appendChanged(logging)));
+    if (_logs && logging != null) {
+      unawaited(_enqueue(() => _appendChanged(logging)));
+    }
   }
 
   /// Fold everything buffered into the reply's trailing part of the same kind.
@@ -318,7 +340,11 @@ class TurnRecorder {
   /// between a block's deltas and the event that closes it. Only this
   /// response's: a block left open by the one before is not this one's to fill.
   int _openReasoningAt(List<MessagePart> parts) => parts.lastIndexWhere(
-      (p) => p is ReasoningPart && p.durationMs == null && p.responseId == _responseId);
+    (p) =>
+        p is ReasoningPart &&
+        p.durationMs == null &&
+        p.responseId == _responseId,
+  );
 
   /// Close the thinking block being written. The backend's text wins over what
   /// streamed: a provider that sends no deltas still reports the whole of it.
@@ -374,20 +400,19 @@ class TurnRecorder {
   /// part that carries a `responseId` and is not named here is never stamped
   /// with one, so it reads back as part of whatever response came before it.
   MessagePart _inResponse(MessagePart part) => switch (part) {
-        TextPart() => part.copyWith(responseId: _responseId),
-        ReasoningPart() => part.copyWith(responseId: _responseId),
-        ToolCallPart() => part.copyWith(responseId: _responseId),
-        ToolResultPart() ||
-        ShellRunPart() ||
-        FilePart() ||
-        ArtifactPart() ||
-        SkillInstallPart() ||
-        ApprovalPart() ||
-        InstructionsPart() ||
-        SteerPart() ||
-        ErrorPart() =>
-          part,
-      };
+    TextPart() => part.copyWith(responseId: _responseId),
+    ReasoningPart() => part.copyWith(responseId: _responseId),
+    ToolCallPart() => part.copyWith(responseId: _responseId),
+    ToolResultPart() ||
+    ShellRunPart() ||
+    FilePart() ||
+    ArtifactPart() ||
+    SkillInstallPart() ||
+    ApprovalPart() ||
+    InstructionsPart() ||
+    SteerPart() ||
+    ErrorPart() => part,
+  };
 
   /// Write whatever the reply has grown by, and [then] after it. Parts are
   /// compared rather than counted: a thinking block is closed in place, and a
@@ -398,22 +423,28 @@ class TurnRecorder {
   /// streaming for two minutes would be written a hundred times over.
   /// [forMessage] is passed rather than read here: queued work runs later, and
   /// by then the turn it belongs to may have cleared itself.
-  Future<void> _appendChanged(String forMessage,
-      {List<ChatRecord> then = const []}) async {
+  Future<void> _appendChanged(
+    String forMessage, {
+    List<ChatRecord> then = const [],
+  }) async {
     final parts = _messageId == null || _messageId == forMessage
         ? _parts
         : const <MessagePart>[];
     final records = <ChatRecord>[];
     for (var i = 0; i < parts.length; i++) {
       if (i >= _logged.length) {
-        records.add(ChatRecord.part(messageId: forMessage, index: i, part: parts[i]));
+        records.add(
+          ChatRecord.part(messageId: forMessage, index: i, part: parts[i]),
+        );
         continue;
       }
       if (_logged[i] == parts[i]) continue;
       final grown = textGrownFrom(_logged[i], parts[i]);
-      records.add(grown == null
-          ? ChatRecord.part(messageId: forMessage, index: i, part: parts[i])
-          : ChatRecord.append(messageId: forMessage, index: i, text: grown));
+      records.add(
+        grown == null
+            ? ChatRecord.part(messageId: forMessage, index: i, part: parts[i])
+            : ChatRecord.append(messageId: forMessage, index: i, text: grown),
+      );
     }
     records.addAll(then);
     if (records.isEmpty) return;

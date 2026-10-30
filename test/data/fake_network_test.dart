@@ -13,22 +13,30 @@ import "fake_network.dart";
 /// then parked in the hold behind a request nobody would release, and the
 /// cancelled download's `cancel()` never came back.
 void main() {
-  test("a response reaching its hold after the client is closed ends there", () async {
-    final net = FakeNetwork.inHalves({"/f": List.filled(64, 1)});
-    net.hold = Completer<void>();
-    final response = await net.send(http.Request("GET", Uri.parse("${FakeNetwork.host}/f")));
+  test(
+    "a response reaching its hold after the client is closed ends there",
+    () async {
+      final net = FakeNetwork.inHalves({"/f": List.filled(64, 1)});
+      net.hold = Completer<void>();
+      final response = await net.send(
+        http.Request("GET", Uri.parse("${FakeNetwork.host}/f")),
+      );
 
-    // Paused before the first of the two halves is even delivered, so the
-    // generator is parked on the yield — never yet at the hold — while the
-    // client closes. Resuming is what reaches the hold.
-    final done = Completer<void>();
-    final received = <int>[];
-    final sub = response.stream.listen(received.addAll, onDone: done.complete);
-    sub.pause();
-    net.close();
-    sub.resume();
-    await done.future;
+      // Paused before the first of the two halves is even delivered, so the
+      // generator is parked on the yield — never yet at the hold — while the
+      // client closes. Resuming is what reaches the hold.
+      final done = Completer<void>();
+      final received = <int>[];
+      final sub = response.stream.listen(
+        received.addAll,
+        onDone: done.complete,
+      );
+      sub.pause();
+      net.close();
+      sub.resume();
+      await done.future;
 
-    expect(received, List.filled(32, 1));
-  });
+      expect(received, List.filled(32, 1));
+    },
+  );
 }

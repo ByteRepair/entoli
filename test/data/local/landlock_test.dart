@@ -15,15 +15,20 @@ void main() {
   late LandlockSandboxHelper helper;
 
   /// Runs [script] through the helper, the way a confined command runs.
-  late Future<({int code, String out, String err})> Function(String script,
-      {CommandSandbox? sandboxOverride}) run0;
+  late Future<({int code, String out, String err})> Function(
+    String script, {
+    CommandSandbox? sandboxOverride,
+  })
+  run0;
 
   setUpAll(() async {
     cache = Directory.systemTemp.createTempSync("agent_chat_landlock_");
     tmp = Directory(p.join(cache.path, "tmp"))..createSync();
     final helper0 = LandlockSandboxHelper(cacheDir: cache.path);
     final sandbox = CommandSandbox(
-        workspace: p.join(cache.path, "ws"), tmp: tmp.path);
+      workspace: p.join(cache.path, "ws"),
+      tmp: tmp.path,
+    );
     Directory(sandbox.workspace).createSync();
     // The first prefix compiles the helper; a machine without the kernel or
     // the compiler answers null and every confined assertion is skipped.
@@ -33,14 +38,18 @@ void main() {
     landlockUsable = prefix != null;
     if (prefix == null) return;
     // The helper's own shape: helper exec --workspace ... -- argv...
-    Future<({int code, String out, String err})> confinedRun(String script,
-        {CommandSandbox? sandboxOverride}) async {
+    Future<({int code, String out, String err})> confinedRun(
+      String script, {
+      CommandSandbox? sandboxOverride,
+    }) async {
       final s = sandboxOverride ?? sandbox;
       final prefixNow = await helper.prefixFor(s);
-      final result = await Process.start(prefixNow!.first,
-          [...prefixNow.skip(1), "/bin/sh", "-c", script],
-          workingDirectory: s.workspace,
-          environment: {"PATH": "/usr/bin:/bin", "HOME": cache.path});
+      final result = await Process.start(
+        prefixNow!.first,
+        [...prefixNow.skip(1), "/bin/sh", "-c", script],
+        workingDirectory: s.workspace,
+        environment: {"PATH": "/usr/bin:/bin", "HOME": cache.path},
+      );
       final out = StringBuffer();
       final err = StringBuffer();
       // Drained to completion rather than read after the exit code: the
@@ -49,8 +58,12 @@ void main() {
       // "Permission denied" line, the last echo — loses that race. Both
       // futures together are the process being over.
       final drained = Future.wait([
-        result.stdout.transform(const SystemEncoding().decoder).forEach(out.write),
-        result.stderr.transform(const SystemEncoding().decoder).forEach(err.write),
+        result.stdout
+            .transform(const SystemEncoding().decoder)
+            .forEach(out.write),
+        result.stderr
+            .transform(const SystemEncoding().decoder)
+            .forEach(err.write),
       ]);
       final code = await result.exitCode;
       await drained;
@@ -67,7 +80,9 @@ void main() {
   test("the helper compiles once and is reused", () async {
     if (!Platform.isLinux) return;
     final sandbox = CommandSandbox(
-        workspace: p.join(cache.path, "ws"), tmp: tmp.path);
+      workspace: p.join(cache.path, "ws"),
+      tmp: tmp.path,
+    );
     final first = await helper.prefixFor(sandbox);
     final second = await helper.prefixFor(sandbox);
     expect(first, isNotNull);
@@ -86,8 +101,11 @@ void main() {
     File(outside).writeAsStringSync("keep\n");
     final r = await run0("echo test > $outside");
     expect(r.err, contains("Permission denied"));
-    expect(File(outside).readAsStringSync(), "keep\n",
-        reason: "the denial took nothing away that was already there");
+    expect(
+      File(outside).readAsStringSync(),
+      "keep\n",
+      reason: "the denial took nothing away that was already there",
+    );
   });
 
   test("reading outside the workspace is allowed", () async {
@@ -102,11 +120,14 @@ void main() {
     if (!landlockUsable) return;
     final home = Directory(p.join(cache.path, "home"))..createSync();
     File(p.join(home.path, ".bashrc")).writeAsStringSync("orig\n");
-    final r = await run0("echo evil >> ${home.path}/.bashrc",
-        sandboxOverride: CommandSandbox(
-            workspace: p.join(cache.path, "ws"),
-            tmp: tmp.path,
-            home: home.path));
+    final r = await run0(
+      "echo evil >> ${home.path}/.bashrc",
+      sandboxOverride: CommandSandbox(
+        workspace: p.join(cache.path, "ws"),
+        tmp: tmp.path,
+        home: home.path,
+      ),
+    );
     expect(r.err, contains("Permission denied"));
     expect(File(p.join(home.path, ".bashrc")).readAsStringSync(), "orig\n");
   });
@@ -120,8 +141,9 @@ void main() {
   test("git works inside the workspace", () async {
     if (!landlockUsable) return;
     final r = await run0(
-        "cd ${p.join(cache.path, "ws")} && git init -q . 2>/dev/null; "
-        "git -c user.email=t@t -c user.name=t commit -q --allow-empty -m x");
+      "cd ${p.join(cache.path, "ws")} && git init -q . 2>/dev/null; "
+      "git -c user.email=t@t -c user.name=t commit -q --allow-empty -m x",
+    );
     expect(r.code, 0, reason: "git needs /dev/null and a writable workspace");
   });
 
@@ -131,23 +153,31 @@ void main() {
     expect(r.out.trim(), "quiet");
   });
 
-  test("creating a file or a symlink outside the workspace is denied", () async {
-    // A first draft of this ruleset left MAKE_REG and MAKE_SYM unhandled,
-    // and an unhandled right is granted everywhere — a confined command
-    // could create a symlink at a well-known path outside its boundary.
-    if (!landlockUsable) return;
-    final home = Directory(p.join(cache.path, "home"))..createSync();
-    final r = await run0(
+  test(
+    "creating a file or a symlink outside the workspace is denied",
+    () async {
+      // A first draft of this ruleset left MAKE_REG and MAKE_SYM unhandled,
+      // and an unhandled right is granted everywhere — a confined command
+      // could create a symlink at a well-known path outside its boundary.
+      if (!landlockUsable) return;
+      final home = Directory(p.join(cache.path, "home"))..createSync();
+      final r = await run0(
         "touch ${home.path}/new.txt; ln -s /etc/passwd ${home.path}/link",
         sandboxOverride: CommandSandbox(
-            workspace: p.join(cache.path, "ws"),
-            tmp: tmp.path,
-            home: home.path));
-    expect(r.err, contains("Permission denied"));
-    expect(File(p.join(home.path, "new.txt")).existsSync(), isFalse,
-        reason: "a make outside the granted set is a refusal, not a hole");
-    expect(File(p.join(home.path, "link")).existsSync(), isFalse);
-  });
+          workspace: p.join(cache.path, "ws"),
+          tmp: tmp.path,
+          home: home.path,
+        ),
+      );
+      expect(r.err, contains("Permission denied"));
+      expect(
+        File(p.join(home.path, "new.txt")).existsSync(),
+        isFalse,
+        reason: "a make outside the granted set is a refusal, not a hole",
+      );
+      expect(File(p.join(home.path, "link")).existsSync(), isFalse);
+    },
+  );
 
   test("a file and a symlink are created inside the workspace", () async {
     if (!landlockUsable) return;
@@ -166,37 +196,48 @@ void main() {
     final extra = Directory(p.join(cache.path, "extra"))..createSync();
     final home = Directory(p.join(cache.path, "home"))..createSync();
     final s = CommandSandbox(
-        workspace: p.join(cache.path, "ws"),
-        tmp: tmp.path,
-        home: home.path,
-        extraWrites: [extra.path]);
+      workspace: p.join(cache.path, "ws"),
+      tmp: tmp.path,
+      home: home.path,
+      extraWrites: [extra.path],
+    );
     final prefix = await helper.prefixFor(s);
     expect(prefix, contains("--write"));
     expect(prefix![prefix.indexOf("--write") + 1], extra.path);
     // Inside the extra root: granted.
-    final granted = await Process.start(prefix.first,
-        [...prefix.skip(1), "/bin/sh", "-c", "touch ${extra.path}/ok.txt"],
-        workingDirectory: s.workspace,
-        environment: {"PATH": "/usr/bin:/bin"});
-    expect(await granted.exitCode, 0,
-        reason: "the extra write root is granted like the workspace");
+    final granted = await Process.start(
+      prefix.first,
+      [...prefix.skip(1), "/bin/sh", "-c", "touch ${extra.path}/ok.txt"],
+      workingDirectory: s.workspace,
+      environment: {"PATH": "/usr/bin:/bin"},
+    );
+    expect(
+      await granted.exitCode,
+      0,
+      reason: "the extra write root is granted like the workspace",
+    );
     expect(File("${extra.path}/ok.txt").existsSync(), isTrue);
     // Outside it, still refused.
-    final refused = await Process.start(prefix.first,
-        [...prefix.skip(1), "/bin/sh", "-c", "touch ${home.path}/no.txt"],
-        workingDirectory: s.workspace,
-        environment: {"PATH": "/usr/bin:/bin"});
-    expect(await refused.exitCode, isNot(0),
-        reason: "the extra root does not widen anything past itself");
+    final refused = await Process.start(
+      prefix.first,
+      [...prefix.skip(1), "/bin/sh", "-c", "touch ${home.path}/no.txt"],
+      workingDirectory: s.workspace,
+      environment: {"PATH": "/usr/bin:/bin"},
+    );
+    expect(
+      await refused.exitCode,
+      isNot(0),
+      reason: "the extra root does not widen anything past itself",
+    );
 
     // Without extra writes there is no --write in the prefix at all.
-    final plain = await helper.prefixFor(CommandSandbox(
-        workspace: p.join(cache.path, "ws"), tmp: tmp.path));
+    final plain = await helper.prefixFor(
+      CommandSandbox(workspace: p.join(cache.path, "ws"), tmp: tmp.path),
+    );
     expect(plain, isNot(contains("--write")));
   });
 
-  test("an extra write root that is a file grants the file's rights",
-      () async {
+  test("an extra write root that is a file grants the file's rights", () async {
     if (!landlockUsable) return;
     final home = Directory(p.join(cache.path, "home2"))..createSync();
     // A writable directory can name a file. The kernel refuses directory
@@ -205,26 +246,34 @@ void main() {
     // ruleset never came up, so the file gets the file rights alone.
     final file = File(p.join(home.path, "g.txt"))..writeAsStringSync("orig\n");
     final s = CommandSandbox(
-        workspace: p.join(cache.path, "ws"),
-        tmp: tmp.path,
-        home: home.path,
-        extraWrites: [file.path]);
+      workspace: p.join(cache.path, "ws"),
+      tmp: tmp.path,
+      home: home.path,
+      extraWrites: [file.path],
+    );
     final prefix = await helper.prefixFor(s);
     expect(prefix, contains("--write"));
     // The file itself is writable, in place.
-    final rewrote = await run0("echo new > ${file.path}",
-        sandboxOverride: s);
+    final rewrote = await run0("echo new > ${file.path}", sandboxOverride: s);
     expect(rewrote.code, 0, reason: "the granted file is writable");
     expect(rewrote.out, isEmpty);
     expect(file.readAsStringSync(), "new\n");
     // Nothing else beside it: no sibling file, no new file in its directory.
-    final sibling = await run0("touch ${home.path}/sibling.txt",
-        sandboxOverride: s);
-    expect(sibling.code, isNot(0),
-        reason: "a file grant does not widen to its directory");
+    final sibling = await run0(
+      "touch ${home.path}/sibling.txt",
+      sandboxOverride: s,
+    );
+    expect(
+      sibling.code,
+      isNot(0),
+      reason: "a file grant does not widen to its directory",
+    );
     final fresh = await run0("touch ${file.path}.bak", sandboxOverride: s);
-    expect(fresh.code, isNot(0),
-        reason: "the file rights do not include creating one beside it");
+    expect(
+      fresh.code,
+      isNot(0),
+      reason: "the file rights do not include creating one beside it",
+    );
   });
 }
 

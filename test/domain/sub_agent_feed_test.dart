@@ -15,8 +15,10 @@ void main() {
     });
 
     test("skips what it already has of one that overlaps", () {
-      expect(growTranscript(held, 1, [text("b"), text("c")]),
-          [...held, text("c")]);
+      expect(growTranscript(held, 1, [text("b"), text("c")]), [
+        ...held,
+        text("c"),
+      ]);
       expect(growTranscript(held, 0, [text("a")]), held);
     });
 
@@ -26,20 +28,22 @@ void main() {
   });
 
   group("the feed", () {
-    test("holds a run from what it already had, and numbers each append",
-        () async {
-      final feed = SubAgentFeed();
-      final appends = <SubAgentAppend>[];
-      feed.appends.listen(appends.add);
+    test(
+      "holds a run from what it already had, and numbers each append",
+      () async {
+        final feed = SubAgentFeed();
+        final appends = <SubAgentAppend>[];
+        feed.appends.listen(appends.add);
 
-      feed.open("chat", "call-1", [text("old")]);
-      feed.add("chat", "call-1", [text("new")]);
-      await Future<void>.delayed(Duration.zero);
+        feed.open("chat", "call-1", [text("old")]);
+        feed.add("chat", "call-1", [text("new")]);
+        await Future<void>.delayed(Duration.zero);
 
-      expect(feed.held("chat", "call-1"), [text("old"), text("new")]);
-      expect(appends.single.from, 1);
-      expect(appends.single.records, [text("new")]);
-    });
+        expect(feed.held("chat", "call-1"), [text("old"), text("new")]);
+        expect(appends.single.from, 1);
+        expect(appends.single.records, [text("new")]);
+      },
+    );
 
     test("lets a run go when its log closes", () async {
       final feed = SubAgentFeed()..open("chat", "call-1", const []);

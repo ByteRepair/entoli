@@ -12,7 +12,8 @@ void main() {
   });
 
   test("leaves out public and tailnet addresses", () {
-    expect(lanBroadcasts(["100.101.102.103", "8.8.8.8", "172.32.0.1"]),
-        ["255.255.255.255"]);
+    expect(lanBroadcasts(["100.101.102.103", "8.8.8.8", "172.32.0.1"]), [
+      "255.255.255.255",
+    ]);
   });
 }

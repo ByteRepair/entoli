@@ -22,20 +22,17 @@ import "unreachable.dart";
 /// automatic one schedules real timers that hold the spinner up through ten
 /// rounds of backoff the user cannot see or stop.
 final marketplaceEntriesProvider = FutureProvider.autoDispose
-    .family<List<MarketplaceEntry>, CompletionKind>(
-  (ref, kind) async {
-    final client = ref.watch(marketplaceClientProvider);
-    try {
-      return await fetchMarketplaceEntries(client, kind);
-    } catch (e) {
-      // Logged once, where it is caught, rather than on every rebuild of the
-      // error state the page draws.
-      logFailure("marketplace", "could not fetch ${kind.label}", e);
-      rethrow;
-    }
-  },
-  retry: (_, _) => null,
-);
+    .family<List<MarketplaceEntry>, CompletionKind>((ref, kind) async {
+      final client = ref.watch(marketplaceClientProvider);
+      try {
+        return await fetchMarketplaceEntries(client, kind);
+      } catch (e) {
+        // Logged once, where it is caught, rather than on every rebuild of the
+        // error state the page draws.
+        logFailure("marketplace", "could not fetch ${kind.label}", e);
+        rethrow;
+      }
+    }, retry: (_, _) => null);
 
 /// The marketplace: what the site ships, per section, over its tabs. The
 /// toolbar's box searches — the name and the description alike, over the
@@ -67,9 +64,7 @@ class _MarketplacePageState extends ConsumerState<MarketplacePage> {
 
   /// The tags ticked per tab, in the page because the tabs outlive the tag
   /// picker page that ticks them; popped for good with it.
-  final _tagged = {
-    for (final kind in _tabs) kind: ValueNotifier(<String>{}),
-  };
+  final _tagged = {for (final kind in _tabs) kind: ValueNotifier(<String>{})};
 
   @override
   void initState() {
@@ -104,9 +99,7 @@ class _MarketplacePageState extends ConsumerState<MarketplacePage> {
             ),
           ],
           bottom: TabBar(
-            tabs: [
-              for (final kind in _tabs) Tab(text: kind.label),
-            ],
+            tabs: [for (final kind in _tabs) Tab(text: kind.label)],
           ),
         ),
         body: Column(
@@ -180,7 +173,9 @@ class _EntryListState extends ConsumerState<_EntryList>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return ref.watch(marketplaceEntriesProvider(widget.kind)).when(
+    return ref
+        .watch(marketplaceEntriesProvider(widget.kind))
+        .when(
           data: (entries) => ValueListenableBuilder<String>(
             valueListenable: widget.query,
             builder: (context, query, _) => ValueListenableBuilder<Set<String>>(
@@ -198,10 +193,8 @@ class _EntryListState extends ConsumerState<_EntryList>
                   slivers: [
                     SliverList.builder(
                       itemCount: groups.local.length,
-                      itemBuilder: (context, i) => _EntryTile(
-                        entry: groups.local[i],
-                        kind: widget.kind,
-                      ),
+                      itemBuilder: (context, i) =>
+                          _EntryTile(entry: groups.local[i], kind: widget.kind),
                     ),
                     // The heading between the halves, and only where both
                     // have something — a tab of one half has nothing it
@@ -255,11 +248,7 @@ class _EntryTile extends StatelessWidget {
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            entry.description,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
+          Text(entry.description, maxLines: 2, overflow: TextOverflow.ellipsis),
           if (meta.isNotEmpty)
             Text(
               meta,
@@ -305,7 +294,10 @@ class _SearchField extends StatelessWidget {
             fillColor: theme.colorScheme.surfaceContainerHighest,
             hintText: "Search",
             prefixIcon: const Icon(Icons.search, size: 20),
-            prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 36),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 40,
+              minHeight: 36,
+            ),
             suffixIcon: text.isEmpty
                 ? null
                 : IconButton(
@@ -313,7 +305,10 @@ class _SearchField extends StatelessWidget {
                     tooltip: "Clear search",
                     onPressed: controller.clear,
                   ),
-            suffixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            suffixIconConstraints: const BoxConstraints(
+              minWidth: 36,
+              minHeight: 36,
+            ),
             contentPadding: const EdgeInsets.symmetric(vertical: 10),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(24),

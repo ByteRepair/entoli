@@ -94,7 +94,9 @@ class _MessageTextState extends State<MessageText> {
           padding: const EdgeInsets.only(right: 4),
           child: Text(
             "•",
-            style: _styleSheet?.listBullet ?? Theme.of(context).textTheme.bodyMedium,
+            style:
+                _styleSheet?.listBullet ??
+                Theme.of(context).textTheme.bodyMedium,
             textAlign: TextAlign.center,
           ),
         ),
@@ -147,13 +149,13 @@ class _StreamingCaretState extends State<StreamingCaret>
 
   @override
   Widget build(BuildContext context) => FadeTransition(
-        opacity: _opacity,
-        child: Container(
-          // Beside the last word rather than against it.
-          margin: const EdgeInsets.only(left: 2),
-          width: 2,
-          height: widget.height,
-          color: widget.color,
-        ),
-      );
+    opacity: _opacity,
+    child: Container(
+      // Beside the last word rather than against it.
+      margin: const EdgeInsets.only(left: 2),
+      width: 2,
+      height: widget.height,
+      color: widget.color,
+    ),
+  );
 }

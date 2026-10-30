@@ -22,7 +22,8 @@ class IncomingTriggerOpen extends ConsumerStatefulWidget {
   final Widget child;
 
   @override
-  ConsumerState<IncomingTriggerOpen> createState() => _IncomingTriggerOpenState();
+  ConsumerState<IncomingTriggerOpen> createState() =>
+      _IncomingTriggerOpenState();
 }
 
 class _IncomingTriggerOpenState extends ConsumerState<IncomingTriggerOpen> {

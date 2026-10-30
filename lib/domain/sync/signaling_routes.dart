@@ -70,16 +70,18 @@ class SignalingRoutes {
   /// dialler's fresh [nonce]: the dialler's [label] is "probe", the host's
   /// "host", so neither answer can be replayed as the other.
   static String proof(String token, String label, String nonce) =>
-      base64Url.encode(Hmac(sha256, utf8.encode(token))
-          .convert(utf8.encode("$label:$nonce"))
-          .bytes);
+      base64Url.encode(
+        Hmac(
+          sha256,
+          utf8.encode(token),
+        ).convert(utf8.encode("$label:$nonce")).bytes,
+      );
 
   /// Which requests carry a body worth reading. Asked before one is drained:
   /// the server binds a well-known port on every interface, so a POST to a
   /// path that is not one of these is the ordinary case, not the exception.
   static bool carriesBody(String method, String path) =>
-      method == "POST" &&
-      (path == offerPath || path == probePath);
+      method == "POST" && (path == offerPath || path == probePath);
 
   Future<SignalingReply> handle(SignalingRequest request) async {
     return switch (request.path) {
@@ -121,9 +123,10 @@ class SignalingRoutes {
   /// A dialler's probe for [token]: a fresh nonce and its proof. [isAnswer]
   /// is whether a host's reply to it proves the host holds [token] too.
   static ({Map<String, String> probe, bool Function(Object? reply) isAnswer})
-      probeFor(String token) {
-    final nonce =
-        base64Url.encode(List.generate(16, (_) => _random.nextInt(256)));
+  probeFor(String token) {
+    final nonce = base64Url.encode(
+      List.generate(16, (_) => _random.nextInt(256)),
+    );
     final host = proof(token, "host", nonce);
     return (
       probe: {"nonce": nonce, "proof": proof(token, "probe", nonce)},
@@ -144,7 +147,8 @@ class SignalingRoutes {
     final body = jsonDecode(request.body) as Map<String, dynamic>;
     final sdp = body["sdp"] as String?;
     final token = body["token"] as String?;
-    final accepted = sdp != null &&
+    final accepted =
+        sdp != null &&
         ((token != null && _tokens.contains(token)) ||
             (_code != null && _code!.isNotEmpty && body["code"] == _code));
     if (!accepted) return const SignalingReply(403);
@@ -153,13 +157,19 @@ class SignalingRoutes {
     final answered = _pending[id] = Completer<String>();
     // Which token let it in travels with it: a reconnect's handshake runs
     // against that pair's secret, and only the caller knows which that is.
-    _offers.add(IncomingOffer(
-        id: id, sdp: sdp, token: _tokens.contains(token) ? token : null));
+    _offers.add(
+      IncomingOffer(
+        id: id,
+        sdp: sdp,
+        token: _tokens.contains(token) ? token : null,
+      ),
+    );
     try {
-      final answer = await answered.future.timeout(patience,
-          onTimeout: () => throw TimeoutException("no answer"));
-      return SignalingReply(200,
-          body: jsonEncode({"sdp": answer}));
+      final answer = await answered.future.timeout(
+        patience,
+        onTimeout: () => throw TimeoutException("no answer"),
+      );
+      return SignalingReply(200, body: jsonEncode({"sdp": answer}));
     } finally {
       _pending.remove(id);
     }

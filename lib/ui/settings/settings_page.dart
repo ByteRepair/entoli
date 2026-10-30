@@ -13,7 +13,10 @@ import "../../core/platform/platform.dart" as platform;
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
 import "../../domain/project_settings.dart"
-    show OmadaOrdering, defaultOmadaOrdering, omadaOrderingLabels,
+    show
+        OmadaOrdering,
+        defaultOmadaOrdering,
+        omadaOrderingLabels,
         omadaOrderingDescriptions;
 import "../../domain/temp_chat_ttl.dart";
 import "../../domain/app_settings.dart";
@@ -70,15 +73,17 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
-  late SettingsCategory _category = widget.initialCategory ?? SettingsCategory.general;
+  late SettingsCategory _category =
+      widget.initialCategory ?? SettingsCategory.general;
 
   /// The state is kept where the category is a page of its own too, so that a
   /// window widened while one is open lands on it rather than on General.
   void _open(SettingsCategory category, {required bool push}) {
     setState(() => _category = category);
     if (push) {
-      Navigator.of(context)
-          .push(MaterialPageRoute(builder: (_) => _CategoryPage(category)));
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => _CategoryPage(category)));
     }
   }
 
@@ -91,7 +96,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final initial = widget.initialCategory?.offered(ref) == false
         ? null
         : widget.initialCategory;
-    final category = _category.offered(ref) ? _category : SettingsCategory.general;
+    final category = _category.offered(ref)
+        ? _category
+        : SettingsCategory.general;
     // One rule, not two: a named category is the whole page unless the window
     // is wide enough for the panel and nobody asked to focus. Narrow has no
     // panel for a preselected category to sit beside, so there it is the page
@@ -127,9 +134,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 /// A category as the whole page: the bar holds nothing but its name, and
 /// leaving it is the back gesture.
 Scaffold _categoryScaffold(SettingsCategory category) => Scaffold(
-      appBar: AppBar(title: Text(category.label)),
-      body: _categoryBody(category),
-    );
+  appBar: AppBar(title: Text(category.label)),
+  body: _categoryBody(category),
+);
 
 /// One category as a page over the list, which is what a narrow window gets in
 /// place of the panel. Leaving it is the back gesture, so the bar holds nothing
@@ -170,81 +177,74 @@ Widget _categoryBody(SettingsCategory category, {Key? key}) =>
 /// page of its own. [SettingsCategory.welcome] is not filed anywhere: the tour
 /// is a body of its own, which [_categoryBody] renders whole.
 List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
-      // The agent's own settings are here rather than under LLMs: the mode is a
-      // behaviour, and the classifier picker travels with it because auto mode
-      // is unusable without one.
-      SettingsCategory.general => const [
-          _AppearanceSection(),
-          Divider(),
-          _AgentSection(),
-          Divider(),
-          _OmadaSection(),
-          Divider(),
-          _TempChatSection(),
-          Divider(),
-          _EnvironmentSection(),
-          // Draws its own divider, since a platform that updates itself by
-          // other means has nothing to put under one.
-          _UpdatesSection(),
-          Divider(),
-          _DeleteAllChats(),
-        ],
-      // Its own category for the reason Voice is one: the picker is a line and
-      // the catalog under it is the rest of the page.
-      SettingsCategory.terminal => const [
-          TerminalSection(),
-          // Draws its own divider, since a build with no proot in it has no
-          // catalog to put under one.
-          RootfsCatalogSection(),
-        ],
-      // Beside Terminal rather than under LLMs, and for the same reason it is:
-      // what is picked is two lines and the catalog under it is the rest of the
-      // page. Where a model runs is also a machine question rather than a
-      // question about models — the LLMs category is what a chat is answered
-      // by, and a model here appears there like any other.
-      // Every download, text and speech: Voice and LLMs only pick, and offer
-      // what is here beside the providers' models.
-      SettingsCategory.onDevice => const [
-          LocalModelSection(),
-          // Draws its own dividers, since a kind nothing here can run has no
-          // catalog to put under one.
-          OnDeviceCatalog(),
-        ],
-      // The assistant section draws nothing where the platform has no
-      // gesture, and opens its own divider.
-      SettingsCategory.voice => const [
-          VoiceSection(),
-          AssistantSection(),
-        ],
-      SettingsCategory.triggers => const [TriggersSection()],
-      // Rendered by [_categoryBody] whole rather than filed here, for the
-      // footers pinned to their bottoms.
-      SettingsCategory.skills => const [],
-      SettingsCategory.agents => const [],
-      SettingsCategory.agentBrowser => const [AgentBrowserSection()],
-      SettingsCategory.byteRepair => const [ByteRepairSection()],
-      SettingsCategory.sync => const [SyncSection()],
-      SettingsCategory.providers => const [_ProvidersEditor()],
-      SettingsCategory.llms => const [
-          DefaultsSection(),
-          Divider(),
-          TurnsSection(),
-        ],
-      SettingsCategory.images => const [ImageSection()],
-      // The two things the agent carries between conversations: the files the
-      // user writes (instructions) and the ones it writes (memories).
-      SettingsCategory.memory => const [
-          InstructionsSection(),
-          Divider(),
-          AutoMemorySection(),
-        ],
-      SettingsCategory.data => const [_BackupSection()],
-      SettingsCategory.shortcuts => const [ShortcutsSection()],
-      SettingsCategory.about => const [_AboutSection()],
-      // Rendered by [_categoryBody] rather than filed here: the tour is a
-      // pager with its own bar, not a list of sections.
-      SettingsCategory.welcome => const [],
-    };
+  // The agent's own settings are here rather than under LLMs: the mode is a
+  // behaviour, and the classifier picker travels with it because auto mode
+  // is unusable without one.
+  SettingsCategory.general => const [
+    _AppearanceSection(),
+    Divider(),
+    _AgentSection(),
+    Divider(),
+    _OmadaSection(),
+    Divider(),
+    _TempChatSection(),
+    Divider(),
+    _EnvironmentSection(),
+    // Draws its own divider, since a platform that updates itself by
+    // other means has nothing to put under one.
+    _UpdatesSection(),
+    Divider(),
+    _DeleteAllChats(),
+  ],
+  // Its own category for the reason Voice is one: the picker is a line and
+  // the catalog under it is the rest of the page.
+  SettingsCategory.terminal => const [
+    TerminalSection(),
+    // Draws its own divider, since a build with no proot in it has no
+    // catalog to put under one.
+    RootfsCatalogSection(),
+  ],
+  // Beside Terminal rather than under LLMs, and for the same reason it is:
+  // what is picked is two lines and the catalog under it is the rest of the
+  // page. Where a model runs is also a machine question rather than a
+  // question about models — the LLMs category is what a chat is answered
+  // by, and a model here appears there like any other.
+  // Every download, text and speech: Voice and LLMs only pick, and offer
+  // what is here beside the providers' models.
+  SettingsCategory.onDevice => const [
+    LocalModelSection(),
+    // Draws its own dividers, since a kind nothing here can run has no
+    // catalog to put under one.
+    OnDeviceCatalog(),
+  ],
+  // The assistant section draws nothing where the platform has no
+  // gesture, and opens its own divider.
+  SettingsCategory.voice => const [VoiceSection(), AssistantSection()],
+  SettingsCategory.triggers => const [TriggersSection()],
+  // Rendered by [_categoryBody] whole rather than filed here, for the
+  // footers pinned to their bottoms.
+  SettingsCategory.skills => const [],
+  SettingsCategory.agents => const [],
+  SettingsCategory.agentBrowser => const [AgentBrowserSection()],
+  SettingsCategory.byteRepair => const [ByteRepairSection()],
+  SettingsCategory.sync => const [SyncSection()],
+  SettingsCategory.providers => const [_ProvidersEditor()],
+  SettingsCategory.llms => const [DefaultsSection(), Divider(), TurnsSection()],
+  SettingsCategory.images => const [ImageSection()],
+  // The two things the agent carries between conversations: the files the
+  // user writes (instructions) and the ones it writes (memories).
+  SettingsCategory.memory => const [
+    InstructionsSection(),
+    Divider(),
+    AutoMemorySection(),
+  ],
+  SettingsCategory.data => const [_BackupSection()],
+  SettingsCategory.shortcuts => const [ShortcutsSection()],
+  SettingsCategory.about => const [_AboutSection()],
+  // Rendered by [_categoryBody] rather than filed here: the tour is a
+  // pager with its own bar, not a list of sections.
+  SettingsCategory.welcome => const [],
+};
 
 /// The categories as a list: beside the page where there is room for one, and
 /// the page itself where there is not. Material, not Scaffold, since the page
@@ -257,24 +257,26 @@ class _Categories extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => Material(
-        child: SafeArea(
-          child: ListView(
-            children: [
-              for (final category in SettingsCategory.values)
-                if (category.offered(ref)) ...[
-                if (category.dividerAbove) const Divider(),
-                ListTile(
-                  selected: category == selected,
-                  leading: Icon(category.icon),
-                  title: Text(category.label),
-                  trailing: selected == null ? const Icon(Icons.chevron_right) : null,
-                  onTap: () => onSelect(category),
-                ),
-              ],
+    child: SafeArea(
+      child: ListView(
+        children: [
+          for (final category in SettingsCategory.values)
+            if (category.offered(ref)) ...[
+              if (category.dividerAbove) const Divider(),
+              ListTile(
+                selected: category == selected,
+                leading: Icon(category.icon),
+                title: Text(category.label),
+                trailing: selected == null
+                    ? const Icon(Icons.chevron_right)
+                    : null,
+                onTap: () => onSelect(category),
+              ),
             ],
-          ),
-        ),
-      );
+        ],
+      ),
+    ),
+  );
 }
 
 class _AppearanceSection extends ConsumerWidget {
@@ -293,10 +295,10 @@ class _AppearanceSection extends ConsumerWidget {
           "Appearance",
           description: switchesLauncher
               ? "How the app looks, and the icon it wears here and on the home "
-                  "screen."
+                    "screen."
               : "How the app looks, and the icon it wears. The launcher's own "
-                  "icon is set when the app is installed, so it does not "
-                  "follow this.",
+                    "icon is set when the app is installed, so it does not "
+                    "follow this.",
         ),
         LabelledField(
           label: "Theme",
@@ -313,9 +315,10 @@ class _AppearanceSection extends ConsumerWidget {
           SwitchListTile(
             title: const Text("Material 3 Expressive"),
             subtitle: const Text(
-                "Build the palette from the colour the system is themed to, so "
-                "the app follows the wallpaper the way the rest of the phone "
-                "does."),
+              "Build the palette from the colour the system is themed to, so "
+              "the app follows the wallpaper the way the rest of the phone "
+              "does.",
+            ),
             value: settings.systemPalette,
             onChanged: notifier.setSystemPalette,
           ),
@@ -330,7 +333,8 @@ class _AppearanceSection extends ConsumerWidget {
                   label: theme.label,
                   colour: theme.primary,
                   second: theme.secondary,
-                  selected: theme.primary == settings.primaryColour &&
+                  selected:
+                      theme.primary == settings.primaryColour &&
                       theme.secondary == settings.secondaryColour,
                   onTap: () => notifier.setColourTheme(theme),
                 ),
@@ -380,9 +384,9 @@ class _ChoiceRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => LabelledField(
-        label: label,
-        child: Wrap(spacing: 12, runSpacing: 12, children: children),
-      );
+    label: label,
+    child: Wrap(spacing: 12, runSpacing: 12, children: children),
+  );
 }
 
 enum _Slot { primary, secondary }
@@ -413,35 +417,42 @@ class _CustomColoursState extends State<_CustomColours> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final groupStyle = theme.textTheme.labelSmall
-        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final groupStyle = theme.textTheme.labelSmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
     final selected = _slot == _Slot.primary ? widget.primary : widget.secondary;
-    final onPick = _slot == _Slot.primary ? widget.onPrimary : widget.onSecondary;
+    final onPick = _slot == _Slot.primary
+        ? widget.onPrimary
+        : widget.onSecondary;
     Widget dot(ThemeColour colour) => Container(
-          width: 14,
-          height: 14,
-          decoration: BoxDecoration(
-            color: colour.colour,
-            shape: BoxShape.circle,
-            border: Border.all(color: theme.colorScheme.outlineVariant),
-          ),
-        );
+      width: 14,
+      height: 14,
+      decoration: BoxDecoration(
+        color: colour.colour,
+        shape: BoxShape.circle,
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+    );
     Widget group(String name, ThemeColourGroup group) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(name, style: groupStyle),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
           children: [
-            Text(name, style: groupStyle),
-            const SizedBox(height: 8),
-            Wrap(spacing: 12, runSpacing: 12, children: [
-              for (final colour in ThemeColour.inGroup(group))
-                _ColourChoice(
-                  label: colour.label,
-                  colour: colour,
-                  selected: colour == selected,
-                  onTap: () => onPick(colour),
-                ),
-            ]),
+            for (final colour in ThemeColour.inGroup(group))
+              _ColourChoice(
+                label: colour.label,
+                colour: colour,
+                selected: colour == selected,
+                onTap: () => onPick(colour),
+              ),
           ],
-        );
+        ),
+      ],
+    );
     return LabelledField(
       label: "Custom colours",
       child: Column(
@@ -462,7 +473,8 @@ class _CustomColoursState extends State<_CustomColours> {
               ),
             ],
             selected: {_slot},
-            onSelectionChanged: (picked) => setState(() => _slot = picked.first),
+            onSelectionChanged: (picked) =>
+                setState(() => _slot = picked.first),
           ),
           const SizedBox(height: 16),
           group("Bold colours", ThemeColourGroup.bold),
@@ -516,12 +528,17 @@ class _ColourChoice extends StatelessWidget {
       // against the colour it is marking — across a split, against the two
       // mixed, since it straddles the line.
       child: selected
-          ? Icon(Icons.check,
+          ? Icon(
+              Icons.check,
               size: 18,
-              color: ThemeData.estimateBrightnessForColor(Color.lerp(a, b, 0.5)!) ==
+              color:
+                  ThemeData.estimateBrightnessForColor(
+                        Color.lerp(a, b, 0.5)!,
+                      ) ==
                       Brightness.dark
                   ? Colors.white
-                  : Colors.black)
+                  : Colors.black,
+            )
           : null,
     );
   }
@@ -660,14 +677,16 @@ class _AboutSection extends ConsumerWidget {
           leading: const Icon(Icons.privacy_tip_outlined),
           title: const Text("Privacy policy"),
           trailing: const Icon(Icons.chevron_right),
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const PrivacyPolicyPage()),
-          ),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const PrivacyPolicyPage())),
         ),
         ListTile(
           leading: const Icon(Icons.balance_outlined),
           title: const Text("Open source libraries"),
-          subtitle: const Text("Everything Entoli is built on, and its licence."),
+          subtitle: const Text(
+            "Everything Entoli is built on, and its licence.",
+          ),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => showLicensePage(
             context: context,
@@ -698,20 +717,20 @@ class _IconChoice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _Choice(
-        tooltip: icon.description,
-        selected: selected,
-        onTap: onTap,
-        corners: BorderRadius.circular(16),
-        width: 104,
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        child: Column(
-          children: [
-            AppIconImage(icon, size: 48),
-            const SizedBox(height: 10),
-            Text(icon.label, style: Theme.of(context).textTheme.labelLarge),
-          ],
-        ),
-      );
+    tooltip: icon.description,
+    selected: selected,
+    onTap: onTap,
+    corners: BorderRadius.circular(16),
+    width: 104,
+    padding: const EdgeInsets.symmetric(vertical: 14),
+    child: Column(
+      children: [
+        AppIconImage(icon, size: 48),
+        const SizedBox(height: 10),
+        Text(icon.label, style: Theme.of(context).textTheme.labelLarge),
+      ],
+    ),
+  );
 }
 
 /// The endpoints the agent calls and how it gates commands.
@@ -727,7 +746,8 @@ class _AgentSection extends ConsumerWidget {
       children: [
         const SectionHeader(
           "Agent",
-          description: "The built-in agent, running inside Entoli. It calls the "
+          description:
+              "The built-in agent, running inside Entoli. It calls the "
               "model itself and runs its commands in the chat's workspace.",
         ),
         LabelledField(
@@ -738,13 +758,13 @@ class _AgentSection extends ConsumerWidget {
             decoration: InputDecoration(
               helperText: settings.approveMode == ApproveMode.auto
                   ? noClassifier
-                      ? "No classifier model set — auto mode will ask for "
-                          "every command."
-                      : "The classifier can also refuse a command outright, "
-                          "without asking you. Reads and writes inside the "
-                          "chat's workspace pass; anything past it waits for "
-                          "you. After several escalations in a turn, the rest "
-                          "of the turn asks."
+                        ? "No classifier model set — auto mode will ask for "
+                              "every command."
+                        : "The classifier can also refuse a command outright, "
+                              "without asking you. Reads and writes inside the "
+                              "chat's workspace pass; anything past it waits for "
+                              "you. After several escalations in a turn, the rest "
+                              "of the turn asks."
                   : null,
             ),
             items: [
@@ -768,14 +788,16 @@ class _AgentSection extends ConsumerWidget {
             nullLabel: "Off",
             defaultOf: LlmProviderConfig.lightDefaultOf,
             role: ModelRole.text,
-            helperOffText: "Classifies commands as safe, dangerous, or "
+            helperOffText:
+                "Classifies commands as safe, dangerous, or "
                 "uncertain. Off, auto mode asks for every command.",
             choice: (
               providerId: settings.classifierProviderId,
               modelId: settings.classifierModelId,
             ),
-            onChanged: (choice) =>
-                ref.read(appSettingsProvider.notifier).setClassifierModel(choice),
+            onChanged: (choice) => ref
+                .read(appSettingsProvider.notifier)
+                .setClassifierModel(choice),
           ),
         ),
         Divider(),
@@ -800,7 +822,8 @@ class _DefaultPermissionsSection extends ConsumerWidget {
       children: [
         PermissionsSection(
           rules: settings.permissions,
-          description: "Standing rules, consulted before the classifier and "
+          description:
+              "Standing rules, consulted before the classifier and "
               "the banner. A deny outranks an ask, which outranks an allow; a "
               "command with segments a rule does not cover still waits.",
           onSaved: (rules) => ref
@@ -809,12 +832,14 @@ class _DefaultPermissionsSection extends ConsumerWidget {
         ),
         SwitchListTile(
           title: const Text("Sandbox commands (Landlock)"),
-          subtitle: Text(sandboxed
-              ? "Commands on this machine may write only to the workspaces "
-                  "and the directories granted. Linux only; a Linux guest "
-                  "is its own sandbox. A project can override this."
-              : "Off: commands on this machine write wherever you can. A "
-                  "project can override this."),
+          subtitle: Text(
+            sandboxed
+                ? "Commands on this machine may write only to the workspaces "
+                      "and the directories granted. Linux only; a Linux guest "
+                      "is its own sandbox. A project can override this."
+                : "Off: commands on this machine write wherever you can. A "
+                      "project can override this.",
+          ),
           value: sandboxed,
           onChanged: (value) => ref
               .read(projectSettingsProvider(null).notifier)
@@ -839,15 +864,17 @@ class _OmadaSection extends ConsumerWidget {
       children: [
         const SectionHeader(
           "Omada",
-          description: "Team chats: several named agents take part in a "
+          description:
+              "Team chats: several named agents take part in a "
               "project's replies, alongside the main one.",
         ),
         SwitchListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16),
           title: const Text("On by default for new projects"),
           subtitle: const Text(
-              "The new-project dialog starts with team chats switched on. "
-              "Existing projects are untouched."),
+            "The new-project dialog starts with team chats switched on. "
+            "Existing projects are untouched.",
+          ),
           value: settings.omadaByDefault,
           onChanged: (value) =>
               ref.read(appSettingsProvider.notifier).setOmadaByDefault(value),
@@ -863,9 +890,10 @@ class _OmadaSection extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Text(
-              omadaOrderingDescriptions[
-                  settings.omadaOrdering ?? defaultOmadaOrdering]!,
-              style: Theme.of(context).textTheme.bodySmall),
+            omadaOrderingDescriptions[settings.omadaOrdering ??
+                defaultOmadaOrdering]!,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ),
         InheritableSlider(
           label: "Max generations per round",
@@ -875,7 +903,8 @@ class _OmadaSection extends ConsumerWidget {
           onChanged: (v) => ref
               .read(appSettingsProvider.notifier)
               .setOmadaMaxGenerations(
-                  v ?? AppSettings.defaultOmadaMaxGenerations),
+                v ?? AppSettings.defaultOmadaMaxGenerations,
+              ),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -903,7 +932,8 @@ class _TempChatSection extends ConsumerWidget {
       children: [
         const SectionHeader(
           "Temporary chats",
-          description: "Chats that are hidden and then deleted after a delay "
+          description:
+              "Chats that are hidden and then deleted after a delay "
               "from when their TTL was enabled. A project or an individual chat "
               "can override this.",
         ),
@@ -911,7 +941,8 @@ class _TempChatSection extends ConsumerWidget {
           label: "Delete chats after",
           child: DropdownButtonFormField<TempChatTtl>(
             initialValue: settings.tempChatTtl,
-            isExpanded: true,            items: [
+            isExpanded: true,
+            items: [
               for (final entry in tempChatTtlLabels.entries)
                 DropdownMenuItem(value: entry.key, child: Text(entry.value)),
             ],
@@ -1042,8 +1073,11 @@ class _ProvidersEditor extends ConsumerWidget {
   }
 
   Future<void> _remove(WidgetRef ref, LlmProviderConfig provider) async {
-    final providers =
-        ref.read(appSettingsProvider).llmProviders.where((p) => p.id != provider.id).toList();
+    final providers = ref
+        .read(appSettingsProvider)
+        .llmProviders
+        .where((p) => p.id != provider.id)
+        .toList();
     await ref.read(appSettingsProvider.notifier).setProviders(providers);
   }
 
@@ -1060,15 +1094,19 @@ class _ProvidersEditor extends ConsumerWidget {
           description: providers.isEmpty
               ? "None yet. The agent cannot answer until one is added."
               : "Where the models come from. Each is an endpoint, a key, and "
-                  "the models it offers.",
+                    "the models it offers.",
         ),
         for (final provider in providers)
           EditableRow(
             title: provider.displayName,
             subtitle: _describe(ref, provider),
             removeLabel: "Remove ${provider.displayName}",
-            onTap: () => _upsert(context, ref,
-                initial: provider, title: "Edit ${provider.displayName}"),
+            onTap: () => _upsert(
+              context,
+              ref,
+              initial: provider,
+              title: "Edit ${provider.displayName}",
+            ),
             onRemove: () => _remove(ref, provider),
           ),
         AddButtonRow(
@@ -1086,9 +1124,14 @@ class _ProvidersEditor extends ConsumerWidget {
     final chosen = await pickProviderPreset(context);
     if (chosen != null && context.mounted) {
       final preset = chosen.preset;
-      await _upsert(context, ref,
-          initial: preset,
-          title: preset == null ? "Add provider" : "Connect ${preset.displayName}");
+      await _upsert(
+        context,
+        ref,
+        initial: preset,
+        title: preset == null
+            ? "Add provider"
+            : "Connect ${preset.displayName}",
+      );
     }
   }
 
@@ -1099,13 +1142,17 @@ class _ProvidersEditor extends ConsumerWidget {
     final environment = ref.read(appSettingsProvider).environment;
     final processEnv = ref.read(processEnvProvider);
     final stored = ref.read(appSecretsProvider).providerKey(config.id);
-    final hasKey = (stored != null && stored.isNotEmpty) ||
-        config.resolveKeyWith((name) => environment[name] ?? processEnv(name)) != null;
+    final hasKey =
+        (stored != null && stored.isNotEmpty) ||
+        config.resolveKeyWith(
+              (name) => environment[name] ?? processEnv(name),
+            ) !=
+            null;
     final status = !provider.needsKey
         ? "On this computer"
         : hasKey
-            ? "Connected"
-            : "Needs a key";
+        ? "Connected"
+        : "Needs a key";
     return provider.terms == null ? "${config.baseUrl} · $status" : status;
   }
 }
@@ -1117,12 +1164,13 @@ class _EnvironmentSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => EnvironmentSection(
-        env: ref.watch(appSettingsProvider).environment,
-        description: "Passed to every command the agent runs. A command already "
-            "running keeps what it started with.",
-        onSaved: (env) =>
-            ref.read(appSettingsProvider.notifier).setEnvironment(env),
-      );
+    env: ref.watch(appSettingsProvider).environment,
+    description:
+        "Passed to every command the agent runs. A command already "
+        "running keeps what it started with.",
+    onSaved: (env) =>
+        ref.read(appSettingsProvider.notifier).setEnvironment(env),
+  );
 }
 
 class _DeleteAllChats extends ConsumerWidget {
@@ -1138,7 +1186,7 @@ class _DeleteAllChats extends ConsumerWidget {
       message: count == 0
           ? "There are no chats to delete."
           : "This permanently removes ${plural(count, "chat")}, "
-              "including their workspaces. It cannot be undone.",
+                "including their workspaces. It cannot be undone.",
       confirmLabel: count == 0 ? null : "Delete all",
       destructive: true,
     );
@@ -1192,16 +1240,18 @@ class _UpdatesSection extends ConsumerWidget {
         const Divider(),
         const SectionHeader(
           "Update",
-          description: "Checked when the app starts: if the latest release is "
+          description:
+              "Checked when the app starts: if the latest release is "
               "newer than this build, that one is downloaded and put in its "
               "place.",
         ),
         SwitchListTile(
           title: const Text("Automatically update"),
           subtitle: const Text(
-              "Look for a newer release on startup and replace this build. "
-              "Linux and macOS run it on the next launch; Windows installs "
-              "it when the app quits, with the installer's usual prompt."),
+            "Look for a newer release on startup and replace this build. "
+            "Linux and macOS run it on the next launch; Windows installs "
+            "it when the app quits, with the installer's usual prompt.",
+          ),
           value: settings.autoUpdate,
           onChanged: (value) =>
               ref.read(appSettingsProvider.notifier).setAutoUpdate(value),
@@ -1231,14 +1281,16 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
   }
 
   Future<void> _export() => _guard(() async {
-        var size = 0;
-        final saved = await ref.read(backupHandoffProvider).save(
-            backupFilename(DateTime.now()), (path) async {
-          await writeBackup(ref.read(appConfigProvider), path);
-          size = await File(path).length();
-        });
-        if (saved) _say("Backup written — ${formatSize(size)}.");
-      });
+    var size = 0;
+    final saved = await ref.read(backupHandoffProvider).save(
+      backupFilename(DateTime.now()),
+      (path) async {
+        await writeBackup(ref.read(appConfigProvider), path);
+        size = await File(path).length();
+      },
+    );
+    if (saved) _say("Backup written — ${formatSize(size)}.");
+  });
 
   Future<void> _import() async {
     // A courtesy rather than a safeguard: the restart stops the turn either
@@ -1260,7 +1312,8 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
     final confirmed = await confirm(
       context,
       title: "Restore this backup?",
-      message: "${_describe(backup)}\n\nEverything here now — every chat, "
+      message:
+          "${_describe(backup)}\n\nEverything here now — every chat, "
           "project, workspace and setting — is replaced by what is in it, and "
           "Entoli starts again on what was restored.",
       confirmLabel: "Restore",
@@ -1273,16 +1326,17 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
     // checkpoint — belongs to the session, so stopping it is what a check
     // against one writer could only approximate.
     final config = ref.read(appConfigProvider);
-    await _guard(() => ref.read(appRestartProvider).restart(
-          // `deleteTree` is the platform's, which gets past proot's mode-0000
-          // stubs in a `projects/<project>/rootfs/` an earlier restore left
-          // behind, and past the read-only skill directories.
-          whileStopped: () => restoreBackup(
-            config,
-            backup,
-            deleteTree: platform.deleteTree,
+    await _guard(
+      () => ref
+          .read(appRestartProvider)
+          .restart(
+            // `deleteTree` is the platform's, which gets past proot's mode-0000
+            // stubs in a `projects/<project>/rootfs/` an earlier restore left
+            // behind, and past the read-only skill directories.
+            whileStopped: () =>
+                restoreBackup(config, backup, deleteTree: platform.deleteTree),
           ),
-        ));
+    );
   }
 
   Future<void> _guard(Future<void> Function() work) =>
@@ -1303,36 +1357,37 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
 
   @override
   Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SectionHeader(
-            "Backup",
-            description: "Every chat, project, workspace, prompt and setting as "
-                "one zip. Restoring one replaces what is here.",
-          ),
-          // The icons the explorer already uses for the same two directions:
-          // a download leaves the app, an upload arrives in it.
-          AddButtonRow(
-            child: ValueListenableBuilder(
-              valueListenable: _busy,
-              builder: (context, busy, _) => Row(
-                spacing: 12,
-                children: [
-                  FilledButton.icon(
-                    icon: const Icon(Icons.download),
-                    label: const Text("Export"),
-                    onPressed: busy ? null : _export,
-                  ),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.upload_file),
-                    label: const Text("Import"),
-                    onPressed: busy ? null : _import,
-                  ),
-                ],
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const SectionHeader(
+        "Backup",
+        description:
+            "Every chat, project, workspace, prompt and setting as "
+            "one zip. Restoring one replaces what is here.",
+      ),
+      // The icons the explorer already uses for the same two directions:
+      // a download leaves the app, an upload arrives in it.
+      AddButtonRow(
+        child: ValueListenableBuilder(
+          valueListenable: _busy,
+          builder: (context, busy, _) => Row(
+            spacing: 12,
+            children: [
+              FilledButton.icon(
+                icon: const Icon(Icons.download),
+                label: const Text("Export"),
+                onPressed: busy ? null : _export,
               ),
-            ),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.upload_file),
+                label: const Text("Import"),
+                onPressed: busy ? null : _import,
+              ),
+            ],
           ),
-          BusyBar(_busy),
-        ],
-      );
+        ),
+      ),
+      BusyBar(_busy),
+    ],
+  );
 }

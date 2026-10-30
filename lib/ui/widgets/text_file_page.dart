@@ -80,8 +80,7 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
 
   Future<void> _load() async {
     try {
-      final content =
-          await readTextHead(widget.path);
+      final content = await readTextHead(widget.path);
       if (!mounted) return;
       // The name said text and the bytes disagree. Popping `true` puts the
       // hand-off back on the explorer, which is what stays on screen to say so
@@ -94,7 +93,9 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
       final controller = CodeLineEditingController.fromText(
         content.text,
         CodeLineOptions(
-          lineBreak: content.text.contains("\r\n") ? TextLineBreak.crlf : TextLineBreak.lf,
+          lineBreak: content.text.contains("\r\n")
+              ? TextLineBreak.crlf
+              : TextLineBreak.lf,
         ),
       )..addListener(_changed);
       _controller?.dispose();
@@ -119,22 +120,26 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
     if (dirty != _dirty) setState(() => _dirty = dirty);
   }
 
-  Future<void> _handOff() =>
-      whileBusy(context, _busy, () => ref.read(fileHandoffProvider).open(widget.path));
+  Future<void> _handOff() => whileBusy(
+    context,
+    _busy,
+    () => ref.read(fileHandoffProvider).open(widget.path),
+  );
 
   /// A plain write rather than through a rename: a rename makes a new file,
   /// which drops the mode an agent's script was given.
   Future<void> _save() => whileBusy(context, _busy, () async {
-        final text = _controller!.text;
-        await File(widget.path).writeAsString(text);
-        if (!mounted) return;
-        setState(() {
-          _saved = text;
-          _dirty = _controller!.text != text;
-        });
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text("Saved ${widget.name}")));
-      });
+    final text = _controller!.text;
+    await File(widget.path).writeAsString(text);
+    if (!mounted) return;
+    setState(() {
+      _saved = text;
+      _dirty = _controller!.text != text;
+    });
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text("Saved ${widget.name}")));
+  });
 
   bool get _canEdit => _content != null && !_tooLarge;
 
@@ -145,13 +150,16 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
   /// The whole file, read now for the clipboard alone when it is too large to
   /// have been read for the page.
   Future<void> _copy() => whileBusy(context, _busy, () async {
-        final text = _tooLarge
-            ? await File(widget.path).readAsString()
-            : _controller!.text;
-        if (mounted) await copyToClipboard(context, text, said: "Copied ${widget.name}");
-      });
+    final text = _tooLarge
+        ? await File(widget.path).readAsString()
+        : _controller!.text;
+    if (mounted) {
+      await copyToClipboard(context, text, said: "Copied ${widget.name}");
+    }
+  });
 
-  void _setScale(double scale) => setState(() => _textScale = scale.clamp(0.6, 2.4));
+  void _setScale(double scale) =>
+      setState(() => _textScale = scale.clamp(0.6, 2.4));
 
   Future<bool> _leave() async {
     if (!_dirty) return true;
@@ -176,14 +184,30 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
       },
       child: CallbackShortcuts(
         bindings: {
-          SingleActivator(LogicalKeyboardKey.keyS, control: !mod, meta: mod): () {
+          SingleActivator(
+            LogicalKeyboardKey.keyS,
+            control: !mod,
+            meta: mod,
+          ): () {
             if (_editing && _dirty) _save();
           },
-          SingleActivator(LogicalKeyboardKey.equal, control: !mod, meta: mod): () =>
+          SingleActivator(
+            LogicalKeyboardKey.equal,
+            control: !mod,
+            meta: mod,
+          ): () =>
               _setScale(_textScale + 0.1),
-          SingleActivator(LogicalKeyboardKey.minus, control: !mod, meta: mod): () =>
+          SingleActivator(
+            LogicalKeyboardKey.minus,
+            control: !mod,
+            meta: mod,
+          ): () =>
               _setScale(_textScale - 0.1),
-          SingleActivator(LogicalKeyboardKey.digit0, control: !mod, meta: mod): () =>
+          SingleActivator(
+            LogicalKeyboardKey.digit0,
+            control: !mod,
+            meta: mod,
+          ): () =>
               _setScale(1),
         },
         child: Focus(
@@ -194,27 +218,31 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
                 _dirty ? "${widget.name} •" : widget.name,
                 overflow: TextOverflow.ellipsis,
               ),
-              actions: _tooLarge ? null : [
-                if (_editing)
-                  IconButton(
-                    icon: const Icon(Icons.save_outlined),
-                    tooltip: "Save",
-                    onPressed: _dirty ? _save : null,
-                  ),
-                if (_editing)
-                  IconButton(
-                    icon: const Icon(Icons.visibility_outlined),
-                    tooltip: "Preview",
-                    onPressed: () => setState(() => _editing = false),
-                  )
-                else
-                  IconButton(
-                    icon: const Icon(Icons.edit_outlined),
-                    tooltip: "Edit",
-                    onPressed: _canEdit ? () => setState(() => _editing = true) : null,
-                  ),
-                _menu(content),
-              ],
+              actions: _tooLarge
+                  ? null
+                  : [
+                      if (_editing)
+                        IconButton(
+                          icon: const Icon(Icons.save_outlined),
+                          tooltip: "Save",
+                          onPressed: _dirty ? _save : null,
+                        ),
+                      if (_editing)
+                        IconButton(
+                          icon: const Icon(Icons.visibility_outlined),
+                          tooltip: "Preview",
+                          onPressed: () => setState(() => _editing = false),
+                        )
+                      else
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined),
+                          tooltip: "Edit",
+                          onPressed: _canEdit
+                              ? () => setState(() => _editing = true)
+                              : null,
+                        ),
+                      _menu(content),
+                    ],
             ),
             body: Column(
               children: [
@@ -229,80 +257,80 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
   }
 
   Widget _menu(WorkspaceText? content) => PopupMenuButton<void Function()>(
-        tooltip: "More",
-        onSelected: (action) => action(),
-        itemBuilder: (context) => [
-          if (_showsEditor)
-            CheckedPopupMenuItem(
-              checked: _wrap,
-              value: () => setState(() => _wrap = !_wrap),
-              child: const Text("Wrap lines"),
-            ),
-          PopupMenuItem(
-            value: _pickTextSize,
-            child: const ListTile(
-              leading: Icon(Icons.format_size),
-              title: Text("Text size"),
-              contentPadding: EdgeInsets.zero,
-            ),
-          ),
-          PopupMenuItem(
-            enabled: content != null,
-            value: _copy,
-            child: const ListTile(
-              leading: Icon(Icons.copy_all_outlined),
-              title: Text("Copy"),
-              contentPadding: EdgeInsets.zero,
-            ),
-          ),
-          PopupMenuItem(
-            value: _handOff,
-            child: const ListTile(
-              leading: Icon(Icons.open_in_new),
-              title: Text("Open in another app"),
-              contentPadding: EdgeInsets.zero,
-            ),
-          ),
-        ],
-      );
+    tooltip: "More",
+    onSelected: (action) => action(),
+    itemBuilder: (context) => [
+      if (_showsEditor)
+        CheckedPopupMenuItem(
+          checked: _wrap,
+          value: () => setState(() => _wrap = !_wrap),
+          child: const Text("Wrap lines"),
+        ),
+      PopupMenuItem(
+        value: _pickTextSize,
+        child: const ListTile(
+          leading: Icon(Icons.format_size),
+          title: Text("Text size"),
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+      PopupMenuItem(
+        enabled: content != null,
+        value: _copy,
+        child: const ListTile(
+          leading: Icon(Icons.copy_all_outlined),
+          title: Text("Copy"),
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+      PopupMenuItem(
+        value: _handOff,
+        child: const ListTile(
+          leading: Icon(Icons.open_in_new),
+          title: Text("Open in another app"),
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+    ],
+  );
 
   /// A slider rather than two menu entries, since a menu closes on every step.
   void _pickTextSize() => showModalBottomSheet<void>(
-        context: context,
-        builder: (sheet) => StatefulBuilder(
-          builder: (sheet, setSheet) => SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Row(
-                children: [
-                  const Icon(Icons.text_decrease),
-                  Expanded(
-                    child: Slider(
-                      value: _textScale,
-                      min: 0.6,
-                      max: 2.4,
-                      divisions: 18,
-                      label: "${(_textScale * 100).round()}%",
-                      onChanged: (v) {
-                        _setScale(v);
-                        setSheet(() {});
-                      },
-                    ),
-                  ),
-                  const Icon(Icons.text_increase),
-                  TextButton(
-                    onPressed: () {
-                      _setScale(1);
-                      setSheet(() {});
-                    },
-                    child: const Text("Reset"),
-                  ),
-                ],
+    context: context,
+    builder: (sheet) => StatefulBuilder(
+      builder: (sheet, setSheet) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Row(
+            children: [
+              const Icon(Icons.text_decrease),
+              Expanded(
+                child: Slider(
+                  value: _textScale,
+                  min: 0.6,
+                  max: 2.4,
+                  divisions: 18,
+                  label: "${(_textScale * 100).round()}%",
+                  onChanged: (v) {
+                    _setScale(v);
+                    setSheet(() {});
+                  },
+                ),
               ),
-            ),
+              const Icon(Icons.text_increase),
+              TextButton(
+                onPressed: () {
+                  _setScale(1);
+                  setSheet(() {});
+                },
+                child: const Text("Reset"),
+              ),
+            ],
           ),
         ),
-      );
+      ),
+    ),
+  );
 
   /// Markdown previews rendered; everything else is the editor, read-only
   /// until Edit.
@@ -317,7 +345,9 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
         action: TextButton(onPressed: _retry, child: const Text("Try again")),
       );
     }
-    if (content == null) return const Center(child: CircularProgressIndicator());
+    if (content == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
     if (content.truncated) {
       return EmptyPane(
         icon: Icons.description_outlined,
@@ -403,8 +433,12 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
         codeTheme: grammar == null
             ? null
             : CodeHighlightTheme(
-                languages: {grammar.name: CodeHighlightThemeMode(mode: grammar.mode)},
-                theme: theme.brightness == Brightness.dark ? githubDarkTheme : githubTheme,
+                languages: {
+                  grammar.name: CodeHighlightThemeMode(mode: grammar.mode),
+                },
+                theme: theme.brightness == Brightness.dark
+                    ? githubDarkTheme
+                    : githubTheme,
               ),
       ),
       indicatorBuilder: (context, editing, chunks, notifier) => Row(

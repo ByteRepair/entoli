@@ -43,15 +43,20 @@ class BashUI extends ToolUI {
     final jobId = result?.jobId;
     if (jobId != null) {
       return JobActivity(
-              command: stringArg(run.call?.argumentsJson, "command") ?? "",
-              jobId: jobId)
-          .view(ref, run);
+        command: stringArg(run.call?.argumentsJson, "command") ?? "",
+        jobId: jobId,
+      ).view(ref, run);
     }
-    return toolRunView(run,
-        commandArg: "command",
-        status: result == null
-            ? (text: "Running", isError: false)
-            : (text: "Exit code ${result.returnCode}", isError: result.returnCode != 0));
+    return toolRunView(
+      run,
+      commandArg: "command",
+      status: result == null
+          ? (text: "Running", isError: false)
+          : (
+              text: "Exit code ${result.returnCode}",
+              isError: result.returnCode != 0,
+            ),
+    );
   }
 }
 
@@ -69,8 +74,11 @@ class JobActivity extends LabelledActivity {
   @override
   RunView view(WidgetRef ref, Run run) {
     final callId = run.callId!;
-    final (:state, :mirrored) = ref.watch(chatViewProvider(run.chatId)
-        .select((v) => (state: v.jobOf(callId), mirrored: v.mirrored)));
+    final (:state, :mirrored) = ref.watch(
+      chatViewProvider(
+        run.chatId,
+      ).select((v) => (state: v.jobOf(callId), mirrored: v.mirrored)),
+    );
     final line = firstLine(command);
     final title = "Background job $jobId";
     if (state case JobRunning(:final job)) {
@@ -79,7 +87,9 @@ class JobActivity extends LabelledActivity {
         label: "Running in the background: $line",
         busy: true,
         drawer: (ref) {
-          final log = ref.watch(jobLogProvider((chatId: run.chatId, job: job))).value;
+          final log = ref
+              .watch(jobLogProvider((chatId: run.chatId, job: job)))
+              .value;
           return RunDrawer(
             title: title,
             command: command,
@@ -93,7 +103,9 @@ class JobActivity extends LabelledActivity {
             sections: [
               (
                 label: "Output",
-                body: log == null || log.isEmpty ? "(nothing printed yet)" : log,
+                body: log == null || log.isEmpty
+                    ? "(nothing printed yet)"
+                    : log,
                 isError: false,
               ),
             ],
@@ -101,7 +113,10 @@ class JobActivity extends LabelledActivity {
         },
       );
     }
-    final end = switch (state) { JobEnded(:final end) => end, _ => null };
+    final end = switch (state) {
+      JobEnded(:final end) => end,
+      _ => null,
+    };
     final status = switch (state) {
       JobEnded(:final end) => _jobStatus(end),
       JobUnheard() => (text: "Not heard from", isError: false),
@@ -125,17 +140,23 @@ class JobActivity extends LabelledActivity {
 }
 
 /// The background jobs running, a pill each, opening the job's drawer.
-List<RunningThing> jobsRunning(WidgetRef ref, ChatViewState view, String chatId) => [
-      for (final job in view.runningJobs.values)
-        RunningThing(
-          group: "background task",
-          label: firstLine(job.command),
-          mono: true,
-          tooltip: "Background job ${job.id}",
-          open: (context) => JobActivity(command: job.command, jobId: job.id)
-              .open(context, Run(chatId: chatId, callId: job.callId)),
-        ),
-    ];
+List<RunningThing> jobsRunning(
+  WidgetRef ref,
+  ChatViewState view,
+  String chatId,
+) => [
+  for (final job in view.runningJobs.values)
+    RunningThing(
+      group: "background task",
+      label: firstLine(job.command),
+      mono: true,
+      tooltip: "Background job ${job.id}",
+      open: (context) => JobActivity(
+        command: job.command,
+        jobId: job.id,
+      ).open(context, Run(chatId: chatId, callId: job.callId)),
+    ),
+];
 
 /// How a job ended, for a status line.
 ActivityStatus _jobStatus(JobEnd end) {
@@ -146,8 +167,10 @@ ActivityStatus _jobStatus(JobEnd end) {
 
 /// The end of a running job's log as it grows, for its drawer.
 final jobLogProvider = StreamProvider.autoDispose
-    .family<String, ({String chatId, ShellJob job})>((ref, of) =>
-        ref.watch(agentBackendProvider).jobsOf(of.chatId).log(of.job));
+    .family<String, ({String chatId, ShellJob job})>(
+      (ref, of) =>
+          ref.watch(agentBackendProvider).jobsOf(of.chatId).log(of.job),
+    );
 
 class _StopJob extends ConsumerWidget {
   const _StopJob({required this.chatId, required this.jobId});
@@ -157,10 +180,12 @@ class _StopJob extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => TextButton(
-        onPressed: () => catchAndSay(context,
-            () => ref.read(agentBackendProvider).jobsOf(chatId).stop(jobId)),
-        child: const Text("Stop"),
-      );
+    onPressed: () => catchAndSay(
+      context,
+      () => ref.read(agentBackendProvider).jobsOf(chatId).stop(jobId),
+    ),
+    child: const Text("Stop"),
+  );
 }
 
 /// Opens a job's whole log in the file viewer, while the workspace still has
@@ -177,9 +202,18 @@ class _OpenLog extends ConsumerStatefulWidget {
 
 class _OpenLogState extends ConsumerState<_OpenLog> {
   late final String _path = p.join(
-      ref.read(appConfigProvider).workspaceDir(widget.chatId,
-          project: ref.read(chatViewProvider(widget.chatId)).chat?.state.project),
-      backgroundLog(widget.callId));
+    ref
+        .read(appConfigProvider)
+        .workspaceDir(
+          widget.chatId,
+          project: ref
+              .read(chatViewProvider(widget.chatId))
+              .chat
+              ?.state
+              .project,
+        ),
+    backgroundLog(widget.callId),
+  );
   // Once: the sheet rebuilds as the keyboard or the window moves.
   late final bool _there = File(_path).existsSync();
 
@@ -188,13 +222,21 @@ class _OpenLogState extends ConsumerState<_OpenLog> {
     final button = TextButton(
       onPressed: !_there
           ? null
-          : () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => TextFilePage(
-                  path: _path, name: p.basename(_path), popsBinary: false))),
+          : () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => TextFilePage(
+                  path: _path,
+                  name: p.basename(_path),
+                  popsBinary: false,
+                ),
+              ),
+            ),
       child: const Text("Open log"),
     );
     if (_there) return button;
     return Tooltip(
-        message: "The log is no longer in the workspace", child: button);
+      message: "The log is no longer in the workspace",
+      child: button,
+    );
   }
 }

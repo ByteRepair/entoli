@@ -19,7 +19,10 @@ class SharedBackup extends FileSelectorBackup {
   final FileHandoff _handoff;
 
   @override
-  Future<bool> save(String name, Future<void> Function(String path) write) async {
+  Future<bool> save(
+    String name,
+    Future<void> Function(String path) write,
+  ) async {
     final dir = await Directory.systemTemp.createTemp("entoli-out");
     try {
       final path = p.join(dir.path, name);

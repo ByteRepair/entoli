@@ -33,7 +33,8 @@ class TerminalSection extends ConsumerWidget {
     if (!canRun && !canHostALinux) {
       return SectionHeader(
         "Where commands run",
-        description: "This platform has no terminal, so the agent has no "
+        description:
+            "This platform has no terminal, so the agent has no "
             "commands to run.",
       );
     }
@@ -44,14 +45,12 @@ class TerminalSection extends ConsumerWidget {
     // device's build shipping without it — a fault of the APK. iOS carries no
     // proot by design; its shell is the in-process emulator, and its catalog
     // rides on the "ios" ABI the device answers with.
-    final unpackagedAbi =
-        available || abi == null || abi == "ios" ? null : abi;
-    final description = "What driver to use when running commands. Determines "
+    final unpackagedAbi = available || abi == null || abi == "ios" ? null : abi;
+    final description =
+        "What driver to use when running commands. Determines "
         "the environment commands will run in."
-        "${available
-            ? " The host system is quite limited. It's recommended to install "
-                "a virtual file-system to be able to install binaries."
-            : ""}";
+        "${available ? " The host system is quite limited. It's recommended to install "
+                  "a virtual file-system to be able to install binaries." : ""}";
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -67,7 +66,8 @@ class TerminalSection extends ConsumerWidget {
           SettingsWarningBanner(
             icon: Icons.warning_amber_rounded,
             color: Theme.of(context).colorScheme.error,
-            text: "This build has no proot in it for $unpackagedAbi. Run "
+            text:
+                "This build has no proot in it for $unpackagedAbi. Run "
                 "tool/android/build.sh $unpackagedAbi and "
                 "tool/android/stage.sh, then build the APK again.",
           ),
@@ -89,9 +89,10 @@ class TerminalSection extends ConsumerWidget {
           onPick: (id) => ref.read(appSettingsProvider.notifier).setRootfs(id),
         ),
         _ConfinementNote(
-            selected == null || !installed.contains(selected)
-                ? host
-                : Confinement.guest),
+          selected == null || !installed.contains(selected)
+              ? host
+              : Confinement.guest,
+        ),
       ],
     );
   }
@@ -111,7 +112,8 @@ class _ConfinementNote extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     // The default project's switch is the app's answer; a project can still
     // turn it back on or off for itself.
-    final switchedOff = confinement.enforcesSandbox &&
+    final switchedOff =
+        confinement.enforcesSandbox &&
         ref.watch(projectSettingsProvider(null).select((s) => s.sandbox)) ==
             false;
     final exposed = confinement == Confinement.none || switchedOff;
@@ -120,9 +122,9 @@ class _ConfinementNote extends ConsumerWidget {
       color: exposed ? scheme.error : scheme.primary,
       text: switchedOff
           ? "Can enforce your sandbox settings with Landlock, but the sandbox "
-              "is switched off in Settings > General, so commands run with "
-              "your full user permissions. A project can turn it back on for "
-              "itself."
+                "is switched off in Settings > General, so commands run with "
+                "your full user permissions. A project can turn it back on for "
+                "itself."
           : confinement.summary,
     );
   }
@@ -137,7 +139,8 @@ class RootfsCatalogSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final canHostALinux = ref.watch(prootAvailableProvider) ||
+    final canHostALinux =
+        ref.watch(prootAvailableProvider) ||
         ref.watch(deviceAbiProvider) == "ios";
     if (!canHostALinux) return const SizedBox.shrink();
     return Column(
@@ -146,7 +149,8 @@ class RootfsCatalogSection extends ConsumerWidget {
         const Divider(),
         const SectionHeader(
           "Available",
-          description: "Downloaded once and kept outside the app's data, so a "
+          description:
+              "Downloaded once and kept outside the app's data, so a "
               "backup does not carry it and a restore does not delete it.",
         ),
         for (final rootfs in rootfsCatalog) RootfsTile(rootfs: rootfs),
@@ -166,10 +170,12 @@ class RootfsTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Its own row only: a progress event names one distribution, and watching
     // the whole state would rebuild every tile for it.
-    final progress =
-        ref.watch(rootfsDownloadsProvider.select((s) => s.active[rootfs.id]));
-    final failure =
-        ref.watch(rootfsDownloadsProvider.select((s) => s.failures[rootfs.id]));
+    final progress = ref.watch(
+      rootfsDownloadsProvider.select((s) => s.active[rootfs.id]),
+    );
+    final failure = ref.watch(
+      rootfsDownloadsProvider.select((s) => s.failures[rootfs.id]),
+    );
     final image = rootfs.imageFor(ref.watch(deviceAbiProvider));
 
     return CatalogTile(
@@ -177,7 +183,7 @@ class RootfsTile extends ConsumerWidget {
       summary: image == null
           ? "No build for this device"
           : "${image.arch} · ${formatSize(image.bytes)} to download · "
-              "${rootfs.packageManager} for everything else",
+                "${rootfs.packageManager} for everything else",
       failure: failure,
       progress: progress,
       trailing: _Action(rootfs: rootfs, downloading: progress != null),
@@ -196,21 +202,22 @@ class _Action extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => CatalogAction(
-        downloading: downloading,
-        installed: ref.watch(installedRootfsProvider).contains(rootfs.id),
-        onCancel: () => ref.read(rootfsDownloadsProvider.notifier).cancel(rootfs.id),
-        onDelete: () => ref.read(rootfsDownloadsProvider.notifier).delete(rootfs),
-        deleteTitle: "Delete ${rootfs.name}?",
-        // What it costs to agree depends on whether commands are running in it.
-        deleteMessage:
-            ref.watch(appSettingsProvider.select((s) => s.rootfsId)) == rootfs.id
-                ? "Everything installed in it goes with it, and commands go back "
-                    "to running on the host."
-                : "Everything installed in it goes with it.",
-        // An architecture with no image is a row drawn dead rather than left
-        // out, so the reader can see the distribution exists.
-        onDownload: rootfs.imageFor(ref.watch(deviceAbiProvider)) == null
-            ? null
-            : () => ref.read(rootfsDownloadsProvider.notifier).install(rootfs),
-      );
+    downloading: downloading,
+    installed: ref.watch(installedRootfsProvider).contains(rootfs.id),
+    onCancel: () =>
+        ref.read(rootfsDownloadsProvider.notifier).cancel(rootfs.id),
+    onDelete: () => ref.read(rootfsDownloadsProvider.notifier).delete(rootfs),
+    deleteTitle: "Delete ${rootfs.name}?",
+    // What it costs to agree depends on whether commands are running in it.
+    deleteMessage:
+        ref.watch(appSettingsProvider.select((s) => s.rootfsId)) == rootfs.id
+        ? "Everything installed in it goes with it, and commands go back "
+              "to running on the host."
+        : "Everything installed in it goes with it.",
+    // An architecture with no image is a row drawn dead rather than left
+    // out, so the reader can see the distribution exists.
+    onDownload: rootfs.imageFor(ref.watch(deviceAbiProvider)) == null
+        ? null
+        : () => ref.read(rootfsDownloadsProvider.notifier).install(rootfs),
+  );
 }

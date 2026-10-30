@@ -30,10 +30,13 @@ void main() {
   late AppConfig config;
 
   ChatRepository repoWith(AppSettings settings, {PromptLibrary? library}) =>
-      ChatRepository(FileChatStore(config), backend, () => settings, config,
-          libraryFor: library == null ? null : (_) => library);
-
-
+      ChatRepository(
+        FileChatStore(config),
+        backend,
+        () => settings,
+        config,
+        libraryFor: library == null ? null : (_) => library,
+      );
 
   /// A chat that is on disk, the way one is by the time a prompt is sent.
   Future<Chat> savedChat(ChatRepository repo) async {
@@ -45,8 +48,9 @@ void main() {
   /// What the chat settings page would have written.
   void pinChatModel(String chatId, {String? provider, String? model}) {
     Directory(config.chatDir(chatId)).createSync(recursive: true);
-    File(config.metaFile(chatId))
-        .writeAsStringSync(ChatMeta(provider: provider, model: model).encode());
+    File(
+      config.metaFile(chatId),
+    ).writeAsStringSync(ChatMeta(provider: provider, model: model).encode());
   }
 
   setUp(() {
@@ -61,7 +65,12 @@ void main() {
   });
 
   test("a chat without its own model runs on the app default", () async {
-    final repo = repoWith(AppSettings(defaultProviderId: "anthropic", defaultModelId: "claude-sonnet-4"));
+    final repo = repoWith(
+      AppSettings(
+        defaultProviderId: "anthropic",
+        defaultModelId: "claude-sonnet-4",
+      ),
+    );
     final chat = await repo.createChat();
 
     await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
@@ -71,7 +80,12 @@ void main() {
   });
 
   test("a chat's own model wins over the app default", () async {
-    final repo = repoWith(AppSettings(defaultProviderId: "anthropic", defaultModelId: "claude-sonnet-4"));
+    final repo = repoWith(
+      AppSettings(
+        defaultProviderId: "anthropic",
+        defaultModelId: "claude-sonnet-4",
+      ),
+    );
     final chat = await savedChat(repo);
 
     pinChatModel(chat.state.id, provider: "ollama-cloud", model: "qwen-2.5");
@@ -82,31 +96,47 @@ void main() {
     expect(backend.prompts.single.settings.model, "qwen-2.5");
   });
 
-  test("a chat's model is never paired with the app default's provider", () async {
-    final repo = repoWith(AppSettings(defaultProviderId: "anthropic", defaultModelId: "claude-sonnet-4"));
-    final chat = await savedChat(repo);
+  test(
+    "a chat's model is never paired with the app default's provider",
+    () async {
+      final repo = repoWith(
+        AppSettings(
+          defaultProviderId: "anthropic",
+          defaultModelId: "claude-sonnet-4",
+        ),
+      );
+      final chat = await savedChat(repo);
 
-    pinChatModel(chat.state.id, model: "qwen-2.5");
+      pinChatModel(chat.state.id, model: "qwen-2.5");
 
-    await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
 
-    expect(backend.prompts.single.settings.model, "qwen-2.5");
-    expect(backend.prompts.single.settings.provider, isNull);
-  });
+      expect(backend.prompts.single.settings.model, "qwen-2.5");
+      expect(backend.prompts.single.settings.provider, isNull);
+    },
+  );
 
   // A turn carried on runs under whatever the chat is set to now, resolved the
   // same way — not under whatever it was when the turn was cut off.
-  test("carrying a turn on resolves the same settings a prompt would", () async {
-    final repo = repoWith(AppSettings(defaultProviderId: "anthropic", defaultModelId: "claude-sonnet-4"));
-    final chat = await savedChat(repo);
+  test(
+    "carrying a turn on resolves the same settings a prompt would",
+    () async {
+      final repo = repoWith(
+        AppSettings(
+          defaultProviderId: "anthropic",
+          defaultModelId: "claude-sonnet-4",
+        ),
+      );
+      final chat = await savedChat(repo);
 
-    pinChatModel(chat.state.id, provider: "ollama-cloud", model: "qwen-2.5");
+      pinChatModel(chat.state.id, provider: "ollama-cloud", model: "qwen-2.5");
 
-    await repo.resumeTurn(chat.state.id).toList();
+      await repo.resumeTurn(chat.state.id).toList();
 
-    expect(backend.resumes.single.settings.provider, "ollama-cloud");
-    expect(backend.resumes.single.settings.model, "qwen-2.5");
-  });
+      expect(backend.resumes.single.settings.provider, "ollama-cloud");
+      expect(backend.resumes.single.settings.model, "qwen-2.5");
+    },
+  );
 
   group("creating one", () {
     test("writes it, and lists it, straight away", () async {
@@ -124,11 +154,16 @@ void main() {
       final repo = repoWith(AppSettings());
 
       final chat = await repo.createChat(
-          meta: ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"));
+        meta: ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"),
+      );
 
       expect((await repo.loadMeta(chat.state.id)).model, "qwen-2.5");
-      expect(ChatMeta.parse(File(config.metaFile(chat.state.id)).readAsStringSync()).model,
-          "qwen-2.5");
+      expect(
+        ChatMeta.parse(
+          File(config.metaFile(chat.state.id)).readAsStringSync(),
+        ).model,
+        "qwen-2.5",
+      );
     });
 
     // Written before the meta, or the store files the meta under the default
@@ -137,13 +172,20 @@ void main() {
       final repo = repoWith(AppSettings());
 
       final chat = await repo.createChat(
-          project: "work", meta: ChatMeta(model: "qwen-2.5"));
+        project: "work",
+        meta: ChatMeta(model: "qwen-2.5"),
+      );
 
-      expect(File(config.stateFile(chat.state.id, project: "work")).existsSync(), isTrue);
-      expect(File(config.metaFile(chat.state.id, project: "work")).existsSync(), isTrue);
+      expect(
+        File(config.stateFile(chat.state.id, project: "work")).existsSync(),
+        isTrue,
+      );
+      expect(
+        File(config.metaFile(chat.state.id, project: "work")).existsSync(),
+        isTrue,
+      );
       expect((await repo.listChats()).single.project, "work");
     });
-
   });
 
   group("projects", () {
@@ -198,10 +240,9 @@ void main() {
 
     /// A seeded turn in [project]; the settings the turn resolved.
     turnSettings(String? project) async {
-      final repo = repoWith(AppSettings(
-        profile: const Profile(name: "Tea Fan"),
-        autoMemory: true,
-      ));
+      final repo = repoWith(
+        AppSettings(profile: const Profile(name: "Tea Fan"), autoMemory: true),
+      );
       final chat = await repo.createChat(project: project);
       await writeChatVia(repo, chat);
       await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
@@ -245,119 +286,153 @@ void main() {
       expect(def.includesUserInstructions, isFalse);
     });
 
-    test("Landlock: the project's answer over the app's, unset is on",
-        () async {
-      expect((await (await turnSettings("byte-repair")).policy()).sandboxed, isTrue);
-      await config.documents
-          .write(config.projectSettingsFile(), '{"sandbox": false}');
-      expect((await (await turnSettings("byte-repair")).policy()).sandboxed, isFalse);
-      await config.documents.write(
+    test(
+      "Landlock: the project's answer over the app's, unset is on",
+      () async {
+        expect(
+          (await (await turnSettings("byte-repair")).policy()).sandboxed,
+          isTrue,
+        );
+        await config.documents.write(
+          config.projectSettingsFile(),
+          '{"sandbox": false}',
+        );
+        expect(
+          (await (await turnSettings("byte-repair")).policy()).sandboxed,
+          isFalse,
+        );
+        await config.documents.write(
           config.projectSettingsFile(project: "byte-repair"),
-          '{"sandbox": true}');
-      expect((await (await turnSettings("byte-repair")).policy()).sandboxed, isTrue);
-    });
+          '{"sandbox": true}',
+        );
+        expect(
+          (await (await turnSettings("byte-repair")).policy()).sandboxed,
+          isTrue,
+        );
+      },
+    );
 
-    test("an Omada-on project drops the task tool; an off one keeps it", () async {
-      await repoWith(AppSettings()).createProject("team");
-      // What the project settings page writes when Omada is flipped on.
-      await config.documents
-          .write(config.projectSettingsFile(project: "team"), '{"omada": true}');
-      final repo = repoWith(AppSettings());
-      final on = await repo.createChat(project: "team");
-      await writeChatVia(repo, on);
-      await repo.sendPrompt(on.state.id, userMessage("hi")).toList();
-      final onSettings = backend.prompts.last.settings;
-      expect(onSettings.bundledInstructions, myTeamNote);
-      expect(onSettings.disabled, contains(AgentCapability.task));
-      expect(onSettings.omada, isTrue);
+    test(
+      "an Omada-on project drops the task tool; an off one keeps it",
+      () async {
+        await repoWith(AppSettings()).createProject("team");
+        // What the project settings page writes when Omada is flipped on.
+        await config.documents.write(
+          config.projectSettingsFile(project: "team"),
+          '{"omada": true}',
+        );
+        final repo = repoWith(AppSettings());
+        final on = await repo.createChat(project: "team");
+        await writeChatVia(repo, on);
+        await repo.sendPrompt(on.state.id, userMessage("hi")).toList();
+        final onSettings = backend.prompts.last.settings;
+        expect(onSettings.bundledInstructions, myTeamNote);
+        expect(onSettings.disabled, contains(AgentCapability.task));
+        expect(onSettings.omada, isTrue);
 
-      final off = await repo.createChat();
-      await writeChatVia(repo, off);
-      await repo.sendPrompt(off.state.id, userMessage("hi")).toList();
-      final offSettings = backend.prompts.last.settings;
-      expect(offSettings.bundledInstructions, isNull);
-      expect(offSettings.disabled, isEmpty);
-      expect(offSettings.omada, isFalse);
-    });
+        final off = await repo.createChat();
+        await writeChatVia(repo, off);
+        await repo.sendPrompt(off.state.id, userMessage("hi")).toList();
+        final offSettings = backend.prompts.last.settings;
+        expect(offSettings.bundledInstructions, isNull);
+        expect(offSettings.disabled, isEmpty);
+        expect(offSettings.omada, isFalse);
+      },
+    );
 
-    test("an Omada-on user project runs under My Team's note, files read on top",
-        () async {
-      await repoWith(AppSettings()).createProject("team");
-      await config.documents
-          .write(config.projectSettingsFile(project: "team"), '{"omada": true}');
-      Directory(config.projectWorkspaceDir(project: "team"))
-          .createSync(recursive: true);
-      File(p.join(config.projectWorkspaceDir(project: "team"), "AGENTS.md"))
-          .writeAsStringSync("team rules");
-      final repo = repoWith(AppSettings());
-      final chat = await repo.createChat(project: "team");
-      await writeChatVia(repo, chat);
+    test(
+      "an Omada-on user project runs under My Team's note, files read on top",
+      () async {
+        await repoWith(AppSettings()).createProject("team");
+        await config.documents.write(
+          config.projectSettingsFile(project: "team"),
+          '{"omada": true}',
+        );
+        Directory(
+          config.projectWorkspaceDir(project: "team"),
+        ).createSync(recursive: true);
+        File(
+          p.join(config.projectWorkspaceDir(project: "team"), "AGENTS.md"),
+        ).writeAsStringSync("team rules");
+        final repo = repoWith(AppSettings());
+        final chat = await repo.createChat(project: "team");
+        await writeChatVia(repo, chat);
 
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+        await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
 
-      final settings = backend.prompts.single.settings;
-      // The room contract is My Team's, resolved through the Omada answer,
-      // with the user's files read after it. The rendering itself is the
-      // backend's, covered by its bundled-note test.
-      expect(settings.bundledInstructions, myTeamNote);
-      expect(settings.includesUserInstructions, isTrue);
-    });
+        final settings = backend.prompts.single.settings;
+        // The room contract is My Team's, resolved through the Omada answer,
+        // with the user's files read after it. The rendering itself is the
+        // backend's, covered by its bundled-note test.
+        expect(settings.bundledInstructions, myTeamNote);
+        expect(settings.includesUserInstructions, isTrue);
+      },
+    );
 
-    test("an Omada-off project ships no note and reads its files alone",
-        () async {
-      await repoWith(AppSettings()).createProject("plain");
-      final repo = repoWith(AppSettings());
-      final chat = await repo.createChat(project: "plain");
-      await writeChatVia(repo, chat);
+    test(
+      "an Omada-off project ships no note and reads its files alone",
+      () async {
+        await repoWith(AppSettings()).createProject("plain");
+        final repo = repoWith(AppSettings());
+        final chat = await repo.createChat(project: "plain");
+        await writeChatVia(repo, chat);
 
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+        await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
 
-      final settings = backend.prompts.single.settings;
-      expect(settings.bundledInstructions, isNull);
-      expect(settings.includesUserInstructions, isFalse);
-    });
+        final settings = backend.prompts.single.settings;
+        expect(settings.bundledInstructions, isNull);
+        expect(settings.includesUserInstructions, isFalse);
+      },
+    );
 
-    test("a turn in My Team runs the room note and drops the task tool",
-        () async {
-      final repo = repoWith(AppSettings());
-      final chat = await repo.createChat(project: "my-team");
-      await writeChatVia(repo, chat);
+    test(
+      "a turn in My Team runs the room note and drops the task tool",
+      () async {
+        final repo = repoWith(AppSettings());
+        final chat = await repo.createChat(project: "my-team");
+        await writeChatVia(repo, chat);
 
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+        await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
 
-      final settings = backend.prompts.single.settings;
-      expect(settings.project, "my-team");
-      expect(settings.disabled, contains(AgentCapability.task));
-      expect(settings.bundledInstructions, myTeamNote);
-      expect(settings.includesUserInstructions, isTrue);
-    });
+        final settings = backend.prompts.single.settings;
+        expect(settings.project, "my-team");
+        expect(settings.disabled, contains(AgentCapability.task));
+        expect(settings.bundledInstructions, myTeamNote);
+        expect(settings.includesUserInstructions, isTrue);
+      },
+    );
 
-    test("a project.json omada flag cannot turn Omada on in a built-in",
-        () async {
-      // The file is what a user project's toggle writes; a built-in's answer
-      // is its spec, so a stray one there must not be read.
-      Directory(config.projectDir(project: "anonymous"))
-          .createSync(recursive: true);
-      await config.documents.write(
-          config.projectSettingsFile(project: "anonymous"), '{"omada": true}');
-      final repo = repoWith(AppSettings());
-      final chat = await repo.createChat(project: "anonymous");
-      await writeChatVia(repo, chat);
+    test(
+      "a project.json omada flag cannot turn Omada on in a built-in",
+      () async {
+        // The file is what a user project's toggle writes; a built-in's answer
+        // is its spec, so a stray one there must not be read.
+        Directory(
+          config.projectDir(project: "anonymous"),
+        ).createSync(recursive: true);
+        await config.documents.write(
+          config.projectSettingsFile(project: "anonymous"),
+          '{"omada": true}',
+        );
+        final repo = repoWith(AppSettings());
+        final chat = await repo.createChat(project: "anonymous");
+        await writeChatVia(repo, chat);
 
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+        await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
 
-      final settings = backend.prompts.single.settings;
-      expect(settings.disabled, isEmpty);
-      // Its own note still stands, not My Team's.
-      expect(settings.bundledInstructions, contains("anonymous chat"));
-    });
+        final settings = backend.prompts.single.settings;
+        expect(settings.disabled, isEmpty);
+        // Its own note still stands, not My Team's.
+        expect(settings.bundledInstructions, contains("anonymous chat"));
+      },
+    );
 
     // A draft is not on disk, so it answers for its own project: the same
     // resolution a saved chat gets, before anything has written it.
     test("a draft in a built-in project resolves before it is saved", () async {
-      final repo = repoWith(AppSettings(
-        profile: const Profile(name: "Tea Fan"),
-      ));
+      final repo = repoWith(
+        AppSettings(profile: const Profile(name: "Tea Fan")),
+      );
       final chat = await repo.createChat(project: "anonymous");
 
       await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
@@ -368,32 +443,40 @@ void main() {
       expect(settings.sharedWorkspace, isFalse);
     });
 
-    test("a move ends the shell the chat stood in, and only that one", () async {
-      final repo = repoWith(AppSettings(defaultProviderId: "anthropic"));
-      final chat = await repo.createChat();
-      await writeChatVia(repo, chat);
+    test(
+      "a move ends the shell the chat stood in, and only that one",
+      () async {
+        final repo = repoWith(AppSettings(defaultProviderId: "anthropic"));
+        final chat = await repo.createChat();
+        await writeChatVia(repo, chat);
 
-      await repo.moveChat(chat.state.id, "work");
+        await repo.moveChat(chat.state.id, "work");
 
-      expect(backend.closedShells, [(chat.state.id, null)]);
-      expect(backend.disposed, isEmpty);
-    });
+        expect(backend.closedShells, [(chat.state.id, null)]);
+        expect(backend.disposed, isEmpty);
+      },
+    );
 
     // A chat moved out of Byte Repair runs its next turn under the project it
     // went to: the note is resolved per turn from where the chat now is, so
     // nothing of the built-in travels with the chat.
-    test("a moved chat's next turn leaves the built-in's note behind", () async {
-      final repo = repoWith(AppSettings(profile: const Profile(name: "Tea Fan")));
-      final chat = await repo.createChat(project: "byte-repair");
-      await writeChatVia(repo, chat);
+    test(
+      "a moved chat's next turn leaves the built-in's note behind",
+      () async {
+        final repo = repoWith(
+          AppSettings(profile: const Profile(name: "Tea Fan")),
+        );
+        final chat = await repo.createChat(project: "byte-repair");
+        await writeChatVia(repo, chat);
 
-      await repo.moveChat(chat.state.id, "work");
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+        await repo.moveChat(chat.state.id, "work");
+        await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
 
-      final settings = backend.prompts.single.settings;
-      expect(settings.project, "work");
-      expect(settings.bundledInstructions, isNull);
-    });
+        final settings = backend.prompts.single.settings;
+        expect(settings.project, "work");
+        expect(settings.bundledInstructions, isNull);
+      },
+    );
 
     // A turn still running holds the directories that are about to move; the
     // next command it ran would quietly remake them under the project it left.
@@ -420,9 +503,14 @@ void main() {
     final repo = repoWith(AppSettings());
     final chat = await repo.createChat(project: "work");
     await writeChatVia(repo, chat);
-    await writeChatVia(repo, chat.copyWith(messages: [
-      Message(id: "m1", role: MessageRole.user, createdAt: DateTime(2026)),
-    ]));
+    await writeChatVia(
+      repo,
+      chat.copyWith(
+        messages: [
+          Message(id: "m1", role: MessageRole.user, createdAt: DateTime(2026)),
+        ],
+      ),
+    );
 
     await repo.retitle(chat.state.id, "Named");
 
@@ -471,7 +559,10 @@ void main() {
     test("a per-chat override still wins", () async {
       final repo = repoWith(AppSettings());
       final chat = await repo.createChat(project: "anonymous");
-      await repo.saveMeta(chat.state.id, ChatMeta(tempChatTtl: TempChatTtl.off));
+      await repo.saveMeta(
+        chat.state.id,
+        ChatMeta(tempChatTtl: TempChatTtl.off),
+      );
 
       final anchored = await repo.saveState(chat.state);
 
@@ -482,7 +573,8 @@ void main() {
 
   group("naming a chat", () {
     ChatRepository repoWithTitleModel() => repoWith(
-        AppSettings(titleProviderId: "anthropic", titleModelId: "claude-haiku-3"));
+      AppSettings(titleProviderId: "anthropic", titleModelId: "claude-haiku-3"),
+    );
 
     test("with no title model configured, nothing is asked", () async {
       final repo = repoWith(AppSettings());
@@ -491,15 +583,24 @@ void main() {
       expect(backend.questions, isEmpty);
     });
 
-    test("the title model is asked about the message, and cleaned up after", () async {
-      final repo = repoWithTitleModel();
-      backend.scriptedAnswer = '"Fixing the parser."';
+    test(
+      "the title model is asked about the message, and cleaned up after",
+      () async {
+        final repo = repoWithTitleModel();
+        backend.scriptedAnswer = '"Fixing the parser."';
 
-      expect(await repo.suggestTitle("the parser is broken"), "Fixing the parser");
-      expect(backend.questions.single.prompt, contains("the parser is broken"));
-      expect(backend.questions.single.provider, "anthropic");
-      expect(backend.questions.single.model, "claude-haiku-3");
-    });
+        expect(
+          await repo.suggestTitle("the parser is broken"),
+          "Fixing the parser",
+        );
+        expect(
+          backend.questions.single.prompt,
+          contains("the parser is broken"),
+        );
+        expect(backend.questions.single.provider, "anthropic");
+        expect(backend.questions.single.model, "claude-haiku-3");
+      },
+    );
 
     test("a message with nothing in it is not worth a call", () async {
       final repo = repoWithTitleModel();
@@ -513,13 +614,18 @@ void main() {
     final repo = repoWith(AppSettings());
     final chat = await repo.createChat();
 
-    final parts = await repo.saveAttachments(chat.state.id, [testAttachment("notes.txt")]);
+    final parts = await repo.saveAttachments(chat.state.id, [
+      testAttachment("notes.txt"),
+    ]);
     final file = parts.single as FilePart;
 
     expect(file.filename, "notes.txt");
     expect(file.mimeType, "text/plain");
     expect(await repo.readResource(chat.state.id, file.resource), [104, 105]);
-    expect(Directory(config.resourcesDir(chat.state.id)).listSync(), hasLength(1));
+    expect(
+      Directory(config.resourcesDir(chat.state.id)).listSync(),
+      hasLength(1),
+    );
   });
 
   // The library is user-editable files, so what a reference meant has to be
@@ -530,7 +636,10 @@ void main() {
       AppSettings(),
       library: PromptLibrary([
         PromptDocument.parse(
-            CompletionKind.skill, "review", "---\ndescription: d\n---\n\nLook at it."),
+          CompletionKind.skill,
+          "review",
+          "---\ndescription: d\n---\n\nLook at it.",
+        ),
       ]),
     );
 
@@ -560,7 +669,7 @@ void main() {
   group("the change feed", () {
     /// A saved chat with the feed already listening over it.
     Future<({String chatId, List<RepoEvent> seen, ChatRepository repo})>
-        watchIt() async {
+    watchIt() async {
       final repo = repoWith(AppSettings());
       final chat = await savedChat(repo);
       final seen = <RepoEvent>[];
@@ -614,18 +723,27 @@ void main() {
     await repo.sendPrompt(chat.state.id, userMessage("go")).toList();
     final policy = backend.prompts.last.settings.policy;
     expect((await policy()).permissions, isEmpty);
-    expect(backend.prompts.last.settings.approveMode, isNull,
-        reason: "nothing pins the mode, so the turn reads the chat's live");
+    expect(
+      backend.prompts.last.settings.approveMode,
+      isNull,
+      reason: "nothing pins the mode, so the turn reads the chat's live",
+    );
     expect((await policy()).approveMode, ApproveMode.auto);
 
     const podman = PermissionRule(
-        tool: "bash", pattern: "podman *", decision: PermissionDecision.allow);
+      tool: "bash",
+      pattern: "podman *",
+      decision: PermissionDecision.allow,
+    );
     await (ProjectSettings.load(config, project: "work")
           ..permissions = [podman]
           ..writableDirs = ["~/.local/share"])
         .save(config, project: "work");
     await (ProjectSettings.load(config)..sandbox = false).save(config);
-    await repo.saveMeta(chat.state.id, ChatMeta(approveMode: ApproveMode.never));
+    await repo.saveMeta(
+      chat.state.id,
+      ChatMeta(approveMode: ApproveMode.never),
+    );
 
     final now = await policy();
     expect(now.permissions, [podman]);
@@ -635,144 +753,192 @@ void main() {
     expect(now.approveMode, ApproveMode.never);
 
     await repo.saveMeta(chat.state.id, ChatMeta(sandbox: true));
-    expect((await policy()).sandboxed, isTrue,
-        reason: "the chat's own answer is over the project's");
+    expect(
+      (await policy()).sandboxed,
+      isTrue,
+      reason: "the chat's own answer is over the project's",
+    );
   });
 
-    group("a rule written from a banner answer", () {
-    test("\"Allow in Chat\" writes the derived rule on the chat's meta.json",
-        () async {
-      final repo = repoWith(AppSettings());
-      final chat = await savedChat(repo);
-      await repo.respondApproval(
-        chat.state.id,
-        "approval-1",
-        ApprovalResponse.alwaysAllowChat,
-        approval: ToolApproval(
+  group("a rule written from a banner answer", () {
+    test(
+      "\"Allow in Chat\" writes the derived rule on the chat's meta.json",
+      () async {
+        final repo = repoWith(AppSettings());
+        final chat = await savedChat(repo);
+        await repo.respondApproval(
+          chat.state.id,
+          "approval-1",
+          ApprovalResponse.alwaysAllowChat,
+          approval: ToolApproval(
             id: "approval-1",
             toolName: "bash",
-            argumentsText: "git checkout -b foo"),
-      );
-      final meta = await repo.loadMeta(chat.state.id);
-      expect(meta.permissions, hasLength(1));
-      expect(meta.permissions.single.tool, "bash");
-      expect(meta.permissions.single.pattern, "git checkout *");
-      expect(meta.permissions.single.decision, PermissionDecision.allow);
-      // The answer travels whole: the waiting turn derives the same rule
-      // from the approval it holds, so the rest of the turn is covered too.
-      expect(
-          backend.approvals.single.response, ApprovalResponse.alwaysAllowChat);
-    });
+            argumentsText: "git checkout -b foo",
+          ),
+        );
+        final meta = await repo.loadMeta(chat.state.id);
+        expect(meta.permissions, hasLength(1));
+        expect(meta.permissions.single.tool, "bash");
+        expect(meta.permissions.single.pattern, "git checkout *");
+        expect(meta.permissions.single.decision, PermissionDecision.allow);
+        // The answer travels whole: the waiting turn derives the same rule
+        // from the approval it holds, so the rest of the turn is covered too.
+        expect(
+          backend.approvals.single.response,
+          ApprovalResponse.alwaysAllowChat,
+        );
+      },
+    );
 
-    test("\"Allow in Project\" writes the rule on the project's project.json",
-        () async {
-      final repo = repoWith(AppSettings());
-      final chat = await savedChat(repo);
-      await repo.respondApproval(
-        chat.state.id,
-        "approval-2",
-        ApprovalResponse.alwaysAllowProject,
-        approval: ToolApproval(
+    test(
+      "\"Allow in Project\" writes the rule on the project's project.json",
+      () async {
+        final repo = repoWith(AppSettings());
+        final chat = await savedChat(repo);
+        await repo.respondApproval(
+          chat.state.id,
+          "approval-2",
+          ApprovalResponse.alwaysAllowProject,
+          approval: ToolApproval(
             id: "approval-2",
             toolName: "webfetch",
-            argumentsText: "https://docs.example.com/guide"),
-      );
-      final settings = ProjectSettings.load(
+            argumentsText: "https://docs.example.com/guide",
+          ),
+        );
+        final settings = ProjectSettings.load(
           config,
-          project: chat.state.project);
-      expect(settings.permissions, hasLength(1));
-      // The standing answer is the webfetch star: one approval covers the
-      // fetch tool and the fetcher commands alike, whatever host each one
-      // names next.
-      expect(settings.permissions.single.tool, "webfetch");
-      expect(settings.permissions.single.pattern, "*");
-      final chatMeta =
-          await repo.loadMeta(chat.state.id);
-      expect(chatMeta.permissions, isEmpty);
-    });
+          project: chat.state.project,
+        );
+        expect(settings.permissions, hasLength(1));
+        // The standing answer is the webfetch star: one approval covers the
+        // fetch tool and the fetcher commands alike, whatever host each one
+        // names next.
+        expect(settings.permissions.single.tool, "webfetch");
+        expect(settings.permissions.single.pattern, "*");
+        final chatMeta = await repo.loadMeta(chat.state.id);
+        expect(chatMeta.permissions, isEmpty);
+      },
+    );
 
-    test("pressing Always twice on the same head does not stack the rule",
-        () async {
-      final repo = repoWith(AppSettings());
-      final chat = await savedChat(repo);
-      ToolApproval banner(String id) => ToolApproval(
+    test(
+      "pressing Always twice on the same head does not stack the rule",
+      () async {
+        final repo = repoWith(AppSettings());
+        final chat = await savedChat(repo);
+        ToolApproval banner(String id) => ToolApproval(
           id: id,
           toolName: "bash",
-          argumentsText: "cd repo && git log");
-      await repo.respondApproval(chat.state.id, "a-1",
-          ApprovalResponse.alwaysAllowChat, approval: banner("a-1"));
-      await repo.respondApproval(chat.state.id, "a-2",
-          ApprovalResponse.alwaysAllowChat, approval: banner("a-2"));
-      final meta = await repo.loadMeta(chat.state.id);
-      expect(meta.permissions, hasLength(1));
-    });
-
-    test("a re-prompt's dir grant lands in the tier the answer named", () async {
-      ToolApproval asked(String id, String dir) => ToolApproval(
-          id: id, toolName: "bash", argumentsText: "writing $dir",
-          deniedDirs: [dir]);
-
-      // Always in Chat: the chat's dirs, granted once.
-      final repo = repoWith(AppSettings());
-      final chat = await savedChat(repo);
-      await repo.respondApproval(chat.state.id, "d-1",
+          argumentsText: "cd repo && git log",
+        );
+        await repo.respondApproval(
+          chat.state.id,
+          "a-1",
           ApprovalResponse.alwaysAllowChat,
-          approval: asked("d-1", "/home/yiannis/Projects/x"));
-      final meta = await repo.loadMeta(chat.state.id);
-      expect(meta.writableDirs, ["/home/yiannis/Projects/x"]);
-      // No command rule: the prose varies every turn and would claim to
-      // allow what it cannot name.
-      expect(meta.permissions, isEmpty);
-      expect(backend.approvals.single.response, ApprovalResponse.alwaysAllowChat);
+          approval: banner("a-1"),
+        );
+        await repo.respondApproval(
+          chat.state.id,
+          "a-2",
+          ApprovalResponse.alwaysAllowChat,
+          approval: banner("a-2"),
+        );
+        final meta = await repo.loadMeta(chat.state.id);
+        expect(meta.permissions, hasLength(1));
+      },
+    );
 
-      // Always in Project: the project's dirs, and not the chat's.
-      final other = repoWith(AppSettings());
-      final projected = await savedChat(other);
-      await other.respondApproval(projected.state.id, "d-2",
+    test(
+      "a re-prompt's dir grant lands in the tier the answer named",
+      () async {
+        ToolApproval asked(String id, String dir) => ToolApproval(
+          id: id,
+          toolName: "bash",
+          argumentsText: "writing $dir",
+          deniedDirs: [dir],
+        );
+
+        // Always in Chat: the chat's dirs, granted once.
+        final repo = repoWith(AppSettings());
+        final chat = await savedChat(repo);
+        await repo.respondApproval(
+          chat.state.id,
+          "d-1",
+          ApprovalResponse.alwaysAllowChat,
+          approval: asked("d-1", "/home/yiannis/Projects/x"),
+        );
+        final meta = await repo.loadMeta(chat.state.id);
+        expect(meta.writableDirs, ["/home/yiannis/Projects/x"]);
+        // No command rule: the prose varies every turn and would claim to
+        // allow what it cannot name.
+        expect(meta.permissions, isEmpty);
+        expect(
+          backend.approvals.single.response,
+          ApprovalResponse.alwaysAllowChat,
+        );
+
+        // Always in Project: the project's dirs, and not the chat's.
+        final other = repoWith(AppSettings());
+        final projected = await savedChat(other);
+        await other.respondApproval(
+          projected.state.id,
+          "d-2",
           ApprovalResponse.alwaysAllowProject,
-          approval: asked("d-2", "/home/yiannis/Projects/y"));
-      final settings = ProjectSettings.load(
+          approval: asked("d-2", "/home/yiannis/Projects/y"),
+        );
+        final settings = ProjectSettings.load(
           config,
-          project: projected.state.project);
-      expect(settings.writableDirs, ["/home/yiannis/Projects/y"]);
-      expect((await other.loadMeta(projected.state.id)).writableDirs, isEmpty);
-    });
+          project: projected.state.project,
+        );
+        expect(settings.writableDirs, ["/home/yiannis/Projects/y"]);
+        expect(
+          (await other.loadMeta(projected.state.id)).writableDirs,
+          isEmpty,
+        );
+      },
+    );
 
     test("the same dir twice is not stacked", () async {
       final repo = repoWith(AppSettings());
       final chat = await savedChat(repo);
       Future<void> answer(String id) => repo.respondApproval(
-            chat.state.id,
-            id,
-            ApprovalResponse.alwaysAllowChat,
-            approval: ToolApproval(
-                id: id,
-                toolName: "bash",
-                deniedDirs: const ["/home/yiannis/Projects/x"]),
-          );
+        chat.state.id,
+        id,
+        ApprovalResponse.alwaysAllowChat,
+        approval: ToolApproval(
+          id: id,
+          toolName: "bash",
+          deniedDirs: const ["/home/yiannis/Projects/x"],
+        ),
+      );
       await answer("d-3");
       await answer("d-4");
       final meta = await repo.loadMeta(chat.state.id);
       expect(meta.writableDirs, hasLength(1));
     });
 
-    test("add_directory's always answer lands in the tier's writableDirs",
-        () async {
-      // The grant request carries its directory in `deniedDirs`: dirs,
-      // never a rule.
-      final repo = repoWith(AppSettings());
-      final chat = await savedChat(repo);
-      await repo.respondApproval(chat.state.id, "ad-1",
+    test(
+      "add_directory's always answer lands in the tier's writableDirs",
+      () async {
+        // The grant request carries its directory in `deniedDirs`: dirs,
+        // never a rule.
+        final repo = repoWith(AppSettings());
+        final chat = await savedChat(repo);
+        await repo.respondApproval(
+          chat.state.id,
+          "ad-1",
           ApprovalResponse.alwaysAllowChat,
           approval: ToolApproval(
-              id: "ad-1",
-              toolName: "add_directory",
-              argumentsText: "/home/yiannis",
-              deniedDirs: const ["/home/yiannis"]));
-      final meta = await repo.loadMeta(chat.state.id);
-      expect(meta.writableDirs, ["/home/yiannis"]);
-      expect(meta.permissions, isEmpty);
-    });
+            id: "ad-1",
+            toolName: "add_directory",
+            argumentsText: "/home/yiannis",
+            deniedDirs: const ["/home/yiannis"],
+          ),
+        );
+        final meta = await repo.loadMeta(chat.state.id);
+        expect(meta.writableDirs, ["/home/yiannis"]);
+        expect(meta.permissions, isEmpty);
+      },
+    );
 
     test("a re-prompt naming the app's own data persists nothing", () async {
       // The tool's door refuses the data tree before any banner; this is the
@@ -780,13 +946,17 @@ void main() {
       final repo = repoWith(AppSettings());
       final chat = await savedChat(repo);
       final inside = "${config.dataDir}/projects";
-      await repo.respondApproval(chat.state.id, "ad-2",
-          ApprovalResponse.alwaysAllowChat,
-          approval: ToolApproval(
-              id: "ad-2",
-              toolName: "add_directory",
-              argumentsText: inside,
-              deniedDirs: [inside]));
+      await repo.respondApproval(
+        chat.state.id,
+        "ad-2",
+        ApprovalResponse.alwaysAllowChat,
+        approval: ToolApproval(
+          id: "ad-2",
+          toolName: "add_directory",
+          argumentsText: inside,
+          deniedDirs: [inside],
+        ),
+      );
       final meta = await repo.loadMeta(chat.state.id);
       expect(meta.writableDirs, isEmpty);
       expect(meta.permissions, isEmpty);
@@ -795,39 +965,51 @@ void main() {
     test("a plain allow writes nothing anywhere", () async {
       final repo = repoWith(AppSettings());
       final chat = await savedChat(repo);
-      await repo.respondApproval(chat.state.id, "approval-3",
-          ApprovalResponse.allow,
-          approval: ToolApproval(
-              id: "approval-3",
-              toolName: "bash",
-              argumentsText: "python3 run.py"));
-      final chatMeta =
-          await repo.loadMeta(chat.state.id);
+      await repo.respondApproval(
+        chat.state.id,
+        "approval-3",
+        ApprovalResponse.allow,
+        approval: ToolApproval(
+          id: "approval-3",
+          toolName: "bash",
+          argumentsText: "python3 run.py",
+        ),
+      );
+      final chatMeta = await repo.loadMeta(chat.state.id);
       expect(chatMeta.permissions, isEmpty);
     });
 
     test("the composed rules carry the tier they were read from", () async {
       final repo = repoWith(AppSettings());
       final chat = await savedChat(repo);
-      await repo.saveMeta(chat.state.id, ChatMeta(permissions: [
-        const PermissionRule(
-            tool: "bash",
-            pattern: "chat rule *",
-            decision: PermissionDecision.allow),
-      ]));
+      await repo.saveMeta(
+        chat.state.id,
+        ChatMeta(
+          permissions: [
+            const PermissionRule(
+              tool: "bash",
+              pattern: "chat rule *",
+              decision: PermissionDecision.allow,
+            ),
+          ],
+        ),
+      );
       // The default project's rules, saved through the documents copy the
       // repository reads, the way the settings page saves them.
       await config.documents.write(
-          config.projectSettingsFile(project: null), jsonEncode({
-        "permissions": [
-          {"tool": "bash", "pattern": "project rule *", "decision": "deny"},
-        ],
-      }));
+        config.projectSettingsFile(project: null),
+        jsonEncode({
+          "permissions": [
+            {"tool": "bash", "pattern": "project rule *", "decision": "deny"},
+          ],
+        }),
+      );
 
       await repo.sendPrompt(chat.state.id, userMessage("go")).toList();
 
       final byPattern = {
-        for (final r in (await backend.prompts.last.settings.policy()).permissions)
+        for (final r
+            in (await backend.prompts.last.settings.policy()).permissions)
           r.pattern: r,
       };
       expect(byPattern["chat rule *"]!.origin, PermissionTier.chat);
@@ -835,7 +1017,9 @@ void main() {
       // default project's are one file — the same read stamped twice, and
       // the app's stamp standing (the file is the default project's).
       expect(
-          byPattern["project rule *"]!.origin, PermissionTier.defaultProject);
+        byPattern["project rule *"]!.origin,
+        PermissionTier.defaultProject,
+      );
     });
 
     test("the rule the next turn reads covers the bare command", () async {
@@ -850,9 +1034,10 @@ void main() {
         "a-4",
         ApprovalResponse.alwaysAllowChat,
         approval: ToolApproval(
-            id: "a-4",
-            toolName: "bash",
-            argumentsText: "git status"),
+          id: "a-4",
+          toolName: "bash",
+          argumentsText: "git status",
+        ),
       );
       await repo.sendPrompt(chat.state.id, userMessage("again")).toList();
 
@@ -869,17 +1054,24 @@ void main() {
         "d-6",
         ApprovalResponse.alwaysAllowProject,
         approval: const ToolApproval(
-            id: "d-6",
-            toolName: "bash",
-            argumentsText: "podman version 2>&1 | head -5",
-            unsandboxed: true),
+          id: "d-6",
+          toolName: "bash",
+          argumentsText: "podman version 2>&1 | head -5",
+          unsandboxed: true,
+        ),
       );
-      final settings = ProjectSettings.load(config, project: chat.state.project);
+      final settings = ProjectSettings.load(
+        config,
+        project: chat.state.project,
+      );
       final rule = settings.permissions.single;
       expect(rule.pattern, "podman version *");
       expect(rule.unconfined, isTrue);
-      expect(rule.decision, isNull,
-          reason: "the asking is left to whatever already decides it");
+      expect(
+        rule.decision,
+        isNull,
+        reason: "the asking is left to whatever already decides it",
+      );
     });
   });
 }

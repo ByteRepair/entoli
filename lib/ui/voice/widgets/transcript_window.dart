@@ -50,7 +50,9 @@ class _TranscriptWindowState extends State<TranscriptWindow> {
     final theme = Theme.of(context);
     final scaler = MediaQuery.textScalerOf(context);
     return SizedBox(
-      height: scaler.scale(TranscriptWindow.lineHeight) * TranscriptWindow.visibleLines,
+      height:
+          scaler.scale(TranscriptWindow.lineHeight) *
+          TranscriptWindow.visibleLines,
       child: ShaderMask(
         shaderCallback: _fadeShader,
         blendMode: BlendMode.dstIn,

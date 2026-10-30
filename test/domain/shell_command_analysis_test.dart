@@ -39,18 +39,21 @@ void main() {
     expect(a.escalationReasons, isEmpty);
   });
 
-  test("assignments to where writes land or how git reads its config escalate", () {
-    final home = parse("HOME=/tmp/evil git commit");
-    expect(home.modelable, isTrue);
-    expect(home.escalationReasons.single, contains("HOME"));
+  test(
+    "assignments to where writes land or how git reads its config escalate",
+    () {
+      final home = parse("HOME=/tmp/evil git commit");
+      expect(home.modelable, isTrue);
+      expect(home.escalationReasons.single, contains("HOME"));
 
-    final gitDir = parse("GIT_DIR=/elsewhere git status");
-    expect(gitDir.escalationReasons.single, contains("GIT_DIR"));
+      final gitDir = parse("GIT_DIR=/elsewhere git status");
+      expect(gitDir.escalationReasons.single, contains("GIT_DIR"));
 
-    final gitVar = parse("GIT_CONFIG_COUNT=1 git status");
-    expect(gitVar.modelable, isTrue);
-    expect(gitVar.escalationReasons, isNotEmpty);
-  });
+      final gitVar = parse("GIT_CONFIG_COUNT=1 git status");
+      expect(gitVar.modelable, isTrue);
+      expect(gitVar.escalationReasons, isNotEmpty);
+    },
+  );
 
   test("assignments that are not sensitive do not escalate", () {
     // `-c` is a word, not an assignment; the include is an escalation only
@@ -106,18 +109,15 @@ void main() {
   });
 
   test("a redirect cut off by a separator escalates rather than throwing", () {
-    for (final command in [
-      "echo a >| out",
-      "echo a > ; b",
-      "echo a > && b",
-    ]) {
+    for (final command in ["echo a >| out", "echo a > ; b", "echo a > && b"]) {
       expect(parse(command).escalationReasons, isNotEmpty, reason: command);
     }
   });
 
   group("here-documents", () {
     test("a quoted body is text, whatever it holds", () {
-      const body = "<pre>| Back | Front |</pre>\n<p>Don't</p> `x` \$(rm a) "
+      const body =
+          "<pre>| Back | Front |</pre>\n<p>Don't</p> `x` \$(rm a) "
           "\$HOME > b; # c";
       for (final command in [
         "cat >> f.html <<'EOF'\n$body\nEOF",
@@ -133,15 +133,20 @@ void main() {
     test("an unquoted body's substitutions are walked", () {
       final a = parse("cat > f <<EOF\n<p>\$(echo x > \$HOME/y)</p>\nEOF");
       expect(a.escalationReasons, isNotEmpty);
-      expect(parse("cat > f <<EOF\n<p>\$name | it's</p>\nEOF").escalationReasons,
-          isEmpty);
+      expect(
+        parse("cat > f <<EOF\n<p>\$name | it's</p>\nEOF").escalationReasons,
+        isEmpty,
+      );
       expect(parse("cat > f <<EOF\n`id`\nEOF").modelable, isFalse);
     });
 
     test("the command after the body is parsed on its own", () {
       final a = parse("cat > f <<'EOF'\na | b\nEOF\nHOME=/tmp ls");
       expect(a.escalationReasons, isNotEmpty);
-      expect(a.modelableSegments, ["cat > f <<'EOF'\na | b\nEOF", "HOME=/tmp ls"]);
+      expect(a.modelableSegments, [
+        "cat > f <<'EOF'\na | b\nEOF",
+        "HOME=/tmp ls",
+      ]);
     });
 
     test("<<- strips tabs, and two bodies are read in order", () {
@@ -152,12 +157,16 @@ void main() {
     });
 
     test("a body goes back on the segment whose << it feeds", () {
-      expect(parse("cat <<'EOF' | head\nx | y\nEOF").modelableSegments,
-          ["cat <<'EOF'\nx | y\nEOF", "head"]);
+      expect(parse("cat <<'EOF' | head\nx | y\nEOF").modelableSegments, [
+        "cat <<'EOF'\nx | y\nEOF",
+        "head",
+      ]);
       // The pipe carries on past the body, so what follows is its own
       // segment and a rule on it still sees it.
-      expect(parse("cat <<'EOF' |\nx\nEOF\nrm -rf /tmp/a").modelableSegments,
-          ["cat <<'EOF'\nx\nEOF", "rm -rf /tmp/a"]);
+      expect(parse("cat <<'EOF' |\nx\nEOF\nrm -rf /tmp/a").modelableSegments, [
+        "cat <<'EOF'\nx\nEOF",
+        "rm -rf /tmp/a",
+      ]);
     });
 
     test("a body that never closes is not modeled", () {
@@ -168,8 +177,11 @@ void main() {
 
   test("segments are cut where the parse cuts commands", () {
     expect(parse(r"echo $a; ls").modelableSegments, [r"echo $a", "ls"]);
-    expect(parse("ls &> f; cmd 2>&1 | head").modelableSegments,
-        ["ls &> f", "cmd 2>&1", "head"]);
+    expect(parse("ls &> f; cmd 2>&1 | head").modelableSegments, [
+      "ls &> f",
+      "cmd 2>&1",
+      "head",
+    ]);
     expect(parse("a &&\nb").modelableSegments, ["a", "b"]);
   });
 
@@ -185,8 +197,11 @@ void main() {
 
   test("a removal is not a redirect target — the sandbox answers for it", () {
     final a = parse("rm -rf /tmp/evil");
-    expect(a.escalationReasons, isEmpty,
-        reason: "no redirect in it; enforcement is what refuses the unlink");
+    expect(
+      a.escalationReasons,
+      isEmpty,
+      reason: "no redirect in it; enforcement is what refuses the unlink",
+    );
   });
 
   test("a substitution is held to the top level's rules, nested too", () {
@@ -221,14 +236,16 @@ void main() {
     final note = a.escalationNote;
     expect(note, isNotNull);
     expect(note, contains("HOME"));
-    expect(note, isNot(contains("asked")),
-        reason: "nothing asked anyone; the wording says what happened");
+    expect(
+      note,
+      isNot(contains("asked")),
+      reason: "nothing asked anyone; the wording says what happened",
+    );
     expect(note, contains("Not run"));
   });
 
   test("the note names the segments where the parse saw them", () {
-    final note =
-        parse("cd /x && HOME=/tmp/evil git push").escalationNote!;
+    final note = parse("cd /x && HOME=/tmp/evil git push").escalationNote!;
     expect(note, contains("cd /x"));
     expect(note, contains("separate bash calls"));
   });

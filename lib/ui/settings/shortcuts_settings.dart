@@ -10,16 +10,16 @@ class ShortcutsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SectionHeader("Keyboard shortcuts"),
-          for (final shortcut in AppShortcut.values)
-            ListTile(
-              title: Text(shortcut.label),
-              trailing: _Keys(shortcut.keyCaps),
-            ),
-        ],
-      );
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const SectionHeader("Keyboard shortcuts"),
+      for (final shortcut in AppShortcut.values)
+        ListTile(
+          title: Text(shortcut.label),
+          trailing: _Keys(shortcut.keyCaps),
+        ),
+    ],
+  );
 }
 
 class _Keys extends StatelessWidget {

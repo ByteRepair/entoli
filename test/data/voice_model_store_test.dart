@@ -35,7 +35,8 @@ void main() {
 
   String url(String path) => net.url(path);
 
-  RecognitionModel plainModel({List<VoiceDownload>? downloads}) => RecognitionModel(
+  RecognitionModel plainModel({List<VoiceDownload>? downloads}) =>
+      RecognitionModel(
         id: "test-stt",
         name: "Test",
         engine: VoiceEngine.senseVoice,
@@ -43,26 +44,30 @@ void main() {
         multilingual: false,
         model: "model.onnx",
         tokens: "tokens.txt",
-        downloads: downloads ??
+        downloads:
+            downloads ??
             [
               VoiceFile(url: url("/model.onnx"), bytes: 64),
               VoiceFile(url: url("/tokens.txt"), bytes: 64),
             ],
       );
 
-  test("a finished download lands where the model says, and is marked whole", () async {
-    final model = plainModel();
-    final seen = await store.install(model).toList();
+  test(
+    "a finished download lands where the model says, and is marked whole",
+    () async {
+      final model = plainModel();
+      final seen = await store.install(model).toList();
 
-    expect(await store.installed(), {"test-stt"});
-    final dir = await store.directoryOf(model);
-    expect(dir, isNotNull);
-    expect(File(p.join(dir!, "model.onnx")).existsSync(), isTrue);
-    expect(File(p.join(dir, "tokens.txt")).existsSync(), isTrue);
-    // Under stt/, not loose in the models directory.
-    expect(p.split(dir), containsAllInOrder(["models", "stt", "test-stt"]));
-    expect(seen.last.received, 128);
-  });
+      expect(await store.installed(), {"test-stt"});
+      final dir = await store.directoryOf(model);
+      expect(dir, isNotNull);
+      expect(File(p.join(dir!, "model.onnx")).existsSync(), isTrue);
+      expect(File(p.join(dir, "tokens.txt")).existsSync(), isTrue);
+      // Under stt/, not loose in the models directory.
+      expect(p.split(dir), containsAllInOrder(["models", "stt", "test-stt"]));
+      expect(seen.last.received, 128);
+    },
+  );
 
   test("a cancelled download leaves nothing, installed or otherwise", () async {
     net.hold = Completer<void>();
@@ -70,8 +75,10 @@ void main() {
     final sub = store.install(model).listen(null);
     // Under way mid-response: the first file's target exists, which the
     // progress stream never says at this size (it reports per megabyte).
-    await waitFor(() => File(p.join(store.directoryFor(model), "model.onnx")).existsSync(),
-        what: "the download to be under way");
+    await waitFor(
+      () => File(p.join(store.directoryFor(model), "model.onnx")).existsSync(),
+      what: "the download to be under way",
+    );
     // Cancel's future waits for the discard, so there is nothing to poll.
     await sub.cancel();
     expect(Directory(store.directoryFor(model)).existsSync(), isFalse);
@@ -80,56 +87,72 @@ void main() {
   });
 
   test("a model that will not download is not left half-installed", () async {
-    final model = plainModel(downloads: [
-      VoiceFile(url: url("/model.onnx"), bytes: 64),
-      // Nothing answers for this one.
-      VoiceFile(url: url("/gone.onnx"), bytes: 64),
-    ]);
+    final model = plainModel(
+      downloads: [
+        VoiceFile(url: url("/model.onnx"), bytes: 64),
+        // Nothing answers for this one.
+        VoiceFile(url: url("/gone.onnx"), bytes: 64),
+      ],
+    );
 
-    await expectLater(store.install(model), emitsThrough(emitsError(isA<Object>())));
+    await expectLater(
+      store.install(model),
+      emitsThrough(emitsError(isA<Object>())),
+    );
     expect(await store.installed(), isEmpty);
     expect(Directory(store.directoryFor(model)).existsSync(), isFalse);
   });
 
-  test("an archive is unpacked with its top-level directory stripped", () async {
-    final model = SpeechModel(
-      id: "test-tts",
-      name: "Test voice",
-      engine: VoiceEngine.vits,
-      languages: "English",
-      multilingual: false,
-      model: "model.onnx",
-      tokens: "tokens.txt",
-      dataDir: "espeak-ng-data",
-      downloads: [VoiceArchive(url: url("/archive.tar.bz2"), bytes: 1)],
-    );
+  test(
+    "an archive is unpacked with its top-level directory stripped",
+    () async {
+      final model = SpeechModel(
+        id: "test-tts",
+        name: "Test voice",
+        engine: VoiceEngine.vits,
+        languages: "English",
+        multilingual: false,
+        model: "model.onnx",
+        tokens: "tokens.txt",
+        dataDir: "espeak-ng-data",
+        downloads: [VoiceArchive(url: url("/archive.tar.bz2"), bytes: 1)],
+      );
 
-    await store.install(model).drain<void>();
+      await store.install(model).drain<void>();
 
-    final dir = await store.directoryOf(model);
-    expect(dir, isNotNull);
-    expect(File(p.join(dir!, "model.onnx")).readAsStringSync(), "weights");
-    expect(File(p.join(dir, "espeak-ng-data", "phondata")).existsSync(), isTrue);
-    // The archive itself is not left beside what came out of it.
-    expect(File(p.join(dir, "_archive.tar.bz2")).existsSync(), isFalse);
-    expect(p.split(dir), containsAllInOrder(["models", "tts", "test-tts"]));
-  });
+      final dir = await store.directoryOf(model);
+      expect(dir, isNotNull);
+      expect(File(p.join(dir!, "model.onnx")).readAsStringSync(), "weights");
+      expect(
+        File(p.join(dir, "espeak-ng-data", "phondata")).existsSync(),
+        isTrue,
+      );
+      // The archive itself is not left beside what came out of it.
+      expect(File(p.join(dir, "_archive.tar.bz2")).existsSync(), isFalse);
+      expect(p.split(dir), containsAllInOrder(["models", "tts", "test-tts"]));
+    },
+  );
 
-  test("installing over a half-finished attempt starts clean; delete takes it all",
-      () async {
-    final model = plainModel();
-    final leftover = Directory(store.directoryFor(model))..createSync(recursive: true);
-    File(p.join(leftover.path, "junk.onnx")).writeAsStringSync("half a download");
+  test(
+    "installing over a half-finished attempt starts clean; delete takes it all",
+    () async {
+      final model = plainModel();
+      final leftover = Directory(store.directoryFor(model))
+        ..createSync(recursive: true);
+      File(
+        p.join(leftover.path, "junk.onnx"),
+      ).writeAsStringSync("half a download");
 
-    await store.install(model).drain<void>();
+      await store.install(model).drain<void>();
 
-    expect(File(p.join(leftover.path, "junk.onnx")).existsSync(), isFalse);
-    expect(await store.installed(), {"test-stt"});
+      expect(File(p.join(leftover.path, "junk.onnx")).existsSync(), isFalse);
+      expect(await store.installed(), {"test-stt"});
 
-    await store.delete(model);
-    expect(await store.installed(), isEmpty);
-    expect(await store.directoryOf(model), isNull);
-  });
+      await store.delete(model);
+      expect(await store.installed(), isEmpty);
+      expect(await store.directoryOf(model), isNull);
+    },
+  );
 }
 
 /// A `.tar.bz2` shaped like the ones sherpa-onnx publishes: one top-level
@@ -138,6 +161,8 @@ List<int> _archive() {
   final archive = Archive()
     ..add(ArchiveFile.string("some-voice-model/model.onnx", "weights"))
     ..add(ArchiveFile.string("some-voice-model/tokens.txt", "a b c"))
-    ..add(ArchiveFile.string("some-voice-model/espeak-ng-data/phondata", "data"));
+    ..add(
+      ArchiveFile.string("some-voice-model/espeak-ng-data/phondata", "data"),
+    );
   return BZip2Encoder().encodeBytes(TarEncoder().encodeBytes(archive));
 }

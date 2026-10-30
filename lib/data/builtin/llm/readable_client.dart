@@ -19,14 +19,13 @@ class ReadableClient implements LlmClient {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
-  }) =>
-      inner.stream(
-        readable(messages, images: images, pdfs: pdfs),
-        model: model,
-        tools: tools,
-        temperature: temperature,
-        reasoningEffort: reasoningEffort,
-      );
+  }) => inner.stream(
+    readable(messages, images: images, pdfs: pdfs),
+    model: model,
+    tools: tools,
+    temperature: temperature,
+    reasoningEffort: reasoningEffort,
+  );
 
   @override
   void close() => inner.close();
@@ -40,8 +39,11 @@ const pdfBudgetBytes = 20 * 1024 * 1024;
 /// [messages] with what the model cannot read named instead of sent. PDFs are
 /// kept newest first while they fit [pdfBudgetBytes]: every request resends
 /// all of them, and the older ones are the ones the model has already read.
-List<LlmMessage> readable(List<LlmMessage> messages,
-    {required bool images, required bool pdfs}) {
+List<LlmMessage> readable(
+  List<LlmMessage> messages, {
+  required bool images,
+  required bool pdfs,
+}) {
   // By identity: the bytes are megabytes, and hashing them per request is
   // what an equality set would do.
   final keptPdfs = Set<LlmAttachment>.identity();
@@ -68,8 +70,12 @@ List<LlmMessage> readable(List<LlmMessage> messages,
   ];
 }
 
-LlmMessage _named(LlmMessage m, List<LlmAttachment> unread, bool pdfs,
-    String Function(Iterable<LlmAttachment>) names) {
+LlmMessage _named(
+  LlmMessage m,
+  List<LlmAttachment> unread,
+  bool pdfs,
+  String Function(Iterable<LlmAttachment>) names,
+) {
   final hiddenImages = unread.where((a) => a.isImage);
   final hiddenPdfs = unread.where((a) => a.isPdf);
   final why = pdfs
@@ -94,4 +100,3 @@ LlmMessage _named(LlmMessage m, List<LlmAttachment> unread, bool pdfs,
     ],
   );
 }
-

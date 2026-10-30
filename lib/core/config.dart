@@ -59,8 +59,7 @@ class AppConfig {
 
   static Future<AppConfig> load(String dataDir) async {
     final config = AppConfig.forDirectory(dataDir);
-    await runMigrations(config.dataDir,
-        fresh: await config.ensureDirs());
+    await runMigrations(config.dataDir, fresh: await config.ensureDirs());
     return config;
   }
 
@@ -188,11 +187,11 @@ class AppConfig {
   /// Create a chat's directories. Reading a path no longer creates it, so the
   /// few places that need them on the filesystem say so.
   Future<void> ensureChatDirs(String chatId, {String? project}) => _ensure([
-        chatDir(chatId, project: project),
-        resourcesDir(chatId, project: project),
-        artifactsDir(chatId, project: project),
-        workspaceDir(chatId, project: project),
-      ]);
+    chatDir(chatId, project: project),
+    resourcesDir(chatId, project: project),
+    artifactsDir(chatId, project: project),
+    workspaceDir(chatId, project: project),
+  ]);
 
   /// A project is its directories: there is nothing else to create one, and
   /// the shared workspace is named in the agent's prompt whether or not
@@ -200,11 +199,11 @@ class AppConfig {
   /// here too, so a project's overrides have somewhere to live the moment it
   /// exists — the way the default one's do at startup.
   Future<void> ensureProjectDirs({String? project}) => _ensure([
-        chatsDir(project: project),
-        projectWorkspaceDir(project: project),
-        for (final kind in CompletionKind.values)
-          promptsDir(kind, project: project),
-      ]);
+    chatsDir(project: project),
+    projectWorkspaceDir(project: project),
+    for (final kind in CompletionKind.values)
+      promptsDir(kind, project: project),
+  ]);
 
   /// True where this call created the data directory, which is what says a
   /// migration has nothing here to move — asked by the call that creates them,
@@ -216,11 +215,7 @@ class AppConfig {
   /// [ensureProjectDirs].
   Future<bool> ensureDirs() async {
     final fresh = !Directory(dataDir).existsSync();
-    await _ensure([
-      dataDir,
-      projectsDir,
-      syncDir,
-    ]);
+    await _ensure([dataDir, projectsDir, syncDir]);
     await ensureProjectDirs();
     return fresh;
   }
@@ -234,8 +229,7 @@ class AppConfig {
   /// The user's global instructions, at the data dir's root: the one file the
   /// instruction load reads that is not inside a project. Outside the
   /// workspaces, so a turn's file tools cannot reach it.
-  String get globalInstructionsFile =>
-      p.join(dataDir, instructionFileName);
+  String get globalInstructionsFile => p.join(dataDir, instructionFileName);
 
   /// The project's instructions, at its workspace root, shared by its chats.
   String projectInstructionsFile({String? project}) =>
@@ -249,7 +243,6 @@ class AppConfig {
   /// Top-level files that mean something on this machine alone: a backup
   /// leaves them out and a restore leaves them in place.
   List<String> get machineLocalFiles => [linkedInstructionsFile];
-
 
   String get settingsFile => p.join(dataDir, "settings.json");
 

@@ -70,7 +70,11 @@ class Transcript {
 /// The reply is put through [speakable] rather than shown raw, so the lines on
 /// screen are the ones being read out — a heading's hashes and a fenced command
 /// belong to the chat page, which is still there.
-List<VoiceLine> linesOf(MessageRole role, MessagePart part, [SpeakableText? growing]) {
+List<VoiceLine> linesOf(
+  MessageRole role,
+  MessagePart part, [
+  SpeakableText? growing,
+]) {
   if (role == MessageRole.user) {
     if (part is! TextPart) return const [];
     final said = part.text.trim();
@@ -81,10 +85,14 @@ List<VoiceLine> linesOf(MessageRole role, MessagePart part, [SpeakableText? grow
   switch (part) {
     case TextPart(:final text):
       final spoken = growing?.of(text) ?? speakable(text);
-      return spoken.isEmpty ? const [] : [VoiceLine(VoiceLineKind.replied, spoken)];
+      return spoken.isEmpty
+          ? const []
+          : [VoiceLine(VoiceLineKind.replied, spoken)];
     case ToolCallPart(:final toolCall):
       final doing = toolUIFor(toolCall.name).spoken;
-      return doing == null ? const [] : [VoiceLine(VoiceLineKind.activity, doing)];
+      return doing == null
+          ? const []
+          : [VoiceLine(VoiceLineKind.activity, doing)];
     case ErrorPart(:final message):
       return [VoiceLine(VoiceLineKind.activity, message)];
     // Typed rather than said — a `!` message from before voice mode was
@@ -104,4 +112,3 @@ List<VoiceLine> linesOf(MessageRole role, MessagePart part, [SpeakableText? grow
       return const [];
   }
 }
-

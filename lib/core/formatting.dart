@@ -9,7 +9,9 @@ String formatSize(int bytes) {
     size /= 1024;
     unit++;
   }
-  final rounded = unit == 0 || size >= 10 ? size.round().toString() : size.toStringAsFixed(1);
+  final rounded = unit == 0 || size >= 10
+      ? size.round().toString()
+      : size.toStringAsFixed(1);
   return "$rounded ${units[unit]}";
 }
 

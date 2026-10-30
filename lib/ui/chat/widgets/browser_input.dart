@@ -4,8 +4,11 @@ import "../../../domain/agent_browser.dart";
 
 /// The keys that insert nothing, or something other than their label, by the
 /// DOM's names for them and the legacy code pages still read.
-final Map<LogicalKeyboardKey, (String key, String code, int keyCode, String? text)>
-    _named = {
+final Map<
+  LogicalKeyboardKey,
+  (String key, String code, int keyCode, String? text)
+>
+_named = {
   LogicalKeyboardKey.enter: ("Enter", "Enter", 13, "\r"),
   LogicalKeyboardKey.numpadEnter: ("Enter", "NumpadEnter", 13, "\r"),
   LogicalKeyboardKey.backspace: ("Backspace", "Backspace", 8, null),
@@ -35,13 +38,13 @@ final Map<LogicalKeyboardKey, (String key, String code, int keyCode, String? tex
 /// its own, so it is named alongside. Paste is not here: the page's clipboard
 /// is not the user's, so the card inserts the user's clipboard instead.
 String? _command(String letter, {required bool shift}) => switch (letter) {
-      "a" => "selectAll",
-      "c" => "copy",
-      "x" => "cut",
-      "z" => shift ? "redo" : "undo",
-      "y" => "redo",
-      _ => null,
-    };
+  "a" => "selectAll",
+  "c" => "copy",
+  "x" => "cut",
+  "z" => shift ? "redo" : "undo",
+  "y" => "redo",
+  _ => null,
+};
 
 /// The DOM's modifier bits for what is held: 1 Alt, 2 Ctrl, 4 Meta, 8 Shift.
 int browserModifiers({
@@ -49,8 +52,7 @@ int browserModifiers({
   required bool control,
   required bool meta,
   required bool shift,
-}) =>
-    (alt ? 1 : 0) | (control ? 2 : 0) | (meta ? 4 : 0) | (shift ? 8 : 0);
+}) => (alt ? 1 : 0) | (control ? 2 : 0) | (meta ? 4 : 0) | (shift ? 8 : 0);
 
 /// A key press as the page should receive it, or null for one it has no name
 /// for. [shortcut] is whether the platform's shortcut modifier is held — Ctrl,
@@ -78,11 +80,19 @@ BrowserKey? browserKeyDown(
     // label is still the letter.
     final label = event.logicalKey.keyLabel;
     if (label.length != 1) return null;
-    return _printable(label.toLowerCase(), modifiers: modifiers, shortcut: true,
-        shift: modifiers & 8 != 0);
+    return _printable(
+      label.toLowerCase(),
+      modifiers: modifiers,
+      shortcut: true,
+      shift: modifiers & 8 != 0,
+    );
   }
-  return _printable(character,
-      modifiers: modifiers, shortcut: shortcut, shift: modifiers & 8 != 0);
+  return _printable(
+    character,
+    modifiers: modifiers,
+    shortcut: shortcut,
+    shift: modifiers & 8 != 0,
+  );
 }
 
 BrowserKey _printable(
@@ -94,15 +104,17 @@ BrowserKey _printable(
   final upper = character.toUpperCase();
   final letter = RegExp(r"^[A-Z]$").hasMatch(upper);
   final digit = RegExp(r"^[0-9]$").hasMatch(character);
-  final command = shortcut ? _command(character.toLowerCase(), shift: shift) : null;
+  final command = shortcut
+      ? _command(character.toLowerCase(), shift: shift)
+      : null;
   return BrowserKey(
     down: true,
     key: character,
     code: letter
         ? "Key$upper"
         : digit
-            ? "Digit$character"
-            : "",
+        ? "Digit$character"
+        : "",
     keyCode: letter || digit ? upper.codeUnitAt(0) : 0,
     text: shortcut ? null : character,
     modifiers: modifiers,
@@ -113,15 +125,20 @@ BrowserKey _printable(
 /// The press of the platform's shortcut for [letter] — Ctrl, or Cmd on a Mac —
 /// as the card's menu sends it: `c` copies, `x` cuts, `a` selects all.
 BrowserKey browserShortcut(String letter, {required bool mac}) => _printable(
-      letter,
-      modifiers: browserModifiers(
-          alt: false, control: !mac, meta: mac, shift: false),
-      shortcut: true,
-      shift: false,
-    );
+  letter,
+  modifiers: browserModifiers(
+    alt: false,
+    control: !mac,
+    meta: mac,
+    shift: false,
+  ),
+  shortcut: true,
+  shift: false,
+);
 
 /// The release of a press: the same key, inserting nothing.
-BrowserKey browserKeyUp(BrowserKey down, {required int modifiers}) => BrowserKey(
+BrowserKey browserKeyUp(BrowserKey down, {required int modifiers}) =>
+    BrowserKey(
       down: false,
       key: down.key,
       code: down.code,

@@ -42,7 +42,11 @@ void main() {
 
       final entries = await listWorkspace(dir);
 
-      expect(entries.map((e) => e.name), ["alpha.txt", "Beta.txt", "Charlie.txt"]);
+      expect(entries.map((e) => e.name), [
+        "alpha.txt",
+        "Beta.txt",
+        "Charlie.txt",
+      ]);
     });
 
     test("a file carries its size and a folder does not", () async {
@@ -128,9 +132,12 @@ void main() {
 
     // The listing under the explorer is re-read, and the agent writes to the
     // same folder, so a tapped file can be gone by the time this runs.
-    test("one that is no longer there is an error rather than an empty page", () {
-      expect(readTextHead("$dir/gone.txt"), throwsException);
-    });
+    test(
+      "one that is no longer there is an error rather than an empty page",
+      () {
+        expect(readTextHead("$dir/gone.txt"), throwsException);
+      },
+    );
   });
 
   group("writing what arrived", () {
@@ -141,7 +148,10 @@ void main() {
     });
 
     test("several files land together", () async {
-      await writeIncoming(dir, [incomingFile("a.txt", "a"), incomingFile("b.txt", "b")]);
+      await writeIncoming(dir, [
+        incomingFile("a.txt", "a"),
+        incomingFile("b.txt", "b"),
+      ]);
 
       expect(File("$dir/a.txt").readAsStringSync(), "a");
       expect(File("$dir/b.txt").readAsStringSync(), "b");
@@ -153,7 +163,10 @@ void main() {
       await writeIncoming(dir, [incomingFile("../../settings.json", "stolen")]);
 
       expect(File("$dir/settings.json").readAsStringSync(), "stolen");
-      expect(File(p.join(dir, "..", "..", "settings.json")).existsSync(), isFalse);
+      expect(
+        File(p.join(dir, "..", "..", "settings.json")).existsSync(),
+        isFalse,
+      );
     });
 
     test("an absolute path is written inside it too", () async {
@@ -258,14 +271,20 @@ void main() {
   group("resolveWorkspacePath", () {
     const workspace = "chats/c1";
     String resolve(String path, {String? homePath}) =>
-        resolveWorkspacePath(path, "$dir/$workspace", dir,
-            homePath: homePath);
-    bool outside(String path, {String? homePath}) => outsideWorkspaces(resolve(path, homePath: homePath), "$dir/$workspace", dir);
+        resolveWorkspacePath(path, "$dir/$workspace", dir, homePath: homePath);
+    bool outside(String path, {String? homePath}) => outsideWorkspaces(
+      resolve(path, homePath: homePath),
+      "$dir/$workspace",
+      dir,
+    );
 
-    test("a relative path lands in the chat's workspace, and is not outside", () {
-      expect(resolve("notes/a.txt"), "$dir/$workspace/notes/a.txt");
-      expect(outside("notes/a.txt"), isFalse);
-    });
+    test(
+      "a relative path lands in the chat's workspace, and is not outside",
+      () {
+        expect(resolve("notes/a.txt"), "$dir/$workspace/notes/a.txt");
+        expect(outside("notes/a.txt"), isFalse);
+      },
+    );
 
     test("a chat-relative path lands in the chat's own, explicitly", () {
       expect(resolve("chat:notes/a.txt"), "$dir/$workspace/notes/a.txt");
@@ -273,15 +292,19 @@ void main() {
     });
 
     test("`~` follows the home it is given, the way the shell's would", () {
-      expect(resolve("~/notes/a.txt", homePath: "$dir/$workspace"),
-          "$dir/$workspace/notes/a.txt");
+      expect(
+        resolve("~/notes/a.txt", homePath: "$dir/$workspace"),
+        "$dir/$workspace/notes/a.txt",
+      );
       expect(resolve("~", homePath: "$dir/$workspace"), "$dir/$workspace");
       expect(outside("~/notes/a.txt", homePath: "$dir/$workspace"), isFalse);
     });
 
     test("and on a machine it is the user's home: past the workspaces", () {
-      expect(resolve("~/notes/a.txt", homePath: "/home/yiannis"),
-          "/home/yiannis/notes/a.txt");
+      expect(
+        resolve("~/notes/a.txt", homePath: "/home/yiannis"),
+        "/home/yiannis/notes/a.txt",
+      );
       expect(outside("~/notes/a.txt", homePath: "/home/yiannis"), isTrue);
     });
 
@@ -293,13 +316,19 @@ void main() {
       expect(outside("$dir/notes/a.txt"), isFalse);
     });
 
-    test("an absolute path the workspaces do not hold is the machine itself", () {
-      expect(resolve("/etc/hosts"), "/etc/hosts");
-      expect(outside("/etc/hosts"), isTrue);
-    });
+    test(
+      "an absolute path the workspaces do not hold is the machine itself",
+      () {
+        expect(resolve("/etc/hosts"), "/etc/hosts");
+        expect(outside("/etc/hosts"), isTrue);
+      },
+    );
 
     test("an absolute path that climbs is normalised before it is judged", () {
-      expect(resolve("$dir/$workspace/notes/../../shared"), "$dir/chats/shared");
+      expect(
+        resolve("$dir/$workspace/notes/../../shared"),
+        "$dir/chats/shared",
+      );
       expect(outside("$dir/$workspace/notes/../../shared"), isFalse);
     });
   });

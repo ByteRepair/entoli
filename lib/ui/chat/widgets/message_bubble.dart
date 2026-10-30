@@ -184,7 +184,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       // which is a different thing to be agreeing to.
       message: others > 0
           ? "This thread and everything below it will be removed. The other "
-              "${others == 1 ? "one stays" : "$others stay"}."
+                "${others == 1 ? "one stays" : "$others stay"}."
           : "This message and everything below it will be removed.",
       confirmLabel: "Delete",
       destructive: true,
@@ -193,14 +193,14 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   }
 
   Future<void> _copy() => copyToClipboard(
-        context,
-        // What the message reads, not what conv.jsonl keeps: the formatted
-        // text is what a reader would paste into another document. Raw
-        // markdown is the button beside it.
-        formattedTextOf(widget.message.plainText),
-        html: htmlClipboardDocument(formattedHtmlOf(widget.message.plainText)),
-        said: "Message copied",
-      );
+    context,
+    // What the message reads, not what conv.jsonl keeps: the formatted
+    // text is what a reader would paste into another document. Raw
+    // markdown is the button beside it.
+    formattedTextOf(widget.message.plainText),
+    html: htmlClipboardDocument(formattedHtmlOf(widget.message.plainText)),
+    said: "Message copied",
+  );
 
   /// What Ctrl+C and the selection menu's Copy write: the selection as text
   /// and as HTML, both read before anything is awaited, since the menu clears
@@ -209,8 +209,14 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     final selection = _selection;
     final plain = selection?.getSelectedContent()?.plainText;
     if (selection == null || plain == null) return;
-    final html = selection.selectedHtml(context.findRenderObject(), widget.message.plainText);
-    await setRichClipboard(plain: plain, html: htmlClipboardDocument(html ?? escapeHtml(plain)));
+    final html = selection.selectedHtml(
+      context.findRenderObject(),
+      widget.message.plainText,
+    );
+    await setRichClipboard(
+      plain: plain,
+      html: htmlClipboardDocument(html ?? escapeHtml(plain)),
+    );
   }
 
   /// The selection's menu, the framework's own with Copy swapped for
@@ -221,24 +227,31 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         buttonItems: [
           for (final item in region.contextMenuButtonItems)
             if (item.type == ContextMenuButtonType.copy)
-              item.copyWith(onPressed: () {
-                unawaited(_copySelection());
-                switch (defaultTargetPlatform) {
-                  case TargetPlatform.android || TargetPlatform.fuchsia:
-                    region.clearSelection();
-                  case TargetPlatform.iOS:
-                    region.hideToolbar(false);
-                  case TargetPlatform.linux || TargetPlatform.macOS || TargetPlatform.windows:
-                    region.hideToolbar();
-                }
-              })
+              item.copyWith(
+                onPressed: () {
+                  unawaited(_copySelection());
+                  switch (defaultTargetPlatform) {
+                    case TargetPlatform.android || TargetPlatform.fuchsia:
+                      region.clearSelection();
+                    case TargetPlatform.iOS:
+                      region.hideToolbar(false);
+                    case TargetPlatform.linux ||
+                        TargetPlatform.macOS ||
+                        TargetPlatform.windows:
+                      region.hideToolbar();
+                  }
+                },
+              )
             else
               item,
         ],
       );
 
-  Future<void> _copyRaw() =>
-      copyToClipboard(context, widget.message.plainText, said: "Markdown copied");
+  Future<void> _copyRaw() => copyToClipboard(
+    context,
+    widget.message.plainText,
+    said: "Markdown copied",
+  );
 
   /// The turn's last round failed, which is what Retry answers: within a round
   /// nothing follows an error, so a turn that ended on one has it trailing,
@@ -279,13 +292,15 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       // A command the user ran is not something they said, so it does not get
       // the colour the things they said are in.
       MessageRole.user => (
-          "You",
-          _command == null && !_wired
-              ? theme.colorScheme.primaryContainer
-              : theme.colorScheme.surfaceContainerHighest
-        ),
-      MessageRole.assistant =>
-        (widget.message.author ?? (widget.entoli ? "Entoli" : null), null),
+        "You",
+        _command == null && !_wired
+            ? theme.colorScheme.primaryContainer
+            : theme.colorScheme.surfaceContainerHighest,
+      ),
+      MessageRole.assistant => (
+        widget.message.author ?? (widget.entoli ? "Entoli" : null),
+        null,
+      ),
       MessageRole.tool => ("Tool", theme.colorScheme.tertiaryContainer),
       MessageRole.system => ("System", theme.colorScheme.tertiaryContainer),
     };
@@ -308,7 +323,10 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                 _pressedAt = null;
                 // A drag that began here was the list being scrolled, not this
                 // message being touched.
-                if (from == null || (event.position - from).distance > kTouchSlop) return;
+                if (from == null ||
+                    (event.position - from).distance > kTouchSlop) {
+                  return;
+                }
                 _show(tapped: !_tapped);
               },
               child: Column(
@@ -331,8 +349,9 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                           Flexible(
                             child: Text(
                               name,
-                              style: theme.textTheme.labelSmall
-                                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
                             ),
                           ),
                         ],
@@ -351,9 +370,10 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                   // it — and the menu's Copy in `_selectionMenu`.
                   Actions(
                     actions: {
-                      CopySelectionTextIntent: CallbackAction<CopySelectionTextIntent>(
-                        onInvoke: (_) => unawaited(_copySelection()),
-                      ),
+                      CopySelectionTextIntent:
+                          CallbackAction<CopySelectionTextIntent>(
+                            onInvoke: (_) => unawaited(_copySelection()),
+                          ),
                     },
                     child: SelectionArea(
                       contextMenuBuilder: _selectionMenu,
@@ -378,64 +398,77 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   }
 
   Widget _actions(ThemeData theme) => ValueListenableBuilder<bool>(
-        valueListenable: _shown,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (_threads > 1) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Text(
-                  "${_thread + 1}/$_threads",
-                  style: theme.textTheme.labelSmall
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                ),
+    valueListenable: _shown,
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_threads > 1) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              "${_thread + 1}/$_threads",
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
-              _step(Icons.chevron_left, "Previous thread", -1),
-              _step(Icons.chevron_right, "Next thread", 1),
-            ],
-            if (widget.message.hasText) ...[
-              ActionIcon(
-                  icon: Icons.copy_outlined, tooltip: "Copy message", onPressed: _copy),
-              ActionIcon(
-                  icon: Icons.code,
-                  tooltip: "Copy raw markdown",
-                  onPressed: _copyRaw),
-            ],
-            if (widget.onSpeak != null)
-              ActionIcon(
-                icon: widget.isSpeaking
-                    ? Icons.stop_circle_outlined
-                    : Icons.volume_up_outlined,
-                tooltip: widget.isSpeaking ? "Stop reading" : "Read aloud",
-                onPressed: widget.onSpeak!,
-              ),
-            if (widget.onDelete != null)
-              ActionIcon(
-                  icon: Icons.delete_outline, tooltip: "Delete thread", onPressed: _delete),
-            if (widget.onEdit != null)
-              ActionIcon(icon: Icons.edit_outlined, tooltip: "Edit", onPressed: _edit),
-            if (widget.onRegenerate != null)
-              ActionIcon(
-                  icon: Icons.refresh,
-                  tooltip: "Regenerate",
-                  onPressed: widget.onRegenerate!),
-          ],
-        ),
-        // Kept whether or not there is anything to show, so a message does not
-        // shift under the pointer the moment the actions appear.
-        builder: (context, shown, child) {
-          final up = shown || widget.isSpeaking;
-          return SizedBox(
-            height: ActionIcon.height,
-            child: AnimatedOpacity(
-              opacity: up ? 1 : 0,
-              duration: const Duration(milliseconds: 120),
-              child: IgnorePointer(ignoring: !up, child: child),
             ),
-          );
-        },
+          ),
+          _step(Icons.chevron_left, "Previous thread", -1),
+          _step(Icons.chevron_right, "Next thread", 1),
+        ],
+        if (widget.message.hasText) ...[
+          ActionIcon(
+            icon: Icons.copy_outlined,
+            tooltip: "Copy message",
+            onPressed: _copy,
+          ),
+          ActionIcon(
+            icon: Icons.code,
+            tooltip: "Copy raw markdown",
+            onPressed: _copyRaw,
+          ),
+        ],
+        if (widget.onSpeak != null)
+          ActionIcon(
+            icon: widget.isSpeaking
+                ? Icons.stop_circle_outlined
+                : Icons.volume_up_outlined,
+            tooltip: widget.isSpeaking ? "Stop reading" : "Read aloud",
+            onPressed: widget.onSpeak!,
+          ),
+        if (widget.onDelete != null)
+          ActionIcon(
+            icon: Icons.delete_outline,
+            tooltip: "Delete thread",
+            onPressed: _delete,
+          ),
+        if (widget.onEdit != null)
+          ActionIcon(
+            icon: Icons.edit_outlined,
+            tooltip: "Edit",
+            onPressed: _edit,
+          ),
+        if (widget.onRegenerate != null)
+          ActionIcon(
+            icon: Icons.refresh,
+            tooltip: "Regenerate",
+            onPressed: widget.onRegenerate!,
+          ),
+      ],
+    ),
+    // Kept whether or not there is anything to show, so a message does not
+    // shift under the pointer the moment the actions appear.
+    builder: (context, shown, child) {
+      final up = shown || widget.isSpeaking;
+      return SizedBox(
+        height: ActionIcon.height,
+        child: AnimatedOpacity(
+          opacity: up ? 1 : 0,
+          duration: const Duration(milliseconds: 120),
+          child: IgnorePointer(ignoring: !up, child: child),
+        ),
       );
+    },
+  );
 
   /// How many threads were written where this message is, and which of them it
   /// is. A message with none is a thread of one, and the only one.
@@ -451,8 +484,9 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     return ActionIcon(
       icon: icon,
       tooltip: tooltip,
-      onPressed:
-          onStep == null || to < 0 || to >= _threads ? null : () => onStep(step),
+      onPressed: onStep == null || to < 0 || to >= _threads
+          ? null
+          : () => onStep(step),
     );
   }
 
@@ -472,14 +506,17 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     // last one, so this is what "live" means for anything drawn from the loop
     // below — the thinking block that has not closed, and the text still being
     // written.
-    final liveAt = widget.isWaiting && parts.isNotEmpty ? parts.length - 1 : null;
+    final liveAt = widget.isWaiting && parts.isNotEmpty
+        ? parts.length - 1
+        : null;
     // A running turn shows one of two things and never both: a caret at the end
     // of the text being written, or a spinner when there is no such text to put
     // one on. `hasText` was not that decision on its own — it ignores
     // whitespace, so a first flush of it drew a spinner beside a caret.
     final carets = liveAt != null && parts[liveAt] is TextPart;
 
-    Widget said(String text, {bool isError = false, bool caret = false}) => Padding(
+    Widget said(String text, {bool isError = false, bool caret = false}) =>
+        Padding(
           padding: const EdgeInsets.only(bottom: 4),
           child: MessageText(
             text: text,
@@ -493,7 +530,8 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     final results = widget.message.toolResults;
     final activities = ref.watch(activityCatalogProvider);
     final calls = {
-      for (final part in widget.message.parts.whereType<ToolCallPart>()) part.toolCall.id,
+      for (final part in widget.message.parts.whereType<ToolCallPart>())
+        part.toolCall.id,
     };
 
     // Trailing state, not parts: they belong under the last thing said.
@@ -529,7 +567,15 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
 
     void closeBubble({List<Widget> trailing = const []}) {
       if (spoken.isEmpty && trailing.isEmpty && files.isEmpty) return;
-      rows.add(_bubble(context, bg, said: spoken.toList(), files: files, trailing: trailing));
+      rows.add(
+        _bubble(
+          context,
+          bg,
+          said: spoken.toList(),
+          files: files,
+          trailing: trailing,
+        ),
+      );
       files = const [];
       spoken.clear();
     }
@@ -563,17 +609,18 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           // Drawn by the call it answers.
           continue;
         case ReasoningPart() ||
-              ToolCallPart() ||
-              ToolResultPart() ||
-              InstructionsPart() ||
-              ApprovalPart() ||
-              ArtifactPart() ||
-              SkillInstallPart():
+            ToolCallPart() ||
+            ToolResultPart() ||
+            InstructionsPart() ||
+            ApprovalPart() ||
+            ArtifactPart() ||
+            SkillInstallPart():
           final activity = activities.of(part)!;
           final run = _runOf(part, i, results, live: isLive(i));
           // What breaks a run of activities: one important of itself, the
           // call the live turn is on, and a run that came back failed.
-          final important = activity.important(run) ||
+          final important =
+              activity.important(run) ||
               (isLive(i) && part is ToolCallPart) ||
               (run.result?.returnCode ?? 0) != 0;
           final label = _label(activity.build(run));
@@ -588,9 +635,13 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           if (isUser) continue;
           flushRun();
           closeBubble();
-          rows.add(AttachmentStrip(children: [
-            AttachmentChip.sent(part, chatId: widget.chatId, size: 256),
-          ]));
+          rows.add(
+            AttachmentStrip(
+              children: [
+                AttachmentChip.sent(part, chatId: widget.chatId, size: 256),
+              ],
+            ),
+          );
         case ShellRunPart():
           // Not a label: a command the user ran is the answer to their message
           // rather than something the turn did on its way to one.
@@ -603,9 +654,11 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           // below it is what is busy.
           flushRun();
           final command = _command;
-          spoken.add(command == null
-              ? said(text, caret: i == liveAt)
-              : ShellCommandText(command: command));
+          spoken.add(
+            command == null
+                ? said(text, caret: i == liveAt)
+                : ShellCommandText(command: command),
+          );
         case ErrorPart(:final message):
           flushRun();
           spoken.add(said("Error: $message", isError: true));
@@ -614,28 +667,34 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           // their bubble, with the reply carrying on under it.
           flushRun();
           closeBubble();
-          rows.add(Align(
-            key: widget.steerKey?.call(message.id),
-            alignment: Alignment.centerRight,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 4, right: 4, bottom: 2),
-                  child: Text(
-                    "You, while it worked",
-                    style: theme.textTheme.labelSmall
-                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          rows.add(
+            Align(
+              key: widget.steerKey?.call(message.id),
+              alignment: Alignment.centerRight,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, right: 4, bottom: 2),
+                    child: Text(
+                      "You, while it worked",
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ),
-                ),
-                _bubble(context, theme.colorScheme.primaryContainer,
+                  _bubble(
+                    context,
+                    theme.colorScheme.primaryContainer,
                     said: [if (message.hasText) said(message.plainText)],
                     files: message.files.toList(),
-                    trailing: const []),
-              ],
+                    trailing: const [],
+                  ),
+                ],
+              ),
             ),
-          ));
+          );
       }
     }
     flushRun();
@@ -651,27 +710,37 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
 
   /// What [part], at [at], is drawn from as an activity. [live] is the part
   /// the turn is on.
-  Run _runOf(MessagePart part, int at, Map<String, ToolResult> results,
-          {required bool live}) =>
-      switch (part) {
-        ToolCallPart(:final toolCall) => Run(
-            chatId: widget.chatId,
-            callId: toolCall.id,
-            call: toolCall,
-            result: results[toolCall.id],
-            going: live && widget.message.hasText,
-          ),
-        ToolResultPart(:final result) =>
-          Run(chatId: widget.chatId, callId: result.callId, result: result),
-        ApprovalPart(:final approvalId) => Run(
-            chatId: widget.chatId, part: part, result: results[approvalId]),
-        ReasoningPart(:final durationMs) => Run(
-            chatId: widget.chatId,
-            part: part,
-            at: at,
-            going: live && durationMs == null),
-        _ => Run(chatId: widget.chatId, part: part, at: at),
-      };
+  Run _runOf(
+    MessagePart part,
+    int at,
+    Map<String, ToolResult> results, {
+    required bool live,
+  }) => switch (part) {
+    ToolCallPart(:final toolCall) => Run(
+      chatId: widget.chatId,
+      callId: toolCall.id,
+      call: toolCall,
+      result: results[toolCall.id],
+      going: live && widget.message.hasText,
+    ),
+    ToolResultPart(:final result) => Run(
+      chatId: widget.chatId,
+      callId: result.callId,
+      result: result,
+    ),
+    ApprovalPart(:final approvalId) => Run(
+      chatId: widget.chatId,
+      part: part,
+      result: results[approvalId],
+    ),
+    ReasoningPart(:final durationMs) => Run(
+      chatId: widget.chatId,
+      part: part,
+      at: at,
+      going: live && durationMs == null,
+    ),
+    _ => Run(chatId: widget.chatId, part: part, at: at),
+  };
 
   Widget _bubble(
     BuildContext context,
@@ -686,7 +755,8 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         if (files.isNotEmpty)
           AttachmentStrip(
             children: [
-              for (final f in files) AttachmentChip.sent(f, chatId: widget.chatId),
+              for (final f in files)
+                AttachmentChip.sent(f, chatId: widget.chatId),
             ],
           ),
         if (bg == null)
@@ -707,7 +777,10 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       builder: (context, constraints) => Container(
         constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.8),
         padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(12),
+        ),
         child: content,
       ),
     );
@@ -748,25 +821,36 @@ class _RenderedSelection extends StaticSelectionContainerDelegate {
     final pieces = <SelectedPiece>[];
     for (final (:selectable, :selected, :sameLine, :box) in _selected()) {
       final range = selectable.getSelection();
-      final paragraph =
-          range == null ? null : paragraphOf(selectable, paragraphs, selected, range);
-      final start = range == null ? 0 : math.min(range.startOffset, range.endOffset);
-      pieces.add(SelectedPiece(
-        text: selected,
-        paragraph: paragraph,
-        start: start,
-        end: start + selected.length,
-        sameLine: pieces.isNotEmpty && sameLine,
-        // A container of its own — a code block's scroll — drawn in the code
-        // face is a code block.
-        monospace: paragraph == null &&
-            paragraphs.any((p) =>
-                p.attached &&
-                box.contains(MatrixUtils.transformRect(
-                        p.getTransformTo(null), Offset.zero & p.size)
-                    .center) &&
-                isMonospace(p)),
-      ));
+      final paragraph = range == null
+          ? null
+          : paragraphOf(selectable, paragraphs, selected, range);
+      final start = range == null
+          ? 0
+          : math.min(range.startOffset, range.endOffset);
+      pieces.add(
+        SelectedPiece(
+          text: selected,
+          paragraph: paragraph,
+          start: start,
+          end: start + selected.length,
+          sameLine: pieces.isNotEmpty && sameLine,
+          // A container of its own — a code block's scroll — drawn in the code
+          // face is a code block.
+          monospace:
+              paragraph == null &&
+              paragraphs.any(
+                (p) =>
+                    p.attached &&
+                    box.contains(
+                      MatrixUtils.transformRect(
+                        p.getTransformTo(null),
+                        Offset.zero & p.size,
+                      ).center,
+                    ) &&
+                    isMonospace(p),
+              ),
+        ),
+      );
     }
     if (pieces.isEmpty) return null;
     return selectionHtml(pieces, RenderedOutline.of(markdown));
@@ -775,21 +859,33 @@ class _RenderedSelection extends StaticSelectionContainerDelegate {
   /// Each selectable with something selected, in order, and whether it shares
   /// a rendered line with what went before: one that does not overlap the box
   /// selected so far vertically is a block of its own.
-  List<({Selectable selectable, String selected, bool sameLine, Rect box})> _selected() {
-    final found = <({Selectable selectable, String selected, bool sameLine, Rect box})>[];
+  List<({Selectable selectable, String selected, bool sameLine, Rect box})>
+  _selected() {
+    final found =
+        <({Selectable selectable, String selected, bool sameLine, Rect box})>[];
     Rect? covered;
     for (final Selectable selectable in selectables) {
       final SelectedContent? selected = selectable.getSelectedContent();
       if (selected == null) continue;
       final transform = selectable.getTransformTo(null);
-      final Rect line = MatrixUtils.transformRect(transform, selectable.boundingBoxes.first);
+      final Rect line = MatrixUtils.transformRect(
+        transform,
+        selectable.boundingBoxes.first,
+      );
       final sameLine =
-          covered != null && line.top <= covered.bottom && line.bottom >= covered.top;
+          covered != null &&
+          line.top <= covered.bottom &&
+          line.bottom >= covered.top;
       final Rect box = MatrixUtils.transformRect(
         transform,
         selectable.boundingBoxes.reduce((a, b) => a.expandToInclude(b)),
       );
-      found.add((selectable: selectable, selected: selected.plainText, sameLine: sameLine, box: box));
+      found.add((
+        selectable: selectable,
+        selected: selected.plainText,
+        sameLine: sameLine,
+        box: box,
+      ));
       covered = covered?.expandToInclude(line) ?? line;
     }
     return found;
@@ -839,4 +935,3 @@ class _Spinner extends StatelessWidget {
     );
   }
 }
-

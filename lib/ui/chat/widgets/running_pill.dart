@@ -37,8 +37,10 @@ class RunningPill extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: mono
               ? TextStyle(fontFamily: monoFamily, fontSize: 12, color: colour)
-              : theme.textTheme.labelMedium
-                  ?.copyWith(color: colour, fontWeight: FontWeight.w500),
+              : theme.textTheme.labelMedium?.copyWith(
+                  color: colour,
+                  fontWeight: FontWeight.w500,
+                ),
         ),
         backgroundColor: theme.colorScheme.primaryContainer,
         side: BorderSide.none,
@@ -54,10 +56,10 @@ class RunningPill extends StatelessWidget {
 
 /// The small spinner of a pill or a group of them.
 Widget runningSpinner(Color colour) => SizedBox(
-      width: 12,
-      height: 12,
-      child: CircularProgressIndicator(strokeWidth: 1.5, color: colour),
-    );
+  width: 12,
+  height: 12,
+  child: CircularProgressIndicator(strokeWidth: 1.5, color: colour),
+);
 
 /// One thing a chat has running beside the reply, as the row above the
 /// composer draws it.
@@ -90,5 +92,9 @@ class RunningThing {
 /// watching through [ref] whatever it reads beyond [view]. The row asks each
 /// for what it has, in the order they are listed, and knows nothing of what
 /// they are.
-typedef RunningSource = List<RunningThing> Function(
-    WidgetRef ref, ChatViewState view, String chatId);
+typedef RunningSource =
+    List<RunningThing> Function(
+      WidgetRef ref,
+      ChatViewState view,
+      String chatId,
+    );

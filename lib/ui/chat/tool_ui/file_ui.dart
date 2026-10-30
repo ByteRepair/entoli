@@ -51,10 +51,11 @@ abstract class _ChangeUI extends ToolUI {
     if (lines == null) return super.build(run);
     final (removed, added) = lines;
     return _DiffLabel(
-        title: _title(run),
-        removed: removed,
-        added: added,
-        onTap: (context) => open(context, run));
+      title: _title(run),
+      removed: removed,
+      added: added,
+      onTap: (context) => open(context, run),
+    );
   }
 
   (List<String>, List<String>)? _changed(Run run) {
@@ -143,16 +144,32 @@ class _DiffLabel extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(children: [
-                const Icon(Icons.description_outlined, size: labelIcon),
-                const SizedBox(width: labelGap),
-                Text(title),
-              ]),
+              Row(
+                children: [
+                  const Icon(Icons.description_outlined, size: labelIcon),
+                  const SizedBox(width: labelGap),
+                  Text(title),
+                ],
+              ),
               const SizedBox(height: 4),
               for (final line in removed)
-                Text("- $line", style: TextStyle(fontFamily: monoFamily, fontSize: 12.5, color: red)),
+                Text(
+                  "- $line",
+                  style: TextStyle(
+                    fontFamily: monoFamily,
+                    fontSize: 12.5,
+                    color: red,
+                  ),
+                ),
               for (final line in added)
-                Text("+ $line", style: TextStyle(fontFamily: monoFamily, fontSize: 12.5, color: green)),
+                Text(
+                  "+ $line",
+                  style: TextStyle(
+                    fontFamily: monoFamily,
+                    fontSize: 12.5,
+                    color: green,
+                  ),
+                ),
             ],
           ),
         ),
@@ -174,12 +191,16 @@ class _DiffLabel extends StatelessWidget {
   final oldLines = before.split("\n");
   final newLines = after.split("\n");
   var start = 0;
-  while (start < oldLines.length && start < newLines.length && oldLines[start] == newLines[start]) {
+  while (start < oldLines.length &&
+      start < newLines.length &&
+      oldLines[start] == newLines[start]) {
     start++;
   }
   var endOld = oldLines.length;
   var endNew = newLines.length;
-  while (endOld > start && endNew > start && oldLines[endOld - 1] == newLines[endNew - 1]) {
+  while (endOld > start &&
+      endNew > start &&
+      oldLines[endOld - 1] == newLines[endNew - 1]) {
     endOld--;
     endNew--;
   }
@@ -195,4 +216,3 @@ extension on List<String> {
   /// the trim left with nothing else in it.
   bool get singleEmpty => length == 1 && this[0].isEmpty;
 }
-

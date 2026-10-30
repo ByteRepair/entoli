@@ -21,7 +21,8 @@ const _page = """
 void main() {
   test("parses redirect and direct links, titles and snippets", () async {
     final search = DuckDuckGoSearch(
-        httpClient: MockClient((_) async => http.Response(_page, 200)));
+      httpClient: MockClient((_) async => http.Response(_page, 200)),
+    );
 
     final result = await search.search("dart");
 

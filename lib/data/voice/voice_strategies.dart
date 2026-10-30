@@ -112,7 +112,9 @@ abstract class MicrophoneListener implements Listener {
     if (words.isEmpty) return;
     // The arm nothing draws: a turn that never happens, and no way to tell it
     // from a microphone that is not working.
-    if (!spoken) return voiceFailed("utterance refused: too quiet for this room");
+    if (!spoken) {
+      return voiceFailed("utterance refused: too quiet for this room");
+    }
     _events.add(VoiceHeard(words));
   }
 
@@ -278,7 +280,9 @@ class ComposedVoiceSession implements VoiceSession {
 /// How every `Voice.start` finishes: a speaker that refuses must not orphan
 /// the listener, which holds a recorder, an isolate or a subscription.
 Future<VoiceSession> composeSession(
-    Listener? listener, Future<Speaker> speaker) async {
+  Listener? listener,
+  Future<Speaker> speaker,
+) async {
   try {
     return ComposedVoiceSession(listener, await speaker);
   } catch (_) {

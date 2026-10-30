@@ -17,7 +17,8 @@ class ArtifactActivity extends Activity {
   bool important(Run run) => true;
 
   @override
-  Widget build(Run run) => _ArtifactCard(chatId: run.chatId, part: run.part! as ArtifactPart);
+  Widget build(Run run) =>
+      _ArtifactCard(chatId: run.chatId, part: run.part! as ArtifactPart);
 }
 
 class _ArtifactCard extends ConsumerWidget {
@@ -39,7 +40,13 @@ class _ArtifactCard extends ConsumerWidget {
       foreground: scheme.onPrimaryContainer,
       onTap: () => ref
           .read(linkOpenerProvider)
-          .openArtifact(context, chatId, artifactId, entryFile: entryFile, title: title),
+          .openArtifact(
+            context,
+            chatId,
+            artifactId,
+            entryFile: entryFile,
+            title: title,
+          ),
     );
   }
 }
@@ -54,25 +61,30 @@ class SkillInstallActivity extends Activity {
   bool important(Run run) => true;
 
   @override
-  Widget build(Run run) => Builder(builder: (context) {
-        final scheme = Theme.of(context).colorScheme;
-        final SkillInstallPart(:installId, :title) = run.part! as SkillInstallPart;
-        return _OutputCard(
-          kind: "Skill",
-          label: title.isEmpty ? "Install skill" : title,
-          icon: Icons.extension,
-          action: Icons.install_desktop,
-          background: scheme.secondaryContainer,
-          foreground: scheme.onSecondaryContainer,
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) =>
-                  SkillInstallPreviewPage(chatId: run.chatId, installId: installId),
+  Widget build(Run run) => Builder(
+    builder: (context) {
+      final scheme = Theme.of(context).colorScheme;
+      final SkillInstallPart(:installId, :title) =
+          run.part! as SkillInstallPart;
+      return _OutputCard(
+        kind: "Skill",
+        label: title.isEmpty ? "Install skill" : title,
+        icon: Icons.extension,
+        action: Icons.install_desktop,
+        background: scheme.secondaryContainer,
+        foreground: scheme.onSecondaryContainer,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => SkillInstallPreviewPage(
+              chatId: run.chatId,
+              installId: installId,
             ),
           ),
-        );
-      });
+        ),
+      );
+    },
+  );
 }
 
 /// The card [ArtifactActivity] and [SkillInstallActivity] are drawn as.
@@ -150,7 +162,11 @@ class _OutputCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Icon(action, size: 18, color: foreground.withValues(alpha: 0.7)),
+                  Icon(
+                    action,
+                    size: 18,
+                    color: foreground.withValues(alpha: 0.7),
+                  ),
                 ],
               ),
             ),
@@ -160,4 +176,3 @@ class _OutputCard extends StatelessWidget {
     );
   }
 }
-

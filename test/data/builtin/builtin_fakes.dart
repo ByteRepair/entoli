@@ -9,8 +9,7 @@ import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/shell.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/web_search.dart";
-import "package:flutter/foundation.dart"
-    show ValueListenable;
+import "package:flutter/foundation.dart" show ValueListenable;
 import "package:http/http.dart" as http;
 
 /// A provider whose client is whatever the test builds.
@@ -23,8 +22,10 @@ class FakeProvider extends LlmProvider {
   LlmClient client(String? apiKey) => build(config, apiKey);
 
   @override
-  Future<List<String>> listModels(String? apiKey, {http.Client? httpClient}) async =>
-      const ["fake-model"];
+  Future<List<String>> listModels(
+    String? apiKey, {
+    http.Client? httpClient,
+  }) async => const ["fake-model"];
 
   @override
   Future<bool> checkKey(String apiKey, {http.Client? httpClient}) async => true;
@@ -42,12 +43,14 @@ class FakeLlmClient implements LlmClient {
   /// was shown rather than only the event the UI saw.
   final List<List<LlmMessage>> sent = [];
   final List<
-      ({
-        String model,
-        List<LlmTool> tools,
-        double? temperature,
-        String? reasoningEffort
-      })> calls = [];
+    ({
+      String model,
+      List<LlmTool> tools,
+      double? temperature,
+      String? reasoningEffort,
+    })
+  >
+  calls = [];
 
   int _at = 0;
   bool closed = false;
@@ -122,8 +125,12 @@ class ConcurrentFakeLlmClient implements LlmClient {
 
 /// A shell that answers from a table instead of running anything.
 class FakeShell extends Shell {
-  FakeShell(this.respond,
-      {this.canRunCommands = true, this.home, this.canRunInBackground = false});
+  FakeShell(
+    this.respond, {
+    this.canRunCommands = true,
+    this.home,
+    this.canRunInBackground = false,
+  });
 
   final ShellResult Function(String command) respond;
 
@@ -186,16 +193,18 @@ class FakeShell extends Shell {
   String get platformDescription => "TestOS 1.0 test";
 
   @override
-  ShellRun start(String command,
-      {required String cwd,
-      required String home,
-      required Duration timeout,
-      Map<String, String>? environment,
-      bool oneShot = false,
-      bool restart = false,
-      String? project,
-      CommandSandbox? sandbox,
-      List<String> readOnly = const []}) {
+  ShellRun start(
+    String command, {
+    required String cwd,
+    required String home,
+    required Duration timeout,
+    Map<String, String>? environment,
+    bool oneShot = false,
+    bool restart = false,
+    String? project,
+    CommandSandbox? sandbox,
+    List<String> readOnly = const [],
+  }) {
     ran.add(command);
     readOnlys.add(readOnly);
     cwds.add(cwd);
@@ -232,8 +241,12 @@ class _FakeRun implements ShellRun {
   Future<void> kill() async {
     shell.killed.add(command);
     if (!_done.isCompleted) {
-      _done.complete(ShellResult.failed("The command was interrupted and killed.",
-          output: shell.killedOutput));
+      _done.complete(
+        ShellResult.failed(
+          "The command was interrupted and killed.",
+          output: shell.killedOutput,
+        ),
+      );
     }
   }
 }
@@ -244,157 +257,182 @@ LlmCompletion bashCall(
   String id = "call-1",
   String text = "",
   Map<String, Object?> extra = const {},
-}) =>
-    LlmCompletion(
-      message: LlmMessage(
-        role: LlmRole.assistant,
-        text: text,
-        toolCalls: [
-          LlmToolCall(
-              id: id, name: "bash", argumentsJson: jsonEncode({"command": command, ...extra})),
-        ],
+}) => LlmCompletion(
+  message: LlmMessage(
+    role: LlmRole.assistant,
+    text: text,
+    toolCalls: [
+      LlmToolCall(
+        id: id,
+        name: "bash",
+        argumentsJson: jsonEncode({"command": command, ...extra}),
       ),
-    );
+    ],
+  ),
+);
 
 /// One assistant turn that calls a tool by name with a map of arguments —
 /// the shape any structured tool call takes in a test. Named for the file
 /// tools because that is what most tests call, but not limited to them.
-LlmCompletion fileCall(String tool, Map<String, Object?> arguments,
-        {String id = "file-1"}) =>
-    LlmCompletion(
-      message: LlmMessage(
-        role: LlmRole.assistant,
-        toolCalls: [
-          LlmToolCall(id: id, name: tool, argumentsJson: jsonEncode(arguments)),
-        ],
-      ),
-    );
+LlmCompletion fileCall(
+  String tool,
+  Map<String, Object?> arguments, {
+  String id = "file-1",
+}) => LlmCompletion(
+  message: LlmMessage(
+    role: LlmRole.assistant,
+    toolCalls: [
+      LlmToolCall(id: id, name: tool, argumentsJson: jsonEncode(arguments)),
+    ],
+  ),
+);
 
 /// One assistant turn that asks the user something. [arguments] is passed as
 /// the model wrote it, so a test can hand over a shape nobody designed for.
 LlmCompletion askCall(Object arguments, {String id = "ask-1"}) => LlmCompletion(
-      message: LlmMessage(
-        role: LlmRole.assistant,
-        toolCalls: [
-          LlmToolCall(
-            id: id,
-            name: askToolName,
-            argumentsJson: arguments is String ? arguments : jsonEncode(arguments),
-          ),
-        ],
+  message: LlmMessage(
+    role: LlmRole.assistant,
+    toolCalls: [
+      LlmToolCall(
+        id: id,
+        name: askToolName,
+        argumentsJson: arguments is String ? arguments : jsonEncode(arguments),
       ),
-    );
+    ],
+  ),
+);
 
 /// One assistant turn that says something and calls nothing.
 LlmCompletion saidOnly(String text, {String? finishReason}) => LlmCompletion(
-      finishReason: finishReason,
-      message: LlmMessage(role: LlmRole.assistant, text: text),
-    );
+  finishReason: finishReason,
+  message: LlmMessage(role: LlmRole.assistant, text: text),
+);
 
 /// One assistant turn that spawns several sub-agents at once, the fan-out a
 /// `task` batch is for. [tasks] is agent-name to prompt, and the call ids are
 /// `t1`, `t2`, ... in the order given — which is the order the model made them.
 LlmCompletion taskCalls(List<(String, String)> tasks) => LlmCompletion(
-      message: LlmMessage(
-        role: LlmRole.assistant,
-        toolCalls: [
-          for (final (i, (agent, prompt)) in tasks.indexed)
-            LlmToolCall(
-              id: "t${i + 1}",
-              name: "task",
-              argumentsJson: jsonEncode({"agent": agent, "prompt": prompt}),
-            ),
-        ],
-      ),
-    );
+  message: LlmMessage(
+    role: LlmRole.assistant,
+    toolCalls: [
+      for (final (i, (agent, prompt)) in tasks.indexed)
+        LlmToolCall(
+          id: "t${i + 1}",
+          name: "task",
+          argumentsJson: jsonEncode({"agent": agent, "prompt": prompt}),
+        ),
+    ],
+  ),
+);
 
 /// One assistant turn that spawns a sub-agent via the `task` tool.
-LlmCompletion taskCall(String agent, String prompt, {String id = "task-1", String text = ""}) =>
-    LlmCompletion(
-      message: LlmMessage(
-        role: LlmRole.assistant,
-        text: text,
-        toolCalls: [
-          LlmToolCall(
-            id: id,
-            name: "task",
-            argumentsJson: jsonEncode({"agent": agent, "prompt": prompt}),
-          ),
-        ],
+LlmCompletion taskCall(
+  String agent,
+  String prompt, {
+  String id = "task-1",
+  String text = "",
+}) => LlmCompletion(
+  message: LlmMessage(
+    role: LlmRole.assistant,
+    text: text,
+    toolCalls: [
+      LlmToolCall(
+        id: id,
+        name: "task",
+        argumentsJson: jsonEncode({"agent": agent, "prompt": prompt}),
       ),
-    );
+    ],
+  ),
+);
 
 /// One assistant turn that calls `webfetch`.
-LlmCompletion fetchCall(String url, {String id = "fetch-1", String text = ""}) =>
-    LlmCompletion(
-      message: LlmMessage(
-        role: LlmRole.assistant,
-        text: text,
-        toolCalls: [
-          LlmToolCall(
-            id: id,
-            name: "webfetch",
-            argumentsJson: jsonEncode({"url": url}),
-          ),
-        ],
+LlmCompletion fetchCall(
+  String url, {
+  String id = "fetch-1",
+  String text = "",
+}) => LlmCompletion(
+  message: LlmMessage(
+    role: LlmRole.assistant,
+    text: text,
+    toolCalls: [
+      LlmToolCall(
+        id: id,
+        name: "webfetch",
+        argumentsJson: jsonEncode({"url": url}),
       ),
-    );
+    ],
+  ),
+);
 
 /// One assistant turn that calls `artifact`.
-LlmCompletion artifactCall(String path, {String? title, String? artifactId, String id = "art-1", String text = ""}) =>
-    LlmCompletion(
-      message: LlmMessage(
-        role: LlmRole.assistant,
-        text: text,
-        toolCalls: [
-          LlmToolCall(
-            id: id,
-            name: artifactToolName,
-            argumentsJson: jsonEncode({
-              "path": path,
-              "title": ?title,
-              "artifact_id": ?artifactId,
-            }),
-          ),
-        ],
+LlmCompletion artifactCall(
+  String path, {
+  String? title,
+  String? artifactId,
+  String id = "art-1",
+  String text = "",
+}) => LlmCompletion(
+  message: LlmMessage(
+    role: LlmRole.assistant,
+    text: text,
+    toolCalls: [
+      LlmToolCall(
+        id: id,
+        name: artifactToolName,
+        argumentsJson: jsonEncode({
+          "path": path,
+          "title": ?title,
+          "artifact_id": ?artifactId,
+        }),
       ),
-    );
+    ],
+  ),
+);
 
 /// One assistant turn that calls `read`.
-LlmCompletion readCall(String path, {int? offset, int? limit, String id = "read-1", String text = ""}) =>
-    LlmCompletion(
-      message: LlmMessage(
-        role: LlmRole.assistant,
-        text: text,
-        toolCalls: [
-          LlmToolCall(
-            id: id,
-            name: "read",
-            argumentsJson: jsonEncode({
-              "path": path,
-              "offset": ?offset,
-              "limit": ?limit,
-            }),
-          ),
-        ],
+LlmCompletion readCall(
+  String path, {
+  int? offset,
+  int? limit,
+  String id = "read-1",
+  String text = "",
+}) => LlmCompletion(
+  message: LlmMessage(
+    role: LlmRole.assistant,
+    text: text,
+    toolCalls: [
+      LlmToolCall(
+        id: id,
+        name: "read",
+        argumentsJson: jsonEncode({
+          "path": path,
+          "offset": ?offset,
+          "limit": ?limit,
+        }),
       ),
-    );
+    ],
+  ),
+);
 
 /// One assistant turn that calls `write`.
-LlmCompletion writeCall(String path, String content, {String id = "write-1", String text = ""}) =>
-    LlmCompletion(
-      message: LlmMessage(
-        role: LlmRole.assistant,
-        text: text,
-        toolCalls: [
-          LlmToolCall(
-            id: id,
-            name: "write",
-            argumentsJson: jsonEncode({"path": path, "content": content}),
-          ),
-        ],
+LlmCompletion writeCall(
+  String path,
+  String content, {
+  String id = "write-1",
+  String text = "",
+}) => LlmCompletion(
+  message: LlmMessage(
+    role: LlmRole.assistant,
+    text: text,
+    toolCalls: [
+      LlmToolCall(
+        id: id,
+        name: "write",
+        argumentsJson: jsonEncode({"path": path, "content": content}),
       ),
-    );
+    ],
+  ),
+);
 
 /// One assistant turn that calls `edit`.
 LlmCompletion editCall(
@@ -404,32 +442,28 @@ LlmCompletion editCall(
   bool replaceAll = false,
   String id = "edit-1",
   String text = "",
-}) =>
-    LlmCompletion(
-      message: LlmMessage(
-        role: LlmRole.assistant,
-        text: text,
-        toolCalls: [
-          LlmToolCall(
-            id: id,
-            name: "edit",
-            argumentsJson: jsonEncode({
-              "path": path,
-              "old_string": oldString,
-              "new_string": newString,
-              if (replaceAll) "replace_all": true,
-            }),
-          ),
-        ],
+}) => LlmCompletion(
+  message: LlmMessage(
+    role: LlmRole.assistant,
+    text: text,
+    toolCalls: [
+      LlmToolCall(
+        id: id,
+        name: "edit",
+        argumentsJson: jsonEncode({
+          "path": path,
+          "old_string": oldString,
+          "new_string": newString,
+          if (replaceAll) "replace_all": true,
+        }),
       ),
-    );
+    ],
+  ),
+);
 
 /// A web search that answers from a table instead of reaching the network.
 class FakeWebSearch extends WebSearch {
-  FakeWebSearch({
-    this.searchResult,
-    this.fetchResult,
-  });
+  FakeWebSearch({this.searchResult, this.fetchResult});
 
   /// What `search` returns. Defaults to a generic success.
   ShellResult Function(String query)? searchResult;

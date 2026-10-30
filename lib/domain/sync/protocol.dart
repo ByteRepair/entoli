@@ -152,6 +152,7 @@ sealed class SyncMessage with _$SyncMessage {
     required String chatId,
     required String text,
     @Default(<SyncFile>[]) List<SyncFile> files,
+
     /// Said over a running turn: wait for it rather than steer it. An older
     /// home device reads none, and queues as it always did.
     @Default(false) bool queue,
@@ -169,8 +170,7 @@ sealed class SyncMessage with _$SyncMessage {
     required List<String?> answers,
   }) = SyncQuestionsRespond;
 
-  const factory SyncMessage.turnAbort({required String chatId}) =
-      SyncTurnAbort;
+  const factory SyncMessage.turnAbort({required String chatId}) = SyncTurnAbort;
 
   /// Carry on a turn the home device was cut off in.
   const factory SyncMessage.turnResume({required String chatId}) =
@@ -321,10 +321,7 @@ abstract class SyncFile with _$SyncFile {
 /// them.
 @freezed
 abstract class SyncAsk with _$SyncAsk {
-  const factory SyncAsk({
-    required String id,
-    String? argumentsJson,
-  }) = _SyncAsk;
+  const factory SyncAsk({required String id, String? argumentsJson}) = _SyncAsk;
 
   factory SyncAsk.fromJson(Map<String, dynamic> json) =>
       _$SyncAskFromJson(json);

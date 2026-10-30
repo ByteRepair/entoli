@@ -92,7 +92,9 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
   Future<void> _scan() async {
     final config = ref.read(appConfigProvider);
     final names = <String>{};
-    final dir = Directory(config.promptsDir(CompletionKind.agent, project: widget.project));
+    final dir = Directory(
+      config.promptsDir(CompletionKind.agent, project: widget.project),
+    );
     if (dir.existsSync()) {
       await for (final entity in dir.list()) {
         if (entity is File && p.extension(entity.path) == ".md") {
@@ -106,8 +108,12 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
   Future<void> _add() async {
     final result = await Navigator.of(context).push<AgentEdit>(
       MaterialPageRoute(
-          builder: (_) => AgentEditorPage(
-              initial: AgentDefinition.main, isNew: true, project: widget.project)),
+        builder: (_) => AgentEditorPage(
+          initial: AgentDefinition.main,
+          isNew: true,
+          project: widget.project,
+        ),
+      ),
     );
     if (result == null || !mounted) return;
     await _save(result, previous: null);
@@ -120,8 +126,9 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
     // directory shows on the rows but not here — picking one sets this
     // project's, and a remove takes this project's away, where "removed on
     // save" would otherwise leave the inherited one on screen.
-    final file =
-        File(agentPicturePath(config, agent.name, project: widget.project));
+    final file = File(
+      agentPicturePath(config, agent.name, project: widget.project),
+    );
     final bytes = file.existsSync() ? await file.readAsBytes() : null;
     if (!mounted) return;
     final result = await Navigator.of(context).push<AgentEdit>(
@@ -177,46 +184,51 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
     String? removes,
     Uint8List? picture,
     bool removePicture = false,
-  }) =>
-      _guard(() async {
-        final config = ref.read(appConfigProvider);
-        final renames = removes != null && removes != name;
-        await platform.readOnlyDirs
-            .of(config.promptsDir(CompletionKind.agent, project: widget.project))
-            .write(() async {
-            final file =
-                File(agentFilePath(config, name, project: widget.project));
-            await file.create(recursive: true);
-            await file.writeAsString(source);
-            if (renames) {
-              await File(agentFilePath(config, removes, project: widget.project))
-                  .delete();
-            }
-            final image =
-                File(agentPicturePath(config, name, project: widget.project));
-            if (removePicture) {
-              if (image.existsSync()) await image.delete();
-            } else if (picture != null) {
-              await image.writeAsBytes(picture);
-            } else if (renames) {
-              // A rename: the old picture moves with the agent, standing over
-              // it where both were set — rename over an existing file is fine.
-              final oldImage = File(agentPicturePath(config, removes, project: widget.project));
-              if (oldImage.existsSync()) await oldImage.rename(image.path);
-            }
-          });
-        await _reload(widget.project);
-        await _scan();
-        _invalidatePicture(name);
-        if (renames) _invalidatePicture(removes);
-        _say(said);
-      });
+  }) => _guard(() async {
+    final config = ref.read(appConfigProvider);
+    final renames = removes != null && removes != name;
+    await platform.readOnlyDirs
+        .of(config.promptsDir(CompletionKind.agent, project: widget.project))
+        .write(() async {
+          final file = File(
+            agentFilePath(config, name, project: widget.project),
+          );
+          await file.create(recursive: true);
+          await file.writeAsString(source);
+          if (renames) {
+            await File(
+              agentFilePath(config, removes, project: widget.project),
+            ).delete();
+          }
+          final image = File(
+            agentPicturePath(config, name, project: widget.project),
+          );
+          if (removePicture) {
+            if (image.existsSync()) await image.delete();
+          } else if (picture != null) {
+            await image.writeAsBytes(picture);
+          } else if (renames) {
+            // A rename: the old picture moves with the agent, standing over
+            // it where both were set — rename over an existing file is fine.
+            final oldImage = File(
+              agentPicturePath(config, removes, project: widget.project),
+            );
+            if (oldImage.existsSync()) await oldImage.rename(image.path);
+          }
+        });
+    await _reload(widget.project);
+    await _scan();
+    _invalidatePicture(name);
+    if (renames) _invalidatePicture(removes);
+    _say(said);
+  });
 
   Future<void> _delete(PromptDocument agent) async {
     final confirmed = await confirm(
       context,
       title: "Remove ${agent.name}?",
-      message: "The agent is deleted. A bundled agent of the same name, if "
+      message:
+          "The agent is deleted. A bundled agent of the same name, if "
           "there is one, is back the next time the library loads.",
       confirmLabel: "Remove",
       destructive: true,
@@ -228,12 +240,14 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
       await platform.readOnlyDirs
           .of(config.promptsDir(CompletionKind.agent, project: widget.project))
           .write(() async {
-          await File(agentFilePath(config, agent.name, project: widget.project))
-              .delete();
-          final image =
-              File(agentPicturePath(config, agent.name, project: widget.project));
-          if (image.existsSync()) await image.delete();
-        });
+            await File(
+              agentFilePath(config, agent.name, project: widget.project),
+            ).delete();
+            final image = File(
+              agentPicturePath(config, agent.name, project: widget.project),
+            );
+            if (image.existsSync()) await image.delete();
+          });
       await _reload(widget.project);
       await _scan();
       _invalidatePicture(agent.name);
@@ -258,8 +272,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
       _say("That file cannot be imported: there is no prompt in it.");
       return;
     }
-    final name =
-        p.basenameWithoutExtension(file.name);
+    final name = p.basenameWithoutExtension(file.name);
     if (!isFolderName(name)) {
       _say("That file cannot be imported: its name cannot be a file name.");
       return;
@@ -272,13 +285,16 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
   /// would rather keep it, or the page went away while asking.
   Future<bool> _mayReplace(String name, String doing) async {
     final config = ref.read(appConfigProvider);
-    final exists = File(agentFilePath(config, name, project: widget.project)).existsSync();
+    final exists = File(
+      agentFilePath(config, name, project: widget.project),
+    ).existsSync();
     if (!mounted) return false;
     return !exists ||
         await confirm(
           context,
           title: "Replace $name?",
-          message: "An agent with that name is already installed. $doing "
+          message:
+              "An agent with that name is already installed. $doing "
               "this one replaces it.",
           confirmLabel: "Replace",
         );
@@ -298,13 +314,15 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
   void _invalidatePicture(String name) =>
       invalidateAgentPicture(ref, name, project: widget.project);
 
-  Future<void> _export(PromptDocument agent) => _guard(() => exportAndSave(
-        ref.read(appConfigProvider),
-        ref.read(backupHandoffProvider),
-        CompletionKind.agent,
-        agent.name,
-        project: widget.project,
-      ));
+  Future<void> _export(PromptDocument agent) => _guard(
+    () => exportAndSave(
+      ref.read(appConfigProvider),
+      ref.read(backupHandoffProvider),
+      CompletionKind.agent,
+      agent.name,
+      project: widget.project,
+    ),
+  );
 
   Future<void> _guard(Future<void> Function() work) =>
       whileBusy(context, _busy, work);
@@ -315,19 +333,21 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
 
   @override
   Widget build(BuildContext context) {
-    final agents =
-        ref.watch(promptLibraryOf((device: widget.device, project: widget.project)))
-            .entries(CompletionKind.agent);
+    final agents = ref
+        .watch(
+          promptLibraryOf((device: widget.device, project: widget.project)),
+        )
+        .entries(CompletionKind.agent);
     final userAgents = _userAgents;
     final description = !_writable
         ? "System prompts a message can address as @name in this project. "
-            "Shown read-only: the entries are this project's, the default "
-            "project's, or the app's own."
+              "Shown read-only: the entries are this project's, the default "
+              "project's, or the app's own."
         : agents.isEmpty
-            ? "System prompts a message can address as @name. None are "
-                "installed yet."
-            : "System prompts a message can address as @name. The bundled "
-                "ones ship with the app; the rest are yours.";
+        ? "System prompts a message can address as @name. None are "
+              "installed yet."
+        : "System prompts a message can address as @name. The bundled "
+              "ones ship with the app; the rest are yours.";
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -386,10 +406,17 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
     final owned = inDir == true && _writable;
     return ListTile(
       dense: true,
-      leading: _local ? AgentPicture(name: agent.name, project: widget.project) : null,
+      leading: _local
+          ? AgentPicture(name: agent.name, project: widget.project)
+          : null,
       title: Text(agent.name),
-      subtitle:
-          agent.description == null ? null : Text(agent.description!, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: agent.description == null
+          ? null
+          : Text(
+              agent.description!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
       onTap: owned ? () => _edit(agent) : null,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -398,24 +425,24 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
             // The scan is still out: neither button nor badge is drawn.
             null => const SizedBox.shrink(),
             true when _writable => Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.edit_outlined),
-                    tooltip: "Edit ${agent.name}",
-                    onPressed: () => _edit(agent),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    tooltip: "Remove ${agent.name}",
-                    onPressed: () => _delete(agent),
-                  ),
-                ],
-              ),
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined),
+                  tooltip: "Edit ${agent.name}",
+                  onPressed: () => _edit(agent),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  tooltip: "Remove ${agent.name}",
+                  onPressed: () => _delete(agent),
+                ),
+              ],
+            ),
             false => Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: Text(_originLabel(agent.name)),
-              ),
+              padding: const EdgeInsets.only(right: 12),
+              child: Text(_originLabel(agent.name)),
+            ),
             true => const SizedBox.shrink(),
           },
           if (_local)
@@ -433,8 +460,8 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
   /// the binary embeds, or a default-project entry this project inherits.
   String _originLabel(String name) =>
       isBundledPromptName(CompletionKind.agent, name, project: widget.project)
-          ? "Bundled"
-          : "Inherited";
+      ? "Bundled"
+      : "Inherited";
 }
 
 /// What the editor page hands back on save: the [agent] as edited, whose
@@ -492,11 +519,15 @@ class AgentEditorPage extends ConsumerStatefulWidget {
 }
 
 class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
-  late final TextEditingController _name = TextEditingController(text: widget.initial.name);
-  late final TextEditingController _description =
-      TextEditingController(text: widget.initial.description);
-  late final TextEditingController _body =
-      TextEditingController(text: widget.initial.instructions);
+  late final TextEditingController _name = TextEditingController(
+    text: widget.initial.name,
+  );
+  late final TextEditingController _description = TextEditingController(
+    text: widget.initial.description,
+  );
+  late final TextEditingController _body = TextEditingController(
+    text: widget.initial.instructions,
+  );
   String? _nameError;
 
   /// What an agent may be granted, listed whatever this device can run: the
@@ -510,7 +541,8 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
 
   /// The ids switched on. Ids this build does not know stay in it, so a
   /// save keeps what a newer build's list named.
-  late final Set<String> _initialTools = widget.initial.tools ??
+  late final Set<String> _initialTools =
+      widget.initial.tools ??
       {
         for (final tool in _grantable)
           if (tool.onByDefault) tool.id,
@@ -562,9 +594,9 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
   /// What a pick or a remove records: the touched flag is the save's answer,
   /// the bytes only what the row shows and what goes back where a pick made.
   void _pick(Uint8List? bytes) => setState(() {
-        _picture = bytes;
-        _pictureTouched = true;
-      });
+    _picture = bytes;
+    _pictureTouched = true;
+  });
 
   /// The picture chooser. The image a pick brings in lives only in this page
   /// until Save: nothing is written by choosing, the way nothing else here is.
@@ -575,7 +607,9 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
         .then((picks) => picks.isEmpty ? null : picks.single);
     if (attachment == null) return;
     if (!attachment.filename.toLowerCase().endsWith(".png")) {
-      if (mounted) say(context, "The picture is saved as a .png — pick a PNG image.");
+      if (mounted) {
+        say(context, "The picture is saved as a .png — pick a PNG image.");
+      }
       return;
     }
     _pick(attachment.bytes);
@@ -594,7 +628,9 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
     final renaming = !widget.isNew && name != widget.initial.name;
     if (renaming) {
       final config = ref.read(appConfigProvider);
-      final taken = File(agentFilePath(config, name, project: widget.project)).existsSync();
+      final taken = File(
+        agentFilePath(config, name, project: widget.project),
+      ).existsSync();
       if (!mounted) return;
       if (taken) {
         setState(() => _nameError = "An agent with that name already exists.");
@@ -606,56 +642,57 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
     // reaches it.
     final unchanged =
         widget.initial.tools == null && setEquals(_tools, _initialTools);
-    Navigator.of(context).pop(
-      (
-        agent: widget.initial.edited(
-          name: name,
-          description: _description.text,
-          instructions: _body.text,
-          tools: unchanged
-              ? null
-              : {
-                  for (final tool in _grantable)
-                    if (_tools.contains(tool.id)) tool.id,
-                  ..._tools.difference(_known),
-                },
-        ),
-        // Only what was touched: untouched bytes going back would have the
-        // section rewrite the same picture over the new name on a rename —
-        // over what moving the old one there already put. Touched and null
-        // together is "remove on save", and the pair is never both empty and
-        // set.
-        picture: _pictureTouched ? _picture : null,
-        removePicture: _pictureTouched && _picture == null,
+    Navigator.of(context).pop((
+      agent: widget.initial.edited(
+        name: name,
+        description: _description.text,
+        instructions: _body.text,
+        tools: unchanged
+            ? null
+            : {
+                for (final tool in _grantable)
+                  if (_tools.contains(tool.id)) tool.id,
+                ..._tools.difference(_known),
+              },
       ),
-    );
+      // Only what was touched: untouched bytes going back would have the
+      // section rewrite the same picture over the new name on a rename —
+      // over what moving the old one there already put. Touched and null
+      // together is "remove on save", and the pair is never both empty and
+      // set.
+      picture: _pictureTouched ? _picture : null,
+      removePicture: _pictureTouched && _picture == null,
+    ));
   }
 
   /// Two tools of one name are one tool worded two ways (`bash` and its
   /// read-only form): switching one on switches the other off.
   void _setTool(AgentTool tool, bool on) => setState(() {
-        if (on) {
-          _tools.removeAll([
-            for (final other in _grantable)
-              if (other.name == tool.name) other.id,
-          ]);
-        }
-        on ? _tools.add(tool.id) : _tools.remove(tool.id);
-      });
+    if (on) {
+      _tools.removeAll([
+        for (final other in _grantable)
+          if (other.name == tool.name) other.id,
+      ]);
+    }
+    on ? _tools.add(tool.id) : _tools.remove(tool.id);
+  });
 
   /// On is every name in [tools] on in one of its forms, and switching the
   /// group on picks each name's first.
-  bool _groupOn(List<AgentTool> tools) => tools.every((tool) => tools
-      .any((other) => other.name == tool.name && _tools.contains(other.id)));
+  bool _groupOn(List<AgentTool> tools) => tools.every(
+    (tool) => tools.any(
+      (other) => other.name == tool.name && _tools.contains(other.id),
+    ),
+  );
 
   void _setGroup(List<AgentTool> tools, bool on) => setState(() {
-        _tools.removeAll(tools.map((tool) => tool.id));
-        if (!on) return;
-        final names = <String>{};
-        for (final tool in tools) {
-          if (names.add(tool.name)) _tools.add(tool.id);
-        }
-      });
+    _tools.removeAll(tools.map((tool) => tool.id));
+    if (!on) return;
+    final names = <String>{};
+    for (final tool in tools) {
+      if (names.add(tool.name)) _tools.add(tool.id);
+    }
+  });
 
   List<Widget> _group(ToolGroup group) {
     final tools = [
@@ -674,8 +711,11 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
           dense: true,
           contentPadding: const EdgeInsets.only(left: 16),
           title: Text(tool.id),
-          subtitle: Text(tool.description,
-              maxLines: 2, overflow: TextOverflow.ellipsis),
+          subtitle: Text(
+            tool.description,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
           value: _tools.contains(tool.id),
           onChanged: (on) => _setTool(tool, on),
         ),
@@ -691,15 +731,15 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(widget.isNew ? "Add agent" : "Edit ${widget.initial.name}"),
+          title: Text(
+            widget.isNew ? "Add agent" : "Edit ${widget.initial.name}",
+          ),
           leading: IconButton(
             icon: const Icon(Icons.close),
             tooltip: "Discard",
             onPressed: _discard,
           ),
-          actions: [
-            TextButton(onPressed: _save, child: const Text("Save")),
-          ],
+          actions: [TextButton(onPressed: _save, child: const Text("Save"))],
         ),
         body: SafeArea(
           child: ListView(
@@ -726,12 +766,12 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                       // anything. Untouched says what is there, plainly.
                       !_pictureTouched
                           ? _picture == null
-                              ? "No picture. A PNG picked here is shown beside "
-                                  "the agent's name in the list and in chat."
-                              : "The agent's picture."
+                                ? "No picture. A PNG picked here is shown beside "
+                                      "the agent's name in the list and in chat."
+                                : "The agent's picture."
                           : _picture == null
-                              ? "The picture is removed on save."
-                              : "A new picture is set on save.",
+                          ? "The picture is removed on save."
+                          : "A new picture is set on save.",
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
@@ -785,10 +825,11 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
               Text("Tools", style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 4),
               mutedParagraph(
-                  context,
-                  "What this agent can use when it runs as a sub-agent or a "
-                  "team member. A tool this device cannot run stays off "
-                  "whatever is set here."),
+                context,
+                "What this agent can use when it runs as a sub-agent or a "
+                "team member. A tool this device cannot run stays off "
+                "whatever is set here.",
+              ),
               for (final group in ToolGroup.values) ..._group(group),
             ],
           ),

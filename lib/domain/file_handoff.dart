@@ -1,6 +1,5 @@
 import "dart:io";
 
-
 /// A file on its way into a workspace from outside Entoli: shared to the app
 /// by another one.
 ///

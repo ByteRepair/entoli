@@ -52,18 +52,18 @@ class PairingOffer {
   final String tag;
 
   Map<String, Object> toJson() => {
-        "v": 1,
-        "kind": kind,
-        "psk": psk,
-        "name": name,
-        if (kind == lanKind) ...{
-          "hosts": hosts,
-          "port": port,
-          if (code.isNotEmpty) "code": code,
-        },
-        if (kind == relayKind) "relay": relayUrl,
-        if (sdp.isNotEmpty) ...{"sdp": sdp, if (tag.isNotEmpty) "tag": tag},
-      };
+    "v": 1,
+    "kind": kind,
+    "psk": psk,
+    "name": name,
+    if (kind == lanKind) ...{
+      "hosts": hosts,
+      "port": port,
+      if (code.isNotEmpty) "code": code,
+    },
+    if (kind == relayKind) "relay": relayUrl,
+    if (sdp.isNotEmpty) ...{"sdp": sdp, if (tag.isNotEmpty) "tag": tag},
+  };
 
   factory PairingOffer.fromJson(Map<String, dynamic> json) {
     final kind = json["kind"] as String? ?? "";
@@ -71,8 +71,10 @@ class PairingOffer {
       kind: kind,
       psk: json["psk"] as String? ?? "",
       name: json["name"] as String? ?? "",
-      hosts:
-          [for (final h in (json["hosts"] as List<Object?>? ?? const [])) h as String],
+      hosts: [
+        for (final h in (json["hosts"] as List<Object?>? ?? const []))
+          h as String,
+      ],
       port: json["port"] as int? ?? 0,
       relayUrl: json["relay"] as String? ?? "",
       code: json["code"] as String? ?? "",
@@ -93,7 +95,9 @@ class PairingOffer {
     try {
       final normalized = base64Url.normalize(trimmed.substring(prefix.length));
       return PairingOffer.fromJson(
-          jsonDecode(utf8.decode(base64Url.decode(normalized))) as Map<String, dynamic>);
+        jsonDecode(utf8.decode(base64Url.decode(normalized)))
+            as Map<String, dynamic>,
+      );
     } catch (_) {
       return null;
     }
@@ -116,7 +120,9 @@ String generatePsk() {
 /// device when scanning a QR is not convenient.
 String generatePairingCode() {
   const alphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
-  final chars =
-      List.generate(6, (_) => alphabet[_random.nextInt(alphabet.length)]);
+  final chars = List.generate(
+    6,
+    (_) => alphabet[_random.nextInt(alphabet.length)],
+  );
   return "${chars.take(3).join()}-${chars.skip(3).join()}";
 }

@@ -14,7 +14,7 @@ import "openai_client.dart" show inlineText;
 /// inside user turns, and thinking has to be handed back the way it came.
 class AnthropicClient implements LlmClient {
   AnthropicClient({required this.baseUrl, this.apiKey, http.Client? httpClient})
-      : _http = httpClient ?? tlsClient();
+    : _http = httpClient ?? tlsClient();
 
   final Uri baseUrl;
   final String? apiKey;
@@ -37,15 +37,15 @@ class AnthropicClient implements LlmClient {
   Map<String, String> get _auth => authOf(apiKey);
 
   static Map<String, String> authOf(String? apiKey) => {
-        "anthropic-version": _version,
-        if (apiKey != null && apiKey.isNotEmpty) "x-api-key": apiKey,
-      };
+    "anthropic-version": _version,
+    if (apiKey != null && apiKey.isNotEmpty) "x-api-key": apiKey,
+  };
 
   Map<String, String> get _headers => {
-        "content-type": "application/json",
-        "accept": "text/event-stream",
-        ..._auth,
-      };
+    "content-type": "application/json",
+    "accept": "text/event-stream",
+    ..._auth,
+  };
 
   @override
   void close() => _http.close();
@@ -58,7 +58,9 @@ class AnthropicClient implements LlmClient {
     double? temperature,
     String? reasoningEffort,
   }) async* {
-    final budget = reasoningEffort == null ? null : _thinkingBudget[reasoningEffort] ?? 8192;
+    final budget = reasoningEffort == null
+        ? null
+        : _thinkingBudget[reasoningEffort] ?? 8192;
     final system = joinedSystemText(messages);
 
     final response = await postStream(
@@ -81,7 +83,8 @@ class AnthropicClient implements LlmClient {
           ],
         "stream": true,
         // Thinking pins the temperature at 1, so the two are never sent together.
-        if (budget != null) "thinking": {"type": "enabled", "budget_tokens": budget},
+        if (budget != null)
+          "thinking": {"type": "enabled", "budget_tokens": budget},
         if (budget == null && temperature != null) "temperature": temperature,
       },
     );
@@ -95,7 +98,8 @@ class AnthropicClient implements LlmClient {
     void readUsage(Map<String, dynamic>? usage) {
       if (usage == null) return;
       inputTokens = (usage["input_tokens"] as num?)?.toInt() ?? inputTokens;
-      cacheRead = (usage["cache_read_input_tokens"] as num?)?.toInt() ?? cacheRead;
+      cacheRead =
+          (usage["cache_read_input_tokens"] as num?)?.toInt() ?? cacheRead;
       cacheWrite =
           (usage["cache_creation_input_tokens"] as num?)?.toInt() ?? cacheWrite;
       outputTokens = (usage["output_tokens"] as num?)?.toInt() ?? outputTokens;
@@ -113,10 +117,13 @@ class AnthropicClient implements LlmClient {
       switch (event["type"]) {
         case "error":
           final error = event["error"];
-          throw LlmException(error is Map ? "${error["message"] ?? error}" : "$error");
+          throw LlmException(
+            error is Map ? "${error["message"] ?? error}" : "$error",
+          );
 
         case "content_block_start":
-          final block = event["content_block"] as Map<String, dynamic>? ?? const {};
+          final block =
+              event["content_block"] as Map<String, dynamic>? ?? const {};
           blocks[index] = _Block(
             type: block["type"] as String? ?? "text",
             id: block["id"] as String?,
@@ -141,7 +148,9 @@ class AnthropicClient implements LlmClient {
               block.body.write(text);
               if (text.isNotEmpty) yield LlmReasoningChunk(text);
             case "signature_delta":
-              block.signature = (block.signature ?? "") + (delta["signature"] as String? ?? "");
+              block.signature =
+                  (block.signature ?? "") +
+                  (delta["signature"] as String? ?? "");
             case "input_json_delta":
               block.body.write(delta["partial_json"] as String? ?? "");
           }
@@ -150,15 +159,19 @@ class AnthropicClient implements LlmClient {
           // The signature is complete here, which is still before the reply
           // starts — so the thinking block can be closed holding it.
           final block = blocks[index];
-          if (block != null && block.type == "thinking" && block.signature != null) {
+          if (block != null &&
+              block.type == "thinking" &&
+              block.signature != null) {
             yield LlmReasoningSignature(block.signature!);
           }
 
         case "message_start":
           // The usage object arrives here and again — larger — on
           // message_delta; both are read, the latter winning.
-          readUsage((event["message"] as Map<String, dynamic>?)?["usage"]
-              as Map<String, dynamic>?);
+          readUsage(
+            (event["message"] as Map<String, dynamic>?)?["usage"]
+                as Map<String, dynamic>?,
+          );
 
         case "message_delta":
           final delta = event["delta"] as Map<String, dynamic>? ?? const {};
@@ -181,12 +194,14 @@ class AnthropicClient implements LlmClient {
           reasoning.write(block.body);
           signature ??= block.signature;
         case "tool_use":
-          calls.add(LlmToolCall(
-            id: block.id ?? "toolu_$index",
-            name: block.name ?? "",
-            // An empty input streams no deltas at all, so the buffer is bare.
-            argumentsJson: block.body.isEmpty ? "{}" : block.body.toString(),
-          ));
+          calls.add(
+            LlmToolCall(
+              id: block.id ?? "toolu_$index",
+              name: block.name ?? "",
+              // An empty input streams no deltas at all, so the buffer is bare.
+              argumentsJson: block.body.isEmpty ? "{}" : block.body.toString(),
+            ),
+          );
       }
     }
 
@@ -234,23 +249,23 @@ class AnthropicClient implements LlmClient {
   }
 
   List<Map<String, dynamic>> _assistantBlocks(LlmMessage message) => [
-        // Thinking comes first and keeps its signature: with thinking enabled,
-        // a tool-use turn that comes back without it is rejected.
-        if (message.reasoning != null && message.reasoningSignature != null)
-          {
-            "type": "thinking",
-            "thinking": message.reasoning,
-            "signature": message.reasoningSignature,
-          },
-        if (message.text.isNotEmpty) {"type": "text", "text": message.text},
-        for (final call in message.toolCalls)
-          {
-            "type": "tool_use",
-            "id": call.id,
-            "name": call.name,
-            "input": _decodeArguments(call.argumentsJson),
-          },
-      ];
+    // Thinking comes first and keeps its signature: with thinking enabled,
+    // a tool-use turn that comes back without it is rejected.
+    if (message.reasoning != null && message.reasoningSignature != null)
+      {
+        "type": "thinking",
+        "thinking": message.reasoning,
+        "signature": message.reasoningSignature,
+      },
+    if (message.text.isNotEmpty) {"type": "text", "text": message.text},
+    for (final call in message.toolCalls)
+      {
+        "type": "tool_use",
+        "id": call.id,
+        "name": call.name,
+        "input": _decodeArguments(call.argumentsJson),
+      },
+  ];
 
   List<Map<String, dynamic>> _userBlocks(LlmMessage message) {
     if (message.role == LlmRole.tool) {
@@ -279,13 +294,13 @@ class AnthropicClient implements LlmClient {
   }
 
   Map<String, dynamic> _block(LlmAttachment file) => {
-        "type": file.isPdf ? "document" : "image",
-        "source": {
-          "type": "base64",
-          "media_type": file.mimeType,
-          "data": file.base64,
-        },
-      };
+    "type": file.isPdf ? "document" : "image",
+    "source": {
+      "type": "base64",
+      "media_type": file.mimeType,
+      "data": file.base64,
+    },
+  };
 
   /// A truncated tool call leaves half a JSON object behind. Sending it back as
   /// an empty input keeps the turn replayable; the model sees its own mistake

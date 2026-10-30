@@ -3,8 +3,12 @@ import "package:path/path.dart" as p;
 /// Turns write permission over a tree off ([writable] false) or back on for
 /// the owner, files and directories alike. [executable] gives every file its
 /// execute bit on the way to read-only.
-typedef SetTreeWritable = Future<void> Function(List<String> paths,
-    {required bool writable, bool executable});
+typedef SetTreeWritable =
+    Future<void> Function(
+      List<String> paths, {
+      required bool writable,
+      bool executable,
+    });
 
 /// A directory the app writes and the agent only reads: a chat's attachments,
 /// the skills. Read-only on disk between the app's own writes, so a command
@@ -54,15 +58,19 @@ class ReadOnlyDirs {
   /// without the platform's.
   ReadOnlyDirs.none() : _set = _none;
 
-  static Future<void> _none(List<String> paths,
-      {required bool writable, bool executable = false}) async {}
+  static Future<void> _none(
+    List<String> paths, {
+    required bool writable,
+    bool executable = false,
+  }) async {}
 
   final SetTreeWritable _set;
   final _dirs = <String, ReadOnlyDir>{};
 
-  ReadOnlyDir of(String path, {bool executable = false}) =>
-      _dirs.putIfAbsent(p.normalize(path),
-          () => ReadOnlyDir._(p.normalize(path), _set, executable: executable));
+  ReadOnlyDir of(String path, {bool executable = false}) => _dirs.putIfAbsent(
+    p.normalize(path),
+    () => ReadOnlyDir._(p.normalize(path), _set, executable: executable),
+  );
 
   /// A skills directory: its files keep their execute bit, since a skill's
   /// scripts arrive from embedded data with none.

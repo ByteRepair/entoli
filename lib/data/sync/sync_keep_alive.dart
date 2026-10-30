@@ -31,9 +31,9 @@ class SyncKeepAlive {
 
   /// The connected devices right now, by id — what Disconnect-all is for.
   Map<String, String> get _connected => {
-        for (final peer in _hub.peers.value.values)
-          if (SyncPeers.connected(peer.status)) peer.deviceId: peer.name,
-      };
+    for (final peer in _hub.peers.value.values)
+      if (SyncPeers.connected(peer.status)) peer.deviceId: peer.name,
+  };
 
   void _peersChanged() => unawaited(_report());
 

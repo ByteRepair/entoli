@@ -24,7 +24,8 @@ void main() {
     }
   });
 
-  void ship(String name) => File(p.join(libDir.path, name)).writeAsStringSync("elf");
+  void ship(String name) =>
+      File(p.join(libDir.path, name)).writeAsStringSync("elf");
 
   void shipProot() {
     ship("libproot.so");
@@ -39,37 +40,45 @@ void main() {
     expect(root.listSync(), isEmpty);
   });
 
-  test("a build with only the loader ships no proot, and so no toolset",
-      () async {
-    ship("libproot-loader.so");
+  test(
+    "a build with only the loader ships no proot, and so no toolset",
+    () async {
+      ship("libproot-loader.so");
 
-    expect(await install(), isNull);
-  });
+      expect(await install(), isNull);
+    },
+  );
 
-  test("proot on its own is a toolset, since it is what a command runs inside",
-      () async {
-    shipProot();
+  test(
+    "proot on its own is a toolset, since it is what a command runs inside",
+    () async {
+      shipProot();
 
-    final tools = await install();
-    expect(tools, isNotNull);
-    expect(tools!.proot, isNotNull);
-  });
+      final tools = await install();
+      expect(tools, isNotNull);
+      expect(tools!.proot, isNotNull);
+    },
+  );
 
   // The prompt names `Toolset.names`, so a name here is a claim the shell can
   // run that command. Nothing is laid out by name any more, and a build that
   // starts claiming one without laying it out is the half-failure this is for.
-  test("nothing is advertised by name, since nothing is laid out under one",
-      () async {
-    shipProot();
+  test(
+    "nothing is advertised by name, since nothing is laid out under one",
+    () async {
+      shipProot();
 
-    expect((await install())!.names, isNull);
-  });
+      expect((await install())!.names, isNull);
+    },
+  );
 
-  test("a temporary directory of its own, since the system's is not writable",
-      () async {
-    shipProot();
+  test(
+    "a temporary directory of its own, since the system's is not writable",
+    () async {
+      shipProot();
 
-    final tmp = (await install())!.environment["TMPDIR"]!;
-    expect(Directory(tmp).existsSync(), isTrue);
-  });
+      final tmp = (await install())!.environment["TMPDIR"]!;
+      expect(Directory(tmp).existsSync(), isTrue);
+    },
+  );
 }

@@ -84,16 +84,16 @@ class LabelledField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: padding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: const TextStyle(fontSize: 12)),
-            const SizedBox(height: 4),
-            child,
-          ],
-        ),
-      );
+    padding: padding,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12)),
+        const SizedBox(height: 4),
+        child,
+      ],
+    ),
+  );
 }
 
 /// The switch-shaped sibling of [InheritableDropdown]: an on/off override
@@ -126,7 +126,8 @@ class InheritableSwitch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return LabelledField(
-      label: "$title${value == null ? " — Default (${inherited ? "on" : "off"})" : ""}",
+      label:
+          "$title${value == null ? " — Default (${inherited ? "on" : "off"})" : ""}",
       child: ResettableField(
         onReset: () => onChanged(null),
         child: SwitchListTile(
@@ -179,9 +180,11 @@ class InheritableDropdown<T> extends StatelessWidget {
           items: [
             DropdownMenuItem<T?>(
               value: null,
-              child: Text(inherited == null
-                  ? defaultOptionLabel
-                  : "$defaultOptionLabel ($inherited)"),
+              child: Text(
+                inherited == null
+                    ? defaultOptionLabel
+                    : "$defaultOptionLabel ($inherited)",
+              ),
             ),
             for (final entry in options.entries)
               DropdownMenuItem<T?>(

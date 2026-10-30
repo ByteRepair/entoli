@@ -1,7 +1,8 @@
 import "dart:async";
 
 import "package:file_selector/file_selector.dart";
-import "package:flutter/foundation.dart" show defaultTargetPlatform, TargetPlatform;
+import "package:flutter/foundation.dart"
+    show defaultTargetPlatform, TargetPlatform;
 import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
@@ -17,18 +18,22 @@ import "running_pill.dart" show RunningThing;
 /// The chat's browser tab and the card that watches it, where there is one to
 /// show. Not on a mirrored chat, whose browser is the other device's.
 ({BrowserTab tab, void Function(BuildContext context) open})? _browserOf(
-    AgentBrowser browser, bool mirrored, String chatId) {
+  AgentBrowser browser,
+  bool mirrored,
+  String chatId,
+) {
   // Not `configured`: that reads the disk, this rebuilds per streamed
   // delta, and a tab with nothing to show draws nothing below anyway.
   if (!browser.available || mirrored) return null;
   final tab = browser.tab(chatId);
   void open(BuildContext context) => showDialog<void>(
-        context: context,
-        builder: (_) => BrowserCard(
-            tab: tab,
-            onQuit: browser.close,
-            window: !browser.inApp || !tab.trustedInput),
-      );
+    context: context,
+    builder: (_) => BrowserCard(
+      tab: tab,
+      onQuit: browser.close,
+      window: !browser.inApp || !tab.trustedInput,
+    ),
+  );
   return (tab: tab, open: open);
 }
 
@@ -42,14 +47,20 @@ class BrowserPrompts extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final of = _browserOf(ref.watch(agentBrowserProvider),
-        ref.watch(isMirroredChatProvider(chatId)), chatId);
+    final of = _browserOf(
+      ref.watch(agentBrowserProvider),
+      ref.watch(isMirroredChatProvider(chatId)),
+      chatId,
+    );
     if (of == null) return const SizedBox.shrink();
     final tab = of.tab;
     void open() => of.open(context);
     return ListenableBuilder(
-      listenable:
-          Listenable.merge([tab.hold, tab.credentialRequest, tab.uploadRequest]),
+      listenable: Listenable.merge([
+        tab.hold,
+        tab.credentialRequest,
+        tab.uploadRequest,
+      ]),
       builder: (context, _) {
         final reason = tab.hold.value?.reason;
         final request = tab.credentialRequest.value;
@@ -67,7 +78,10 @@ class BrowserPrompts extends ConsumerWidget {
               if (upload != null || request != null)
                 Container(
                   margin: const EdgeInsets.only(bottom: 4),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(8),
@@ -110,33 +124,46 @@ class BrowserPrompts extends ConsumerWidget {
 /// The chat's tab as the running row reads it: the page it is on and whether
 /// it is hidden from the agent, null with no tab open. Rebuilt as the tab
 /// changes, which it says through listenables rather than providers.
-final _browserTabProvider = Provider.autoDispose.family<
-    ({BrowserPage page, BrowserHold? hold, void Function(BuildContext) open})?,
-    String>((ref, chatId) {
-  final of = _browserOf(ref.watch(agentBrowserProvider),
-      ref.watch(isMirroredChatProvider(chatId)), chatId);
-  if (of == null) return null;
-  final changes = Listenable.merge([of.tab.page, of.tab.hold]);
-  changes.addListener(ref.invalidateSelf);
-  ref.onDispose(() => changes.removeListener(ref.invalidateSelf));
-  final page = of.tab.page.value;
-  if (page == null) return null;
-  return (page: page, hold: of.tab.hold.value, open: of.open);
-});
+final _browserTabProvider = Provider.autoDispose
+    .family<
+      ({
+        BrowserPage page,
+        BrowserHold? hold,
+        void Function(BuildContext) open,
+      })?,
+      String
+    >((ref, chatId) {
+      final of = _browserOf(
+        ref.watch(agentBrowserProvider),
+        ref.watch(isMirroredChatProvider(chatId)),
+        chatId,
+      );
+      if (of == null) return null;
+      final changes = Listenable.merge([of.tab.page, of.tab.hold]);
+      changes.addListener(ref.invalidateSelf);
+      ref.onDispose(() => changes.removeListener(ref.invalidateSelf));
+      final page = of.tab.page.value;
+      if (page == null) return null;
+      return (page: page, hold: of.tab.hold.value, open: of.open);
+    });
 
 /// The chat's browser tab, while one is open: the first of the running pills,
 /// standing alone, opening a live view of the page. The view is the
 /// browser's own screencast, so it shows the page when the browser runs
 /// hidden too.
 List<RunningThing> browserRunning(
-    WidgetRef ref, ChatViewState view, String chatId) {
+  WidgetRef ref,
+  ChatViewState view,
+  String chatId,
+) {
   final tab = ref.watch(_browserTabProvider(chatId));
   if (tab == null) return const [];
   final hold = tab.hold;
   return [
     RunningThing(
       icon: hold == null ? Icons.travel_explore : Icons.visibility_off,
-      label: "Browser · ${_where(tab.page)}"
+      label:
+          "Browser · ${_where(tab.page)}"
           "${hold == null ? "" : " · hidden from the agent"}",
       tooltip: "Watch the agent's browser",
       open: tab.open,
@@ -175,11 +202,13 @@ class _UploadPanelState extends State<UploadPanel> {
   }
 
   void _upload() {
-    unawaited(widget.tab
-        .submitUpload([for (final file in _chosen) file.path])
-        .catchError((Object e) {
-      logFailure("browser", "files could not be given to the page", e);
-    }));
+    unawaited(
+      widget.tab
+          .submitUpload([for (final file in _chosen) file.path])
+          .catchError((Object e) {
+            logFailure("browser", "files could not be given to the page", e);
+          }),
+    );
   }
 
   @override
@@ -212,8 +241,9 @@ class _UploadPanelState extends State<UploadPanel> {
           ),
           Text(
             "You choose what is sent. Sending a message cancels it.",
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 8),
           if (_chosen.isNotEmpty)
@@ -284,9 +314,11 @@ class _CredentialPanelState extends State<CredentialPanel> {
 
   void _submit() {
     final values = [for (final field in _fields) field.text];
-    unawaited(widget.tab.submitCredentials(values).catchError((Object e) {
-      logFailure("browser", "a sign-in could not be typed in", e);
-    }));
+    unawaited(
+      widget.tab.submitCredentials(values).catchError((Object e) {
+        logFailure("browser", "a sign-in could not be typed in", e);
+      }),
+    );
   }
 
   @override
@@ -305,7 +337,10 @@ class _CredentialPanelState extends State<CredentialPanel> {
                 const Icon(Icons.lock_outline, size: 18),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(request.reason, style: theme.textTheme.titleSmall),
+                  child: Text(
+                    request.reason,
+                    style: theme.textTheme.titleSmall,
+                  ),
                 ),
                 TextButton(
                   onPressed: widget.onWatch,
@@ -315,8 +350,9 @@ class _CredentialPanelState extends State<CredentialPanel> {
             ),
             Text(
               "Typed into the page by the app. The agent never sees it.",
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 8),
             for (var i = 0; i < request.fields.length; i++)
@@ -335,8 +371,9 @@ class _CredentialPanelState extends State<CredentialPanel> {
                   textInputAction: i == request.fields.length - 1
                       ? TextInputAction.done
                       : TextInputAction.next,
-                  onSubmitted:
-                      i == request.fields.length - 1 ? (_) => _submit() : null,
+                  onSubmitted: i == request.fields.length - 1
+                      ? (_) => _submit()
+                      : null,
                 ),
               ),
             Row(
@@ -369,8 +406,12 @@ String _where(BrowserPage page) {
 /// the page itself under the user's mouse and keyboard. Listens again when the
 /// tab is reopened under it.
 class BrowserCard extends StatefulWidget {
-  const BrowserCard(
-      {super.key, required this.tab, required this.onQuit, this.window = true});
+  const BrowserCard({
+    super.key,
+    required this.tab,
+    required this.onQuit,
+    this.window = true,
+  });
 
   final BrowserTab tab;
 
@@ -465,9 +506,11 @@ class _BrowserCardState extends State<BrowserCard> {
   /// Fire [send], saying in the log rather than on screen when it fails: the
   /// next frame shows whether it landed.
   void _send(Future<void> Function() send) {
-    unawaited(send().catchError((Object e) {
-      logFailure("browser", "input to the page failed", e);
-    }));
+    unawaited(
+      send().catchError((Object e) {
+        logFailure("browser", "input to the page failed", e);
+      }),
+    );
   }
 
   int get _modifiers {
@@ -493,15 +536,17 @@ class _BrowserCardState extends State<BrowserCard> {
     final text = widget.tab.selectedText();
     _send(() async {
       final selected = await text;
-      if (selected != null) await Clipboard.setData(ClipboardData(text: selected));
+      if (selected != null) {
+        await Clipboard.setData(ClipboardData(text: selected));
+      }
     });
   }
 
   /// The user's clipboard typed at the caret, the page's not being theirs.
   void _paste() => _send(() async {
-        final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
-        if (text != null && text.isNotEmpty) await widget.tab.insertText(text);
-      });
+    final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    if (text != null && text.isNotEmpty) await widget.tab.insertText(text);
+  });
 
   /// Press and release the platform's shortcut for [letter], with the
   /// editing command it names.
@@ -522,7 +567,9 @@ class _BrowserCardState extends State<BrowserCard> {
     final choice = await showMenu<String>(
       context: context,
       position: RelativeRect.fromRect(
-          global & Size.zero, Offset.zero & overlay.size),
+        global & Size.zero,
+        Offset.zero & overlay.size,
+      ),
       items: const [
         PopupMenuItem(value: "cut", child: Text("Cut")),
         PopupMenuItem(value: "copy", child: Text("Copy")),
@@ -547,15 +594,18 @@ class _BrowserCardState extends State<BrowserCard> {
     }
   }
 
-  void _wheel(Offset at, Offset delta) =>
-      _send(() => widget.tab.pointer(BrowserPointer(
-            BrowserPointerKind.wheel,
-            x: at.dx,
-            y: at.dy,
-            deltaX: delta.dx,
-            deltaY: delta.dy,
-            modifiers: _modifiers,
-          )));
+  void _wheel(Offset at, Offset delta) => _send(
+    () => widget.tab.pointer(
+      BrowserPointer(
+        BrowserPointerKind.wheel,
+        x: at.dx,
+        y: at.dy,
+        deltaX: delta.dx,
+        deltaY: delta.dy,
+        modifiers: _modifiers,
+      ),
+    ),
+  );
 
   void _touchDown(PointerDownEvent event) {
     _touchStart = event.localPosition;
@@ -592,14 +642,18 @@ class _BrowserCardState extends State<BrowserCard> {
     _focus.requestFocus();
     final at = _toPage(event.localPosition, drawn);
     for (final kind in [BrowserPointerKind.down, BrowserPointerKind.up]) {
-      _send(() => widget.tab.pointer(BrowserPointer(
+      _send(
+        () => widget.tab.pointer(
+          BrowserPointer(
             kind,
             x: at.dx,
             y: at.dy,
             button: "left",
             buttons: kind == BrowserPointerKind.down ? kPrimaryMouseButton : 0,
             clickCount: 1,
-          )));
+          ),
+        ),
+      );
     }
   }
 
@@ -612,8 +666,10 @@ class _BrowserCardState extends State<BrowserCard> {
   Offset _toPage(Offset local, Size drawn) {
     final frame = _frame;
     if (frame == null || drawn.width == 0 || drawn.height == 0) return local;
-    return Offset(local.dx * frame.width / drawn.width,
-        local.dy * frame.height / drawn.height);
+    return Offset(
+      local.dx * frame.width / drawn.width,
+      local.dy * frame.height / drawn.height,
+    );
   }
 
   void _move(BrowserPointer event) {
@@ -622,21 +678,23 @@ class _BrowserCardState extends State<BrowserCard> {
       return;
     }
     _moving = true;
-    unawaited(widget.tab.pointer(event).catchError((Object _) {}).whenComplete(() {
-      _moving = false;
-      final next = _nextMove;
-      _nextMove = null;
-      if (next != null) _move(next);
-    }));
+    unawaited(
+      widget.tab.pointer(event).catchError((Object _) {}).whenComplete(() {
+        _moving = false;
+        final next = _nextMove;
+        _nextMove = null;
+        if (next != null) _move(next);
+      }),
+    );
   }
 
   static String _buttonOf(int buttons) => buttons & kPrimaryMouseButton != 0
       ? "left"
       : buttons & kSecondaryMouseButton != 0
-          ? "right"
-          : buttons & kMiddleMouseButton != 0
-              ? "middle"
-              : "none";
+      ? "right"
+      : buttons & kMiddleMouseButton != 0
+      ? "middle"
+      : "none";
 
   void _down(PointerDownEvent event, Size drawn) {
     if (event.kind == PointerDeviceKind.touch) return _touchDown(event);
@@ -648,14 +706,17 @@ class _BrowserCardState extends State<BrowserCard> {
     }
     final at = _toPage(event.localPosition, drawn);
     final now = DateTime.now();
-    _clicks = now.difference(_lastDown) < const Duration(milliseconds: 500) &&
+    _clicks =
+        now.difference(_lastDown) < const Duration(milliseconds: 500) &&
             (at - _lastAt).distance < 5
         ? _clicks + 1
         : 1;
     _lastDown = now;
     _lastAt = at;
     _pressed = _buttonOf(event.buttons);
-    _send(() => widget.tab.pointer(BrowserPointer(
+    _send(
+      () => widget.tab.pointer(
+        BrowserPointer(
           BrowserPointerKind.down,
           x: at.dx,
           y: at.dy,
@@ -663,7 +724,9 @@ class _BrowserCardState extends State<BrowserCard> {
           buttons: event.buttons,
           clickCount: _clicks,
           modifiers: _modifiers,
-        )));
+        ),
+      ),
+    );
   }
 
   void _up(PointerUpEvent event, Size drawn) {
@@ -673,7 +736,9 @@ class _BrowserCardState extends State<BrowserCard> {
       return;
     }
     final at = _toPage(event.localPosition, drawn);
-    _send(() => widget.tab.pointer(BrowserPointer(
+    _send(
+      () => widget.tab.pointer(
+        BrowserPointer(
           BrowserPointerKind.up,
           x: at.dx,
           y: at.dy,
@@ -681,20 +746,24 @@ class _BrowserCardState extends State<BrowserCard> {
           buttons: event.buttons,
           clickCount: _clicks,
           modifiers: _modifiers,
-        )));
+        ),
+      ),
+    );
     _pressed = "none";
   }
 
   void _hover(PointerEvent event, Size drawn) {
     final at = _toPage(event.localPosition, drawn);
-    _move(BrowserPointer(
-      BrowserPointerKind.move,
-      x: at.dx,
-      y: at.dy,
-      button: _buttonOf(event.buttons),
-      buttons: event.buttons,
-      modifiers: _modifiers,
-    ));
+    _move(
+      BrowserPointer(
+        BrowserPointerKind.move,
+        x: at.dx,
+        y: at.dy,
+        button: _buttonOf(event.buttons),
+        buttons: event.buttons,
+        modifiers: _modifiers,
+      ),
+    );
   }
 
   /// Claimed through the resolver, so a wheel over the page does not also
@@ -703,14 +772,18 @@ class _BrowserCardState extends State<BrowserCard> {
     if (event is! PointerScrollEvent) return;
     GestureBinding.instance.pointerSignalResolver.register(event, (event) {
       final scroll = event as PointerScrollEvent;
-      _wheel(_toPage(scroll.localPosition, drawn),
-          _toPage(scroll.scrollDelta, drawn));
+      _wheel(
+        _toPage(scroll.localPosition, drawn),
+        _toPage(scroll.scrollDelta, drawn),
+      );
     });
   }
 
   /// Two fingers on a trackpad, which arrive as a pan rather than a wheel.
   void _pan(PointerPanZoomUpdateEvent event, Size drawn) => _wheel(
-      _toPage(event.localPosition, drawn), -_toPage(event.localPanDelta, drawn));
+    _toPage(event.localPosition, drawn),
+    -_toPage(event.localPanDelta, drawn),
+  );
 
   /// Every key goes to the page while the viewport has focus — Tab and Escape
   /// included, which would otherwise move focus or close the card.
@@ -736,7 +809,11 @@ class _BrowserCardState extends State<BrowserCard> {
             event.logicalKey == LogicalKeyboardKey.keyX)) {
       _copySelection();
     }
-    final key = browserKeyDown(event, modifiers: _modifiers, shortcut: shortcut);
+    final key = browserKeyDown(
+      event,
+      modifiers: _modifiers,
+      shortcut: shortcut,
+    );
     if (key == null) return KeyEventResult.handled;
     _held[event.physicalKey] = key;
     _send(() => widget.tab.key(key));
@@ -767,7 +844,9 @@ class _BrowserCardState extends State<BrowserCard> {
                   IconButton(
                     tooltip: "Back",
                     icon: const Icon(Icons.arrow_back),
-                    onPressed: open ? () => _send(widget.tab.historyBack) : null,
+                    onPressed: open
+                        ? () => _send(widget.tab.historyBack)
+                        : null,
                   ),
                   IconButton(
                     tooltip: "Forward",
@@ -800,7 +879,8 @@ class _BrowserCardState extends State<BrowserCard> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant),
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
                           ),
                         ],
                       ),
@@ -854,9 +934,11 @@ class _BrowserCardState extends State<BrowserCard> {
                         padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
                         child: Row(
                           children: [
-                            Icon(Icons.visibility_off,
-                                size: 18,
-                                color: theme.colorScheme.onSecondaryContainer),
+                            Icon(
+                              Icons.visibility_off,
+                              size: 18,
+                              color: theme.colorScheme.onSecondaryContainer,
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -864,8 +946,8 @@ class _BrowserCardState extends State<BrowserCard> {
                                 "The agent can do nothing in the browser until "
                                 "you give it back.",
                                 style: theme.textTheme.bodySmall?.copyWith(
-                                    color:
-                                        theme.colorScheme.onSecondaryContainer),
+                                  color: theme.colorScheme.onSecondaryContainer,
+                                ),
                               ),
                             ),
                             TextButton(
@@ -885,8 +967,10 @@ class _BrowserCardState extends State<BrowserCard> {
                   child: frame == null
                       ? Center(
                           child: _ended
-                              ? Text("The browser has closed.",
-                                  style: theme.textTheme.bodyMedium)
+                              ? Text(
+                                  "The browser has closed.",
+                                  style: theme.textTheme.bodyMedium,
+                                )
                               : const CircularProgressIndicator(),
                         )
                       : LayoutBuilder(
@@ -900,22 +984,29 @@ class _BrowserCardState extends State<BrowserCard> {
                                     ? SystemMouseCursors.basic
                                     : MouseCursor.defer,
                                 child: Listener(
-                                  onPointerDown:
-                                      open ? (e) => _down(e, drawn) : null,
-                                  onPointerUp: open ? (e) => _up(e, drawn) : null,
+                                  onPointerDown: open
+                                      ? (e) => _down(e, drawn)
+                                      : null,
+                                  onPointerUp: open
+                                      ? (e) => _up(e, drawn)
+                                      : null,
                                   onPointerMove: open
                                       ? (e) => e.kind == PointerDeviceKind.touch
-                                          ? _touchMove(e, drawn)
-                                          : _hover(e, drawn)
+                                            ? _touchMove(e, drawn)
+                                            : _hover(e, drawn)
                                       : null,
-                                  onPointerCancel:
-                                      open ? (_) => _touchCancel() : null,
-                                  onPointerHover:
-                                      open ? (e) => _hover(e, drawn) : null,
-                                  onPointerSignal:
-                                      open ? (e) => _scroll(e, drawn) : null,
-                                  onPointerPanZoomUpdate:
-                                      open ? (e) => _pan(e, drawn) : null,
+                                  onPointerCancel: open
+                                      ? (_) => _touchCancel()
+                                      : null,
+                                  onPointerHover: open
+                                      ? (e) => _hover(e, drawn)
+                                      : null,
+                                  onPointerSignal: open
+                                      ? (e) => _scroll(e, drawn)
+                                      : null,
+                                  onPointerPanZoomUpdate: open
+                                      ? (e) => _pan(e, drawn)
+                                      : null,
                                   child: Image.memory(
                                     frame.jpeg,
                                     gaplessPlayback: true,

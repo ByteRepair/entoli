@@ -29,20 +29,26 @@ void main() {
 
   /// A client whose endpoint rejects the request outright.
   OpenAiClient clientRejecting(int status, String reason) => OpenAiClient(
-        baseUrl: Uri.parse("https://example.test/v1"),
-        httpClient: MockClient.streaming((_, _) async => errorResponse(status, {
-              "error": {"message": reason},
-            })),
-      );
+    baseUrl: Uri.parse("https://example.test/v1"),
+    httpClient: MockClient.streaming(
+      (_, _) async => errorResponse(status, {
+        "error": {"message": reason},
+      }),
+    ),
+  );
 
   Map<String, dynamic> sentBody() =>
-      jsonDecode((requests.single as http.Request).body) as Map<String, dynamic>;
+      jsonDecode((requests.single as http.Request).body)
+          as Map<String, dynamic>;
 
-  Map<String, dynamic> delta(Map<String, dynamic> delta, {String? finishReason}) => {
-        "choices": [
-          {"index": 0, "delta": delta, "finish_reason": finishReason},
-        ],
-      };
+  Map<String, dynamic> delta(
+    Map<String, dynamic> delta, {
+    String? finishReason,
+  }) => {
+    "choices": [
+      {"index": 0, "delta": delta, "finish_reason": finishReason},
+    ],
+  };
 
   group("streaming", () {
     test("text arrives in pieces and is assembled once", () async {
@@ -52,7 +58,10 @@ void main() {
         "[DONE]",
       ]).stream(const [], model: "gpt-test").toList();
 
-      expect(chunks.whereType<LlmTextChunk>().map((c) => c.text), ["Hel", "lo"]);
+      expect(chunks.whereType<LlmTextChunk>().map((c) => c.text), [
+        "Hel",
+        "lo",
+      ]);
       expect(chunks.whereType<LlmCompletion>().single.message.text, "Hello");
     });
 
@@ -64,7 +73,10 @@ void main() {
         "[DONE]",
       ]).stream(const [], model: "gpt-test").toList();
 
-      expect(chunks.whereType<LlmReasoningChunk>().map((c) => c.text), ["hmm", " and also"]);
+      expect(chunks.whereType<LlmReasoningChunk>().map((c) => c.text), [
+        "hmm",
+        " and also",
+      ]);
       final message = chunks.whereType<LlmCompletion>().single.message;
       expect(message.reasoning, "hmm and also");
       expect(message.text, "answer");
@@ -108,12 +120,18 @@ void main() {
             {
               "index": 0,
               "id": "a",
-              "function": {"name": "bash", "arguments": "{\"command\":\"one\"}"},
+              "function": {
+                "name": "bash",
+                "arguments": "{\"command\":\"one\"}",
+              },
             },
             {
               "index": 1,
               "id": "b",
-              "function": {"name": "bash", "arguments": "{\"command\":\"two\"}"},
+              "function": {
+                "name": "bash",
+                "arguments": "{\"command\":\"two\"}",
+              },
             },
           ],
         }),
@@ -122,7 +140,10 @@ void main() {
 
       final calls = chunks.whereType<LlmCompletion>().single.message.toolCalls;
       expect(calls.map((c) => c.id), ["a", "b"]);
-      expect(calls.map((c) => jsonDecode(c.argumentsJson)["command"]), ["one", "two"]);
+      expect(calls.map((c) => jsonDecode(c.argumentsJson)["command"]), [
+        "one",
+        "two",
+      ]);
     });
 
     test("a frame that is not JSON is skipped rather than fatal", () async {
@@ -145,8 +166,13 @@ void main() {
 
       expect(
         client.stream(const [], model: "gpt-test").toList(),
-        throwsA(isA<LlmException>()
-            .having((e) => e.message, "message", contains("context length"))),
+        throwsA(
+          isA<LlmException>().having(
+            (e) => e.message,
+            "message",
+            contains("context length"),
+          ),
+        ),
       );
     });
   });
@@ -154,41 +180,64 @@ void main() {
   group("failures", () {
     test("a rate limit is worth trying again, a rejected key is not", () async {
       expect(
-        clientRejecting(429, "slow down").stream(const [], model: "gpt-test").toList(),
-        throwsA(isA<LlmException>()
-            .having((e) => e.retryable, "retryable", isTrue)
-            .having((e) => e.statusCode, "statusCode", 429)
-            .having((e) => e.message, "message", "slow down")),
+        clientRejecting(
+          429,
+          "slow down",
+        ).stream(const [], model: "gpt-test").toList(),
+        throwsA(
+          isA<LlmException>()
+              .having((e) => e.retryable, "retryable", isTrue)
+              .having((e) => e.statusCode, "statusCode", 429)
+              .having((e) => e.message, "message", "slow down"),
+        ),
       );
       // 401 is policy, not a blip.
       expect(
-        clientRejecting(401, "invalid api key").stream(const [], model: "gpt-test").toList(),
-        throwsA(isA<LlmException>().having((e) => e.retryable, "retryable", isFalse)),
+        clientRejecting(
+          401,
+          "invalid api key",
+        ).stream(const [], model: "gpt-test").toList(),
+        throwsA(
+          isA<LlmException>().having((e) => e.retryable, "retryable", isFalse),
+        ),
       );
     });
 
-    test("an endpoint that is not there at all is worth trying again", () async {
-      final client = OpenAiClient(
-        baseUrl: Uri.parse("https://example.test/v1"),
-        httpClient: MockClient.streaming((_, _) => throw const ConnectionRefused()),
-      );
+    test(
+      "an endpoint that is not there at all is worth trying again",
+      () async {
+        final client = OpenAiClient(
+          baseUrl: Uri.parse("https://example.test/v1"),
+          httpClient: MockClient.streaming(
+            (_, _) => throw const ConnectionRefused(),
+          ),
+        );
 
-      expect(
-        client.stream(const [], model: "gpt-test").toList(),
-        throwsA(isA<LlmException>().having((e) => e.retryable, "retryable", isTrue)),
-      );
-    });
+        expect(
+          client.stream(const [], model: "gpt-test").toList(),
+          throwsA(
+            isA<LlmException>().having((e) => e.retryable, "retryable", isTrue),
+          ),
+        );
+      },
+    );
   });
 
   group("the request", () {
     test("names the tool the model may call", () async {
-      await clientStreaming(["[DONE]"]).stream(
-        const [],
-        model: "gpt-test",
-        tools: const [
-          LlmTool(name: "bash", description: "run it", schema: {"type": "object"}),
-        ],
-      ).toList();
+      await clientStreaming(["[DONE]"])
+          .stream(
+            const [],
+            model: "gpt-test",
+            tools: const [
+              LlmTool(
+                name: "bash",
+                description: "run it",
+                schema: {"type": "object"},
+              ),
+            ],
+          )
+          .toList();
 
       final body = sentBody();
       expect(body["stream"], isTrue);
@@ -198,7 +247,9 @@ void main() {
     });
 
     test("leaves out what was not asked for", () async {
-      await clientStreaming(["[DONE]"]).stream(const [], model: "gpt-test").toList();
+      await clientStreaming([
+        "[DONE]",
+      ]).stream(const [], model: "gpt-test").toList();
 
       final body = sentBody();
       expect(body.containsKey("temperature"), isFalse);
@@ -207,7 +258,12 @@ void main() {
 
       // And carries temperature and effort when they are set.
       await clientStreaming(["[DONE]"])
-          .stream(const [], model: "gpt-test", temperature: 0.4, reasoningEffort: "high")
+          .stream(
+            const [],
+            model: "gpt-test",
+            temperature: 0.4,
+            reasoningEffort: "high",
+          )
           .toList();
       final with_ = sentBody();
       expect(with_["temperature"], 0.4);
@@ -223,7 +279,10 @@ void main() {
 
       final messages = sentBody()["messages"] as List;
       expect(messages, hasLength(2));
-      expect(messages[0], {"role": "system", "content": "be helpful\n\nwork in /tmp"});
+      expect(messages[0], {
+        "role": "system",
+        "content": "be helpful\n\nwork in /tmp",
+      });
       expect(messages[1], {"role": "user", "content": "hi"});
     });
 
@@ -241,7 +300,11 @@ void main() {
       final messages = sentBody()["messages"] as List;
       expect(messages[0], {"role": "system", "content": "be helpful"});
       expect(messages[1]["tool_calls"][0]["id"], "c1");
-      expect(messages[2], {"role": "tool", "tool_call_id": "c1", "content": "output"});
+      expect(messages[2], {
+        "role": "tool",
+        "tool_call_id": "c1",
+        "content": "output",
+      });
     });
   });
 
@@ -262,7 +325,12 @@ void main() {
         }),
         "[DONE]",
       ]).stream(const [], model: "gemini-test").toList();
-      final call = chunks.whereType<LlmCompletion>().single.message.toolCalls.single;
+      final call = chunks
+          .whereType<LlmCompletion>()
+          .single
+          .message
+          .toolCalls
+          .single;
       expect(call.signature, "sig-1");
 
       await clientStreaming(["[DONE]"]).stream([
@@ -281,30 +349,42 @@ void main() {
           toolCalls: [LlmToolCall(id: "c1", name: "bash", argumentsJson: "{}")],
         ),
       ], model: "gpt-test").toList();
-      final sent = (sentBody()["messages"] as List).single["tool_calls"][0] as Map;
+      final sent =
+          (sentBody()["messages"] as List).single["tool_calls"][0] as Map;
       expect(sent.containsKey("extra_content"), isFalse);
     });
 
-    test("Gemini gets the placeholder on the first of an unsigned reply's calls", () async {
-      requests = [];
-      final client = GeminiClient(
-        baseUrl: Uri.parse("https://generativelanguage.googleapis.com/v1beta/openai"),
-        httpClient: MockClient.streaming((request, _) async {
-          requests.add(request);
-          return sseResponse(["[DONE]"]);
-        }),
-      );
-      await client.stream(const [
-        LlmMessage(role: LlmRole.assistant, toolCalls: [
-          LlmToolCall(id: "c1", name: "bash", argumentsJson: "{}"),
-          LlmToolCall(id: "c2", name: "bash", argumentsJson: "{}"),
-        ]),
-      ], model: "gemini-test").toList();
-      final calls = (sentBody()["messages"] as List).single["tool_calls"] as List;
-      expect(calls[0]["extra_content"]["google"]["thought_signature"],
-          "skip_thought_signature_validator");
-      expect((calls[1] as Map).containsKey("extra_content"), isFalse);
-    });
+    test(
+      "Gemini gets the placeholder on the first of an unsigned reply's calls",
+      () async {
+        requests = [];
+        final client = GeminiClient(
+          baseUrl: Uri.parse(
+            "https://generativelanguage.googleapis.com/v1beta/openai",
+          ),
+          httpClient: MockClient.streaming((request, _) async {
+            requests.add(request);
+            return sseResponse(["[DONE]"]);
+          }),
+        );
+        await client.stream(const [
+          LlmMessage(
+            role: LlmRole.assistant,
+            toolCalls: [
+              LlmToolCall(id: "c1", name: "bash", argumentsJson: "{}"),
+              LlmToolCall(id: "c2", name: "bash", argumentsJson: "{}"),
+            ],
+          ),
+        ], model: "gemini-test").toList();
+        final calls =
+            (sentBody()["messages"] as List).single["tool_calls"] as List;
+        expect(
+          calls[0]["extra_content"]["google"]["thought_signature"],
+          "skip_thought_signature_validator",
+        );
+        expect((calls[1] as Map).containsKey("extra_content"), isFalse);
+      },
+    );
   });
 
   group("attachments", () {
@@ -323,7 +403,8 @@ void main() {
         ),
       ], model: "gpt-test").toList();
 
-      final content = (sentBody()["messages"] as List).single["content"] as String;
+      final content =
+          (sentBody()["messages"] as List).single["content"] as String;
       expect(content, contains("what does this say?"));
       expect(content, contains("note.txt"));
       expect(content, contains("the secret is 42"));
@@ -344,10 +425,14 @@ void main() {
         ),
       ], model: "gpt-test").toList();
 
-      final content = (sentBody()["messages"] as List).single["content"] as List;
+      final content =
+          (sentBody()["messages"] as List).single["content"] as List;
       expect(content[0], {"type": "text", "text": "what is this?"});
       expect(content[1]["type"], "image_url");
-      expect(content[1]["image_url"]["url"], startsWith("data:image/png;base64,"));
+      expect(
+        content[1]["image_url"]["url"],
+        startsWith("data:image/png;base64,"),
+      );
     });
 
     test("a PDF goes as a file part, as a data URL", () async {
@@ -365,13 +450,15 @@ void main() {
         ),
       ], model: "gpt-test").toList();
 
-      final content = (sentBody()["messages"] as List).single["content"] as List;
+      final content =
+          (sentBody()["messages"] as List).single["content"] as List;
       expect(content[0], {"type": "text", "text": "have a look"});
       expect(content[1], {
         "type": "file",
         "file": {
           "filename": "report.pdf",
-          "file_data": "data:application/pdf;base64,${base64Encode(const [1, 2])}",
+          "file_data":
+              "data:application/pdf;base64,${base64Encode(const [1, 2])}",
         },
       });
     });
@@ -391,7 +478,8 @@ void main() {
         ),
       ], model: "gpt-test").toList();
 
-      final content = (sentBody()["messages"] as List).single["content"] as String;
+      final content =
+          (sentBody()["messages"] as List).single["content"] as String;
       expect(content, contains("(attached: data.zip, application/zip)"));
     });
   });
@@ -400,7 +488,10 @@ void main() {
   /// minutes rather than a spinner that cannot be told apart from a hang.
   group("how far it has got through the prompt", () {
     test("is not asked for unless the endpoint is known to answer it", () async {
-      final client = clientStreaming([delta({"content": "hi"}), "[DONE]"]);
+      final client = clientStreaming([
+        delta({"content": "hi"}),
+        "[DONE]",
+      ]);
 
       await client.stream(const [], model: "m").toList();
 
@@ -416,7 +507,10 @@ void main() {
         returnProgress: true,
         httpClient: MockClient.streaming((request, _) async {
           requests.add(request);
-          return sseResponse([delta({"content": "hi"}), "[DONE]"]);
+          return sseResponse([
+            delta({"content": "hi"}),
+            "[DONE]",
+          ]);
         }),
       );
 
@@ -481,14 +575,25 @@ void main() {
         delta({"content": "Here it is"}),
         delta({
           "images": [
-            {"type": "image_url", "image_url": {"url": png}},
-            {"type": "image_url", "image_url": {"url": "https://not.inline/x.png"}},
+            {
+              "type": "image_url",
+              "image_url": {"url": png},
+            },
+            {
+              "type": "image_url",
+              "image_url": {"url": "https://not.inline/x.png"},
+            },
           ],
         }),
         "[DONE]",
       ]).stream(const [], model: "img-test").toList();
 
-      final image = chunks.whereType<LlmCompletion>().single.message.attachments.single;
+      final image = chunks
+          .whereType<LlmCompletion>()
+          .single
+          .message
+          .attachments
+          .single;
       expect(image.mimeType, "image/png");
       expect(image.bytes, base64Decode("iVBORw0K"));
     });
@@ -499,14 +604,18 @@ void main() {
         baseUrl: Uri.parse("https://example.test/v1"),
         httpClient: MockClient.streaming((request, _) async {
           requests.add(request);
-          return http.StreamedResponse(Stream.value(utf8.encode(jsonEncode(body))), 200);
+          return http.StreamedResponse(
+            Stream.value(utf8.encode(jsonEncode(body))),
+            200,
+          );
         }),
       );
     }
 
     test("speech is transcribed through the audio endpoint", () async {
-      final text = await clientAnswering({"text": "hello"})
-          .transcribe(Uint8List.fromList([1, 2]), model: "whisper-x");
+      final text = await clientAnswering({
+        "text": "hello",
+      }).transcribe(Uint8List.fromList([1, 2]), model: "whisper-x");
 
       final sent = requests.single as http.MultipartRequest;
       expect(sent.url.path, "/v1/audio/transcriptions");
@@ -515,15 +624,22 @@ void main() {
       expect(text, "hello");
     });
 
-    test("a sentence is spoken as WAV, with the voice only where named", () async {
-      final client = clientAnswering({});
-      await client.speak("hi", model: "tts-x");
-      expect(requests.single.url.path, "/v1/audio/speech");
-      expect(sentBody(), {"model": "tts-x", "input": "hi", "response_format": "wav"});
+    test(
+      "a sentence is spoken as WAV, with the voice only where named",
+      () async {
+        final client = clientAnswering({});
+        await client.speak("hi", model: "tts-x");
+        expect(requests.single.url.path, "/v1/audio/speech");
+        expect(sentBody(), {
+          "model": "tts-x",
+          "input": "hi",
+          "response_format": "wav",
+        });
 
-      await clientAnswering({}).speak("hi", model: "tts-x", voice: "alloy");
-      expect(sentBody()["voice"], "alloy");
-    });
+        await clientAnswering({}).speak("hi", model: "tts-x", voice: "alloy");
+        expect(sentBody()["voice"], "alloy");
+      },
+    );
 
     test("an OpenAI image model is asked through the Images API", () async {
       final images = await clientAnswering({
@@ -537,35 +653,71 @@ void main() {
       expect(images.single.bytes, base64Decode("iVBORw0K"));
     });
 
-    test("a tool result's images follow the results in a user message", () async {
-      await clientStreaming(["[DONE]"]).stream([
-        const LlmMessage(role: LlmRole.assistant, toolCalls: [
-          LlmToolCall(id: "c1", name: "image_generation", argumentsJson: "{}"),
-          LlmToolCall(id: "c2", name: "bash", argumentsJson: "{}"),
-        ]),
-        LlmMessage(role: LlmRole.tool, toolCallId: "c1", text: "made", attachments: [
-          LlmAttachment(filename: "a.png", mimeType: "image/png", bytes: base64Decode("iVBORw0K")),
-        ]),
-        const LlmMessage(role: LlmRole.tool, toolCallId: "c2", text: "ok"),
-      ], model: "gpt-test").toList();
+    test(
+      "a tool result's images follow the results in a user message",
+      () async {
+        await clientStreaming(["[DONE]"]).stream([
+          const LlmMessage(
+            role: LlmRole.assistant,
+            toolCalls: [
+              LlmToolCall(
+                id: "c1",
+                name: "image_generation",
+                argumentsJson: "{}",
+              ),
+              LlmToolCall(id: "c2", name: "bash", argumentsJson: "{}"),
+            ],
+          ),
+          LlmMessage(
+            role: LlmRole.tool,
+            toolCallId: "c1",
+            text: "made",
+            attachments: [
+              LlmAttachment(
+                filename: "a.png",
+                mimeType: "image/png",
+                bytes: base64Decode("iVBORw0K"),
+              ),
+            ],
+          ),
+          const LlmMessage(role: LlmRole.tool, toolCallId: "c2", text: "ok"),
+        ], model: "gpt-test").toList();
 
-      final sent = (sentBody()["messages"] as List).cast<Map<String, dynamic>>();
-      expect(sent.map((m) => m["role"]), ["assistant", "tool", "tool", "user"]);
-      expect(sent[1]["content"], "made");
-      expect((sent.last["content"] as List).last["image_url"]["url"], png);
-    });
+        final sent = (sentBody()["messages"] as List)
+            .cast<Map<String, dynamic>>();
+        expect(sent.map((m) => m["role"]), [
+          "assistant",
+          "tool",
+          "tool",
+          "user",
+        ]);
+        expect(sent[1]["content"], "made");
+        expect((sent.last["content"] as List).last["image_url"]["url"], png);
+      },
+    );
 
     test("a tool result's PDF follows the results as a file part", () async {
       await clientStreaming(["[DONE]"]).stream([
-        const LlmMessage(role: LlmRole.assistant, toolCalls: [
-          LlmToolCall(id: "c1", name: "read", argumentsJson: "{}"),
-        ]),
-        LlmMessage(role: LlmRole.tool, toolCallId: "c1", text: "PDF a.pdf attached.", attachments: [
-          LlmAttachment(filename: "a.pdf", mimeType: "application/pdf", bytes: Uint8List(1)),
-        ]),
+        const LlmMessage(
+          role: LlmRole.assistant,
+          toolCalls: [LlmToolCall(id: "c1", name: "read", argumentsJson: "{}")],
+        ),
+        LlmMessage(
+          role: LlmRole.tool,
+          toolCallId: "c1",
+          text: "PDF a.pdf attached.",
+          attachments: [
+            LlmAttachment(
+              filename: "a.pdf",
+              mimeType: "application/pdf",
+              bytes: Uint8List(1),
+            ),
+          ],
+        ),
       ], model: "gpt-test").toList();
 
-      final sent = (sentBody()["messages"] as List).cast<Map<String, dynamic>>();
+      final sent = (sentBody()["messages"] as List)
+          .cast<Map<String, dynamic>>();
       expect(sent.map((m) => m["role"]), ["assistant", "tool", "user"]);
       expect((sent.last["content"] as List).last["type"], "file");
     });
@@ -574,26 +726,36 @@ void main() {
       const jpeg = "/9j/4AAQSkZJRgABAQ==";
       requests = [];
       final images = await GeminiClient(
-        baseUrl: Uri.parse("https://generativelanguage.googleapis.com/v1beta/openai"),
+        baseUrl: Uri.parse(
+          "https://generativelanguage.googleapis.com/v1beta/openai",
+        ),
         apiKey: "g-key",
         httpClient: MockClient.streaming((request, _) async {
           requests.add(request);
           return http.StreamedResponse(
-              Stream.value(utf8.encode(jsonEncode({
-                "candidates": [
-                  {
-                    "content": {
-                      "parts": [
-                        {"text": "here"},
-                        {
-                          "inlineData": {"mimeType": "image/jpeg", "data": jpeg},
-                        },
-                      ],
+            Stream.value(
+              utf8.encode(
+                jsonEncode({
+                  "candidates": [
+                    {
+                      "content": {
+                        "parts": [
+                          {"text": "here"},
+                          {
+                            "inlineData": {
+                              "mimeType": "image/jpeg",
+                              "data": jpeg,
+                            },
+                          },
+                        ],
+                      },
                     },
-                  },
-                ],
-              }))),
-              200);
+                  ],
+                }),
+              ),
+            ),
+            200,
+          );
         }),
       ).generateImage("a cat", model: "gemini-image", quality: "high");
 
@@ -607,11 +769,13 @@ void main() {
 
     test("quality is sent as the Images API names it", () async {
       final answer = {"data": const []};
-      await clientAnswering(answer)
-          .generateImage("a cat", model: "gpt-image-1", quality: "low");
+      await clientAnswering(
+        answer,
+      ).generateImage("a cat", model: "gpt-image-1", quality: "low");
       expect(sentBody()["quality"], "low");
-      await clientAnswering(answer)
-          .generateImage("a cat", model: "dall-e-3", quality: "high");
+      await clientAnswering(
+        answer,
+      ).generateImage("a cat", model: "dall-e-3", quality: "high");
       expect(sentBody()["quality"], "hd");
     });
 
@@ -622,7 +786,10 @@ void main() {
             "message": {
               "content": "",
               "images": [
-                {"type": "image_url", "image_url": {"url": png}},
+                {
+                  "type": "image_url",
+                  "image_url": {"url": png},
+                },
               ],
             },
           },
@@ -637,44 +804,66 @@ void main() {
 
   group("Gemini", () {
     GeminiClient geminiRejecting(int status) => GeminiClient(
-          baseUrl: Uri.parse("https://generativelanguage.googleapis.com/v1beta/openai"),
-          httpClient: MockClient.streaming((_, _) async => errorResponse(status, {
-                "error": {"message": "whatever Google says this week"},
-              })),
-        );
+      baseUrl: Uri.parse(
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+      ),
+      httpClient: MockClient.streaming(
+        (_, _) async => errorResponse(status, {
+          "error": {"message": "whatever Google says this week"},
+        }),
+      ),
+    );
 
-    test("a 404 says the model is retired, whatever Google's wording", () async {
-      await expectLater(
-        geminiRejecting(404).stream(const [], model: "gemini-2.5-flash").toList(),
-        throwsA(isA<LlmException>()
-            .having((e) => e.toString(), "text", GeminiClient.retired)
-            .having((e) => e.retryable, "retryable", isFalse)),
-      );
-    });
+    test(
+      "a 404 says the model is retired, whatever Google's wording",
+      () async {
+        await expectLater(
+          geminiRejecting(
+            404,
+          ).stream(const [], model: "gemini-2.5-flash").toList(),
+          throwsA(
+            isA<LlmException>()
+                .having((e) => e.toString(), "text", GeminiClient.retired)
+                .having((e) => e.retryable, "retryable", isFalse),
+          ),
+        );
+      },
+    );
 
     test("any other failure is left as it was", () async {
       await expectLater(
-        geminiRejecting(429).stream(const [], model: "gemini-3.8-flash").toList(),
-        throwsA(isA<LlmException>().having((e) => e.statusCode, "statusCode", 429)),
+        geminiRejecting(
+          429,
+        ).stream(const [], model: "gemini-3.8-flash").toList(),
+        throwsA(
+          isA<LlmException>().having((e) => e.statusCode, "statusCode", 429),
+        ),
       );
     });
 
     GeminiClient geminiAnswering(List<Map<String, dynamic>> parts) {
       requests = [];
       return GeminiClient(
-        baseUrl: Uri.parse("https://generativelanguage.googleapis.com/v1beta/openai"),
+        baseUrl: Uri.parse(
+          "https://generativelanguage.googleapis.com/v1beta/openai",
+        ),
         apiKey: "g-key",
         httpClient: MockClient.streaming((request, _) async {
           requests.add(request);
           return http.StreamedResponse(
-              Stream.value(utf8.encode(jsonEncode({
-                "candidates": [
-                  {
-                    "content": {"parts": parts},
-                  },
-                ],
-              }))),
-              200);
+            Stream.value(
+              utf8.encode(
+                jsonEncode({
+                  "candidates": [
+                    {
+                      "content": {"parts": parts},
+                    },
+                  ],
+                }),
+              ),
+            ),
+            200,
+          );
         }),
       );
     }
@@ -685,48 +874,72 @@ void main() {
         {"text": " hello there \n"},
       ]).transcribe(Uint8List.fromList([1, 2]), model: "gemini-3.8-flash");
 
-      expect(requests.single.url.path, "/v1beta/models/gemini-3.8-flash:generateContent");
+      expect(
+        requests.single.url.path,
+        "/v1beta/models/gemini-3.8-flash:generateContent",
+      );
       final parts = sentBody()["contents"][0]["parts"] as List;
       expect(parts.first["text"], GeminiClient.transcribeInstruction);
-      expect(parts.last["inlineData"], {"mimeType": "audio/wav", "data": base64Encode([1, 2])});
+      expect(parts.last["inlineData"], {
+        "mimeType": "audio/wav",
+        "data": base64Encode([1, 2]),
+      });
       expect(text, "hello there");
     });
 
-    test("speech is synthesised natively, and its PCM wrapped as a WAV", () async {
-      final wav = await geminiAnswering([
-        {
-          "inlineData": {
-            "mimeType": "audio/L16;codec=pcm;rate=22050",
-            "data": base64Encode([1, 2, 3, 4]),
+    test(
+      "speech is synthesised natively, and its PCM wrapped as a WAV",
+      () async {
+        final wav = await geminiAnswering([
+          {
+            "inlineData": {
+              "mimeType": "audio/L16;codec=pcm;rate=22050",
+              "data": base64Encode([1, 2, 3, 4]),
+            },
           },
-        },
-      ]).speak("hi", model: "gemini-tts", voice: "Kore");
+        ]).speak("hi", model: "gemini-tts", voice: "Kore");
 
-      expect(requests.single.url.path, "/v1beta/models/gemini-tts:generateContent");
-      final config = sentBody()["generationConfig"] as Map;
-      expect(config["responseModalities"], ["AUDIO"]);
-      expect(config["speechConfig"]["voiceConfig"]["prebuiltVoiceConfig"]["voiceName"], "Kore");
-      expect(ascii.decode(wav.sublist(0, 4)), "RIFF");
-      expect(ByteData.sublistView(wav).getUint32(24, Endian.little), 22050);
-      expect(wav.sublist(44), [1, 2, 3, 4]);
-    });
+        expect(
+          requests.single.url.path,
+          "/v1beta/models/gemini-tts:generateContent",
+        );
+        final config = sentBody()["generationConfig"] as Map;
+        expect(config["responseModalities"], ["AUDIO"]);
+        expect(
+          config["speechConfig"]["voiceConfig"]["prebuiltVoiceConfig"]["voiceName"],
+          "Kore",
+        );
+        expect(ascii.decode(wav.sublist(0, 4)), "RIFF");
+        expect(ByteData.sublistView(wav).getUint32(24, Endian.little), 22050);
+        expect(wav.sublist(44), [1, 2, 3, 4]);
+      },
+    );
 
     test("no voice asked for sends no speech config", () async {
       await geminiAnswering([
         {
-          "inlineData": {"mimeType": "audio/L16;codec=pcm;rate=24000", "data": "AAA="},
+          "inlineData": {
+            "mimeType": "audio/L16;codec=pcm;rate=24000",
+            "data": "AAA=",
+          },
         },
       ]).speak("hi", model: "gemini-tts");
-      expect((sentBody()["generationConfig"] as Map).containsKey("speechConfig"), isFalse);
-    });
-
-    test("a reply with no audio in it is a failure, not a silent sentence", () async {
-      await expectLater(
-        geminiAnswering([
-          {"text": "no"},
-        ]).speak("hi", model: "gemini-tts"),
-        throwsA(isA<LlmException>()),
+      expect(
+        (sentBody()["generationConfig"] as Map).containsKey("speechConfig"),
+        isFalse,
       );
     });
+
+    test(
+      "a reply with no audio in it is a failure, not a silent sentence",
+      () async {
+        await expectLater(
+          geminiAnswering([
+            {"text": "no"},
+          ]).speak("hi", model: "gemini-tts"),
+          throwsA(isA<LlmException>()),
+        );
+      },
+    );
   });
 }

@@ -75,13 +75,17 @@ sealed class ChatRecord with _$ChatRecord {
     required DateTime createdAt,
     String? siblingOf,
     @Default(false) bool replacesSibling,
+
     /// See [Message.documents]. On the record that opens the message rather
     /// than a part of its own: it is about the message, not something in it.
     @Default({}) Map<String, String> documents,
+
     /// See [Message.author]. About the message, like [documents].
     String? author,
+
     /// See [Message.addressees]. About the message, like [documents].
     @Default([]) List<String> addressees,
+
     /// See [Message.omadaOn]. About the message, like [documents].
     bool? omadaOn,
   }) = MessageRecord;
@@ -152,6 +156,7 @@ sealed class ChatRecord with _$ChatRecord {
   const factory ChatRecord.compaction({
     required String upToMessageId,
     required String summary,
+
     /// See [ConversationCompaction.chatTokens].
     int? chatTokens,
   }) = CompactionRecord;
@@ -170,7 +175,8 @@ sealed class ChatRecord with _$ChatRecord {
     @Default({}) Map<String, dynamic> data,
   }) = CallEventRecord;
 
-  factory ChatRecord.fromJson(Map<String, dynamic> json) => _$ChatRecordFromJson(json);
+  factory ChatRecord.fromJson(Map<String, dynamic> json) =>
+      _$ChatRecordFromJson(json);
 }
 
 /// What a log describes: the one thread through it that is on screen, and the
@@ -251,19 +257,21 @@ Replayed replayTree(Iterable<ChatRecord> records) {
   for (final record in records) {
     switch (record) {
       case MessageRecord(
-          :final id,
-          :final role,
-          :final createdAt,
-          :final siblingOf,
-          :final replacesSibling,
-          :final documents,
-          :final author,
-          :final addressees,
-          :final omadaOn
-        ):
+        :final id,
+        :final role,
+        :final createdAt,
+        :final siblingOf,
+        :final replacesSibling,
+        :final documents,
+        :final author,
+        :final addressees,
+        :final omadaOn,
+      ):
         // A branch of a message that has since been deleted goes on the end
         // instead, which is where it would have gone naming nothing at all.
-        final beside = siblingOf != null && nodes.containsKey(siblingOf) ? siblingOf : null;
+        final beside = siblingOf != null && nodes.containsKey(siblingOf)
+            ? siblingOf
+            : null;
         final under = beside == null ? thread().lastOrNull : parent[beside];
         parent[id] = under;
         (children[under] ??= []).add(id);
@@ -271,13 +279,14 @@ Replayed replayTree(Iterable<ChatRecord> records) {
         // further down the log says the user cycled off it.
         shown[under] = id;
         nodes[id] = Message(
-            id: id,
-            role: role,
-            createdAt: createdAt,
-            documents: documents,
-            author: author,
-            addressees: addressees,
-            omadaOn: omadaOn);
+          id: id,
+          role: role,
+          createdAt: createdAt,
+          documents: documents,
+          author: author,
+          addressees: addressees,
+          omadaOn: omadaOn,
+        );
         // After this one has joined them, so what it replaces is still there to
         // be found — and so that one record says the whole of where a message
         // goes, with no second line to arrive in the right order.
@@ -311,21 +320,28 @@ Replayed replayTree(Iterable<ChatRecord> records) {
         final into = nodes[messageId];
         if (into == null || into.role != MessageRole.assistant) continue;
         nodes[messageId] = into.copyWith(
-            addressees: addressees, context: context ?? into.context);
+          addressees: addressees,
+          context: context ?? into.context,
+        );
 
       case RewindRecord(:final messageId):
         if (nodes.containsKey(messageId)) forget(messageId);
 
-      case CompactionRecord(:final upToMessageId, :final summary, :final chatTokens):
+      case CompactionRecord(
+        :final upToMessageId,
+        :final summary,
+        :final chatTokens,
+      ):
         // Applied where the boundary is still live; dropped as a record the
         // moment the rewind takes it away, like any other marker of what was
         // there. Keyed by the boundary, so a marker written twice for the
         // same message is the last one — the way a superseded part is.
         if (nodes.containsKey(upToMessageId)) {
           compactions[upToMessageId] = ConversationCompaction(
-              upToMessageId: upToMessageId,
-              summary: summary,
-              chatTokens: chatTokens);
+            upToMessageId: upToMessageId,
+            summary: summary,
+            chatTokens: chatTokens,
+          );
         }
 
       case CallEventRecord(:final callId, :final kind, :final data):
@@ -349,14 +365,16 @@ Replayed replayTree(Iterable<ChatRecord> records) {
   }
 
   return Replayed(
-      messages: messages,
-      branches: branches,
-      compactions: liveCompactions,
-      callEvents: callEvents);
+    messages: messages,
+    branches: branches,
+    compactions: liveCompactions,
+    callEvents: callEvents,
+  );
 }
 
 /// The thread a log describes. [replayTree] for the branches beside it.
-List<Message> replay(Iterable<ChatRecord> records) => replayTree(records).messages;
+List<Message> replay(Iterable<ChatRecord> records) =>
+    replayTree(records).messages;
 
 /// The chat a log describes: the conversation, the threads beside it, and
 /// whether it stops in the middle of a turn. Both stores load through here, so
@@ -393,7 +411,9 @@ bool endsUnfinished(List<Message> messages, List<ChatRecord> records) {
   if (last == null || last.role != MessageRole.assistant) return false;
   // A sub-agent's transcript is the reply alone, so there is not always one.
   final prompt = messages.length < 2 ? null : messages[messages.length - 2];
-  if (prompt != null && shellBypassCommand(prompt.plainText) != null) return false;
+  if (prompt != null && shellBypassCommand(prompt.plainText) != null) {
+    return false;
+  }
   // A wired-callback turn (`/compact`) appends nothing either. Matched by
   // name alone rather than against the library: this runs on a reload, where
   // what the skill's frontmatter says today is not what it said when the turn
@@ -402,10 +422,14 @@ bool endsUnfinished(List<Message> messages, List<ChatRecord> records) {
   // interrupted turn is then not offered, where it would have been resumable;
   // a name in the enum is the app's own, and shadowing one is not a state
   // worth a stamp on every message for.
-  if (prompt != null && wiredSkillFromText(prompt.plainText) != null) return false;
+  if (prompt != null && wiredSkillFromText(prompt.plainText) != null) {
+    return false;
+  }
   TurnEnd? ended;
   for (final record in records) {
-    if (record is TurnEndRecord && record.messageId == last.id) ended = record.reason;
+    if (record is TurnEndRecord && record.messageId == last.id) {
+      ended = record.reason;
+    }
   }
   return ended?.resumable ?? true;
 }
@@ -413,10 +437,10 @@ bool endsUnfinished(List<Message> messages, List<ChatRecord> records) {
 /// The two parts an [AppendRecord] can land on, and what it does to them.
 /// Anything else is left alone: only text grows a piece at a time.
 MessagePart withMoreText(MessagePart part, String text) => switch (part) {
-      TextPart(text: final had) => part.copyWith(text: "$had$text"),
-      ReasoningPart(text: final had) => part.copyWith(text: "$had$text"),
-      _ => part,
-    };
+  TextPart(text: final had) => part.copyWith(text: "$had$text"),
+  ReasoningPart(text: final had) => part.copyWith(text: "$had$text"),
+  _ => part,
+};
 
 /// The text [part] has beyond [was], when growing is the only thing that
 /// happened to it. Null means it changed some other way and has to be written
@@ -434,9 +458,9 @@ String? textGrownFrom(MessagePart was, MessagePart part) {
 }
 
 String? _growingText(MessagePart part) => switch (part) {
-      TextPart(:final text) || ReasoningPart(:final text) => text,
-      _ => null,
-    };
+  TextPart(:final text) || ReasoningPart(:final text) => text,
+  _ => null,
+};
 
 /// The records [messages] are made of: each message, then each part it already
 /// has. What writes a conversation assembled in memory, and what a turn opens
@@ -447,25 +471,27 @@ String? _growingText(MessagePart part) => switch (part) {
 /// of what makes a turn a thread rather than a continuation, and [replacing]
 /// takes that one away rather than joining it. Left out, this describes one
 /// thread and no branches — which is all a conversation held as a list can say.
-List<ChatRecord> recordsOf(List<Message> messages,
-        {String? siblingOf, bool replacing = false}) =>
-    [
-      for (final (at, message) in messages.indexed) ...[
-        ChatRecord.message(
-          id: message.id,
-          role: message.role,
-          createdAt: message.createdAt,
-          documents: message.documents,
-          author: message.author,
-          addressees: message.addressees,
-          omadaOn: message.omadaOn,
-          siblingOf: at == 0 ? siblingOf : null,
-          replacesSibling: at == 0 && replacing,
-        ),
-        for (final (index, part) in message.parts.indexed)
-          ChatRecord.part(messageId: message.id, index: index, part: part),
-      ],
-    ];
+List<ChatRecord> recordsOf(
+  List<Message> messages, {
+  String? siblingOf,
+  bool replacing = false,
+}) => [
+  for (final (at, message) in messages.indexed) ...[
+    ChatRecord.message(
+      id: message.id,
+      role: message.role,
+      createdAt: message.createdAt,
+      documents: message.documents,
+      author: message.author,
+      addressees: message.addressees,
+      omadaOn: message.omadaOn,
+      siblingOf: at == 0 ? siblingOf : null,
+      replacesSibling: at == 0 && replacing,
+    ),
+    for (final (index, part) in message.parts.indexed)
+      ChatRecord.part(messageId: message.id, index: index, part: part),
+  ],
+];
 
 /// The log's own encoding, so the one place that describes the format is the
 /// one that reads and writes it.
@@ -483,7 +509,9 @@ List<ChatRecord> decodeLog(String text) {
   for (final line in LineSplitter.split(text)) {
     if (line.isEmpty) continue;
     try {
-      records.add(ChatRecord.fromJson(jsonDecode(line) as Map<String, dynamic>));
+      records.add(
+        ChatRecord.fromJson(jsonDecode(line) as Map<String, dynamic>),
+      );
     } catch (_) {
       break;
     }

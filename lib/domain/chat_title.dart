@@ -9,7 +9,8 @@ const _maxWords = 20;
 const _maxChars = 120;
 
 /// What the title model is asked. One message, and the answer names the chat.
-String titlePrompt(String message) => """
+String titlePrompt(String message) =>
+    """
 Name this conversation from the user's first message, in at most $_maxWords words.
 
 Reply with the title alone: no quotes, no trailing punctuation, no explanation,
@@ -29,11 +30,16 @@ String? cleanTitle(String raw) {
       .first
       // Repeated, so a heading marker and a "Title:" prefix come off in
       // either order.
-      .replaceFirst(RegExp(r"""^(?:["“”'*#\s]+|title\s*:\s*)+""", caseSensitive: false), "")
+      .replaceFirst(
+        RegExp(r"""^(?:["“”'*#\s]+|title\s*:\s*)+""", caseSensitive: false),
+        "",
+      )
       .replaceFirst(RegExp(r"""["“”'*.,\s]+$"""), "")
       .replaceAll(RegExp(r"\s+"), " ");
   final words = title.split(" ");
   if (words.length > _maxWords) title = words.take(_maxWords).join(" ");
-  if (title.length > _maxChars) title = "${title.substring(0, _maxChars).trimRight()}…";
+  if (title.length > _maxChars) {
+    title = "${title.substring(0, _maxChars).trimRight()}…";
+  }
   return title.isEmpty ? null : title;
 }

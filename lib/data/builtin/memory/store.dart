@@ -78,30 +78,25 @@ class MemoryEntry {
   /// rather than waiting on a recall.
   final bool pinned;
 
-  MemoryEntry copyWithPinned(bool pinned) => MemoryEntry(
-        id: id,
-        text: text,
-        at: at,
-        chat: chat,
-        pinned: pinned,
-      );
+  MemoryEntry copyWithPinned(bool pinned) =>
+      MemoryEntry(id: id, text: text, at: at, chat: chat, pinned: pinned);
 
   /// The wire's shape, for a paired device's memory page.
   Map<String, dynamic> toJson() => {
-        "id": id,
-        "text": text,
-        "at": at.toIso8601String(),
-        "chat": ?chat,
-        "pinned": pinned,
-      };
+    "id": id,
+    "text": text,
+    "at": at.toIso8601String(),
+    "chat": ?chat,
+    "pinned": pinned,
+  };
 
   factory MemoryEntry.fromJson(Map<String, dynamic> json) => MemoryEntry(
-        id: json["id"] as String,
-        text: json["text"] as String,
-        at: DateTime.parse(json["at"] as String),
-        chat: json["chat"] as String?,
-        pinned: json["pinned"] as bool? ?? false,
-      );
+    id: json["id"] as String,
+    text: json["text"] as String,
+    at: DateTime.parse(json["at"] as String),
+    chat: json["chat"] as String?,
+    pinned: json["pinned"] as bool? ?? false,
+  );
 }
 
 /// What the memory page reads and changes: this device's [MemoryStore], or a
@@ -189,10 +184,10 @@ class MemoryStore implements Memories {
 
   /// A tombstone (`d`), pin (`p`) or unpin (`u`) line for [id].
   static String _marker(String type, String id) => jsonEncode({
-        "t": type,
-        "id": id,
-        "at": DateTime.now().toUtc().toIso8601String(),
-      });
+    "t": type,
+    "id": id,
+    "at": DateTime.now().toUtc().toIso8601String(),
+  });
 
   /// When the store was last tidied by a consolidation pass, for the interval
   /// between passes. Nothing stamped, and a stamp that will not parse — a torn
@@ -244,14 +239,22 @@ class MemoryStore implements Memories {
         await _append(_memoryRecord(id, text.trim(), when, chat));
         updated++;
       } else {
-        await _append(_memoryRecord(const Uuid().v4(), text.trim(), when, chat));
+        await _append(
+          _memoryRecord(const Uuid().v4(), text.trim(), when, chat),
+        );
         added++;
       }
     }
     for (final text in add ?? const <String>[]) {
       if (text.trim().isEmpty) continue;
-      await _append(_memoryRecord(const Uuid().v4(), text.trim(),
-          DateTime.now().toUtc(), chat));
+      await _append(
+        _memoryRecord(
+          const Uuid().v4(),
+          text.trim(),
+          DateTime.now().toUtc(),
+          chat,
+        ),
+      );
       added++;
     }
     if (added + updated + deleted > 0) await _rebuildIndex();
@@ -291,8 +294,10 @@ class MemoryStore implements Memories {
       for (final entry in all)
         if (scores[entry.id] != null) (entry, scores[entry.id]!),
     ];
-    hits.sort((a, b) =>
-        b.$2 == a.$2 ? b.$1.at.compareTo(a.$1.at) : b.$2.compareTo(a.$2));
+    hits.sort(
+      (a, b) =>
+          b.$2 == a.$2 ? b.$1.at.compareTo(a.$1.at) : b.$2.compareTo(a.$2),
+    );
     // [hits] is best first, so the bar and the cap are both a cut point.
     final kept = <MemoryEntry>[];
     for (final hit in hits) {
@@ -344,7 +349,9 @@ class MemoryStore implements Memories {
 
   /// One line of the log, or null where it is not a record at all: a torn
   /// write, or one whose fields are not what the reader needs.
-  ({bool delete, bool? pin, String id, MemoryEntry? entry})? _recordOf(String line) {
+  ({bool delete, bool? pin, String id, MemoryEntry? entry})? _recordOf(
+    String line,
+  ) {
     Object? decoded;
     try {
       decoded = jsonDecode(line);
@@ -419,8 +426,7 @@ class MemoryStore implements Memories {
   Future<void> _writeIndex(int size, Map<String, List<String>> terms) async {
     // Through a rename: a torn index would cost a rebuild on the next read,
     // but a reader must never see an empty one under a non-empty log.
-    await _writer.write(
-        _indexPath, jsonEncode({"size": size, "terms": terms}));
+    await _writer.write(_indexPath, jsonEncode({"size": size, "terms": terms}));
   }
 
   static Map<String, List<String>> _indexFor(List<MemoryEntry> entries) {
@@ -506,8 +512,7 @@ String renderPinned(List<MemoryEntry> memories) {
 /// to a line is a fact it cannot judge.
 String renderConsolidation(List<MemoryEntry> memories) {
   if (memories.isEmpty) return "";
-  return memories
-      .reversed
+  return memories.reversed
       .take(consolidationMaxEntries)
       .map((memory) => "- [${memory.id}] ${memory.text.trim()}")
       .join("\n");

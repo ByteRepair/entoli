@@ -36,7 +36,8 @@ class AssistantSection extends ConsumerWidget {
         const Divider(),
         const SectionHeader(
           "Assistant",
-          description: "Android's assistant gesture opens Entoli on a new chat, "
+          description:
+              "Android's assistant gesture opens Entoli on a new chat, "
               "once Entoli is picked as the assistant in the system's settings. "
               "Nothing else uses these.",
         ),
@@ -47,10 +48,14 @@ class AssistantSection extends ConsumerWidget {
             isExpanded: true,
             items: [
               for (final project in everyProject(named))
-                DropdownMenuItem(value: project, child: Text(projectLabel(project))),
+                DropdownMenuItem(
+                  value: project,
+                  child: Text(projectLabel(project)),
+                ),
             ],
-            onChanged: (project) =>
-                ref.read(appSettingsProvider.notifier).setAssistantProject(project),
+            onChanged: (project) => ref
+                .read(appSettingsProvider.notifier)
+                .setAssistantProject(project),
           ),
         ),
         LabelledField(

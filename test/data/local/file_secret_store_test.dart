@@ -22,12 +22,15 @@ void main() {
 
   Uint8List bytes() => Uint8List.fromList([1, 2, 3]);
 
-  test("writes a secret on a data directory nothing has written to yet", () async {
-    await store.write("k", bytes());
+  test(
+    "writes a secret on a data directory nothing has written to yet",
+    () async {
+      await store.write("k", bytes());
 
-    expect(await store.read("k"), bytes());
-    expect(File("${config.dataDir}/sync/secrets.json").existsSync(), isTrue);
-  });
+      expect(await store.read("k"), bytes());
+      expect(File("${config.dataDir}/sync/secrets.json").existsSync(), isTrue);
+    },
+  );
 
   test("a second store reads what the first wrote", () async {
     await store.write("k", bytes());

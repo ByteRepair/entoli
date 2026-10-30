@@ -58,30 +58,70 @@ enum ThemeColour {
   boldSlate("Slate", 0xFF607D8B, group: ThemeColourGroup.bold),
 
   // As each upstream publishes it; see [ColourTheme].
-  apple("iOS / macOS", appleBlueArgb,
-      group: ThemeColourGroup.theme, greySurfaces: true),
-  windows("Windows", 0xFF0078D7,
-      group: ThemeColourGroup.theme, greySurfaces: true),
-  adwaita("GNOME Adwaita", 0xFF3584E4,
-      group: ThemeColourGroup.theme, greySurfaces: true),
-  breeze("KDE Breeze", 0xFF3DAEE9,
-      group: ThemeColourGroup.theme, greySurfaces: true),
-  ubuntuOrange("Ubuntu orange", 0xFFE95420,
-      group: ThemeColourGroup.theme, greySurfaces: true),
-  ubuntuAubergine("Ubuntu aubergine", 0xFF77216F, group: ThemeColourGroup.theme),
-  materialPrimary("Material primary", 0xFF6750A4, group: ThemeColourGroup.theme),
-  materialSecondary("Material secondary", 0xFF625B71, group: ThemeColourGroup.theme),
+  apple(
+    "iOS / macOS",
+    appleBlueArgb,
+    group: ThemeColourGroup.theme,
+    greySurfaces: true,
+  ),
+  windows(
+    "Windows",
+    0xFF0078D7,
+    group: ThemeColourGroup.theme,
+    greySurfaces: true,
+  ),
+  adwaita(
+    "GNOME Adwaita",
+    0xFF3584E4,
+    group: ThemeColourGroup.theme,
+    greySurfaces: true,
+  ),
+  breeze(
+    "KDE Breeze",
+    0xFF3DAEE9,
+    group: ThemeColourGroup.theme,
+    greySurfaces: true,
+  ),
+  ubuntuOrange(
+    "Ubuntu orange",
+    0xFFE95420,
+    group: ThemeColourGroup.theme,
+    greySurfaces: true,
+  ),
+  ubuntuAubergine(
+    "Ubuntu aubergine",
+    0xFF77216F,
+    group: ThemeColourGroup.theme,
+  ),
+  materialPrimary(
+    "Material primary",
+    0xFF6750A4,
+    group: ThemeColourGroup.theme,
+  ),
+  materialSecondary(
+    "Material secondary",
+    0xFF625B71,
+    group: ThemeColourGroup.theme,
+  ),
   draculaPurple("Dracula purple", 0xFFBD93F9, group: ThemeColourGroup.theme),
   draculaPink("Dracula pink", 0xFFFF79C6, group: ThemeColourGroup.theme),
   nordFrost("Nord frost", 0xFF88C0D0, group: ThemeColourGroup.theme),
   nordBlue("Nord blue", 0xFF5E81AC, group: ThemeColourGroup.theme),
   solarizedBlue("Solarized blue", 0xFF268BD2, group: ThemeColourGroup.theme),
-  solarizedYellow("Solarized yellow", 0xFFB58900, group: ThemeColourGroup.theme),
+  solarizedYellow(
+    "Solarized yellow",
+    0xFFB58900,
+    group: ThemeColourGroup.theme,
+  ),
   gruvboxYellow("Gruvbox yellow", 0xFFD79921, group: ThemeColourGroup.theme),
   gruvboxAqua("Gruvbox aqua", 0xFF689D6A, group: ThemeColourGroup.theme);
 
-  const ThemeColour(this.label, this.argb,
-      {this.group = ThemeColourGroup.pastel, this.greySurfaces = false});
+  const ThemeColour(
+    this.label,
+    this.argb, {
+    this.group = ThemeColourGroup.pastel,
+    this.greySurfaces = false,
+  });
 
   final String label;
   final int argb;
@@ -110,11 +150,18 @@ enum ColourTheme {
   adwaita(ThemeColour.adwaita, ThemeColour.adwaita),
   breeze(ThemeColour.breeze, ThemeColour.breeze),
   ubuntu(ThemeColour.ubuntuOrange, ThemeColour.ubuntuAubergine, "Ubuntu"),
-  material(ThemeColour.materialPrimary, ThemeColour.materialSecondary,
-      "Material You"),
+  material(
+    ThemeColour.materialPrimary,
+    ThemeColour.materialSecondary,
+    "Material You",
+  ),
   dracula(ThemeColour.draculaPurple, ThemeColour.draculaPink, "Dracula"),
   nord(ThemeColour.nordFrost, ThemeColour.nordBlue, "Nord"),
-  solarized(ThemeColour.solarizedBlue, ThemeColour.solarizedYellow, "Solarized"),
+  solarized(
+    ThemeColour.solarizedBlue,
+    ThemeColour.solarizedYellow,
+    "Solarized",
+  ),
   gruvbox(ThemeColour.gruvboxYellow, ThemeColour.gruvboxAqua, "Gruvbox");
 
   const ColourTheme(this.primary, this.secondary, [this._label]);

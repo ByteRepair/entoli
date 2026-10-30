@@ -4,7 +4,8 @@ import "package:flutter_test/flutter_test.dart";
 void main() {
   group("injectBaseStyles", () {
     test("inserts fonts and style into an existing <head>", () {
-      final html = "<!DOCTYPE html><html><head><title>x</title></head><body><p>hi</p></body></html>";
+      final html =
+          "<!DOCTYPE html><html><head><title>x</title></head><body><p>hi</p></body></html>";
       final out = injectBaseStyles(html);
 
       expect(out, contains("<!-- entoli-base-css -->"));
@@ -58,8 +59,10 @@ void main() {
       expect(out, contains("rebeccapurple"));
       // The base injection lands before the model's style, so the model wins
       // on equal specificity.
-      expect(out.indexOf("<!-- entoli-base-css -->"),
-          lessThan(out.indexOf("rebeccapurple")));
+      expect(
+        out.indexOf("<!-- entoli-base-css -->"),
+        lessThan(out.indexOf("rebeccapurple")),
+      );
     });
   });
 }

@@ -23,23 +23,22 @@ void main() {
     WidgetTester tester,
     String markdown, {
     Brightness brightness = Brightness.light,
-  }) =>
-      app.pump(
-        tester,
-        Scaffold(
-          body: MessageBubble(
-            chatId: "chat-1",
-            message: Message(
-              id: "m1",
-              role: MessageRole.assistant,
-              createdAt: DateTime(2026),
-              parts: [TextPart(text: markdown)],
-            ),
-            isWaiting: false,
-          ),
+  }) => app.pump(
+    tester,
+    Scaffold(
+      body: MessageBubble(
+        chatId: "chat-1",
+        message: Message(
+          id: "m1",
+          role: MessageRole.assistant,
+          createdAt: DateTime(2026),
+          parts: [TextPart(text: markdown)],
         ),
-        brightness: brightness,
-      );
+        isWaiting: false,
+      ),
+    ),
+    brightness: brightness,
+  );
 
   CodeBlock block(WidgetTester tester) => tester.widget(find.byType(CodeBlock));
 
@@ -65,24 +64,27 @@ void main() {
   }
 
   group("what a fence draws", () {
-    testWidgets("the code, without the newline that closed the fence",
-        (tester) async {
+    testWidgets("the code, without the newline that closed the fence", (
+      tester,
+    ) async {
       await pump(tester, "before\n\n```dart\nvoid main() {}\n```\n\nafter");
 
       expect(block(tester).code, "void main() {}");
       expect(spanOf(tester).toPlainText(), "void main() {}");
     });
 
-    testWidgets("the language it was fenced with, on the block's own bar",
-        (tester) async {
+    testWidgets("the language it was fenced with, on the block's own bar", (
+      tester,
+    ) async {
       await pump(tester, "```python\nprint(1)\n```");
 
       expect(block(tester).language, "python");
       expect(find.text("python"), findsOneWidget);
     });
 
-    testWidgets("a fence with no language still draws, and names none",
-        (tester) async {
+    testWidgets("a fence with no language still draws, and names none", (
+      tester,
+    ) async {
       await pump(tester, "```\nplain\n```");
 
       expect(block(tester).language, isNull);
@@ -112,7 +114,9 @@ void main() {
   });
 
   group("highlighting", () {
-    testWidgets("a language it knows is coloured token by token", (tester) async {
+    testWidgets("a language it knows is coloured token by token", (
+      tester,
+    ) async {
       await pump(tester, "```dart\nfinal x = 1;\n```");
 
       final painted = colours(spanOf(tester)).toSet();
@@ -128,16 +132,23 @@ void main() {
       expect(colours(spanOf(tester)).toSet().length, 1);
     });
 
-    testWidgets("an alias the grammar declares works like its own name",
-        (tester) async {
+    testWidgets("an alias the grammar declares works like its own name", (
+      tester,
+    ) async {
       await pump(tester, "```sh\nif [ -f x ]; then echo y; fi\n```");
 
       expect(colours(spanOf(tester)).toSet().length, greaterThan(1));
     });
 
     // The token colours are the palette's, not one theme used under both.
-    testWidgets("the dark palette gets the dark theme's colours", (tester) async {
-      await pump(tester, "```dart\nfinal x = 1;\n```", brightness: Brightness.dark);
+    testWidgets("the dark palette gets the dark theme's colours", (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        "```dart\nfinal x = 1;\n```",
+        brightness: Brightness.dark,
+      );
 
       final painted = colours(spanOf(tester)).toSet();
       expect(painted, contains(githubDarkTheme["keyword"]!.color));
@@ -157,7 +168,9 @@ void main() {
       expect(identical(spanOf(tester), first), isTrue);
     });
 
-    testWidgets("the other palette is not answered out of that", (tester) async {
+    testWidgets("the other palette is not answered out of that", (
+      tester,
+    ) async {
       const fence = "```dart\nfinal repainted = 1;\n```";
       await pump(tester, fence);
       final light = colours(spanOf(tester)).toSet();
@@ -167,7 +180,9 @@ void main() {
       expect(colours(spanOf(tester)).toSet(), isNot(light));
     });
 
-    testWidgets("the code keeps one font whatever it is coloured", (tester) async {
+    testWidgets("the code keeps one font whatever it is coloured", (
+      tester,
+    ) async {
       await pump(tester, "```dart\nfinal x = 1;\n```");
 
       // A token span carries a colour and nothing else, so anything else it is
@@ -181,8 +196,9 @@ void main() {
   });
 
   group("copying", () {
-    testWidgets("the button takes the code, not the fence around it",
-        (tester) async {
+    testWidgets("the button takes the code, not the fence around it", (
+      tester,
+    ) async {
       final copied = clipboard(tester);
       await pump(tester, "here:\n\n```dart\nvoid main() {}\n```");
 
@@ -209,8 +225,9 @@ void main() {
     // The bar is the block's chrome, not what the model said. Dragging the
     // whole reply copies the rendered text, the language name included in
     // neither direction.
-    testWidgets("a drag across the reply does not pick up the bar",
-        (tester) async {
+    testWidgets("a drag across the reply does not pick up the bar", (
+      tester,
+    ) async {
       final copied = clipboard(tester);
       await pump(tester, "read this:\n\n```python\nprint(1)\n```");
 
@@ -227,14 +244,18 @@ void main() {
 
   // `fromTheme` paints a code block in `cardColor`, which M3 resolves to
   // `colorScheme.surface` — the colour of the page it is drawn on.
-  testWidgets("the block is a surface of its own, not the page's",
-      (tester) async {
+  testWidgets("the block is a surface of its own, not the page's", (
+    tester,
+  ) async {
     await pump(tester, "```dart\nvoid main() {}\n```");
 
     final scheme = Theme.of(tester.element(find.byType(CodeBlock))).colorScheme;
     final decoration = tester
         .widgetList<Container>(
-          find.ancestor(of: find.byType(CodeBlock), matching: find.byType(Container)),
+          find.ancestor(
+            of: find.byType(CodeBlock),
+            matching: find.byType(Container),
+          ),
         )
         .map((c) => c.decoration)
         .whereType<BoxDecoration>();

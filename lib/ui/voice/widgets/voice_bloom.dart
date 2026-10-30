@@ -99,12 +99,12 @@ class _VoiceBloomState extends State<VoiceBloom> with TickerProviderStateMixin {
   BloomMode get _mode => _modeOf(widget.state);
 
   static BloomMode _modeOf(VoiceViewState state) => switch (state.status) {
-        _ when state.hushed => BloomMode.still,
-        VoiceStatus.listening => BloomMode.listening,
-        VoiceStatus.speaking => BloomMode.speaking,
-        VoiceStatus.thinking || VoiceStatus.starting => BloomMode.thinking,
-        VoiceStatus.off || VoiceStatus.failed => BloomMode.still,
-      };
+    _ when state.hushed => BloomMode.still,
+    VoiceStatus.listening => BloomMode.listening,
+    VoiceStatus.speaking => BloomMode.speaking,
+    VoiceStatus.thinking || VoiceStatus.starting => BloomMode.thinking,
+    VoiceStatus.off || VoiceStatus.failed => BloomMode.still,
+  };
 
   @override
   void dispose() {
@@ -120,7 +120,9 @@ class _VoiceBloomState extends State<VoiceBloom> with TickerProviderStateMixin {
     final colour = voiceColour(widget.state, theme);
     // A still orb is one nothing is happening in, so it is lit lower rather
     // than only being smaller.
-    final lit = mode == BloomMode.still ? colour.withValues(alpha: 0.5) : colour;
+    final lit = mode == BloomMode.still
+        ? colour.withValues(alpha: 0.5)
+        : colour;
     if (_light?.colour != lit) {
       _light = BloomLight(lit, _hot(lit, theme.brightness));
     }
@@ -139,7 +141,10 @@ class _VoiceBloomState extends State<VoiceBloom> with TickerProviderStateMixin {
               Container(
                 width: 6,
                 height: 6,
-                decoration: BoxDecoration(shape: BoxShape.circle, color: colour),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: colour,
+                ),
               ),
               const SizedBox(width: 8),
               Text(
@@ -244,7 +249,8 @@ class BloomPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final centre = size.center(Offset.zero);
     final rest = size.shortestSide / (2 * reach);
-    final orb = rest *
+    final orb =
+        rest *
         switch (mode) {
           // The breath is what keeps a quiet room alive; the voice rides on
           // top of it.
@@ -258,7 +264,14 @@ class BloomPainter extends CustomPainter {
       // A ring is worth more when a voice shed it than when the room did.
       final shed = mode == BloomMode.listening ? 0.55 + 0.45 * level : 1.0;
       for (var i = 0; i < _rings; i++) {
-        _ring(canvas, centre, orb, rest * reach, (phase + i / _rings) % 1, shed);
+        _ring(
+          canvas,
+          centre,
+          orb,
+          rest * reach,
+          (phase + i / _rings) % 1,
+          shed,
+        );
       }
     }
     if (mode == BloomMode.thinking) {
@@ -290,21 +303,34 @@ class BloomPainter extends CustomPainter {
   /// read as something leaving rather than a circle being resized. It travels
   /// from the orb as it is now to [edge], so a swollen orb does not push its
   /// own rings off the screen.
-  void _ring(Canvas canvas, Offset centre, double orb, double edge, double at,
-      double shed) {
+  void _ring(
+    Canvas canvas,
+    Offset centre,
+    double orb,
+    double edge,
+    double at,
+    double shed,
+  ) {
     final out = Curves.easeOut.transform(at);
     canvas.drawCircle(
       centre,
       orb + (edge - orb) * out,
       _stroke
         ..strokeWidth = 3 - 1.8 * out
-        ..color = light.glow
-            .withValues(alpha: 0.6 * math.pow(1 - out, 1.3) * shed),
+        ..color = light.glow.withValues(
+          alpha: 0.6 * math.pow(1 - out, 1.3) * shed,
+        ),
     );
   }
 
-  void _arc(Canvas canvas, Offset centre, double radius, double from,
-      double sweep, double alpha) {
+  void _arc(
+    Canvas canvas,
+    Offset centre,
+    double radius,
+    double from,
+    double sweep,
+    double alpha,
+  ) {
     canvas.drawArc(
       Rect.fromCircle(center: centre, radius: radius),
       from,
@@ -344,26 +370,26 @@ Color _hot(Color colour, Brightness brightness) {
 /// radius it is drawn at, and in the paints they will be drawn with.
 class BloomLight {
   BloomLight(this.colour, this.glow)
-      : body = Paint()
-          ..shader = RadialGradient(
-            // Lit from a little above the middle, so it reads as a body of
-            // light rather than as a disc.
-            center: const Alignment(0, -0.16),
-            colors: [
-              glow.withValues(alpha: colour.a * 0.98),
-              colour.withValues(alpha: colour.a * 0.92),
-              colour.withValues(alpha: 0),
-            ],
-            stops: const [0, 0.5, 1],
-          ).createShader(_unit),
-        halo = Paint()
-          ..shader = RadialGradient(
-            colors: [
-              colour.withValues(alpha: colour.a * 0.26),
-              colour.withValues(alpha: 0),
-            ],
-            stops: const [0.3, 1],
-          ).createShader(_unit);
+    : body = Paint()
+        ..shader = RadialGradient(
+          // Lit from a little above the middle, so it reads as a body of
+          // light rather than as a disc.
+          center: const Alignment(0, -0.16),
+          colors: [
+            glow.withValues(alpha: colour.a * 0.98),
+            colour.withValues(alpha: colour.a * 0.92),
+            colour.withValues(alpha: 0),
+          ],
+          stops: const [0, 0.5, 1],
+        ).createShader(_unit),
+      halo = Paint()
+        ..shader = RadialGradient(
+          colors: [
+            colour.withValues(alpha: colour.a * 0.26),
+            colour.withValues(alpha: 0),
+          ],
+          stops: const [0.3, 1],
+        ).createShader(_unit);
 
   final Color colour;
   final Color glow;

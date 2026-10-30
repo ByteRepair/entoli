@@ -28,19 +28,18 @@ Future<ProviderEdit?> promptForProvider(
   String title = "Add provider",
   void Function(BuildContext, Uri)? openLink,
   Future<bool> Function(LlmProviderConfig config, String apiKey)? checkKey,
-}) =>
-    showDialog<ProviderEdit>(
-      context: context,
-      builder: (context) => _ProviderDialog(
-        initial: initial,
-        storedKey: storedKey,
-        nameTaken: nameTaken,
-        encrypted: encrypted,
-        title: title,
-        openLink: openLink,
-        checkKey: checkKey,
-      ),
-    );
+}) => showDialog<ProviderEdit>(
+  context: context,
+  builder: (context) => _ProviderDialog(
+    initial: initial,
+    storedKey: storedKey,
+    nameTaken: nameTaken,
+    encrypted: encrypted,
+    title: title,
+    openLink: openLink,
+    checkKey: checkKey,
+  ),
+);
 
 class ProviderEdit {
   const ProviderEdit(this.config, this.setKey);
@@ -68,25 +67,35 @@ class _ProviderDialog extends StatefulWidget {
   final bool encrypted;
   final String title;
   final void Function(BuildContext, Uri)? openLink;
-  final Future<bool> Function(LlmProviderConfig config, String apiKey)? checkKey;
+  final Future<bool> Function(LlmProviderConfig config, String apiKey)?
+  checkKey;
 
   @override
   State<_ProviderDialog> createState() => _ProviderDialogState();
 }
 
 class _ProviderDialogState extends State<_ProviderDialog> {
-  late final _name = TextEditingController(text: widget.initial?.displayName ?? "");
-  late final _catalogId = TextEditingController(text: widget.initial?.catalogId ?? "");
-  late final _baseUrl = TextEditingController(text: widget.initial?.baseUrl ?? "");
+  late final _name = TextEditingController(
+    text: widget.initial?.displayName ?? "",
+  );
+  late final _catalogId = TextEditingController(
+    text: widget.initial?.catalogId ?? "",
+  );
+  late final _baseUrl = TextEditingController(
+    text: widget.initial?.baseUrl ?? "",
+  );
   late final _apiKey = TextEditingController();
-  late final _modelsEndpoint =
-      TextEditingController(text: widget.initial?.modelsEndpoint ?? "");
+  late final _modelsEndpoint = TextEditingController(
+    text: widget.initial?.modelsEndpoint ?? "",
+  );
   late var _api = widget.initial?.api ?? LlmApi.openai;
 
   /// Non-null for a provider with a class of its own, which opens on the key
   /// alone; a custom endpoint is nothing but the technical fields, so it opens
   /// on them.
-  late final _provider = widget.initial == null ? null : providerOf(widget.initial!);
+  late final _provider = widget.initial == null
+      ? null
+      : providerOf(widget.initial!);
   late final _terms = _provider?.terms;
   late final _keyless = _provider?.needsKey == false;
   late var _advanced = _terms == null;
@@ -160,10 +169,10 @@ class _ProviderDialogState extends State<_ProviderDialog> {
       Text(
         _keyless
             ? "$_service runs on this computer, so there is nothing to type. "
-                "Start $_service before you chat."
+                  "Start $_service before you chat."
             : "Entoli needs an access key from your $_service account to talk "
-                "to it. Create one on $_service's website, copy it, and paste it "
-                "below.",
+                  "to it. Create one on $_service's website, copy it, and paste it "
+                  "below.",
         style: textTheme.bodyMedium,
       ),
       if (terms.keyUrl != null) ...[
@@ -210,7 +219,7 @@ class _ProviderDialogState extends State<_ProviderDialog> {
           helperText: helper,
           errorText: _rejected
               ? "$_service did not accept this key. Check "
-                  "it was copied whole."
+                    "it was copied whole."
               : null,
           errorMaxLines: 2,
         ),
@@ -218,7 +227,8 @@ class _ProviderDialogState extends State<_ProviderDialog> {
 
   /// The preset's own name, which the plain words are about whatever the
   /// entry is called.
-  late final String _service = (widget.initial == null
+  late final String _service =
+      (widget.initial == null
           ? null
           : presetOf(widget.initial!)?.displayName) ??
       "The provider";
@@ -227,7 +237,11 @@ class _ProviderDialogState extends State<_ProviderDialog> {
     final edit = _submit();
     final key = edit?.setKey;
     final check = widget.checkKey;
-    if (edit == null || key == null || key.isEmpty || check == null || _rejected) {
+    if (edit == null ||
+        key == null ||
+        key.isEmpty ||
+        check == null ||
+        _rejected) {
       Navigator.pop(context, edit);
       return;
     }
@@ -281,7 +295,9 @@ class _ProviderDialogState extends State<_ProviderDialog> {
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
                     style: TextButton.styleFrom(padding: EdgeInsets.zero),
-                    icon: Icon(_advanced ? Icons.expand_less : Icons.expand_more),
+                    icon: Icon(
+                      _advanced ? Icons.expand_less : Icons.expand_more,
+                    ),
                     label: const Text("Advanced"),
                     onPressed: () => setState(() => _advanced = !_advanced),
                   ),
@@ -303,12 +319,17 @@ class _ProviderDialogState extends State<_ProviderDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text("Cancel"),
+        ),
         FilledButton(
           onPressed: _checking || !_nameOk ? null : _save,
           child: _checking
               ? const SizedBox.square(
-                  dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
               : Text(_rejected ? "Save anyway" : "Save"),
         ),
       ],
@@ -325,7 +346,10 @@ class _ProviderDialogState extends State<_ProviderDialog> {
         isExpanded: true,
         decoration: const InputDecoration(labelText: "API"),
         items: const [
-          DropdownMenuItem(value: LlmApi.openai, child: Text("OpenAI-compatible")),
+          DropdownMenuItem(
+            value: LlmApi.openai,
+            child: Text("OpenAI-compatible"),
+          ),
           DropdownMenuItem(value: LlmApi.anthropic, child: Text("Anthropic")),
         ],
         onChanged: (value) => setState(() => _api = value ?? LlmApi.openai),
@@ -345,8 +369,8 @@ class _ProviderDialogState extends State<_ProviderDialog> {
           helper: hasStoredKey
               ? "Leave empty to keep the stored key"
               : widget.initial?.apiKeyEnv == null
-                  ? "Stored in the ${widget.encrypted ? "OS keyring" : "app secret store"}"
-                  : "Leave empty to read \$${widget.initial!.apiKeyEnv} from the environment",
+              ? "Stored in the ${widget.encrypted ? "OS keyring" : "app secret store"}"
+              : "Leave empty to read \$${widget.initial!.apiKeyEnv} from the environment",
         ),
       ] else if (widget.initial?.apiKeyEnv != null && !hasStoredKey) ...[
         const SizedBox(height: 8),
@@ -361,7 +385,8 @@ class _ProviderDialogState extends State<_ProviderDialog> {
         controller: _modelsEndpoint,
         decoration: const InputDecoration(
           labelText: "Models endpoint",
-          helperText: "Empty lists the models models.dev has for it. Filled, "
+          helperText:
+              "Empty lists the models models.dev has for it. Filled, "
               "lists this endpoint's instead, e.g. "
               "http://localhost:11434/v1/models.",
           helperMaxLines: 3,
@@ -372,7 +397,8 @@ class _ProviderDialogState extends State<_ProviderDialog> {
         controller: _catalogId,
         decoration: const InputDecoration(
           labelText: "Provider ID",
-          helperText: "Its id on models.dev, which lists its models when the "
+          helperText:
+              "Its id on models.dev, which lists its models when the "
               "models endpoint is empty, e.g. google. Empty matches it by "
               "base URL.",
           helperMaxLines: 3,

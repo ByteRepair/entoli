@@ -60,12 +60,14 @@ class PlanAddTool extends _PlanTool {
   String get name => planAddToolName;
 
   @override
-  String get fragment => "`$planAddToolName`/`$planNextToolName`/"
+  String get fragment =>
+      "`$planAddToolName`/`$planNextToolName`/"
       "`$planDoneToolName` to work through a plan ($planFileName in the "
       "workspace)";
 
   @override
-  String get description => "Add one task to the plan ($planFileName in the "
+  String get description =>
+      "Add one task to the plan ($planFileName in the "
       "workspace). One call per task, in the order the work goes. The user "
       "reads every task and its details before approving, and "
       "$planNextToolName hands the details back when the task is taken, so "
@@ -74,52 +76,64 @@ class PlanAddTool extends _PlanTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "task": {
-            "type": "string",
-            "description": "The task's title, one line — what will be done.",
-          },
-          "details": {
-            "type": "string",
-            "description": "The plan for this task, in markdown: how it will "
-                "be done, what it touches, and how it will be verified.",
-          },
-          "section": {
-            "type": "string",
-            "description": "Optional heading to file it under. Tasks without "
-                "one go under \"$planDefaultSection\".",
-          },
-        },
-        "required": ["task", "details"],
-      };
+    "type": "object",
+    "properties": {
+      "task": {
+        "type": "string",
+        "description": "The task's title, one line — what will be done.",
+      },
+      "details": {
+        "type": "string",
+        "description":
+            "The plan for this task, in markdown: how it will "
+            "be done, what it touches, and how it will be verified.",
+      },
+      "section": {
+        "type": "string",
+        "description":
+            "Optional heading to file it under. Tasks without "
+            "one go under \"$planDefaultSection\".",
+      },
+    },
+    "required": ["task", "details"],
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
     final task = stringArg(call.argumentsJson, "task");
     if (task == null) {
-      yield* toolRejected(call,
-          'The $planAddToolName tool takes {"task": "..."}; that argument '
-          "was missing.");
+      yield* toolRejected(
+        call,
+        'The $planAddToolName tool takes {"task": "..."}; that argument '
+        "was missing.",
+      );
       return;
     }
     final details = stringArg(call.argumentsJson, "details");
     if (details == null) {
-      yield* toolRejected(call,
-          'The $planAddToolName tool takes {"task": "...", "details": "..."}; '
-          "the details were missing. Write the plan for this task: how it "
-          "will be done, what it touches, and how it will be verified.");
+      yield* toolRejected(
+        call,
+        'The $planAddToolName tool takes {"task": "...", "details": "..."}; '
+        "the details were missing. Write the plan for this task: how it "
+        "will be done, what it touches, and how it will be verified.",
+      );
       return;
     }
     final section = stringArg(call.argumentsJson, "section");
     yield toolCalled(call, task);
     final path = _planPath(turn);
     yield* gatedFileRun(turn, call, path, planAddToolName, () async {
-      final updated = planAddTask(await _readPlan(turn), task,
-          section: section, details: details);
+      final updated = planAddTask(
+        await _readPlan(turn),
+        task,
+        section: section,
+        details: details,
+      );
       await File(path).writeAsString(updated);
       return ShellResult(
-          returnCode: 0, output: planAddResult(task, planProgress(updated)));
+        returnCode: 0,
+        output: planAddResult(task, planProgress(updated)),
+      );
     });
   }
 }
@@ -135,14 +149,14 @@ class PlanNextTool extends _PlanTool {
   String get name => planNextToolName;
 
   @override
-  String get description => "Take the next pending task of the plan and mark "
+  String get description =>
+      "Take the next pending task of the plan and mark "
       "it as being worked on. Answers the task's number, so plan_done can "
       "name it, and the plan written for it. \"All tasks done.\" when nothing "
       "is left.";
 
   @override
-  Map<String, dynamic> get schema =>
-      const {"type": "object", "properties": {}};
+  Map<String, dynamic> get schema => const {"type": "object", "properties": {}};
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
@@ -170,31 +184,35 @@ class PlanDoneTool extends _PlanTool {
   String get name => planDoneToolName;
 
   @override
-  String get description => "Mark a task of the plan done: the one "
+  String get description =>
+      "Mark a task of the plan done: the one "
       "$planNextToolName last answered, by number, or by naming enough of the "
       "task's text to identify it.";
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "task": {
-            "type": "string",
-            "description": "The task's number as $planNextToolName reported "
-                "it, or the start of its text.",
-          },
-        },
-        "required": ["task"],
-      };
+    "type": "object",
+    "properties": {
+      "task": {
+        "type": "string",
+        "description":
+            "The task's number as $planNextToolName reported "
+            "it, or the start of its text.",
+      },
+    },
+    "required": ["task"],
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
     final task = stringArg(call.argumentsJson, "task");
     if (task == null) {
-      yield* toolRejected(call,
-          'The $planDoneToolName tool takes {"task": "..."} — the number '
-          "$planNextToolName reported, or the start of the task's text; that "
-          "argument was missing.");
+      yield* toolRejected(
+        call,
+        'The $planDoneToolName tool takes {"task": "..."} — the number '
+        "$planNextToolName reported, or the start of the task's text; that "
+        "argument was missing.",
+      );
       return;
     }
     yield toolCalled(call, task);
@@ -206,16 +224,18 @@ class PlanDoneTool extends _PlanTool {
     }
     final found = planFind(plan, task);
     if (found == null) {
-      final candidates = planCandidates(plan, task)
-          .map((t) => "${t.index}. ${t.text}")
-          .toList();
+      final candidates = planCandidates(
+        plan,
+        task,
+      ).map((t) => "${t.index}. ${t.text}").toList();
       yield toolFailed(
-          call,
-          candidates.isEmpty
-              ? "No task matches \"$task\". Call $planNextToolName to take "
+        call,
+        candidates.isEmpty
+            ? "No task matches \"$task\". Call $planNextToolName to take "
                   "the next one, or read $planFileName."
-              : "\"$task\" matches more than one task: ${candidates.join("; ")}. "
-                  "Name it by number, or by more of its text.");
+            : "\"$task\" matches more than one task: ${candidates.join("; ")}. "
+                  "Name it by number, or by more of its text.",
+      );
       return;
     }
     // The index came from the text just read, so the mark cannot miss.
@@ -250,7 +270,8 @@ class PresentPlanTool extends AgentTool {
       "`$presentPlanToolName` to put the plan to the user for approval";
 
   @override
-  String get description => "Present the plan for approval when the last "
+  String get description =>
+      "Present the plan for approval when the last "
       "task is recorded. The chat shows every task with its details, then "
       "asks the user: Go, or type the changes they want. Do not start "
       "executing until the answer is Go; on changes, revise the plan as they "
@@ -260,23 +281,26 @@ class PresentPlanTool extends AgentTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string",
-            "description": "A short title for the plan, shown in the chat and "
-                "on the question.",
-          },
-        },
-      };
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string",
+        "description":
+            "A short title for the plan, shown in the chat and "
+            "on the question.",
+      },
+    },
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
     final args = presentPlanArgsFrom(call.argumentsJson);
     if (args == null) {
-      yield* toolRejected(call,
-          'The $presentPlanToolName tool takes no required arguments; "title" '
-          "is an optional string.");
+      yield* toolRejected(
+        call,
+        'The $presentPlanToolName tool takes no required arguments; "title" '
+        "is an optional string.",
+      );
       return;
     }
     yield toolCalled(call, args.title ?? planFileName);

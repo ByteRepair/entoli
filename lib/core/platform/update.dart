@@ -2,8 +2,7 @@ import "dart:ffi";
 import "dart:io";
 
 import "package:ffi/ffi.dart";
-import "package:flutter/foundation.dart"
-    show kDebugMode, kProfileMode;
+import "package:flutter/foundation.dart" show kDebugMode, kProfileMode;
 import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
@@ -70,11 +69,14 @@ class DesktopUpdater implements AppUpdateHost {
     /// nothing. Null asks what this run is, which under `flutter test` is a
     /// debug build — so a test that wants the check to run passes `false`.
     this.debug,
-  })  : appImage = appImage ?? Platform.environment["APPIMAGE"],
-        bundle = bundle ?? _resolvedBundle(),
-        installedExe = installedExe ??
-            installedWindowsExe(
-                Platform.resolvedExecutable, Platform.environment);
+  }) : appImage = appImage ?? Platform.environment["APPIMAGE"],
+       bundle = bundle ?? _resolvedBundle(),
+       installedExe =
+           installedExe ??
+           installedWindowsExe(
+             Platform.resolvedExecutable,
+             Platform.environment,
+           );
 
   final UpdateFlavour flavour;
   final String cacheDir;
@@ -124,7 +126,11 @@ class DesktopUpdater implements AppUpdateHost {
     final client = httpClient ?? tlsClient();
     String? staged;
     try {
-      final tag = await latestReleaseTag(client, updateRepo, timeout: _tagTimeout);
+      final tag = await latestReleaseTag(
+        client,
+        updateRepo,
+        timeout: _tagTimeout,
+      );
       if (!versionIsNewer(version, tag)) {
         return logDetail(_tag, () => "$version is current against $tag");
       }
@@ -156,10 +162,10 @@ class DesktopUpdater implements AppUpdateHost {
   /// an AppImage under it, macOS out of a plain bundle and Windows out of
   /// anything but the installed folder are checks that would run at nothing.
   Future<bool> _located() async => switch (flavour) {
-        UpdateFlavour.linux => appImage != null,
-        UpdateFlavour.macos => bundle != null && await _writableBeside(bundle!),
-        UpdateFlavour.windows => installedExe != null,
-      };
+    UpdateFlavour.linux => appImage != null,
+    UpdateFlavour.macos => bundle != null && await _writableBeside(bundle!),
+    UpdateFlavour.windows => installedExe != null,
+  };
 
   /// Whether the swap could land: a translocated copy, a mounted image or a
   /// folder this user cannot write would otherwise fetch the whole image on
@@ -177,10 +183,10 @@ class DesktopUpdater implements AppUpdateHost {
   }
 
   String get flavourBuild => switch (flavour) {
-        UpdateFlavour.linux => "AppImage",
-        UpdateFlavour.macos => "installed bundle",
-        UpdateFlavour.windows => "installed app",
-      };
+    UpdateFlavour.linux => "AppImage",
+    UpdateFlavour.macos => "installed bundle",
+    UpdateFlavour.windows => "installed app",
+  };
 
   /// The release asset, streamed onto [staged] — beside the AppImage it will
   /// rename over on Linux, one filesystem so the rename is atomic, and in the
@@ -198,10 +204,12 @@ class DesktopUpdater implements AppUpdateHost {
     final sink = File(staged).openWrite();
     var received = 0;
     try {
-      await sink.addStream(response.stream.map((chunk) {
-        received += chunk.length;
-        return chunk;
-      }));
+      await sink.addStream(
+        response.stream.map((chunk) {
+          received += chunk.length;
+          return chunk;
+        }),
+      );
     } finally {
       await sink.close();
     }
@@ -211,14 +219,14 @@ class DesktopUpdater implements AppUpdateHost {
     // a body no length was declared for (chunked) is not compared.
     final expected = response.contentLength;
     if (expected != null && received != expected) {
-      throw HttpException(
-          "$asset arrived at $received of $expected bytes");
+      throw HttpException("$asset arrived at $received of $expected bytes");
     }
   }
 
   /// Per process, like [_stagingName]: two copies checking at once must not
   /// write, or arm, the same file.
-  String _cacheStage(String asset) => p.join(cacheDir, "updates", "$pid-$asset");
+  String _cacheStage(String asset) =>
+      p.join(cacheDir, "updates", "$pid-$asset");
 
   /// The name the staged file carries under this process, distinct from any
   /// other copy of the app running a check with its own — a file beside the
@@ -249,12 +257,18 @@ class DesktopUpdater implements AppUpdateHost {
 
     switch (flavour) {
       case UpdateFlavour.linux:
-        await sweep(p.dirname(appImage!), (name) => name.startsWith(_stagingPrefix));
+        await sweep(
+          p.dirname(appImage!),
+          (name) => name.startsWith(_stagingPrefix),
+        );
       case UpdateFlavour.macos:
         // With the bundle missing, a swap's rollback failed and what is
         // beside it may be the only copy of the app left.
         if (bundle != null && Directory(bundle!).existsSync()) {
-          await sweep(p.dirname(bundle!), (name) => name.startsWith(_stagingPrefix));
+          await sweep(
+            p.dirname(bundle!),
+            (name) => name.startsWith(_stagingPrefix),
+          );
         }
       case UpdateFlavour.windows:
         break;
@@ -267,7 +281,11 @@ class DesktopUpdater implements AppUpdateHost {
     final mode = await Process.run("chmod", ["755", staged]);
     if (mode.exitCode != 0) {
       throw ProcessException(
-          "chmod", ["755", staged], mode.stderr.toString(), mode.exitCode);
+        "chmod",
+        ["755", staged],
+        mode.stderr.toString(),
+        mode.exitCode,
+      );
     }
     // POSIX: a name can be taken out from under a running binary. The inode
     // this process executes keeps it alive until it exits; the name is what
@@ -294,8 +312,11 @@ class DesktopUpdater implements AppUpdateHost {
       ]);
       if (attach.exitCode != 0) {
         throw ProcessException(
-            "hdiutil", ["attach", dmg], attach.stderr.toString(),
-            attach.exitCode);
+          "hdiutil",
+          ["attach", dmg],
+          attach.stderr.toString(),
+          attach.exitCode,
+        );
       }
       attached = true;
       // One app in the image is what a release ships; anything else is not a
@@ -310,8 +331,12 @@ class DesktopUpdater implements AppUpdateHost {
       final staged = p.join(parent, _stagingName, name);
       final copy = await Process.run("ditto", [sources.single, staged]);
       if (copy.exitCode != 0) {
-        throw ProcessException("ditto", [sources.single, staged],
-            copy.stderr.toString(), copy.exitCode);
+        throw ProcessException(
+          "ditto",
+          [sources.single, staged],
+          copy.stderr.toString(),
+          copy.exitCode,
+        );
       }
       // The engine directory is the whole build in miniature: with nothing in
       // it the download is not an app, and swapping it in would take the
@@ -341,8 +366,12 @@ class DesktopUpdater implements AppUpdateHost {
           } catch (error) {
             // Neither is in place: the discard and the sweep both leave the
             // two copies alone while the bundle path is missing.
-            logFailure(_tag, "the old bundle could not be put back from "
-                "$aside", error);
+            logFailure(
+              _tag,
+              "the old bundle could not be put back from "
+              "$aside",
+              error,
+            );
           }
           rethrow;
         }
@@ -371,8 +400,12 @@ class DesktopUpdater implements AppUpdateHost {
   Future<void> _detach(String mount) async {
     Future<bool> detach(List<String> extra) async {
       try {
-        final run = await Process.run(
-            "hdiutil", ["detach", "-quiet", ...extra, mount]);
+        final run = await Process.run("hdiutil", [
+          "detach",
+          "-quiet",
+          ...extra,
+          mount,
+        ]);
         if (run.exitCode == 0) return true;
         if (extra.isNotEmpty) {
           logFailure(_tag, "the update image would not detach", run.stderr);
@@ -393,19 +426,24 @@ class DesktopUpdater implements AppUpdateHost {
   }
 
   Future<void> _armInstaller(String msi) async {
-    final script =
-        windowsUpdateCommand(pid, msi, p.join(p.dirname(msi), "msi.log"));
+    final script = windowsUpdateCommand(
+      pid,
+      msi,
+      p.join(p.dirname(msi), "msi.log"),
+    );
     // A final public field does not promote, so the arm goes through a local.
     final arm = spawn;
     if (arm != null) {
       await arm(script);
       return;
     }
-    await Process.start(
-      "powershell.exe",
-      ["-NoProfile", "-WindowStyle", "Hidden", "-Command", script],
-      mode: ProcessStartMode.detached,
-    );
+    await Process.start("powershell.exe", [
+      "-NoProfile",
+      "-WindowStyle",
+      "Hidden",
+      "-Command",
+      script,
+    ], mode: ProcessStartMode.detached);
   }
 
   /// Take back what a failed replace left behind. The download always goes —
@@ -450,7 +488,10 @@ String windowsUpdateCommand(int pid, String msiPath, String logPath) {
 /// [exe] where it is the MSI's install, under Program Files\Entoli (see
 /// tool/windows/entoli.wxs), else null.
 String? installedWindowsExe(String exe, Map<String, String> environment) {
-  for (final root in [environment["ProgramW6432"], environment["ProgramFiles"]]) {
+  for (final root in [
+    environment["ProgramW6432"],
+    environment["ProgramFiles"],
+  ]) {
     if (root == null) continue;
     final folder = p.windows.join(root, "Entoli").toLowerCase();
     if (p.windows.isWithin(folder, exe.toLowerCase())) return exe;

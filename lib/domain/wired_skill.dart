@@ -15,9 +15,7 @@ import "prompt_library.dart";
 /// has none of the staleness hazard that made `Message.documents` necessary
 /// for `/skills`, and the reader of a turn being resent cannot ask what the
 /// frontmatter said when it ran.
-enum WiredSkill {
-  compact,
-}
+enum WiredSkill { compact }
 
 /// The wired skills by name — the enum is the closed set, so this is the one
 /// lookup the dispatch shares.

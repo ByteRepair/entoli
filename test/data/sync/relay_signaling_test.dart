@@ -91,21 +91,23 @@ void main() {
       expect(joiner.sent, isEmpty);
     });
 
-    test("an invalid first message — non-join or bad role — closes the peer",
-        () async {
-      final peer = _FakePeer();
-      rooms.adopt(peer);
+    test(
+      "an invalid first message — non-join or bad role — closes the peer",
+      () async {
+        final peer = _FakePeer();
+        rooms.adopt(peer);
 
-      peer.say("not json at all");
-      await pumpEventQueue();
-      expect(peer.closed, isTrue);
+        peer.say("not json at all");
+        await pumpEventQueue();
+        expect(peer.closed, isTrue);
 
-      final second = _FakePeer();
-      rooms.adopt(second);
-      second.say(jsonEncode({"join": "room", "role": "eavesdropper"}));
-      await pumpEventQueue();
-      expect(second.closed, isTrue);
-    });
+        final second = _FakePeer();
+        rooms.adopt(second);
+        second.say(jsonEncode({"join": "room", "role": "eavesdropper"}));
+        await pumpEventQueue();
+        expect(second.closed, isTrue);
+      },
+    );
   });
 
   group("the signaler", () {
@@ -121,10 +123,11 @@ void main() {
       sent = [];
       outgoing.stream.listen(sent.add);
       signaler = RelaySignaler(
-          incoming: incoming.stream,
-          outgoing: outgoing.sink,
-          room: "room",
-          role: "i");
+        incoming: incoming.stream,
+        outgoing: outgoing.sink,
+        room: "room",
+        role: "i",
+      );
     });
 
     tearDown(() async {
@@ -142,15 +145,17 @@ void main() {
       expect(jsonDecode(sent.last! as String), {"offer": "v=0 offer"});
     });
 
-    test("a message with nothing waiting for it does not stop the next one",
-        () async {
-      final waiting = signaler.waitFor("offer");
+    test(
+      "a message with nothing waiting for it does not stop the next one",
+      () async {
+        final waiting = signaler.waitFor("offer");
 
-      incoming.add(jsonEncode({"noise": 1}));
-      incoming.add(jsonEncode({"offer": "v=0 offer"}));
+        incoming.add(jsonEncode({"noise": 1}));
+        incoming.add(jsonEncode({"offer": "v=0 offer"}));
 
-      expect((await waiting)["offer"], "v=0 offer");
-    });
+        expect((await waiting)["offer"], "v=0 offer");
+      },
+    );
 
     test("something that is not a message at all is ignored", () async {
       final waiting = signaler.waitFor("offer");
@@ -162,13 +167,15 @@ void main() {
       expect((await waiting)["offer"], "v=0 offer");
     });
 
-    test("waiting for what never comes times out rather than hanging",
-        () async {
-      await expectLater(
-        signaler.waitFor("answer", timeout: const Duration(milliseconds: 50)),
-        throwsA(isA<TimeoutException>()),
-      );
-    });
+    test(
+      "waiting for what never comes times out rather than hanging",
+      () async {
+        await expectLater(
+          signaler.waitFor("answer", timeout: const Duration(milliseconds: 50)),
+          throwsA(isA<TimeoutException>()),
+        );
+      },
+    );
   });
 }
 

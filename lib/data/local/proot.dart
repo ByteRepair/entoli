@@ -94,7 +94,8 @@ ShellDriver prootDriver({
     guestRoot: guestHome,
     includeParentEnvironment: false,
     hostToGuestPaths: hostToGuest,
-    description: "${rootfs.describe(abi)}, in which ${rootfs.packageManager} "
+    description:
+        "${rootfs.describe(abi)}, in which ${rootfs.packageManager} "
         "installs anything else you need. Your home directory (~) is the "
         "project workspace, and the rest of the device is not there. "
         "It is running under proot on ${Platform.operatingSystem} "

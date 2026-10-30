@@ -7,28 +7,32 @@
 enum Confinement {
   /// Linux's host shell under the Landlock helper: the policy is enforced.
   landlock(
-    summary: "Enforces your sandbox settings with Landlock: commands can "
+    summary:
+        "Enforces your sandbox settings with Landlock: commands can "
         "write only to the workspaces and the folders your rules and "
         "writable directories grant. Reading is never blocked.",
   ),
 
   /// A phone's host shell, inside the app's own OS sandbox.
   appSandbox(
-    summary: "Your sandbox settings are kept but not enforced here. Commands "
+    summary:
+        "Your sandbox settings are kept but not enforced here. Commands "
         "stay inside the system's app sandbox, which reaches the app's own "
         "files and nothing else on the device. Approval rules still apply.",
   ),
 
   /// A downloaded Linux, under proot or the iOS emulator.
   guest(
-    summary: "Your sandbox settings are kept but not enforced here. Commands "
+    summary:
+        "Your sandbox settings are kept but not enforced here. Commands "
         "run inside the downloaded Linux and see its files and the "
         "workspaces, not the rest of the device. Approval rules still apply.",
   ),
 
   /// A desktop host shell with no sandbox: macOS and Windows.
   none(
-    summary: "Your sandbox settings are kept but not enforced here: nothing "
+    summary:
+        "Your sandbox settings are kept but not enforced here: nothing "
         "on this platform implements them. Commands run with your full user "
         "permissions and can write anywhere you can. Only the approval rules "
         "stand between the agent and your files.",

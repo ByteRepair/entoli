@@ -1,5 +1,4 @@
-import "models.dart"
-    show PermissionDecision, PermissionTier, ToolApproval;
+import "models.dart" show PermissionDecision, PermissionTier, ToolApproval;
 import "safe_command.dart" show SegmentReach, profileSegment, readsOnly;
 import "shell.dart" show bashToolName, pathInside;
 import "shell_command_analysis.dart" show ShellCommandAnalysis, plainCommand;
@@ -32,8 +31,7 @@ enum ApproveMode {
 /// without the user ever seeing it.
 const approveModeLabels = {
   ApproveMode.ask: "Ask before every command",
-  ApproveMode.auto:
-      "Auto: run what the classifier rates safe, ask on the rest",
+  ApproveMode.auto: "Auto: run what the classifier rates safe, ask on the rest",
   ApproveMode.never: "Run everything without asking (DANGEROUS)",
 };
 
@@ -43,7 +41,9 @@ const approveModeLabels = {
 /// field reads as "inherit" and a non-null one falls back with `??`.
 ApproveMode? approveModeFromJson(Map<String, dynamic> json) {
   final mode = json["approveMode"] as String?;
-  if (mode != null) return ApproveMode.values.asNameMap()[mode] ?? ApproveMode.ask;
+  if (mode != null) {
+    return ApproveMode.values.asNameMap()[mode] ?? ApproveMode.ask;
+  }
   final legacy = json["approveCommands"] as bool?;
   return switch (legacy) {
     true => ApproveMode.ask,
@@ -76,8 +76,7 @@ class NoClassifier implements PermissionClassifier {
     String argumentsJson, {
     required String workspace,
     List<String> alsoWritable = const [],
-  }) async =>
-      PermissionDecision.ask;
+  }) async => PermissionDecision.ask;
 }
 
 /// One permission rule, written at the app, project or chat tier: for [tool]
@@ -146,40 +145,40 @@ class PermissionRule {
   // The old `writes` key granted every command in the turn, not the rule's
   // own; it is not read, rules from before being reset rather than migrated.
   factory PermissionRule.fromJson(Map<String, dynamic> json) => PermissionRule(
-        tool: json["tool"] as String? ?? "*",
-        pattern: json["pattern"] as String? ?? "",
-        decision: json["decision"] == null
-            ? null
-            : _decision(json["decision"] as String?),
-        unconfined: json["unconfined"] == true,
-        writes: [
-          for (final w in (json["sandboxWrites"] as List<dynamic>? ?? const []))
-            if (w is String) w,
-        ],
-      );
+    tool: json["tool"] as String? ?? "*",
+    pattern: json["pattern"] as String? ?? "",
+    decision: json["decision"] == null
+        ? null
+        : _decision(json["decision"] as String?),
+    unconfined: json["unconfined"] == true,
+    writes: [
+      for (final w in (json["sandboxWrites"] as List<dynamic>? ?? const []))
+        if (w is String) w,
+    ],
+  );
 
   static PermissionDecision _decision(String? name) =>
       PermissionDecision.values.asNameMap()[name] ?? PermissionDecision.ask;
 
   Map<String, dynamic> toJson() => {
-        "tool": tool,
-        "pattern": pattern,
-        if (decision != null) "decision": decision!.name,
-        if (unconfined) "unconfined": true,
-        if (writes.isNotEmpty) "sandboxWrites": writes,
-      };
+    "tool": tool,
+    "pattern": pattern,
+    if (decision != null) "decision": decision!.name,
+    if (unconfined) "unconfined": true,
+    if (writes.isNotEmpty) "sandboxWrites": writes,
+  };
 
   /// This rule with [origin] stamped — the one field a rule gains after it
   /// is read, the tier the turn's composition found it in. Not persisted;
   /// a rule moved between files is stamped anew.
   PermissionRule copyWith({PermissionTier? origin}) => PermissionRule(
-        tool: tool,
-        pattern: pattern,
-        decision: decision,
-        unconfined: unconfined,
-        writes: writes,
-        origin: origin ?? this.origin,
-      );
+    tool: tool,
+    pattern: pattern,
+    decision: decision,
+    unconfined: unconfined,
+    writes: writes,
+    origin: origin ?? this.origin,
+  );
 
   /// This rule with [resolve] applied wherever it names a path: the sandbox
   /// [writes], and the pattern of a file tool. A command's pattern is left
@@ -226,7 +225,9 @@ class PermissionRule {
 /// confine more than the turn does, so there is no stricter answer for a
 /// looser one to lose to.
 ({bool unconfined, List<String> writes}) rulesSandbox(
-    List<PermissionRule> rules, List<String> segments) {
+  List<PermissionRule> rules,
+  List<String> segments,
+) {
   var matched = false;
   var unconfined = true;
   final writes = <String>{};
@@ -235,7 +236,9 @@ class PermissionRule {
     final subject = _subjectOf(segment);
     if (subject != null) {
       for (final rule in rules) {
-        if (!rule.setsSandbox || !_ruleMatches(rule, bashToolName, subject)) continue;
+        if (!rule.setsSandbox || !_ruleMatches(rule, bashToolName, subject)) {
+          continue;
+        }
         if (rule.unconfined) segmentUnconfined = true;
         writes.addAll(rule.writes);
       }
@@ -274,8 +277,9 @@ List<Map<String, dynamic>> permissionRulesToJson(List<PermissionRule> rules) =>
 /// the process.
 final _globCache = <String, RegExp>{};
 
-bool globMatch(String glob, String text) =>
-    _globCache.putIfAbsent(glob, () => _compileGlob(glob)).hasMatch(text.trim());
+bool globMatch(String glob, String text) => _globCache
+    .putIfAbsent(glob, () => _compileGlob(glob))
+    .hasMatch(text.trim());
 
 RegExp _compileGlob(String glob) {
   const anyArgs = " .*";
@@ -318,8 +322,10 @@ RuleVerdict? rulesDecideTraced(
       final found = segmentVerdict(rules, segment);
       final d = found?.decision;
       if (d == PermissionDecision.deny) {
-        return (decision: PermissionDecision.deny,
-            tiers: found!.tiers.toList());
+        return (
+          decision: PermissionDecision.deny,
+          tiers: found!.tiers.toList(),
+        );
       }
       if (d == null) {
         verdict = PermissionDecision.ask;
@@ -347,14 +353,19 @@ RuleVerdict? rulesDecideTraced(
 /// deterministic tiers need to know a segment is one the user wants shown.
 RuleVerdict? segmentVerdict(List<PermissionRule> rules, String segment) {
   final subject = _subjectOf(segment);
-  return subject == null ? null : _strongestTraced(rules, bashToolName, subject);
+  return subject == null
+      ? null
+      : _strongestTraced(rules, bashToolName, subject);
 }
 
 /// The verdict [rules] makes of one subject, with the tiers of the rules
 /// that made it — the strongest decision wins; every rule at that strength
 /// adds its origin, so a subject covered by two tiers says both.
 RuleVerdict? _strongestTraced(
-    List<PermissionRule> rules, String toolName, String subject) {
+  List<PermissionRule> rules,
+  String toolName,
+  String subject,
+) {
   PermissionDecision? verdict;
   final tiers = <PermissionTier>{};
   for (final rule in rules) {
@@ -375,7 +386,10 @@ RuleVerdict? _strongestTraced(
 
 /// The outcome of [rulesDecideTraced]: the decision and the tiers that
 /// spoke for it.
-typedef RuleVerdict = ({PermissionDecision decision, List<PermissionTier> tiers});
+typedef RuleVerdict = ({
+  PermissionDecision decision,
+  List<PermissionTier> tiers,
+});
 
 PermissionDecision? _stronger(PermissionDecision? a, PermissionDecision b) =>
     a == null || b.index > a.index ? b : a;
@@ -387,11 +401,13 @@ PermissionDecision? _stronger(PermissionDecision? a, PermissionDecision b) =>
 String? _subjectOf(String segment) => plainCommand(segment)?.words.join(" ");
 
 bool _ruleMatches(PermissionRule rule, String toolName, String subject) =>
-    expandBraces(rule.pattern).any((pattern) => switch (toolName) {
-          bashToolName => globMatch(pattern, subject),
-          webfetchToolName => _hostMatch(pattern, subject),
-          _ => pathInside(subject, pattern) || globMatch(pattern, subject),
-        });
+    expandBraces(rule.pattern).any(
+      (pattern) => switch (toolName) {
+        bashToolName => globMatch(pattern, subject),
+        webfetchToolName => _hostMatch(pattern, subject),
+        _ => pathInside(subject, pattern) || globMatch(pattern, subject),
+      },
+    );
 
 /// The alternatives a pattern names with shell brace syntax:
 /// `{podman,toolbox} *` is `podman *` and `toolbox *`. Braces rather than
@@ -405,9 +421,11 @@ List<String> expandBraces(String pattern) => pattern.contains("{")
 final _braceCache = <String, List<String>>{};
 
 List<String> _expandBraces(String pattern) {
-  for (var open = pattern.indexOf("{");
-      open >= 0;
-      open = pattern.indexOf("{", open + 1)) {
+  for (
+    var open = pattern.indexOf("{");
+    open >= 0;
+    open = pattern.indexOf("{", open + 1)
+  ) {
     var depth = 0;
     final commas = <int>[];
     int? close;
@@ -428,7 +446,8 @@ List<String> _expandBraces(String pattern) {
     return [
       for (var k = 0; k + 1 < cuts.length; k++)
         ..._expandBraces(
-            "$head${pattern.substring(cuts[k] + 1, cuts[k + 1])}$tail"),
+          "$head${pattern.substring(cuts[k] + 1, cuts[k + 1])}$tail",
+        ),
     ];
   }
   return [pattern];
@@ -531,7 +550,7 @@ PermissionRule? ruleFromApproval(ToolApproval? approval) {
 String _commandPrefix(String command) {
   final head =
       ShellCommandAnalysis.parse(command).modelableSegments?.firstOrNull ??
-          command;
+      command;
   final words = head.split(RegExp(r"\s+"));
   final prefix = words.length <= 2 ? head : words.take(2).join(" ");
   if (prefix.isEmpty) return command;

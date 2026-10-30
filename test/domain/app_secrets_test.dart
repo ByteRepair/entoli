@@ -21,35 +21,41 @@ void main() {
 
   AppSecrets secretsOver() => AppSecrets(FileSecretStore(config));
 
-  test("a stored key is read back, and reads are served from the mirror", () async {
-    final secrets = secretsOver();
+  test(
+    "a stored key is read back, and reads are served from the mirror",
+    () async {
+      final secrets = secretsOver();
 
-    await secrets.setProviderKey("ollama-cloud", "sk-1");
-    expect(secrets.providerKey("ollama-cloud"), "sk-1");
+      await secrets.setProviderKey("ollama-cloud", "sk-1");
+      expect(secrets.providerKey("ollama-cloud"), "sk-1");
 
-    // A fresh object over the same store reads the same answer: what landed
-    // on disk is what the mirror was filled from.
-    final again = secretsOver();
-    await again.load();
-    expect(again.providerKey("ollama-cloud"), "sk-1");
-  });
+      // A fresh object over the same store reads the same answer: what landed
+      // on disk is what the mirror was filled from.
+      final again = secretsOver();
+      await again.load();
+      expect(again.providerKey("ollama-cloud"), "sk-1");
+    },
+  );
 
-  test("the file behind it is the store's, and no key lands in settings.json",
-      () async {
-    final secrets = secretsOver();
+  test(
+    "the file behind it is the store's, and no key lands in settings.json",
+    () async {
+      final secrets = secretsOver();
 
-    await secrets.setProviderKey("ollama-cloud", "sk-1");
-    await AppSettings(llmProviders: const []).save(config);
+      await secrets.setProviderKey("ollama-cloud", "sk-1");
+      await AppSettings(llmProviders: const []).save(config);
 
-    // Through the store, the way a second process would read it.
-    final stored =
-        utf8.decode((await FileSecretStore(config).read(providerKeysKey))!);
-    expect(stored, contains("sk-1"));
-    final settings = File(config.settingsFile).existsSync()
-        ? await File(config.settingsFile).readAsString()
-        : "";
-    expect(settings, isNot(contains("sk-1")));
-  });
+      // Through the store, the way a second process would read it.
+      final stored = utf8.decode(
+        (await FileSecretStore(config).read(providerKeysKey))!,
+      );
+      expect(stored, contains("sk-1"));
+      final settings = File(config.settingsFile).existsSync()
+          ? await File(config.settingsFile).readAsString()
+          : "";
+      expect(settings, isNot(contains("sk-1")));
+    },
+  );
 
   test("null clears one entry and leaves the rest", () async {
     final secrets = secretsOver();
@@ -67,17 +73,19 @@ void main() {
     expect(again.providerKey("b"), "sk-b");
   });
 
-  test("the last entry removed deletes the item, so nothing is stored at all",
-      () async {
-    final store = FileSecretStore(config);
-    final secrets = AppSecrets(store);
-    await secrets.setProviderKey("a", "sk-a");
+  test(
+    "the last entry removed deletes the item, so nothing is stored at all",
+    () async {
+      final store = FileSecretStore(config);
+      final secrets = AppSecrets(store);
+      await secrets.setProviderKey("a", "sk-a");
 
-    await secrets.setProviderKey("a", null);
+      await secrets.setProviderKey("a", null);
 
-    // A device with no providers holds nothing: the item is gone, not empty.
-    expect(await store.read(providerKeysKey), isNull);
-  });
+      // A device with no providers holds nothing: the item is gone, not empty.
+      expect(await store.read(providerKeysKey), isNull);
+    },
+  );
 
   test("the TURN password rides its own item", () async {
     final store = FileSecretStore(config);

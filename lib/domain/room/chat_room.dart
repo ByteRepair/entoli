@@ -74,7 +74,8 @@ class ChatRoom {
   void _jobsChanged() {
     if (_disposed) return;
     _view = state.copyWith(
-        runningJobs: {for (final job in _jobs.jobs.value) job.callId: job});
+      runningJobs: {for (final job in _jobs.jobs.value) job.callId: job},
+    );
   }
 
   /// A background job ended, likely between turns: kept on the log through
@@ -84,16 +85,20 @@ class ChatRoom {
   Future<void> _jobEnded(({String callId, JobEnd end}) ended) async {
     final (:callId, :end) = ended;
     final data = end.toJson();
-    unawaited(_append(
-        [ChatRecord.callEvent(callId: callId, kind: jobEndedEvent, data: data)]));
+    unawaited(
+      _append([
+        ChatRecord.callEvent(callId: callId, kind: jobEndedEvent, data: data),
+      ]),
+    );
     // After the load, which may have read the log before this line landed.
     if (!_loaded) await _ready;
     final chat = state.chat;
     if (_disposed || chat == null) return;
     _view = state.copyWith(
-        chat: chat.copyWith(
-            callEvents:
-                withCallEvent(chat.callEvents, callId, jobEndedEvent, data)));
+      chat: chat.copyWith(
+        callEvents: withCallEvent(chat.callEvents, callId, jobEndedEvent, data),
+      ),
+    );
   }
 
   bool _loaded = false;
@@ -146,11 +151,13 @@ class ChatRoom {
   Future<void> _append(List<ChatRecord> records) {
     final queued = _appendQueue;
     return _appendQueue =
-        (queued == null ? Future<void>.sync(() => _repo.append(chatId, records)) : queued.then((_) => _repo.append(chatId, records)))
+        (queued == null
+                ? Future<void>.sync(() => _repo.append(chatId, records))
+                : queued.then((_) => _repo.append(chatId, records)))
             .catchError((Object e) {
-      // A failed line must not wedge the queue; the lost records get a line.
-      logFailure("chat", "could not append to $chatId", e);
-    });
+              // A failed line must not wedge the queue; the lost records get a line.
+              logFailure("chat", "could not append to $chatId", e);
+            });
   }
 
   Agent _agent(String? handle) => Agent(_repo, chatId, handle);
@@ -161,12 +168,19 @@ class ChatRoom {
   ///
   /// Pre: [agent] has no turn in flight.
   _RunningTurn _openTurnEntry(String replyId, Agent agent) {
-    assert(!_turns.values.any((t) => t.agent.handle == agent.handle),
-        "an agent has at most one turn in flight");
-    final turn =
-        _RunningTurn(replyId: replyId, agent: agent, done: Completer<TurnEnd?>());
+    assert(
+      !_turns.values.any((t) => t.agent.handle == agent.handle),
+      "an agent has at most one turn in flight",
+    );
+    final turn = _RunningTurn(
+      replyId: replyId,
+      agent: agent,
+      done: Completer<TurnEnd?>(),
+    );
     turn.recorder = TurnRecorder(
-        append: _append, onParts: (parts) => _writeReply(turn, parts));
+      append: _append,
+      onParts: (parts) => _writeReply(turn, parts),
+    );
     turn.recorder.open(replyId);
     _turns[replyId] = turn;
     return turn;
@@ -178,8 +192,9 @@ class ChatRoom {
   /// voice handover — awaits this. Null where nothing is running.
   Future<TurnEnd?>? get turnDone {
     if (_turns.isEmpty) return null;
-    return Future.wait([for (final turn in _turns.values) turn.done.future])
-        .then((ends) => ends.lastOrNull);
+    return Future.wait([
+      for (final turn in _turns.values) turn.done.future,
+    ]).then((ends) => ends.lastOrNull);
   }
 
   /// The first read of the chat off disk. **Anything that drives a turn waits
@@ -255,15 +270,19 @@ class ChatRoom {
   /// is the session the turn is rewriting underneath it. Where it is checked
   /// after that, the turn it runs goes through the room's machinery like any
   /// other, so the spinner, Stop and the composer's rules hold.
-  Future<void> send(String text,
-      {List<Attachment> attachments = const [], bool queue = false}) async {
+  Future<void> send(
+    String text, {
+    List<Attachment> attachments = const [],
+    bool queue = false,
+  }) async {
     await _ready;
     if (state.chat == null) return;
     final wired = wiredSkillFromText(text);
     if (wired != null) {
       if (state.isRunning) {
         _view = state.copyWith(
-            status: "Wait for the turn to finish before compacting");
+          status: "Wait for the turn to finish before compacting",
+        );
         return;
       }
       switch (wired.skill) {
@@ -291,8 +310,11 @@ class ChatRoom {
   /// it lands — the same stamp a fresh send writes where the prompt is not on
   /// the log yet.
   Message _composeSay(String text, List<MessagePart> files) {
-    final say = _repo.composeUserPrompt(text,
-        project: state.chat?.state.project, files: files);
+    final say = _repo.composeUserPrompt(
+      text,
+      project: state.chat?.state.project,
+      files: files,
+    );
     final chat = state.chat;
     return chat == null
         ? say
@@ -322,9 +344,9 @@ class ChatRoom {
   }
 
   /// The strip, read off the inboxes rather than kept beside them.
-  void _showSteering() => _view = state.copyWith(steering: [
-        for (final t in _turns.values) ...t.steers.pending,
-      ]);
+  void _showSteering() => _view = state.copyWith(
+    steering: [for (final t in _turns.values) ...t.steers.pending],
+  );
 
   /// Send a say still waiting for its turn to read it after the turn instead.
   Future<void> queueSteer(String id) async {
@@ -340,19 +362,27 @@ class ChatRoom {
   Future<Draft?> withdrawSteer(String id) async {
     final say = _unsteer(id);
     if (say == null) return null;
-    final attachments = await Future.wait(say.files.map((f) async {
-      final bytes = await _repo.readResource(chatId, f.resource);
-      await _repo.deleteResource(chatId, f.resource);
-      return bytes == null
-          ? null
-          : Attachment(filename: f.filename, mimeType: f.mimeType, bytes: bytes);
-    }));
+    final attachments = await Future.wait(
+      say.files.map((f) async {
+        final bytes = await _repo.readResource(chatId, f.resource);
+        await _repo.deleteResource(chatId, f.resource);
+        return bytes == null
+            ? null
+            : Attachment(
+                filename: f.filename,
+                mimeType: f.mimeType,
+                bytes: bytes,
+              );
+      }),
+    );
     return (text: say.plainText, attachments: attachments.nonNulls.toList());
   }
 
   Message? _unsteer(String id) {
-    final say =
-        _turns.values.map((t) => t.steers.withdraw(id)).nonNulls.firstOrNull;
+    final say = _turns.values
+        .map((t) => t.steers.withdraw(id))
+        .nonNulls
+        .firstOrNull;
     if (say != null) _showSteering();
     return say;
   }
@@ -370,9 +400,11 @@ class ChatRoom {
     final chat = state.chat;
     if (chat == null) return;
     _view = state.copyWith(
-        chat: chat.copyWith(
-            messages: [...chat.messages, ...says],
-            state: chat.state.copyWith(updatedAt: DateTime.now())));
+      chat: chat.copyWith(
+        messages: [...chat.messages, ...says],
+        state: chat.state.copyWith(updatedAt: DateTime.now()),
+      ),
+    );
     _said.addAll(says);
   }
 
@@ -409,16 +441,23 @@ class ChatRoom {
   /// runs through the ordering like anything else in the room, one member
   /// turn per mention. [replacing] is the exception — an edit answers for
   /// itself, under whoever the prompt it stands beside named.
-  Future<void> _prompt(String text,
-      {List<MessagePart> files = const [], Message? replacing}) async {
+  Future<void> _prompt(
+    String text, {
+    List<MessagePart> files = const [],
+    Message? replacing,
+  }) async {
     final chat = state.chat;
     if (chat == null || state.isRunning) return;
-    final at =
-        replacing == null ? chat.messages.length : chat.messages.indexOf(replacing);
+    final at = replacing == null
+        ? chat.messages.length
+        : chat.messages.indexOf(replacing);
     if (at < 0) return;
 
-    final userMsg =
-        _repo.composeUserPrompt(text, project: chat.state.project, files: files);
+    final userMsg = _repo.composeUserPrompt(
+      text,
+      project: chat.state.project,
+      files: files,
+    );
     if (replacing != null) {
       await _say(userMsg, replacing: replacing);
       return;
@@ -439,8 +478,9 @@ class ChatRoom {
     final chat = state.chat;
     if (chat == null) return;
     final userMsg = _repo.composeUserPrompt(
-        "/compact${arguments.isEmpty ? "" : " $arguments"}",
-        project: chat.state.project);
+      "/compact${arguments.isEmpty ? "" : " $arguments"}",
+      project: chat.state.project,
+    );
     await _say(userMsg);
   }
 
@@ -449,14 +489,15 @@ class ChatRoom {
   /// its empty reply logged — so this runs the summarizer, writes the marker,
   /// and ends the turn the way any event stream would have. Shaped like the
   /// loop's end so `isRunning`, Stop and the settle rules hold over it.
-  Future<void> _runCompactTurn(
-      _RunningTurn turn, String arguments) async {
+  Future<void> _runCompactTurn(_RunningTurn turn, String arguments) async {
     // The wait says what it is: a summarizer over a long conversation is a
     // read of minutes, and a spinner that cannot be told apart from a hang is
     // the row that says nothing.
     _view = state.copyWith(status: "Compacting the conversation");
     try {
-      await compact(instructions: arguments.trim().isEmpty ? null : arguments.trim());
+      await compact(
+        instructions: arguments.trim().isEmpty ? null : arguments.trim(),
+      );
     } catch (e) {
       logFailure("compact", "compact turn failed", e);
     } finally {
@@ -480,15 +521,19 @@ class ChatRoom {
   /// it is true, the landing is skipped whole — no marker, so the next settle
   /// may retry. The manual compact turn is its own running turn and lands
   /// unconditionally.
-  Future<void> compact(
-      {required String? instructions, bool recheck = false}) async {
+  Future<void> compact({
+    required String? instructions,
+    bool recheck = false,
+  }) async {
     final chat = state.chat;
     final result = chat == null
         ? null
-        : await _repo.compact(chatId,
+        : await _repo.compact(
+            chatId,
             history: chat.messages,
             compactions: chat.compactions,
-            instructions: instructions);
+            instructions: instructions,
+          );
     if (_disposed || result == null || (recheck && state.isRunning)) return;
     // The wrapper's own guard is the reentrancy flag, and it sets the chat on
     // the way through — so nothing to hand back here.
@@ -503,16 +548,20 @@ class ChatRoom {
   /// answers it, where scheduling decided ahead of the prompt. No guard on
   /// the room here: dispatching a fan-out is what puts several turns in
   /// flight, and the verbs that need the guard carry their own.
-  Future<void> _say(Message userMsg,
-      {Message? replacing, String? member, int generation = 0}) async {
+  Future<void> _say(
+    Message userMsg, {
+    Message? replacing,
+    String? member,
+    int generation = 0,
+  }) async {
     final chat = state.chat;
     if (chat == null) return;
     final logged = replacing == null && chat.messages.contains(userMsg);
     final at = logged
         ? chat.messages.indexOf(userMsg)
         : replacing == null
-            ? chat.messages.length
-            : chat.messages.indexOf(replacing);
+        ? chat.messages.length
+        : chat.messages.indexOf(replacing);
     if (at < 0) return;
     // Scheduling that named the member stamps them directly; a fresh send
     // reads the address off what composing wrote into the message.
@@ -564,7 +613,10 @@ class ChatRoom {
     final logged = chat.messages.contains(prompt);
     final say = logged
         ? prompt
-        : prompt.copyWith(omadaOn: omada, addressees: roster.addressees(prompt));
+        : prompt.copyWith(
+            omadaOn: omada,
+            addressees: roster.addressees(prompt),
+          );
     // The room's mode at this turn, stamped on the turn's opener: the page
     // derives sections from these stamps, a separator above an opener that
     // flips from the last one. The implicit off a chat starts in is not a
@@ -582,7 +634,12 @@ class ChatRoom {
         .copyWith(state: chat.state.copyWith(updatedAt: DateTime.now()));
 
     final isFirst = chat.messages.isEmpty;
-    _view = state.copyWith(chat: updated, isRunning: true, clearRetry: true, clearStatus: true);
+    _view = state.copyWith(
+      chat: updated,
+      isRunning: true,
+      clearRetry: true,
+      clearStatus: true,
+    );
     // The prompt and the empty reply go down before the turn starts, so a chat
     // killed before the model says anything still shows what was asked. What
     // comes back carries the TTL anchor the save resolved, and is kept.
@@ -595,9 +652,13 @@ class ChatRoom {
     final turn = _openTurnEntry(opening.last.id, agent);
     turn.generation = generation;
     applyState(await _repo.saveState(updated.state));
-    await turn.recorder.write(recordsOf(openingWithMode,
+    await turn.recorder.write(
+      recordsOf(
+        openingWithMode,
         siblingOf: replacing?.id,
-        replacing: replacing != null && !chat.worthAThread(replacing)));
+        replacing: replacing != null && !chat.worthAThread(replacing),
+      ),
+    );
     // Only the first message names the chat. The list is not refreshed here:
     // the chat was written, and listed, when it was created.
     if (isFirst) _host.firstSaid(prompt.plainText);
@@ -621,22 +682,27 @@ class ChatRoom {
       }
       return;
     }
-    _listen(turn, agent.take(say,
+    _listen(
+      turn,
+      agent.take(
+        say,
         history: history,
         compactions: chat.compactions,
         replaces: replacing != null,
-        steers: turn.steers));
+        steers: turn.steers,
+      ),
+    );
   }
 
   /// The turn's reply. Always role `assistant` — the role is the render
   /// class, not the author; [Message.author] is what names them.
   Message _newReply({String? author}) => Message(
-        id: _uuid.v4(),
-        role: MessageRole.assistant,
-        createdAt: DateTime.now(),
-        parts: const [],
-        author: author,
-      );
+    id: _uuid.v4(),
+    role: MessageRole.assistant,
+    createdAt: DateTime.now(),
+    parts: const [],
+    author: author,
+  );
 
   /// Carry on the turn the chat was cut off in. What this produces goes on the
   /// end of the reply that is already there, closed by a second [TurnEndRecord]
@@ -664,11 +730,16 @@ class ChatRoom {
     final chat = state.chat;
     final reply = replyId == null
         ? chat!.messages.lastWhereOrNull(_resumableReply)
-        : chat!.messages
-            .firstWhereOrNull((m) => m.id == replyId && _resumableReply(m));
+        : chat!.messages.firstWhereOrNull(
+            (m) => m.id == replyId && _resumableReply(m),
+          );
     if (reply == null) return;
 
-    _view = state.copyWith(isRunning: true, clearRetry: true, clearStatus: true);
+    _view = state.copyWith(
+      isRunning: true,
+      clearRetry: true,
+      clearStatus: true,
+    );
     // The member who wrote the reply carries it on; a fresh entry takes them
     // as its lane, which is what relay's busy check reads.
     final agent = _agent(_roster(chat).known(nameOf(reply.author)));
@@ -680,11 +751,13 @@ class ChatRoom {
     turn.recorder.open(reply.id, existing: reply.parts);
 
     _listen(
-        turn,
-        agent.carryOn(
-            history: chat.messages,
-            compactions: chat.compactions,
-            steers: turn.steers));
+      turn,
+      agent.carryOn(
+        history: chat.messages,
+        compactions: chat.compactions,
+        steers: turn.steers,
+      ),
+    );
   }
 
   /// What a turn can be carried on from: an assistant's reply. A command's
@@ -694,9 +767,10 @@ class ChatRoom {
 
   void _listen(_RunningTurn turn, Stream<AgentEvent> stream) {
     turn.sub = stream.listen(
-        (event) => _onEvent(turn, event),
-        onDone: () => _finishTurn(turn),
-        onError: (Object e, StackTrace trace) => _onError(turn, e, trace));
+      (event) => _onEvent(turn, event),
+      onDone: () => _finishTurn(turn),
+      onError: (Object e, StackTrace trace) => _onError(turn, e, trace),
+    );
   }
 
   /// The user message that produced [messageId] — itself when it is one,
@@ -704,7 +778,10 @@ class ChatRoom {
   Message? _promptFor(Chat chat, String messageId) {
     final from = chat.messages.indexWhere((m) => m.id == messageId);
     if (from < 0) return null;
-    final at = chat.messages.lastIndexWhere((m) => m.role == MessageRole.user, from);
+    final at = chat.messages.lastIndexWhere(
+      (m) => m.role == MessageRole.user,
+      from,
+    );
     return at < 0 ? null : chat.messages[at];
   }
 
@@ -714,7 +791,10 @@ class ChatRoom {
   Message? _replyFor(Chat chat, String messageId) {
     final from = chat.messages.indexWhere((m) => m.id == messageId);
     if (from < 0) return null;
-    final at = chat.messages.indexWhere((m) => m.role == MessageRole.assistant, from);
+    final at = chat.messages.indexWhere(
+      (m) => m.role == MessageRole.assistant,
+      from,
+    );
     return at < 0 ? null : chat.messages[at];
   }
 
@@ -770,10 +850,13 @@ class ChatRoom {
   /// it is about to replace the conversation this one would be computed from,
   /// so a held-down arrow would issue a reload per frame against state that no
   /// longer holds.
-  Chat? get _rethreadable => state.isRunning || _rethreading ? null : state.chat;
+  Chat? get _rethreadable =>
+      state.isRunning || _rethreading ? null : state.chat;
   bool _rethreading = false;
 
-  Future<void> _rethread(Future<Chat> Function(ChatRepository repo) change) async {
+  Future<void> _rethread(
+    Future<Chat> Function(ChatRepository repo) change,
+  ) async {
     _rethreading = true;
     try {
       final now = await change(_repo);
@@ -808,7 +891,8 @@ class ChatRoom {
         // The pair completing is the live block's end: the result and the
         // run part are what the conversation keeps of the output from here.
         _view = state.copyWith(
-            shellOutput: _withoutTurn(state.shellOutput, turn.replyId));
+          shellOutput: _withoutTurn(state.shellOutput, turn.replyId),
+        );
         break;
       case ErrorEvent(:final message, :final retryable):
         // Whether the round can carry the turn on from this, and the first
@@ -826,35 +910,43 @@ class ChatRoom {
         _updateReply(turn, (m) => m.copyWith(context: usage));
       case ApprovalRequestEvent(:final approval):
         _view = state.copyWith(
-            approvals: {
-              ...state.approvals,
-              turn.replyId: [...state.approvals[turn.replyId] ?? [], approval]
-            });
+          approvals: {
+            ...state.approvals,
+            turn.replyId: [...state.approvals[turn.replyId] ?? [], approval],
+          },
+        );
       case QuestionRequestEvent(:final request):
-        _view = state.copyWith(questions: {
-          ...state.questions,
-          turn.replyId: [...state.questions[turn.replyId] ?? [], request]
-        });
+        _view = state.copyWith(
+          questions: {
+            ...state.questions,
+            turn.replyId: [...state.questions[turn.replyId] ?? [], request],
+          },
+        );
       case SubAgentStartEvent():
-        _view = state.copyWith(runningSubAgents: {
-          ...state.runningSubAgents,
-          turn.replyId: [
-            ...(state.runningSubAgents[turn.replyId] ?? []),
-            event
-          ]
-        });
+        _view = state.copyWith(
+          runningSubAgents: {
+            ...state.runningSubAgents,
+            turn.replyId: [
+              ...(state.runningSubAgents[turn.replyId] ?? []),
+              event,
+            ],
+          },
+        );
       case SubAgentEndEvent(:final id):
-        _view = state.copyWith(runningSubAgents: {
-          for (final entry in state.runningSubAgents.entries)
-            entry.key: entry.value.where((s) => s.id != id).toList()
-        });
+        _view = state.copyWith(
+          runningSubAgents: {
+            for (final entry in state.runningSubAgents.entries)
+              entry.key: entry.value.where((s) => s.id != id).toList(),
+          },
+        );
       case RetryEvent(:final attempt, :final message):
         _view = state.copyWith(retry: "Attempt $attempt failed: $message");
       case ShellOutputEvent(:final text):
         // The live view of a command's output, for the block under the label.
         // Cleared where the pair completes, in the cases above.
         _view = state.copyWith(
-            shellOutput: {...state.shellOutput, turn.replyId: text});
+          shellOutput: {...state.shellOutput, turn.replyId: text},
+        );
       case StatusEvent(:final label):
         _view = label == null
             ? state.copyWith(clearStatus: true)
@@ -862,7 +954,8 @@ class ChatRoom {
       case DoneEvent(:final aborted):
         if (aborted) turn.recorder.outcome ??= TurnEnd.aborted;
         _view = state.copyWith(
-            shellOutput: _withoutTurn(state.shellOutput, turn.replyId));
+          shellOutput: _withoutTurn(state.shellOutput, turn.replyId),
+        );
         _finishTurn(turn);
     }
   }
@@ -908,7 +1001,9 @@ class ChatRoom {
       reason = null;
     } else {
       turn.recorder.flushDeltas();
-      final to = turn.recorder.outcome == null ? _routeOf(turn) : const <String>[];
+      final to = turn.recorder.outcome == null
+          ? _routeOf(turn)
+          : const <String>[];
       reason = await turn.recorder.close(addressees: to);
       if (to.isNotEmpty) _stampAddressees(turn.replyId, to);
     }
@@ -934,8 +1029,7 @@ class ChatRoom {
         retry: "Retrying (${turn.round}/$rounds) — ${turn.errorLine}",
         approvals: _withoutTurn(state.approvals, turn.replyId),
         questions: _withoutTurn(state.questions, turn.replyId),
-        runningSubAgents:
-            _withoutTurn(state.runningSubAgents, turn.replyId),
+        runningSubAgents: _withoutTurn(state.runningSubAgents, turn.replyId),
       );
       await Future<void>.delayed(wait);
       if (turn.retryGen != gen) {
@@ -1043,8 +1137,7 @@ class ChatRoom {
     // rather than stranded when the user flips the ordering mid-round.
     final ids = _schedule.settle(reason == TurnEnd.done ? turn.replyId : null);
     final replies = [
-      for (final id in ids)
-        chat.messages.firstWhereOrNull((m) => m.id == id),
+      for (final id in ids) chat.messages.firstWhereOrNull((m) => m.id == id),
     ].whereType<Message>().toList();
     _handoff(reason, chat, replies);
     // Whatever the schedule may run now, runs: a queued say, a handoff just
@@ -1070,8 +1163,12 @@ class ChatRoom {
     for (final reply in replies) {
       // The wave lands one past the turn that named it: the round's depth is
       // the finished turn's own, and the cap reads it at dispatch.
-      _schedule.addHandoff([for (final a in reply.addressees) ?nameOf(a)], reply,
-          generation: _schedule.generationOf(reply.id), thread: chat.messages);
+      _schedule.addHandoff(
+        [for (final a in reply.addressees) ?nameOf(a)],
+        reply,
+        generation: _schedule.generationOf(reply.id),
+        thread: chat.messages,
+      );
     }
   }
 
@@ -1090,18 +1187,22 @@ class ChatRoom {
     final chat = state.chat;
     if (chat == null) return;
     _view = state.copyWith(
-        chat: chat.copyWith(messages: [
-      for (final m in chat.messages)
-        m.id == replyId ? m.copyWith(addressees: to) : m,
-    ]));
+      chat: chat.copyWith(
+        messages: [
+          for (final m in chat.messages)
+            m.id == replyId ? m.copyWith(addressees: to) : m,
+        ],
+      ),
+    );
   }
 
   /// Run what the schedule may run now, through the room's ordering.
   Future<void> _dispatch() => _schedule.dispatch(
-      ordering: () => _ordering,
-      cap: () => _host.maxGenerations(state.chat?.state.project),
-      busy: () => {for (final turn in _turns.values) turn.agent.handle},
-      run: _run);
+    ordering: () => _ordering,
+    cap: () => _host.maxGenerations(state.chat?.state.project),
+    busy: () => {for (final turn in _turns.values) turn.agent.handle},
+    run: _run,
+  );
 
   /// Open the turn one scheduled item runs as. [member] null is the main
   /// agent's; a handoff's prompt is the reply that names the member, already
@@ -1193,7 +1294,8 @@ class ChatRoom {
       _turns[replyId]?.recorder.recordApprovalAnswer(approvalId, r.name);
     }
     _view = state.copyWith(
-        approvals: _dropItem(state.approvals, approvalId, (a) => a.id));
+      approvals: _dropItem(state.approvals, approvalId, (a) => a.id),
+    );
   }
 
   /// Answer a request the panel was showing. One entry per question it held,
@@ -1201,7 +1303,8 @@ class ChatRoom {
   Future<void> answerQuestions(String requestId, List<String?> answers) async {
     await _repo.respondQuestions(chatId, requestId, answers);
     _view = state.copyWith(
-        questions: _dropItem(state.questions, requestId, (q) => q.id));
+      questions: _dropItem(state.questions, requestId, (q) => q.id),
+    );
   }
 
   /// The map without the turn's own entry — what a finished turn leaves of the
@@ -1211,12 +1314,13 @@ class ChatRoom {
 
   /// The map without [id] from any turn's list.
   static Map<String, List<T>> _dropItem<T>(
-          Map<String, List<T>> map, String id, Object? Function(T) keyOf) =>
-      {
-        for (final entry in map.entries)
-          entry.key:
-              entry.value.where((item) => keyOf(item) != id).toList()
-      };
+    Map<String, List<T>> map,
+    String id,
+    Object? Function(T) keyOf,
+  ) => {
+    for (final entry in map.entries)
+      entry.key: entry.value.where((item) => keyOf(item) != id).toList(),
+  };
 }
 
 /// One live turn of the room. The recorder is built per entry — its
@@ -1224,7 +1328,11 @@ class ChatRoom {
 /// unchanged under parallel turns — and the fields below it are the retry
 /// machinery, scoped to the turn they carry.
 class _RunningTurn {
-  _RunningTurn({required this.replyId, required this.agent, required this.done});
+  _RunningTurn({
+    required this.replyId,
+    required this.agent,
+    required this.done,
+  });
 
   /// The reply this turn writes, and the table's key.
   final String replyId;

@@ -23,8 +23,16 @@ void main() {
       expect(model.downloads, isNotEmpty, reason: model.id);
       expect(model.bytes, greaterThan(0), reason: model.id);
       for (final download in model.downloads) {
-        expect(download.bytes, greaterThan(0), reason: "${model.id} ${download.url}");
-        expect(Uri.tryParse(download.url)?.isScheme("https"), isTrue, reason: model.id);
+        expect(
+          download.bytes,
+          greaterThan(0),
+          reason: "${model.id} ${download.url}",
+        );
+        expect(
+          Uri.tryParse(download.url)?.isScheme("https"),
+          isTrue,
+          reason: model.id,
+        );
       }
     }
   });
@@ -91,14 +99,14 @@ void main() {
 }
 
 Iterable<String> _needs(VoiceModel model) => switch (model) {
-      RecognitionModel() => [
-          model.tokens,
-          ?model.model,
-          ?model.encoder,
-          ?model.decoder,
-          ?model.preprocessor,
-          ?model.uncachedDecoder,
-          ?model.cachedDecoder,
-        ],
-      SpeechModel() => [model.model, model.tokens, ?model.voices],
-    };
+  RecognitionModel() => [
+    model.tokens,
+    ?model.model,
+    ?model.encoder,
+    ?model.decoder,
+    ?model.preprocessor,
+    ?model.uncachedDecoder,
+    ?model.cachedDecoder,
+  ],
+  SpeechModel() => [model.model, model.tokens, ?model.voices],
+};

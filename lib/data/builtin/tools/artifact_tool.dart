@@ -37,7 +37,8 @@ class ArtifactTool extends AgentTool {
   String get section => systemProse("artifacts");
 
   @override
-  String get description => "Publish an HTML page the user can view in the "
+  String get description =>
+      "Publish an HTML page the user can view in the "
       "app. Write the HTML and supporting files to your workspace with "
       "`write`/`edit`, then call this tool with the path to the entry point "
       "HTML file. The harness copies the file's directory and opens it in the "
@@ -47,34 +48,38 @@ class ArtifactTool extends AgentTool {
 
   @override
   Map<String, dynamic> get schema => const {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "Workspace-relative path to the entry point HTML "
-                "file (e.g. \"report/index.html\" or \"chart.html\"). Prefix "
-                "with `project:` to publish from the project workspace.",
-          },
-          "title": {
-            "type": "string",
-            "description": "A short title for the artifact card.",
-          },
-          "artifact_id": {
-            "type": "string",
-            "description": "The id returned by a previous `artifact` call. "
-                "Pass this to update an existing artifact in place rather "
-                "than creating a new one.",
-          },
-        },
-        "required": ["path"],
-      };
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string",
+        "description":
+            "Workspace-relative path to the entry point HTML "
+            "file (e.g. \"report/index.html\" or \"chart.html\"). Prefix "
+            "with `project:` to publish from the project workspace.",
+      },
+      "title": {
+        "type": "string",
+        "description": "A short title for the artifact card.",
+      },
+      "artifact_id": {
+        "type": "string",
+        "description":
+            "The id returned by a previous `artifact` call. "
+            "Pass this to update an existing artifact in place rather "
+            "than creating a new one.",
+      },
+    },
+    "required": ["path"],
+  };
 
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
     final parsed = artifactArgsFrom(call.argumentsJson);
     if (parsed == null) {
-      yield* toolRejected(call,
-          'The $artifactToolName tool takes {"path": "..."}; that argument was missing.');
+      yield* toolRejected(
+        call,
+        'The $artifactToolName tool takes {"path": "..."}; that argument was missing.',
+      );
       return;
     }
     final path = turn.resolvePath(parsed.path);
@@ -82,8 +87,11 @@ class ArtifactTool extends AgentTool {
     String? artifactId;
     final outcome = GateOutcome();
     yield* turn.gate.path(call, path, artifactToolName, () async {
-      artifactId = await turn.saveArtifact!(parsed.path, parsed.entryFile,
-          artifactId: parsed.artifactId);
+      artifactId = await turn.saveArtifact!(
+        parsed.path,
+        parsed.entryFile,
+        artifactId: parsed.artifactId,
+      );
       return const ShellResult(returnCode: 0, output: "");
     }, outcome);
     final id = artifactId;
@@ -91,16 +99,22 @@ class ArtifactTool extends AgentTool {
       yield ToolResultEvent(outcome.resultOf(call));
       return;
     }
-    yield ArtifactEvent(artifactId: id, entryFile: parsed.entryFile, title: parsed.title);
+    yield ArtifactEvent(
+      artifactId: id,
+      entryFile: parsed.entryFile,
+      title: parsed.title,
+    );
     final label = parsed.title.isEmpty ? parsed.path : "'${parsed.title}'";
     // One output, so the model is told how to update it on a reload too — the
     // instructions used to be said to the model alone and were lost with the
     // session.
     outcome.result = ShellResult(
-        returnCode: 0,
-        output: "Artifact $label published. The user can view it in the app. "
-            "It is saved with the chat. To update it, edit the files and call "
-            "artifact again with artifact_id: \"$id\".");
+      returnCode: 0,
+      output:
+          "Artifact $label published. The user can view it in the app. "
+          "It is saved with the chat. To update it, edit the files and call "
+          "artifact again with artifact_id: \"$id\".",
+    );
     yield ToolResultEvent(outcome.resultOf(call));
   }
 }

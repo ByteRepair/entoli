@@ -18,8 +18,9 @@ void main() {
 
   String? rootfs() => app.container.read(appSettingsProvider).rootfsId;
 
-  testWidgets("a phone installs Alpine and picks it before the tour",
-      (tester) async {
+  testWidgets("a phone installs Alpine and picks it before the tour", (
+    tester,
+  ) async {
     app = TestApp.create(proot: true);
     app.rootfs.installing = Completer();
     await app.pump(tester, gate);
@@ -75,15 +76,19 @@ void main() {
     expect(rootfs(), isNull);
   });
 
-  testWidgets("skipped where no Linux can run, and once the tour is seen",
-      (tester) async {
+  testWidgets("skipped where no Linux can run, and once the tour is seen", (
+    tester,
+  ) async {
     app = TestApp.create();
     await app.pump(tester, gate);
     expect(find.text("tour"), findsOneWidget);
 
     app.dispose();
     app = TestApp.create(proot: true);
-    await io(tester, () => app.seedSettings(AppSettings(licenceAccepted: true)));
+    await io(
+      tester,
+      () => app.seedSettings(AppSettings(licenceAccepted: true)),
+    );
     await app.pump(tester, gate);
     await tester.pump();
     expect(find.text("tour"), findsOneWidget);

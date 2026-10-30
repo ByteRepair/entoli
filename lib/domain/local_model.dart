@@ -159,8 +159,9 @@ class GgufModel extends LocalModel {
   final String? sha256;
 
   @override
-  List<ModelFile> get files =>
-      [ModelFile(path: ggufWeights, url: url, bytes: size, sha256: sha256)];
+  List<ModelFile> get files => [
+    ModelFile(path: ggufWeights, url: url, bytes: size, sha256: sha256),
+  ];
 
   @override
   String get source => url;
@@ -202,14 +203,14 @@ class MlxModel extends LocalModel {
 
   @override
   List<ModelFile> get files => [
-        for (final (path, bytes, sha256) in weights)
-          ModelFile(
-            path: path,
-            url: "$_hf/$repo/resolve/$revision/$path",
-            bytes: bytes,
-            sha256: sha256,
-          ),
-      ];
+    for (final (path, bytes, sha256) in weights)
+      ModelFile(
+        path: path,
+        url: "$_hf/$repo/resolve/$revision/$path",
+        bytes: bytes,
+        sha256: sha256,
+      ),
+  ];
 
   @override
   String get source => "$_hf/$repo";
@@ -273,19 +274,20 @@ class DownloadedModel {
   }
 
   /// Whether an NPU can be handed it as it is; see [LocalModel].
-  bool get offloadsToNpu => const {"Q4_0", "Q8_0", "MXFP4"}.contains(quantisation);
+  bool get offloadsToNpu =>
+      const {"Q4_0", "Q8_0", "MXFP4"}.contains(quantisation);
 
   Map<String, Object?> toJson() => {
-        "id": id,
-        "name": name,
-        "bytes": bytes,
-        "quantisation": quantisation,
-        "contextLength": contextLength,
-        "kvBytesPerToken": kvBytesPerToken,
-        "parameters": ?parameters,
-        "licence": ?licence,
-        "url": ?url,
-      };
+    "id": id,
+    "name": name,
+    "bytes": bytes,
+    "quantisation": quantisation,
+    "contextLength": contextLength,
+    "kvBytesPerToken": kvBytesPerToken,
+    "parameters": ?parameters,
+    "licence": ?licence,
+    "url": ?url,
+  };
 
   /// Null for anything that does not say what the server needs.
   static DownloadedModel? fromJson(Object? json, {required String file}) {
@@ -293,8 +295,13 @@ class DownloadedModel {
     final id = json["id"], name = json["name"], bytes = json["bytes"];
     final quantisation = json["quantisation"];
     final context = json["contextLength"], kv = json["kvBytesPerToken"];
-    if (id is! String || name is! String || bytes is! int || quantisation is! String ||
-        context is! int || kv is! int || kv <= 0) {
+    if (id is! String ||
+        name is! String ||
+        bytes is! int ||
+        quantisation is! String ||
+        context is! int ||
+        kv is! int ||
+        kv <= 0) {
       return null;
     }
     return DownloadedModel(
@@ -351,7 +358,8 @@ const ggufCatalog = <GgufModel>[
     id: "ornith-1.5-9b-q4_0",
     name: "Ornith-1.5 9B",
     parameters: "9B",
-    url: "$_hf/bartowski/Ornith-1.5-9B-GGUF/resolve/main/Ornith-1.5-9B-Q4_0.gguf",
+    url:
+        "$_hf/bartowski/Ornith-1.5-9B-GGUF/resolve/main/Ornith-1.5-9B-Q4_0.gguf",
     size: 5482832768,
     sha256: "a5d329392574fd050af89231ca64eb004121ed51e373c441c4c748599f3cf489",
     licence: "MIT",
@@ -371,12 +379,36 @@ const mlxCatalog = <MlxModel>[
     revision: "674aaa7240b91e8012fcad5d791b7dfe5ba90207",
     licence: "Apache-2.0",
     weights: [
-      ("chat_template.jinja", 7755, "273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80"),
-      ("config.json", 3113, "beb7fc5a6e0405fe332821cf1a8ef7b69bb390a8c8933171647de5579debf949"),
-      ("model.safetensors", 1722271785, "713fe7e5d3c3965f7106b0d0ee17615f7869c23c8d327996df8c1196fbcf07d5"),
-      ("model.safetensors.index.json", 81722, "8294c05cca7d53a6c33e3db2b379539bd296d054e0b689711b16b6ac93c7e49d"),
-      ("tokenizer.json", 19989343, "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4"),
-      ("tokenizer_config.json", 1139, "e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182"),
+      (
+        "chat_template.jinja",
+        7755,
+        "273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80",
+      ),
+      (
+        "config.json",
+        3113,
+        "beb7fc5a6e0405fe332821cf1a8ef7b69bb390a8c8933171647de5579debf949",
+      ),
+      (
+        "model.safetensors",
+        1722271785,
+        "713fe7e5d3c3965f7106b0d0ee17615f7869c23c8d327996df8c1196fbcf07d5",
+      ),
+      (
+        "model.safetensors.index.json",
+        81722,
+        "8294c05cca7d53a6c33e3db2b379539bd296d054e0b689711b16b6ac93c7e49d",
+      ),
+      (
+        "tokenizer.json",
+        19989343,
+        "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4",
+      ),
+      (
+        "tokenizer_config.json",
+        1139,
+        "e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182",
+      ),
     ],
   ),
   MlxModel(
@@ -387,12 +419,36 @@ const mlxCatalog = <MlxModel>[
     revision: "0e7ffd5c629ef7719d4cbc04069232580bfa9d9c",
     licence: "Apache-2.0",
     weights: [
-      ("chat_template.jinja", 7756, "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715"),
-      ("config.json", 3366, "f3efc81b2ea8d96a45301037d3ccccbcccdef44a961845c87f286aaddbc6eaaa"),
-      ("model.safetensors", 3034300695, "5fb9acd0246866381cf8c5c354c6db1019f6498eec4ccb4f5edcc71ffeacb2db"),
-      ("model.safetensors.index.json", 101944, "52e534c41f7b97708329c85f762e5882bf48bd5955a422c6ae74eba321e6048a"),
-      ("tokenizer.json", 19989343, "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4"),
-      ("tokenizer_config.json", 1139, "e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182"),
+      (
+        "chat_template.jinja",
+        7756,
+        "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715",
+      ),
+      (
+        "config.json",
+        3366,
+        "f3efc81b2ea8d96a45301037d3ccccbcccdef44a961845c87f286aaddbc6eaaa",
+      ),
+      (
+        "model.safetensors",
+        3034300695,
+        "5fb9acd0246866381cf8c5c354c6db1019f6498eec4ccb4f5edcc71ffeacb2db",
+      ),
+      (
+        "model.safetensors.index.json",
+        101944,
+        "52e534c41f7b97708329c85f762e5882bf48bd5955a422c6ae74eba321e6048a",
+      ),
+      (
+        "tokenizer.json",
+        19989343,
+        "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4",
+      ),
+      (
+        "tokenizer_config.json",
+        1139,
+        "e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182",
+      ),
     ],
   ),
   MlxModel(
@@ -403,12 +459,36 @@ const mlxCatalog = <MlxModel>[
     revision: "a48173b246ac705be75c05bedf1a0666db522d53",
     licence: "MIT",
     weights: [
-      ("chat_template.jinja", 7593, "9dd2fbd270feaa1fbef2d4f634d7887c9c506e3bde140f8e7351c8944e8fd235"),
-      ("config.json", 3084, "7ddc5bb8c3057edaa0a3337c1721312a8f3d28ad587b77dd6ac075876929d95d"),
-      ("model.safetensors", 5038161163, "c022a4c4b8de62c75306e2442fd78161ff49bce85fe7abb308c5ad5d04454a26"),
-      ("model.safetensors.index.json", 81194, "215f9abadc1cea4d465b01c036dffcac5a84c2fb2386777863eff6928b91ed0b"),
-      ("tokenizer.json", 19989325, "06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523"),
-      ("tokenizer_config.json", 1160, "386ba246ba3dfa4d3a21d8bc8712eba38de558e5ac94c2c90436d8f94d519d5e"),
+      (
+        "chat_template.jinja",
+        7593,
+        "9dd2fbd270feaa1fbef2d4f634d7887c9c506e3bde140f8e7351c8944e8fd235",
+      ),
+      (
+        "config.json",
+        3084,
+        "7ddc5bb8c3057edaa0a3337c1721312a8f3d28ad587b77dd6ac075876929d95d",
+      ),
+      (
+        "model.safetensors",
+        5038161163,
+        "c022a4c4b8de62c75306e2442fd78161ff49bce85fe7abb308c5ad5d04454a26",
+      ),
+      (
+        "model.safetensors.index.json",
+        81194,
+        "215f9abadc1cea4d465b01c036dffcac5a84c2fb2386777863eff6928b91ed0b",
+      ),
+      (
+        "tokenizer.json",
+        19989325,
+        "06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",
+      ),
+      (
+        "tokenizer_config.json",
+        1160,
+        "386ba246ba3dfa4d3a21d8bc8712eba38de558e5ac94c2c90436d8f94d519d5e",
+      ),
     ],
   ),
 ];
@@ -425,7 +505,7 @@ String localModelIdFor(String url, Iterable<String> taken) {
   final base = stem.isEmpty ? "model" : stem;
   final used = taken.toSet();
   if (!used.contains(base)) return base;
-  for (var n = 2;; n++) {
+  for (var n = 2; ; n++) {
     if (!used.contains("$base-$n")) return "$base-$n";
   }
 }
@@ -448,4 +528,5 @@ const appleModelId = "apple-foundation-model";
 /// is one short ask. A null model id is the provider's default, the system
 /// model.
 bool isTitleOnlyModel(String? providerId, String? modelId) =>
-    providerId == appleProviderId && (modelId == null || modelId == appleModelId);
+    providerId == appleProviderId &&
+    (modelId == null || modelId == appleModelId);

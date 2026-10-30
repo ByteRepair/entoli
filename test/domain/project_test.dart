@@ -5,20 +5,23 @@ import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 
 void main() {
-  test("projectNameFrom: typed kept, spaces dashed, path-hostile replaced, unusable null", () {
-    // Typed plain: kept as it was typed.
-    expect(projectNameFrom("Website"), "Website");
-    // Spaces become dashes, so the name is one word in a path.
-    expect(projectNameFrom("  my  side project "), "my-side-project");
-    // The name ends up as a directory the model writes paths to.
-    expect(projectNameFrom("../etc"), "etc");
-    expect(projectNameFrom("a/b"), "a-b");
-    expect(projectNameFrom(".hidden"), "hidden");
-    // Nothing usable in it: not a name.
-    expect(projectNameFrom("   "), isNull);
-    expect(projectNameFrom("///"), isNull);
-    expect(projectNameFrom("..."), isNull);
-  });
+  test(
+    "projectNameFrom: typed kept, spaces dashed, path-hostile replaced, unusable null",
+    () {
+      // Typed plain: kept as it was typed.
+      expect(projectNameFrom("Website"), "Website");
+      // Spaces become dashes, so the name is one word in a path.
+      expect(projectNameFrom("  my  side project "), "my-side-project");
+      // The name ends up as a directory the model writes paths to.
+      expect(projectNameFrom("../etc"), "etc");
+      expect(projectNameFrom("a/b"), "a-b");
+      expect(projectNameFrom(".hidden"), "hidden");
+      // Nothing usable in it: not a name.
+      expect(projectNameFrom("   "), isNull);
+      expect(projectNameFrom("///"), isNull);
+      expect(projectNameFrom("..."), isNull);
+    },
+  );
 
   // What `projectNameFrom` produces is what the path helpers will accept.
   test("what a name is sanitized into is a project name", () {
@@ -31,12 +34,14 @@ void main() {
   // The default project is `null` above the filesystem and that directory
   // below it, so a second project answering to the same name is two entries
   // for one place.
-  test("the default project's own directory is not a name a project can have",
-      () {
-    expect(isProjectName(defaultProjectDir), isFalse);
-    expect(projectNameFrom("Default"), isNull);
-    expect(projectNameFrom("default"), isNull);
-  });
+  test(
+    "the default project's own directory is not a name a project can have",
+    () {
+      expect(isProjectName(defaultProjectDir), isFalse);
+      expect(projectNameFrom("Default"), isNull);
+      expect(projectNameFrom("default"), isNull);
+    },
+  );
 
   test("the default project is labelled rather than left blank", () {
     expect(projectLabel(null), defaultProjectLabel);
@@ -49,19 +54,29 @@ void main() {
     // empty is the screen asking nothing, distinct from unset. The default
     // project is gated at the provider, which reads no description for it;
     // the function itself answers for any project that is not a built-in.
-    test("the description set, the app default where nothing set, nothing where empty", () {
-      expect(emptyChatQuestionFor(null, description: null),
-          defaultEmptyChatQuestion);
-      expect(emptyChatQuestionFor("work", description: null),
-          defaultEmptyChatQuestion);
-      expect(emptyChatQuestionFor("work", description: "What are we building?"),
-          "What are we building?");
-      expect(
+    test(
+      "the description set, the app default where nothing set, nothing where empty",
+      () {
+        expect(
+          emptyChatQuestionFor(null, description: null),
+          defaultEmptyChatQuestion,
+        );
+        expect(
+          emptyChatQuestionFor("work", description: null),
+          defaultEmptyChatQuestion,
+        );
+        expect(
+          emptyChatQuestionFor("work", description: "What are we building?"),
+          "What are we building?",
+        );
+        expect(
           emptyChatQuestionFor(null, description: "What are we building?"),
-          "What are we building?");
-      expect(emptyChatQuestionFor("work", description: ""), isNull);
-      expect(emptyChatQuestionFor("work", description: "  "), isNull);
-    });
+          "What are we building?",
+        );
+        expect(emptyChatQuestionFor("work", description: ""), isNull);
+        expect(emptyChatQuestionFor("work", description: "  "), isNull);
+      },
+    );
   });
 
   group("the built-in projects", () {
@@ -156,20 +171,28 @@ void main() {
       // A future Omada-on built-in that ships no note of its own runs under
       // My Team's; an Omada-off one ships none.
       expect(
-          const BuiltinProject(dir: "work", label: "work", omada: true)
-              .bundledInstructions,
-          myTeam.bundledInstructions);
+        const BuiltinProject(
+          dir: "work",
+          label: "work",
+          omada: true,
+        ).bundledInstructions,
+        myTeam.bundledInstructions,
+      );
       expect(
-          const BuiltinProject(dir: "work", label: "work")
-              .bundledInstructions,
-          isNull);
+        const BuiltinProject(dir: "work", label: "work").bundledInstructions,
+        isNull,
+      );
       expect(
-          const BuiltinProject(dir: "work", label: "work")
-              .includesUserInstructions,
-          isFalse);
+        const BuiltinProject(
+          dir: "work",
+          label: "work",
+        ).includesUserInstructions,
+        isFalse,
+      );
       expect(
-          const BuiltinProject(dir: "work", label: "work").hasSettingsPage,
-          isFalse);
+        const BuiltinProject(dir: "work", label: "work").hasSettingsPage,
+        isFalse,
+      );
     });
 
     // Anonymous ships a 24h TTL and its own question; Byte Repair inherits the
@@ -177,17 +200,25 @@ void main() {
     // leaves both null, the way a user's project does.
     test("ship their own TTL defaults and empty-chat questions", () {
       expect(anon.tempChatTtl, TempChatTtl.hours24);
-      expect(anon.emptyChatQuestion, "What would you like to discuss anonymously?");
       expect(
-          myTeam.emptyChatQuestion,
-          "Speak to a team of collaborating agents. Use @ to converse.");
+        anon.emptyChatQuestion,
+        "What would you like to discuss anonymously?",
+      );
+      expect(
+        myTeam.emptyChatQuestion,
+        "Speak to a team of collaborating agents. Use @ to converse.",
+      );
       expect(myTeam.tempChatTtl, isNull);
       expect(byteRepair.tempChatTtl, isNull);
       expect(byteRepair.emptyChatQuestion, "What would you like to verify?");
-      expect(const BuiltinProject(dir: "work", label: "work").tempChatTtl, isNull);
       expect(
-          const BuiltinProject(dir: "work", label: "work").emptyChatQuestion,
-          isNull);
+        const BuiltinProject(dir: "work", label: "work").tempChatTtl,
+        isNull,
+      );
+      expect(
+        const BuiltinProject(dir: "work", label: "work").emptyChatQuestion,
+        isNull,
+      );
     });
 
     // Offered after the default and before the user's projects, and not twice.
@@ -223,8 +254,9 @@ void main() {
       expect(byteRepair.rootfsIsolation, isTrue);
       expect(anon.rootfsIsolation, isFalse);
       expect(
-          const BuiltinProject(dir: "work", label: "work").rootfsIsolation,
-          isFalse);
+        const BuiltinProject(dir: "work", label: "work").rootfsIsolation,
+        isFalse,
+      );
     });
 
     // Byte Repair requires setup before turns can be sent: the chat page
@@ -234,8 +266,9 @@ void main() {
       expect(byteRepair.requiresSetup, isTrue);
       expect(anon.requiresSetup, isFalse);
       expect(
-          const BuiltinProject(dir: "work", label: "work").requiresSetup,
-          isFalse);
+        const BuiltinProject(dir: "work", label: "work").requiresSetup,
+        isFalse,
+      );
     });
   });
 }

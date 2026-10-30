@@ -14,11 +14,11 @@ import "package:agent_chat/data/builtin/builtin_options.dart";
 /// A member as the library holds one: the frontmatter's description is the
 /// short description the roster answers with.
 PromptDocument memberDoc(String name, {String? description}) => PromptDocument(
-      kind: CompletionKind.agent,
-      name: name,
-      frontmatter: {"description": ?description},
-      body: "You are $name.",
-    );
+  kind: CompletionKind.agent,
+  name: name,
+  frontmatter: {"description": ?description},
+  body: "You are $name.",
+);
 
 void main() {
   late BuiltinSession session;
@@ -34,65 +34,83 @@ void main() {
     ApproveMode approveMode = ApproveMode.never,
     List<ToolApproval>? asked,
     String? viewer,
-  }) =>
-      BuiltinAgent(
-        session: session,
-        client: client,
-        shell: FakeShell((_) => ok("")),
-        workspace: "/tmp/workspace",
-        projectWorkspace: "/tmp/project",
-        model: "fake-model",
-        options: const BuiltinOptions(),
-        approveMode: approveMode,
-        approve: (approval) async {
-          asked?.add(approval);
-          return ApprovalResponse.allow;
-        },
-        answer: (request) async => request.unanswered,
-        roomParticipants: members,
-        viewer: viewer,
-      );
+  }) => BuiltinAgent(
+    session: session,
+    client: client,
+    shell: FakeShell((_) => ok("")),
+    workspace: "/tmp/workspace",
+    projectWorkspace: "/tmp/project",
+    model: "fake-model",
+    options: const BuiltinOptions(),
+    approveMode: approveMode,
+    approve: (approval) async {
+      asked?.add(approval);
+      return ApprovalResponse.allow;
+    },
+    answer: (request) async => request.unanswered,
+    roomParticipants: members,
+    viewer: viewer,
+  );
 
   final finish = saidOnly("done");
 
   group("offering", () {
-    test("the roster is offered by an omada turn, and by nothing else", () async {
-      final room = FakeLlmClient([[finish]]);
-      await agentWith(room, [memberDoc("explore")]).run(userMessage("hi")).toList();
-      expect(room.calls.first.tools.map((t) => t.name), contains(listParticipantsToolName));
+    test(
+      "the roster is offered by an omada turn, and by nothing else",
+      () async {
+        final room = FakeLlmClient([
+          [finish],
+        ]);
+        await agentWith(room, [
+          memberDoc("explore"),
+        ]).run(userMessage("hi")).toList();
+        expect(
+          room.calls.first.tools.map((t) => t.name),
+          contains(listParticipantsToolName),
+        );
 
-      final direct = FakeLlmClient([[finish]]);
-      await agentWith(direct, null).run(userMessage("hi")).toList();
-      expect(direct.calls.first.tools.map((t) => t.name),
-          isNot(contains(listParticipantsToolName)));
-    });
+        final direct = FakeLlmClient([
+          [finish],
+        ]);
+        await agentWith(direct, null).run(userMessage("hi")).toList();
+        expect(
+          direct.calls.first.tools.map((t) => t.name),
+          isNot(contains(listParticipantsToolName)),
+        );
+      },
+    );
   });
 
   group("the answer", () {
-    test("every member is the handle with the @, then their description",
-        () async {
-      final client = FakeLlmClient([
-        [fileCall(listParticipantsToolName, {})],
-        [finish],
-      ]);
-      final events = await agentWith(client, [
-        memberDoc("explore", description: "Fast explorer."),
-        memberDoc("general", description: "Your direct answer."),
-      ]).run(userMessage("who is here?")).toList();
+    test(
+      "every member is the handle with the @, then their description",
+      () async {
+        final client = FakeLlmClient([
+          [fileCall(listParticipantsToolName, {})],
+          [finish],
+        ]);
+        final events = await agentWith(client, [
+          memberDoc("explore", description: "Fast explorer."),
+          memberDoc("general", description: "Your direct answer."),
+        ]).run(userMessage("who is here?")).toList();
 
-      final result = events.whereType<ToolResultEvent>().single.result;
-      expect(result.returnCode, 0);
-      expect(result.output,
-          "@explore — Fast explorer.\n@general — Your direct answer.");
-    });
+        final result = events.whereType<ToolResultEvent>().single.result;
+        expect(result.returnCode, 0);
+        expect(
+          result.output,
+          "@explore — Fast explorer.\n@general — Your direct answer.",
+        );
+      },
+    );
 
     test("a member with no description is the handle alone", () async {
       final client = FakeLlmClient([
         [fileCall(listParticipantsToolName, {})],
         [finish],
       ]);
-      final events =
-          await agentWith(client, [memberDoc("bare")]).run(userMessage("hi")).toList();
+      final events = await agentWith(client, [
+        memberDoc("bare"),
+      ]).run(userMessage("hi")).toList();
 
       final result = events.whereType<ToolResultEvent>().single.result;
       expect(result.output, "@bare");
@@ -103,7 +121,10 @@ void main() {
         [fileCall(listParticipantsToolName, {})],
         [finish],
       ]);
-      final events = await agentWith(client, const []).run(userMessage("hi")).toList();
+      final events = await agentWith(
+        client,
+        const [],
+      ).run(userMessage("hi")).toList();
 
       final result = events.whereType<ToolResultEvent>().single.result;
       expect(result.returnCode, 0);
@@ -118,13 +139,17 @@ void main() {
         [finish],
       ]);
       final asked = <ToolApproval>[];
-      final events = await agentWith(client, [memberDoc("explore")],
-              approveMode: ApproveMode.ask, asked: asked)
-          .run(userMessage("hi"))
-          .toList();
+      final events = await agentWith(
+        client,
+        [memberDoc("explore")],
+        approveMode: ApproveMode.ask,
+        asked: asked,
+      ).run(userMessage("hi")).toList();
 
-      expect(events.whereType<ToolCallEvent>().single.call.name,
-          listParticipantsToolName);
+      expect(
+        events.whereType<ToolCallEvent>().single.call.name,
+        listParticipantsToolName,
+      );
       expect(events.whereType<ToolResultEvent>().single.result.returnCode, 0);
       expect(asked, isEmpty);
     });
@@ -136,42 +161,62 @@ void main() {
         [fileCall(listParticipantsToolName, {})],
         [finish],
       ]);
-      final events = await agentWith(client, null).run(userMessage("hi")).toList();
+      final events = await agentWith(
+        client,
+        null,
+      ).run(userMessage("hi")).toList();
 
       final result = events.whereType<ToolResultEvent>().first.result;
       expect(result.returnCode, -1);
-      expect(result.exceptionInfo, contains("no tool called '$listParticipantsToolName'"));
+      expect(
+        result.exceptionInfo,
+        contains("no tool called '$listParticipantsToolName'"),
+      );
     });
   });
 
   group("end_turn", () {
-    test("is offered on a member's turn, not the house's or a direct one",
-        () async {
-      Future<List<String>> offered(List<PromptDocument>? members,
-          {String? viewer}) async {
-        final client = FakeLlmClient([[finish]]);
-        await agentWith(client, members, viewer: viewer)
-            .run(userMessage("hi"))
-            .toList();
-        return client.calls.first.tools.map((t) => t.name).toList();
-      }
+    test(
+      "is offered on a member's turn, not the house's or a direct one",
+      () async {
+        Future<List<String>> offered(
+          List<PromptDocument>? members, {
+          String? viewer,
+        }) async {
+          final client = FakeLlmClient([
+            [finish],
+          ]);
+          await agentWith(
+            client,
+            members,
+            viewer: viewer,
+          ).run(userMessage("hi")).toList();
+          return client.calls.first.tools.map((t) => t.name).toList();
+        }
 
-      final room = [memberDoc("explore")];
-      expect(await offered(room, viewer: "explore"), contains(endTurnToolName));
-      expect(await offered(room), isNot(contains(endTurnToolName)));
-      expect(await offered(null, viewer: "explore"),
-          isNot(contains(endTurnToolName)));
-    });
+        final room = [memberDoc("explore")];
+        expect(
+          await offered(room, viewer: "explore"),
+          contains(endTurnToolName),
+        );
+        expect(await offered(room), isNot(contains(endTurnToolName)));
+        expect(
+          await offered(null, viewer: "explore"),
+          isNot(contains(endTurnToolName)),
+        );
+      },
+    );
 
     test("ends the turn without asking the model again", () async {
       final client = FakeLlmClient([
-        [fileCall(endTurnToolName, {"reason": "Not for me."})],
+        [
+          fileCall(endTurnToolName, {"reason": "Not for me."}),
+        ],
         [saidOnly("never asked")],
       ]);
-      final events = await agentWith(client, [memberDoc("explore")],
-              viewer: "explore")
-          .run(userMessage("hi"))
-          .toList();
+      final events = await agentWith(client, [
+        memberDoc("explore"),
+      ], viewer: "explore").run(userMessage("hi")).toList();
 
       expect(client.calls, hasLength(1));
       final call = events.whereType<ToolCallEvent>().single.call;

@@ -16,7 +16,12 @@ enum AppShortcut {
   newOmadaChat("New Omada chat", LogicalKeyboardKey.keyN, alt: true),
   togglePin("Pin or unpin the open chat", LogicalKeyboardKey.keyP);
 
-  const AppShortcut(this.label, this.key, {this.shift = false, this.alt = false});
+  const AppShortcut(
+    this.label,
+    this.key, {
+    this.shift = false,
+    this.alt = false,
+  });
 
   final String label;
   final LogicalKeyboardKey key;

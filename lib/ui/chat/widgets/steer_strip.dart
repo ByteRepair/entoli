@@ -16,6 +16,7 @@ class SteerStrip extends StatelessWidget {
 
   final List<Message> steering;
   final ValueChanged<String> onQueue;
+
   /// Null where there is no composer to take a say back into.
   final ValueChanged<String>? onWithdraw;
 
@@ -23,8 +24,9 @@ class SteerStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     if (steering.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
-    final quiet = theme.textTheme.bodySmall
-        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final quiet = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       padding: const EdgeInsets.only(left: 12, top: 2, bottom: 2),
@@ -38,17 +40,23 @@ class SteerStrip extends StatelessWidget {
           for (final say in steering)
             Row(
               children: [
-                Icon(Icons.subdirectory_arrow_right,
-                    size: 16, color: theme.colorScheme.primary),
+                Icon(
+                  Icons.subdirectory_arrow_right,
+                  size: 16,
+                  color: theme.colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text.rich(
-                    TextSpan(children: [
-                      TextSpan(
+                    TextSpan(
+                      children: [
+                        TextSpan(
                           text: _line(say),
-                          style: theme.textTheme.bodyMedium),
-                      TextSpan(text: "  at the next step", style: quiet),
-                    ]),
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                        TextSpan(text: "  at the next step", style: quiet),
+                      ],
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),

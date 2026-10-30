@@ -7,7 +7,11 @@ import "../../domain/app_settings.dart";
 import "../../domain/builtin_project.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart"
-    show ProjectRef, defaultEmptyChatQuestion, emptyChatQuestionFor, localProject;
+    show
+        ProjectRef,
+        defaultEmptyChatQuestion,
+        emptyChatQuestionFor,
+        localProject;
 import "../../domain/project_settings.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../domain/tristate.dart";
@@ -46,7 +50,9 @@ Future<void> deleteProject(
         context,
         title: "Delete project?",
         message: _deleteMessage(
-            project, _chatsIn(ref.read(chatListProvider).value, project)),
+          project,
+          _chatsIn(ref.read(chatListProvider).value, project),
+        ),
         confirmLabel: "Delete",
         destructive: true,
       )) {
@@ -67,7 +73,9 @@ Future<void> deleteProject(
       .update((l) => l.withoutProject(project));
   ref.invalidate(projectListProvider);
   ref.invalidate(chatListProvider);
-  if (context.mounted && popToRoot) Navigator.of(context).popUntil((r) => r.isFirst);
+  if (context.mounted && popToRoot) {
+    Navigator.of(context).popUntil((r) => r.isFirst);
+  }
 }
 
 String _deleteMessage(String project, int count) =>
@@ -93,7 +101,9 @@ class ProjectSettingsPage extends ConsumerWidget {
     if (ref.watch(projectGoneProvider(at))) {
       return Scaffold(
         appBar: AppBar(title: const Text("Project settings")),
-        body: const Center(child: Text("This project is no longer on that device.")),
+        body: const Center(
+          child: Text("This project is no longer on that device."),
+        ),
       );
     }
     if (!ref.watch(projectLoadedProvider(at))) {
@@ -104,9 +114,15 @@ class ProjectSettingsPage extends ConsumerWidget {
     }
     final frozen = ref.watch(projectFrozenProvider(at));
     final count = remote
-        ? ref.watch(remoteChatsProvider.select((chats) => chats
-            .where((c) => c.deviceId == device && c.state.project == project)
-            .length))
+        ? ref.watch(
+            remoteChatsProvider.select(
+              (chats) => chats
+                  .where(
+                    (c) => c.deviceId == device && c.state.project == project,
+                  )
+                  .length,
+            ),
+          )
         : _chatsIn(ref.watch(chatListProvider).value, project);
     // A built-in reaches this page where its spec says it has one; the rows a
     // built-in cannot use — its own memory store, and deletion — are hidden
@@ -122,7 +138,9 @@ class ProjectSettingsPage extends ConsumerWidget {
           if (remote)
             if (ref.watch(syncPeersProvider)[device]?.name ?? "The device"
                 case final name)
-              frozen ? MirrorStrip.offline(deviceName: name) : MirrorStrip.remote(deviceName: name),
+              frozen
+                  ? MirrorStrip.offline(deviceName: name)
+                  : MirrorStrip.remote(deviceName: name),
           Expanded(
             // What the device last said, readable and not written until it
             // is back.
@@ -137,60 +155,68 @@ class ProjectSettingsPage extends ConsumerWidget {
                   // pushes, and chats states its count without one. A paired device's
                   // files are there, with no path here: its path, workspace and
                   // instructions are left off.
-                  SettingsCardRow(children: [
-                    SettingsCard.copy(
-                      icon: Icons.badge_outlined,
-                      title: "Project name",
-                      value: project,
-                      said: "Copied project name",
-                    ),
-                    if (!remote)
+                  SettingsCardRow(
+                    children: [
                       SettingsCard.copy(
-                        icon: Icons.route,
-                        title: "Path",
-                        value: ref.watch(appConfigProvider).projectDir(project: project),
-                        said: "Copied project path",
+                        icon: Icons.badge_outlined,
+                        title: "Project name",
+                        value: project,
+                        said: "Copied project name",
                       ),
-                    if (builtIn == null) _DescriptionCard(at: at),
-                    if (!remote)
-                      WorkspaceTile(
-                        root: ref
-                            .watch(appConfigProvider)
-                            .projectWorkspaceDir(project: project),
-                        title: "Project workspace",
+                      if (!remote)
+                        SettingsCard.copy(
+                          icon: Icons.route,
+                          title: "Path",
+                          value: ref
+                              .watch(appConfigProvider)
+                              .projectDir(project: project),
+                          said: "Copied project path",
+                        ),
+                      if (builtIn == null) _DescriptionCard(at: at),
+                      if (!remote)
+                        WorkspaceTile(
+                          root: ref
+                              .watch(appConfigProvider)
+                              .projectWorkspaceDir(project: project),
+                          title: "Project workspace",
+                        ),
+                      SettingsCard(
+                        icon: Icons.forum_outlined,
+                        title: "Chats",
+                        subtitle: "$count",
                       ),
-                    SettingsCard(
-                      icon: Icons.forum_outlined,
-                      title: "Chats",
-                      subtitle: "$count",
-                    ),
-                  ]),
+                    ],
+                  ),
                   const Divider(),
                   // Instructions, skills and agents: what a turn in this project is
                   // told by name. The built-ins' pages are view-only — the sections
                   // gate themselves on the spec — but what they hold is shown, the way
                   // the Memory rows are.
-                  SettingsCardRow(children: [
-                    if (!remote &&
-                        (builtIn?.bundledInstructions == null ||
-                            builtIn?.includesUserInstructions == true))
-                      _ProfileCard(project: project),
-                    _PromptsCard(
-                      at: at,
-                      kind: CompletionKind.skill,
-                      icon: Icons.extension_outlined,
-                    ),
-                    _PromptsCard(
-                      at: at,
-                      kind: CompletionKind.agent,
-                      icon: Icons.smart_toy_outlined,
-                    ),
-                  ]),
+                  SettingsCardRow(
+                    children: [
+                      if (!remote &&
+                          (builtIn?.bundledInstructions == null ||
+                              builtIn?.includesUserInstructions == true))
+                        _ProfileCard(project: project),
+                      _PromptsCard(
+                        at: at,
+                        kind: CompletionKind.skill,
+                        icon: Icons.extension_outlined,
+                      ),
+                      _PromptsCard(
+                        at: at,
+                        kind: CompletionKind.agent,
+                        icon: Icons.smart_toy_outlined,
+                      ),
+                    ],
+                  ),
                   const Divider(),
-                  SettingsCardRow(children: [
-                    _EnvironmentCard(at: at),
-                    _PermissionsCard(at: at),
-                  ]),
+                  SettingsCardRow(
+                    children: [
+                      _EnvironmentCard(at: at),
+                      _PermissionsCard(at: at),
+                    ],
+                  ),
                   const Divider(),
                   if (builtIn == null) ...[
                     _ProjectMemoryRow(at: at),
@@ -202,7 +228,9 @@ class ProjectSettingsPage extends ConsumerWidget {
                   // wherever the answer is on.
                   _OmadaRow(at: at, builtIn: builtIn),
                   if (builtIn?.omada ??
-                      ref.watch(projectSettingsOf(at).select((s) => s.omada))) ...[
+                      ref.watch(
+                        projectSettingsOf(at).select((s) => s.omada),
+                      )) ...[
                     _OmadaOrderingRow(at: at),
                     _OmadaMaxGenerationsRow(at: at),
                   ],
@@ -222,8 +250,13 @@ class ProjectSettingsPage extends ConsumerWidget {
                       confirmMessage: _deleteMessage(project, count),
                       onConfirmed: () => remote
                           ? _deleteRemote(context, ref, at)
-                          : deleteProject(context, ref, project,
-                              popToRoot: true, ask: false),
+                          : deleteProject(
+                              context,
+                              ref,
+                              project,
+                              popToRoot: true,
+                              ask: false,
+                            ),
                     ),
                   ],
                 ],
@@ -238,11 +271,17 @@ class ProjectSettingsPage extends ConsumerWidget {
   /// Deleted there, and waited on: the page goes once the device has said it
   /// is gone, onto that device's default project.
   Future<void> _deleteRemote(
-      BuildContext context, WidgetRef ref, ProjectRef at) async {
-    if (!await ref.read(syncHubProvider).deleteRemoteProject(at.device!, at.project!)) {
+    BuildContext context,
+    WidgetRef ref,
+    ProjectRef at,
+  ) async {
+    if (!await ref
+        .read(syncHubProvider)
+        .deleteRemoteProject(at.device!, at.project!)) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("The project was not deleted there.")));
+          const SnackBar(content: Text("The project was not deleted there.")),
+        );
       }
       return;
     }
@@ -262,15 +301,17 @@ class _DescriptionCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final description =
-        ref.watch(projectSettingsOf(at).select((s) => s.description));
+    final description = ref.watch(
+      projectSettingsOf(at).select((s) => s.description),
+    );
     return SettingsCard(
       icon: Icons.description_outlined,
       title: "Description",
       // What the screen asks for this project, the resolver owning the
       // null/blank/text cases; null out of it is the blank answer, shown
       // here as what it is.
-      subtitle: emptyChatQuestionFor(at.project, description: description) ?? "Empty",
+      subtitle:
+          emptyChatQuestionFor(at.project, description: description) ?? "Empty",
       trailing: ResetButton(
         resetLabel: "default",
         onReset: () =>
@@ -327,7 +368,9 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
       subtitle: _set == null ? "" : (_set! ? "Set" : "Not set"),
       onTap: () async {
         await Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => ProfilePage(project: widget.project)),
+          MaterialPageRoute(
+            builder: (_) => ProfilePage(project: widget.project),
+          ),
         );
         _check();
       },
@@ -379,17 +422,18 @@ class _OmadaRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final bool on = builtIn?.omada ??
+    final bool on =
+        builtIn?.omada ??
         ref.watch(projectSettingsOf(at).select((settings) => settings.omada));
     return SwitchListTile(
       title: const Text("Omada"),
       subtitle: const Text(
-          "Several named agents take part in a chat's replies, alongside the "
-          "main one."),
+        "Several named agents take part in a chat's replies, alongside the "
+        "main one.",
+      ),
       value: on,
       onChanged: builtIn == null
-          ? (value) =>
-              ref.read(projectSettingsOf(at).notifier).setOmada(value)
+          ? (value) => ref.read(projectSettingsOf(at).notifier).setOmada(value)
           : null,
     );
   }
@@ -404,8 +448,9 @@ class _OmadaOrderingRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final value = ref
-        .watch(projectSettingsOf(at).select((s) => s.omadaOrdering));
+    final value = ref.watch(
+      projectSettingsOf(at).select((s) => s.omadaOrdering),
+    );
     final app = ref.watch(appSettingsOf(at)).omadaOrdering;
     final effective = value ?? app ?? defaultOmadaOrdering;
     return Column(
@@ -422,8 +467,10 @@ class _OmadaOrderingRow extends ConsumerWidget {
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Text(omadaOrderingDescriptions[effective]!,
-              style: Theme.of(context).textTheme.bodySmall),
+          child: Text(
+            omadaOrderingDescriptions[effective]!,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ),
       ],
     );
@@ -442,13 +489,13 @@ class _OmadaMaxGenerationsRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return InheritableSlider(
       label: "Max generations per round",
-      value: ref.watch(projectSettingsOf(at)
-          .select((s) => s.omadaMaxGenerations)),
+      value: ref.watch(
+        projectSettingsOf(at).select((s) => s.omadaMaxGenerations),
+      ),
       stops: AppSettings.omadaGenerationStops,
       inherited: ref.watch(appSettingsOf(at)).omadaMaxGenerations,
-      onChanged: (v) => ref
-          .read(projectSettingsOf(at).notifier)
-          .setOmadaMaxGenerations(v),
+      onChanged: (v) =>
+          ref.read(projectSettingsOf(at).notifier).setOmadaMaxGenerations(v),
     );
   }
 }
@@ -465,10 +512,10 @@ class _TurnMaxStepsRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return InheritableSlider(
       label: "Max steps per turn",
-      value: ref.watch(
-          projectSettingsOf(at).select((s) => s.turnMaxSteps)),
+      value: ref.watch(projectSettingsOf(at).select((s) => s.turnMaxSteps)),
       stops: AppSettings.turnStepStops,
-      inherited: ref.watch(appSettingsOf(at)).turnMaxSteps ??
+      inherited:
+          ref.watch(appSettingsOf(at)).turnMaxSteps ??
           AppSettings.defaultTurnMaxSteps,
       onChanged: (v) =>
           ref.read(projectSettingsOf(at).notifier).setTurnMaxSteps(v),
@@ -495,9 +542,7 @@ class _EnvironmentCard extends ConsumerWidget {
           ? "Default (inherited)"
           : "$count variable${count == 1 ? "" : "s"}",
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => _ProjectEnvironmentPage(at: at),
-        ),
+        MaterialPageRoute(builder: (_) => _ProjectEnvironmentPage(at: at)),
       ),
     );
   }
@@ -515,13 +560,14 @@ class _ProjectEnvironmentPage extends ConsumerWidget {
       appBar: AppBar(title: const Text("Environment")),
       body: EnvironmentSection(
         env: settings.environment ?? const {},
-        description: "Passed to every command the project's chats run, over the "
+        description:
+            "Passed to every command the project's chats run, over the "
             "app-level variables. A command already running keeps what it "
             "started with.",
         onSaved: (env) => ref
             .read(projectSettingsOf(at).notifier)
-             .setEnvironment(env.isEmpty ? null : env),
-       ),
+            .setEnvironment(env.isEmpty ? null : env),
+      ),
     );
   }
 }
@@ -581,8 +627,14 @@ class _PromptsCard extends ConsumerWidget {
             // is pinned to the bottom of the page rather than one row more
             // of a list here.
             body: switch (kind) {
-              CompletionKind.skill => SkillsSection(project: project, device: at.device),
-              CompletionKind.agent => AgentsSection(project: project, device: at.device),
+              CompletionKind.skill => SkillsSection(
+                project: project,
+                device: at.device,
+              ),
+              CompletionKind.agent => AgentsSection(
+                project: project,
+                device: at.device,
+              ),
             },
           ),
         ),
@@ -609,9 +661,7 @@ class _PermissionsCard extends ConsumerWidget {
           ? "Default (inherited)"
           : "$count rule${count == 1 ? "" : "s"}",
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => _ProjectPermissionsPage(at: at),
-        ),
+        MaterialPageRoute(builder: (_) => _ProjectPermissionsPage(at: at)),
       ),
     );
   }
@@ -625,51 +675,56 @@ class _ProjectPermissionsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(projectSettingsOf(at));
-    final app = ref.watch(projectSettingsOf((device: at.device, project: null)));
+    final app = ref.watch(
+      projectSettingsOf((device: at.device, project: null)),
+    );
     final notifier = ref.read(projectSettingsOf(at).notifier);
     final sandboxed = settings.sandbox ?? app.sandbox ?? true;
     return Scaffold(
       appBar: AppBar(title: const Text("Permissions")),
-      body: ListView(children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: mutedParagraph(
-            context,
-            "The app's own permissions (Settings > General > Agent) apply "
-            "before these, in every project, without being listed here.",
+      body: ListView(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: mutedParagraph(
+              context,
+              "The app's own permissions (Settings > General > Agent) apply "
+              "before these, in every project, without being listed here.",
+            ),
           ),
-        ),
-        const SizedBox(height: 4),
-        PermissionsSection(
-          rules: settings.permissions,
-          description: "Standing rules for this project's chats: whether a "
-              "matching command is asked about, and what it may touch once "
-              "it runs.",
-          onSaved: (rules) => ref
-              .read(projectSettingsOf(at).notifier)
-              .setProjectPermissions(rules),
-        ),
-        const Divider(),
-        WritableDirsSection(
-          dirs: settings.writableDirs,
-          description: "Directories the project's sandboxed commands may "
-              "write to, beside the workspace.",
-          onSaved: (dirs) => ref
-              .read(projectSettingsOf(at).notifier)
-              .setWritableDirs(dirs),
-        ),
-        const Divider(),
-        // Each overrides the app's answer for this project's chats.
-        InheritableSwitch(
-          title: "Sandbox commands (Landlock)",
-          subtitle: sandboxed
-              ? null
-              : "Off: commands write wherever you can.",
-          value: settings.sandbox,
-          inherited: app.sandbox ?? true,
-          onChanged: notifier.setProjectSandbox,
-        ),
-      ]),
+          const SizedBox(height: 4),
+          PermissionsSection(
+            rules: settings.permissions,
+            description:
+                "Standing rules for this project's chats: whether a "
+                "matching command is asked about, and what it may touch once "
+                "it runs.",
+            onSaved: (rules) => ref
+                .read(projectSettingsOf(at).notifier)
+                .setProjectPermissions(rules),
+          ),
+          const Divider(),
+          WritableDirsSection(
+            dirs: settings.writableDirs,
+            description:
+                "Directories the project's sandboxed commands may "
+                "write to, beside the workspace.",
+            onSaved: (dirs) =>
+                ref.read(projectSettingsOf(at).notifier).setWritableDirs(dirs),
+          ),
+          const Divider(),
+          // Each overrides the app's answer for this project's chats.
+          InheritableSwitch(
+            title: "Sandbox commands (Landlock)",
+            subtitle: sandboxed
+                ? null
+                : "Off: commands write wherever you can.",
+            value: settings.sandbox,
+            inherited: app.sandbox ?? true,
+            onChanged: notifier.setProjectSandbox,
+          ),
+        ],
+      ),
     );
   }
 }

@@ -14,15 +14,23 @@ enum TriggerOutcome { done, error, aborted }
 /// its target chat deleted — no turn ran; the trigger was disarmed by the
 /// manager, which owns the bookkeeping, and the fire's own notification
 /// was worded by the runner.
-typedef TriggerRunResult
-    = ({String chatId, TriggerOutcome outcome, String snippet, bool targetGone});
+typedef TriggerRunResult = ({
+  String chatId,
+  TriggerOutcome outcome,
+  String snippet,
+  bool targetGone,
+});
 
 /// The seam between deciding a trigger is due and running its turn — what
 /// [TriggerManager] actually needs, and what its tests stand in for.
 /// [reason] is the kind's own words for why the fire happened, appended to
 /// the prompt rather than sent beside it: the log says why a turn started.
 abstract interface class TriggerRuns {
-  Future<TriggerRunResult> run(Trigger trigger, String reason, List<String> projects);
+  Future<TriggerRunResult> run(
+    Trigger trigger,
+    String reason,
+    List<String> projects,
+  );
 }
 
 /// Drives a trigger's turn through the same [ChatController] the UI uses, so
@@ -30,7 +38,10 @@ abstract interface class TriggerRuns {
 /// while it is running. The implementation lives in the UI layer; the domain
 /// only knows the interface.
 abstract interface class TriggerTurnDriver {
-  Future<({TriggerOutcome outcome, String snippet})> send(String chatId, String prompt);
+  Future<({TriggerOutcome outcome, String snippet})> send(
+    String chatId,
+    String prompt,
+  );
 }
 
 /// Creates the chat or finds the target, stamps the trigger fired, and hands
@@ -72,11 +83,10 @@ class TriggerRunner implements TriggerRuns {
   final Future<void> Function(Trigger trigger) onTriggerFired;
 
   @override
-  Future<({String chatId, TriggerOutcome outcome, String snippet, bool targetGone})> run(
-    Trigger trigger,
-    String reason,
-    List<String> projects,
-  ) async {
+  Future<
+    ({String chatId, TriggerOutcome outcome, String snippet, bool targetGone})
+  >
+  run(Trigger trigger, String reason, List<String> projects) async {
     final target = trigger.chatId;
     return target == null
         ? _runNewChat(trigger, reason, projects)
@@ -85,8 +95,10 @@ class TriggerRunner implements TriggerRuns {
 
   /// The headless half: the prompt the trigger set, the reason a line under
   /// it, in a chat made for the fire.
-  Future<({String chatId, TriggerOutcome outcome, String snippet, bool targetGone})>
-      _runNewChat(Trigger trigger, String reason, List<String> projects) async {
+  Future<
+    ({String chatId, TriggerOutcome outcome, String snippet, bool targetGone})
+  >
+  _runNewChat(Trigger trigger, String reason, List<String> projects) async {
     final project = projectOrDefault(trigger.project, projects);
     final chat = await repo.createChat(
       title: trigger.title,
@@ -95,7 +107,10 @@ class TriggerRunner implements TriggerRuns {
     );
     await onTriggerFired(trigger.copyWith(lastFiredAt: clock.now()));
     onListChanged(chat.state.id);
-    final result = await driver.send(chat.state.id, prompted(trigger.prompt, reason, member: trigger.member));
+    final result = await driver.send(
+      chat.state.id,
+      prompted(trigger.prompt, reason, member: trigger.member),
+    );
     return (
       chatId: chat.state.id,
       outcome: result.outcome,
@@ -113,8 +128,10 @@ class TriggerRunner implements TriggerRuns {
   /// A same-chat fire while the user's own turn runs queues behind it on the
   /// room rather than being swallowed by Send's refusal — the driver awaits
   /// the running turn before speaking.
-  Future<({String chatId, TriggerOutcome outcome, String snippet, bool targetGone})>
-      _runIntoChat(Trigger trigger, String reason, String chatId) async {
+  Future<
+    ({String chatId, TriggerOutcome outcome, String snippet, bool targetGone})
+  >
+  _runIntoChat(Trigger trigger, String reason, String chatId) async {
     Chat? chat;
     try {
       chat = await repo.openChat(chatId);
@@ -126,22 +143,44 @@ class TriggerRunner implements TriggerRuns {
       // Anything else — a disk error, a storage blip — is not "gone": the
       // trigger stays armed for its next slot, with a line saying what
       // happened rather than a disarm and a lie about deletion.
-      logFailure("triggers", "could not open target chat; the fire is skipped", e);
-      return (chatId: chatId, outcome: TriggerOutcome.error, snippet: "", targetGone: false);
+      logFailure(
+        "triggers",
+        "could not open target chat; the fire is skipped",
+        e,
+      );
+      return (
+        chatId: chatId,
+        outcome: TriggerOutcome.error,
+        snippet: "",
+        targetGone: false,
+      );
     }
     if (chat == null) {
       logFailure("triggers", "target chat is gone; disarming", chatId);
       await alarms.notify(
         title: trigger.title,
-        body: "The chat this trigger runs in no longer exists, so it was "
+        body:
+            "The chat this trigger runs in no longer exists, so it was "
             "switched off.",
       );
-      return (chatId: chatId, outcome: TriggerOutcome.error, snippet: "", targetGone: true);
+      return (
+        chatId: chatId,
+        outcome: TriggerOutcome.error,
+        snippet: "",
+        targetGone: true,
+      );
     }
     await onTriggerFired(trigger.copyWith(lastFiredAt: clock.now()));
-    final result =
-        await driver.send(chatId, prompted(trigger.prompt, reason, member: trigger.member));
-    return (chatId: chatId, outcome: result.outcome, snippet: result.snippet, targetGone: false);
+    final result = await driver.send(
+      chatId,
+      prompted(trigger.prompt, reason, member: trigger.member),
+    );
+    return (
+      chatId: chatId,
+      outcome: result.outcome,
+      snippet: result.snippet,
+      targetGone: false,
+    );
   }
 
   /// The one wording of "the fire, and what set it off": the prompt (its
@@ -150,10 +189,9 @@ class TriggerRunner implements TriggerRuns {
   /// any message sent), then the kind's reason in a line below. The tool's
   /// schema description names this shape, not a literal of a reason's own
   /// words.
-  static String prompted(String prompt, String reason, {String? member}) =>
-      [
-        if (member != null) "${CompletionKind.agent.trigger}$member",
-        prompt,
-        if (reason.isNotEmpty) "($reason)",
-      ].join("\n\n");
+  static String prompted(String prompt, String reason, {String? member}) => [
+    if (member != null) "${CompletionKind.agent.trigger}$member",
+    prompt,
+    if (reason.isNotEmpty) "($reason)",
+  ].join("\n\n");
 }

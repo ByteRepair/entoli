@@ -21,7 +21,8 @@ import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/llm_provider.dart";
-import "package:agent_chat/domain/local_model.dart" show appleModelId, appleProviderId;
+import "package:agent_chat/domain/local_model.dart"
+    show appleModelId, appleProviderId;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/prompt_library.dart";
@@ -75,12 +76,14 @@ void main() {
           for (final p in providers) FakeProvider(p, (_, _) => client),
           if (judge != null)
             FakeProvider(
-                const LlmProviderConfig(
-                    id: "judge",
-                    api: LlmApi.openai,
-                    baseUrl: "https://judge.test/v1",
-                    defaultModelId: "judge-model"),
-                (_, _) => judge),
+              const LlmProviderConfig(
+                id: "judge",
+                api: LlmApi.openai,
+                baseUrl: "https://judge.test/v1",
+                defaultModelId: "judge-model",
+              ),
+              (_, _) => judge,
+            ),
         ],
         lookupEnv: (_) => null,
         lookupKey: (_) => null,
@@ -116,53 +119,70 @@ void main() {
     List<PermissionRule> permissions = const [],
     String? omadaMember,
     bool omada = false,
-  }) =>
-      backend
-          .sendPrompt(
-              chatId,
-              userMessage(text,
-                  at: at ?? sentAt, documents: documents, files: files),
-              history: history,
-              settings: TurnSettings(
-                  model: model,
-                  provider: provider,
-                  project: project,
-                  approveMode: approveMode,
-                  policy: () async =>
-                      StandingPermissions(permissions: permissions),
-                  memory: memory,
-                  sharedWorkspace: sharedWorkspace,
-                  disabled: disabled,
-                  bundledInstructions: bundledInstructions,
-                  includesUserInstructions: includesUserInstructions,
-                  omadaMember: omadaMember,
-                  omada: omada))
-          .toList();
+  }) => backend
+      .sendPrompt(
+        chatId,
+        userMessage(text, at: at ?? sentAt, documents: documents, files: files),
+        history: history,
+        settings: TurnSettings(
+          model: model,
+          provider: provider,
+          project: project,
+          approveMode: approveMode,
+          policy: () async => StandingPermissions(permissions: permissions),
+          memory: memory,
+          sharedWorkspace: sharedWorkspace,
+          disabled: disabled,
+          bundledInstructions: bundledInstructions,
+          includesUserInstructions: includesUserInstructions,
+          omadaMember: omadaMember,
+          omada: omada,
+        ),
+      )
+      .toList();
 
   /// Carrying on the turn [history] ends in, under the same settings [send]
   /// uses.
-  Future<List<AgentEvent>> resuming(BuiltinBackend backend, List<Message> history) =>
-      backend
-          .resumeTurn(chatId,
-              history: history,
-              settings: const TurnSettings(
-                  model: "fake-model", provider: "fake", approveMode: ApproveMode.never))
-          .toList();
+  Future<List<AgentEvent>> resuming(
+    BuiltinBackend backend,
+    List<Message> history,
+  ) => backend
+      .resumeTurn(
+        chatId,
+        history: history,
+        settings: const TurnSettings(
+          model: "fake-model",
+          provider: "fake",
+          approveMode: ApproveMode.never,
+        ),
+      )
+      .toList();
 
   /// A turn left running for the test to answer, whether what it stops on is a
   /// command to approve or a question to pick from.
-  Stream<AgentEvent> asking(BuiltinBackend backend, String text,
-          {ApproveMode approveMode = ApproveMode.ask}) =>
-      backend.sendPrompt(chatId, userMessage(text, at: sentAt),
-          settings: TurnSettings(
-              model: "fake-model", provider: "fake", approveMode: approveMode));
+  Stream<AgentEvent> asking(
+    BuiltinBackend backend,
+    String text, {
+    ApproveMode approveMode = ApproveMode.ask,
+  }) => backend.sendPrompt(
+    chatId,
+    userMessage(text, at: sentAt),
+    settings: TurnSettings(
+      model: "fake-model",
+      provider: "fake",
+      approveMode: approveMode,
+    ),
+  );
 
   group("picking where the turn runs", () {
     test("a chat with no provider is told to configure one", () async {
       final backend = backendOver([]);
       final events = await send(backend, "hi", provider: null, model: null);
 
-      expect(events.whereType<ErrorEvent>().single.message, contains("No model is selected"));
+      expect(
+        events.whereType<ErrorEvent>().single.message,
+        contains("No model is selected"),
+      );
       expect(events.last, isA<DoneEvent>());
     });
 
@@ -171,49 +191,73 @@ void main() {
     test("the Apple system model answers a title and no turn", () async {
       providers = const [
         LlmProviderConfig(
-            id: appleProviderId,
-            api: LlmApi.openai,
-            baseUrl: "",
-            defaultModelId: appleModelId),
+          id: appleProviderId,
+          api: LlmApi.openai,
+          baseUrl: "",
+          defaultModelId: appleModelId,
+        ),
       ];
       final backend = backendOver([
         [saidOnly("Sorting records")],
       ]);
 
       for (final model in [appleModelId, null]) {
-        final events = await send(backend, "hi", provider: appleProviderId, model: model);
-        expect(events.whereType<ErrorEvent>().single.message, contains("only names chats"));
+        final events = await send(
+          backend,
+          "hi",
+          provider: appleProviderId,
+          model: model,
+        );
+        expect(
+          events.whereType<ErrorEvent>().single.message,
+          contains("only names chats"),
+        );
       }
       expect(client.sent, isEmpty);
 
-      expect(await backend.ask("name this", model: appleModelId, provider: appleProviderId),
-          "Sorting records");
+      expect(
+        await backend.ask(
+          "name this",
+          model: appleModelId,
+          provider: appleProviderId,
+        ),
+        "Sorting records",
+      );
     });
 
-    test("an Omada-on turn withholds the task tool and runs the room note", () async {
-      final backend = backendOver([
-        [finish],
-      ]);
+    test(
+      "an Omada-on turn withholds the task tool and runs the room note",
+      () async {
+        final backend = backendOver([
+          [finish],
+        ]);
 
-      await send(backend, "hi",
+        await send(
+          backend,
+          "hi",
           disabled: {AgentCapability.task},
           bundledInstructions: myTeamNote,
-          includesUserInstructions: true);
+          includesUserInstructions: true,
+        );
 
-      // The capability mechanism drops `task` from the tool list; the room
-      // contract is the turn's instructions, resolved in the repository and
-      // rendered under it.
-      final tools = client.calls.single.tools.map((t) => t.name).toSet();
-      expect(tools, isNot(contains("task")));
-      final turnMessage = client.sent.first[1].text;
-      expect(turnMessage, contains(myTeamNote!));
-    });
+        // The capability mechanism drops `task` from the tool list; the room
+        // contract is the turn's instructions, resolved in the repository and
+        // rendered under it.
+        final tools = client.calls.single.tools.map((t) => t.name).toSet();
+        expect(tools, isNot(contains("task")));
+        final turnMessage = client.sent.first[1].text;
+        expect(turnMessage, contains(myTeamNote!));
+      },
+    );
 
     test("an omada turn offers the roster from the project's library, and a "
         "direct one offers nothing", () async {
       final library = PromptLibrary([
-        PromptDocument.parse(CompletionKind.agent, "explore",
-            "---\ndescription: Fast explorer\n---\nYou explore."),
+        PromptDocument.parse(
+          CompletionKind.agent,
+          "explore",
+          "---\ndescription: Fast explorer\n---\nYou explore.",
+        ),
       ]);
       final room = backendOver([
         [fileCall(listParticipantsToolName, {})],
@@ -222,53 +266,91 @@ void main() {
       final events = await send(room, "hi", omada: true, project: "Team");
 
       expect(
-          client.calls.first.tools.map((t) => t.name), contains(listParticipantsToolName));
+        client.calls.first.tools.map((t) => t.name),
+        contains(listParticipantsToolName),
+      );
       // The roster is the project's agent library, resolved where the turn
       // is composed to run.
-      expect(events.whereType<ToolResultEvent>().single.result.output,
-          contains("@explore — Fast explorer"));
-      expect(events.whereType<ToolResultEvent>().single.result.output,
-          isNot(contains("@general")));
+      expect(
+        events.whereType<ToolResultEvent>().single.result.output,
+        contains("@explore — Fast explorer"),
+      );
+      expect(
+        events.whereType<ToolResultEvent>().single.result.output,
+        isNot(contains("@general")),
+      );
 
-      final direct = backendOver([[finish]], library: library);
+      final direct = backendOver([
+        [finish],
+      ], library: library);
       await send(direct, "hi");
       expect(
-          client.calls.first.tools.map((t) => t.name),
-          isNot(contains(listParticipantsToolName)));
+        client.calls.first.tools.map((t) => t.name),
+        isNot(contains(listParticipantsToolName)),
+      );
     });
 
     test("a member's turn is told its own handle", () async {
       final library = PromptLibrary([
-        PromptDocument.parse(CompletionKind.agent, "explore",
-            "---\ndescription: Fast explorer\n---\nYou explore."),
+        PromptDocument.parse(
+          CompletionKind.agent,
+          "explore",
+          "---\ndescription: Fast explorer\n---\nYou explore.",
+        ),
       ]);
-      final room = backendOver([[finish]], library: library);
-      await send(room, "hi",
-          omada: true, project: "Team", omadaMember: "explore");
+      final room = backendOver([
+        [finish],
+      ], library: library);
+      await send(
+        room,
+        "hi",
+        omada: true,
+        project: "Team",
+        omadaMember: "explore",
+      );
 
-      expect(client.sent.first[1].text,
-          contains("You are @explore, a member of this team.\n\nYou explore."));
+      expect(
+        client.sent.first[1].text,
+        contains("You are @explore, a member of this team.\n\nYou explore."),
+      );
     });
 
     test("a member's turn is offered its own tools, and the main agent's "
         "is not narrowed by them", () async {
       final library = PromptLibrary([
-        PromptDocument.parse(CompletionKind.agent, "explore",
-            "---\ntools: read, bash(readonly)\n---\nYou explore."),
+        PromptDocument.parse(
+          CompletionKind.agent,
+          "explore",
+          "---\ntools: read, bash(readonly)\n---\nYou explore.",
+        ),
       ]);
-      final room = backendOver([[finish], [finish]], library: library);
-      await send(room, "hi",
-          omada: true, project: "Team", omadaMember: "explore");
-      await send(room, "hi @explore",
-          documents: const {"@explore": "You explore."});
+      final room = backendOver([
+        [finish],
+        [finish],
+      ], library: library);
+      await send(
+        room,
+        "hi",
+        omada: true,
+        project: "Team",
+        omadaMember: "explore",
+      );
+      await send(
+        room,
+        "hi @explore",
+        documents: const {"@explore": "You explore."},
+      );
 
-      Set<String> offered(int call) =>
-          {for (final tool in client.calls[call].tools) tool.name};
+      Set<String> offered(int call) => {
+        for (final tool in client.calls[call].tools) tool.name,
+      };
       expect(offered(0), containsAll(["read", "bash"]));
       expect(offered(0), isNot(contains("write")));
       expect(offered(1), containsAll(["read", "write", "bash"]));
-      expect(client.calls[1].tools.firstWhere((t) => t.name == "bash").description,
-          isNot(contains("Read-only")));
+      expect(
+        client.calls[1].tools.firstWhere((t) => t.name == "bash").description,
+        isNot(contains("Read-only")),
+      );
     });
 
     test("a turn outside Omada still offers the task tool", () async {
@@ -288,7 +370,10 @@ void main() {
       final backend = backendOver([]);
       final events = await send(backend, "hi", provider: "ghost");
 
-      expect(events.whereType<ErrorEvent>().single.message, contains("'ghost' is not configured"));
+      expect(
+        events.whereType<ErrorEvent>().single.message,
+        contains("'ghost' is not configured"),
+      );
     });
 
     test("a provider that names a default does not need it pinned", () async {
@@ -300,18 +385,22 @@ void main() {
       expect(client.calls.single.model, "fake-model");
     });
 
-    test("a provider whose models are listed but default unnamed cannot be guessed at", () async {
-      providers = const [
-        LlmProviderConfig(
+    test(
+      "a provider whose models are listed but default unnamed cannot be guessed at",
+      () async {
+        providers = const [
+          LlmProviderConfig(
             id: "fake",
             api: LlmApi.openai,
-            baseUrl: "https://example.test/v1"),
-      ];
-      final backend = backendOver([]);
-      final events = await send(backend, "hi", model: null);
+            baseUrl: "https://example.test/v1",
+          ),
+        ];
+        final backend = backendOver([]);
+        final events = await send(backend, "hi", model: null);
 
-      expect(events.whereType<ErrorEvent>(), hasLength(1));
-    });
+        expect(events.whereType<ErrorEvent>(), hasLength(1));
+      },
+    );
 
     test("the turn runs in the chat's own workspace", () async {
       final backend = backendOver([
@@ -327,8 +416,12 @@ void main() {
     test("a command is kept from the chat's attachments and every skills and "
         "agents directory there is", () async {
       Directory(config.bundledSkillsDir()).createSync(recursive: true);
-      Directory(config.promptsDir(CompletionKind.skill)).createSync(recursive: true);
-      Directory(config.promptsDir(CompletionKind.agent)).createSync(recursive: true);
+      Directory(
+        config.promptsDir(CompletionKind.skill),
+      ).createSync(recursive: true);
+      Directory(
+        config.promptsDir(CompletionKind.agent),
+      ).createSync(recursive: true);
       final backend = backendOver([
         [bashCall("ls")],
         [finish],
@@ -360,8 +453,9 @@ void main() {
       // The chat workspace is created by the turn; the project workspace is
       // where the AGENTS.md the loader should find lives.
       Directory(config.projectWorkspaceDir()).createSync(recursive: true);
-      File(p.join(config.projectWorkspaceDir(), "AGENTS.md"))
-          .writeAsStringSync("project rules");
+      File(
+        p.join(config.projectWorkspaceDir(), "AGENTS.md"),
+      ).writeAsStringSync("project rules");
 
       await send(backend, "hi");
 
@@ -369,44 +463,54 @@ void main() {
       expect(client.sent.first[1].text, contains("Workspace instructions"));
     });
 
-    test("a bundled note stands in for the files, and the files are not read",
-        () async {
-      final backend = backendOver([
-        [finish],
-      ]);
-      Directory(config.projectWorkspaceDir()).createSync(recursive: true);
-      File(p.join(config.projectWorkspaceDir(), "AGENTS.md"))
-          .writeAsStringSync("project rules");
-      File(config.globalInstructionsFile).writeAsStringSync("global rules");
+    test(
+      "a bundled note stands in for the files, and the files are not read",
+      () async {
+        final backend = backendOver([
+          [finish],
+        ]);
+        Directory(config.projectWorkspaceDir()).createSync(recursive: true);
+        File(
+          p.join(config.projectWorkspaceDir(), "AGENTS.md"),
+        ).writeAsStringSync("project rules");
+        File(config.globalInstructionsFile).writeAsStringSync("global rules");
 
-      await send(backend, "hi",
+        await send(
+          backend,
+          "hi",
           project: "anonymous",
           sharedWorkspace: false,
           bundledInstructions: "This is an anonymous chat.",
-          includesUserInstructions: false);
+          includesUserInstructions: false,
+        );
 
-      final system = client.sent.first[1].text;
-      expect(system, contains("This is an anonymous chat."));
-      expect(system, isNot(contains("project rules")));
-      expect(system, isNot(contains("global rules")));
-    });
+        final system = client.sent.first[1].text;
+        expect(system, contains("This is an anonymous chat."));
+        expect(system, isNot(contains("project rules")));
+        expect(system, isNot(contains("global rules")));
+      },
+    );
 
     test("a bundled note that includes the user's instructions reads the "
         "files after it, so the user's rules win on conflict", () async {
       final backend = backendOver([
         [finish],
       ]);
-      Directory(config.projectWorkspaceDir(project: "byte-repair"))
-          .createSync(recursive: true);
-      File(p.join(config.projectWorkspaceDir(project: "byte-repair"),
-          "AGENTS.md"))
-          .writeAsStringSync("project rules");
+      Directory(
+        config.projectWorkspaceDir(project: "byte-repair"),
+      ).createSync(recursive: true);
+      File(
+        p.join(config.projectWorkspaceDir(project: "byte-repair"), "AGENTS.md"),
+      ).writeAsStringSync("project rules");
       File(config.globalInstructionsFile).writeAsStringSync("global rules");
 
-      await send(backend, "hi",
-          project: "byte-repair",
-          bundledInstructions: "This is a Byte Repair project.",
-          includesUserInstructions: true);
+      await send(
+        backend,
+        "hi",
+        project: "byte-repair",
+        bundledInstructions: "This is a Byte Repair project.",
+        includesUserInstructions: true,
+      );
 
       final system = client.sent.first[1].text;
       // The bundled note is the base.
@@ -416,8 +520,10 @@ void main() {
       expect(system, contains("project rules"));
       // The note renders before the files — the project file wins on conflict
       // because it is rendered last, the way it is for a user's project.
-      expect(system.indexOf("This is a Byte Repair project."),
-          lessThan(system.indexOf("project rules")));
+      expect(
+        system.indexOf("This is a Byte Repair project."),
+        lessThan(system.indexOf("project rules")),
+      );
     });
 
     group("recording the first instruction read", () {
@@ -428,50 +534,60 @@ void main() {
       /// the shape a turn's own log entry takes, which is what the next
       /// turn's history holds.
       Message replyRecording(List<AgentEvent> first) => Message(
-            id: "reply-1",
-            role: MessageRole.assistant,
-            createdAt: sentAt,
-            parts: [
-              for (final read in first.whereType<InstructionsReadEvent>())
-                MessagePart.instructions(files: read.files),
-              const MessagePart.text(text: "done", responseId: "r1"),
-            ],
-          );
+        id: "reply-1",
+        role: MessageRole.assistant,
+        createdAt: sentAt,
+        parts: [
+          for (final read in first.whereType<InstructionsReadEvent>())
+            MessagePart.instructions(files: read.files),
+          const MessagePart.text(text: "done", responseId: "r1"),
+        ],
+      );
 
       /// The shape `instructions_test.dart` builds, on this config's layout:
       /// the global file at the data dir's root and the project's at its
       /// workspace root.
       void writeInstructions({bool importsIntoProject = false}) {
-        File(config.globalInstructionsFile)
-            .writeAsStringSync(importsIntoProject ? "see @./notes.md" : "global rules");
+        File(config.globalInstructionsFile).writeAsStringSync(
+          importsIntoProject ? "see @./notes.md" : "global rules",
+        );
         if (importsIntoProject) {
-          File(p.join(config.projectWorkspaceDir(), "notes.md"))
-              .writeAsStringSync("the notes");
+          File(
+            p.join(config.projectWorkspaceDir(), "notes.md"),
+          ).writeAsStringSync("the notes");
         }
-        File(config.projectInstructionsFile())
-            .writeAsStringSync(importsIntoProject ? "see @./notes.md" : "project rules");
+        File(config.projectInstructionsFile()).writeAsStringSync(
+          importsIntoProject ? "see @./notes.md" : "project rules",
+        );
       }
 
-      test("the first turn records every file it reads, before the response",
-          () async {
-        final backend = backendOver([
-          [finish],
-        ]);
-        writeInstructions();
+      test(
+        "the first turn records every file it reads, before the response",
+        () async {
+          final backend = backendOver([
+            [finish],
+          ]);
+          writeInstructions();
 
-        final events = await send(backend, "hi");
+          final events = await send(backend, "hi");
 
-        final reads = events.whereType<InstructionsReadEvent>().toList();
-        expect(reads, hasLength(1));
-        expect(reads.single.files,
-            [ref(config.globalInstructionsFile, InstructionKind.global),
-             ref(p.join(config.projectWorkspaceDir(), "AGENTS.md"),
-                 InstructionKind.project)]);
-        // The read precedes the first response: the part is the reply's first,
-        // and the label renders above the thinking one.
-        expect(events.indexOf(reads.single), lessThan(
-            events.indexOf(events.whereType<ResponseStart>().first)));
-      });
+          final reads = events.whereType<InstructionsReadEvent>().toList();
+          expect(reads, hasLength(1));
+          expect(reads.single.files, [
+            ref(config.globalInstructionsFile, InstructionKind.global),
+            ref(
+              p.join(config.projectWorkspaceDir(), "AGENTS.md"),
+              InstructionKind.project,
+            ),
+          ]);
+          // The read precedes the first response: the part is the reply's first,
+          // and the label renders above the thinking one.
+          expect(
+            events.indexOf(reads.single),
+            lessThan(events.indexOf(events.whereType<ResponseStart>().first)),
+          );
+        },
+      );
 
       test("a later turn re-reading the same files records nothing", () async {
         final backend = backendOver([
@@ -481,8 +597,14 @@ void main() {
         writeInstructions();
 
         final first = await send(backend, "hi");
-        final events = await send(backend, "again",
-            history: [userMessage("hi", at: sentAt), replyRecording(first)]);
+        final events = await send(
+          backend,
+          "again",
+          history: [
+            userMessage("hi", at: sentAt),
+            replyRecording(first),
+          ],
+        );
 
         expect(events.whereType<InstructionsReadEvent>(), isEmpty);
         // The files are still in front of the model: recorded once, read
@@ -490,31 +612,45 @@ void main() {
         expect(client.sent.last[1].text, contains("project rules"));
       });
 
-      test("an import added between turns is the only thing recorded", () async {
-        final backend = backendOver([
-          [finish],
-          [finish],
-        ]);
-        writeInstructions();
+      test(
+        "an import added between turns is the only thing recorded",
+        () async {
+          final backend = backendOver([
+            [finish],
+            [finish],
+          ]);
+          writeInstructions();
 
-        final first = await send(backend, "hi");
-        // Between turns, the project file gains an import pointing at a new
-        // file, the way a user editing it between turns reaches the next one.
-        File(p.join(config.projectWorkspaceDir(), "AGENTS.md"))
-            .writeAsStringSync("project rules\nsee @./notes.md");
-        File(p.join(config.projectWorkspaceDir(), "notes.md"))
-            .writeAsStringSync("the notes");
+          final first = await send(backend, "hi");
+          // Between turns, the project file gains an import pointing at a new
+          // file, the way a user editing it between turns reaches the next one.
+          File(
+            p.join(config.projectWorkspaceDir(), "AGENTS.md"),
+          ).writeAsStringSync("project rules\nsee @./notes.md");
+          File(
+            p.join(config.projectWorkspaceDir(), "notes.md"),
+          ).writeAsStringSync("the notes");
 
-        final events = await send(backend, "again",
-            history: [userMessage("hi", at: sentAt), replyRecording(first)],
-            memory: MemorySettings(imports: true));
+          final events = await send(
+            backend,
+            "again",
+            history: [
+              userMessage("hi", at: sentAt),
+              replyRecording(first),
+            ],
+            memory: MemorySettings(imports: true),
+          );
 
-        final reads = events.whereType<InstructionsReadEvent>().toList();
-        expect(reads, hasLength(1));
-        expect(reads.single.files,
-            [ref(p.join(config.projectWorkspaceDir(), "notes.md"),
-                InstructionKind.imported)]);
-      });
+          final reads = events.whereType<InstructionsReadEvent>().toList();
+          expect(reads, hasLength(1));
+          expect(reads.single.files, [
+            ref(
+              p.join(config.projectWorkspaceDir(), "notes.md"),
+              InstructionKind.imported,
+            ),
+          ]);
+        },
+      );
 
       test("a read that pulls a nested AGENTS.md in records it, and the "
           "rendered block still reaches the model", () async {
@@ -537,21 +673,19 @@ void main() {
             .skip(1)
             .toList();
         expect(nested, hasLength(1));
-        expect(nested.single.files,
-            [ref(p.join(sub, "AGENTS.md"), InstructionKind.directory)]);
+        expect(nested.single.files, [
+          ref(p.join(sub, "AGENTS.md"), InstructionKind.directory),
+        ]);
         // The block rides the result, which is the only route nested
         // instructions reach the model by — the read's own numbered lines
         // first, then the rendered instructions.
-        final result =
-            events.whereType<ToolResultEvent>().first.result;
-        expect(result.output, "1: the contents\n"
-            "\n\n"
-            "${renderInstructions([
-              InstructionFile(
-                  path: p.join(sub, "AGENTS.md"),
-                  kind: InstructionKind.directory,
-                  content: "sub rules")
-            ])}");
+        final result = events.whereType<ToolResultEvent>().first.result;
+        expect(
+          result.output,
+          "1: the contents\n"
+          "\n\n"
+          "${renderInstructions([InstructionFile(path: p.join(sub, "AGENTS.md"), kind: InstructionKind.directory, content: "sub rules")])}",
+        );
       });
 
       test("reading the same nested file again in a later turn records "
@@ -569,34 +703,44 @@ void main() {
         File(p.join(sub, "notes.txt")).writeAsStringSync("the contents");
 
         final first = await send(backend, "read it");
-        final events = await send(backend, "again",
-            history: [userMessage("hi", at: sentAt), replyRecording(first)]);
+        final events = await send(
+          backend,
+          "again",
+          history: [
+            userMessage("hi", at: sentAt),
+            replyRecording(first),
+          ],
+        );
 
-        expect(events.whereType<InstructionsReadEvent>(),
-            isEmpty);
+        expect(events.whereType<InstructionsReadEvent>(), isEmpty);
       });
 
-      test("a rewind takes the record back, so re-running records again",
-          () async {
-        final backend = backendOver([
-          [finish],
-          [finish],
-        ]);
-        writeInstructions();
+      test(
+        "a rewind takes the record back, so re-running records again",
+        () async {
+          final backend = backendOver([
+            [finish],
+            [finish],
+          ]);
+          writeInstructions();
 
-        await send(backend, "hi");
-        // The history of the rewound conversation: the prompt and a reply
-        // that never carried the part, which is what a rewind past it leaves.
-        final events = await send(backend, "again",
+          await send(backend, "hi");
+          // The history of the rewound conversation: the prompt and a reply
+          // that never carried the part, which is what a rewind past it leaves.
+          final events = await send(
+            backend,
+            "again",
             history: [
               userMessage("hi", at: sentAt),
               replyRecording(const []),
-            ]);
+            ],
+          );
 
-        final reads = events.whereType<InstructionsReadEvent>().toList();
-        expect(reads, hasLength(1));
-        expect(reads.single.files, hasLength(2));
-      });
+          final reads = events.whereType<InstructionsReadEvent>().toList();
+          expect(reads, hasLength(1));
+          expect(reads.single.files, hasLength(2));
+        },
+      );
 
       test("a retry round re-running the load is not recorded twice", () async {
         // The first attempt fails the request; the turn's automatic retry
@@ -638,39 +782,54 @@ void main() {
         ]);
         writeInstructions();
 
-        final events = await send(backend, "hi",
-            project: "anonymous",
-            sharedWorkspace: false,
-            bundledInstructions: "This is an anonymous chat.",
-            includesUserInstructions: false);
+        final events = await send(
+          backend,
+          "hi",
+          project: "anonymous",
+          sharedWorkspace: false,
+          bundledInstructions: "This is an anonymous chat.",
+          includesUserInstructions: false,
+        );
 
         expect(events.whereType<InstructionsReadEvent>(), isEmpty);
       });
 
-      test("a bundled note that includes the user's files records them",
-          () async {
-        final backend = backendOver([
-          [finish],
-        ]);
-        Directory(config.projectWorkspaceDir(project: "byte-repair"))
-            .createSync(recursive: true);
-        File(p.join(config.projectWorkspaceDir(project: "byte-repair"),
-            "AGENTS.md")).writeAsStringSync("project rules");
-        File(config.globalInstructionsFile).writeAsStringSync("global rules");
+      test(
+        "a bundled note that includes the user's files records them",
+        () async {
+          final backend = backendOver([
+            [finish],
+          ]);
+          Directory(
+            config.projectWorkspaceDir(project: "byte-repair"),
+          ).createSync(recursive: true);
+          File(
+            p.join(
+              config.projectWorkspaceDir(project: "byte-repair"),
+              "AGENTS.md",
+            ),
+          ).writeAsStringSync("project rules");
+          File(config.globalInstructionsFile).writeAsStringSync("global rules");
 
-        final events = await send(backend, "hi",
+          final events = await send(
+            backend,
+            "hi",
             project: "byte-repair",
             bundledInstructions: "This is a Byte Repair project.",
-            includesUserInstructions: true);
+            includesUserInstructions: true,
+          );
 
-        final reads = events.whereType<InstructionsReadEvent>().toList();
-        expect(reads, hasLength(1));
-        expect(reads.single.files, hasLength(2));
-        // The bundled note itself is not a file read, so it is not in the
-        // record.
-        expect(reads.single.files.where((f) => f.kind == InstructionKind.bundled),
-            isEmpty);
-      });
+          final reads = events.whereType<InstructionsReadEvent>().toList();
+          expect(reads, hasLength(1));
+          expect(reads.single.files, hasLength(2));
+          // The bundled note itself is not a file read, so it is not in the
+          // record.
+          expect(
+            reads.single.files.where((f) => f.kind == InstructionKind.bundled),
+            isEmpty,
+          );
+        },
+      );
     });
 
     test("relevant memories are recalled into the turn", () async {
@@ -681,9 +840,11 @@ void main() {
       await store.add("the user likes code formatted with tabs");
       await store.add("notes about the weather");
 
-      await send(backend, "how should the code be formatted",
-          memory: MemorySettings(
-              autoMemory: true, memoryDir: config.memoryDir()));
+      await send(
+        backend,
+        "how should the code be formatted",
+        memory: MemorySettings(autoMemory: true, memoryDir: config.memoryDir()),
+      );
 
       final system = client.sent.first[1].text;
       expect(system, contains("Recalled memories"));
@@ -701,9 +862,15 @@ void main() {
       final store = MemoryStore(config.memoryDir());
       await store.add("the user likes code formatted with tabs");
 
-      await send(backend, "how should the code be formatted",
-          memory: MemorySettings(
-              autoMemory: true, recall: false, memoryDir: config.memoryDir()));
+      await send(
+        backend,
+        "how should the code be formatted",
+        memory: MemorySettings(
+          autoMemory: true,
+          recall: false,
+          memoryDir: config.memoryDir(),
+        ),
+      );
 
       expect(client.sent.first[1].text, isNot(contains("Recalled memories")));
     });
@@ -713,51 +880,68 @@ void main() {
         [finish],
       ]);
 
-      final events = await send(backend, "how should the code be formatted",
-          memory: MemorySettings(
-              autoMemory: true, memoryDir: config.memoryDir()));
+      final events = await send(
+        backend,
+        "how should the code be formatted",
+        memory: MemorySettings(autoMemory: true, memoryDir: config.memoryDir()),
+      );
 
       expect(client.sent.first[1].text, isNot(contains("Recalled memories")));
       expect(events.last, isA<DoneEvent>());
     });
 
-    test("pinned memories reach the turn in full, the rest as an index",
-        () async {
+    test(
+      "pinned memories reach the turn in full, the rest as an index",
+      () async {
+        final backend = backendOver([
+          [finish],
+        ]);
+        final store = MemoryStore(config.memoryDir());
+        await store.add("the user likes code formatted with tabs");
+        await store.add("the codebase is called Entoli");
+        final standing = await store.add("the deploy key rotates every month");
+        await store.pin(standing.id);
+
+        await send(
+          backend,
+          "unrelated question",
+          memory: MemorySettings(
+            autoMemory: true,
+            memoryDir: config.memoryDir(),
+          ),
+        );
+
+        final system = client.sent.first[1].text;
+        expect(system, contains("Pinned memories"));
+        expect(system, contains("the deploy key rotates every month"));
+        expect(system, contains("Memory index"));
+        expect(system, contains("the user likes code formatted with tabs"));
+        expect(system, contains("the codebase is called Entoli"));
+        // The pinned one is in the block, not in the index: one place for it.
+        expect(
+          system.split("the deploy key rotates every month").length - 1,
+          1,
+        );
+      },
+    );
+
+    test("no pinned or index section while the recall gate is off", () async {
       final backend = backendOver([
         [finish],
       ]);
       final store = MemoryStore(config.memoryDir());
-      await store.add("the user likes code formatted with tabs");
-      await store.add("the codebase is called Entoli");
       final standing = await store.add("the deploy key rotates every month");
       await store.pin(standing.id);
 
-      await send(backend, "unrelated question",
-          memory: MemorySettings(
-              autoMemory: true, memoryDir: config.memoryDir()));
-
-      final system = client.sent.first[1].text;
-      expect(system, contains("Pinned memories"));
-      expect(system, contains("the deploy key rotates every month"));
-      expect(system, contains("Memory index"));
-      expect(system, contains("the user likes code formatted with tabs"));
-      expect(system, contains("the codebase is called Entoli"));
-      // The pinned one is in the block, not in the index: one place for it.
-      expect(system.split("the deploy key rotates every month").length - 1, 1);
-    });
-
-    test("no pinned or index section while the recall gate is off",
-        () async {
-      final backend = backendOver([
-        [finish],
-      ]);
-      final store = MemoryStore(config.memoryDir());
-      final standing = await store.add("the deploy key rotates every month");
-      await store.pin(standing.id);
-
-      await send(backend, "unrelated question",
-          memory: MemorySettings(
-              autoMemory: true, recall: false, memoryDir: config.memoryDir()));
+      await send(
+        backend,
+        "unrelated question",
+        memory: MemorySettings(
+          autoMemory: true,
+          recall: false,
+          memoryDir: config.memoryDir(),
+        ),
+      );
 
       final system = client.sent.first[1].text;
       expect(system, isNot(contains("Pinned memories")));
@@ -769,35 +953,47 @@ void main() {
         [finish],
       ]);
       await backend
-          .sendPrompt(chatId, userMessage("hi", at: sentAt),
-              settings: const TurnSettings(
-                  model: "fake-model",
-                  provider: "fake",
-                  project: "work",
-                  approveMode: ApproveMode.never))
+          .sendPrompt(
+            chatId,
+            userMessage("hi", at: sentAt),
+            settings: const TurnSettings(
+              model: "fake-model",
+              provider: "fake",
+              project: "work",
+              approveMode: ApproveMode.never,
+            ),
+          )
           .toList();
 
       final system = client.sent.first[1].text;
       expect(system, contains(config.workspaceDir(chatId, project: "work")));
       expect(system, contains(config.projectWorkspaceDir(project: "work")));
-      expect(Directory(config.projectWorkspaceDir(project: "work")).existsSync(), isTrue);
+      expect(
+        Directory(config.projectWorkspaceDir(project: "work")).existsSync(),
+        isTrue,
+      );
     });
 
     // Scratch work a later turn may want is the workspace's, not the machine
     // temp directory's — /tmp was where the crops that a chat lost came from.
-    test("the workspace prompt keeps work in the chat until the user moves it",
-        () async {
-      final backend = backendOver([
-        [finish],
-      ]);
-      await send(backend, "hi");
+    test(
+      "the workspace prompt keeps work in the chat until the user moves it",
+      () async {
+        final backend = backendOver([
+          [finish],
+        ]);
+        await send(backend, "hi");
 
-      final system = client.sent.first[1].text;
-      expect(system, contains("Everything you make in this conversation goes here."));
-      expect(system, contains("Move work there only when the user wants"));
-      // /tmp is mapped to the chat's own scratch, so nothing steers away from it.
-      expect(system, isNot(contains("machine's /tmp")));
-    });
+        final system = client.sent.first[1].text;
+        expect(
+          system,
+          contains("Everything you make in this conversation goes here."),
+        );
+        expect(system, contains("Move work there only when the user wants"));
+        // /tmp is mapped to the chat's own scratch, so nothing steers away from it.
+        expect(system, isNot(contains("machine's /tmp")));
+      },
+    );
 
     // A project that does not share a workspace is the answer to "a chat that
     // must not reach past itself": the prompt names the chat's own workspace
@@ -832,117 +1028,177 @@ void main() {
 
   group("commands and agents", () {
     PromptLibrary libraryWith(CompletionKind kind, String name, String body) =>
-        PromptLibrary([PromptDocument.parse(kind, name, "---\ndescription: d\n---\n\n$body")]);
+        PromptLibrary([
+          PromptDocument.parse(kind, name, "---\ndescription: d\n---\n\n$body"),
+        ]);
 
     test("/name expands to the command's template", () async {
-      final asWritten =
-          libraryWith(CompletionKind.skill, "review", "Review this:\n\n\$ARGUMENTS");
+      final asWritten = libraryWith(
+        CompletionKind.skill,
+        "review",
+        "Review this:\n\n\$ARGUMENTS",
+      );
       final backend = backendOver([
         [finish],
       ], library: asWritten);
-      await send(backend, "/review the parser",
-          documents: promptDocuments("/review the parser", asWritten));
+      await send(
+        backend,
+        "/review the parser",
+        documents: promptDocuments("/review the parser", asWritten),
+      );
 
       expect(client.sent.first[2].text, contains("Review this:\n\nthe parser"));
       expect(client.sent.first[2].text, isNot(contains(r"$ARGUMENTS")));
     });
 
     test("a command with no placeholder gets its arguments appended", () async {
-      final asWritten =
-          libraryWith(CompletionKind.skill, "commit", "Commit what changed.");
+      final asWritten = libraryWith(
+        CompletionKind.skill,
+        "commit",
+        "Commit what changed.",
+      );
       final backend = backendOver([
         [finish],
       ], library: asWritten);
-      await send(backend, "/commit only the tests",
-          documents: promptDocuments("/commit only the tests", asWritten));
+      await send(
+        backend,
+        "/commit only the tests",
+        documents: promptDocuments("/commit only the tests", asWritten),
+      );
 
       expect(client.sent.first[2].text, contains("Commit what changed."));
       expect(client.sent.first[2].text, contains("only the tests"));
     });
 
-    test("a name the library does not know is left as the prose it probably is", () async {
-      final backend = backendOver(
-        [
+    test(
+      "a name the library does not know is left as the prose it probably is",
+      () async {
+        final backend = backendOver(
+          [
+            [finish],
+          ],
+          library: libraryWith(CompletionKind.skill, "review", "Review this."),
+        );
+        await send(backend, "/etc/hosts is where?");
+
+        expect(client.sent.first[2].text, contains("/etc/hosts is where?"));
+      },
+    );
+
+    test(
+      "@name hands the work to that agent rather than wearing its prompt",
+      () async {
+        final asWritten = libraryWith(
+          CompletionKind.agent,
+          "researcher",
+          "You only read.",
+        );
+        final backend = backendOver([
           [finish],
-        ],
-        library: libraryWith(CompletionKind.skill, "review", "Review this."),
-      );
-      await send(backend, "/etc/hosts is where?");
+        ], library: asWritten);
+        await send(
+          backend,
+          "@researcher where is the parser?",
+          documents: promptDocuments(
+            "@researcher where is the parser?",
+            asWritten,
+          ),
+        );
 
-      expect(client.sent.first[2].text, contains("/etc/hosts is where?"));
-    });
+        expect(client.sent.first[1].text, contains("@researcher"));
+        expect(client.sent.first[1].text, contains("`task`"));
+        expect(
+          client.sent.first.map((m) => m.text).join(),
+          isNot(contains("You only read.")),
+        );
+        expect(
+          client.sent.first[2].text,
+          contains("@researcher where is the parser?"),
+        );
+      },
+    );
 
-    test("@name hands the work to that agent rather than wearing its prompt",
-        () async {
-      final asWritten =
-          libraryWith(CompletionKind.agent, "researcher", "You only read.");
-      final backend = backendOver([
-        [finish],
-      ], library: asWritten);
-      await send(backend, "@researcher where is the parser?",
-          documents: promptDocuments("@researcher where is the parser?", asWritten));
+    test(
+      "a command edited since is still the words the turn was sent with",
+      () async {
+        final asWritten = libraryWith(
+          CompletionKind.skill,
+          "review",
+          "Look hard at:\n\n\$ARGUMENTS",
+        );
+        final backend = backendOver(
+          [
+            [finish],
+          ],
+          // The library the turn is replayed against says something else
+          // entirely, and a deleted command would say nothing at all.
+          library: libraryWith(CompletionKind.skill, "review", "REWRITTEN"),
+        );
+        await send(
+          backend,
+          "/review the parser",
+          documents: promptDocuments("/review the parser", asWritten),
+        );
 
-      expect(client.sent.first[1].text, contains("@researcher"));
-      expect(client.sent.first[1].text, contains("`task`"));
-      expect(client.sent.first.map((m) => m.text).join(),
-          isNot(contains("You only read.")));
-      expect(client.sent.first[2].text, contains("@researcher where is the parser?"));
-    });
-
-    test("a command edited since is still the words the turn was sent with",
-        () async {
-      final asWritten = libraryWith(CompletionKind.skill, "review", "Look hard at:\n\n\$ARGUMENTS");
-      final backend = backendOver(
-        [
-          [finish],
-        ],
-        // The library the turn is replayed against says something else
-        // entirely, and a deleted command would say nothing at all.
-        library: libraryWith(CompletionKind.skill, "review", "REWRITTEN"),
-      );
-      await send(backend, "/review the parser",
-          documents: promptDocuments("/review the parser", asWritten));
-
-      expect(client.sent.first[2].text, contains("Look hard at:\n\nthe parser"));
-      expect(client.sent.first[2].text, isNot(contains("REWRITTEN")));
-    });
+        expect(
+          client.sent.first[2].text,
+          contains("Look hard at:\n\nthe parser"),
+        );
+        expect(client.sent.first[2].text, isNot(contains("REWRITTEN")));
+      },
+    );
 
     test("a command deleted since still reads back", () async {
-      final asWritten = libraryWith(CompletionKind.skill, "review", "Review this.");
+      final asWritten = libraryWith(
+        CompletionKind.skill,
+        "review",
+        "Review this.",
+      );
       final backend = backendOver([
         [finish],
       ]);
-      await send(backend, "/review the parser",
-          documents: promptDocuments("/review the parser", asWritten));
+      await send(
+        backend,
+        "/review the parser",
+        documents: promptDocuments("/review the parser", asWritten),
+      );
 
       expect(client.sent.first[2].text, contains("Review this."));
     });
 
-    test("a resumed turn is still handed to the agent its message named",
-        () async {
-      final asWritten = libraryWith(CompletionKind.agent, "researcher", "You only read.");
-      final backend = backendOver(
-        [
+    test(
+      "a resumed turn is still handed to the agent its message named",
+      () async {
+        final asWritten = libraryWith(
+          CompletionKind.agent,
+          "researcher",
+          "You only read.",
+        );
+        final backend = backendOver([
           [finish],
-        ],
-        library: asWritten,
-      );
-      // Resumed rather than sent: the `@agent` is read off the message that
-      // started the turn, which is where its record is.
-      await resuming(backend, [
-        userMessage("@researcher where is the parser?",
+        ], library: asWritten);
+        // Resumed rather than sent: the `@agent` is read off the message that
+        // started the turn, which is where its record is.
+        await resuming(backend, [
+          userMessage(
+            "@researcher where is the parser?",
             at: sentAt,
-            documents: promptDocuments("@researcher where is the parser?", asWritten)),
-        Message(
-          id: "m2",
-          role: MessageRole.assistant,
-          createdAt: sentAt,
-          parts: const [MessagePart.text(text: "part way", responseId: "r1")],
-        ),
-      ]);
+            documents: promptDocuments(
+              "@researcher where is the parser?",
+              asWritten,
+            ),
+          ),
+          Message(
+            id: "m2",
+            role: MessageRole.assistant,
+            createdAt: sentAt,
+            parts: const [MessagePart.text(text: "part way", responseId: "r1")],
+          ),
+        ]);
 
-      expect(client.sent.first[1].text, contains("@researcher"));
-    });
+        expect(client.sent.first[1].text, contains("@researcher"));
+      },
+    );
 
     test("an email address is not a mention", () async {
       final backend = backendOver(
@@ -953,23 +1209,30 @@ void main() {
       );
       await send(backend, "write to me@example.com");
 
-      expect(client.sent.first.map((m) => m.text).join(),
-          isNot(contains("You only read.")));
+      expect(
+        client.sent.first.map((m) => m.text).join(),
+        isNot(contains("You only read.")),
+      );
     });
   });
 
   group("running a command yourself", () {
     test("a ! message runs the command and never reaches a model", () async {
-      final backend = backendOver([], respond: (c) =>
-          c.startsWith("cat")
-              ? const ShellResult(returnCode: 2, output: "no such file")
-              : ok("hello\n"));
+      final backend = backendOver(
+        [],
+        respond: (c) => c.startsWith("cat")
+            ? const ShellResult(returnCode: 2, output: "no such file")
+            : ok("hello\n"),
+      );
       final events = await send(backend, "!echo hello");
 
       expect(shell.ran, ["echo hello"]);
       expect(client.sent, isEmpty);
       final run = events.whereType<ShellRunEvent>().single.run;
-      expect((run.command, run.returnCode, run.output), ("echo hello", 0, "hello\n"));
+      expect(
+        (run.command, run.returnCode, run.output),
+        ("echo hello", 0, "hello\n"),
+      );
       // What it exited with comes back with it, whatever the code.
       final failing = await send(backend, "!cat nothing");
       expect(failing.whereType<ShellRunEvent>().single.run.returnCode, 2);
@@ -995,13 +1258,16 @@ void main() {
 
     // The point of running the command yourself: it is not a model's to
     // approve or to be configured for.
-    test("nothing is asked about, since the user typed it themselves", () async {
-      final backend = backendOver([], respond: (_) => ok(""));
-      final events = await asking(backend, "!rm -rf build").toList();
+    test(
+      "nothing is asked about, since the user typed it themselves",
+      () async {
+        final backend = backendOver([], respond: (_) => ok(""));
+        final events = await asking(backend, "!rm -rf build").toList();
 
-      expect(shell.ran, ["rm -rf build"]);
-      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
-    });
+        expect(shell.ran, ["rm -rf build"]);
+        expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
+      },
+    );
 
     test("a chat with no provider can still run one", () async {
       final backend = backendOver([], respond: (_) => ok("out"));
@@ -1011,21 +1277,28 @@ void main() {
       expect(events.whereType<ErrorEvent>().map((e) => e.message), isEmpty);
     });
 
-    test("it runs in the chat's own workspace, with the project's for a home",
-        () async {
-      final backend = backendOver([], respond: (_) => ok(""));
-      await send(backend, "!pwd");
+    test(
+      "it runs in the chat's own workspace, with the project's for a home",
+      () async {
+        final backend = backendOver([], respond: (_) => ok(""));
+        await send(backend, "!pwd");
 
-      expect(shell.cwds, [config.workspaceDir(chatId)]);
-      expect(shell.homes, [config.projectWorkspaceDir()]);
-      expect(Directory(config.workspaceDir(chatId)).existsSync(), isTrue);
+        expect(shell.cwds, [config.workspaceDir(chatId)]);
+        expect(shell.homes, [config.projectWorkspaceDir()]);
+        expect(Directory(config.workspaceDir(chatId)).existsSync(), isTrue);
 
-      // Where no workspace is shared, the chat's own is the home too.
-      await send(backend, "!pwd", project: "anonymous", sharedWorkspace: false);
-      final workspace = config.workspaceDir(chatId, project: "anonymous");
-      expect(shell.cwds.last, workspace);
-      expect(shell.homes.last, workspace);
-    });
+        // Where no workspace is shared, the chat's own is the home too.
+        await send(
+          backend,
+          "!pwd",
+          project: "anonymous",
+          sharedWorkspace: false,
+        );
+        final workspace = config.workspaceDir(chatId, project: "anonymous");
+        expect(shell.cwds.last, workspace);
+        expect(shell.homes.last, workspace);
+      },
+    );
 
     test("stopping the turn kills the command", () async {
       final backend = backendOver([]);
@@ -1060,15 +1333,23 @@ void main() {
       shell.hang.add("sleep 100");
       shell.killedOutput = "hello\n";
 
-      final turn =
-          asking(backend, "hi", approveMode: ApproveMode.never).toList();
-      await untilPending("the command", () async =>
-          shell.ran.contains("sleep 100") ? const [true] : const <bool>[]);
+      final turn = asking(
+        backend,
+        "hi",
+        approveMode: ApproveMode.never,
+      ).toList();
+      await untilPending(
+        "the command",
+        () async =>
+            shell.ran.contains("sleep 100") ? const [true] : const <bool>[],
+      );
       await backend.abort(chatId);
       final events = await turn.timeout(const Duration(seconds: 5));
 
-      expect(events.whereType<ToolResultEvent>().single.result.output,
-          contains("hello"));
+      expect(
+        events.whereType<ToolResultEvent>().single.result.output,
+        contains("hello"),
+      );
       expect(events.whereType<DoneEvent>().single.aborted, isTrue);
     });
 
@@ -1084,123 +1365,169 @@ void main() {
       expect(sent, contains('"returncode": 0'));
     });
 
-    test("an ordinary chat carried on after a restart is the one that was left",
-        () async {
-      // The same invariant the `!` turn below keeps, for the path every other
-      // turn takes. It is what the on-device KV cache rests on: a chat reopened
-      // or regenerated has to send the text that was sent before, or every
-      // cached prefix past the system prompt misses and the whole history is
-      // read again. See "The projection" in `lib/domain/AGENTS.md`.
-      final live = backendOver([
-        [finish],
-        [finish],
-      ]);
-      await send(live, "first");
-      await send(live, "second");
-      final held = client.sent.last.map((m) => (m.role, m.text)).toList();
+    test(
+      "an ordinary chat carried on after a restart is the one that was left",
+      () async {
+        // The same invariant the `!` turn below keeps, for the path every other
+        // turn takes. It is what the on-device KV cache rests on: a chat reopened
+        // or regenerated has to send the text that was sent before, or every
+        // cached prefix past the system prompt misses and the whole history is
+        // read again. See "The projection" in `lib/domain/AGENTS.md`.
+        final live = backendOver([
+          [finish],
+          [finish],
+        ]);
+        await send(live, "first");
+        await send(live, "second");
+        final held = client.sent.last.map((m) => (m.role, m.text)).toList();
 
-      final restarted = backendOver([
-        [finish],
-      ]);
-      await send(restarted, "second", history: [
-        Message(
-          id: "m1",
-          role: MessageRole.user,
-          createdAt: sentAt,
-          parts: const [MessagePart.text(text: "first")],
-        ),
-        Message(
-          id: "m2",
-          role: MessageRole.assistant,
-          createdAt: sentAt,
-          parts: const [MessagePart.text(text: "done", responseId: "r1")],
-        ),
-      ]);
+        final restarted = backendOver([
+          [finish],
+        ]);
+        await send(
+          restarted,
+          "second",
+          history: [
+            Message(
+              id: "m1",
+              role: MessageRole.user,
+              createdAt: sentAt,
+              parts: const [MessagePart.text(text: "first")],
+            ),
+            Message(
+              id: "m2",
+              role: MessageRole.assistant,
+              createdAt: sentAt,
+              parts: const [MessagePart.text(text: "done", responseId: "r1")],
+            ),
+          ],
+        );
 
-      expect(client.sent.single.map((m) => (m.role, m.text)), held);
-    });
+        expect(client.sent.single.map((m) => (m.role, m.text)), held);
+      },
+    );
 
     // A tool's outcome was worded twice — once as the turn ran, once out of the
     // log — and for the file tools the two said different things, so every chat
     // that had read or edited anything diverged the moment it was reopened.
-    test("a tool result reads the same live as it does after a restart", () async {
-      final live = backendOver([
-        [fileCall("read", {"path": "notes.txt"})],
-        [finish],
-      ]);
-      await send(live, "what is in notes.txt?");
-      final answered = client.sent.last.singleWhere((m) => m.role == LlmRole.tool);
+    test(
+      "a tool result reads the same live as it does after a restart",
+      () async {
+        final live = backendOver([
+          [
+            fileCall("read", {"path": "notes.txt"}),
+          ],
+          [finish],
+        ]);
+        await send(live, "what is in notes.txt?");
+        final answered = client.sent.last.singleWhere(
+          (m) => m.role == LlmRole.tool,
+        );
 
-      final restarted = backendOver([
-        [finish],
-      ]);
-      await send(restarted, "and now?", history: [
-        userMessage("what is in notes.txt?", at: sentAt),
-        Message(
-          id: "m2",
-          role: MessageRole.assistant,
-          createdAt: sentAt,
-          parts: const [
-            MessagePart.toolCall(
-                toolCall: ToolCall(
-                    id: "file-1", name: "read", argumentsJson: '{"path":"notes.txt"}'),
-                responseId: "r1"),
-            MessagePart.toolResult(
-                result: ToolResult(
+        final restarted = backendOver([
+          [finish],
+        ]);
+        await send(
+          restarted,
+          "and now?",
+          history: [
+            userMessage("what is in notes.txt?", at: sentAt),
+            Message(
+              id: "m2",
+              role: MessageRole.assistant,
+              createdAt: sentAt,
+              parts: const [
+                MessagePart.toolCall(
+                  toolCall: ToolCall(
+                    id: "file-1",
+                    name: "read",
+                    argumentsJson: '{"path":"notes.txt"}',
+                  ),
+                  responseId: "r1",
+                ),
+                MessagePart.toolResult(
+                  result: ToolResult(
                     callId: "file-1",
                     returnCode: -1,
                     output: "",
-                    exceptionInfo: "File not found: notes.txt")),
+                    exceptionInfo: "File not found: notes.txt",
+                  ),
+                ),
+              ],
+            ),
           ],
-        ),
-      ]);
-      final rebuilt = client.sent.last.singleWhere((m) => m.role == LlmRole.tool);
+        );
+        final rebuilt = client.sent.last.singleWhere(
+          (m) => m.role == LlmRole.tool,
+        );
 
-      expect(answered.text, contains("File not found: notes.txt"));
-      expect(rebuilt.text, answered.text);
-    });
+        expect(answered.text, contains("File not found: notes.txt"));
+        expect(rebuilt.text, answered.text);
+      },
+    );
 
     // The live session is filled as the command finishes and a reload builds
     // the same exchange back out of the log. Attached, because what is named to
     // the model is the half a hand-written session line would get wrong.
-    test("a chat carried on after a restart is the one that was left", () async {
-      final live = backendOver([
-        [finish],
-      ], respond: (_) => ok("hello\n"));
-      await send(live, "!echo hello", files: const [
-        MessagePart.file(
-            resource: "r1", filename: "notes.txt", mimeType: "text/plain"),
-      ]);
-      await send(live, "what did that say?");
-      final held = client.sent.single.map((m) => (m.role, m.text)).toList();
-
-      final restarted = backendOver([
-        [finish],
-      ], respond: (_) => ok("hello\n"));
-      await send(restarted, "what did that say?", history: [
-        Message(
-          id: "m1",
-          role: MessageRole.user,
-          createdAt: sentAt,
-          parts: const [
+    test(
+      "a chat carried on after a restart is the one that was left",
+      () async {
+        final live = backendOver([
+          [finish],
+        ], respond: (_) => ok("hello\n"));
+        await send(
+          live,
+          "!echo hello",
+          files: const [
             MessagePart.file(
-                resource: "r1", filename: "notes.txt", mimeType: "text/plain"),
-            MessagePart.text(text: "!echo hello"),
+              resource: "r1",
+              filename: "notes.txt",
+              mimeType: "text/plain",
+            ),
           ],
-        ),
-        Message(
-          id: "m2",
-          role: MessageRole.assistant,
-          createdAt: sentAt,
-          parts: const [
-            MessagePart.shellRun(command: "echo hello", returnCode: 0, output: "hello\n"),
-          ],
-        ),
-      ]);
+        );
+        await send(live, "what did that say?");
+        final held = client.sent.single.map((m) => (m.role, m.text)).toList();
 
-      expect(client.sent.single.map((m) => (m.role, m.text)), held);
-      expect(held.map((m) => m.$2).join("\n"), contains("notes.txt"));
-    });
+        final restarted = backendOver([
+          [finish],
+        ], respond: (_) => ok("hello\n"));
+        await send(
+          restarted,
+          "what did that say?",
+          history: [
+            Message(
+              id: "m1",
+              role: MessageRole.user,
+              createdAt: sentAt,
+              parts: const [
+                MessagePart.file(
+                  resource: "r1",
+                  filename: "notes.txt",
+                  mimeType: "text/plain",
+                ),
+                MessagePart.text(text: "!echo hello"),
+              ],
+            ),
+            Message(
+              id: "m2",
+              role: MessageRole.assistant,
+              createdAt: sentAt,
+              parts: const [
+                MessagePart.shellRun(
+                  command: "echo hello",
+                  returnCode: 0,
+                  output: "hello\n",
+                ),
+              ],
+            ),
+          ],
+        );
+
+        expect(client.sent.single.map((m) => (m.role, m.text)), held);
+        expect(held.map((m) => m.$2).join("\n"), contains("notes.txt"));
+      },
+    );
   });
 
   group("approvals", () {
@@ -1215,11 +1542,17 @@ void main() {
 
       // The banner's arrival is the turn's own async hop; polled, not beaten.
       final pending = await untilPending(
-          "the approval", () => backend.pendingApprovals(chatId));
+        "the approval",
+        () => backend.pendingApprovals(chatId),
+      );
       expect(pending.single.toolName, "bash");
       expect(pending.single.argumentsJson, contains("rm -rf build"));
 
-      await backend.respondApproval(chatId, pending.single.id, ApprovalResponse.allow);
+      await backend.respondApproval(
+        chatId,
+        pending.single.id,
+        ApprovalResponse.allow,
+      );
       await turn;
 
       expect(shell.ran, contains("rm -rf build"));
@@ -1234,7 +1567,9 @@ void main() {
 
       final turn = asking(backend, "clean").toList();
       final first = (await untilPending(
-          "the approval", () => backend.pendingApprovals(chatId))).single;
+        "the approval",
+        () => backend.pendingApprovals(chatId),
+      )).single;
       await backend.respondApproval(chatId, first.id, ApprovalResponse.deny);
       final events = await turn;
 
@@ -1252,31 +1587,40 @@ void main() {
       // turn of the loop before the agent gets round to waiting on it.
       await asking(backend, "list").listen((event) {
         if (event is ApprovalRequestEvent) {
-          backend.respondApproval(chatId, event.approval.id, ApprovalResponse.allow);
+          backend.respondApproval(
+            chatId,
+            event.approval.id,
+            ApprovalResponse.allow,
+          );
         }
       }).asFuture<void>();
 
       expect(shell.ran, ["ls"]);
     });
 
-    test("aborting answers what was still on screen, so nothing is left waiting", () async {
-      final backend = backendOver([
-        [bashCall("rm -rf build")],
-      ]);
+    test(
+      "aborting answers what was still on screen, so nothing is left waiting",
+      () async {
+        final backend = backendOver([
+          [bashCall("rm -rf build")],
+        ]);
 
-      final turn = asking(backend, "clean").toList();
-      expect(
-        await untilPending(
-            "The approval", () async => await backend.pendingApprovals(chatId)),
-        hasLength(1),
-      );
+        final turn = asking(backend, "clean").toList();
+        expect(
+          await untilPending(
+            "The approval",
+            () async => await backend.pendingApprovals(chatId),
+          ),
+          hasLength(1),
+        );
 
-      await backend.abort(chatId);
-      await turn.timeout(const Duration(seconds: 5));
+        await backend.abort(chatId);
+        await turn.timeout(const Duration(seconds: 5));
 
-      expect(shell.ran, isEmpty);
-      expect(await backend.pendingApprovals(chatId), isEmpty);
-    });
+        expect(shell.ran, isEmpty);
+        expect(await backend.pendingApprovals(chatId), isEmpty);
+      },
+    );
   });
 
   group("questions", () {
@@ -1292,27 +1636,36 @@ void main() {
       ],
     });
 
-    test("one is offered until it is answered, and the answer reaches the model",
-        () async {
-      final backend = backendOver([
-        [askWhich],
-        [finish],
-      ]);
+    test(
+      "one is offered until it is answered, and the answer reaches the model",
+      () async {
+        final backend = backendOver([
+          [askWhich],
+          [finish],
+        ]);
 
-      final turn = asking(backend, "set up storage", approveMode: ApproveMode.never).toList();
+        final turn = asking(
+          backend,
+          "set up storage",
+          approveMode: ApproveMode.never,
+        ).toList();
 
-      final pending =
-          (await untilPending("The question", () => backend.pendingQuestions(chatId)))
-              .single;
-      expect(pending.questions.single.question, "Which database?");
+        final pending = (await untilPending(
+          "The question",
+          () => backend.pendingQuestions(chatId),
+        )).single;
+        expect(pending.questions.single.question, "Which database?");
 
-      await backend.respondQuestions(chatId, pending.id, ["Postgres"]);
-      await turn;
+        await backend.respondQuestions(chatId, pending.id, ["Postgres"]);
+        await turn;
 
-      expect(backend.pendingQuestions(chatId), isEmpty);
-      expect(client.sent[1].firstWhere((m) => m.toolCallId == pending.id).text,
-          contains("Postgres"));
-    });
+        expect(backend.pendingQuestions(chatId), isEmpty);
+        expect(
+          client.sent[1].firstWhere((m) => m.toolCallId == pending.id).text,
+          contains("Postgres"),
+        );
+      },
+    );
 
     test("an answer that beats the agent to it is not lost", () async {
       final backend = backendOver([
@@ -1320,7 +1673,11 @@ void main() {
         [finish],
       ]);
 
-      await asking(backend, "set up storage", approveMode: ApproveMode.never).listen((event) {
+      await asking(
+        backend,
+        "set up storage",
+        approveMode: ApproveMode.never,
+      ).listen((event) {
         if (event is QuestionRequestEvent) {
           backend.respondQuestions(chatId, event.request.id, ["SQLite"]);
         }
@@ -1329,19 +1686,29 @@ void main() {
       expect(client.sent[1].map((m) => m.text).join(), contains("SQLite"));
     });
 
-    test("aborting answers what was on screen, so nothing is left waiting", () async {
-      final backend = backendOver([
-        [askWhich],
-      ]);
+    test(
+      "aborting answers what was on screen, so nothing is left waiting",
+      () async {
+        final backend = backendOver([
+          [askWhich],
+        ]);
 
-      final turn = asking(backend, "set up storage", approveMode: ApproveMode.never).toList();
-      await untilPending("The question", () => backend.pendingQuestions(chatId));
+        final turn = asking(
+          backend,
+          "set up storage",
+          approveMode: ApproveMode.never,
+        ).toList();
+        await untilPending(
+          "The question",
+          () => backend.pendingQuestions(chatId),
+        );
 
-      await backend.abort(chatId);
-      await turn.timeout(const Duration(seconds: 5));
+        await backend.abort(chatId);
+        await turn.timeout(const Duration(seconds: 5));
 
-      expect(backend.pendingQuestions(chatId), isEmpty);
-    });
+        expect(backend.pendingQuestions(chatId), isEmpty);
+      },
+    );
   });
 
   group("which turns are running", () {
@@ -1350,16 +1717,26 @@ void main() {
         [finish],
       ]);
       final seen = <Set<String>>[];
-      backend.runningTurns.addListener(() => seen.add(backend.runningTurns.value));
+      backend.runningTurns.addListener(
+        () => seen.add(backend.runningTurns.value),
+      );
 
       var listedAtTheEnd = false;
-      await for (final event in backend.sendPrompt(chatId, userMessage("hi", at: sentAt),
-          settings: const TurnSettings(
-              model: "fake-model", provider: "fake", approveMode: ApproveMode.never))) {
+      await for (final event in backend.sendPrompt(
+        chatId,
+        userMessage("hi", at: sentAt),
+        settings: const TurnSettings(
+          model: "fake-model",
+          provider: "fake",
+          approveMode: ApproveMode.never,
+        ),
+      )) {
         // The listener writing the turn's closing records is still reading this
         // stream, so the hold has to outlast the last event rather than the
         // agent that produced it.
-        if (event is DoneEvent) listedAtTheEnd = backend.runningTurns.value.contains(chatId);
+        if (event is DoneEvent) {
+          listedAtTheEnd = backend.runningTurns.value.contains(chatId);
+        }
       }
 
       expect(listedAtTheEnd, isTrue);
@@ -1372,21 +1749,27 @@ void main() {
       ]);
     });
 
-    test("aborting says so on the way out, so the turn is not logged as done",
-        () async {
-      final backend = backendOver([
-        [bashCall("touch marker")],
-      ]);
-      final events = <AgentEvent>[];
-      final turn = asking(backend, "hi", approveMode: ApproveMode.ask).listen(events.add);
-      await pumpEvents();
+    test(
+      "aborting says so on the way out, so the turn is not logged as done",
+      () async {
+        final backend = backendOver([
+          [bashCall("touch marker")],
+        ]);
+        final events = <AgentEvent>[];
+        final turn = asking(
+          backend,
+          "hi",
+          approveMode: ApproveMode.ask,
+        ).listen(events.add);
+        await pumpEvents();
 
-      await backend.abort(chatId);
-      await turn.cancel();
+        await backend.abort(chatId);
+        await turn.cancel();
 
-      expect(events.whereType<DoneEvent>().single.aborted, isTrue);
-      expect(backend.runningTurns.value, isEmpty);
-    });
+        expect(events.whereType<DoneEvent>().single.aborted, isTrue);
+        expect(backend.runningTurns.value, isEmpty);
+      },
+    );
 
     test("aborting a parallel round ends every turn's stream", () async {
       final backend = backendOver([
@@ -1401,8 +1784,10 @@ void main() {
       });
 
       await backend.abort(chatId);
-      final ended = await Future.wait([first, second])
-          .timeout(const Duration(seconds: 5));
+      final ended = await Future.wait([
+        first,
+        second,
+      ]).timeout(const Duration(seconds: 5));
 
       for (final events in ended) {
         expect(events.whereType<DoneEvent>().last.aborted, isTrue);
@@ -1435,40 +1820,44 @@ void main() {
     /// A conversation stopped mid-fan-out: the reply holds a `task` call whose
     /// result never landed, which is what a killed turn leaves behind.
     List<Message> historyWithPendingTask({String callId = "task-1"}) => [
-          Message(
-            id: "u1",
-            role: MessageRole.user,
-            createdAt: DateTime.utc(2026),
-            parts: [MessagePart.text(text: "count the files")],
+      Message(
+        id: "u1",
+        role: MessageRole.user,
+        createdAt: DateTime.utc(2026),
+        parts: [MessagePart.text(text: "count the files")],
+      ),
+      Message(
+        id: "a1",
+        role: MessageRole.assistant,
+        createdAt: DateTime.utc(2026),
+        parts: [
+          MessagePart.toolCall(
+            toolCall: ToolCall(
+              id: callId,
+              name: "task",
+              argumentsJson: jsonEncode({
+                "agent": "general",
+                "prompt": "count",
+              }),
+            ),
           ),
-          Message(
-            id: "a1",
-            role: MessageRole.assistant,
-            createdAt: DateTime.utc(2026),
-            parts: [
-              MessagePart.toolCall(
-                toolCall: ToolCall(
-                  id: callId,
-                  name: "task",
-                  argumentsJson: jsonEncode({"agent": "general", "prompt": "count"}),
-                ),
-              ),
-            ],
-          ),
-        ];
+        ],
+      ),
+    ];
 
     /// The transcript that sub-agent left: something said, and no `turnEnd`.
     Future<void> seedKilledSubAgent(String callId, String said) =>
         FileSubAgentLog(config, chatId).append(
-            callId,
-            recordsOf([
-              Message(
-                id: callId,
-                role: MessageRole.assistant,
-                createdAt: DateTime.utc(2026),
-                parts: [MessagePart.text(text: said)],
-              ),
-            ]));
+          callId,
+          recordsOf([
+            Message(
+              id: callId,
+              role: MessageRole.assistant,
+              createdAt: DateTime.utc(2026),
+              parts: [MessagePart.text(text: said)],
+            ),
+          ]),
+        );
 
     test("it is carried on, and its answer reaches the parent", () async {
       await seedKilledSubAgent("task-1", "I was halfway through");
@@ -1488,8 +1877,9 @@ void main() {
       expect(result.output, contains("there are three"));
       // The parent is shown the answer, not that it was interrupted: the
       // sub-agent's own output is what answers its `task` call.
-      final answered = client.sent.last
-          .where((m) => m.role == LlmRole.tool && m.toolCallId == "task-1");
+      final answered = client.sent.last.where(
+        (m) => m.role == LlmRole.tool && m.toolCallId == "task-1",
+      );
       expect(answered.single.text, contains("there are three"));
       expect(answered.single.text, isNot(contains("interrupted")));
     });
@@ -1503,7 +1893,10 @@ void main() {
 
       await resuming(backend, historyWithPendingTask());
 
-      expect(client.sent.first.any((m) => m.text.contains("I was halfway through")), isTrue);
+      expect(
+        client.sent.first.any((m) => m.text.contains("I was halfway through")),
+        isTrue,
+      );
     });
 
     test("a call that never started keeps the interrupted wording", () async {
@@ -1515,8 +1908,9 @@ void main() {
       final events = await resuming(backend, historyWithPendingTask());
 
       expect(events.whereType<ToolResultEvent>(), isEmpty);
-      final answered = client.sent.single
-          .where((m) => m.role == LlmRole.tool && m.toolCallId == "task-1");
+      final answered = client.sent.single.where(
+        (m) => m.role == LlmRole.tool && m.toolCallId == "task-1",
+      );
       expect(answered.single.text, contains("interrupted"));
     });
   });
@@ -1528,8 +1922,16 @@ void main() {
     test("a turn stopped mid-classification stops there", () async {
       final verdict = Completer<void>();
       final judge = FakeLlmClient([
-        [const LlmCompletion(message: LlmMessage(role: LlmRole.assistant, text: "allow"))],
-        [const LlmCompletion(message: LlmMessage(role: LlmRole.assistant, text: "ask"))],
+        [
+          const LlmCompletion(
+            message: LlmMessage(role: LlmRole.assistant, text: "allow"),
+          ),
+        ],
+        [
+          const LlmCompletion(
+            message: LlmMessage(role: LlmRole.assistant, text: "ask"),
+          ),
+        ],
       ]);
       final backend = backendOver([
         [bashCall("pdflatex main.tex")],
@@ -1537,40 +1939,58 @@ void main() {
         [finish],
       ], judge: _Held(judge, verdict.future));
       Stream<AgentEvent> auto(String text) => backend.sendPrompt(
-          chatId, userMessage(text, at: sentAt),
-          settings: const TurnSettings(
-              model: "fake-model",
-              provider: "fake",
-              classifierProvider: "judge",
-              classifierModel: "judge-model",
-              approveMode: ApproveMode.auto));
+        chatId,
+        userMessage(text, at: sentAt),
+        settings: const TurnSettings(
+          model: "fake-model",
+          provider: "fake",
+          classifierProvider: "judge",
+          classifierModel: "judge-model",
+          approveMode: ApproveMode.auto,
+        ),
+      );
 
       final first = auto("one").toList();
-      await untilPending("the classifier",
-          () async => judge.sent.isEmpty ? const <bool>[] : const [true]);
+      await untilPending(
+        "the classifier",
+        () async => judge.sent.isEmpty ? const <bool>[] : const [true],
+      );
       await backend.abort(chatId);
       await first;
 
       // The resend: the log's thread, with the stopped call unanswered.
-      await backend.resetSession(chatId, history: [
-        userMessage("one", at: sentAt),
-        Message(
-          id: "a1",
-          role: MessageRole.assistant,
-          createdAt: sentAt,
-          parts: const [
-            MessagePart.toolCall(
+      await backend.resetSession(
+        chatId,
+        history: [
+          userMessage("one", at: sentAt),
+          Message(
+            id: "a1",
+            role: MessageRole.assistant,
+            createdAt: sentAt,
+            parts: const [
+              MessagePart.toolCall(
                 toolCall: ToolCall(
-                    id: "call-1", name: "bash", argumentsJson: '{"command":"pdflatex main.tex"}')),
-          ],
-        ),
-      ]);
+                  id: "call-1",
+                  name: "bash",
+                  argumentsJson: '{"command":"pdflatex main.tex"}',
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
       final second = auto("two").toList();
       final pending = await untilPending(
-          "the approval", () => backend.pendingApprovals(chatId));
+        "the approval",
+        () => backend.pendingApprovals(chatId),
+      );
       verdict.complete();
       await pumpEvents();
-      await backend.respondApproval(chatId, pending.single.id, ApprovalResponse.allow);
+      await backend.respondApproval(
+        chatId,
+        pending.single.id,
+        ApprovalResponse.allow,
+      );
       final events = await second;
 
       expect(shell.ran, ["rm -rf build"]);
@@ -1596,20 +2016,23 @@ void main() {
         [finish],
       ]);
       await send(backend, "first");
-      await backend.resetSession(chatId, history: [
-        Message(
-          id: "m1",
-          role: MessageRole.user,
-          createdAt: sentAt,
-          parts: const [MessagePart.text(text: "what is 2+2?")],
-        ),
-        Message(
-          id: "m2",
-          role: MessageRole.assistant,
-          createdAt: sentAt,
-          parts: const [MessagePart.text(text: "four")],
-        ),
-      ]);
+      await backend.resetSession(
+        chatId,
+        history: [
+          Message(
+            id: "m1",
+            role: MessageRole.user,
+            createdAt: sentAt,
+            parts: const [MessagePart.text(text: "what is 2+2?")],
+          ),
+          Message(
+            id: "m2",
+            role: MessageRole.assistant,
+            createdAt: sentAt,
+            parts: const [MessagePart.text(text: "four")],
+          ),
+        ],
+      );
       await send(backend, "and 3+3?");
 
       final transcript = client.sent.last.map((m) => m.text).join("\n");
@@ -1620,27 +2043,37 @@ void main() {
 
     // Sessions live in memory, so a chat opened after a restart has none —
     // and the model would be answering the next message from nothing.
-    test("a chat the backend has never held is filled from its conversation", () async {
-      final backend = backendOver([
-        [finish],
-      ]);
-      await send(backend, "and 3+3?", history: [
-        Message(
-          id: "m1",
-          role: MessageRole.user,
-          createdAt: sentAt,
-          parts: const [MessagePart.text(text: "what is 2+2?")],
-        ),
-        Message(
-          id: "m2",
-          role: MessageRole.assistant,
-          createdAt: sentAt,
-          parts: const [MessagePart.text(text: "four")],
-        ),
-      ]);
+    test(
+      "a chat the backend has never held is filled from its conversation",
+      () async {
+        final backend = backendOver([
+          [finish],
+        ]);
+        await send(
+          backend,
+          "and 3+3?",
+          history: [
+            Message(
+              id: "m1",
+              role: MessageRole.user,
+              createdAt: sentAt,
+              parts: const [MessagePart.text(text: "what is 2+2?")],
+            ),
+            Message(
+              id: "m2",
+              role: MessageRole.assistant,
+              createdAt: sentAt,
+              parts: const [MessagePart.text(text: "four")],
+            ),
+          ],
+        );
 
-      expect(client.sent.single.map((m) => m.text).join("\n"), contains("what is 2+2?"));
-    });
+        expect(
+          client.sent.single.map((m) => m.text).join("\n"),
+          contains("what is 2+2?"),
+        );
+      },
+    );
 
     test("one the backend is already holding is left alone", () async {
       final backend = backendOver([
@@ -1648,14 +2081,20 @@ void main() {
         [finish],
       ]);
       await send(backend, "first");
-      await send(backend, "second", history: [
-        Message(
-          id: "m1",
-          role: MessageRole.user,
-          createdAt: sentAt,
-          parts: const [MessagePart.text(text: "somebody else's conversation")],
-        ),
-      ]);
+      await send(
+        backend,
+        "second",
+        history: [
+          Message(
+            id: "m1",
+            role: MessageRole.user,
+            createdAt: sentAt,
+            parts: const [
+              MessagePart.text(text: "somebody else's conversation"),
+            ],
+          ),
+        ],
+      );
 
       final transcript = client.sent.last.map((m) => m.text).join("\n");
       expect(transcript, isNot(contains("somebody else's")));
@@ -1664,35 +2103,45 @@ void main() {
 
     // A turn that errored leaves the session behind it, so a resume that only
     // filled an empty one would hand the model those messages twice.
-    test("a resume rebuilds the session even when one is already held", () async {
-      final backend = backendOver([
-        [finish],
-        [finish],
-      ]);
-      await send(backend, "count the files");
-      await resuming(backend, [
-        Message(
-          id: "m1",
-          role: MessageRole.user,
-          createdAt: sentAt,
-          parts: const [MessagePart.text(text: "count the files")],
-        ),
-        Message(
-          id: "m2",
-          role: MessageRole.assistant,
-          createdAt: sentAt,
-          parts: const [
-            MessagePart.toolCall(
-              toolCall: ToolCall(id: "c1", name: "bash", argumentsJson: '{"command":"ls"}'),
-            ),
-          ],
-        ),
-      ]);
+    test(
+      "a resume rebuilds the session even when one is already held",
+      () async {
+        final backend = backendOver([
+          [finish],
+          [finish],
+        ]);
+        await send(backend, "count the files");
+        await resuming(backend, [
+          Message(
+            id: "m1",
+            role: MessageRole.user,
+            createdAt: sentAt,
+            parts: const [MessagePart.text(text: "count the files")],
+          ),
+          Message(
+            id: "m2",
+            role: MessageRole.assistant,
+            createdAt: sentAt,
+            parts: const [
+              MessagePart.toolCall(
+                toolCall: ToolCall(
+                  id: "c1",
+                  name: "bash",
+                  argumentsJson: '{"command":"ls"}',
+                ),
+              ),
+            ],
+          ),
+        ]);
 
-      final sent = client.sent.last;
-      expect(sent.where((m) => m.text.contains("count the files")), hasLength(1));
-      expect(sent.last.text, contains("interrupted before it finished"));
-    });
+        final sent = client.sent.last;
+        expect(
+          sent.where((m) => m.text.contains("count the files")),
+          hasLength(1),
+        );
+        expect(sent.last.text, contains("interrupted before it finished"));
+      },
+    );
 
     // Why a turn is being carried on is that turn's own business, and nothing
     // logs it. A session that went on holding it would send every later turn a
@@ -1725,16 +2174,24 @@ void main() {
       final restarted = backendOver([
         [finish],
       ]);
-      await send(restarted, "and now?", history: [
-        interrupted.first,
-        interrupted.last.copyWith(parts: [
-          ...interrupted.last.parts,
-          const MessagePart.text(text: "done", responseId: "r2"),
-        ]),
-      ]);
+      await send(
+        restarted,
+        "and now?",
+        history: [
+          interrupted.first,
+          interrupted.last.copyWith(
+            parts: [
+              ...interrupted.last.parts,
+              const MessagePart.text(text: "done", responseId: "r2"),
+            ],
+          ),
+        ],
+      );
 
-      expect(held.map((m) => m.$2).join("\n"),
-          isNot(contains("interrupted before it finished")));
+      expect(
+        held.map((m) => m.$2).join("\n"),
+        isNot(contains("interrupted before it finished")),
+      );
       expect(client.sent.last.map((m) => (m.role, m.text)), held);
     });
 
@@ -1742,35 +2199,50 @@ void main() {
       final backend = backendOver([
         [finish],
       ]);
-      await backend.resetSession(chatId, history: [
-        Message(
-          id: "m1",
-          role: MessageRole.user,
-          createdAt: sentAt,
-          parts: const [
-            MessagePart.file(resource: "r1", filename: "diagram.png", mimeType: "image/png"),
-            MessagePart.text(text: "what is this?"),
-          ],
-        ),
-      ]);
+      await backend.resetSession(
+        chatId,
+        history: [
+          Message(
+            id: "m1",
+            role: MessageRole.user,
+            createdAt: sentAt,
+            parts: const [
+              MessagePart.file(
+                resource: "r1",
+                filename: "diagram.png",
+                mimeType: "image/png",
+              ),
+              MessagePart.text(text: "what is this?"),
+            ],
+          ),
+        ],
+      );
       await send(backend, "again");
 
-      expect(client.sent.first.map((m) => m.text).join(), contains("diagram.png"));
+      expect(
+        client.sent.first.map((m) => m.text).join(),
+        contains("diagram.png"),
+      );
     });
 
-    test("disposing a chat forgets it, and closes the shell that was running in it",
-        () async {
-      final backend = backendOver([
-        [finish],
-        [finish],
-      ]);
-      await send(backend, "first");
-      await backend.disposeChat(chatId);
-      await send(backend, "second");
+    test(
+      "disposing a chat forgets it, and closes the shell that was running in it",
+      () async {
+        final backend = backendOver([
+          [finish],
+          [finish],
+        ]);
+        await send(backend, "first");
+        await backend.disposeChat(chatId);
+        await send(backend, "second");
 
-      expect(client.sent.last.map((m) => m.text).join(), isNot(contains("first")));
-      expect(shell.closedSessions, [config.workspaceDir(chatId)]);
-    });
+        expect(
+          client.sent.last.map((m) => m.text).join(),
+          isNot(contains("first")),
+        );
+        expect(shell.closedSessions, [config.workspaceDir(chatId)]);
+      },
+    );
   });
 
   group("the room's sessions", () {
@@ -1780,49 +2252,61 @@ void main() {
     // reply's text is the one its script said; its id comes off the text,
     // unique inside each test, which is all a conversation needs.
     Message sayFor(String text, List<String> addressees) => Message(
-            id: "m-$text",
-            role: MessageRole.user,
-            createdAt: sentAt,
-            parts: [MessagePart.text(text: text)],
-            addressees: addressees);
+      id: "m-$text",
+      role: MessageRole.user,
+      createdAt: sentAt,
+      parts: [MessagePart.text(text: text)],
+      addressees: addressees,
+    );
     Message replyBy(String text, {String? author}) => Message(
-            id: "m-$text",
-            role: MessageRole.assistant,
-            createdAt: sentAt,
-            parts: [MessagePart.text(text: text)],
-            author: author);
+      id: "m-$text",
+      role: MessageRole.assistant,
+      createdAt: sentAt,
+      parts: [MessagePart.text(text: text)],
+      author: author,
+    );
     String transcript() => client.sent.last.map((m) => m.text).join("\n");
 
-    test("a warm session is synced with the room's history before a turn",
-        () async {
-      final backend = backendOver([
-        [saidOnly("done one")],
-        [saidOnly("done two")],
-      ]);
-      final m1 = sayFor("hello", const []);
-      final r1 = replyBy("done one");
-      await send(backend, "hello");
-      expect(client.sent, hasLength(1));
+    test(
+      "a warm session is synced with the room's history before a turn",
+      () async {
+        final backend = backendOver([
+          [saidOnly("done one")],
+          [saidOnly("done two")],
+        ]);
+        final m1 = sayFor("hello", const []);
+        final r1 = replyBy("done one");
+        await send(backend, "hello");
+        expect(client.sent, hasLength(1));
 
-      // What the room said since: a say addressed to @explore, and their
-      // reply, neither an exchange this backend ran. The house's next
-      // dispatch words them into its session before the turn opens.
-      final m2 = sayFor("explore the logs, @explore", const ["@explore"]);
-      final r2 = replyBy("done two", author: "@explore");
-      await send(backend, "thanks both",
-          history: [m1, r1, m2, r2], omadaMember: null);
+        // What the room said since: a say addressed to @explore, and their
+        // reply, neither an exchange this backend ran. The house's next
+        // dispatch words them into its session before the turn opens.
+        final m2 = sayFor("explore the logs, @explore", const ["@explore"]);
+        final r2 = replyBy("done two", author: "@explore");
+        await send(
+          backend,
+          "thanks both",
+          history: [m1, r1, m2, r2],
+          omadaMember: null,
+        );
 
-      expect(transcript(), contains("Message from the user, addressed to "
-          "@explore (not addressed to you):\n\nexplore the logs"));
-      expect(transcript(), contains("Message from explore"));
-      expect(transcript(), contains("thanks both"));
-      // The say that opened the chat is dressed once; the later one never.
-      expect(transcript(), contains("The user asks:\n\nhello"));
-      expect(transcript(), isNot(contains("The user asks:\n\nthanks both")));
-    });
+        expect(
+          transcript(),
+          contains(
+            "Message from the user, addressed to "
+            "@explore (not addressed to you):\n\nexplore the logs",
+          ),
+        );
+        expect(transcript(), contains("Message from explore"));
+        expect(transcript(), contains("thanks both"));
+        // The say that opened the chat is dressed once; the later one never.
+        expect(transcript(), contains("The user asks:\n\nhello"));
+        expect(transcript(), isNot(contains("The user asks:\n\nthanks both")));
+      },
+    );
 
-    test("a participant's session words what it already holds once",
-        () async {
+    test("a participant's session words what it already holds once", () async {
       // Three dispatches; the session's own last turn is in the next
       // dispatch's history too, and must not word twice.
       final backend = backendOver([
@@ -1865,8 +2349,12 @@ void main() {
 
       // The member's own first dispatch fills from the room whole: the say
       // it was addressed with is its mail, verbatim and dressed.
-      await send(backend, "warm-up filler",
-          history: [m1, r1, m2, r2], omadaMember: "explore");
+      await send(
+        backend,
+        "warm-up filler",
+        history: [m1, r1, m2, r2],
+        omadaMember: "explore",
+      );
       expect(transcript(), contains("The user asks:\n\nexplore the logs"));
       // The house's reply is the house's words, labeled; the house's own
       // greeting - the say above it - rides in the same wording.
@@ -1895,8 +2383,12 @@ void main() {
       await send(backend, "room filler", history: [m1, r1, m2, r2]);
 
       // @explore's next dispatch syncs what the room said since.
-      await send(backend, "carry on, @explore",
-          history: [m1, r1, m2, r2, m3, r3], omadaMember: "explore");
+      await send(
+        backend,
+        "carry on, @explore",
+        history: [m1, r1, m2, r2, m3, r3],
+        omadaMember: "explore",
+      );
       expect(transcript(), contains("room talk about the diff"));
       expect(transcript(), contains("Message from (main agent)"));
       expect(transcript(), contains("Message from reviewer"));
@@ -1904,93 +2396,123 @@ void main() {
       expect(transcript().split("carry on, @explore"), hasLength(2));
     });
 
-    test("a caller whose thread diverges from the log is not trusted",
-        () async {
-      // The session holds an exchange this backend filled; the next dispatch
-      // brings a history that words something else in the covered ids'
-      // place. The sync re-words from the log itself, never from a caller's
-      // copy.
-      final backend = backendOver([
-        [saidOnly("done one")],
-      ]);
-      final m1 = sayFor("explore the logs, @explore", const ["@explore"]);
-      final log = replyBy("what the log actually says", author: "@explore");
-      await backend.store.saveState(makeState(chatId));
-      await backend.store.append(chatId, recordsOf([m1, log]));
+    test(
+      "a caller whose thread diverges from the log is not trusted",
+      () async {
+        // The session holds an exchange this backend filled; the next dispatch
+        // brings a history that words something else in the covered ids'
+        // place. The sync re-words from the log itself, never from a caller's
+        // copy.
+        final backend = backendOver([
+          [saidOnly("done one")],
+        ]);
+        final m1 = sayFor("explore the logs, @explore", const ["@explore"]);
+        final log = replyBy("what the log actually says", author: "@explore");
+        await backend.store.saveState(makeState(chatId));
+        await backend.store.append(chatId, recordsOf([m1, log]));
 
-      await send(backend, "warm-up filler",
-          history: [m1, log], omadaMember: "explore");
+        await send(
+          backend,
+          "warm-up filler",
+          history: [m1, log],
+          omadaMember: "explore",
+        );
 
-      final bogus = sayFor("somebody else's conversation", const []);
-      final bogusReply = replyBy("the fake exchange");
-      await send(backend, "carry on, @explore",
-          history: [bogus, bogusReply, m1, log], omadaMember: "explore");
+        final bogus = sayFor("somebody else's conversation", const []);
+        final bogusReply = replyBy("the fake exchange");
+        await send(
+          backend,
+          "carry on, @explore",
+          history: [bogus, bogusReply, m1, log],
+          omadaMember: "explore",
+        );
 
-      expect(transcript(), contains("explore the logs"));
-      expect(transcript(), contains("what the log actually says"));
-      expect(transcript(), contains("carry on, @explore"));
-      expect(transcript(), isNot(contains("somebody else's")));
-      expect(transcript(), isNot(contains("the fake exchange")));
-    });
+        expect(transcript(), contains("explore the logs"));
+        expect(transcript(), contains("what the log actually says"));
+        expect(transcript(), contains("carry on, @explore"));
+        expect(transcript(), isNot(contains("somebody else's")));
+        expect(transcript(), isNot(contains("the fake exchange")));
+      },
+    );
 
-    test("a warm session's live tail confirms across a tool-calling turn",
-        () async {
-      // The turn before this dispatch called a tool; the session's wording of
-      // it holds a tool call and an observation. The sync re-words the same
-      // records per message to confirm the tail, and the two wordings must
-      // agree by content: an entry that matched only by instance identity
-      // would break the confirm here, leave the session's covered ids where
-      // they were, and every room turn after it never worded into this
-      // session at all.
-      final backend = backendOver([
-        [bashCall("grep logs", id: "c1")],
-        [saidOnly("found ten hits")],
-        [saidOnly("done two")],
-        [saidOnly("done four")],
-      ], respond: (_) => ok("hits\n"));
+    test(
+      "a warm session's live tail confirms across a tool-calling turn",
+      () async {
+        // The turn before this dispatch called a tool; the session's wording of
+        // it holds a tool call and an observation. The sync re-words the same
+        // records per message to confirm the tail, and the two wordings must
+        // agree by content: an entry that matched only by instance identity
+        // would break the confirm here, leave the session's covered ids where
+        // they were, and every room turn after it never worded into this
+        // session at all.
+        final backend = backendOver([
+          [bashCall("grep logs", id: "c1")],
+          [saidOnly("found ten hits")],
+          [saidOnly("done two")],
+          [saidOnly("done four")],
+        ], respond: (_) => ok("hits\n"));
 
-      final m1 = sayFor("grep the logs, @explore", const ["@explore"]);
-      final live = Message(
+        final m1 = sayFor("grep the logs, @explore", const ["@explore"]);
+        final live = Message(
           id: "m-live",
           role: MessageRole.assistant,
           createdAt: sentAt,
           parts: const [
             MessagePart.toolCall(
-                toolCall: ToolCall(
-                    id: "c1",
-                    name: "bash",
-                    argumentsJson: '{"command":"grep logs"}'),
-                responseId: "r1"),
+              toolCall: ToolCall(
+                id: "c1",
+                name: "bash",
+                argumentsJson: '{"command":"grep logs"}',
+              ),
+              responseId: "r1",
+            ),
             MessagePart.toolResult(
-                result: ToolResult(callId: "c1", returnCode: 0, output: "hits\n")),
+              result: ToolResult(callId: "c1", returnCode: 0, output: "hits\n"),
+            ),
             MessagePart.text(text: "found ten hits", responseId: "r2"),
           ],
-          author: "@explore");
-      await backend.sendPrompt(chatId, m1,
-          settings: const TurnSettings(
-              model: "fake-model",
-              provider: "fake",
-              approveMode: ApproveMode.never,
-              omadaMember: "explore")).toList();
+          author: "@explore",
+        );
+        await backend
+            .sendPrompt(
+              chatId,
+              m1,
+              settings: const TurnSettings(
+                model: "fake-model",
+                provider: "fake",
+                approveMode: ApproveMode.never,
+                omadaMember: "explore",
+              ),
+            )
+            .toList();
 
-      // The room's own turn ran between, worded only into the house's
-      // session — never this one's.
-      final m2 = sayFor("anyone home?", const []);
-      final r2 = replyBy("done two");
-      await send(backend, "house filler", history: [m1, live, m2, r2],
-          omadaMember: null);
+        // The room's own turn ran between, worded only into the house's
+        // session — never this one's.
+        final m2 = sayFor("anyone home?", const []);
+        final r2 = replyBy("done two");
+        await send(
+          backend,
+          "house filler",
+          history: [m1, live, m2, r2],
+          omadaMember: null,
+        );
 
-      // And @explore's next dispatch words the house's exchange in; the tool
-      // call's wording confirms once, and the prompt below words nothing
-      // twice.
-      await send(backend, "carry on, @explore",
-          history: [m1, live, m2, r2], omadaMember: "explore");
-      expect(transcript(), contains("anyone home?"));
-      expect(transcript(), contains("Message from (main agent)"));
-      // And the turn's own prompt is the say, never worded twice, whether
-      // directly or inside the wording of the tool turn that confirmed it.
-      expect(transcript().split("grep the logs"), hasLength(2));
-    });
+        // And @explore's next dispatch words the house's exchange in; the tool
+        // call's wording confirms once, and the prompt below words nothing
+        // twice.
+        await send(
+          backend,
+          "carry on, @explore",
+          history: [m1, live, m2, r2],
+          omadaMember: "explore",
+        );
+        expect(transcript(), contains("anyone home?"));
+        expect(transcript(), contains("Message from (main agent)"));
+        // And the turn's own prompt is the say, never worded twice, whether
+        // directly or inside the wording of the tool turn that confirmed it.
+        expect(transcript().split("grep the logs"), hasLength(2));
+      },
+    );
   });
 
   group("asking one question", () {
@@ -1999,8 +2521,11 @@ void main() {
         [saidOnly("Sorting a list of records")],
       ]);
 
-      final answer =
-          await backend.ask("name this", model: "fake-model", provider: "fake");
+      final answer = await backend.ask(
+        "name this",
+        model: "fake-model",
+        provider: "fake",
+      );
 
       expect(answer, "Sorting a list of records");
       expect(client.sent.single, hasLength(1));
@@ -2014,7 +2539,10 @@ void main() {
       expect(await backend.ask("hi", model: "m", provider: "ghost"), isNull);
       // And a request that fails mid-call answers null too.
       client.failures[0] = const LlmException("no", statusCode: 500);
-      expect(await backend.ask("hi", model: "fake-model", provider: "fake"), isNull);
+      expect(
+        await backend.ask("hi", model: "fake-model", provider: "fake"),
+        isNull,
+      );
     });
 
     // The session is the conversation the agent holds; a question asked
@@ -2024,12 +2552,22 @@ void main() {
         [saidOnly("An answer")],
         [finish],
       ]);
-      await backend.ask("name this chat", model: "fake-model", provider: "fake");
+      await backend.ask(
+        "name this chat",
+        model: "fake-model",
+        provider: "fake",
+      );
 
       await send(backend, "hello there");
 
-      expect(client.sent.last.map((m) => m.text).join(), isNot(contains("An answer")));
-      expect(client.sent.last.map((m) => m.text).join(), isNot(contains("name this chat")));
+      expect(
+        client.sent.last.map((m) => m.text).join(),
+        isNot(contains("An answer")),
+      );
+      expect(
+        client.sent.last.map((m) => m.text).join(),
+        isNot(contains("name this chat")),
+      );
     });
   });
 
@@ -2038,7 +2576,11 @@ void main() {
       final backend = backendOver([]);
 
       expect(await backend.models(), [
-        const ModelOption(providerId: "fake", modelId: "fake-model", label: "fake · fake-model"),
+        const ModelOption(
+          providerId: "fake",
+          modelId: "fake-model",
+          label: "fake · fake-model",
+        ),
       ]);
     });
 
@@ -2069,20 +2611,23 @@ void main() {
 
     setUp(() => store = MemoryStore(config.memoryDir()));
 
-    test("a finished turn leaves the memory the background model kept", () async {
-      // The first scripted turn is the agent finishing; the second is the
-      // extraction call answering with the one fact it kept.
-      final backend = backendOver([
-        [finish],
-        [saidOnly('{"memories": ["the user likes tabs over spaces"]}')],
-      ]);
+    test(
+      "a finished turn leaves the memory the background model kept",
+      () async {
+        // The first scripted turn is the agent finishing; the second is the
+        // extraction call answering with the one fact it kept.
+        final backend = backendOver([
+          [finish],
+          [saidOnly('{"memories": ["the user likes tabs over spaces"]}')],
+        ]);
 
-      await send(backend, "how should I indent this", memory: memory());
+        await send(backend, "how should I indent this", memory: memory());
 
-      await untilMemory(store, "the user likes tabs over spaces");
-      final entry = (await store.entries()).single;
-      expect(entry.chat, chatId);
-    });
+        await untilMemory(store, "the user likes tabs over spaces");
+        final entry = (await store.entries()).single;
+        expect(entry.chat, chatId);
+      },
+    );
 
     test("an extraction that names nothing writes nothing", () async {
       final backend = backendOver([
@@ -2096,36 +2641,48 @@ void main() {
       expect(await store.entries(), isEmpty);
     });
 
-    test("the extraction is asked the exchange and what is already kept",
-        () async {
-      final existing = await store.add("the user likes tabs over spaces");
-      final backend = backendOver([
-        [saidOnly("use spaces, the user changed their mind")],
-        [saidOnly('{"memories": []}')],
-      ]);
+    test(
+      "the extraction is asked the exchange and what is already kept",
+      () async {
+        final existing = await store.add("the user likes tabs over spaces");
+        final backend = backendOver([
+          [saidOnly("use spaces, the user changed their mind")],
+          [saidOnly('{"memories": []}')],
+        ]);
 
-      await send(backend, "how should I indent this", memory: memory());
+        await send(backend, "how should I indent this", memory: memory());
 
-      // The extraction is unwatched background work: polled, not beaten.
-      await waitFor(() => client.sent.length >= 2, what: "the extraction call");
+        // The extraction is unwatched background work: polled, not beaten.
+        await waitFor(
+          () => client.sent.length >= 2,
+          what: "the extraction call",
+        );
 
-      final question = client.sent.last.last;
-      expect(question.text, contains("how should I indent this"));
-      expect(question.text, contains("use spaces, the user changed their mind"));
-      // The kept memory, with the id the replacement ops take.
-      expect(question.text, contains("the user likes tabs over spaces"));
-      expect(question.text, contains(existing.id));
-      expect(question.text, contains("JSON"));
-    });
+        final question = client.sent.last.last;
+        expect(question.text, contains("how should I indent this"));
+        expect(
+          question.text,
+          contains("use spaces, the user changed their mind"),
+        );
+        // The kept memory, with the id the replacement ops take.
+        expect(question.text, contains("the user likes tabs over spaces"));
+        expect(question.text, contains(existing.id));
+        expect(question.text, contains("JSON"));
+      },
+    );
 
     test("a replacement corrects the kept memory in place", () async {
       final existing = await store.add("the user likes tabs over spaces");
       final backend = backendOver([
         [saidOnly("use spaces, the user changed their mind")],
-        [saidOnly(jsonEncode({
-          "memories": <String>[],
-          "replaces": {existing.id: "the user likes spaces over tabs"},
-        }))],
+        [
+          saidOnly(
+            jsonEncode({
+              "memories": <String>[],
+              "replaces": {existing.id: "the user likes spaces over tabs"},
+            }),
+          ),
+        ],
       ]);
 
       await send(backend, "how should I indent this", memory: memory());
@@ -2142,10 +2699,14 @@ void main() {
       final existing = await store.add("a fact that turned out wrong");
       final backend = backendOver([
         [saidOnly("never mind that, it was wrong")],
-        [saidOnly(jsonEncode({
-          "memories": <String>[],
-          "delete": [existing.id],
-        }))],
+        [
+          saidOnly(
+            jsonEncode({
+              "memories": <String>[],
+              "delete": [existing.id],
+            }),
+          ),
+        ],
       ]);
 
       await send(backend, "let me correct the record", memory: memory());
@@ -2162,7 +2723,11 @@ void main() {
     test("kept facts land as a note the page can see", () async {
       final backend = backendOver([
         [saidOnly("the user likes tabs over spaces")],
-        [saidOnly('{"memories": ["the user likes tabs over spaces", "the user is on the west coast"]}')],
+        [
+          saidOnly(
+            '{"memories": ["the user likes tabs over spaces", "the user is on the west coast"]}',
+          ),
+        ],
       ]);
       final notes = <MemoryNote>[];
       final subscription = backend.memoryNotes.listen(notes.add);
@@ -2185,10 +2750,14 @@ void main() {
       final existing = await store.add("the user likes tabs over spaces");
       final backend = backendOver([
         [saidOnly("still tabs, by the way")],
-        [saidOnly(jsonEncode({
-          "memories": <String>[],
-          "replaces": {existing.id: "the user likes tabs over spaces"},
-        }))],
+        [
+          saidOnly(
+            jsonEncode({
+              "memories": <String>[],
+              "replaces": {existing.id: "the user likes tabs over spaces"},
+            }),
+          ),
+        ],
       ]);
       final notes = <MemoryNote>[];
       final subscription = backend.memoryNotes.listen(notes.add);
@@ -2198,7 +2767,10 @@ void main() {
       await subscription.cancel();
 
       expect(notes, isEmpty);
-      expect((await store.entries()).single.text, "the user likes tabs over spaces");
+      expect(
+        (await store.entries()).single.text,
+        "the user likes tabs over spaces",
+      );
     });
 
     test("no background model, nothing is written", () async {
@@ -2206,7 +2778,11 @@ void main() {
         [finish],
       ]);
 
-      await send(backend, "how should I indent this", memory: memory(bg: false));
+      await send(
+        backend,
+        "how should I indent this",
+        memory: memory(bg: false),
+      );
 
       await pumpEvents();
       expect(await store.entries(), isEmpty);
@@ -2218,8 +2794,11 @@ void main() {
         [saidOnly('{"memories": ["a fact"]}')],
       ]);
 
-      await send(backend, "how should I indent this",
-          memory: memory(extract: false));
+      await send(
+        backend,
+        "how should I indent this",
+        memory: memory(extract: false),
+      );
 
       await pumpEvents();
       expect(await store.entries(), isEmpty);
@@ -2232,12 +2811,16 @@ void main() {
       ]);
       final events = <AgentEvent>[];
       final turn = backend
-          .sendPrompt(chatId, userMessage("hi", at: sentAt),
-              settings: TurnSettings(
-                  model: "fake-model",
-                  provider: "fake",
-                  approveMode: ApproveMode.ask,
-                  memory: memory()))
+          .sendPrompt(
+            chatId,
+            userMessage("hi", at: sentAt),
+            settings: TurnSettings(
+              model: "fake-model",
+              provider: "fake",
+              approveMode: ApproveMode.ask,
+              memory: memory(),
+            ),
+          )
           .listen(events.add);
       await pumpEvents();
 
@@ -2256,14 +2839,16 @@ void main() {
     setUp(() => store = MemoryStore(config.memoryDir()));
 
     /// A store grown to [n] facts, one memory each.
-    Future<List<MemoryEntry>> seed(int n) async =>
-        [for (var i = 0; i < n; i++) await store.add("the user likes thing $i")];
+    Future<List<MemoryEntry>> seed(int n) async => [
+      for (var i = 0; i < n; i++) await store.add("the user likes thing $i"),
+    ];
 
     /// The consolidation's own question, out of what the client was sent.
     String tidyQuestion() {
       for (final call in client.sent) {
-        final asked =
-            [for (final m in call) m.text].where((t) => t.contains("Tidy")).toList();
+        final asked = [
+          for (final m in call) m.text,
+        ].where((t) => t.contains("Tidy")).toList();
         if (asked.length == 1) return asked.single;
       }
       fail("the consolidation was never asked");
@@ -2302,11 +2887,15 @@ void main() {
       final backend = backendOver([
         [finish],
         [saidOnly('{"memories": []}')],
-        [saidOnly(jsonEncode({
-          "memories": <String>[],
-          "replaces": {keep.id: "the user likes things one and two"},
-          "delete": [spend.id],
-        }))],
+        [
+          saidOnly(
+            jsonEncode({
+              "memories": <String>[],
+              "replaces": {keep.id: "the user likes things one and two"},
+              "delete": [spend.id],
+            }),
+          ),
+        ],
       ]);
 
       await send(backend, "hello again", memory: memory());
@@ -2366,10 +2955,14 @@ void main() {
       final backend = backendOver([
         [finish],
         [saidOnly('{"memories": []}')],
-        [saidOnly(jsonEncode({
-          "memories": <String>[],
-          "delete": [pinnedEntry.id, spend.id],
-        }))],
+        [
+          saidOnly(
+            jsonEncode({
+              "memories": <String>[],
+              "delete": [pinnedEntry.id, spend.id],
+            }),
+          ),
+        ],
       ]);
 
       await send(backend, "hello again", memory: memory());
@@ -2382,7 +2975,10 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 10));
       }
       final remaining = await store.entries();
-      expect(remaining.where((e) => e.id == pinnedEntry.id).single.pinned, isTrue);
+      expect(
+        remaining.where((e) => e.id == pinnedEntry.id).single.pinned,
+        isTrue,
+      );
       expect(tidyQuestion(), isNot(contains(pinnedEntry.id)));
     });
   });
@@ -2399,11 +2995,13 @@ void main() {
         approveMode: ApproveMode.ask,
         permissions: const [
           PermissionRule(
-              tool: "bash", pattern: "rm *", decision: PermissionDecision.deny),
+            tool: "bash",
+            pattern: "rm *",
+            decision: PermissionDecision.deny,
+          ),
         ],
       );
-      expect(shell.ran, isEmpty,
-          reason: "a deny rule refuses without running");
+      expect(shell.ran, isEmpty, reason: "a deny rule refuses without running");
       final text = events
           .whereType<ToolResultEvent>()
           .map((r) => [r.result.output, r.result.exceptionInfo ?? ""].join(" "))
@@ -2449,8 +3047,10 @@ Future<void> untilMemory(MemoryStore store, String want) async {
     final entries = await store.entries();
     if ([for (final e in entries) e.text].contains(want)) return;
     if (DateTime.now().isAfter(deadline)) {
-      fail("the store never held '$want'; it held "
-          "${[for (final e in entries) e.text]}");
+      fail(
+        "the store never held '$want'; it held "
+        "${[for (final e in entries) e.text]}",
+      );
     }
     await Future<void>.delayed(const Duration(milliseconds: 10));
   }
@@ -2465,12 +3065,16 @@ class _Held implements LlmClient {
   final Future<void> gate;
 
   @override
-  Stream<LlmChunk> stream(List<LlmMessage> messages,
-      {required String model,
-      List<LlmTool> tools = const [],
-      double? temperature,
-      String? reasoningEffort}) async* {
-    final chunks = await inner.stream(messages, model: model, tools: tools).toList();
+  Stream<LlmChunk> stream(
+    List<LlmMessage> messages, {
+    required String model,
+    List<LlmTool> tools = const [],
+    double? temperature,
+    String? reasoningEffort,
+  }) async* {
+    final chunks = await inner
+        .stream(messages, model: model, tools: tools)
+        .toList();
     if (inner.sent.length == 1) await gate;
     yield* Stream.fromIterable(chunks);
   }

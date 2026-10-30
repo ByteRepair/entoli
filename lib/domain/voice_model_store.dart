@@ -20,17 +20,17 @@ class InstallableVoiceModel implements Installable {
 
   @override
   ModelFacts get facts => (
-        parameters: model.parameters,
-        languages: model.languages,
-        bytes: model.bytes,
-        quantisation: null,
-        context: null,
-        voices: switch (model) {
-          SpeechModel(:final speakers) => speakers,
-          _ => null,
-        },
-        licence: model.licence,
-      );
+    parameters: model.parameters,
+    languages: model.languages,
+    bytes: model.bytes,
+    quantisation: null,
+    context: null,
+    voices: switch (model) {
+      SpeechModel(:final speakers) => speakers,
+      _ => null,
+    },
+    licence: model.licence,
+  );
 
   @override
   String? get note => model.note;

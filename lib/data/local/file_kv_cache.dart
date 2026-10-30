@@ -16,7 +16,8 @@ import "../../core/log.dart";
 /// name it writes. The server this drives is the same one a turn reaches; these
 /// are two more requests to it, at `/slots/0` rather than `/chat/completions`.
 class FileKvCache implements LocalKvCache {
-  FileKvCache(this._dir, {http.Client? client}) : _http = client ?? tlsClient() {
+  FileKvCache(this._dir, {http.Client? client})
+    : _http = client ?? tlsClient() {
     // The server is launched with this as its `--slot-save-path` and will not
     // create it, so it has to exist before the first turn. A single `mkdir`,
     // so synchronously at startup is cheaper than a guard on every save.
@@ -52,8 +53,12 @@ class FileKvCache implements LocalKvCache {
     // own longest-prefix cache serves a continuation, and restoring a shorter
     // or equal dump would only throw that progress away.
     final live = _live[at.baseUrl];
-    if (live != null && _upto(keys, live) >= _upto(keys, candidate)) return true;
-    if (!await _slot(at, "restore", kvFilename(namespace, candidate))) return false;
+    if (live != null && _upto(keys, live) >= _upto(keys, candidate)) {
+      return true;
+    }
+    if (!await _slot(at, "restore", kvFilename(namespace, candidate))) {
+      return false;
+    }
     _live[at.baseUrl] = candidate;
     await _touch(namespace, candidate);
     return true;
@@ -87,15 +92,18 @@ class FileKvCache implements LocalKvCache {
   /// leaves the eviction order where it already was.
   Future<void> _touch(String namespace, String key) async {
     try {
-      await File(p.join(_dir, kvFilename(namespace, key)))
-          .setLastModified(DateTime.now());
+      await File(
+        p.join(_dir, kvFilename(namespace, key)),
+      ).setLastModified(DateTime.now());
     } catch (_) {}
   }
 
   /// The longest of [keys] (already longest-first) with a dump on disk.
   Future<String?> _longestSaved(String namespace, List<String> keys) async {
     for (final key in keys) {
-      if (File(p.join(_dir, kvFilename(namespace, key))).existsSync()) return key;
+      if (File(p.join(_dir, kvFilename(namespace, key))).existsSync()) {
+        return key;
+      }
     }
     return null;
   }
@@ -109,16 +117,20 @@ class FileKvCache implements LocalKvCache {
   }
 
   Future<bool> _slot(LocalEndpoint at, String action, String filename) async {
-    final root = Uri.parse(at.baseUrl).replace(path: "/slots/0", queryParameters: {"action": action});
+    final root = Uri.parse(
+      at.baseUrl,
+    ).replace(path: "/slots/0", queryParameters: {"action": action});
     try {
-      final response = await _http.post(
-        root,
-        headers: {
-          "content-type": "application/json",
-          if (at.apiKey.isNotEmpty) "authorization": "Bearer ${at.apiKey}",
-        },
-        body: '{"filename": "$filename"}',
-      ).timeout(const Duration(seconds: 30));
+      final response = await _http
+          .post(
+            root,
+            headers: {
+              "content-type": "application/json",
+              if (at.apiKey.isNotEmpty) "authorization": "Bearer ${at.apiKey}",
+            },
+            body: '{"filename": "$filename"}',
+          )
+          .timeout(const Duration(seconds: 30));
       final ok = response.statusCode == 200;
       // A build without slot save/restore compiled in answers 501, and a
       // restore of a dump the current weights cannot read fails too — both are
@@ -135,9 +147,18 @@ class FileKvCache implements LocalKvCache {
     await for (final entry in Directory(_dir).list()) {
       if (entry is! File || !entry.path.endsWith(".bin")) continue;
       final stat = entry.statSync();
-      files.add((name: p.basename(entry.path), size: stat.size, modified: stat.modified));
+      files.add((
+        name: p.basename(entry.path),
+        size: stat.size,
+        modified: stat.modified,
+      ));
     }
-    for (final name in kvEvictions(files, namespace: namespace, count: count, budgetBytes: _budgetBytes)) {
+    for (final name in kvEvictions(
+      files,
+      namespace: namespace,
+      count: count,
+      budgetBytes: _budgetBytes,
+    )) {
       try {
         await File(p.join(_dir, name)).delete();
       } catch (_) {}

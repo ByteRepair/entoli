@@ -13,13 +13,15 @@ void main() {
     // the AppDir's usr/bin is the same shape.
     expect(
       bundledLinuxLibDir(
-          executablePath: "/repo/build/linux/x64/release/bundle/agent_chat"),
+        executablePath: "/repo/build/linux/x64/release/bundle/agent_chat",
+      ),
       "/repo/build/linux/x64/release/bundle/lib",
     );
     // An executable already in lib/ does not grow a second lib.
     expect(
       bundledLinuxLibDir(
-          executablePath: "/repo/build/linux/x64/release/bundle/lib/agent_chat"),
+        executablePath: "/repo/build/linux/x64/release/bundle/lib/agent_chat",
+      ),
       "/repo/build/linux/x64/release/bundle/lib",
     );
     // A bare install has no lib/ beside it, so the answer names one that does

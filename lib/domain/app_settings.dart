@@ -172,8 +172,9 @@ class AppSettings {
   /// case: a name is what tells two of them apart.
   bool providerNameTaken(String name, {String? exceptId}) {
     final lower = name.trim().toLowerCase();
-    return llmProviders
-        .any((p) => p.id != exceptId && p.displayName.toLowerCase() == lower);
+    return llmProviders.any(
+      (p) => p.id != exceptId && p.displayName.toLowerCase() == lower,
+    );
   }
 
   /// The user's profile, injected at the end of the system prompt. App-level
@@ -466,105 +467,125 @@ class AppSettings {
   /// An enum name this build does not know is a later build's, and falls
   /// back to the default rather than failing the whole load.
   factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
-        defaultModelId: _orNull(json["defaultModelId"] as String?),
-        defaultProviderId: _orNull(json["defaultProviderId"] as String?),
-        titleModelId: _orNull(json["titleModelId"] as String?),
-        titleProviderId: _orNull(json["titleProviderId"] as String?),
-        classifierModelId: _orNull(json["classifierModelId"] as String?),
-        classifierProviderId: _orNull(json["classifierProviderId"] as String?),
-        imageModelId: _orNull(json["imageModelId"] as String?),
-        imageProviderId: _orNull(json["imageProviderId"] as String?),
-        imageQuality: ImageQuality.values.asNameMap()[json["imageQuality"]] ??
-            ImageQuality.auto,
-        instructionImports: json["instructionImports"] as bool? ?? true,
-        nestedInstructions: json["nestedInstructions"] as bool? ?? true,
-        instructionExcludes:
-            (json["instructionExcludes"] as List? ?? const [])
-                .map((e) => e as String)
-                .toList(),
-        autoMemory: json["autoMemory"] as bool? ?? false,
-        // Written only when off, so a file that predates them says nothing and
-        // gets the on defaults.
-        memoryRecall: json["memoryRecall"] as bool? ?? true,
-        memoryExtraction: json["memoryExtraction"] as bool? ?? true,
-        memoryAgentTool: json["memoryAgentTool"] as bool? ?? true,
-        memoryModelId: _orNull(json["memoryModelId"] as String?),
-        memoryProviderId: _orNull(json["memoryProviderId"] as String?),
-        // `opencodeEnv` is what this was called when a second backend spawned
-        // servers. Read-only: `save` writes `environment`, so a file migrates
-        // itself the first time anything is changed, and the fallback can go
-        // once no unwritten files are left.
-        environment: _stringMap(json["environment"] ?? json["opencodeEnv"]),
-        approveMode: _approveMode(json),
-        llmProviders: _providers(json["llmProviders"]),
-        profile: Profile.fromJson(json["profile"]),
-        tone: Tone.values.asNameMap()[json["tone"]] ?? Tone.none,
-        citations: json["citations"] as bool? ?? false,
-        appIcon: AppIcon.values.asNameMap()[json["appIcon"]] ?? AppIcon.cookie,
-        appTheme: AppTheme.values.asNameMap()[json["appTheme"]] ?? AppTheme.system,
-        primaryColour: ThemeColour.values.asNameMap()[json["primaryColour"]] ?? ThemeColour.apple,
-        secondaryColour: ThemeColour.values.asNameMap()[json["secondaryColour"]] ?? ThemeColour.apple,
-        cornerRadius: CornerRadius.values.asNameMap()[json["cornerRadius"]] ?? CornerRadius.medium,
-        systemPalette: json["systemPalette"] as bool? ?? false,
-        tempChatTtl: TempChatTtl.values.asNameMap()[json["tempChatTtl"]] ?? TempChatTtl.off,
-        voiceRecognitionModelId: _orNull(json["voiceRecognitionModelId"] as String?),
-        voiceSpeechModelId: _orNull(json["voiceSpeechModelId"] as String?),
-        voiceSpeaker: json["voiceSpeaker"] as int? ?? 0,
-        // Absent in a file from before providers could listen and speak.
-        voiceRecognitionProviderId:
-            _orNull(json["voiceRecognitionProviderId"] as String?) ?? localProviderId,
-        voiceSpeechProviderId:
-            _orNull(json["voiceSpeechProviderId"] as String?) ?? localProviderId,
-        voiceSpeechVoice: _orNull(json["voiceSpeechVoice"] as String?),
-        voiceLanguage: _orNull(json["voiceLanguage"] as String?),
-        voicePushToTalk: json["voicePushToTalk"] as bool? ?? false,
-        assistantProject: _orNull(json["assistantProject"] as String?),
-        assistantView: AssistantView.values.asNameMap()[json["assistantView"]] ?? AssistantView.chat,
-        rootfsId: _orNull(json["rootfsId"] as String?),
-        maxLocalModels:
-            (json["maxLocalModels"] as int? ?? 1).clamp(1, maxLocalModelsAllowed),
-        localModelDevice: _orNull(json["localModelDevice"] as String?),
-        localModelContext: json["localModelContext"] as int?,
-        localModelPrefill: json["localModelPrefill"] as bool? ?? false,
-        localModelThreads: json["localModelThreads"] as int?,
-        // `localModelKvCacheChats` is what this was called while it was thought
-        // to count chats. Read-only, like `opencodeEnv` above: `save` writes
-        // the new name, so a file migrates itself on the next change.
-        localModelKvCachePrompts: (json["localModelKvCachePrompts"] ??
-            json["localModelKvCacheChats"]) as int?,
-        deviceName: _orNull(json["deviceName"] as String?),
-        syncRelayUrl: _orNull(json["syncRelayUrl"] as String?),
-        syncKeepAlive: json["syncKeepAlive"] as bool? ?? false,
-        turnUrl: _orNull(json["turnUrl"] as String?),
-        turnUsername: _orNull(json["turnUsername"] as String?),
-        turnRetries:
-            (json["turnRetries"] as int? ?? defaultTurnRetries).clamp(0, maxTurnRetries),
-        omadaByDefault: json["omadaByDefault"] as bool? ?? false,
-        omadaMaxGenerations:
-            (json["omadaMaxGenerations"] as int? ?? defaultOmadaMaxGenerations),
-        omadaOrdering: OmadaOrdering.values.asNameMap()[json["omadaOrdering"]],
-        turnMaxSteps: json["turnMaxSteps"] as int?,
-        autoCompact:
-            json["autoCompact"] as bool? ?? defaultAutoCompact,
-        autoCompactPercent: (json["autoCompactPercent"] as int? ??
-                defaultAutoCompactPercent)
-            .clamp(10, 95),
-        totalContext: (json["totalContext"] as int? ?? defaultTotalContext)
-            .clamp(minTotalContext, maxTotalContext),
-        licenceAccepted: json["licenceAccepted"] as bool? ?? false,
-        // Written only when on is the default, so a file that predates it
-        // says nothing and gets the on default — the same bargain the memory
-        // gates are held to.
-        autoUpdate: json["autoUpdate"] as bool? ?? true,
-        agentBrowser: _orNull(json["agentBrowser"] as String?),
-        agentBrowserVisible: json["agentBrowserVisible"] as bool? ?? false,
-        agentBrowserApproval:
-            BrowserApproval.values.asNameMap()[json["agentBrowserApproval"]] ??
-                BrowserApproval.never,
-        agentBrowserUploads: BrowserUploadPolicy.values
-                .asNameMap()[json["agentBrowserUploads"]] ??
-            BrowserUploadPolicy.classifier,
-      );
+    defaultModelId: _orNull(json["defaultModelId"] as String?),
+    defaultProviderId: _orNull(json["defaultProviderId"] as String?),
+    titleModelId: _orNull(json["titleModelId"] as String?),
+    titleProviderId: _orNull(json["titleProviderId"] as String?),
+    classifierModelId: _orNull(json["classifierModelId"] as String?),
+    classifierProviderId: _orNull(json["classifierProviderId"] as String?),
+    imageModelId: _orNull(json["imageModelId"] as String?),
+    imageProviderId: _orNull(json["imageProviderId"] as String?),
+    imageQuality:
+        ImageQuality.values.asNameMap()[json["imageQuality"]] ??
+        ImageQuality.auto,
+    instructionImports: json["instructionImports"] as bool? ?? true,
+    nestedInstructions: json["nestedInstructions"] as bool? ?? true,
+    instructionExcludes: (json["instructionExcludes"] as List? ?? const [])
+        .map((e) => e as String)
+        .toList(),
+    autoMemory: json["autoMemory"] as bool? ?? false,
+    // Written only when off, so a file that predates them says nothing and
+    // gets the on defaults.
+    memoryRecall: json["memoryRecall"] as bool? ?? true,
+    memoryExtraction: json["memoryExtraction"] as bool? ?? true,
+    memoryAgentTool: json["memoryAgentTool"] as bool? ?? true,
+    memoryModelId: _orNull(json["memoryModelId"] as String?),
+    memoryProviderId: _orNull(json["memoryProviderId"] as String?),
+    // `opencodeEnv` is what this was called when a second backend spawned
+    // servers. Read-only: `save` writes `environment`, so a file migrates
+    // itself the first time anything is changed, and the fallback can go
+    // once no unwritten files are left.
+    environment: _stringMap(json["environment"] ?? json["opencodeEnv"]),
+    approveMode: _approveMode(json),
+    llmProviders: _providers(json["llmProviders"]),
+    profile: Profile.fromJson(json["profile"]),
+    tone: Tone.values.asNameMap()[json["tone"]] ?? Tone.none,
+    citations: json["citations"] as bool? ?? false,
+    appIcon: AppIcon.values.asNameMap()[json["appIcon"]] ?? AppIcon.cookie,
+    appTheme: AppTheme.values.asNameMap()[json["appTheme"]] ?? AppTheme.system,
+    primaryColour:
+        ThemeColour.values.asNameMap()[json["primaryColour"]] ??
+        ThemeColour.apple,
+    secondaryColour:
+        ThemeColour.values.asNameMap()[json["secondaryColour"]] ??
+        ThemeColour.apple,
+    cornerRadius:
+        CornerRadius.values.asNameMap()[json["cornerRadius"]] ??
+        CornerRadius.medium,
+    systemPalette: json["systemPalette"] as bool? ?? false,
+    tempChatTtl:
+        TempChatTtl.values.asNameMap()[json["tempChatTtl"]] ?? TempChatTtl.off,
+    voiceRecognitionModelId: _orNull(
+      json["voiceRecognitionModelId"] as String?,
+    ),
+    voiceSpeechModelId: _orNull(json["voiceSpeechModelId"] as String?),
+    voiceSpeaker: json["voiceSpeaker"] as int? ?? 0,
+    // Absent in a file from before providers could listen and speak.
+    voiceRecognitionProviderId:
+        _orNull(json["voiceRecognitionProviderId"] as String?) ??
+        localProviderId,
+    voiceSpeechProviderId:
+        _orNull(json["voiceSpeechProviderId"] as String?) ?? localProviderId,
+    voiceSpeechVoice: _orNull(json["voiceSpeechVoice"] as String?),
+    voiceLanguage: _orNull(json["voiceLanguage"] as String?),
+    voicePushToTalk: json["voicePushToTalk"] as bool? ?? false,
+    assistantProject: _orNull(json["assistantProject"] as String?),
+    assistantView:
+        AssistantView.values.asNameMap()[json["assistantView"]] ??
+        AssistantView.chat,
+    rootfsId: _orNull(json["rootfsId"] as String?),
+    maxLocalModels: (json["maxLocalModels"] as int? ?? 1).clamp(
+      1,
+      maxLocalModelsAllowed,
+    ),
+    localModelDevice: _orNull(json["localModelDevice"] as String?),
+    localModelContext: json["localModelContext"] as int?,
+    localModelPrefill: json["localModelPrefill"] as bool? ?? false,
+    localModelThreads: json["localModelThreads"] as int?,
+    // `localModelKvCacheChats` is what this was called while it was thought
+    // to count chats. Read-only, like `opencodeEnv` above: `save` writes
+    // the new name, so a file migrates itself on the next change.
+    localModelKvCachePrompts:
+        (json["localModelKvCachePrompts"] ?? json["localModelKvCacheChats"])
+            as int?,
+    deviceName: _orNull(json["deviceName"] as String?),
+    syncRelayUrl: _orNull(json["syncRelayUrl"] as String?),
+    syncKeepAlive: json["syncKeepAlive"] as bool? ?? false,
+    turnUrl: _orNull(json["turnUrl"] as String?),
+    turnUsername: _orNull(json["turnUsername"] as String?),
+    turnRetries: (json["turnRetries"] as int? ?? defaultTurnRetries).clamp(
+      0,
+      maxTurnRetries,
+    ),
+    omadaByDefault: json["omadaByDefault"] as bool? ?? false,
+    omadaMaxGenerations:
+        (json["omadaMaxGenerations"] as int? ?? defaultOmadaMaxGenerations),
+    omadaOrdering: OmadaOrdering.values.asNameMap()[json["omadaOrdering"]],
+    turnMaxSteps: json["turnMaxSteps"] as int?,
+    autoCompact: json["autoCompact"] as bool? ?? defaultAutoCompact,
+    autoCompactPercent:
+        (json["autoCompactPercent"] as int? ?? defaultAutoCompactPercent).clamp(
+          10,
+          95,
+        ),
+    totalContext: (json["totalContext"] as int? ?? defaultTotalContext).clamp(
+      minTotalContext,
+      maxTotalContext,
+    ),
+    licenceAccepted: json["licenceAccepted"] as bool? ?? false,
+    // Written only when on is the default, so a file that predates it
+    // says nothing and gets the on default — the same bargain the memory
+    // gates are held to.
+    autoUpdate: json["autoUpdate"] as bool? ?? true,
+    agentBrowser: _orNull(json["agentBrowser"] as String?),
+    agentBrowserVisible: json["agentBrowserVisible"] as bool? ?? false,
+    agentBrowserApproval:
+        BrowserApproval.values.asNameMap()[json["agentBrowserApproval"]] ??
+        BrowserApproval.never,
+    agentBrowserUploads:
+        BrowserUploadPolicy.values.asNameMap()[json["agentBrowserUploads"]] ??
+        BrowserUploadPolicy.classifier,
+  );
 
   /// `approveMode` is the current key. An older file has `approveCommands` as
   /// a bool, migrated by [approveModeFromJson]. A file with neither is the
@@ -577,9 +598,7 @@ class AppSettings {
 
   static List<LlmProviderConfig> _providers(Object? value) {
     if (value is! List) return const [];
-    return [
-      for (final entry in value) ?LlmProviderConfig.fromJson(entry),
-    ];
+    return [for (final entry in value) ?LlmProviderConfig.fromJson(entry)];
   }
 
   static Map<String, String> _stringMap(Object? value) {
@@ -599,92 +618,94 @@ class AppSettings {
       config.documents.write(config.settingsFile, jsonEncode(toJson()));
 
   Map<String, dynamic> toJson() => {
-      if (defaultModelId != null) "defaultModelId": defaultModelId,
-      if (defaultProviderId != null) "defaultProviderId": defaultProviderId,
-      if (titleModelId != null) "titleModelId": titleModelId,
-      if (titleProviderId != null) "titleProviderId": titleProviderId,
-      if (classifierModelId != null) "classifierModelId": classifierModelId,
-      if (classifierProviderId != null) "classifierProviderId": classifierProviderId,
-      if (imageModelId != null) "imageModelId": imageModelId,
-      if (imageProviderId != null) "imageProviderId": imageProviderId,
-      if (imageQuality != ImageQuality.auto) "imageQuality": imageQuality.name,
-      // Written only when off, so a file that predates the on defaults says
-      // nothing and gets them.
-      if (!instructionImports) "instructionImports": instructionImports,
-      if (!nestedInstructions) "nestedInstructions": nestedInstructions,
-      if (instructionExcludes.isNotEmpty)
-        "instructionExcludes": instructionExcludes,
-      if (autoMemory) "autoMemory": autoMemory,
-      if (!memoryRecall) "memoryRecall": memoryRecall,
-      if (!memoryExtraction) "memoryExtraction": memoryExtraction,
-      if (!memoryAgentTool) "memoryAgentTool": memoryAgentTool,
-      if (memoryModelId != null) "memoryModelId": memoryModelId,
-      if (memoryProviderId != null) "memoryProviderId": memoryProviderId,
-      if (environment.isNotEmpty) "environment": environment,
-      // Written only when not auto, so a file that predates the default
-      // says nothing and gets it.
-      if (approveMode != ApproveMode.auto) "approveMode": approveMode.name,
-      if (llmProviders.isNotEmpty)
-        "llmProviders": [for (final provider in llmProviders) provider.toJson()],
-      if (profile != null && !profile!.isEmpty) "profile": profile!.toJson(),
-      if (tone != Tone.none) "tone": tone.name,
-      if (citations) "citations": citations,
-      "appIcon": appIcon.name,
-      "appTheme": appTheme.name,
-      "primaryColour": primaryColour.name,
-      "secondaryColour": secondaryColour.name,
-      "cornerRadius": cornerRadius.name,
-      "systemPalette": systemPalette,
-      "tempChatTtl": tempChatTtl.name,
-      if (voiceRecognitionModelId != null)
-        "voiceRecognitionModelId": voiceRecognitionModelId,
-      if (voiceSpeechModelId != null) "voiceSpeechModelId": voiceSpeechModelId,
-      if (voiceSpeaker != 0) "voiceSpeaker": voiceSpeaker,
-      if (voiceRecognitionProviderId != localProviderId)
-        "voiceRecognitionProviderId": voiceRecognitionProviderId,
-      if (voiceSpeechProviderId != localProviderId)
-        "voiceSpeechProviderId": voiceSpeechProviderId,
-      "voiceSpeechVoice": ?voiceSpeechVoice,
-      if (voiceLanguage != null) "voiceLanguage": voiceLanguage,
-      if (voicePushToTalk) "voicePushToTalk": voicePushToTalk,
-      if (assistantProject != null) "assistantProject": assistantProject,
-      "assistantView": assistantView.name,
-      if (rootfsId != null) "rootfsId": rootfsId,
-      if (maxLocalModels != 1) "maxLocalModels": maxLocalModels,
-      if (localModelDevice != null) "localModelDevice": localModelDevice,
-      if (localModelContext != null) "localModelContext": localModelContext,
-      if (localModelPrefill) "localModelPrefill": localModelPrefill,
-      if (localModelThreads != null) "localModelThreads": localModelThreads,
-      if (localModelKvCachePrompts != null)
-        "localModelKvCachePrompts": localModelKvCachePrompts,
-      if (deviceName != null) "deviceName": deviceName,
-      if (syncRelayUrl != null) "syncRelayUrl": syncRelayUrl,
-      if (syncKeepAlive) "syncKeepAlive": syncKeepAlive,
-      if (turnUrl != null) "turnUrl": turnUrl,
-      if (turnUsername != null) "turnUsername": turnUsername,
-      // Written only when not the default, for the same reason the memory
-      // gates are: a file that predates it says nothing and gets the default.
-      if (turnRetries != defaultTurnRetries) "turnRetries": turnRetries,
-      if (omadaByDefault) "omadaByDefault": omadaByDefault,
-      if (omadaMaxGenerations != defaultOmadaMaxGenerations)
-        "omadaMaxGenerations": omadaMaxGenerations,
-      if (omadaOrdering != null) "omadaOrdering": omadaOrdering!.name,
-      if (turnMaxSteps != null) "turnMaxSteps": turnMaxSteps,
-      if (!autoCompact) "autoCompact": autoCompact,
-      if (autoCompactPercent != defaultAutoCompactPercent)
-        "autoCompactPercent": autoCompactPercent,
-      if (totalContext != defaultTotalContext) "totalContext": totalContext,
-      if (licenceAccepted) "licenceAccepted": licenceAccepted,
-      if (!autoUpdate) "autoUpdate": autoUpdate,
-      if (agentBrowser != null) "agentBrowser": agentBrowser,
-      if (agentBrowserVisible) "agentBrowserVisible": agentBrowserVisible,
-      if (agentBrowserApproval != BrowserApproval.never)
-        "agentBrowserApproval": agentBrowserApproval.name,
-      if (agentBrowserUploads != BrowserUploadPolicy.classifier)
-        "agentBrowserUploads": agentBrowserUploads.name,
-    };
+    if (defaultModelId != null) "defaultModelId": defaultModelId,
+    if (defaultProviderId != null) "defaultProviderId": defaultProviderId,
+    if (titleModelId != null) "titleModelId": titleModelId,
+    if (titleProviderId != null) "titleProviderId": titleProviderId,
+    if (classifierModelId != null) "classifierModelId": classifierModelId,
+    if (classifierProviderId != null)
+      "classifierProviderId": classifierProviderId,
+    if (imageModelId != null) "imageModelId": imageModelId,
+    if (imageProviderId != null) "imageProviderId": imageProviderId,
+    if (imageQuality != ImageQuality.auto) "imageQuality": imageQuality.name,
+    // Written only when off, so a file that predates the on defaults says
+    // nothing and gets them.
+    if (!instructionImports) "instructionImports": instructionImports,
+    if (!nestedInstructions) "nestedInstructions": nestedInstructions,
+    if (instructionExcludes.isNotEmpty)
+      "instructionExcludes": instructionExcludes,
+    if (autoMemory) "autoMemory": autoMemory,
+    if (!memoryRecall) "memoryRecall": memoryRecall,
+    if (!memoryExtraction) "memoryExtraction": memoryExtraction,
+    if (!memoryAgentTool) "memoryAgentTool": memoryAgentTool,
+    if (memoryModelId != null) "memoryModelId": memoryModelId,
+    if (memoryProviderId != null) "memoryProviderId": memoryProviderId,
+    if (environment.isNotEmpty) "environment": environment,
+    // Written only when not auto, so a file that predates the default
+    // says nothing and gets it.
+    if (approveMode != ApproveMode.auto) "approveMode": approveMode.name,
+    if (llmProviders.isNotEmpty)
+      "llmProviders": [for (final provider in llmProviders) provider.toJson()],
+    if (profile != null && !profile!.isEmpty) "profile": profile!.toJson(),
+    if (tone != Tone.none) "tone": tone.name,
+    if (citations) "citations": citations,
+    "appIcon": appIcon.name,
+    "appTheme": appTheme.name,
+    "primaryColour": primaryColour.name,
+    "secondaryColour": secondaryColour.name,
+    "cornerRadius": cornerRadius.name,
+    "systemPalette": systemPalette,
+    "tempChatTtl": tempChatTtl.name,
+    if (voiceRecognitionModelId != null)
+      "voiceRecognitionModelId": voiceRecognitionModelId,
+    if (voiceSpeechModelId != null) "voiceSpeechModelId": voiceSpeechModelId,
+    if (voiceSpeaker != 0) "voiceSpeaker": voiceSpeaker,
+    if (voiceRecognitionProviderId != localProviderId)
+      "voiceRecognitionProviderId": voiceRecognitionProviderId,
+    if (voiceSpeechProviderId != localProviderId)
+      "voiceSpeechProviderId": voiceSpeechProviderId,
+    "voiceSpeechVoice": ?voiceSpeechVoice,
+    if (voiceLanguage != null) "voiceLanguage": voiceLanguage,
+    if (voicePushToTalk) "voicePushToTalk": voicePushToTalk,
+    if (assistantProject != null) "assistantProject": assistantProject,
+    "assistantView": assistantView.name,
+    if (rootfsId != null) "rootfsId": rootfsId,
+    if (maxLocalModels != 1) "maxLocalModels": maxLocalModels,
+    if (localModelDevice != null) "localModelDevice": localModelDevice,
+    if (localModelContext != null) "localModelContext": localModelContext,
+    if (localModelPrefill) "localModelPrefill": localModelPrefill,
+    if (localModelThreads != null) "localModelThreads": localModelThreads,
+    if (localModelKvCachePrompts != null)
+      "localModelKvCachePrompts": localModelKvCachePrompts,
+    if (deviceName != null) "deviceName": deviceName,
+    if (syncRelayUrl != null) "syncRelayUrl": syncRelayUrl,
+    if (syncKeepAlive) "syncKeepAlive": syncKeepAlive,
+    if (turnUrl != null) "turnUrl": turnUrl,
+    if (turnUsername != null) "turnUsername": turnUsername,
+    // Written only when not the default, for the same reason the memory
+    // gates are: a file that predates it says nothing and gets the default.
+    if (turnRetries != defaultTurnRetries) "turnRetries": turnRetries,
+    if (omadaByDefault) "omadaByDefault": omadaByDefault,
+    if (omadaMaxGenerations != defaultOmadaMaxGenerations)
+      "omadaMaxGenerations": omadaMaxGenerations,
+    if (omadaOrdering != null) "omadaOrdering": omadaOrdering!.name,
+    if (turnMaxSteps != null) "turnMaxSteps": turnMaxSteps,
+    if (!autoCompact) "autoCompact": autoCompact,
+    if (autoCompactPercent != defaultAutoCompactPercent)
+      "autoCompactPercent": autoCompactPercent,
+    if (totalContext != defaultTotalContext) "totalContext": totalContext,
+    if (licenceAccepted) "licenceAccepted": licenceAccepted,
+    if (!autoUpdate) "autoUpdate": autoUpdate,
+    if (agentBrowser != null) "agentBrowser": agentBrowser,
+    if (agentBrowserVisible) "agentBrowserVisible": agentBrowserVisible,
+    if (agentBrowserApproval != BrowserApproval.never)
+      "agentBrowserApproval": agentBrowserApproval.name,
+    if (agentBrowserUploads != BrowserUploadPolicy.classifier)
+      "agentBrowserUploads": agentBrowserUploads.name,
+  };
 }
 
 /// How the tools write: the settings notifier's own update, so a change lands
 /// in the state the app holds rather than under it.
-typedef SettingsEditor = Future<void> Function(void Function(AppSettings) change);
+typedef SettingsEditor =
+    Future<void> Function(void Function(AppSettings) change);
