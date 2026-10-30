@@ -63,7 +63,7 @@ void main() {
   testWidgets("where it can run one, the catalog is offered with its size", (
     tester,
   ) async {
-    app = TestApp.create(localLlm: FakeLocalLlm());
+    app = TestApp.create(localRuntime: FakeLocalRuntime());
     await pumpOnDevice(tester);
 
     expect(find.text(model.name), findsOneWidget);
@@ -76,7 +76,10 @@ void main() {
 
   testWidgets("there is no model picker — every downloaded one is offered "
       "wherever a model is chosen", (tester) async {
-    app = TestApp.create(localLlm: FakeLocalLlm(), localModels: {model.id});
+    app = TestApp.create(
+      localRuntime: FakeLocalRuntime(),
+      localModels: {model.id},
+    );
     await pumpLlmSettings(tester);
 
     // The pick used to live here, and having moved it there must be nothing
@@ -86,12 +89,15 @@ void main() {
     expect(find.text("Max LLMs running"), findsOneWidget);
     // Downloaded is not loaded. A gigabyte of memory is spent when a chat asks
     // for the model, not when the file lands.
-    expect(app.localLlm.served, isEmpty);
+    expect(app.localRuntime.served, isEmpty);
     expect(find.text("Nothing loaded"), findsOneWidget);
   });
 
   testWidgets("the cap on how many run at once is stored", (tester) async {
-    app = TestApp.create(localLlm: FakeLocalLlm(), localModels: {model.id});
+    app = TestApp.create(
+      localRuntime: FakeLocalRuntime(),
+      localModels: {model.id},
+    );
     await pumpLlmSettings(tester);
 
     await tester.tap(find.text("One at a time"));
@@ -102,15 +108,15 @@ void main() {
     expect(app.container.read(appSettingsProvider).maxLocalModels, 2);
     // Nothing was started or stopped by the change: the cap is read when a
     // model is next asked for, so a chat mid-reply keeps the model it has.
-    expect(app.localLlm.served, isEmpty);
-    expect(app.localLlm.stops, 0);
+    expect(app.localRuntime.served, isEmpty);
+    expect(app.localRuntime.stops, 0);
   });
 
   testWidgets("an accelerator is offered by the name the server gave it", (
     tester,
   ) async {
     app = TestApp.create(
-      localLlm: FakeLocalLlm(
+      localRuntime: FakeLocalRuntime(
         devicesFound: const [
           LocalDevice(
             name: "HTP0",
@@ -137,7 +143,10 @@ void main() {
 
   testWidgets("a phone with no accelerator is told so rather than offered a "
       "dropdown of one", (tester) async {
-    app = TestApp.create(localLlm: FakeLocalLlm(), localModels: {model.id});
+    app = TestApp.create(
+      localRuntime: FakeLocalRuntime(),
+      localModels: {model.id},
+    );
     await pumpLlmSettings(tester);
 
     expect(
@@ -149,9 +158,9 @@ void main() {
   testWidgets("a loaded model says where it is actually running", (
     tester,
   ) async {
-    final llm = FakeLocalLlm();
-    app = TestApp.create(localLlm: llm, localModels: {model.id});
-    await io(tester, () => llm.serve(model.id, device: "Vulkan0"));
+    final llm = FakeLocalRuntime();
+    app = TestApp.create(localRuntime: llm, localModels: {model.id});
+    await io(tester, () => app.serveLocal(model.id, device: "Vulkan0"));
     await pumpLlmSettings(tester);
 
     // The resolved device, not the setting: Auto is decided when the model
@@ -165,9 +174,9 @@ void main() {
   testWidgets("a model on the CPU says so rather than naming a device", (
     tester,
   ) async {
-    final llm = FakeLocalLlm();
-    app = TestApp.create(localLlm: llm, localModels: {model.id});
-    await io(tester, () => llm.serve(model.id, device: LocalDevice.cpu));
+    final llm = FakeLocalRuntime();
+    app = TestApp.create(localRuntime: llm, localModels: {model.id});
+    await io(tester, () => app.serveLocal(model.id, device: LocalDevice.cpu));
     await pumpLlmSettings(tester);
 
     expect(find.textContaining("Answering on the CPU"), findsOneWidget);
@@ -176,14 +185,14 @@ void main() {
   testWidgets("a model that will not load says why, beside the others", (
     tester,
   ) async {
-    final llm = FakeLocalLlm(ready: false, failure: "not enough memory");
-    app = TestApp.create(localLlm: llm, localModels: {model.id});
+    final llm = FakeLocalRuntime(ready: false, failure: "not enough memory");
+    app = TestApp.create(localRuntime: llm, localModels: {model.id});
     // A turn asked for it and it would not come up, which is the only way this
     // row is reached now that the settings page starts nothing. The throw is
     // what a turn would be told, and is not what this test is about.
     await io(tester, () async {
       try {
-        await llm.serve(model.id);
+        await app.serveLocal(model.id);
       } on LocalLlmFailure {
         // Expected.
       }
@@ -197,9 +206,13 @@ void main() {
   });
 
   testWidgets("unloading everything takes the warm-up with it", (tester) async {
-    final llm = FakeLocalLlm();
-    app = TestApp.create(localLlm: llm, localModels: {model.id}, prefill: true);
-    await io(tester, () => llm.serve(model.id));
+    final llm = FakeLocalRuntime();
+    app = TestApp.create(
+      localRuntime: llm,
+      localModels: {model.id},
+      prefill: true,
+    );
+    await io(tester, () => app.serveLocal(model.id));
     await pumpLlmSettings(tester);
 
     // Held at its serve, which is where a warm-up spends most of its life. From
@@ -217,16 +230,16 @@ void main() {
     // Both, and the warm-up first: one left running would go on saying so over
     // a list with nothing in it.
     expect(find.textContaining("Prefilling"), findsNothing);
-    expect(app.localLlm.stops, 1);
+    expect(app.localRuntime.stops, 1);
     expect(app.work.prefills.last, isNull);
     llm.loading!.complete();
     await io(tester, () => warming);
   });
 
   testWidgets("deleting one that is loaded unloads it first", (tester) async {
-    final llm = FakeLocalLlm();
-    app = TestApp.create(localLlm: llm, localModels: {model.id});
-    await io(tester, () => llm.serve(model.id));
+    final llm = FakeLocalRuntime();
+    app = TestApp.create(localRuntime: llm, localModels: {model.id});
+    await io(tester, () => app.serveLocal(model.id));
     await pumpOnDevice(tester);
 
     await tester.tap(find.byTooltip("Delete"));
@@ -237,13 +250,13 @@ void main() {
     expect(app.localModels.deleted, [model.id]);
     // The server has the file open, so deleting under it would leave a model
     // answering out of a file that is no longer there.
-    expect(app.localLlm.stops, greaterThan(0));
+    expect(app.localRuntime.stops, greaterThan(0));
   });
 
   testWidgets(
     "a download in flight shows what it is doing, and can be stopped",
     (tester) async {
-      app = TestApp.create(localLlm: FakeLocalLlm());
+      app = TestApp.create(localRuntime: FakeLocalRuntime());
       app.localModels.installing = Completer<void>();
       await pumpOnDevice(tester);
 
@@ -266,7 +279,7 @@ void main() {
     (tester) async {
       // The on-device provider lists what is on disk, so a list built before
       // the download would leave the model out of every picker.
-      app = TestApp.create(localLlm: FakeLocalLlm());
+      app = TestApp.create(localRuntime: FakeLocalRuntime());
       await pumpOnDevice(tester);
       final before = app.container.read(availableModelsProvider);
 
@@ -292,7 +305,7 @@ void main() {
       // One added by link, or one an older catalog offered: either way it is the
       // gigabytes it always was, and only this row can reach them.
       app = TestApp.create(
-        localLlm: FakeLocalLlm(),
+        localRuntime: FakeLocalRuntime(),
         localModels: {"qwen3.5-2b-q4_0"},
       );
       await pumpOnDevice(tester);
@@ -315,7 +328,7 @@ void main() {
   testWidgets("a model is added by its link alone, and lands in the list", (
     tester,
   ) async {
-    app = TestApp.create(localLlm: FakeLocalLlm());
+    app = TestApp.create(localRuntime: FakeLocalRuntime());
     await pumpOnDevice(tester);
 
     await scrollTo(tester, find.text("Add model"));
@@ -341,7 +354,10 @@ void main() {
   });
 
   testWidgets("turning the KV cache off is stored", (tester) async {
-    app = TestApp.create(localLlm: FakeLocalLlm(), localModels: {model.id});
+    app = TestApp.create(
+      localRuntime: FakeLocalRuntime(),
+      localModels: {model.id},
+    );
     await pumpLlmSettings(tester);
 
     // On by default: the field leads with the ten it resolves to.
@@ -355,7 +371,10 @@ void main() {
   });
 
   testWidgets("the KV cache is counted in prompts, not chats", (tester) async {
-    app = TestApp.create(localLlm: FakeLocalLlm(), localModels: {model.id});
+    app = TestApp.create(
+      localRuntime: FakeLocalRuntime(),
+      localModels: {model.id},
+    );
     await pumpLlmSettings(tester);
 
     // A dump is one request to the model and a turn writes one per step, so
@@ -375,7 +394,7 @@ void main() {
     "the cores slider is drawn only where there is more than one core",
     (tester) async {
       app = TestApp.create(
-        localLlm: FakeLocalLlm(maxThreads: 8),
+        localRuntime: FakeLocalRuntime(maxThreads: 8),
         localModels: {model.id},
       );
       await pumpLlmSettings(tester);
@@ -390,7 +409,7 @@ void main() {
     tester,
   ) async {
     app = TestApp.create(
-      localLlm: FakeLocalLlm(maxThreads: 1),
+      localRuntime: FakeLocalRuntime(maxThreads: 1),
       localModels: {model.id},
     );
     await pumpLlmSettings(tester);
@@ -400,7 +419,7 @@ void main() {
 
   testWidgets("dragging the slider down stores fewer cores", (tester) async {
     app = TestApp.create(
-      localLlm: FakeLocalLlm(maxThreads: 8),
+      localRuntime: FakeLocalRuntime(maxThreads: 8),
       localModels: {model.id},
     );
     await pumpLlmSettings(tester);

@@ -53,19 +53,19 @@ void main() {
   test("asking for a model loads it from its directory, once", () async {
     final mlx = engine();
 
-    final directory = await mlx.serve(small.id);
-    await mlx.serve(small.id);
+    final loaded = await mlx.serve(small.id, testLocalOptions());
+    await mlx.serve(small.id, testLocalOptions());
 
     expect(calls(), ["load ${small.id}"]);
-    expect((asked.single.arguments as Map)["directory"], directory);
+    expect((asked.single.arguments as Map)["directory"], loaded.model.file);
     expect(mlx.running.value.single.phase, LocalLlmPhase.ready);
   });
 
   test("past the cap the least recently served is evicted first", () async {
     final mlx = engine();
 
-    await mlx.serve(small.id);
-    await mlx.serve(large.id);
+    await mlx.serve(small.id, testLocalOptions());
+    await mlx.serve(large.id, testLocalOptions());
     expect(calls(), [
       "load ${small.id}",
       "evict ${small.id}",
@@ -74,7 +74,7 @@ void main() {
     expect(mlx.running.value.map((s) => s.modelId), [large.id]);
 
     asked.clear();
-    await mlx.serve(small.id, maxRunning: 2);
+    await mlx.serve(small.id, testLocalOptions(maxRunning: 2));
     expect(calls(), ["load ${small.id}"]);
     expect(mlx.running.value.map((s) => s.modelId), [large.id, small.id]);
   });
@@ -86,9 +86,9 @@ void main() {
       refuse[small.id] = "not enough memory";
 
       await expectLater(
-        mlx.serve(small.id),
+        mlx.serve(small.id, testLocalOptions()),
         throwsA(
-          isA<LlmException>().having(
+          isA<LocalLlmFailure>().having(
             (e) => e.message,
             "message",
             contains("not enough memory"),
@@ -104,18 +104,21 @@ void main() {
   test(
     "a model that is not downloaded is refused before the channel is asked",
     () async {
-      await expectLater(engine().serve("gone"), throwsA(isA<LlmException>()));
+      await expectLater(
+        engine().serve("gone", testLocalOptions()),
+        throwsA(isA<LocalLlmFailure>()),
+      );
       expect(asked, isEmpty);
     },
   );
 
   test("unloading everything evicts every model", () async {
     final mlx = engine();
-    await mlx.serve(small.id);
+    await mlx.serve(small.id, testLocalOptions());
 
     await mlx.stopAll();
 
-    expect(calls().last, "evictAll");
+    expect(calls().last, "evict ${small.id}");
     expect(mlx.running.value, isEmpty);
   });
 

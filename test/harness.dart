@@ -11,7 +11,8 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:http/http.dart" as http;
 
 import "package:agent_chat/core/config.dart";
-import "package:agent_chat/data/builtin/llm/local_prefill.dart";
+import "package:agent_chat/data/local/local_instance.dart";
+import "package:agent_chat/data/local/local_prefill.dart";
 import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/local/llama_engine.dart";
@@ -102,7 +103,7 @@ class TestApp {
     required this.voiceModels,
     required this.rootfs,
     required this.localModels,
-    required this.localLlm,
+    required this.localRuntime,
     required this.prefill,
     required this.work,
     required this.container,
@@ -131,11 +132,11 @@ class TestApp {
   /// seeds Apple's. The default has
   /// neither, which is every platform a VM test would otherwise be pretending
   /// to be.
-  /// [localModels] is which on-device models are downloaded, and [localLlm] the
-  /// server that would run one — the two halves the On-device page turns on. The
-  /// default has no server, which is every platform but Android and Linux and so
-  /// what most of the suite should be pretending to be; [localEngineMissing] is
-  /// a build of one of those two that shipped without it.
+  /// [localModels] is which on-device models are downloaded, and
+  /// [localRuntime] what would run one — the two halves the On-device page
+  /// turns on. The default has no engine, which is every platform but those
+  /// that run models and so what most of the suite should be pretending to be;
+  /// [localEngineMissing] is a build that should have carried one and did not.
   /// [linuxes] is which distributions are installed, and [proot] whether this
   /// build could run one at all — the two halves the Terminal page turns on.
   /// The default is a build with no proot in it, which is every platform but
@@ -182,7 +183,7 @@ class TestApp {
     String? byteRepairInstallDir = guestEsbmcInstallDir,
     List<String> byteRepairBrewPaths = const [],
     Set<String> localModels = const {},
-    FakeLocalLlm? localLlm,
+    FakeLocalRuntime? localRuntime,
     bool localEngineMissing = false,
     bool prefill = false,
     String? abi,
@@ -214,20 +215,15 @@ class TestApp {
     final models = FakeVoiceModelStore(installed: voiceModels);
     final linux = FakeRootfsStore(installed: linuxes);
     final onDevice = FakeLocalModelStore(installed: localModels);
-    final server = localLlm ?? FakeLocalLlm();
-    final LocalEngine engine = localLlm != null
-        ? LlamaEngine(server, onDevice)
+    final runtime = localRuntime ?? FakeLocalRuntime();
+    final LocalEngine engine = localRuntime != null
+        ? LlamaEngine(runtime, onDevice)
         : NoLocalEngine(missingFromBuild: localEngineMissing);
     final work = FakeBackgroundWork();
     // The real one over the two fakes it sits between: what a page shows of a
     // warm-up, and what stopping one reaches, is all its own.
     final warmUp = prefill
-        ? LocalPrefill(
-            llm: server,
-            background: work,
-            warmup: testWarmup(),
-            nameOf: engine.nameOf,
-          )
+        ? LocalPrefill(engine: engine, background: work, warmup: testWarmup())
         : null;
     final system = {
       if (nativeVoice.recognition) speech.nativePicks.recognition,
@@ -255,7 +251,7 @@ class TestApp {
       voiceModels: models,
       rootfs: linux,
       localModels: onDevice,
-      localLlm: server,
+      localRuntime: runtime,
       prefill: warmUp,
       work: work,
       container: ProviderContainer(
@@ -400,7 +396,7 @@ class TestApp {
   final FakeVoiceModelStore voiceModels;
   final FakeRootfsStore rootfs;
   final FakeLocalModelStore localModels;
-  final FakeLocalLlm localLlm;
+  final FakeLocalRuntime localRuntime;
 
   /// What the lifecycle listener would have reported.
   set appHidden(bool hidden) =>
@@ -414,6 +410,13 @@ class TestApp {
   final ProviderContainer container;
 
   ChatRepository get repo => container.read(chatRepositoryProvider);
+
+  /// Loads [modelId] the way a turn would, under the default settings but for
+  /// [device].
+  Future<LocalInstance> serveLocal(String modelId, {String? device}) =>
+      container
+          .read(localEngineProvider)
+          .serve(modelId, testLocalOptions(device: device));
 
   /// Settings on disk, written the way the app writes them — which is also
   /// what puts them in the synchronous copy `AppSettings.load` reads.

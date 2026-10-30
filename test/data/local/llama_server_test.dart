@@ -6,6 +6,7 @@ import "package:agent_chat/data/builtin/llm/hosted_models.dart";
 import "package:agent_chat/data/builtin/llm/on_device_provider.dart";
 import "package:agent_chat/data/local/llama_engine.dart";
 import "package:agent_chat/data/local/llama_server.dart";
+import "package:agent_chat/data/local/local_engine.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/local_llm.dart";
 import "package:agent_chat/domain/model_registry.dart";
@@ -24,12 +25,29 @@ void main() {
     libDir: "/data/app/pkg/lib/arm64",
   );
   final model = downloadedAs(ggufCatalog.first);
-  OnDeviceProvider onDevice(LocalLlm pool, LocalModelStore store) =>
-      OnDeviceProvider(
-        LlamaEngine(pool, store),
-        () => AppSettings(),
-        voices: () => const {},
+
+  /// The real engine over a server that cannot come up.
+  LlamaEngine failing([LocalModelStore store = const _AlwaysInstalled()]) =>
+      LlamaEngine(
+        LlamaRuntime(
+          const LlamaBinaries(server: "/bin/false", libDir: "/nonexistent"),
+        ),
+        store,
       );
+
+  OnDeviceProvider onDevice(LocalModelStore store) => OnDeviceProvider(
+    failing(store),
+    () => AppSettings(),
+    voices: () => const {},
+  );
+
+  LocalOptions options({int maxRunning = 1}) => (
+    device: null,
+    contextLength: null,
+    maxRunning: maxRunning,
+    threads: null,
+    keptPrompts: 0,
+  );
 
   ({List<String> command, Map<String, String> environment}) launch({
     String device = noDevice,
@@ -325,22 +343,14 @@ something else entirely
   /// eviction order testable here: what a `serve` displaced is a property of
   /// the list, not of whether the process came up.
   group("the pool, over a server that will not start", () {
-    LlamaServerPool failing() => LlamaServerPool(
-      const LlamaBinaries(server: "/bin/false", libDir: "/nonexistent"),
-      _AlwaysInstalled(),
-    );
-
-    Future<void> askFor(
-      LlamaServerPool pool,
-      String id, {
-      int maxRunning = 1,
-    }) => expectLater(
-      pool.serve(id, maxRunning: maxRunning),
-      throwsA(isA<LocalLlmFailure>()),
-    );
+    Future<void> askFor(LlamaEngine pool, String id, {int maxRunning = 1}) =>
+        expectLater(
+          pool.serve(id, options(maxRunning: maxRunning)),
+          throwsA(isA<LocalLlmFailure>()),
+        );
 
     Future<void> ask(
-      LlamaServerPool pool,
+      LlamaEngine pool,
       LocalModel model, {
       int maxRunning = 1,
     }) => askFor(pool, model.id, maxRunning: maxRunning);
@@ -411,14 +421,10 @@ something else entirely
       // full all the same. That is the whole change from the pick that used to
       // live on the settings page.
       expect(pool.running.value, isEmpty);
-      expect(
-        LlamaEngine(pool, const _AlwaysInstalled()).installed,
-        ggufCatalog.map((m) => m.id),
-      );
+      expect(pool.installed, ggufCatalog.map((m) => m.id));
       expect(
         [
           for (final m in onDevice(
-            pool,
             const _AlwaysInstalled(),
           ).offered(ModelCatalog.empty, ModelHost.resolving()))
             m.ref,
@@ -430,19 +436,16 @@ something else entirely
       );
       // No address of its own: each model is its own process on its own port,
       // and the endpoint's client is what routes between them.
-      expect(onDevice(pool, const _AlwaysInstalled()).config.baseUrl, isEmpty);
+      expect(onDevice(const _AlwaysInstalled()).config.baseUrl, isEmpty);
     });
 
     test(
       "a model that is not downloaded is refused before anything is spawned",
       () async {
-        final pool = LlamaServerPool(
-          const LlamaBinaries(server: "/bin/false", libDir: "/nonexistent"),
-          const UnavailableLocalModelStore(),
-        );
+        final pool = failing(const UnavailableLocalModelStore());
 
         await expectLater(
-          pool.serve(model.id),
+          pool.serve(model.id, options()),
           throwsA(isA<LocalLlmFailure>()),
         );
 
@@ -451,7 +454,6 @@ something else entirely
         // of every picker until there is something to pick.
         expect(
           onDevice(
-            pool,
             const UnavailableLocalModelStore(),
           ).offered(ModelCatalog.empty, ModelHost.resolving()),
           isEmpty,
@@ -463,7 +465,7 @@ something else entirely
       final pool = failing();
 
       await expectLater(
-        pool.serve("gone-in-a-later-build"),
+        pool.serve("gone-in-a-later-build", options()),
         throwsA(isA<LocalLlmFailure>()),
       );
 

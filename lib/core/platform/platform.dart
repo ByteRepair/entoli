@@ -9,12 +9,11 @@ import "../../data/builtin/tools/agent_tool.dart";
 import "../../data/builtin/tools/registry.dart";
 import "../../data/builtin/llm/llm_client.dart";
 import "../../data/builtin/llm/llm_registry.dart";
-import "../../data/builtin/llm/local_pool_client.dart";
-import "../../data/builtin/llm/local_prefill.dart";
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../data/local/file_chat_store.dart";
-import "../../data/local/llama_engine.dart";
+import "../../data/local/local_client.dart";
 import "../../data/local/local_engine.dart";
+import "../../data/local/local_prefill.dart";
 import "../../data/prompts/prompt_sources.dart";
 import "../../domain/agent_browser.dart";
 import "../../domain/app_settings.dart";
@@ -150,9 +149,9 @@ BuiltinBackend createBackend(
 }
 
 /// The on-device prompt warm-up, built where the shell that words the system
-/// prompt and the server it warms both are. Null where the engine is not
-/// llama.cpp's. It reads the settings fresh on each run for the reason the
-/// pool's client does: they are edited between turns.
+/// prompt and the engine it warms both are. Null where the build runs no
+/// on-device models. It reads the settings fresh on each run for the reason
+/// the engine's client does: they are edited between turns.
 ///
 /// The warm-up prompt is `systemPrompt` and nothing else — the body a real turn
 /// sends as its first system message, with the per-chat `turnPrompt` that
@@ -166,13 +165,11 @@ LocalPrefill? createLocalPrefill(
   BackgroundWork background,
   AppConfig config,
 ) {
-  if (engine is! LlamaEngine) return null;
+  if (!engine.available) return null;
   final shell = backend.shell;
   return LocalPrefill(
-    llm: engine.llm,
+    engine: engine,
     background: background,
-    nameOf: engine.nameOf,
-    kvCache: engine.kvCache,
     // One settings read per warm, feeding both the serve options and the
     // prompt, so the two cannot be built from different snapshots.
     warmup: () {
@@ -202,7 +199,7 @@ LocalPrefill? createLocalPrefill(
         background: shell.canRunInBackground,
       );
       return (
-        options: poolOptions(now),
+        options: localOptions(now),
         messages: [
           agentSystemMessage(
             platform: shell.platformDescription,

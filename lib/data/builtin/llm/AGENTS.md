@@ -13,7 +13,7 @@ holding all N results.
 `OpenAiClient` has one flag that is not about the shape of the wire:
 `returnProgress` asks for llama.cpp's `prompt_progress` frames, which arrive
 while the prompt is still being read and become `LlmPromptProgress`. Off by
-default and turned on only by `LocalPoolClient`, because a hosted provider is
+default and turned on only by `LlamaInstance`, because a hosted provider is
 entitled to reject a body field it has never heard of and the strict ones do.
 The frame arrives with `choices` empty, so it is read before the guard that
 skips a frame with nothing in it — a detail worth knowing because moving that

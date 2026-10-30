@@ -9,9 +9,10 @@ import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/llm/hosted_models.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:agent_chat/data/builtin/llm/local_pool_client.dart";
 import "package:agent_chat/data/builtin/llm/providers/provider.dart";
-import "package:agent_chat/data/builtin/llm/local_prefill.dart";
+import "package:agent_chat/data/local/local_client.dart";
+import "package:agent_chat/data/local/local_instance.dart";
+import "package:agent_chat/data/local/local_prefill.dart";
 import "package:agent_chat/data/sync/channel.dart";
 import "package:agent_chat/data/sync/peers.dart" show PeerState;
 import "package:agent_chat/data/sync/sync_hub.dart"
@@ -219,6 +220,22 @@ class FakeBackgroundWork implements BackgroundWork {
   void stop([BackgroundJob job = BackgroundJob.turns]) => _stops.add(job);
 }
 
+/// What a turn would serve with under the default settings, but for [device]
+/// and how many prompts are kept — none unless a test says, so the prompt
+/// cache stays out of every test that is not about it. A load is reused only
+/// under the same options, so [testWarmup] is built from this too.
+LocalOptions testLocalOptions({
+  String? device,
+  int keptPrompts = 0,
+  int maxRunning = 1,
+}) => localOptions(
+  AppSettings(
+    localModelDevice: device,
+    localModelKvCachePrompts: keptPrompts,
+    maxLocalModels: maxRunning,
+  ),
+);
+
 /// The prefill's [Warmup], with the settings a test cares about and defaults
 /// for the rest. One spelling: the record has five option fields, and a rename
 /// of any of them should not be a hunt through the suite.
@@ -231,9 +248,7 @@ Warmup Function() testWarmup({
   List<LlmTool> tools = const [],
 }) =>
     () => (
-      options: poolOptions(
-        AppSettings(localModelKvCachePrompts: kvCachePrompts),
-      ),
+      options: testLocalOptions(keptPrompts: kvCachePrompts),
       messages: messages,
       tools: tools,
     );
@@ -1285,106 +1300,165 @@ class FakeLocalModelStore extends LocalModelStore {
   }
 }
 
-/// The on-device pool with nothing behind it. [served] is what a test asserts
-/// on — that asking for a model is what loads it, and with what — and [ready] is
-/// whether it gets there, so the failed row can be drawn without a model that
-/// will not load. What is on disk is the store's, beside it in the engine.
-class FakeLocalLlm extends LocalLlm {
-  FakeLocalLlm({
+/// The on-device runtime with nothing behind it: [Residency], the client, the
+/// prompt cache and the prefill are the real ones over it, so a test of any of
+/// them exercises the shared code rather than a copy. [served] is one entry
+/// per serve, as it was asked for — including the ones answered from what was
+/// already loaded, since "it did not load a second copy" is worth asserting —
+/// and [ready] is whether a load gets there, so the failed row can be drawn
+/// without a model that will not load.
+class FakeLocalRuntime extends LocalRuntime {
+  FakeLocalRuntime({
     this.devicesFound = const [],
     this.ready = true,
     this.failure = "It would not fit.",
     this.maxThreads,
-    this.baseUrl = "http://127.0.0.1:1/v1",
+    this.chunks = const [],
+    this.restores = false,
   });
-
-  /// Where a served model says it is. The default is a port nothing is on, so a
-  /// test that only cares that a warm-up was attempted gets a refused
-  /// connection rather than a wait; a test about what was actually sent points
-  /// this at an `HttpServer` of its own.
-  final String baseUrl;
 
   final List<LocalDevice> devicesFound;
   final bool ready;
   final String failure;
 
+  /// What every generation yields, in order.
+  final List<LlmChunk> chunks;
+
+  /// Whether a restore finds the file it is asked for.
+  final bool restores;
+
   /// What the cores slider tops out at, and whether it is drawn at all. Null by
-  /// default, which takes the slider off the page — a test that wants it sets a
-  /// number above one.
+  /// default, which takes the slider off the page.
   @override
   final int? maxThreads;
 
-  /// One entry per [serve], as it was asked for — including the ones answered
-  /// from what was already up, since "it did not start a second copy" is a
-  /// thing worth asserting.
-  final List<
-    ({
-      String modelId,
-      String? device,
-      int? contextLength,
-      int maxRunning,
-      int? threads,
-      bool kvCache,
-    })
-  >
-  served = [];
+  final List<({String modelId, LocalOptions options})> served = [];
 
+  /// The messages of every generation, in order.
+  final List<List<LlmMessage>> generated = [];
+
+  final List<String> saved = [];
+  final List<String> restored = [];
+
+  /// Instances stopped, by a cap, a reload or an unload.
   var stops = 0;
 
-  /// Held open where a test wants a model that has not finished loading: [serve]
-  /// publishes its row and then waits on this, which is where the settings page
-  /// draws one and where a warm-up sits until it has a server to warm.
+  /// Loads and stops as they happened, `load <id>` and `stop <id>`, which is
+  /// the order [Residency] promises.
+  final List<String> events = [];
+
+  /// Held open where a test wants a generation caught after its first chunk —
+  /// a prompt still being read, which is where a warm-up's Stop lands.
+  Completer<void>? hold;
+
+  /// Held open where a test wants a model that has not finished loading: an
+  /// instance publishes its row and then waits on this, which is where the
+  /// settings page draws one and where a warm-up sits until it has a model.
   Completer<void>? loading;
 
   @override
-  final ValueNotifier<List<LocalLlmState>> running = ValueNotifier(const []);
+  Set<LocalControl> get controls => LocalControl.values.toSet();
 
   @override
   Future<List<LocalDevice>> devices() async => devicesFound;
 
   @override
-  Future<LocalEndpoint> serve(
-    String modelId, {
-    String? device,
-    int? contextLength,
-    int maxRunning = 1,
-    int? threads,
-    bool kvCache = false,
-  }) async {
-    served.add((
-      modelId: modelId,
-      device: device,
-      contextLength: contextLength,
-      maxRunning: maxRunning,
-      threads: threads,
-      kvCache: kvCache,
-    ));
-    final state = LocalLlmState(
-      modelId: modelId,
-      phase: ready ? LocalLlmPhase.ready : LocalLlmPhase.failed,
-      device: device,
-      contextLength: contextLength,
-      failure: ready ? null : failure,
-    );
-    running.value = [
-      ...running.value
-          .where((each) => each.modelId != modelId)
-          .take(maxRunning - 1),
-      state,
-    ];
-    if (loading != null) await loading!.future;
-    if (!ready) throw LocalLlmFailure(failure);
-    return LocalEndpoint(
-      baseUrl: baseUrl,
-      apiKey: "k",
-      contextLength: contextLength ?? 0,
+  Future<LocalLoad> resolve(DownloadedModel model, LocalOptions options) async {
+    served.add((modelId: model.id, options: options));
+    return LocalLoad(
+      contextLength: options.contextLength ?? 4096,
+      device: options.device,
+      threads: options.threads,
+      keepsPrompts: options.keepsPrompts,
     );
   }
 
   @override
-  Future<void> stopAll() async {
-    stops++;
-    running.value = const [];
+  LocalInstance create(
+    DownloadedModel model,
+    LocalLoad load, {
+    required void Function() onChange,
+  }) => FakeLocalInstance(this, model, load, onChange);
+}
+
+class FakeLocalInstance extends LocalInstance {
+  FakeLocalInstance(this._runtime, this.model, this.load, this._onChange);
+
+  final FakeLocalRuntime _runtime;
+  final void Function() _onChange;
+
+  @override
+  final DownloadedModel model;
+
+  @override
+  final LocalLoad load;
+
+  final _ready = Completer<void>();
+  var _phase = LocalLlmPhase.starting;
+
+  @override
+  Future<void> get ready => _ready.future;
+
+  @override
+  LocalLlmState get state => LocalLlmState(
+    modelId: model.id,
+    phase: _phase,
+    device: load.device,
+    contextLength: load.contextLength,
+    failure: _phase == LocalLlmPhase.failed ? _runtime.failure : null,
+  );
+
+  @override
+  void start() {
+    _runtime.events.add("load ${model.id}");
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    final loading = _runtime.loading;
+    if (loading != null) await loading.future;
+    if (_runtime.ready) {
+      _phase = LocalLlmPhase.ready;
+      _ready.complete();
+    } else {
+      _phase = LocalLlmPhase.failed;
+      _ready.completeError(LocalLlmFailure(_runtime.failure));
+      _ready.future.ignore();
+    }
+    _onChange();
+  }
+
+  @override
+  Stream<LlmChunk> generate(
+    List<LlmMessage> messages, {
+    List<LlmTool> tools = const [],
+    double? temperature,
+    String? reasoningEffort,
+  }) async* {
+    _runtime.generated.add(messages);
+    for (final (i, chunk) in _runtime.chunks.indexed) {
+      yield chunk;
+      final hold = _runtime.hold;
+      if (i == 0 && hold != null) await hold.future;
+    }
+  }
+
+  @override
+  Future<bool> saveState(String file) async {
+    _runtime.saved.add(file);
+    return true;
+  }
+
+  @override
+  Future<bool> restoreState(String file) async {
+    _runtime.restored.add(file);
+    return _runtime.restores;
+  }
+
+  @override
+  Future<void> stop() async {
+    _runtime.stops++;
+    _runtime.events.add("stop ${model.id}");
   }
 }
 

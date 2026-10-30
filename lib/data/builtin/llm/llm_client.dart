@@ -295,15 +295,13 @@ abstract class LlmClient {
 
 /// Clients kept by name, rebuilt when what they were built from changes.
 ///
-/// Two things hold one: `LlmRegistry`, keyed by provider id over the API shape,
-/// URL and key; and `LocalPoolClient`, keyed by model id over the port its
-/// server came up on. Both want the same three things and got them wrong in the
-/// same way twice — the close on eviction is the half that is easy to leave
-/// out, and an `http.Client` that is dropped rather than closed holds its
-/// connections until the isolate ends.
+/// `LlmRegistry` holds one, keyed by provider id over the API shape, URL and
+/// key. The close on eviction is the half that is easy to leave out, and an
+/// `http.Client` that is dropped rather than closed holds its connections until
+/// the isolate ends.
 ///
 /// [signature] is whatever "still the same client" means to the holder. It is a
-/// string because both of them compose one out of several fields, and comparing
+/// string because the holder composes one out of several fields, and comparing
 /// a record would mean a type parameter for the sake of an `==`.
 class LlmClientCache {
   final _entries = <String, ({String signature, LlmClient client})>{};

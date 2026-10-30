@@ -20,7 +20,6 @@ import "../../data/local/bundled_tools.dart";
 import "../../data/local/byte_repair_store.dart";
 import "../../data/local/file_secret_store.dart";
 import "../../data/local/ios_reminder_alarms.dart";
-import "../../data/local/file_kv_cache.dart";
 import "../../data/local/file_modes.dart";
 import "../read_only_dirs.dart";
 import "../../data/local/file_local_model_store.dart";
@@ -32,6 +31,7 @@ import "../../data/local/llama_server.dart";
 import "../../data/local/local_engine.dart";
 import "../../data/local/mlx_engine.dart";
 import "../../data/local/model_format.dart";
+import "../../data/local/prompt_cache.dart";
 import "../../data/local/proot.dart";
 import "../../data/local/apple_fm.dart";
 import "../../data/local/landlock.dart";
@@ -326,13 +326,16 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
     p.join(cacheDir, "llm"),
     format: const GgufFormat(),
   );
-  final pool = LlamaServerPool(
-    LlamaBinaries(server: server, libDir: libDir),
+  final prompts = PromptCache(p.join(cacheDir, "kv-cache"));
+  return LlamaEngine(
+    LlamaRuntime(
+      LlamaBinaries(server: server, libDir: libDir),
+      slotSaveDir: prompts.dir,
+      fitLayers: !Platform.isAndroid,
+    ),
     store,
-    slotSaveDir: _kvCacheDir(cacheDir),
-    fitLayers: !Platform.isAndroid,
+    prompts: prompts,
   );
-  return LlamaEngine(pool, store, kvCache: FileKvCache(_kvCacheDir(cacheDir)));
 }
 
 /// [AppleFm] where the device could carry Apple's on-device model. Hardware
@@ -375,10 +378,6 @@ String bundledLinuxLibDir({String? executablePath}) {
   final dir = p.dirname(path);
   return p.basename(dir) == "lib" ? dir : p.join(dir, "lib");
 }
-
-/// The server's `--slot-save-path` and [FileKvCache]'s directory: one join so
-/// the two cannot disagree.
-String _kvCacheDir(String cacheDir) => p.join(cacheDir, "kv-cache");
 
 FileHandoff createFileHandoff() =>
     Platform.isAndroid ? AndroidFileHandoff() : const DesktopFileHandoff();

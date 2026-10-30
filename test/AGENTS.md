@@ -100,35 +100,41 @@ wait is event-driven instead — poll a thing the code already publishes
 (`local_shell_test.dart`'s `printed` reads the run's live output) until it
 says the moment being aimed at has arrived.
 
-`TestApp.create(localLlm: …, localModels: …)` is the same pair for the On-device
-page — whether this build has a server at all, and which models are downloaded;
-the harness puts the two together as a `LlamaEngine`, or a `NoLocalEngine`
-where the server is unavailable.
-`FakeLocalLlm.served` is what its tests assert on — one entry per `serve`,
-including the ones answered from what was already up, since "it did not start a
-second copy" is worth asserting. What is on disk is `localModels`, a separate
-list from what is running for the reason the real one keeps them apart: every
-downloaded model is in every picker, and only the ones asked for are loaded.
-`ready: false` is a model that will not load, which is the
-one failure the page has to draw — and reaching that row now means calling
-`serve` in the test, because the settings page no longer starts anything.
-`loading` is a completer `serve` waits on after publishing its row, which is a
-model still coming up and is where a warm-up sits.
+`TestApp.create(localRuntime: …, localModels: …)` is the same pair for the
+On-device page — whether this build runs models at all, and which are
+downloaded; the harness puts the two together as a `LlamaEngine`, or a
+`NoLocalEngine` where there is no runtime. **Only the runtime is faked**:
+`FakeLocalRuntime` and its `FakeLocalInstance` stand in for a server, and
+`Residency`, the client, the prompt cache and the prefill are the real ones over
+them, so a test of any of those exercises the code every runtime shares rather
+than a copy of it. `FakeLocalRuntime.served` is one entry per serve, including
+the ones answered from what was already loaded, since "it did not load a second
+copy" is worth asserting; `events` is its loads and stops in order, the order
+`Residency` promises. What is on disk is `localModels`, a separate list from
+what is loaded for the reason the real one keeps them apart: every downloaded
+model is in every picker, and only the ones asked for are loaded.
+`ready: false` is a model that will not load, which is the one failure the page
+has to draw — and reaching that row means serving it in the test
+(`app.serveLocal`), because the settings page starts nothing. `loading` is a
+completer a load waits on after its row is published, which is a model still
+coming up and is where a warm-up sits; `hold` is one a generation waits on after
+its first chunk, which is a prompt still being read and is where a warm-up's
+Stop lands; `chunks` is what every generation yields, and `restores` whether a
+saved prompt is found. `testLocalOptions` is what a turn would serve with, and
+the test warm-up is built from it: a loaded model is reused only under the same
+options, so two spellings would reload it.
 
-`TestApp.create(prefill: true)` builds a real `LocalPrefill` over the two fakes
-it sits between and exposes it as `app.prefill`, since what a page shows of a
-warm-up and what stopping one reaches are its own. A page drawing one has a
-spinner on it, so `pumpAndSettle` never returns and those tests pump instead.
-The prefill's own tests hand `LocalPrefill` an `httpClient`: one that refuses
-everything by default, and `_FakeServer` — llama.cpp's stream in two chunks,
-held in the middle — where "the prompt was never sent" has to be told from
-"nothing would have answered anyway".
+`TestApp.create(prefill: true)` builds a real `LocalPrefill` over the engine and
+exposes it as `app.prefill`, since what a page shows of a warm-up and what
+stopping one reaches are its own. A page drawing one has a spinner on it, so
+`pumpAndSettle` never returns and those tests pump instead.
 
-What the pool is actually asked to do is `llama_server_test.dart`. `llamaLaunch`
-is a pure function there for the reason `proot_test.dart` is one; the pool
-itself is exercised over `/bin/false`, which cannot come up — and that is enough,
-because a failed load still takes its place in the list, so the eviction order
-is testable without a server that answers.
+What llama.cpp is actually asked to do is `llama_server_test.dart`.
+`llamaLaunch` is a pure function there for the reason `proot_test.dart` is one;
+the engine itself is exercised over a `LlamaRuntime` on `/bin/false`, which
+cannot come up — and that is enough, because a failed load still takes its
+place in the list, so the eviction order is testable without a server that
+answers.
 
 `FakeBackend.runningTurns` is the one thing on it that a scripted turn does not
 drive: a scripted turn is over the moment its events are yielded, so

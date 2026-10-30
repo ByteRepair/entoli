@@ -45,7 +45,7 @@ import "domain/link_opener.dart";
 import "domain/llm_provider.dart";
 import "domain/model_capability.dart";
 import "domain/model_registry.dart";
-import "data/builtin/llm/local_prefill.dart";
+import "data/local/local_prefill.dart";
 import "data/local/byte_repair_store.dart";
 import "domain/local_llm.dart";
 import "domain/local_model.dart";

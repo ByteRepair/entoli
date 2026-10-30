@@ -400,18 +400,39 @@ gigabyte of memory on weights, is the wrong trade.
 ### The engine
 
 **What runs models is a `LocalEngine`, one per platform**, chosen by
-`createLocalEngine` in `core/platform/` and nowhere else. It owns the four
-things that differ between runtimes: the catalog it offers, the store its
-models live in, which settings it reads (`controls`), and the `client` a
-request reaches a model through. `OnDeviceProvider` holds one and asks it for
-the client, so the provider knows nothing of servers or ports; the On-device
-page draws `catalog` and only the `controls` the engine names. `LlamaEngine`
-is llama.cpp's server pool (`LocalLlm`) over GGUF files, on Android and Linux,
-and reads every control. `MlxEngine` is MLX through Apple's Foundation Models
-framework, on iOS 27 and macOS 27 where the build links mlx-swift-lm, and
-reads only how many may be resident — see "The MLX models" in
-`ios/AGENTS.md`. `NoLocalEngine` is everywhere else, `missingFromBuild` where
-a platform that builds a server got a build without one.
+`createLocalEngine` in `core/platform/` and nowhere else. `OnDeviceProvider`
+holds one and asks it for the `client`, so the provider knows nothing of
+servers or ports; the On-device page draws its `catalog`, its `running` rows
+and only the `controls` it names. `NoLocalEngine` is a platform with none,
+`missingFromBuild` where a platform that builds a server got a build without
+one.
+
+**Everything an engine does but load a model is written once**, in
+`RuntimeEngine` and the classes it is made of, so llama.cpp and MLX differ in
+one place each — their `LocalRuntime`:
+
+- `LocalRuntime` is the engine's half: what the settings mean for a model
+  (`resolve`, into a `LocalLoad` — "auto" made a device, a default context
+  made a number), which settings it reads (`controls`), its devices and
+  thread count, and `create`, a `LocalInstance` of a model.
+- `LocalInstance` is one loaded model: `generate`, `saveState` and
+  `restoreState` of its prompt state, and `stop`. It is made by the runtime
+  and told to `start` loading by `Residency`, separately, so a model it
+  displaces is stopped first.
+- `Residency` is which models are loaded — see "Loading one, and when".
+- `LocalClient` is the turn: serve, restore, generate, save.
+- `PromptCache` is the prompt state on disk — see "Persisting the KV cache
+  to disk".
+- `LocalPrefill` warms through the engine — see "Prefilling the system
+  prompt".
+
+`LlamaEngine` is llama.cpp over GGUF files, on Android and Linux:
+`LlamaRuntime` and its `LlamaInstance`, a server process each, reading every
+control. `MlxEngine` is MLX on iOS 27 and macOS 27 where the build links
+mlx-swift-lm: `MlxRuntime` and its `MlxInstance`, over the model host's
+channel — see "The MLX models" in `ios/AGENTS.md`. The two engines add only
+what is theirs besides: a catalog, and for llama.cpp the Add model page's
+`fromLink`.
 
 A model is its files (`LocalModel.files`), each with its own size and
 SHA-256, so `FileLocalModelStore` fetches and checks any model the same way.
@@ -446,10 +467,10 @@ place to say the same thing and the one place that could disagree with the rest.
 It also means a launch loads nothing at all, where it used to spend a minute and
 a gigabyte restoring a pick the user might not have been about to use.
 
-**`LocalLlm.serve` is the only thing that reconciles what is running with the
-settings**, and there is no second path to forget. It answers from a server
-already up under the same device and context, reloads one that is up under
-different ones, and starts one that is not up at all. Settings ride in per call
+**`Residency.serve` is the only thing that reconciles what is loaded with the
+settings**, and there is no second path to forget. It answers from a model
+already loaded under the same `LocalLoad`, reloads one loaded under a
+different one, and loads one that is not loaded at all. Settings ride in per call
 rather than being held, the way `LocalShell` re-reads its environment, so a
 change reaches the next turn — and pointedly not the current one, which keeps a
 context edit from pulling the model out from under a chat mid-reply.
@@ -465,11 +486,10 @@ and a phone that could hold three is not the phone this is written for. With the
 cap at one and a title model set, the two evict each other every turn; that is
 the honest cost of one, and the reason to raise it.
 
-**The client is what routes**, not the registry. `LlamaEngine`'s client,
-`LocalPoolClient`, reads the
-model out of the request, serves it, and hands the call to a `OpenAiClient` on
-that server's port — one per model, dropped when the port changes, the same
-signature check `LlmRegistry` makes. **It rides on the provider rather than on
+**The client is what routes**, not the registry. An engine's client,
+`LocalClient`, reads the model out of the request, serves it, and hands the
+call to that model's `LocalInstance` — for llama.cpp an `OpenAiClient` on its
+server's port, made once per server. **It rides on the provider rather than on
 the registry**: `OnDeviceProvider` is an `LlmProvider` whose `client` is the
 engine's, as `AppleFmProvider`'s is the framework's channel, so the registry never
 compares a provider id against a reserved name — it knows nothing about who
@@ -660,7 +680,7 @@ to run out of. A laptop's discrete GPU has memory of its own, and every layer
 of a model larger than it is a load that fails. There `-ngl` is left out and
 llama.cpp's `--fit` splits the layers against what the card has free, which an
 explicit `-ngl` would turn off. It sizes nothing else, since `-c` is always
-given. `LlamaServerPool(fitLayers:)` is the switch, on everywhere but Android.
+given. `LlamaRuntime(fitLayers:)` is the switch, on everywhere but Android.
 
 **arm64 only, and that is a size decision — on Android.** The server and its
 libraries are about 50 MB stripped — the Vulkan backend's `libggml-vulkan.so`
@@ -741,7 +761,7 @@ conversation's workspace path, which is per-chat, so no two chats shared a
 cacheable prefix. Moving the workspace to the end of the prompt bought most of
 that back — the long body above it is the same text for every chat, and
 llama.cpp's slot cache matches tokens, so it reused the head — but it left the
-whole thing one message, and a message is what `kvPrefixKeys` hashes. Two chats
+whole thing one message, and a message is what `promptPrefixKeys` hashes. Two chats
 therefore agreed on no *key*, and the body the warm-up wrote to disk was filed
 under a name no chat ever looked for: the live slot helped, the dump could not.
 
@@ -761,9 +781,10 @@ on them. A chat template that assumed exactly one system message would be the
 thing to watch; the bundled server renders each message under its own role.
 
 **It is the on-device provider's own feature and touches no shared interface.**
-`LocalPrefill` drives the existing `LocalLlm.serve` and an `OpenAiClient` with
-`returnProgress` — the same two a real turn uses — and cancels the stream at the
-first token, by which point the prompt is read and cached. Nothing on
+`LocalPrefill` serves the model through `LocalEngine.serve` and reads the
+prompt through `LocalInstance.generate` — the same two a real turn uses,
+whichever runtime the engine has — and cancels the stream at the first token
+that is not progress, by which point the prompt is read and held. Nothing on
 `LlmClient`, `LlmProvider` or `AgentBackend` grew a method; a hosted provider
 sees none of it. The one new port method is `BackgroundWork.prefilling`, which
 is the foreground service, not a provider — and its notification is a visible
@@ -781,7 +802,7 @@ first turn — so nothing rewarms on a profile change.
 
 **A warm-up reads the disk before it reads the prompt.** The body is written to
 disk by the mechanism the next section describes, so the second launch has one
-already: `LocalPrefill` serves the model, asks `LocalKvCache.warm` for the body,
+already: `LocalPrefill` serves the model, asks `PromptCache.warm` for the body,
 and — where that hits — is finished, having sent no prompt at all. It is why
 `warm` answers `bool` where a turn ignores it; a turn sends its prompt either
 way, and only this can be over before it starts. Without it the disk cache only
@@ -800,7 +821,7 @@ in `LocalPrefill` rather than at any of the places that stop one. Unload all is
 the way it was first noticed; deleting a model is another, since `unpick` stops
 everything; and a turn asking for a second model past `maxLocalModels` is a
 third, which no button could have known about. What all three share is
-`LocalLlm.running` losing the row — published *before* the pool kills anything —
+`LocalEngine.running` losing the row — published *before* anything is stopped —
 so `_whileServed` watches that and cancels. It arms before the serve and fires
 only after the model has been seen running, because until the pool has published
 the row "not in the list" is a warm-up that has not started rather than one
@@ -812,21 +833,22 @@ The prefill only ever helped the *first* turn. Reopening a long multi-turn chat
 was the same wait made worse: with the live server gone (a reload, an app
 restart, the model evicted for another), the whole history — thousands of tokens
 — is reprocessed from scratch, which on a phone is minutes just to resume a
-conversation the user already had. `LocalKvCache` closes that by saving the
-server's slot KV to disk with llama.cpp's slot save/restore, and restoring it
-when the chat comes back.
+conversation the user already had. `PromptCache` closes that by having the
+instance save its prompt state to disk — llama.cpp's slot save/restore, for a
+`LlamaInstance` — and restore it when the chat comes back. Which file, when,
+and which to throw away is the cache's, once for every runtime; writing and
+reading one is the instance's.
 
 **It is content-addressed, and that is what keeps it the provider's own.**
 Nothing hands it a chat id: a dump is keyed on a hash of the prompt prefix that
-produced it (`kvPrefixKeys` — one key per message boundary, over the messages
+produced it (`promptPrefixKeys` — one key per message boundary, over the messages
 and the tools that head every request), so no identifier crosses
 `LlmClient.stream` and no interface a hosted provider shares grew a method — the
-same constraint the prefill kept. `LocalPoolClient` restores the longest saved
+same constraint the prefill kept. `LocalClient` restores the longest saved
 prefix of a request before the turn and saves the whole prompt after it; both
 are best-effort, so a miss or a build without slot save/restore just pays the
-prompt the way it did before. The code is `local_kv_cache.dart` (the port and the
-pure key/eviction math) and `file_kv_cache.dart` (the disk and the
-`/slots/0` requests, wherever the pool runs).
+prompt the way it did before. The code is `prompt_cache.dart` (the disk and
+the pure key/eviction math) and `LlamaInstance`'s `/slots/0` requests.
 
 **That `/slots/0` is why the server has one slot (`-np 1`).** Its default is
 four sharing the pool, each request routed to whichever slot's prompt matches
@@ -840,14 +862,15 @@ and the disk cache is this app's answer to the same question.
 **Invalidation is the keying, not a bookkeeping step.** A rewound or edited chat
 hashes to a different key, misses, and its stale dump ages out of the LRU on its
 own. A dump is also unreadable by a different model, context length, or KV quant,
-so the filename carries a `kvNamespace` of exactly those — plus the device
+so the filename carries a `promptNamespace` of exactly those — plus the device
 setting, which is the picker's word rather than the resolved one, so Auto and CPU
 keep separate dumps on a phone where they launch the same server. A change to any
 of them lands the dump where nothing looks for it, and the old namespace's files are
 reaped by the byte budget rather than tracked. One directory holds every
 namespace, because `--slot-save-path` takes a basename and the name is where the
 namespace rides; the pool and the cache are built from the one join
-(`_kvCacheDir`) so they cannot disagree on it.
+(`PromptCache.dir`, handed to `LlamaRuntime` as its slot save path) so they
+cannot disagree on it.
 
 **On by default at ten prefixes** (the "Cached prompts" picker; `Off` writes
 nothing), because the win is large and the reopen is the common case. The dumps
@@ -859,7 +882,7 @@ near-lossless but still a change to generation, so it rides on the cache being
 on: turn it off and the server runs f16, the behaviour it had before this.
 
 **The number counts prompts, and the picker used to say chats.** One dump is one
-request: `LocalPoolClient.stream` saves after each, and the agent calls it once
+request: `LocalClient.stream` saves after each, and the agent calls it once
 per step, so a turn that runs five commands writes five — and the bound is over
 every chat at once rather than per chat. "10 chats" promised ten conversations
 kept warm and, for a turn of any length, meant closer to two. The setting is
@@ -877,7 +900,7 @@ same threads and cache flags a real turn does, or the first turn would find the
 server launched differently and relaunch it, throwing the warm away.
 
 **Eviction reads a dump's date as when it was last used, not when it was
-written**, and `FileKvCache.warm` touching the file it restored is the whole of
+written**, and `PromptCache.warm` touching the file it restored is the whole of
 what makes that true. It matters because of the body: nothing but the prefill
 ever writes it, so on write order it is the oldest of its namespace within a
 chat or two and the oldest file outright soon after, and both bounds reap from
@@ -892,5 +915,5 @@ does.
 The **cores** setting is the other half of the On-device machine questions:
 `localModelThreads` caps how many the server runs on (the slider, from every big
 core down to one), trading tokens-per-second for battery. Null is the default —
-every big core (`bigCoreCount`) — and the slider's top is `LocalLlm.maxThreads`
+every big core (`bigCoreCount`) — and the slider's top is `LocalRuntime.maxThreads`
 so it never offers more than the server would use anyway.

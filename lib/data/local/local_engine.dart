@@ -5,21 +5,12 @@ import "../../domain/local_llm.dart";
 import "../../domain/local_model.dart";
 import "../../domain/local_model_store.dart";
 import "../builtin/llm/llm_client.dart";
+import "local_client.dart";
+import "local_instance.dart";
+import "prompt_cache.dart";
+import "residency.dart";
 
-/// A setting on the On-device page, drawn only where the engine reads it.
-/// The device picker, the cores slider and Add model are drawn from what the
-/// engine answers instead: [LocalEngine.devices], [LocalEngine.maxThreads],
-/// [LocalEngine.fromLink].
-enum LocalControl {
-  /// How many models may be resident at once.
-  maxRunning,
-
-  /// How much context a model is loaded with.
-  context,
-
-  /// Prompts kept warm on disk between turns.
-  kvCache,
-}
+export "local_instance.dart" show LocalControl, LocalOptions;
 
 /// What runs downloaded models on this device: the models it offers, where it
 /// keeps them, what is loaded, and how a request reaches one. One per platform,
@@ -45,6 +36,17 @@ abstract class LocalEngine {
 
   /// What is loaded and how far each one has got, least recently served first.
   ValueListenable<List<LocalLlmState>> get running;
+
+  /// [modelId], loaded under [options] if it is not already: what a turn and
+  /// the prefill reach a model through.
+  Future<LocalInstance> serve(String modelId, LocalOptions options);
+
+  /// Where prompts are kept between turns, or null where this build keeps
+  /// none.
+  PromptCache? get prompts => null;
+
+  /// Unload [modelId], where it is loaded.
+  Future<void> stop(String modelId);
 
   /// Unload everything.
   Future<void> stopAll();
@@ -89,6 +91,51 @@ typedef ModelLink = ({
   String? sha256,
 });
 
+/// An engine over a [LocalRuntime]: everything an engine does but load a model
+/// — which models are resident, the turn, the prompt cache — written once, so
+/// llama.cpp and MLX differ only in their runtime. See "The engine" in
+/// `lib/data/local/AGENTS.md`.
+abstract class RuntimeEngine extends LocalEngine {
+  RuntimeEngine(this.runtime, this.store, {this.prompts})
+    : residency = Residency(runtime, store);
+
+  final LocalRuntime runtime;
+
+  @override
+  final LocalModelStore store;
+
+  @override
+  final PromptCache? prompts;
+
+  final Residency residency;
+
+  @override
+  Set<LocalControl> get controls => runtime.controls;
+
+  @override
+  ValueListenable<List<LocalLlmState>> get running => residency.running;
+
+  @override
+  Future<LocalInstance> serve(String modelId, LocalOptions options) =>
+      residency.serve(modelId, options);
+
+  @override
+  Future<void> stop(String modelId) => residency.stop(modelId);
+
+  @override
+  Future<void> stopAll() => residency.stopAll();
+
+  @override
+  LlmClient client(AppSettings Function() settings) =>
+      LocalClient(residency, () => localOptions(settings()), prompts: prompts);
+
+  @override
+  Future<List<LocalDevice>>? devices() => runtime.devices();
+
+  @override
+  int? get maxThreads => runtime.maxThreads;
+}
+
 /// No engine: a platform with none, and a build that carried none.
 class NoLocalEngine extends LocalEngine {
   const NoLocalEngine({this.missingFromBuild = false});
@@ -112,6 +159,15 @@ class NoLocalEngine extends LocalEngine {
   ValueListenable<List<LocalLlmState>> get running => _none;
 
   static final _none = ValueNotifier(const <LocalLlmState>[]);
+
+  @override
+  Future<LocalInstance> serve(String modelId, LocalOptions options) =>
+      Future.error(
+        const LocalLlmFailure("This build runs no on-device models."),
+      );
+
+  @override
+  Future<void> stop(String modelId) async {}
 
   @override
   Future<void> stopAll() async {}

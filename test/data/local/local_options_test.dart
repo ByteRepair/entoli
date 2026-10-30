@@ -1,27 +1,27 @@
-import "package:agent_chat/data/builtin/llm/local_pool_client.dart";
+import "package:agent_chat/data/local/local_client.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "../../harness.dart";
 
 void main() {
-  group("poolOptions", () {
+  group("localOptions", () {
     test("carries the cores and cache-count settings", () {
-      final options = poolOptions(
+      final options = localOptions(
         AppSettings(localModelThreads: 4, localModelKvCachePrompts: 30),
       );
       expect(options.threads, 4);
-      expect(options.kvCachePrompts, 30);
+      expect(options.keptPrompts, 30);
 
-      // Nothing set is the default ten, and the default is on, so the server
-      // still sees caching; zero is off and is not defaulted away.
+      // Nothing set is the default ten, and the default is on, so a load
+      // still keeps prompts; zero is off and is not defaulted away.
       expect(
-        poolOptions(AppSettings()).kvCachePrompts,
+        localOptions(AppSettings()).keptPrompts,
         AppSettings.defaultKvCachePrompts,
       );
-      expect(poolOptions(AppSettings()).kvCachePrompts, greaterThan(0));
+      expect(localOptions(AppSettings()).keptPrompts, greaterThan(0));
       expect(
-        poolOptions(AppSettings(localModelKvCachePrompts: 0)).kvCachePrompts,
+        localOptions(AppSettings(localModelKvCachePrompts: 0)).keptPrompts,
         0,
       );
     });
