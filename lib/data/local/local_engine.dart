@@ -7,27 +7,18 @@ import "../../domain/local_model_store.dart";
 import "../builtin/llm/llm_client.dart";
 
 /// A setting on the On-device page, drawn only where the engine reads it.
+/// The device picker, the cores slider and Add model are drawn from what the
+/// engine answers instead: [LocalEngine.devices], [LocalEngine.maxThreads],
+/// [LocalEngine.fromLink].
 enum LocalControl {
   /// How many models may be resident at once.
   maxRunning,
 
-  /// Which accelerator runs a model.
-  device,
-
   /// How much context a model is loaded with.
   context,
 
-  /// How many CPU cores run a model.
-  threads,
-
   /// Prompts kept warm on disk between turns.
   kvCache,
-
-  /// Warming the default model's system prompt in the background.
-  prefill,
-
-  /// Downloading a model from a link the user types.
-  addByLink,
 }
 
 /// What runs downloaded models on this device: the models it offers, where it
@@ -72,7 +63,29 @@ abstract class LocalEngine {
       store.downloadedOfSync(modelId)?.name ??
       catalog.where((m) => m.id == modelId).firstOrNull?.name ??
       modelId;
+
+  /// The accelerators a model may be put on, or null where there is no choice
+  /// to offer.
+  Future<List<LocalDevice>>? devices() => null;
+
+  /// The most cores worth offering, or null where cores are not this
+  /// engine's to choose.
+  int? get maxThreads => null;
+
+  /// How a link the user typed becomes a model to download, or null where this
+  /// engine takes none — which is also what draws Add model.
+  LocalModel Function(ModelLink link)? get fromLink => null;
 }
+
+/// What the Add model page asks for.
+typedef ModelLink = ({
+  String url,
+  String id,
+  String name,
+  String? parameters,
+  String? licence,
+  String? sha256,
+});
 
 /// No engine: the web, and a build that carried none.
 class NoLocalEngine extends LocalEngine {

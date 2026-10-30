@@ -33,6 +33,7 @@ class LocalPrefill {
     required this.llm,
     required this.background,
     required this.warmup,
+    this.nameOf = _idAsName,
     this.kvCache,
     this.httpClient,
   }) {
@@ -45,6 +46,11 @@ class LocalPrefill {
   final LocalLlm llm;
   final BackgroundWork background;
   final Warmup Function() warmup;
+
+  /// What a model is called, for the notification and the settings row.
+  final String Function(String modelId) nameOf;
+
+  static String _idAsName(String modelId) => modelId;
 
   /// What the warm-up's own client sends over. Injected only by the tests,
   /// which have no server to reach.
@@ -104,7 +110,7 @@ class LocalPrefill {
   }
 
   Future<void> _run(String modelId, int gen) async {
-    final name = llm.nameOf(modelId);
+    final name = nameOf(modelId);
     state.value = LocalPrefillState(name: name);
     await background.prefilling(name);
 

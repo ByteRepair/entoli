@@ -1172,7 +1172,6 @@ class FakeLocalModelStore extends LocalModelStore {
 /// will not load. What is on disk is the store's, beside it in the engine.
 class FakeLocalLlm extends LocalLlm {
   FakeLocalLlm({
-    this.available = true,
     this.devicesFound = const [],
     this.ready = true,
     this.failure = "It would not fit.",
@@ -1186,16 +1185,9 @@ class FakeLocalLlm extends LocalLlm {
   /// this at an `HttpServer` of its own.
   final String baseUrl;
 
-  @override
-  final bool available;
-
   final List<LocalDevice> devicesFound;
   final bool ready;
   final String failure;
-
-  @override
-  String nameOf(String modelId) =>
-      ggufCatalog.where((m) => m.id == modelId).firstOrNull?.name ?? modelId;
 
   /// What the cores slider tops out at, and whether it is drawn at all. Null by
   /// default, which takes the slider off the page — a test that wants it sets a

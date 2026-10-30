@@ -13,11 +13,11 @@ import "../../core/formatting.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 
-/// The accelerators this phone turned out to have. Asked once and kept: it
-/// spawns the server with `--list-devices`, and the answer cannot change while
-/// the app runs.
-final localDevicesProvider = FutureProvider<List<LocalDevice>>(
-    (ref) => ref.watch(localLlmProvider).devices());
+/// The accelerators this phone turned out to have, or null where the engine
+/// offers no choice. Asked once and kept: it spawns the server with
+/// `--list-devices`, and the answer cannot change while the app runs.
+final localDevicesProvider = FutureProvider<List<LocalDevice>?>(
+    (ref) => ref.watch(localEngineProvider).devices() ?? Future.value(null));
 
 /// The row that opens [LocalLlmSettingsPage], kept off the On-device page
 /// itself so the catalogs are what it shows.
@@ -50,30 +50,27 @@ class LocalModelSection extends ConsumerWidget {
 /// picker here would have been a second place to say the same thing, and the
 /// one place that could disagree with the rest.
 ///
-/// Each setting is drawn only where the engine reads it, in this order.
+/// Each setting is drawn only where the engine reads it: a [LocalControl] it
+/// names, a device list or core count it answers, a prefill it has.
 class LocalLlmSettingsPage extends ConsumerWidget {
   const LocalLlmSettingsPage({super.key});
-
-  static const _rows = <LocalControl, Widget>{
-    LocalControl.maxRunning: _MaxRunningPicker(),
-    LocalControl.device: _DevicePicker(),
-    LocalControl.context: _ContextPicker(),
-    LocalControl.threads: _ThreadsSlider(),
-    LocalControl.prefill: _PrefillToggle(),
-    LocalControl.kvCache: _KvCachePicker(),
-  };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controls = ref.watch(localEngineProvider).controls;
+    final prefill = ref.watch(localPrefillProvider) != null;
     return Scaffold(
       appBar: AppBar(title: const Text("LLM settings")),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
-          for (final MapEntry(:key, :value) in _rows.entries)
-            if (controls.contains(key)) value,
-          if (controls.contains(LocalControl.prefill)) const _Prefilling(),
+          if (controls.contains(LocalControl.maxRunning)) const _MaxRunningPicker(),
+          const _DevicePicker(),
+          if (controls.contains(LocalControl.context)) const _ContextPicker(),
+          const _ThreadsSlider(),
+          if (prefill) const _PrefillToggle(),
+          if (controls.contains(LocalControl.kvCache)) const _KvCachePicker(),
+          const _Prefilling(),
           const _Running(),
         ],
       ),
@@ -105,7 +102,8 @@ class _MaxRunningPicker extends ConsumerWidget {
 }
 
 /// What runs the arithmetic. Everything but the CPU is discovered — see
-/// [LocalLlm.devices] — so on most phones this is one entry and says so.
+/// [LocalEngine.devices] — so on most phones this is one entry and says so.
+/// Not drawn where the engine offers no choice.
 class _DevicePicker extends ConsumerWidget {
   const _DevicePicker();
 
@@ -119,6 +117,7 @@ class _DevicePicker extends ConsumerWidget {
     if (found.isLoading) {
       return const LabelledField(label: "Runs on", child: Text("Looking…"));
     }
+    if (found.hasValue && found.value == null) return const SizedBox.shrink();
     final devices = found.asData?.value ?? const [];
     if (devices.isEmpty) {
       return const LabelledField(
@@ -196,7 +195,7 @@ class _ThreadsSliderState extends ConsumerState<_ThreadsSlider> {
 
   @override
   Widget build(BuildContext context) {
-    final max = ref.watch(localLlmProvider).maxThreads;
+    final max = ref.watch(localEngineProvider).maxThreads;
     if (max == null || max <= 1) return const SizedBox.shrink();
     final chosen = ref.watch(appSettingsProvider.select((s) => s.localModelThreads));
     final value = _dragging ?? (chosen ?? max).toDouble();
@@ -467,18 +466,19 @@ class _AddLocalModelPageState extends ConsumerState<AddLocalModelPage> {
       for (final model in ref.read(addedLocalModelsProvider)) model.id,
       ...ref.read(installedLocalModelsProvider),
     };
-    final model = GgufModel(
+    final engine = ref.read(localEngineProvider);
+    final model = engine.fromLink!((
       id: localModelIdFor(url, taken),
       name: _name.text.trim(),
       url: url,
       parameters: optional(_parameters),
       licence: optional(_licence),
       sha256: optional(_sha256),
-    );
+    ));
     ref.read(addedLocalModelsProvider.notifier).add(model);
     ref
         .read(modelDownloadsProvider.notifier)
-        .install(InstallableLocalModel(model, ref.read(localModelStoreProvider)));
+        .install(InstallableLocalModel(model, engine.store));
     Navigator.of(context).pop();
   }
 

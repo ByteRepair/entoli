@@ -16,7 +16,6 @@ import "data/builtin/llm/on_device_provider.dart" show OnDeviceProvider;
 import "data/builtin/llm/providers/presets.dart" show providerOf;
 import "data/builtin/llm/providers/provider.dart" show LlmProvider, resolveIn;
 import "data/local/apple_fm.dart" show AppleFm;
-import "data/local/llama_engine.dart" show LlamaEngine;
 import "data/local/local_engine.dart";
 import "data/builtin/builtin_backend.dart";
 import "data/local/file_trigger_store.dart";
@@ -49,7 +48,6 @@ import "data/builtin/llm/local_prefill.dart";
 import "data/local/byte_repair_store.dart";
 import "domain/local_llm.dart";
 import "domain/local_model.dart";
-import "domain/local_model_store.dart";
 import "domain/models.dart";
 import "data/prompts/prompt_sources.dart" show promptTiers;
 import "domain/permission.dart";
@@ -248,22 +246,13 @@ final onDeviceModelsProvider = Provider<OnDeviceProvider>((ref) => OnDeviceProvi
 /// every reader of this is synchronous.
 final localEngineProvider = Provider<LocalEngine>((ref) => const NoLocalEngine());
 
-final localModelStoreProvider =
-    Provider<LocalModelStore>((ref) => ref.watch(localEngineProvider).store);
-
-/// llama.cpp's server pool, for the settings only it reads: devices, threads,
-/// the prefill.
-final localLlmProvider = Provider<LocalLlm>((ref) => switch (ref.watch(localEngineProvider)) {
-      LlamaEngine(:final llm) => llm,
-      _ => const UnavailableLocalLlm(),
-    });
 
 /// Which on-device models are downloaded.
 class InstalledLocalModels extends InstalledIds {
   InstalledLocalModels(super.seed);
 
   @override
-  Future<Set<String>> scan() => ref.read(localModelStoreProvider).installed();
+  Future<Set<String>> scan() => ref.read(localEngineProvider).store.installed();
 }
 
 final installedLocalModelsProvider =

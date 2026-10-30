@@ -22,9 +22,6 @@ import "local_model.dart";
 abstract class LocalLlm {
   const LocalLlm();
 
-  /// Whether this build has a server to run at all.
-  bool get available;
-
   /// What is loaded and how far each one has got, least recently served first.
   /// A [ValueListenable] rather than a stream because the settings page draws
   /// it and a rebuild per frame of a model load is the wrong shape.
@@ -70,9 +67,6 @@ abstract class LocalLlm {
   /// Stop everything. What the settings page's own control reaches, and what a
   /// phone short of memory wants.
   Future<void> stopAll();
-
-  /// What [modelId] is called, for a line that names it.
-  String nameOf(String modelId) => modelId;
 }
 
 /// The models on this device, text and voice, as one provider.
@@ -168,9 +162,6 @@ const maxLocalModelsAllowed = 2;
 /// No server bundled, so nothing to load.
 class UnavailableLocalLlm extends LocalLlm {
   const UnavailableLocalLlm();
-
-  @override
-  bool get available => false;
 
   @override
   ValueListenable<List<LocalLlmState>> get running => _none;

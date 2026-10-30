@@ -2,7 +2,6 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../core/formatting.dart";
-import "../../data/local/local_engine.dart" show LocalControl;
 import "../../domain/installable.dart";
 import "../../domain/local_model.dart";
 import "../../domain/local_model_store.dart";
@@ -92,7 +91,7 @@ class _TextModels extends ConsumerWidget {
             installed: true,
             deleteMessage: (m) => deleteMessage(m, again: false),
           ),
-        if (engine.controls.contains(LocalControl.addByLink))
+        if (engine.fromLink != null)
           AddButtonRow(
             child: OutlinedButton.icon(
               icon: const Icon(Icons.add_link),

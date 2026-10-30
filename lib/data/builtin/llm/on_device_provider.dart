@@ -47,7 +47,7 @@ class OnDeviceProvider extends LlmProvider with KeyFree {
     final ref = (providerId: localProviderId, modelId: id);
     final voice = voices().contains(id) ? voiceModelById(id) : null;
     return [
-      if (_engine.installed.contains(id))
+      if (_engine.store.downloadedOfSync(id) != null)
         HostedChatModel(ref, ModelInfo(id: id, toolCall: true)),
       if (voice is RecognitionModel) OnDeviceTranscriptionModel(ref, voice),
       if (voice is SpeechModel) OnDeviceSynthesisModel(ref, voice),

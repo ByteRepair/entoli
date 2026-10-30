@@ -1,6 +1,5 @@
 import "dart:async";
 
-import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
@@ -33,7 +32,7 @@ void main() {
 
   testWidgets("a build with no server in it says where the answer is instead, "
       "and offers nothing to download", (tester) async {
-    app = TestApp.create();
+    app = TestApp.create(localEngineMissing: true);
     await pumpOnDevice(tester);
 
     // Android and Linux build a server, so missing one is a fault to name.
@@ -44,13 +43,11 @@ void main() {
 
   testWidgets("a platform that never builds a server keeps only the voice "
       "downloads", (tester) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
     app = TestApp.create();
     await pumpOnDevice(tester);
 
     expect(find.textContaining("Ollama or LM Studio"), findsNothing);
     expect(find.text("Answering on this device"), findsNothing);
-    debugDefaultTargetPlatformOverride = null;
   });
 
   testWidgets("with neither a server nor a voice catalog there is no On-device "

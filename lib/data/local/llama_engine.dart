@@ -14,8 +14,7 @@ import "local_engine.dart";
 class LlamaEngine extends LocalEngine {
   const LlamaEngine(this.llm, this.store, {this.kvCache});
 
-  /// The server pool, which the llama-only settings (devices, threads, the
-  /// prefill) reach directly.
+  /// The server pool, which the prefill warms directly.
   final LocalLlm llm;
 
   @override
@@ -28,7 +27,9 @@ class LlamaEngine extends LocalEngine {
   List<LocalModel> get catalog => ggufCatalog;
 
   @override
-  Set<LocalControl> get controls => LocalControl.values.toSet();
+  Set<LocalControl> get controls => _controls;
+
+  static final _controls = LocalControl.values.toSet();
 
   @override
   ValueListenable<List<LocalLlmState>> get running => llm.running;
@@ -39,4 +40,20 @@ class LlamaEngine extends LocalEngine {
   @override
   LlmClient client(AppSettings Function() settings) =>
       LocalPoolClient(llm, () => poolOptions(settings()), kvCache: kvCache);
+
+  @override
+  Future<List<LocalDevice>> devices() => llm.devices();
+
+  @override
+  int? get maxThreads => llm.maxThreads;
+
+  @override
+  LocalModel Function(ModelLink link) get fromLink => (link) => GgufModel(
+        id: link.id,
+        name: link.name,
+        url: link.url,
+        parameters: link.parameters,
+        licence: link.licence,
+        sha256: link.sha256,
+      );
 }

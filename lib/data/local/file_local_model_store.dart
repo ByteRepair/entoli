@@ -108,12 +108,13 @@ class FileLocalModelStore extends LocalModelStore {
           final directory = directoryFor(model.id);
           Directory(directory).createSync(recursive: true);
 
+          final total = model.bytes;
           var done = 0;
           for (final file in model.files) {
             final to = p.join(directory, file.path);
             Directory(p.dirname(to)).createSync(recursive: true);
             final digest = await run.fetchSha256(
-                url: file.url, to: to, total: model.bytes, done: done);
+                url: file.url, to: to, total: total, done: done);
             if (run.cancelled) return;
             // A gigabyte over somebody's mobile data, and the publisher already
             // says what it should come to. Weights are not a program, so this
@@ -126,7 +127,7 @@ class FileLocalModelStore extends LocalModelStore {
                 "be, so nothing was kept.",
               );
             }
-            done += await File(to).length();
+            done += file.bytes ?? await File(to).length();
           }
 
           final DownloadedModel downloaded;

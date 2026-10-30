@@ -416,9 +416,11 @@ What the files mean once they land — what the runtime is pointed at, and the
 facts read off them — is the engine's `ModelFormat`; `GgufFormat` reads the
 header. A GGUF model (`GgufModel`) is the one-file case.
 
-The settings only llama.cpp reads (devices, threads, the KV cache, the prefill)
-still reach the pool directly through `localLlmProvider`, which answers the
-pool where the engine is `LlamaEngine` and an unavailable one elsewhere.
+Some rows are drawn from what the engine answers rather than from
+`controls`: the device picker from `devices()`, the cores slider from
+`maxThreads`, Add model from `fromLink`, each null where the engine has no
+such choice, and the prefill toggle from there being a prefill — which only
+`createLocalPrefill` decides, building one for a `LlamaEngine` alone.
 
 The endpoint is composed by `modelProvidersProvider` rather than written into
 `settings.json`, and it has no address to write: each model is its own process

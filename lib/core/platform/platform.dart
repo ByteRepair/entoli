@@ -169,6 +169,7 @@ LocalPrefill? createLocalPrefill(
   return LocalPrefill(
     llm: engine.llm,
     background: background,
+    nameOf: engine.nameOf,
     kvCache: engine.kvCache,
     // One settings read per warm, feeding both the serve options and the
     // prompt, so the two cannot be built from different snapshots.
