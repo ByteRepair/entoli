@@ -179,6 +179,47 @@ binary it was written for first and takes its plist and its service out
 itself when the check fails. Nothing is left behind after an uninstall, and
 nothing needs a hand.
 
+## The model host
+
+The on-device models — MLX's text models and sherpa-onnx's voice — run in a
+second process, `entoli-models`, not in the one that draws the window. The
+GPU interleaves processes, not the queues of one: MLX encoding in the app's
+own process put its work beside every frame the window drew, and a turn on a
+4B model held frames for hundreds of milliseconds. Opened as an app of its
+own the stutter drops to slight. It is also what keeps a quit during an MLX
+turn from crashing — see below.
+
+`ModelHost` (`lib/data/model_host/`) is what the engines ask for what they
+talk to — a `ModelChannel` for the native half, a `Worker` for an isolate —
+and they never learn which process answers. macOS gets `HelperModelHost`;
+every other platform `InProcessModelHost`, since iOS cannot start a process
+and the rest run their models as a server of their own or on the CPU.
+
+- **It is this app's executable, launched again.** `HelperProcess` runs
+  `/usr/bin/open -n -g -a <bundle> --args entoli-models <socket> <pid>`
+  rather than spawning a child: a child is this app's to macOS, its GPU work
+  scheduled as the app's own. Launched with that flag, `AppDelegate` keeps no
+  window and `ModelHost` (in `MainFlutterWindow.swift`) runs a headless
+  engine on `modelHostMain` with `AppleFmChannel` registered on it. Only an
+  app bundle has an executable to launch again, so under `flutter test` it
+  refuses rather than wait on a connect that never comes.
+- **The socket is the only way in.** A Unix socket in a directory only this
+  user can enter, removed once connected, and the host's first frame must
+  carry the key handed to it in its environment. The frames are
+  `StandardMessageCodec` messages, length-prefixed (`host_frame.dart`).
+- **The host goes with the app, however it goes.** Its parent is launchd, so
+  it watches the pid it was handed, and leaves when that exits or the socket
+  closes. A host lost is every model in it lost, and `ModelHost.lost` tells
+  the engines so their Running lists empty.
+- **It leaves through `_exit`.** `exit` runs C++ static destructors, MLX's
+  Metal device among them, while a generation may still be encoding on
+  another thread — the crash every quit during an MLX turn ended in. `quit`
+  stops the generations first, bounded at three seconds.
+
+Still owed: a helper bundle (`Contents/Helpers/`, `LSBackgroundOnly`, opened
+through `NSWorkspace`) in place of `open -n`, so LaunchServices sees a
+background-only helper rather than a second launch of Entoli itself.
+
 ## What is absent, and honestly so
 
 No llama.cpp: the bundled server is built for Android and Linux. The

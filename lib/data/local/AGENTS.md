@@ -430,7 +430,8 @@ one place each — their `LocalRuntime`:
 `LlamaRuntime` and its `LlamaInstance`, a server process each, reading every
 control. `MlxEngine` is MLX on iOS 27 and macOS 27 where the build links
 mlx-swift-lm: `MlxRuntime` and its `MlxInstance`, over the model host's
-channel — see "The MLX models" in `ios/AGENTS.md`. The two engines add only
+channel — see "The MLX models" in `ios/AGENTS.md` and "The model host" in
+`macos/AGENTS.md`. The two engines add only
 what is theirs besides: a catalog, and for llama.cpp the Add model page's
 `fromLink`.
 
