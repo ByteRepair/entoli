@@ -868,6 +868,21 @@ in its filter, so they share one path: `AttachmentPicker` (a domain interface,
 `file_selector` behind it, faked in tests) hands back `Attachment`s of filename,
 mime type and bytes.
 
+A paste is the other way in. `ClipboardFiles` answers what the clipboard holds
+that is not text, and the composer's Ctrl/Cmd+V asks it before the field's own
+paste, which runs only when it found nothing. The answer is the runner's
+(`readFiles` on the `agent_chat/clipboard` channel, beside the rich copy), since
+Flutter's clipboard reads text alone, and each runner ranks the same way: a
+file list over text, because a file manager's copy carries the names as text
+too; text over an image, because a spreadsheet's cells carry a picture of
+themselves. A file comes back as a path the Dart side reads, an image as PNG
+bytes. A browser is the exception: Ctrl+V never reaches Flutter's shortcuts
+there and a page cannot read the clipboard's files, so the document's paste
+event carries them and the focused composer takes them. Android's keyboards
+hand an image over as inserted content rather than a clip, which the field's
+`contentInsertionConfiguration` takes. The long-press menu's Paste is still
+the field's own, and pastes text only.
+
 Bytes are saved under the chat's `resources/` and the message keeps a `FilePart`
 naming the resource. That is what makes an edit or a regenerate work: the parts
 are in `conv.jsonl`, so a resend passes the parts along and never touches the

@@ -140,6 +140,7 @@ class CompletionField extends ConsumerStatefulWidget {
     this.textAlignVertical,
     this.shortcuts = const <ShortcutActivator, Intent>{},
     this.actions = const <Type, Action<Intent>>{},
+    this.contentInsertionConfiguration,
     this.layout = _stacked,
   });
 
@@ -164,6 +165,9 @@ class CompletionField extends ConsumerStatefulWidget {
   /// name a key, and it only binds any while it has something to pick.
   final Map<ShortcutActivator, Intent> shortcuts;
   final Map<Type, Action<Intent>> actions;
+
+  /// What a keyboard's image or sticker does, passed to the field.
+  final ContentInsertionConfiguration? contentInsertionConfiguration;
 
   final CompletionLayout layout;
 
@@ -304,6 +308,7 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
           textAlignVertical: widget.textAlignVertical,
           style: widget.style,
           decoration: widget.decoration,
+          contentInsertionConfiguration: widget.contentInsertionConfiguration,
         ),
       ),
     );

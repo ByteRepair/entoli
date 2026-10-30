@@ -61,7 +61,8 @@ class MainFlutterWindow: NSWindow {
 }
 
 /// The copy with formatting, which Flutter's own clipboard call cannot make:
-/// it writes plain text only. See rich_clipboard.dart. In this file rather
+/// it writes plain text only. And the files a paste brings, which it cannot
+/// read. See rich_clipboard.dart and clipboard_files.dart. In this file rather
 /// than its own so the Xcode project needs no new entry.
 enum ClipboardChannel {
   private static var channel: FlutterMethodChannel?
@@ -69,16 +70,42 @@ enum ClipboardChannel {
   static func register(with messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(name: "agent_chat/clipboard", binaryMessenger: messenger)
     channel.setMethodCallHandler { call, result in
-      guard call.method == "setHtml" else { return result(FlutterMethodNotImplemented) }
-      guard let args = call.arguments as? [String: Any],
-            let plain = args["plain"] as? String, let html = args["html"] as? String
-      else { return result(FlutterError(code: "bad-args", message: "plain and html", details: nil)) }
-      let pasteboard = NSPasteboard.general
-      pasteboard.clearContents()
-      pasteboard.setString(html, forType: .html)
-      pasteboard.setString(plain, forType: .string)
-      result(nil)
+      switch call.method {
+      case "setHtml":
+        guard let args = call.arguments as? [String: Any],
+              let plain = args["plain"] as? String, let html = args["html"] as? String
+        else { return result(FlutterError(code: "bad-args", message: "plain and html", details: nil)) }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(html, forType: .html)
+        pasteboard.setString(plain, forType: .string)
+        result(nil)
+      case "readFiles":
+        result(readFiles())
+      default:
+        result(FlutterMethodNotImplemented)
+      }
     }
     self.channel = channel
+  }
+
+  /// A Finder copy carries the names as text too, so files win over text, and
+  /// text over an image: a spreadsheet's cells come with a picture of
+  /// themselves.
+  private static func readFiles() -> [[String: Any]] {
+    let pasteboard = NSPasteboard.general
+    if let urls = pasteboard.readObjects(
+      forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
+      !urls.isEmpty
+    {
+      return urls.map { ["path": $0.path] }
+    }
+    if pasteboard.string(forType: .string) != nil { return [] }
+    let png = pasteboard.data(forType: .png)
+      ?? pasteboard.data(forType: .tiff).flatMap {
+        NSBitmapImageRep(data: $0)?.representation(using: .png, properties: [:])
+      }
+    guard let png else { return [] }
+    return [["name": "pasted.png", "mime": "image/png", "bytes": FlutterStandardTypedData(bytes: png)]]
   }
 }

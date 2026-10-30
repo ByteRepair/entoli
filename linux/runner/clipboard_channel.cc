@@ -64,9 +64,73 @@ FlMethodResponse* set_html(FlValue* args) {
   return FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
 }
 
-void handle(FlMethodChannel*, FlMethodCall* call, gpointer) {
+void respond_files(FlMethodCall* call, FlValue* files) {
   g_autoptr(FlMethodResponse) response =
-      g_strcmp0(fl_method_call_get_name(call), "setHtml") == 0
+      FL_METHOD_RESPONSE(fl_method_success_response_new(files));
+  fl_method_call_respond(call, response, nullptr);
+  g_object_unref(call);
+}
+
+void got_uris(GtkClipboard*, gchar** uris, gpointer user) {
+  auto* call = static_cast<FlMethodCall*>(user);
+  g_autoptr(FlValue) files = fl_value_new_list();
+  for (gchar** uri = uris; uri != nullptr && *uri != nullptr; uri++) {
+    g_autofree gchar* path = g_filename_from_uri(*uri, nullptr, nullptr);
+    if (path == nullptr) continue;
+    FlValue* entry = fl_value_new_map();
+    fl_value_set_string_take(entry, "path", fl_value_new_string(path));
+    fl_value_append_take(files, entry);
+  }
+  g_strfreev(uris);
+  respond_files(call, files);
+}
+
+void got_image(GtkClipboard*, GdkPixbuf* pixbuf, gpointer user) {
+  auto* call = static_cast<FlMethodCall*>(user);
+  g_autoptr(FlValue) files = fl_value_new_list();
+  gchar* png = nullptr;
+  gsize size = 0;
+  if (pixbuf != nullptr &&
+      gdk_pixbuf_save_to_buffer(pixbuf, &png, &size, "png", nullptr, nullptr)) {
+    FlValue* entry = fl_value_new_map();
+    fl_value_set_string_take(entry, "name", fl_value_new_string("pasted.png"));
+    fl_value_set_string_take(entry, "mime", fl_value_new_string("image/png"));
+    fl_value_set_string_take(
+        entry, "bytes",
+        fl_value_new_uint8_list(reinterpret_cast<const uint8_t*>(png), size));
+    fl_value_append_take(files, entry);
+    g_free(png);
+  }
+  respond_files(call, files);
+}
+
+// A file manager's copy carries the names as text too, so a file list wins
+// over text, and text over an image: a spreadsheet's cells come with a
+// picture of themselves.
+void got_targets(GtkClipboard* clipboard, GdkAtom* atoms, gint count,
+                 gpointer user) {
+  auto* call = static_cast<FlMethodCall*>(user);
+  if (atoms != nullptr && gtk_targets_include_uri(atoms, count)) {
+    gtk_clipboard_request_uris(clipboard, got_uris, call);
+  } else if (atoms != nullptr && !gtk_targets_include_text(atoms, count) &&
+             gtk_targets_include_image(atoms, count, FALSE)) {
+    gtk_clipboard_request_image(clipboard, got_image, call);
+  } else {
+    g_autoptr(FlValue) none = fl_value_new_list();
+    respond_files(call, none);
+  }
+}
+
+void handle(FlMethodChannel*, FlMethodCall* call, gpointer) {
+  const gchar* method = fl_method_call_get_name(call);
+  if (g_strcmp0(method, "readFiles") == 0) {
+    // Answered from the callbacks, which hold the call until then.
+    gtk_clipboard_request_targets(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),
+                                  got_targets, g_object_ref(call));
+    return;
+  }
+  g_autoptr(FlMethodResponse) response =
+      g_strcmp0(method, "setHtml") == 0
           ? set_html(fl_method_call_get_args(call))
           : FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
   fl_method_call_respond(call, response, nullptr);

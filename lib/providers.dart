@@ -33,6 +33,7 @@ import "domain/app_theme.dart";
 import "domain/assistant_launch.dart";
 import "domain/assistant_view.dart";
 import "domain/attachment_picker.dart";
+import "domain/clipboard_files.dart";
 import "domain/backup_handoff.dart";
 import "domain/background_work.dart";
 import "domain/builtin_project.dart";
@@ -104,6 +105,7 @@ final linkedInstructionsStoreProvider = Provider(
 final marketplaceClientProvider =
     Provider<http.Client>((ref) => throw UnimplementedError());
 final attachmentPickerProvider = Provider<AttachmentPicker>((ref) => throw UnimplementedError());
+final clipboardFilesProvider = Provider<ClipboardFiles>((ref) => throw UnimplementedError());
 final fileHandoffProvider = Provider<FileHandoff>((ref) => throw UnimplementedError());
 final backupHandoffProvider = Provider<BackupHandoff>((ref) => throw UnimplementedError());
 final appRestartProvider = Provider<AppRestart>((ref) => throw UnimplementedError());

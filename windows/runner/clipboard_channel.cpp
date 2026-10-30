@@ -3,11 +3,15 @@
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
 
+#include <shellapi.h>
+
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <memory>
 #include <string>
 #include <variant>
+#include <vector>
 
 namespace {
 
@@ -62,6 +66,52 @@ bool SetHtml(HWND window, const std::string& plain, const std::string& html) {
   return ok;
 }
 
+std::string Utf8(const std::wstring& wide) {
+  const int size = WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), -1, nullptr,
+                                       0, nullptr, nullptr);
+  std::string out(size > 0 ? size : 1, '\0');
+  WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), -1, out.data(), size, nullptr,
+                      nullptr);
+  out.resize(std::strlen(out.c_str()));
+  return out;
+}
+
+// Explorer's copy carries the names as text too, so a file list wins over
+// text, and text over an image: a spreadsheet's cells come with a picture of
+// themselves.
+flutter::EncodableList ReadFiles(HWND window) {
+  using flutter::EncodableMap;
+  using flutter::EncodableValue;
+  flutter::EncodableList files;
+  if (!OpenClipboard(window)) return files;
+  if (auto drop = static_cast<HDROP>(GetClipboardData(CF_HDROP))) {
+    const UINT count = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
+    for (UINT i = 0; i < count; i++) {
+      std::wstring path(DragQueryFileW(drop, i, nullptr, 0) + 1, L'\0');
+      path.resize(DragQueryFileW(drop, i, path.data(),
+                                 static_cast<UINT>(path.size())));
+      files.push_back(EncodableValue(EncodableMap{
+          {EncodableValue("path"), EncodableValue(Utf8(path))}}));
+    }
+  } else if (!IsClipboardFormatAvailable(CF_UNICODETEXT)) {
+    // What a screenshot tool puts beside its bitmap. A bare CF_DIB is left
+    // alone: a BMP is not an image any model takes.
+    HANDLE png = GetClipboardData(RegisterClipboardFormatW(L"PNG"));
+    const auto* bytes =
+        png == nullptr ? nullptr : static_cast<const uint8_t*>(GlobalLock(png));
+    if (bytes != nullptr) {
+      std::vector<uint8_t> data(bytes, bytes + GlobalSize(png));
+      GlobalUnlock(png);
+      files.push_back(EncodableValue(EncodableMap{
+          {EncodableValue("name"), EncodableValue("pasted.png")},
+          {EncodableValue("mime"), EncodableValue("image/png")},
+          {EncodableValue("bytes"), EncodableValue(data)}}));
+    }
+  }
+  CloseClipboard();
+  return files;
+}
+
 }  // namespace
 
 void RegisterClipboardChannel(flutter::BinaryMessenger* messenger, HWND window) {
@@ -71,6 +121,9 @@ void RegisterClipboardChannel(flutter::BinaryMessenger* messenger, HWND window) 
       messenger, "agent_chat/clipboard",
       &flutter::StandardMethodCodec::GetInstance());
   channel->SetMethodCallHandler([window](const auto& call, auto result) {
+    if (call.method_name() == "readFiles") {
+      return result->Success(flutter::EncodableValue(ReadFiles(window)));
+    }
     if (call.method_name() != "setHtml") return result->NotImplemented();
     const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
     const std::string* plain = nullptr;
