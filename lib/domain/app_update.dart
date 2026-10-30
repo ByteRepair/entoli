@@ -1,7 +1,7 @@
 /// The release the app can update itself to from the three desktops, and the
 /// pieces of the check every platform side shares. The platform half — where
 /// a download is staged and what putting it in place means here — is
-/// `core/platform/io/update.dart`; this file is what every side agrees on.
+/// `core/platform/update.dart`; this file is what every side agrees on.
 library;
 
 /// The repository the check looks at. `releases/latest` answers with a
@@ -76,7 +76,7 @@ String? latestTagOf(Uri location) {
 }
 
 /// The platform half of the automatic update — see "The automatic update" in
-/// the root notes. One side per desktop; the web and the phones answer
+/// the root notes. One side per desktop; the phones answer
 /// [UnavailableAppUpdateHost].
 abstract class AppUpdateHost {
   /// Whether this build is one the updater serves at all. The three desktops
@@ -90,8 +90,8 @@ abstract class AppUpdateHost {
   Future<void> check({required String? version, required bool enabled});
 }
 
-/// The answer on the platforms that do not update themselves: Android, iOS
-/// and the web, which reach releases through their own channels. Every
+/// The answer on the platforms that do not update themselves: Android and
+/// iOS, which reach releases through their own channels. Every
 /// question is answered honestly and nothing runs.
 class UnavailableAppUpdateHost implements AppUpdateHost {
   const UnavailableAppUpdateHost();

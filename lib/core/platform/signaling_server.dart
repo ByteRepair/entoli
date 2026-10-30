@@ -2,9 +2,9 @@ import "dart:async";
 import "dart:convert";
 import "dart:io";
 
-import "../../../domain/sync/lan_signaling.dart";
-import "../../log.dart";
-import "../../../domain/sync/signaling_routes.dart";
+import "../../domain/sync/lan_signaling.dart";
+import "../log.dart";
+import "../../domain/sync/signaling_routes.dart";
 
 /// The rendezvous two devices on one network meet at before WebRTC can take
 /// over. Binds all interfaces on the well-known port; that and a one-time code
@@ -162,9 +162,6 @@ class SignalingServer implements LanSignaling {
 
   Future<void> _handle(HttpRequest request) async {
     final response = request.response;
-    // Before anything that can throw: a browser has to be able to read a 500
-    // as well as an answer.
-    SignalingRoutes.cors.forEach(response.headers.set);
     try {
       final reply = await _routes.handle(SignalingRequest(
         request.method,
@@ -173,7 +170,6 @@ class SignalingServer implements LanSignaling {
             ? await utf8.decodeStream(request)
             : "",
       ));
-      reply.headers.forEach(response.headers.set);
       response.statusCode = reply.status;
       if (reply.body.isNotEmpty) response.write(reply.body);
     } catch (_) {

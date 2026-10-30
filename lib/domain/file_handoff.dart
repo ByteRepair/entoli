@@ -1,9 +1,8 @@
-import "dart:typed_data";
+import "dart:io";
 
-import "package:fs_shim/fs.dart";
 
-/// A file on its way into a workspace from outside Entoli: picked in a
-/// browser's chooser, or shared to the app by another one.
+/// A file on its way into a workspace from outside Entoli: shared to the app
+/// by another one.
 ///
 /// Deliberately not the bytes — a batch waits on screen while a workspace is
 /// picked, and holding it as buffers is what a phone gets killed for. Each
@@ -24,18 +23,7 @@ abstract class IncomingFile {
   /// where the platform put it, so a second call has nothing left to write.
   /// Whoever offers a retry has to offer it over files that have not landed
   /// yet, never over the same list again.
-  Future<void> writeTo(FileSystem fs, String target);
-}
-
-/// Bytes already in hand, which is the one case with nothing to defer.
-class IncomingBytes extends IncomingFile {
-  const IncomingBytes(super.path, this.bytes);
-
-  final Uint8List bytes;
-
-  @override
-  Future<void> writeTo(FileSystem fs, String target) =>
-      fs.file(target).writeAsBytes(bytes);
+  Future<void> writeTo(String target);
 }
 
 /// A copy the platform staged on disk before Entoli was told about it —
@@ -50,29 +38,25 @@ class IncomingStaged extends IncomingFile {
   final String staged;
 
   @override
-  Future<void> writeTo(FileSystem fs, String target) async {
-    final file = fs.file(staged);
+  Future<void> writeTo(String target) async {
+    final file = File(staged);
     try {
       await file.rename(target);
-    } on FileSystemException catch (e) {
+    } on PathNotFoundException {
       // Only a rename across volumes is worth a second try. A copy of a file
       // that is not there fails the same way and buries the real cause under
       // its own.
-      if (e.status == FileSystemException.statusNotFound) rethrow;
+      rethrow;
+    } on FileSystemException {
       await file.copy(target);
       await file.delete();
     }
   }
 }
 
-/// Which way out of the app a selection takes. The port answers with the kind
-/// rather than the wording, so the button's name and its icon are decided in
-/// one place and that place is the UI.
-enum ExportKind { share, download }
-
 /// What a workspace file can do outside Entoli, and what can come back in. Each
 /// route is gated the way `Shell.canRunCommands` gates the agent's commands,
-/// because the three platforms answer differently rather than partially:
+/// because the platforms answer differently rather than partially:
 ///
 /// - Desktop opens a file in the viewer it is registered with, and shows a
 ///   folder in the file manager. It has no share sheet and needs no chooser of
@@ -80,8 +64,6 @@ enum ExportKind { share, download }
 /// - Android opens a file with an `ACTION_VIEW` intent, sends a selection out
 ///   through the share sheet, and takes files in the same way: another app
 ///   shares to Entoli, and [takeShare] is what is waiting when it does.
-/// - A browser opens a file in a new tab and lets itself preview it, downloads
-///   a selection, and takes files in through [import].
 abstract interface class FileHandoff {
   /// Open [path] in whatever this platform views that kind of file with.
   Future<void> open(String path);
@@ -90,16 +72,11 @@ abstract interface class FileHandoff {
   bool get canReveal;
   Future<void> reveal(String dir);
 
-  /// Hand [paths] to the rest of the device. Neither destination takes a
-  /// folder, so a selection with one in it goes as a single zip. Null is a
-  /// platform with nowhere to hand them.
-  ExportKind? get exportKind;
+  /// Hand [paths] to the rest of the device through the share sheet. It does
+  /// not take a folder, so a selection with one in it goes as a single zip.
+  /// False is a platform with no share sheet to hand them to.
+  bool get canShare;
   Future<void> export(List<String> paths);
-
-  /// Take files in through a chooser of Entoli's own. Only a browser has one:
-  /// Android's route in is the share sheet, and desktop's is the file manager.
-  bool get canImport;
-  Future<List<IncomingFile>> import({required bool folders});
 
   /// What another app shared to Entoli and nothing has claimed yet. Reading it
   /// empties it, so one share is offered a workspace exactly once.

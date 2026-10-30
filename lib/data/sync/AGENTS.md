@@ -15,7 +15,7 @@ and approves.
 | Impersonation on reconnect | Each device has a persistent Ed25519 keypair. Peer keys are pinned in `devices.json`; reconnects verify the peer's identity via signed transcript, the handshake refuses an id that is not the hash of the signing key, and `requirePeerId` refuses a different key. |
 | Stolen/replayed pairing payload | Pairing secrets are single-use for fresh pairs; reconnect tokens are derived per-pair. Channel keys are per-connection via ephemeral X25519. |
 | Message injection/replay/ordering | AEAD nonces are monotonic per-direction counters; a replayed or reordered frame fails its MAC. Role enforcement at dispatch disconnects on violation. |
-| Compromised paired device | Devices are individually revocable. Mirrors are RAM-only on the viewing device — never written to the data dir, so never in backups or IndexedDB. |
+| Compromised paired device | Devices are individually revocable. Mirrors are RAM-only on the viewing device — never written to the data dir, so never in backups. |
 
 Key hygiene: secrets never enter logs, errors, or `conv.jsonl`. The first wire
 message is the handshake itself — no plaintext `hello` before it.
@@ -33,9 +33,8 @@ Both sides sign the transcript (both ephemeral keys, both identity keys, in
 fixed role order) with their Ed25519 identity key. Channel keys are
 HKDF-SHA256 over the X25519 shared secret and the pairing secret; the pairing
 secret never crossed the network. The SAS (eight base32 characters, forty
-bits) is derived beside the keys for human confirmation — regrouped five bits
-at a time rather than through one 40-bit integer, since a shift past 32 bits is
-truncated on the web.
+bits) is derived beside the keys for human confirmation — one 40-bit integer
+read out five bits at a time.
 
 **`v` is the protocol version, and a mismatch is refused before anything
 else.** `SyncIdentity.protocolVersion` is bumped by any change an older build
@@ -109,8 +108,7 @@ exposes `sendJson` / `jsonIncoming` for the NDJSON control protocol and
 ## Three rendezvous transports
 
 1. **Same-LAN** (`signaling_server.dart`): HTTP server binding `0.0.0.0` on an
-   ephemeral port, serving CORS + Private-Network-Access preflights. QR
-   carries `{hosts, port, one-time code, psk}`. The joiner POSTs its offer;
+   ephemeral port. QR carries `{hosts, port, one-time code, psk}`. The joiner POSTs its offer;
    the host answers in the same response. The HTTP is cleartext on a direct
    IP and always is: the server only ever sees the SDP blobs (opaque without
    the keys) and a one-time code, the pairing secret travels out-of-band, and
@@ -126,13 +124,8 @@ exposes `sendJson` / `jsonIncoming` for the NDJSON control protocol and
    through a human. Universal fallback; the only route that works with no
    network beyond the data channel's own ICE.
 
-Web builds are relay/manual-paste only — a browser cannot bind a socket, and
-HTTPS Pages makes plain-http LAN dialing mixed-content-blocked. So a browser
-can only ever *join*: `createLanSignaling` answers null there, and the Sync
-page says as much rather than drawing a button that does nothing.
-`startPairingWindow` throws `SyncPairing.noRoute` where neither route is
-available, and the wording differs by platform because what is missing does —
-a desktop is short of both, a browser only of the relay.
+`startPairingWindow` throws `SyncPairing.noRoute` where neither the LAN nor
+the relay route is available.
 
 ## The three pieces
 
@@ -206,7 +199,7 @@ appear until a reconnect, so `_announced` holds the ids last sent and a
 a re-read per event: `saveState` runs several times a turn.
 
 The mirroring side keeps `MirrorChat`s **in RAM only** — never under
-`<dataDir>`, so never in a backup, never in IndexedDB, and gone when the
+`<dataDir>`, so never in a backup, and gone when the
 process is. That is what makes a mirror safe on a borrowed device, and it is
 also why a resume is a line count rather than a file: `chatOpen{fromLine}` asks
 for the log from where this device got to, and `chatSnapshot{totalLines}` is
@@ -623,10 +616,8 @@ before anything else, so the already-paired are there from the first frame.
 The sync device name is the machine's own hostname where it has one, falling
 back to the first characters of the key fingerprint. A user's own name for it
 wins over both. The hostname comes in as a constructor argument rather than
-being read in the hub: `Platform.localHostname` is `dart:io`'s, and a browser
-has no name of its own to give — `location.hostname` is the server the page
-came from, which is a different machine entirely. On Android
-`Platform.localHostname` is `localhost`, so the system device name is read
+being read in the hub, because `Platform.localHostname` is not the answer
+everywhere: on Android it is `localhost`, so the system device name is read
 through `agent_chat/device` instead — `Settings.Global device_name`, the name
 the user set in system settings, falling back to `Build.MODEL`. `minSdk` is 26
 and the setting has been there since 24, so no fallback path is needed. The
@@ -867,13 +858,10 @@ non-required camera feature for it, and iOS's `Info.plist` the
   WM, the dev toolbox).
 - **Android**: `FileSecretStore` under app-private storage — already out of
   every other app's reach — until Keystore wiring lands.
-- **Web**: `FileSecretStore` in origin-scoped IndexedDB. The weakest of the
-  three; the Sync page says so rather than pretending otherwise.
 
 `encrypted` says which a build got. The provider settings read it: the
 provider dialog's Advanced key field words its helper text by it, since "OS
-keyring" and "app secret store" are different promises to make. The Sync page
-does not say so on the web, where the keys sit in ordinary IndexedDB.
+keyring" and "app secret store" are different promises to make.
 
 Sync is not the only tenant. `AppSecrets` (`lib/domain/app_secrets.dart`)
 holds the provider API keys (`provider-keys`, one JSON map under one item —
@@ -905,7 +893,7 @@ and the prompt directories, and neither writer here makes it. That is not a
 detail either could have kept to itself: the identity is written before the
 registry on a fresh install, so whichever writes first would have had to make
 it for the other, and both did — until one of them didn't and the app died in
-`main` before a frame on Android and the web, where there is no keyring to
+`main` before a frame on Android, where there is no keyring to
 write to instead. The restore path calls `ensureDirs` for the same reason, and
 it is the only one that deletes `sync/` and unpacks nothing over it.
 

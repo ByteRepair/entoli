@@ -1,10 +1,11 @@
 import "dart:async";
 import "dart:convert";
+import "dart:io";
 import "dart:math";
 import "dart:typed_data";
 
 import "package:flutter/foundation.dart";
-import "package:fs_shim/fs.dart";
+import "package:path/path.dart" as p;
 
 import "../../core/log.dart";
 import "../../domain/models.dart" show JobEnd;
@@ -17,9 +18,7 @@ import "../../domain/shell_job.dart";
 /// call the agent makes in that chat, this turn or a later one, hears how the
 /// ended ones ended.
 class BackgroundJobs {
-  BackgroundJobs(this.fs);
-
-  final FileSystem fs;
+  BackgroundJobs();
 
   /// How long one may run before it is killed. A job nobody stopped is still
   /// a process the user did not ask to keep forever.
@@ -28,7 +27,7 @@ class BackgroundJobs {
   final _chats = <String, ChatJobs>{};
 
   ChatJobs forChat(String chatId) =>
-      _chats.putIfAbsent(chatId, () => ChatJobs._(fs));
+      _chats.putIfAbsent(chatId, () => ChatJobs._());
 
   /// Kill [chatId]'s jobs and forget them: the chat is being deleted.
   Future<void> closeChat(String chatId) async =>
@@ -48,9 +47,7 @@ String backgroundScript(String callId, String command) =>
 
 /// One chat's jobs.
 class ChatJobs implements ChatShellJobs {
-  ChatJobs._(this._fs);
-
-  final FileSystem _fs;
+  ChatJobs._();
 
   @override
   final ValueNotifier<List<ShellJob>> jobs = ValueNotifier(const []);
@@ -81,7 +78,7 @@ class ChatJobs implements ChatShellJobs {
       id: id,
       callId: callId,
       command: command,
-      logPath: _fs.path.join(workspace, backgroundLog(callId)),
+      logPath: p.join(workspace, backgroundLog(callId)),
       pid: await run.pid,
     );
     jobs.value = [...jobs.value, job];
@@ -95,8 +92,8 @@ class ChatJobs implements ChatShellJobs {
     _notes.add("Background job ${job.id} (`${firstLine(job.command)}`) $how.");
     var log = "";
     try {
-      final file = _fs.file(job.logPath);
-      log = await _tail(file, (await file.stat()).size);
+      final file = File(job.logPath);
+      log = await _tail(file, (file.statSync()).size);
     } catch (e) {
       logFailure("jobs", "could not read the log of job ${job.id}", e);
     }
@@ -128,7 +125,7 @@ class ChatJobs implements ChatShellJobs {
   @override
   Stream<String> log(ShellJob job,
       {Duration every = const Duration(milliseconds: 500)}) {
-    final file = _fs.file(job.logPath);
+    final file = File(job.logPath);
     late final StreamController<String> out;
     Timer? timer;
     var busy = false;
@@ -140,7 +137,7 @@ class ChatJobs implements ChatShellJobs {
       if (busy || out.isClosed) return;
       busy = true;
       final ended = !_runs.containsKey(job.id);
-      final stat = await file.stat();
+      final stat = file.statSync();
       final now = (stat.size, stat.modified);
       if (stat.type != FileSystemEntityType.notFound && now != seen) {
         seen = now;

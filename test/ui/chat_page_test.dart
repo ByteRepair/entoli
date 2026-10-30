@@ -3,6 +3,7 @@ import "dart:io";
 import "package:flutter/foundation.dart" show debugDefaultTargetPlatformOverride, TargetPlatform;
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
+import "package:path/path.dart" as p;
 import "package:super_sliver_list/super_sliver_list.dart";
 
 import "package:agent_chat/data/sync/sync_hub.dart";
@@ -1457,9 +1458,8 @@ void main() {
       ]);
       await app.writeChat(full);
       final workspace = app.config.workspaceDir(chat.state.id);
-      await app.config.fs.directory(workspace).create(recursive: true);
-      await app.config.fs
-          .file(app.config.fs.path.join(workspace, planFileName))
+      await Directory(workspace).create(recursive: true);
+      await File(p.join(workspace, planFileName))
           .writeAsString("# Plan\n\n## Tasks\n\n- [x] read the parser\n"
               "  Start at `parse.dart`.\n- [ ] fix the header\n  Keep the old entry point.\n");
       return full;

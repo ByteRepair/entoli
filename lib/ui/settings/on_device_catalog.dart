@@ -18,7 +18,7 @@ import "model_downloads.dart";
 /// section since they answer separate questions, every row the same
 /// [ModelDownloadTile]. A kind nothing here can run is left off rather than
 /// listed with nothing to fetch: text models where the build has no server,
-/// voice models where the platform has no sherpa (iOS, a browser).
+/// voice models where the platform has no sherpa (iOS).
 class OnDeviceCatalog extends ConsumerWidget {
   const OnDeviceCatalog({super.key});
 

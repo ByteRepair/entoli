@@ -325,12 +325,11 @@ void main() {
 
     // Selecting survives having nowhere to share to, because deleting is not a
     // route out of the app.
-    testWidgets("there is nothing to share or upload, but there is to select",
+    testWidgets("there is nothing to share, but there is to select",
         (tester) async {
       seed(files: ["notes.md"]);
       await open(tester);
 
-      expect(find.byTooltip("Upload"), findsNothing);
       expect(find.byTooltip("Select"), findsOneWidget);
     });
 
@@ -351,12 +350,11 @@ void main() {
   group("android", () {
     setUp(() => start(handoff: FakeFileHandoff.android()));
 
-    testWidgets("has no file manager and no chooser of its own", (tester) async {
+    testWidgets("has no file manager", (tester) async {
       seed(files: ["notes.md"]);
       await open(tester);
 
       expect(find.byTooltip("Show in file manager"), findsNothing);
-      expect(find.byTooltip("Upload"), findsNothing);
     });
 
     testWidgets("a selection goes out through the share sheet", (tester) async {
@@ -592,70 +590,6 @@ void main() {
 
       expect(find.text("Project workspace"), findsOneWidget);
       expect(find.text("shared.md"), findsOneWidget);
-    });
-  });
-
-  group("web", () {
-    setUp(() => start(handoff: FakeFileHandoff.web()));
-
-    testWidgets("the button says download rather than share", (tester) async {
-      seed(files: ["a.txt"]);
-      await open(tester);
-
-      await tester.longPress(find.text("a.txt"));
-      await settleIo(tester);
-
-      expect(find.text("Download"), findsOneWidget);
-      expect(find.text("Share"), findsNothing);
-    });
-
-    testWidgets("uploaded files land in the folder being looked at",
-        (tester) async {
-      seed(files: ["src/main.dart"]);
-      await open(tester);
-      await tester.tap(find.text("src"));
-      await settleIo(tester);
-
-      app.handoff.scriptedImport = [incomingFile("added.txt", "new")];
-      await tester.tap(find.byTooltip("Upload"));
-      await settleIo(tester);
-      await tester.tap(find.text("Upload files"));
-      await settleIo(tester);
-
-      expect(app.handoff.imports, [false]);
-      expect(File("$root/src/added.txt").readAsStringSync(), "new");
-      expect(find.text("added.txt"), findsOneWidget);
-    });
-
-    testWidgets("uploading a folder asks for one and keeps its shape", (tester) async {
-      await open(tester);
-
-      app.handoff.scriptedImport = [
-        incomingFile("notes/a.txt", "a"),
-        incomingFile("notes/deep/b.txt", "b"),
-      ];
-      await tester.tap(find.byTooltip("Upload"));
-      await settleIo(tester);
-      await tester.tap(find.text("Upload folder"));
-      await settleIo(tester);
-
-      expect(app.handoff.imports, [true]);
-      expect(File("$root/notes/a.txt").readAsStringSync(), "a");
-      expect(File("$root/notes/deep/b.txt").readAsStringSync(), "b");
-      expect(find.text("notes"), findsOneWidget);
-    });
-
-    testWidgets("a cancelled chooser leaves the folder alone", (tester) async {
-      seed(files: ["a.txt"]);
-      await open(tester);
-
-      app.handoff.scriptedImport = const [];
-      await tester.tap(find.byTooltip("Upload"));
-      await settleIo(tester);
-      await tester.tap(find.text("Upload files"));
-      await settleIo(tester);
-
-      expect(Directory(root).listSync().length, 1);
     });
   });
 

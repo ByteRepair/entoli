@@ -42,9 +42,9 @@ import "../../widgets/action_icon.dart";
 import "../../widgets/dialogs.dart";
 
 /// The grammars a fence can name. `re_highlight` ships 197, and registering
-/// all of them costs 359 KB gzipped in the web bundle where these thirty-one
-/// cost 56 KB — a grammar is data, so nothing tree-shakes the ones nobody
-/// names and every page load pays for them. This is what a coding agent on
+/// all of them costs 359 KB gzipped where these thirty-one cost 56 KB — a
+/// grammar is data, so nothing tree-shakes the ones nobody names and every
+/// install pays for them. This is what a coding agent on
 /// these three platforms actually emits; Swift is the one deliberate
 /// omission, its grammar being larger than all of these put together.
 ///

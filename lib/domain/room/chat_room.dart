@@ -868,8 +868,7 @@ class ChatRoom {
   }
 
   /// The turn is over when it has been written, not when the last event
-  /// arrives. Writing is asynchronous — a browser's filesystem cannot be
-  /// anything else — so returning before the queue drains would report a
+  /// arrives. Writing is asynchronous, so returning before the queue drains would report a
   /// finished turn whose last records are still in flight, and closing the app
   /// in that window would lose them. A write that fails still has to clear
   /// [isRunning], or the composer stays disabled with nothing running.

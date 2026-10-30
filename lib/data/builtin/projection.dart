@@ -95,9 +95,8 @@ Future<List<LlmMessage>> projectionOf(
   final from = marker == null
       ? 0
       : messages.lastIndexWhere((m) => m.id == marker.upToMessageId) + 1;
-  // Every resource at once rather than a message at a time: on the web each
-  // read is its own IndexedDB transaction, and a long conversation's would
-  // otherwise be one round trip after another. Only the verbatim half's bytes
+  // Every resource at once rather than a message at a time, so a long
+  // conversation's reads overlap rather than queue. Only the verbatim half's bytes
   // are read — the summarized span's are what the summary replaced.
   // A reply's are the images its tools made, which ride their results.
   final files = await Future.wait(messages.asMap().entries.map((e) =>

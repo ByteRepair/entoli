@@ -4,7 +4,7 @@
 macOS 26 "Liquid Glass" icon), hand-authored from `assets/icons/cookie.svg` —
 the app's default icon, the one iOS and macOS show (launcher switching is
 Android's `activity-alias` alone; the other icon has no copy here, the way it
-has no PWA one). `ios/Runner/entoli.icon` is a symlink to this directory: it is
+has no Linux or Windows one). `ios/Runner/entoli.icon` is a symlink to this directory: it is
 one icon for both platforms, `supported-platforms: squares shared`, and the
 build compiles it to whatever each target needs.
 

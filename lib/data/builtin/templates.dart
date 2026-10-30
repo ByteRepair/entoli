@@ -39,7 +39,7 @@ String substitute(String content, Map<String, String> values) {
 /// is the whole of why the split exists.
 ///
 /// Empty where there is nothing to say, and a caller sends no second message
-/// then: a browser has no workspace path to name.
+/// then.
 String turnPrompt({
   required String workspace,
   required String projectWorkspace,

@@ -7,7 +7,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/core/config.dart";
-import "package:agent_chat/core/platform/io/platform.dart" show deleteTree;
+import "package:agent_chat/core/platform/host.dart" show deleteTree;
 import "package:agent_chat/data/local/file_modes.dart";
 import "package:agent_chat/core/read_only_dirs.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
@@ -432,21 +432,6 @@ void main() {
       expect(File(p.join(dir.path, "index.html")).readAsStringSync(), contains("entoli-base-css"));
       expect(File(p.join(dir.path, "new.txt")).readAsStringSync(), "new");
       expect(File(p.join(dir.path, "old.txt")).existsSync(), isFalse);
-    });
-
-    test("readArtifactFile reads back what was copied", () async {
-      await store.saveState(makeState("a1"));
-      final ws = config.workspaceDir("a1");
-      final src = p.join(ws, "report");
-      await Directory(src).create(recursive: true);
-      final png = Uint8List.fromList([1, 2, 3, 4]);
-      await Directory(p.join(src, "assets")).create();
-      await File(p.join(src, "assets", "logo.png")).writeAsBytes(png);
-      await File(p.join(src, "index.html")).writeAsString("<p>");
-
-      final id = await store.createArtifact("a1", src, "index.html");
-      expect(await store.readArtifactFile("a1", id, "assets/logo.png"), png);
-      expect(await store.readArtifactFile("a1", id, "missing.txt"), isNull);
     });
 
     test("readArtifactZip carries the files named from the artifact root",

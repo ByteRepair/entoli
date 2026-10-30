@@ -40,7 +40,7 @@ void main() {
         final reply = await routes.handle(SignalingRequest(
             request.method, request.url.path,
             body: request.body));
-        return http.Response(reply.body, reply.status, headers: reply.headers);
+        return http.Response(reply.body, reply.status);
       }),
     );
   });
@@ -149,7 +149,7 @@ void main() {
         final reply = await routes.handle(SignalingRequest(
             request.method, request.url.path,
             body: request.body));
-        return http.Response(reply.body, reply.status, headers: reply.headers);
+        return http.Response(reply.body, reply.status);
       }),
     );
     // A "." is outside base64url, so no nonce or proof can contain it.

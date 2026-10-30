@@ -6,7 +6,7 @@ import "package:flutter/services.dart" show rootBundle;
 ///
 /// Bundled rather than the `monospace` alias, which resolves to whatever the
 /// device has — Roboto Mono on one Android, Droid Sans Mono on another, DejaVu
-/// on this desktop, per-browser on the web. Those things are shown verbatim
+/// on this desktop. Those things are shown verbatim
 /// because their exact characters line up, which is a poor thing to leave to
 /// the platform.
 const monoFamily = "RobotoMono";
@@ -15,9 +15,8 @@ const monoFamily = "RobotoMono";
 /// over a Source Serif 4 body — worn by the whole app through `entoliTheme`,
 /// not only by its artifacts. Both are bundled rather than linked the way the
 /// stylesheet does it, because a Flutter view has no Google Fonts `<link>`:
-/// the engine reads only what pubspec declares, and the web build blocks its
-/// first frame on every face in that declaration, so what ships is what is
-/// subset small.
+/// the engine reads only what pubspec declares, and what ships is subset
+/// small.
 const displayFamily = "PlayfairDisplay";
 
 const bodyFamily = "SourceSerif4";

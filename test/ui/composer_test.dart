@@ -438,20 +438,6 @@ void main() {
     expect(find.byType(AttachmentChip), findsNothing);
   });
 
-  testWidgets("a browser's pasted files land only in a focused composer",
-      (tester) async {
-    await pump(tester);
-
-    app.clipboard.pastedEvents.add([testAttachment("away.txt")]);
-    await settleIo(tester);
-    expect(find.text("away.txt"), findsNothing);
-
-    await type(tester, "");
-    app.clipboard.pastedEvents.add([testAttachment("here.txt")]);
-    await settleIo(tester);
-    expect(find.text("here.txt"), findsOneWidget);
-  });
-
   testWidgets("an attachment on its own is worth sending, nothing at all is not", (tester) async {
     app.picker.scripted = [testAttachment("notes.txt")];
     await pump(tester);

@@ -34,24 +34,3 @@ abstract class RootfsStore {
 
   Future<void> delete(Rootfs rootfs);
 }
-
-/// The web's rootfs store: nowhere to put one, and nothing that could run it.
-class UnavailableRootfsStore extends RootfsStore {
-  const UnavailableRootfsStore();
-
-  @override
-  Future<Set<String>> installed() async => const {};
-
-  @override
-  Future<String?> directoryOf(Rootfs rootfs) async => null;
-
-  @override
-  String? directoryOfSync(String id) => null;
-
-  @override
-  Stream<DownloadProgress> install(Rootfs rootfs, {required String abi}) =>
-      Stream.error(UnsupportedError("A Linux cannot be installed here."));
-
-  @override
-  Future<void> delete(Rootfs rootfs) async {}
-}

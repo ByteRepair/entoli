@@ -16,10 +16,9 @@ class SignalingRequest {
 }
 
 class SignalingReply {
-  const SignalingReply(this.status, {this.headers = const {}, this.body = ""});
+  const SignalingReply(this.status, {this.body = ""});
 
   final int status;
-  final Map<String, String> headers;
   final String body;
 }
 
@@ -62,11 +61,10 @@ class SignalingRoutes {
     if (pending != null && !pending.isCompleted) pending.complete(sdp);
   }
 
-  /// The routes. Named because the io side asks about them too.
+  /// The routes. Named because `SignalingServer` asks about them too.
   static const healthPath = "/entoli/health";
   static const probePath = "/entoli/probe";
   static const offerPath = "/entoli/offer";
-  static const answerPath = "/entoli/answer";
 
   /// What either side of a probe proves it holds [token] with, over the
   /// dialler's fresh [nonce]: the dialler's [label] is "probe", the host's
@@ -77,35 +75,18 @@ class SignalingRoutes {
           .bytes);
 
   /// Which requests carry a body worth reading. Asked before one is drained:
-  /// the io side binds a well-known port on every interface, so a POST to a
+  /// the server binds a well-known port on every interface, so a POST to a
   /// path that is not one of these is the ordinary case, not the exception.
   static bool carriesBody(String method, String path) =>
       method == "POST" &&
-      (path == offerPath || path == answerPath || path == probePath);
-
-  /// Permissive CORS plus Chrome's Private-Network preflight answer: a browser
-  /// tab served from anywhere must be able to dial this server on the LAN it
-  /// sits on.
-  static const cors = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "content-type",
-    "Access-Control-Max-Age": "600",
-  };
+      (path == offerPath || path == probePath);
 
   Future<SignalingReply> handle(SignalingRequest request) async {
-    if (request.method == "OPTIONS") {
-      return const SignalingReply(204, headers: {
-        ...cors,
-        "Access-Control-Allow-Private-Network": "true",
-      });
-    }
     return switch (request.path) {
-      healthPath => const SignalingReply(200, headers: cors),
+      healthPath => const SignalingReply(200),
       probePath => _probe(request),
-      answerPath => _answer(request),
       offerPath => _offer(request),
-      _ => const SignalingReply(404, headers: cors),
+      _ => const SignalingReply(404),
     };
   }
 
@@ -115,13 +96,13 @@ class SignalingRoutes {
   /// the offer that follows is cleartext either way.
   SignalingReply _probe(SignalingRequest request) {
     if (request.method != "POST") {
-      return const SignalingReply(405, headers: cors);
+      return const SignalingReply(405);
     }
     final body = jsonDecode(request.body) as Map<String, dynamic>;
     final answer = answerProbe(body);
     return answer == null
-        ? const SignalingReply(403, headers: cors)
-        : SignalingReply(200, headers: cors, body: jsonEncode(answer));
+        ? const SignalingReply(403)
+        : SignalingReply(200, body: jsonEncode(answer));
   }
 
   /// The host's half of a probe, over HTTP or a LAN broadcast: its own proof
@@ -152,19 +133,13 @@ class SignalingRoutes {
 
   static final _random = Random.secure();
 
-  SignalingReply _answer(SignalingRequest request) {
-    final body = jsonDecode(request.body) as Map<String, dynamic>;
-    postAnswer(body["id"] as String? ?? "", body["sdp"] as String? ?? "");
-    return const SignalingReply(200, headers: cors);
-  }
-
   /// Validates the code or reconnect token and nothing else — it only gates
   /// who can make the host do work. Everything the channel later needs is
   /// authenticated by the pairing secret in the handshake, so a stranger who
   /// guesses either has bought themselves a connection nobody accepts.
   Future<SignalingReply> _offer(SignalingRequest request) async {
     if (request.method != "POST") {
-      return const SignalingReply(405, headers: cors);
+      return const SignalingReply(405);
     }
     final body = jsonDecode(request.body) as Map<String, dynamic>;
     final sdp = body["sdp"] as String?;
@@ -172,7 +147,7 @@ class SignalingRoutes {
     final accepted = sdp != null &&
         ((token != null && _tokens.contains(token)) ||
             (_code != null && _code!.isNotEmpty && body["code"] == _code));
-    if (!accepted) return const SignalingReply(403, headers: cors);
+    if (!accepted) return const SignalingReply(403);
 
     final id = "${_nextId++}";
     final answered = _pending[id] = Completer<String>();
@@ -184,7 +159,7 @@ class SignalingRoutes {
       final answer = await answered.future.timeout(patience,
           onTimeout: () => throw TimeoutException("no answer"));
       return SignalingReply(200,
-          headers: cors, body: jsonEncode({"sdp": answer}));
+          body: jsonEncode({"sdp": answer}));
     } finally {
       _pending.remove(id);
     }

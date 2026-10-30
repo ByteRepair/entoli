@@ -7,10 +7,10 @@ import "package:flutter/foundation.dart"
 import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
-import "../../tls.dart";
-import "../../log.dart";
-import "../../../data/download.dart" show latestReleaseTag;
-import "../../../domain/app_update.dart";
+import "../tls.dart";
+import "../log.dart";
+import "../../data/download.dart" show latestReleaseTag;
+import "../../domain/app_update.dart";
 
 const _tag = "update";
 

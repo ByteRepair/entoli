@@ -74,7 +74,7 @@ class IshShell extends Shell {
 
   /// Whether the thing commands would run in is there. Empty is how "no
   /// Linux installed" reads here, and false is what keeps the agent from
-  /// offering the tool a device cannot answer — the browser's rule.
+  /// offering the tool a device cannot answer.
   bool get rootfsInstalled => rootfsDir().isNotEmpty;
 
   @override

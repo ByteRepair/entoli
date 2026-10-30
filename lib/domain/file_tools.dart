@@ -1,4 +1,6 @@
-import "package:fs_shim/fs.dart";
+import "dart:io";
+
+import "package:path/path.dart" as p;
 
 import "tool_arg.dart";
 import "workspace.dart";
@@ -89,8 +91,8 @@ EditArgs? editArgsFrom(String? json) {
 typedef FileStamp = ({DateTime modified, int size});
 
 /// [path]'s stamp now, or null where nothing is there.
-Future<FileStamp?> fileStampOf(FileSystem fs, String path) async {
-  final stat = await fs.file(path).stat();
+Future<FileStamp?> fileStampOf(String path) async {
+  final stat = File(path).statSync();
   if (stat.type == FileSystemEntityType.notFound) return null;
   return (modified: stat.modified, size: stat.size);
 }
@@ -99,11 +101,11 @@ Future<FileStamp?> fileStampOf(FileSystem fs, String path) async {
 /// existing file must have been read, and not changed since: the model edits
 /// what it saw, and what it saw has to be what is there. A file that does not
 /// exist is a `write` creating it, which needs no read.
-Future<String?> unreadFileProblem(FileSystem fs, String path,
+Future<String?> unreadFileProblem(String path,
     {required String shownPath,
     required String toolName,
     required Map<String, FileStamp> readFiles}) async {
-  final now = await fileStampOf(fs, path);
+  final now = await fileStampOf(path);
   if (now == null) return null;
   final read = readFiles[path];
   if (read == null) {
@@ -149,7 +151,6 @@ String guestWorkspacePath(
 /// path out. Paths starting with [guestRoot] are translated back to
 /// [projectWorkspace] so the host filesystem can find them.
 String resolveWorkspacePath(
-  FileSystem fs,
   String path,
   String workspace,
   String projectWorkspace, {
@@ -164,7 +165,7 @@ String resolveWorkspacePath(
           : path;
   final base = project ? projectWorkspace : workspace;
   if (rest.startsWith("~/")) {
-    rest = fs.path.join(homePath ?? projectWorkspace, rest.substring(2));
+    rest = p.join(homePath ?? projectWorkspace, rest.substring(2));
   } else if (rest == "~") {
     rest = homePath ?? projectWorkspace;
   }
@@ -174,18 +175,17 @@ String resolveWorkspacePath(
     final suffix = rest.substring(guestRoot.length);
     rest = suffix.isEmpty
         ? projectWorkspace
-        : fs.path.join(projectWorkspace, suffix);
+        : p.join(projectWorkspace, suffix);
   }
-  if (!fs.path.isAbsolute(rest)) {
-    return fs.path.join(base, safeRelativePath(fs, rest));
+  if (!p.isAbsolute(rest)) {
+    return p.join(base, safeRelativePath(rest));
   }
-  return fs.path.normalize(rest);
+  return p.normalize(rest);
 }
 
 /// Whether [path] — one [resolveWorkspacePath] has already resolved — is one
 /// the workspaces do not hold: an absolute path reaching past both of them,
-/// the machine itself, and on the web the rest of the data store the app
-/// lives in. An absolute path *into* a workspace is the model using the place
+/// the machine itself. An absolute path *into* a workspace is the model using the place
 /// it was told, and is not outside. The file tools are gated on this: a path
 /// the workspaces hold runs without asking, one they do not is offered to the
 /// user first.
@@ -197,15 +197,14 @@ String resolveWorkspacePath(
 /// already made: one store of granted directories, read by the command
 /// confinement and by this gate alike.
 bool outsideWorkspaces(
-  FileSystem fs,
   String path,
   String workspace,
   String projectWorkspace, {
   List<String> granted = const [],
 }) {
-  if (isUnder(fs, path, workspace) || isUnder(fs, path, projectWorkspace)) {
+  if (isUnder(path, workspace) || isUnder(path, projectWorkspace)) {
     return false;
   }
-  return !granted.any((dir) => isUnder(fs, path, dir));
+  return !granted.any((dir) => isUnder(path, dir));
 }
 

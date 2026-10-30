@@ -1,3 +1,5 @@
+import "dart:io";
+
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
@@ -79,7 +81,7 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
   Future<void> _load() async {
     try {
       final content =
-          await readTextHead(ref.read(appConfigProvider).fs, widget.path);
+          await readTextHead(widget.path);
       if (!mounted) return;
       // The name said text and the bytes disagree. Popping `true` puts the
       // hand-off back on the explorer, which is what stays on screen to say so
@@ -124,7 +126,7 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
   /// which drops the mode an agent's script was given.
   Future<void> _save() => whileBusy(context, _busy, () async {
         final text = _controller!.text;
-        await ref.read(appConfigProvider).fs.file(widget.path).writeAsString(text);
+        await File(widget.path).writeAsString(text);
         if (!mounted) return;
         setState(() {
           _saved = text;
@@ -144,7 +146,7 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
   /// have been read for the page.
   Future<void> _copy() => whileBusy(context, _busy, () async {
         final text = _tooLarge
-            ? await ref.read(appConfigProvider).fs.file(widget.path).readAsString()
+            ? await File(widget.path).readAsString()
             : _controller!.text;
         if (mounted) await copyToClipboard(context, text, said: "Copied ${widget.name}");
       });

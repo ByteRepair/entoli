@@ -145,7 +145,7 @@ class TriggerSetTool extends _TriggerTool {
     if (draft.source case FileSource(:final paths)) {
       final outside = [
         for (final path in paths)
-          if (outsideWorkspaces(turn.fs, turn.resolvePath(path), turn.workspace,
+          if (outsideWorkspaces(turn.resolvePath(path), turn.workspace,
               turn.projectWorkspace))
             path,
       ];

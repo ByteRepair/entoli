@@ -24,7 +24,7 @@ void main() {
   void start() {
     app = TestApp.create();
     dir = app.config.memoryDir();
-    store = MemoryStore(app.config.fs, dir);
+    store = MemoryStore(dir);
   }
 
   Future<void> open(WidgetTester tester) async {
@@ -268,8 +268,7 @@ void main() {
 
     testWidgets("the project settings page opens the project's own", (tester) async {
       await io(tester, () => app.repo.createProject("research"));
-      final projectStore = MemoryStore(
-          app.config.fs, app.config.memoryDir(project: "research"));
+      final projectStore = MemoryStore(app.config.memoryDir(project: "research"));
       await io(tester, () => projectStore.add("research keeps its own"));
 
       await app.pump(tester, const ProjectSettingsPage(project: "research"));

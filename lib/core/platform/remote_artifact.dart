@@ -2,11 +2,10 @@ import "dart:io";
 import "dart:typed_data";
 
 import "package:archive/archive.dart";
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
 
-import "../../../data/sync/artifact_bytes.dart" show ArtifactBytes;
-import "../../../domain/workspace.dart";
-import "../../log.dart";
+import "../../data/sync/artifact_bytes.dart" show ArtifactBytes;
+import "../../domain/workspace.dart";
+import "../log.dart";
 
 /// The mirror-side half of opening a remote artifact: the bytes come off the
 /// sync channel, are written to a temporary directory, and every platform
@@ -22,7 +21,7 @@ Future<String> unzipRemoteArtifact(Uint8List bytes) async {
   for (final member in ZipDecoder().decodeBytes(bytes)) {
     if (member.isDirectory) continue;
     final target =
-        "${dir.path}/${safeRelativePath(fileSystemIo, member.name)}";
+        "${dir.path}/${safeRelativePath(member.name)}";
     final file = File(target);
     await file.create(recursive: true);
     await file.writeAsBytes(member.readBytes() ?? Uint8List(0));

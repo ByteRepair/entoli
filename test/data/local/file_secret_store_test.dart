@@ -1,22 +1,22 @@
+import "dart:io";
 import "dart:typed_data";
 
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/local/file_secret_store.dart";
 import "package:agent_chat/domain/sync/identity.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:fs_shim/fs_memory.dart";
 
-/// The secret store Android and the web get, over a data directory this launch
+/// The secret store Android gets, over a data directory this launch
 /// created — which is the state that matters, since the identity is written on
 /// the first launch and a failure there took the app down before a frame.
 void main() {
-  late FileSystem fs;
   late AppConfig config;
   late FileSecretStore store;
 
   setUp(() async {
-    fs = newFileSystemMemory();
-    config = await AppConfig.load(fs, "/entoli");
+    final dir = await Directory.systemTemp.createTemp("entoli_test_");
+    addTearDown(() => dir.delete(recursive: true));
+    config = await AppConfig.load(dir.path);
     store = FileSecretStore(config);
   });
 
@@ -26,7 +26,7 @@ void main() {
     await store.write("k", bytes());
 
     expect(await store.read("k"), bytes());
-    expect(await fs.file("/entoli/sync/secrets.json").exists(), isTrue);
+    expect(await File("${config.dataDir}/sync/secrets.json").exists(), isTrue);
   });
 
   test("a second store reads what the first wrote", () async {

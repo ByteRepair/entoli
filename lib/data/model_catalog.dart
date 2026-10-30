@@ -1,3 +1,5 @@
+import "dart:io";
+
 import "package:flutter/foundation.dart" show compute;
 import "package:http/http.dart" as http;
 
@@ -16,10 +18,10 @@ final modelsDevUrl = Uri.parse("https://models.dev/api.json");
 Future<void> loadModelCatalog(AppConfig config, http.Client client,
     {required bool fetch}) async {
   ModelCatalog.notifier.value = ModelCatalog.parse(builtinModelsJson);
-  final file = config.fs.file(config.modelsFile);
+  final file = File(config.modelsFile);
   DateTime? fetched;
   try {
-    if (await file.exists()) {
+    if (file.existsSync()) {
       // Off the UI isolate, as the fetch's parse is: the cache is most of it.
       ModelCatalog.notifier.value = await compute(ModelCatalog.parse, await file.readAsString());
       fetched = ModelCatalog.current.fetched;
@@ -40,7 +42,7 @@ Future<void> loadModelCatalog(AppConfig config, http.Client client,
     final catalog =
         (await compute(ModelCatalog.parse, response.body)).fetchedAt(DateTime.now());
     ModelCatalog.notifier.value = catalog;
-    await writeThroughRename(config.fs, config.modelsFile, catalog.toJsonText());
+    await writeThroughRename(config.modelsFile, catalog.toJsonText());
   } catch (e) {
     logFailure("models", "fetching the model catalog failed", e);
   }

@@ -1,8 +1,9 @@
+import "dart:io";
+
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/local/file_trigger_store.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:fs_shim/fs_memory.dart";
 
 void main() {
   late AppConfig config;
@@ -10,7 +11,9 @@ void main() {
   late DebugPrintCallback saved;
 
   setUp(() async {
-    config = await AppConfig.load(newFileSystemMemory(), "/entoli");
+    final dir = await Directory.systemTemp.createTemp("entoli_test_");
+    addTearDown(() => dir.delete(recursive: true));
+    config = await AppConfig.load(dir.path);
     logged = [];
     saved = debugPrint;
     debugPrint = (message, {wrapWidth}) => logged.add(message ?? "");
@@ -24,7 +27,7 @@ void main() {
   });
 
   test("a reminders.json that does not parse still logs", () async {
-    await config.fs.file(config.remindersFile).writeAsString("{not json");
+    await File(config.remindersFile).writeAsString("{not json");
 
     expect(await FileTriggerStore(config).load(), isEmpty);
     expect(logged, [startsWith("[triggers]")]);

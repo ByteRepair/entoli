@@ -13,9 +13,7 @@ import "file_rootfs_store.dart" show DownloadRunSha256;
 import "model_format.dart";
 
 /// A downloaded model in a directory of its own, outside the data directory —
-/// see [LocalModelStore] for why that matters. `dart:io` rather than the
-/// config's `FileSystem` for the reason `FileRootfsStore` is: what reads these
-/// files is a runtime with a path, not the app.
+/// see [LocalModelStore] for why that matters.
 ///
 /// Each directory holds the model's files, a record of what they are and where
 /// they came from, and the marker, written last. The record is what lists it:

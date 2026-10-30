@@ -11,11 +11,9 @@ Under `core/` that last one was the only import in the tree pointing from
 `core/` back into `ui/`, which is the direction that says a file is on the wrong
 side of a line.
 
-What stayed behind is what genuinely is a port: the artifact server and the web
-artifact opener under `core/platform/io/` and `core/platform/web/`, still
-reached through the conditional import that keeps `dart:io` off the web and
-`package:web` off a native build. Desktop is no longer one of them: the base
-stylesheet is injected into the artifact's entry file at publish time (see
+What stayed behind is what genuinely is a port: the artifact server under
+`core/platform/`, the loopback the phones' artifact webview is served from.
+Desktop needs no server at all: the base stylesheet is injected into the artifact's entry file at publish time (see
 "Artifacts" in the root notes), so the desktop opener opens the file on disk
 over `file://` and nothing about the page needs building at open time. That is
 also why the injection had to move: opening a temp copy of the entry file, as

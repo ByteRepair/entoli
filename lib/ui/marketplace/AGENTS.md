@@ -31,8 +31,7 @@ copied rather than imported — extracting them out of the sidebar waits for a
 third caller.
 
 The list is the site's `index.json` per section
-(`byterepair.github.io/entoli-marketplace`, whose paths already carry
-`Access-Control-Allow-Origin: *`, so a browser build can fetch it). The URL is
+(`byterepair.github.io/entoli-marketplace`). The URL is
 `marketplaceBaseUrl`, a const — promoted to a setting if it ever needs to be
 one. The section path is `CompletionKind.folder`, which is `"skills"` /
 `"agents"`, the site's own directory names: one fact, written once — and

@@ -302,7 +302,7 @@ creates an inaccessible placeholder to mount over. In the guest the stub is
 invisible; on the host it is poison, because `dart:io` cannot list a mode-0000
 directory, so a recursive delete over a rootfs that hosted a session dies on
 one and a `cp` that has to read one does too — both were live on a device. So
-the per-project rootfs copy (`FileByteRepairStore.ensureRootfs`) is a tar round
+the per-project rootfs copy (`ByteRepairStore.ensureRootfs`) is a tar round
 trip through `copyTree`, which excludes the stub paths (nothing there is
 reachable in the guest anyway) and starts by clearing whatever an earlier
 attempt left; and every rootfs deletion — the project's environment, and the
@@ -672,8 +672,7 @@ at all, and x86_64 Android is an emulator. A build without it gets a
 page says the build ran without `tool/linux/build-llama.sh`, a build fault in
 the sense a missing proot is. Everywhere else there is never a server to miss,
 so the section is not drawn, and the On-device category itself is hidden where
-there is no voice catalog to download either (`SettingsCategory.offered`): iOS and the
-web.
+there is no voice catalog to download either (`SettingsCategory.offered`): iOS.
 
 **Linux carries the same server, built natively.** `tool/linux/build-llama.sh`
 builds the pinned release for the host — the same cmake choices the Android
@@ -826,7 +825,7 @@ same constraint the prefill kept. `LocalPoolClient` restores the longest saved
 prefix of a request before the turn and saves the whole prompt after it; both
 are best-effort, so a miss or a build without slot save/restore just pays the
 prompt the way it did before. The code is `local_kv_cache.dart` (the port and the
-pure key/eviction math, web-safe) and `file_kv_cache.dart` (the disk and the
+pure key/eviction math) and `file_kv_cache.dart` (the disk and the
 `/slots/0` requests, wherever the pool runs).
 
 **That `/slots/0` is why the server has one slot (`-np 1`).** Its default is

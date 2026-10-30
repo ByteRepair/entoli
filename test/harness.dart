@@ -8,7 +8,6 @@ import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:http/http.dart" as http;
 
 import "package:agent_chat/core/config.dart";
@@ -17,9 +16,7 @@ import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/local/llama_engine.dart";
 import "package:agent_chat/data/local/local_engine.dart";
-import "package:agent_chat/data/local/byte_repair_store.dart"
-    show guestEsbmcInstallDir;
-import "package:agent_chat/data/local/file_byte_repair_store.dart";
+import "package:agent_chat/data/local/byte_repair_store.dart";
 import "package:agent_chat/data/sync/peers.dart" show PeerState, PeerStatus;
 import "package:agent_chat/data/sync/sync_hub.dart"
     show RemoteChatEntry, RemoteProject, SyncHub;
@@ -67,8 +64,8 @@ import "fakes.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
 
 /// The shell a test gets by default: a real host shell where the test pretends
-/// to be Android — [proot] or [abi] set — and `UnavailableShell` otherwise,
-/// which is the web default. The terminal settings page gates on
+/// to be Android — [proot] or [abi] set — and `UnavailableShell` otherwise.
+/// The terminal settings page gates on
 /// `canRunCommands`, so a test pretending to be Android has to answer true the
 /// way the real one would. A test pretending to be a native desktop that the
 /// two knobs cannot distinguish passes [shell] explicitly.
@@ -298,7 +295,7 @@ class TestApp {
               () => InstalledVoiceModels({...voiceModels, ...system},
                   system: system)),
           rootfsStoreProvider.overrideWithValue(linux),
-          byteRepairStoreProvider.overrideWithValue(FileByteRepairStore(
+          byteRepairStoreProvider.overrideWithValue(ByteRepairStore(
               config: config,
               project: ByteRepairProject().dir,
               workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir),
@@ -933,7 +930,7 @@ Future<void> waitFor(FutureOr<bool> Function() done,
 /// directories — made with `dart:io` so this stays synchronous.
 AppConfig tempConfig([String prefix = "agent_chat_test_"]) {
   final tmp = Directory.systemTemp.createTempSync(prefix);
-  final config = AppConfig.forDirectory(tmp.path, fileSystemIo);
+  final config = AppConfig.forDirectory(tmp.path);
   Directory(config.chatsDir()).createSync(recursive: true);
   Directory(config.projectWorkspaceDir()).createSync(recursive: true);
   addTearDown(() {

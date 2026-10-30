@@ -2,7 +2,7 @@ import "dart:convert";
 import "dart:io";
 import "dart:typed_data";
 
-import "package:agent_chat/core/platform/io/remote_artifact.dart";
+import "package:agent_chat/core/platform/remote_artifact.dart";
 import "package:agent_chat/data/sync/artifact_bytes.dart";
 import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";

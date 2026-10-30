@@ -15,7 +15,6 @@ analyzer:
     - lib/domain/bundled_project_prompts.dart
     - build/**
     - android/**
-    - web/**
     - linux/**
     - ios/**
     - macos/**

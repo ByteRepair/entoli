@@ -1,5 +1,6 @@
 import "dart:async";
 import "dart:convert";
+import "dart:io";
 
 import "../../../domain/agent_backend.dart";
 import "../../../domain/agent_browser.dart";
@@ -897,7 +898,7 @@ class BrowserUploadTool extends BrowserTool {
     }
     final resolved = [for (final path in paths) turn.resolvePath(path)];
     for (var i = 0; i < resolved.length; i++) {
-      if (!await turn.fs.file(resolved[i]).exists()) {
+      if (!File(resolved[i]).existsSync()) {
         yield* toolRejected(call, "There is no file at ${paths[i]}.");
         return;
       }

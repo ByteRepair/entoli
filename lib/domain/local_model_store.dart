@@ -97,8 +97,8 @@ class InstallableLocalModel implements Installable {
   Future<void> delete() => store.delete(id);
 }
 
-/// A browser's model store: nowhere to put a gigabyte, and nothing that could
-/// run it if there were.
+/// The store where there is no engine: nothing that could run a model, so
+/// nowhere to put one.
 class UnavailableLocalModelStore extends LocalModelStore {
   const UnavailableLocalModelStore();
 

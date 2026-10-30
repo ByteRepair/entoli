@@ -1,8 +1,10 @@
 import "dart:convert";
 
+import "package:flutter/services.dart" show rootBundle;
 
 import "../../data/builtin/builtin_agent.dart";
 import "../../data/builtin/builtin_backend.dart";
+import "../../data/builtin/duckduckgo_search.dart";
 import "../../data/builtin/tools/agent_tool.dart";
 import "../../data/builtin/tools/registry.dart";
 import "../../data/builtin/llm/llm_client.dart";
@@ -29,10 +31,10 @@ import "../../domain/trigger_manager.dart" show TriggerRegistryFactory;
 import "../../domain/rootfs_store.dart";
 import "../../domain/shell.dart";
 import "../config.dart";
-import "io/platform.dart" if (dart.library.js_interop) "web/platform.dart";
+import "host.dart";
 import "../../data/builtin/builtin_options.dart";
 
-export "io/platform.dart" if (dart.library.js_interop) "web/platform.dart"
+export "host.dart"
     show
         processEnv,
         byteRepairBinDir,
@@ -42,7 +44,6 @@ export "io/platform.dart" if (dart.library.js_interop) "web/platform.dart"
         createAppleFm,
         createAppUpdateHost,
         createAssistantLaunch,
-        createFileSystem,
         createFileWatches,
         createLanSignaling,
         createLocalEngine,
@@ -57,14 +58,13 @@ export "io/platform.dart" if (dart.library.js_interop) "web/platform.dart"
         deviceHostname,
         hostConfinement,
         installBundledTools,
-        persist,
         registerRecorder,
         readOnlyDirs,
         registerVoiceLicences,
         setupComplete;
 
 // The app's platform seam: everything platform-varying is resolved here or
-// re-exported from the side that answers it.
+// re-exported from `host.dart`, which answers it.
 
 /// The agent, wired to what this platform can reach and to whatever the
 /// settings page last wrote. [libraries] is Entoli's commands and agents per
@@ -121,7 +121,7 @@ BuiltinBackend createBackend(
       rootfsStore: rootfs,
       rootfsId: () => settings().rootfsId,
     ),
-    webSearch: platformWebSearch(),
+    webSearch: DuckDuckGoSearch(),
     browser: browser,
     store: store,
     triggerRegistry: triggerRegistry,
@@ -185,7 +185,6 @@ LocalPrefill? createLocalPrefill(
       final offer = ToolOffer(
         caps: AgentCapabilities.forTurn(
           commands: shell.canRunCommands,
-          webSearch: backend.webSearch.available,
           disabled: const {},
         ),
         // The same skills a turn's prompt lists, off the same library the
@@ -217,8 +216,7 @@ LocalPrefill? createLocalPrefill(
   );
 }
 
-/// The Byte Repair tooling store. Which project it is for is decided here so
-/// both sides of the conditional import agree on it.
+/// The Byte Repair tooling store, for the Byte Repair project.
 ByteRepairStore createByteRepairStore(
         AppConfig config, String cacheDir, RootfsStore? rootfs) =>
     platformByteRepairStore(
@@ -233,9 +231,9 @@ ByteRepairStore createByteRepairStore(
 /// `tool/prepare.sh` writes from pubspec. Null if it could not be read, which
 /// About leaves the line out for.
 Future<String?> appVersion() async {
-  final source = await platformVersionJson();
-  if (source == null) return null;
   try {
+    // The `assets/` prefix is part of the asset key, not just the on-disk path.
+    final source = await rootBundle.loadString("assets/version.json");
     return (jsonDecode(source) as Map<String, dynamic>)["version"] as String?;
   } catch (_) {
     return null;
@@ -245,10 +243,10 @@ Future<String?> appVersion() async {
 ChatStore createChatStore(AppConfig config) =>
     FileChatStore(config, deleteTree: deleteTree, readOnlyDirs: readOnlyDirs);
 
-FileHandoff createFileHandoff(AppConfig config) => platformFileHandoff(config.fs);
+FileHandoff createFileHandoff(AppConfig config) => platformFileHandoff();
 
 BackupHandoff createBackupHandoff(AppConfig config, FileHandoff handoff) =>
-    platformBackupHandoff(config.fs, handoff);
+    platformBackupHandoff(handoff);
 
 /// The presets and the user's own beside them. [project]'s overrides are
 /// layered on the default set; `null` is the default project.

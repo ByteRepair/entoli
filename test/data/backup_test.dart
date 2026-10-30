@@ -1,6 +1,5 @@
 import "dart:convert";
 import "dart:io";
-import "dart:typed_data";
 
 import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -13,8 +12,27 @@ import "../harness.dart";
 
 void main() {
   late AppConfig config;
+  late Directory out;
+  var made = 0;
 
-  setUp(() => config = tempConfig());
+  setUp(() {
+    config = tempConfig();
+    out = Directory.systemTemp.createTempSync("backup_out_");
+    addTearDown(() => out.deleteSync(recursive: true));
+  });
+
+  /// A backup written the way Export writes one, outside the data directory.
+  Future<String> written() async {
+    final path = "${out.path}/backup-${made++}.zip";
+    await writeBackup(config, path);
+    return path;
+  }
+
+  Future<Backup> opened(String path) async {
+    final backup = await openBackup(config, path);
+    addTearDown(backup.close);
+    return backup;
+  }
 
   void write(String relative, String text) {
     final file = File("${config.dataDir}/$relative");
@@ -29,9 +47,9 @@ void main() {
   }
 
   Future<Archive> archive() async =>
-      ZipDecoder().decodeBytes(await writeBackup(config));
+      ZipDecoder().decodeBytes(File(await written()).readAsBytesSync());
 
-  Future<Backup> roundTrip() async => parseBackup(await writeBackup(config));
+  Future<Backup> roundTrip() async => opened(await written());
 
   test("a file is a member at the path it has under the data directory",
       () async {
@@ -196,36 +214,53 @@ void main() {
     write("projects/default/chats/a/conv.jsonl",
         '{"type":"append","text":"hello"}\n' * 200);
 
-    expect((await writeBackup(config)).length,
+    expect(File(await written()).lengthSync(),
         lessThan(File(config.convFile("a")).lengthSync()));
   });
 
+  // The restore clears the data directory before it reads a member, so one
+  // saved into a workspace would be gone by then without the copy.
+  test("a backup kept inside the data directory still restores", () async {
+    write("projects/default/chats/a/state.json", "{}");
+    final inside = "${config.projectWorkspaceDir()}/backup.zip";
+    await File(await written()).copy(inside);
+
+    await restoreBackup(config, await opened(inside));
+
+    expect(File("${config.dataDir}/projects/default/chats/a/state.json")
+        .existsSync(), isTrue);
+  });
+
   group("what it refuses", () {
-    Uint8List zipOf(Object? manifest) {
+    String fileOf(List<int> bytes) {
+      final path = "${out.path}/made-${made++}.zip";
+      File(path).writeAsBytesSync(bytes);
+      return path;
+    }
+
+    String zipOf(Object? manifest) {
       final archive = Archive()..add(ArchiveFile.string("settings.json", "{}"));
       if (manifest != null) {
         archive.add(ArchiveFile.string(manifestName, jsonEncode(manifest)));
       }
-      return ZipEncoder().encodeBytes(archive);
+      return fileOf(ZipEncoder().encodeBytes(archive));
     }
 
-    test("something that is not a backup", () {
-      expect(
-        () => parseBackup(Uint8List.fromList("not a zip".codeUnits)),
-        throwsA(isA<BackupFormatException>()),
-      );
+    test("something that is not a backup", () async {
+      final refused = throwsA(isA<BackupFormatException>());
+      await expectLater(
+          openBackup(config, fileOf("not a zip".codeUnits)), refused);
       // A zip, but none of ours: no manifest.
-      expect(() => parseBackup(zipOf(null)), throwsA(isA<BackupFormatException>()));
+      await expectLater(openBackup(config, zipOf(null)), refused);
       // Ours, but another format's manifest.
-      expect(
-        () => parseBackup(zipOf({"format": "something-else", "version": 1})),
-        throwsA(isA<BackupFormatException>()),
-      );
+      await expectLater(
+          openBackup(config, zipOf({"format": "something-else", "version": 1})),
+          refused);
       // A format and version this build speaks of but cannot read.
-      expect(
-        () => parseBackup(zipOf({"format": backupFormat, "version": backupVersion + 1})),
-        throwsA(isA<BackupFormatException>()),
-      );
+      await expectLater(
+          openBackup(config,
+              zipOf({"format": backupFormat, "version": backupVersion + 1})),
+          refused);
     });
 
     // A zip is a file someone can build by hand, so a member's name is treated
@@ -236,7 +271,8 @@ void main() {
             manifestName, jsonEncode({"format": backupFormat, "version": backupVersion})))
         ..add(ArchiveFile.string("../../escaped.json", "no"));
 
-      await restoreBackup(config, parseBackup(ZipEncoder().encodeBytes(archive)));
+      await restoreBackup(
+          config, await opened(fileOf(ZipEncoder().encodeBytes(archive))));
 
       expect(File("${config.dataDir}/escaped.json").existsSync(), isTrue);
       expect(File("${config.dataDir}/../../escaped.json").existsSync(), isFalse);

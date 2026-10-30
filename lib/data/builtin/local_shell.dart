@@ -128,7 +128,7 @@ class LocalShell extends Shell {
       : Platform.environment["HOME"];
 
   /// The machine user's own home directory; null where there is no real user
-  /// home (the web, Android's app-private storage).
+  /// home (Android's app-private storage).
   @override
   String? get machineHome => machineHomeDir();
 

@@ -3,8 +3,6 @@ import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
 
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
-
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/tools/skill_create_tool.dart";
@@ -62,7 +60,6 @@ void main() {
         session: session,
         client: client,
         shell: FakeShell((_) => ok(""), canRunCommands: true),
-        fs: fileSystemIo,
         workspace: workspace.path,
         projectWorkspace: projectWorkspace.path,
         model: "fake-model",
@@ -108,7 +105,6 @@ void main() {
         session: session,
         client: without,
         shell: FakeShell((_) => ok(""), canRunCommands: true),
-        fs: fileSystemIo,
         workspace: workspace.path,
         projectWorkspace: projectWorkspace.path,
         model: "fake-model",

@@ -429,7 +429,6 @@ class FakeWebSearch extends WebSearch {
   FakeWebSearch({
     this.searchResult,
     this.fetchResult,
-    this.available = true,
   });
 
   /// What `search` returns. Defaults to a generic success.
@@ -437,9 +436,6 @@ class FakeWebSearch extends WebSearch {
 
   /// What `fetch` returns. Defaults to a generic success.
   ShellResult Function(String url)? fetchResult;
-
-  @override
-  final bool available;
 
   final List<String> searched = [];
   final List<String> fetched = [];

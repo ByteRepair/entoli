@@ -2,8 +2,7 @@ import "package:path/path.dart" as p;
 
 /// Turns write permission over a tree off ([writable] false) or back on for
 /// the owner, files and directories alike. [executable] gives every file its
-/// execute bit on the way to read-only. A no-op where there are no
-/// permissions to set, as on the web.
+/// execute bit on the way to read-only.
 typedef SetTreeWritable = Future<void> Function(List<String> paths,
     {required bool writable, bool executable});
 
@@ -51,8 +50,8 @@ class ReadOnlyDir {
 class ReadOnlyDirs {
   ReadOnlyDirs(this._set);
 
-  /// Where there are no permissions to set, as on the web: every write goes
-  /// straight through.
+  /// Nothing locked: every write goes straight through. A store a test builds
+  /// without the platform's.
   ReadOnlyDirs.none() : _set = _none;
 
   static Future<void> _none(List<String> paths,

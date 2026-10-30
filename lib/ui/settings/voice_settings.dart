@@ -300,7 +300,7 @@ class _SpeakerField extends ConsumerWidget {
 /// the question [_SpeakerField] answers for a downloaded model, which is why
 /// the two are siblings that never draw together.
 ///
-/// Nothing is drawn where the device names no languages: a browser, a desktop,
+/// Nothing is drawn where the device names no languages: a desktop,
 /// and a phone whose synthesiser would not answer. A picker holding only the
 /// device's own language is a control that cannot say anything.
 class _LanguageField extends ConsumerWidget {

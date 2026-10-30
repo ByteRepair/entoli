@@ -1,6 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/core/platform/io/platform.dart";
+import "package:agent_chat/core/platform/host.dart";
 
 /// The path the Linux build looks for its model server at is the whole of
 /// what turns a staged binary into a working feature, and it is pure over the

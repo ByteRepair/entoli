@@ -212,9 +212,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
         onSend: _send,
         onAbort: () {},
         project: project,
-        onVoice: ref.watch(voiceProvider).available
-            ? () => startVoiceChat(context, ref, meta: _meta)
-            : null,
+        onVoice: () => startVoiceChat(context, ref, meta: _meta),
         workspace: null,
       );
     }
@@ -1042,9 +1040,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
               view: view,
               driver: notifier,
               project: chat.state.project,
-              onVoice: ref.watch(voiceProvider).available
-                  ? () => openVoice(context, ref, widget.chatId)
-                  : null,
+              onVoice: () => openVoice(context, ref, widget.chatId),
               workspace: ref
                   .watch(appConfigProvider)
                   .workspaceDir(widget.chatId, project: chat.state.project),

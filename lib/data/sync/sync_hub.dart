@@ -35,8 +35,7 @@ export "signaling/pairing_payload.dart"
     show PairingOffer, generatePairingCode, generatePsk;
 
 /// One of a peer's chats, as this device mirrors it. RAM-only: nothing here
-/// is ever written to the data directory, so no backup and no IndexedDB
-/// carries it.
+/// is ever written to the data directory, so no backup carries it.
 class MirrorChat {
   MirrorChat({
     required this.peerId,

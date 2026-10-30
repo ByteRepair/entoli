@@ -1,3 +1,7 @@
+import "dart:io";
+
+import "package:path/path.dart" as p;
+
 import "../../../domain/agent_backend.dart";
 import "../../../domain/ask.dart";
 import "../../../domain/plan.dart";
@@ -14,8 +18,8 @@ import "turn.dart";
 /// The file is the model's own writing: the tools are line edits over it,
 /// written through `fs` directly rather than `edit` — the tools own the
 /// plan's lines, and an `edit` against them would be two writers on one file.
-/// The trio rides the floor beside the file tools, so a browser has them; a
-/// sub-agent does not.
+/// The trio rides the floor beside the file tools, so a device with no shell
+/// has them; a sub-agent does not.
 abstract class _PlanTool extends AgentTool {
   _PlanTool(super.offer);
 
@@ -26,11 +30,11 @@ abstract class _PlanTool extends AgentTool {
   bool get offered => !offer.oneShot;
 }
 
-String _planPath(Turn turn) => turn.fs.path.join(turn.workspace, planFileName);
+String _planPath(Turn turn) => p.join(turn.workspace, planFileName);
 
 Future<String?> _readPlan(Turn turn) async {
-  final file = turn.fs.file(_planPath(turn));
-  if (!await file.exists()) return null;
+  final file = File(_planPath(turn));
+  if (!file.existsSync()) return null;
   return file.readAsString();
 }
 
@@ -113,7 +117,7 @@ class PlanAddTool extends _PlanTool {
     yield* gatedFileRun(turn, call, path, planAddToolName, () async {
       final updated = planAddTask(await _readPlan(turn), task,
           section: section, details: details);
-      await turn.fs.file(path).writeAsString(updated);
+      await File(path).writeAsString(updated);
       return ShellResult(
           returnCode: 0, output: planAddResult(task, planProgress(updated)));
     });
@@ -152,7 +156,7 @@ class PlanNextTool extends _PlanTool {
     }
     // The index came from the text just read, so the mark cannot miss.
     final marked = planMark(plan, next.index, PlanTaskStatus.inProgress)!;
-    await turn.fs.file(_planPath(turn)).writeAsString(marked);
+    await File(_planPath(turn)).writeAsString(marked);
     yield toolOk(call, planNextResult(next, planProgress(marked)));
   }
 }
@@ -216,7 +220,7 @@ class PlanDoneTool extends _PlanTool {
     }
     // The index came from the text just read, so the mark cannot miss.
     final marked = planMark(plan, found.index, PlanTaskStatus.done)!;
-    await turn.fs.file(_planPath(turn)).writeAsString(marked);
+    await File(_planPath(turn)).writeAsString(marked);
     yield toolOk(call, planDoneResult(found, planProgress(marked)));
   }
 }

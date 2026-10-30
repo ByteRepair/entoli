@@ -11,7 +11,7 @@ to the viewer](docs/screenshot.png)
 
 ## Obtaining Entoli
 
-Entoli ships for Windows, Linux, macOS, Android, and the web.
+Entoli ships for Windows, Linux, macOS, and Android.
 
 **Windows**: download `entoli-installer.msi` from the
 [GitHub releases](https://github.com/ByteRepair/entoli/releases) and run
@@ -35,13 +35,10 @@ and drag the app to `/Applications`.
 3. Get the app from the
    [Google Play Store](https://play.google.com/store/apps/details?id=io.byterepair.entoli).
 
-**Web**: the latest release is served at
-[yiannis128.github.io/agent-chat](https://yiannis128.github.io/agent-chat/).
-
 ## Development
 
-Entoli is a Flutter app targeting Windows, Linux, macOS, Android, and the
-web. Beyond the Flutter SDK, each platform needs a few native dev libraries;
+Entoli is a Flutter app targeting Windows, Linux, macOS, and Android.
+Beyond the Flutter SDK, each platform needs a few native dev libraries;
 the lists below are the complete set, copy-pasteable into whichever package
 manager you use.
 
@@ -190,11 +187,6 @@ manager working from the first command; `packageManager` is named in the system
 prompt, so the model knows how to install what it needs. `id` is the directory
 the rootfs installs into under the cache directory, so renaming one orphans what
 a user already downloaded.
-
-### Web
-
-Only the Flutter SDK. No native dependencies; `sherpa_onnx`'s WebAssembly is
-stubbed out via `dependency_overrides`, so it never enters the web bundle.
 
 ### AppImage
 

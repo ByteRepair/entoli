@@ -19,8 +19,7 @@ import "paired_device_page.dart";
 
 /// The Sync category: this device's name, then how to pair a new device, the
 /// paired-device list, and the relay and TURN rows for reaching peers over
-/// the internet. Shown on every platform — a browser pairs as the joiner
-/// side, so the name and the paired-device list are still its business.
+/// the internet. Shown on every platform.
 class SyncSection extends ConsumerWidget {
   const SyncSection({super.key});
 
@@ -355,12 +354,8 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
       children: [
         SectionHeader(
           "Pair a new device",
-          description: kIsWeb
-              ? "A browser can only join: paste a code from another device, "
-                  "or set a relay URL under Internet relay below and open a "
-                  "window over it."
-              : "Open a window and show the code, or paste a code "
-                  "from another device.",
+          description: "Open a window and show the code, or paste a code "
+              "from another device.",
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),

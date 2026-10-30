@@ -1,7 +1,7 @@
 import "package:flutter/services.dart";
 
 import "../../domain/app_icon.dart";
-import "../../core/log.dart";
+import "../log.dart";
 import "form_factor.dart";
 
 /// Tells `MainActivity.kt` which launcher entry to show. The default icon

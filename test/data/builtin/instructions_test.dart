@@ -1,7 +1,6 @@
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/memory/instructions.dart";
@@ -41,8 +40,7 @@ void main() {
 
   Future<List<InstructionFile>> load(
           {bool imports = false, List<String> excludes = const []}) =>
-      loadInstructions(fileSystemIo,
-          projectWorkspace: projectWorkspace,
+      loadInstructions(projectWorkspace: projectWorkspace,
           global: [global],
           imports: imports,
           excludes: excludes);
@@ -76,8 +74,7 @@ void main() {
       ..createSync(recursive: true)
       ..writeAsStringSync("repo rules");
 
-    final files = await loadInstructions(fileSystemIo,
-        projectWorkspace: projectWorkspace,
+    final files = await loadInstructions(projectWorkspace: projectWorkspace,
         global: [global, other.path, claude.path, global, p.join(tmp.path, "gone.md")]);
 
     expect([for (final f in files) f.content], [
@@ -275,32 +272,31 @@ void main() {
   group("excludes", () {
     test("** spans directories, * and ? do not", () {
       final path = "/data/projects/work/workspace/vendor/lib/AGENTS.md";
-      expect(isExcludedPath(fileSystemIo, path, ["**/vendor/**"]), isTrue);
-      expect(isExcludedPath(fileSystemIo, path, ["**/vendor"]), isFalse);
-      expect(isExcludedPath(fileSystemIo, path,
+      expect(isExcludedPath(path, ["**/vendor/**"]), isTrue);
+      expect(isExcludedPath(path, ["**/vendor"]), isFalse);
+      expect(isExcludedPath(path,
               ["/data/projects/*/workspace/AGENTS.md"]),
           isFalse);
-      expect(isExcludedPath(fileSystemIo,
-              "/data/projects/work/workspace/AGENTS.md",
+      expect(isExcludedPath("/data/projects/work/workspace/AGENTS.md",
               ["/data/projects/*/workspace/AGENTS.md"]),
           isTrue);
-      expect(isExcludedPath(fileSystemIo, path, ["/data/projects/*/AGENTS.md"]),
+      expect(isExcludedPath(path, ["/data/projects/*/AGENTS.md"]),
           isFalse);
       expect(
-          isExcludedPath(fileSystemIo, path,
+          isExcludedPath(path,
               ["/data/projects/wor?/workspace/vendor/lib/AGENTS.md"]),
           isTrue);
-      expect(isExcludedPath(fileSystemIo, path, const []), isFalse);
-      expect(isExcludedPath(fileSystemIo, path, ["", "  "]), isFalse);
+      expect(isExcludedPath(path, const []), isFalse);
+      expect(isExcludedPath(path, ["", "  "]), isFalse);
     });
 
     test("a pattern without a slash names a file name, anywhere", () {
       expect(
-          isExcludedPath(fileSystemIo, "/a/b/AGENTS.md", ["AGENTS.md"]),
+          isExcludedPath("/a/b/AGENTS.md", ["AGENTS.md"]),
           isTrue);
-      expect(isExcludedPath(fileSystemIo, "/a/b/notes.md", ["AGENTS.md"]),
+      expect(isExcludedPath("/a/b/notes.md", ["AGENTS.md"]),
           isFalse);
-      expect(isExcludedPath(fileSystemIo, "/a/b/AGENTS.md", ["*.md"]), isTrue);
+      expect(isExcludedPath("/a/b/AGENTS.md", ["*.md"]), isTrue);
     });
 
     test("a project file the pattern names is not loaded", () async {
@@ -328,8 +324,7 @@ void main() {
     test("a nested file the pattern names is not pulled in by a read",
         () async {
       write("chats/chat-1/sub/AGENTS.md", "sub rules");
-      final found = await findNestedInstructions(fileSystemIo,
-          p.join(chatWorkspace, "sub", "notes.txt"),
+      final found = await findNestedInstructions(p.join(chatWorkspace, "sub", "notes.txt"),
           alreadyLoaded: {},
           excludes: ["**/sub/AGENTS.md"]);
       expect(found, isEmpty);
@@ -339,8 +334,7 @@ void main() {
   group("nested", () {
     test("finds the nearest AGENTS.md above a read file", () async {
       write("chats/chat-1/sub/AGENTS.md", "sub rules");
-      final found = await findNestedInstructions(fileSystemIo,
-          p.join(chatWorkspace, "sub", "notes.txt"),
+      final found = await findNestedInstructions(p.join(chatWorkspace, "sub", "notes.txt"),
           alreadyLoaded: {});
       expect(found.single.path, p.join(chatWorkspace, "sub", "AGENTS.md"));
     });
@@ -348,16 +342,14 @@ void main() {
     test("a nested file above the project root's own loads too", () async {
       write("AGENTS.md", "project rules");
       write("chats/chat-1/sub/AGENTS.md", "sub rules");
-      final found = await findNestedInstructions(fileSystemIo,
-          p.join(chatWorkspace, "sub", "notes.txt"),
+      final found = await findNestedInstructions(p.join(chatWorkspace, "sub", "notes.txt"),
           alreadyLoaded: {p.join(projectWorkspace, "AGENTS.md")});
       expect(found.single.path, p.join(chatWorkspace, "sub", "AGENTS.md"));
     });
 
     test("skips files already loaded", () async {
       write("chats/chat-1/sub/AGENTS.md", "sub rules");
-      final found = await findNestedInstructions(fileSystemIo,
-          p.join(chatWorkspace, "sub", "notes.txt"),
+      final found = await findNestedInstructions(p.join(chatWorkspace, "sub", "notes.txt"),
           alreadyLoaded: {p.join(chatWorkspace, "sub", "AGENTS.md")});
       expect(found, isEmpty);
     });
@@ -366,8 +358,7 @@ void main() {
       final repo = p.join(tmp.path, "elsewhere");
       Directory(p.join(repo, "src")).createSync(recursive: true);
       File(p.join(repo, "AGENTS.md")).writeAsStringSync("repo rules");
-      final found = await findNestedInstructions(fileSystemIo,
-          p.join(repo, "src", "notes.txt"),
+      final found = await findNestedInstructions(p.join(repo, "src", "notes.txt"),
           alreadyLoaded: {});
       expect(found.single.path, p.join(repo, "AGENTS.md"));
     });
@@ -375,8 +366,7 @@ void main() {
     test("walks past the project workspace's root", () async {
       File(p.join(tmp.path, "AGENTS.md")).writeAsStringSync("above rules");
       write("chats/chat-1/sub/AGENTS.md", "sub rules");
-      final found = await findNestedInstructions(fileSystemIo,
-          p.join(chatWorkspace, "sub", "notes.txt"),
+      final found = await findNestedInstructions(p.join(chatWorkspace, "sub", "notes.txt"),
           alreadyLoaded: {});
       expect(found.map((f) => f.path), [
         p.join(chatWorkspace, "sub", "AGENTS.md"),

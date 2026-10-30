@@ -11,7 +11,7 @@ it takes a bundle and an output path: the only way to try a change to the
 packaging without pushing and dispatching. `tool/linux/` holds what the
 script assembles — `AppRun` and the desktop entry, named for the application
 id the way everything else on Linux is. The icon comes from
-`web/icons/Icon-512.png`, its file name decided by the entry's own `Icon=`,
+`tool/icons/cookie-512.png`, its file name decided by the entry's own `Icon=`,
 so one string is the authority for it.
 
 **`StartupWMClass=` is load-bearing.** GNOME matches a running window to a

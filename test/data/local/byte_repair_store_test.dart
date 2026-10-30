@@ -6,9 +6,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/core/config.dart";
-import "package:agent_chat/data/local/byte_repair_store.dart"
-    show guestEsbmcInstallDir;
-import "package:agent_chat/data/local/file_byte_repair_store.dart";
+import "package:agent_chat/data/local/byte_repair_store.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/rootfs.dart" show alpine;
@@ -480,7 +478,7 @@ exit 0""");
 
   test("the store passes its install dir and the binary's name, install only",
       () async {
-    final s = FileByteRepairStore(
+    final s = ByteRepairStore(
       config: config,
       project: ByteRepairProject().dir,
       workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir),
@@ -514,7 +512,7 @@ exit 0""");
     }
   }
 
-  FileByteRepairStore storeAt(String? installDir) => FileByteRepairStore(
+  ByteRepairStore storeAt(String? installDir) => ByteRepairStore(
         config: config,
         project: ByteRepairProject().dir,
         workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir),
@@ -567,10 +565,10 @@ exit 0""");
   });
 
   group("a mac's Homebrew", () {
-    FileByteRepairStore macStore(String? installDir, {required bool brew}) {
+    ByteRepairStore macStore(String? installDir, {required bool brew}) {
       final fake = p.join(config.dataDir, "brew");
       if (brew) File(fake).writeAsStringSync("");
-      return FileByteRepairStore(
+      return ByteRepairStore(
         config: config,
         project: ByteRepairProject().dir,
         workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir),
@@ -685,7 +683,7 @@ exit 0""");
       () async {
     final project = ByteRepairProject().dir;
     final binDir = p.join(config.dataDir, "byte-repair", "bin");
-    final store = FileByteRepairStore(
+    final store = ByteRepairStore(
       config: config,
       project: project,
       workspace: config.projectWorkspaceDir(project: project),

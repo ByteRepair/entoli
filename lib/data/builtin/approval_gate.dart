@@ -1,7 +1,5 @@
 import "dart:async";
 
-import "package:fs_shim/fs.dart";
-
 import "../../domain/agent_backend.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/models.dart";
@@ -44,7 +42,6 @@ class ApprovalGate {
     this.approveMode,
     required this.classifier,
     required this.approve,
-    required this.fs,
     required this.workspace,
     required this.projectWorkspace,
     required this.shell,
@@ -69,7 +66,6 @@ class ApprovalGate {
   /// Raises the banner and waits for the answer.
   final Future<ApprovalResponse> Function(ToolApproval approval) approve;
 
-  final FileSystem fs;
   final String workspace;
   final String projectWorkspace;
   final Shell shell;
@@ -290,7 +286,7 @@ class ApprovalGate {
     List<String> granted = const [],
     String? ruleSubject,
   }) async* {
-    if (outsideWorkspaces(fs, path, workspace, projectWorkspace,
+    if (outsideWorkspaces(path, workspace, projectWorkspace,
         granted: granted)) {
       yield* decide(call, toolName, () => _guarded(run), outcome,
           argumentsText: path, ruleSubject: ruleSubject);

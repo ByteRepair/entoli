@@ -213,22 +213,12 @@ class Handshake {
   /// Eight characters of base32 without lookalikes, grouped 4+4 — the forty
   /// bits the derivation gives, which an attacker gets no offline oracle for
   /// and one online guess per connection attempt.
-  ///
-  /// Regrouped five bits at a time rather than through one 40-bit integer:
-  /// a shift past 32 bits is truncated on the web.
   static String formatSas(List<int> bytes) {
     const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-    final chars = StringBuffer();
-    var held = 0, bits = 0;
-    for (final b in bytes.take(5)) {
-      held = ((held << 8) | b) & 0xfff;
-      bits += 8;
-      while (bits >= 5) {
-        bits -= 5;
-        chars.write(alphabet[(held >> bits) & 31]);
-      }
-    }
-    final text = chars.toString();
+    final bits = bytes.take(5).fold(0, (held, b) => (held << 8) | b);
+    final text = [
+      for (var shift = 35; shift >= 0; shift -= 5) alphabet[(bits >> shift) & 31],
+    ].join();
     return "${text.substring(0, 4)}-${text.substring(4)}";
   }
 }

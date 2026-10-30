@@ -1,6 +1,9 @@
+import "dart:io";
+
 import "package:file_selector/file_selector.dart" show openFiles;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:path/path.dart" as p;
 
 import "../../core/config.dart";
 import "../../core/platform/form_factor.dart";
@@ -44,7 +47,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   RenameWriter? _write;
 
   RenameWriter _writerOf(AppConfig config) =>
-      _write ??= RenameWriter.fs(config.fs);
+      _write ??= RenameWriter();
 
   DateTime? _dobValue;
   Tone? _tone;
@@ -77,13 +80,13 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     final config = ref.read(appConfigProvider);
     final path = _instructionsPath(config);
     try {
-      final file = config.fs.file(path);
-      if (await file.exists()) _instructions.text = await file.readAsString();
+      final file = File(path);
+      if (file.existsSync()) _instructions.text = await file.readAsString();
     } catch (_) {
       // A file that will not read is shown as empty; saving overwrites it.
     }
     // Linking is by path, which only a desktop's picker hands back: a phone's
-    // gives a copy, and a browser no path at all.
+    // gives a copy.
     if (isDesktop) {
       final linked = await ref.read(linkedInstructionsStoreProvider).load();
       _linked = [...linked.files];
@@ -121,12 +124,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   /// Together rather than in turn: a path on a stalled mount should cost the
   /// page its own wait, not everyone's after it.
   Future<Set<String>> _missingOf(List<String> paths) async {
-    final fs = ref.read(appConfigProvider).fs;
-    final exists = await Future.wait(paths.map((p) => fs.file(p).exists()));
+    final exists = await Future.wait(paths.map((p) => File(p).exists()));
     return {for (final (i, path) in paths.indexed) if (!exists[i]) path};
   }
 
-  String _nameOf(String path) => ref.read(appConfigProvider).fs.path.basename(path);
+  String _nameOf(String path) => p.basename(path);
 
   Future<void> _openFile(String path, String name) async {
     await Navigator.of(context).push(MaterialPageRoute<void>(
@@ -140,7 +142,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     final added = [
       for (final file in picked)
         if (!_linked.contains(file.path) &&
-            !config.fs.path.equals(file.path, config.globalInstructionsFile))
+            !p.equals(file.path, config.globalInstructionsFile))
           file.path,
     ];
     if (added.isEmpty || !mounted) return;
@@ -204,13 +206,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   /// deletes the file rather than leaving an empty one behind.
   Future<void> _writeInstructions(
       AppConfig config, String path, String text) async {
-    final fs = config.fs;
     if (text.trim().isEmpty) {
-      final file = fs.file(path);
-      if (await file.exists()) await file.delete();
+      final file = File(path);
+      if (file.existsSync()) await file.delete();
       return;
     }
-    await fs.directory(fs.path.dirname(path)).create(recursive: true);
+    await Directory(p.dirname(path)).create(recursive: true);
     await _writerOf(config).write(path, text);
   }
 

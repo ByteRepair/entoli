@@ -2,6 +2,7 @@
 // holds, wherever it holds it from. The inverse of the import the settings
 // pages take in — a `.skill` zip for a skill, the `.md` file itself for an
 // agent — and the resolver the skill view page reads its bytes through.
+import "dart:io";
 import "dart:typed_data";
 
 import "../../core/config.dart";
@@ -13,6 +14,7 @@ import "../../domain/bundled_prompt_file.dart"
     show bundledPromptFileOf, bundledPromptFilesOf;
 import "../../domain/models.dart";
 import "../../domain/project.dart" show defaultProjectDir;
+import "../backup_handoff.dart";
 import "skill_import.dart"
     show SkillImportException, SkillPackage, skillDirectory, agentFilePath;
 import "skill_package.dart" show packageSkillBytes;
@@ -50,8 +52,8 @@ Future<Uint8List?> exportPromptBytes(
           ]));
   }
   for (final tier in _ownThenDefault(project)) {
-    final file = config.fs.file(agentFilePath(config, name, project: tier));
-    if (await file.exists()) return file.readAsBytes();
+    final file = File(agentFilePath(config, name, project: tier));
+    if (file.existsSync()) return file.readAsBytes();
   }
   final bundled = bundledPromptFileOf(bundledAgentFiles, project, name);
   return bundled == null ? null : Uint8List.fromList(bundled.bytes);
@@ -78,7 +80,10 @@ Future<void> exportAndSave(
   if (bytes == null) {
     throw const SkillImportException("its file could not be read");
   }
-  await handoff.save(promptExportName(kind, name), bytes);
+  await withStagedFile(promptExportName(kind, name), (path) async {
+    await File(path).writeAsBytes(bytes);
+    await handoff.save(path);
+  });
 }
 
 /// The skill's files as they sit inside its own directory, resolved the way
@@ -111,10 +116,9 @@ Future<List<(String, Uint8List)>?> _skillEntries(
   String name, {
   String? project,
 }) async {
-  final fs = config.fs;
   final dir = skillDirectory(config, name, project: project);
-  if (!await fs.directory(dir).exists()) return null;
-  final archive = await archiveOf(fs, [dir], base: dir);
+  if (!Directory(dir).existsSync()) return null;
+  final archive = await archiveOf([dir], base: dir);
   return [
     for (final file in archive)
       if (file.isFile) (file.name, file.readBytes() ?? Uint8List(0)),

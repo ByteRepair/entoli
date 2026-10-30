@@ -9,8 +9,8 @@
 ///
 /// The viewer has no network on Android, so the Google Fonts `<link>` is a
 /// no-op there and the font stacks fall back to `Georgia` / `Times New Roman`
-/// / serif, which keeps the newspaper character. On desktop and web, where a
-/// browser is online, the `<link>` loads and the look is the real one.
+/// / serif, which keeps the newspaper character. On desktop, where a browser
+/// is online, the `<link>` loads and the look is the real one.
 const _baseMarker = "<!-- entoli-base-css -->";
 
 const _fontsHead = """

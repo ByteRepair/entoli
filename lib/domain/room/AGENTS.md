@@ -255,7 +255,7 @@ composer, and stay their own list.
 clears `isRunning`. Returning earlier would report a finished turn whose last
 records are still in flight, and closing the app in that window would lose them
 — and would leave a log that reads as killed when it was not. The window is
-milliseconds on a disk and longer on IndexedDB. A write that fails still has to
+milliseconds on a disk. A write that fails still has to
 clear the flag, or the composer stays disabled with nothing running.
 ## Automatic retry rounds
 

@@ -1,4 +1,5 @@
 import "dart:convert";
+import "dart:io";
 
 import "../../core/config.dart";
 import "../../core/log.dart" show logFailure;
@@ -11,7 +12,7 @@ import "../../domain/linked_instructions.dart";
 /// pages saving at once would otherwise each write back what the other had
 /// not seen.
 class LinkedInstructionsStore {
-  LinkedInstructionsStore(this._config) : _write = RenameWriter.fs(_config.fs);
+  LinkedInstructionsStore(this._config) : _write = RenameWriter();
 
   final AppConfig _config;
   final RenameWriter _write;
@@ -19,8 +20,8 @@ class LinkedInstructionsStore {
 
   Future<LinkedInstructions> load() async {
     try {
-      final file = _config.fs.file(_config.linkedInstructionsFile);
-      if (!await file.exists()) return const LinkedInstructions();
+      final file = File(_config.linkedInstructionsFile);
+      if (!file.existsSync()) return const LinkedInstructions();
       return LinkedInstructions.fromJson(
           jsonDecode(await file.readAsString()) as Map<String, dynamic>);
     } catch (e) {

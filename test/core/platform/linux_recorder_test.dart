@@ -4,8 +4,8 @@ import "package:flutter_test/flutter_test.dart";
 import "package:record/record.dart"
     show AudioEncoder, InputDevice, RecordConfig, RecordPlatform;
 
-import "package:agent_chat/core/platform/io/linux_recorder.dart";
-import "package:agent_chat/core/platform/io/platform.dart"
+import "package:agent_chat/core/platform/linux_recorder.dart";
+import "package:agent_chat/core/platform/host.dart"
     show registerRecorder;
 
 /// The config the voice session sends: raw mono 16 kHz PCM with the two

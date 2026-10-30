@@ -443,7 +443,7 @@ This skill ships inside Entoli, a chat app over a coding agent. The environment 
 - There is no browser for you. Wherever this file says to open or serve an HTML file, write it into the workspace with `--static` and publish it with the `artifact` tool instead. The same goes for the eval review in Description Optimization Step 2.
 - Feedback the viewer collects comes back as a `feedback.json` download — ask the user to drop it into the workspace or paste it into the chat.
 - The `claude` CLI is not available, so Description Optimization's automated loop (Step 3) does not run; that section says what to do instead.
-- Python is whatever the machine has: on a desktop it is the system `python3`, on Android it is inside the Linux the commands run under, and in a browser there is none at all. Where there is none, the parts of this skill that are scripts rather than instructions are out of reach — say so and work without them.
+- Python is whatever the machine has: on a desktop it is the system `python3`, on Android it is inside the Linux the commands run under, and on a device with no Linux installed there is none at all. Where there is none, the parts of this skill that are scripts rather than instructions are out of reach — say so and work without them.
 - Packaging is the `create_skill` tool rather than a script: it takes the skill's directory, posts a card, and the user installs from there. There is no `.skill` file to hand over and no Settings page to point at. See the Package section.
 
 ---

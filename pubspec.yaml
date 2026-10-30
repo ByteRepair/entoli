@@ -37,11 +37,8 @@ dependencies:
   path_provider: ^2.1.6
   file_selector: ^1.1.0
   mime: ^2.0.0
-  # A dart:io-shaped FileSystem with an IndexedDB backend, so the web build has
-  # the same layout as a disk. See AGENTS.md, "On-disk layout".
-  fs_shim: ^2.5.5
-  # Neither a share sheet nor a browser download takes a folder, so a folder
-  # leaves the workspace as a zip. See AGENTS.md, "The workspace explorer".
+  # A share sheet does not take a folder, so a folder leaves the workspace as
+  # a zip. See AGENTS.md, "The workspace explorer".
   archive: ^4.1.0
 
   # Icons
@@ -57,8 +54,8 @@ dependencies:
   # grammars are registered is in `code_block.dart`.
   re_highlight: ^0.0.3
 
-  # Opening links from rendered markdown: external browser on desktop and
-  # web, in-app webview on Android.
+  # Opening links from rendered markdown: external browser on desktop, in-app
+  # webview on Android.
   url_launcher: ^6.3.2
   webview_flutter: ^4.14.1
   # Hybrid composition, which the platform-neutral API cannot ask for.
@@ -66,9 +63,9 @@ dependencies:
 
   # Voice mode. sherpa-onnx is speech recognition, speech synthesis and voice
   # activity detection from one dependency: `record` opens the microphone and
-  # `audioplayers` says the reply back. See "Voice mode" in AGENTS.md, and
-  # issue #58 for why a browser gets none of this. The interface and Linux
-  # packages are reached directly by the pw-record fallback, `LinuxRecorder`.
+  # `audioplayers` says the reply back. See "Voice mode" in AGENTS.md. The
+  # interface and Linux packages are reached directly by the pw-record
+  # fallback, `LinuxRecorder`.
   sherpa_onnx: ^1.13.6
   record: ^7.1.1
   record_platform_interface: ^2.1.0
@@ -81,8 +78,6 @@ dependencies:
   # A swappable clock so tests pin "now" rather than rotting against the
   # calendar. The reminder feature reads it; see "Reminders" in AGENTS.md.
   clock: ^1.1.2
-  # navigator.storage.persist(), so what the browser stored is not evicted.
-  web: ^1.1.1
   # Held below 1.6.2: its Linux plugin segfaults on registration (SEGV in
   # FlutterMediaStream's constructor) whether or not libpulse was found at
   # build time. Unpin when a release fixes it.
@@ -100,14 +95,6 @@ dependencies:
   yaml: ^3.1.4
   re_editor: ^0.10.0
   super_sliver_list: ^0.4.1
-
-# `sherpa_onnx` depends on `sherpa_onnx_web` whatever platform is being built,
-# and that package ships a 14 MB WebAssembly build of onnxruntime as a
-# web-platform asset. Plugin assets are not tree-shaken, so a web build that
-# can never run voice mode would carry all of it. See tool/web/sherpa_onnx_web_stub.
-dependency_overrides:
-  sherpa_onnx_web:
-    path: tool/web/sherpa_onnx_web_stub
 
 dev_dependencies:
   flutter_test:
@@ -136,8 +123,8 @@ flutter:
     - assets/icons/
     - assets/images/
     # The version About shows, generated from pubspec by tool/prepare.sh.
-    # Flutter writes its own version.json for Linux and Web, which overrides
-    # this where one exists; on every other platform this is the only copy.
+    # Flutter writes its own version.json for Linux, which overrides this
+    # there; on every other platform this is the only copy.
     - assets/version.json
     # The fonts' licences, read into `LicenseRegistry` at startup. An asset
     # rather than only a file in the repo, since the OFL asks for it to travel
@@ -150,15 +137,11 @@ flutter:
     # until a second, invisible download has finished is worse to explain than
     # an app that is slightly bigger. Every model sherpa takes, it takes as a
     # path, so this is copied out of the bundle on first use.
-    - path: assets/models/silero_vad.onnx
-      platforms: [android, ios, linux, macos, windows]
-    - path: assets/models/silero-vad-LICENSE.txt
-      platforms: [android, ios, linux, macos, windows]
+    - assets/models/silero_vad.onnx
+    - assets/models/silero-vad-LICENSE.txt
     # Byte Repair's install script, run through the configured terminal env to
-    # install make, github-cli and ESBMC. Platform-gated to keep it off the web
-    # build, which has no shell to run it.
-    - path: assets/scripts/byte-repair-setup.sh
-      platforms: [android, ios, linux, macos, windows]
+    # install make, github-cli and ESBMC.
+    - assets/scripts/byte-repair-setup.sh
     # The Mozilla root set the TLS fallback verifies against. Dart reads the
     # OS's own root store for its HTTPS trust, and on Windows the store's
     # population is schannel's, on demand, which a dart:io client never

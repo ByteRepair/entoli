@@ -3,7 +3,7 @@ import "package:flutter/widgets.dart";
 /// Opens a link from rendered markdown, and an artifact the model rendered.
 /// Android shows `http`/`https` in an in-app webview; everything else (and
 /// every other platform) hands the URL to the external browser. Artifacts open
-/// the same way on Android and desktop; on web, a blob URL opens in a new tab.
+/// in an in-app webview on the phones and in the external browser on desktop.
 abstract interface class LinkOpener {
   Future<void> open(BuildContext context, Uri url);
 

@@ -2,8 +2,6 @@ import "dart:convert";
 
 import "package:flutter_test/flutter_test.dart";
 
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
-
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/llm/gated_client.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
@@ -42,7 +40,6 @@ void main() {
     return SubAgentRunner(
       client: subClient,
       shell: shell,
-      fs: fileSystemIo,
       workspace: "/tmp/workspace",
       projectWorkspace: "/tmp/project",
       model: "fake-model",
@@ -131,7 +128,6 @@ void main() {
       final runner = SubAgentRunner(
         client: subClient,
         shell: shell,
-        fs: fileSystemIo,
         workspace: "/tmp/workspace",
         projectWorkspace: "/tmp/project",
         model: "fake-model",
@@ -141,7 +137,6 @@ void main() {
         session: session,
         client: parentClient,
         shell: shell,
-        fs: fileSystemIo,
         workspace: "/tmp/workspace",
         projectWorkspace: "/tmp/project",
         model: "fake-model",
@@ -297,7 +292,6 @@ void main() {
       final runner = SubAgentRunner(
         client: sub,
         shell: shell,
-        fs: fileSystemIo,
         workspace: "/tmp/workspace",
         projectWorkspace: "/tmp/project",
         model: "fake-model",
@@ -307,7 +301,6 @@ void main() {
         session: session,
         client: parent,
         shell: shell,
-        fs: fileSystemIo,
         workspace: "/tmp/workspace",
         projectWorkspace: "/tmp/project",
         model: "fake-model",
@@ -365,7 +358,6 @@ void main() {
       final runner = SubAgentRunner(
         client: sub,
         shell: shell,
-        fs: fileSystemIo,
         workspace: "/tmp/workspace",
         projectWorkspace: "/tmp/project",
         model: "fake-model",
@@ -375,7 +367,6 @@ void main() {
         session: session,
         client: parent,
         shell: shell,
-        fs: fileSystemIo,
         workspace: "/tmp/workspace",
         projectWorkspace: "/tmp/project",
         model: "fake-model",
@@ -428,7 +419,6 @@ void main() {
       final runner = SubAgentRunner(
         client: gatedSub,
         shell: shell,
-        fs: fileSystemIo,
         workspace: "/tmp/workspace",
         projectWorkspace: "/tmp/project",
         model: "fake-model",
@@ -440,7 +430,6 @@ void main() {
         session: session,
         client: gatedParent,
         shell: shell,
-        fs: fileSystemIo,
         workspace: "/tmp/workspace",
         projectWorkspace: "/tmp/project",
         model: "fake-model",
@@ -596,7 +585,6 @@ void main() {
       final runner = SubAgentRunner(
         client: sub,
         shell: shell,
-        fs: fileSystemIo,
         workspace: "/tmp/workspace",
         projectWorkspace: "/tmp/project",
         model: "fake-model",
@@ -606,7 +594,6 @@ void main() {
         session: session,
         client: parent,
         shell: shell,
-        fs: fileSystemIo,
         workspace: "/tmp/workspace",
         projectWorkspace: "/tmp/project",
         model: "fake-model",
@@ -633,7 +620,6 @@ void main() {
       return SubAgentRunner(
         client: client,
         shell: shell,
-        fs: fileSystemIo,
         workspace: "/tmp/workspace",
         projectWorkspace: "/tmp/project",
         model: "fake-model",

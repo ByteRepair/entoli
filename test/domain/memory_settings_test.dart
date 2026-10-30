@@ -4,7 +4,6 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/core/config.dart";
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_settings.dart";
@@ -25,7 +24,7 @@ void main() {
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync("memory_settings_test_");
-    config = AppConfig.forDirectory(tmp.path, fileSystemIo);
+    config = AppConfig.forDirectory(tmp.path);
     Directory(config.chatsDir()).createSync(recursive: true);
     backend = FakeBackend();
   });

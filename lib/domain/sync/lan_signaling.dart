@@ -33,10 +33,9 @@ List<String> lanBroadcasts(List<String> own) => {
 /// The LAN rendezvous a desktop offers while pairing: where a joiner's offer
 /// waits for an answer, and the one-time code that gates it.
 ///
-/// An interface rather than the server itself so the web build — which cannot
-/// listen — gets a null from `createLanSignaling` and every caller asks
-/// whether there is anything to run at all. See `SignalingServer` on the io
-/// side for what actually answers.
+/// An interface rather than the server itself, so `domain/` holds no socket
+/// and a test can run with none. See `SignalingServer` under `core/platform/`
+/// for what actually answers.
 abstract interface class LanSignaling {
   /// Offers arriving from joiners, newest while you are subscribed.
   Stream<IncomingOffer> get offers;

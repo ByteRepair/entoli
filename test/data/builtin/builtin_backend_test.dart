@@ -677,7 +677,7 @@ void main() {
       final backend = backendOver([
         [finish],
       ]);
-      final store = MemoryStore(config.fs, config.memoryDir());
+      final store = MemoryStore(config.memoryDir());
       await store.add("the user likes code formatted with tabs");
       await store.add("notes about the weather");
 
@@ -698,7 +698,7 @@ void main() {
       final backend = backendOver([
         [finish],
       ]);
-      final store = MemoryStore(config.fs, config.memoryDir());
+      final store = MemoryStore(config.memoryDir());
       await store.add("the user likes code formatted with tabs");
 
       await send(backend, "how should the code be formatted",
@@ -726,7 +726,7 @@ void main() {
       final backend = backendOver([
         [finish],
       ]);
-      final store = MemoryStore(config.fs, config.memoryDir());
+      final store = MemoryStore(config.memoryDir());
       await store.add("the user likes code formatted with tabs");
       await store.add("the codebase is called Entoli");
       final standing = await store.add("the deploy key rotates every month");
@@ -751,7 +751,7 @@ void main() {
       final backend = backendOver([
         [finish],
       ]);
-      final store = MemoryStore(config.fs, config.memoryDir());
+      final store = MemoryStore(config.memoryDir());
       final standing = await store.add("the deploy key rotates every month");
       await store.pin(standing.id);
 
@@ -2067,7 +2067,7 @@ void main() {
   group("writing memories after a turn", () {
     late MemoryStore store;
 
-    setUp(() => store = MemoryStore(config.fs, config.memoryDir()));
+    setUp(() => store = MemoryStore(config.memoryDir()));
 
     test("a finished turn leaves the memory the background model kept", () async {
       // The first scripted turn is the agent finishing; the second is the
@@ -2253,7 +2253,7 @@ void main() {
   group("tidying the memories in the background", () {
     late MemoryStore store;
 
-    setUp(() => store = MemoryStore(config.fs, config.memoryDir()));
+    setUp(() => store = MemoryStore(config.memoryDir()));
 
     /// A store grown to [n] facts, one memory each.
     Future<List<MemoryEntry>> seed(int n) async =>

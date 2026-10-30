@@ -28,10 +28,8 @@ the sub-agent strip are **the same widgets** drawn here too, rather than reduced
 voice-only versions: a turn waiting on an answer nobody can see is a hung turn,
 and a second copy of either is a second thing to keep right.
 
-The port is `Voice`, behind the app's one conditional import like `Shell` and
-`WebSearch`. `Voice.available` is false in a browser, which is what leaves the
-composer's circle undrawn — see issue #58 for why sherpa's WebAssembly is not
-the answer there, and what is.
+The port is `Voice`, resolved in `core/platform/` like `Shell` and
+`WebSearch`. Every platform has one, so the composer's circle is always drawn.
 
 **Android ships the libraries and downloads the models, like the desktops.**
 sherpa's native code is in the APK again — it was excluded once, when Android's
@@ -56,25 +54,6 @@ app does, and cannot be fixed from here: which service the framework trusts
 is the user's setting, not the app's. So the catalog is on Android as it is on
 the desktops, and a phone whose system recognizer is unusable picks a
 downloaded model instead.
-
-Keeping it off the web takes one deliberate piece of machinery.
-**`sherpa_onnx` depends on `sherpa_onnx_web` whatever platform is being built**,
-and that package declares a 14 MB WebAssembly build of onnxruntime as a
-web-platform asset. Plugin assets are not tree-shaken, so simply adding the
-dependency put 14 MB into a build that can never call it — measured: the web
-build went from 43 MB to 58 MB. `tool/web/sherpa_onnx_web_stub` is a local package
-of the same name, overridden in `dependency_overrides`, holding the two members
-the web plugin registrant reaches for and no assets at all. Nothing on the web
-imports `package:sherpa_onnx`, so none of the real API is ever wanted.
-
-The trap in it is that a `dependency_overrides` entry replaces the package on
-**every** platform, not only the one it was written for. If a `sherpa_onnx`
-bump inside `^1.13.6` ever reaches a third member of `SherpaOnnxWeb`, the
-desktop and Android builds break for a web-only reason — so the stub is
-something to check when that constraint moves, which the espeak-ng note above
-means it eventually will. The
-Silero asset is kept out the ordinary way, with `platforms:` on its pubspec
-entry.
 
 ## What listens and what speaks
 
@@ -253,8 +232,8 @@ same `SherpaListener` the desktops use (the `SherpaVoice` it holds, whose
 through), and the speech half answers the same way — so the four pairings all
 work, including a system recognizer with a downloaded voice or the reverse.
 The catalog is the other half: it draws wherever sherpa runs, which is every
-platform but the web — and iOS, `hasModelCatalog` false being what takes it
-off the page where the engines are everything.
+platform but iOS, `hasModelCatalog` false being what takes it off the page
+where the engines are everything.
 
 **What decides is whether the engine is there, not whether this is Android**,
 and the answer goes into the set that already existed for the question.
@@ -271,7 +250,7 @@ second question each gate had to remember, silently wrong in the one that
 forgot.
 
 It is on `Voice` rather than in `core/platform/` because that port is already
-per-platform and already built there, which keeps `io/platform.dart` resolving
+per-platform and already built there, which keeps `host.dart` resolving
 `Platform.isAndroid` once instead of twice and leaves `platform.dart` with no
 member exposed any way but its own. `FakeVoice` is then the test seam, so
 `TestApp.create` takes `nativeVoice` and nothing parallel has to be overridden.
@@ -720,7 +699,7 @@ the wrong home for a file that lives for one sentence. `flutter_pcm_sound`
 would be lower latency and has no Linux or Windows. **On Linux the microphone
 is `parecord`**, which `record` shells out to — `pulseaudio-utils`, which a
 PipeWire system *does not* have; it ships `pw-record` beside its own daemon
-instead. So `LinuxRecorder` (`core/platform/io/`) sits under `record`'s
+instead. So `LinuxRecorder` (`core/platform/`) sits under `record`'s
 platform interface, asks `PATH` for `parecord` first and `pw-record` where it
 is missing — the stock implementation verbatim where the first is found, the
 argv translated where it is not — and says which packages to install where

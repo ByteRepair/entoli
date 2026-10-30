@@ -1,6 +1,7 @@
-import "dart:typed_data";
+import "dart:io";
 
 import "package:file_selector/file_selector.dart";
+import "package:path/path.dart" as p;
 
 import "../domain/backup_handoff.dart";
 
@@ -9,28 +10,33 @@ const _backups = XTypeGroup(
   extensions: ["zip"],
   mimeTypes: ["application/zip"],
   uniformTypeIdentifiers: ["public.zip-archive"],
-  webWildCards: ["application/zip"],
 );
 
-/// A save dialog and a file chooser, through `file_selector` — one plugin over
-/// the desktops and a browser. The browser has no dialog to show and answers
-/// with a download instead, which is the same promise from where the user is
-/// standing.
+/// A save dialog and a file chooser, through `file_selector`.
 class FileSelectorBackup implements BackupHandoff {
   const FileSelectorBackup();
 
   @override
-  Future<void> save(String name, Uint8List bytes) async {
-    final location =
-        await getSaveLocation(suggestedName: name, acceptedTypeGroups: const [_backups]);
+  Future<void> save(String path) async {
+    final location = await getSaveLocation(
+        suggestedName: p.basename(path), acceptedTypeGroups: const [_backups]);
     if (location == null) return;
-    await XFile.fromData(bytes, name: name, mimeType: "application/zip")
-        .saveTo(location.path);
+    await File(path).copy(location.path);
   }
 
   @override
-  Future<Uint8List?> pick() async {
-    final file = await openFile(acceptedTypeGroups: const [_backups]);
-    return file?.readAsBytes();
+  Future<String?> pick() async =>
+      (await openFile(acceptedTypeGroups: const [_backups]))?.path;
+}
+
+/// Runs [use] over a path called [name] in a fresh temporary directory, for a
+/// file on its way to [BackupHandoff.save], and removes the directory after.
+Future<T> withStagedFile<T>(
+    String name, Future<T> Function(String path) use) async {
+  final dir = await Directory.systemTemp.createTemp("entoli-out");
+  try {
+    return await use(p.join(dir.path, name));
+  } finally {
+    await dir.delete(recursive: true);
   }
 }

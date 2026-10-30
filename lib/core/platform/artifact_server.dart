@@ -3,9 +3,8 @@ import "dart:io";
 
 import "package:path/path.dart" as p;
 
-import "../../../domain/artifact_server.dart";
-import "../../../domain/artifact_style.dart";
-import "../../../domain/content_type.dart";
+import "../../domain/artifact_style.dart";
+import "../../domain/content_type.dart";
 
 /// Serves [rootDir] over HTTP on a random localhost port. Used on the phones,
 /// where the WebView blocks `file://` URLs — even with `setAllowFileAccess(true)`
@@ -15,8 +14,8 @@ import "../../../domain/content_type.dart";
 /// HTML responses are run through [injectBaseStyles] before serving, so the
 /// artifact gets the base stylesheet the viewer provides — the model writes
 /// semantic HTML and the newspaper look is layered under whatever it adds.
-class IoArtifactServer implements ArtifactServer {
-  IoArtifactServer._(this._server, this.rootDir);
+class ArtifactServer {
+  ArtifactServer._(this._server, this.rootDir);
 
   final HttpServer _server;
   final String rootDir;
@@ -24,12 +23,11 @@ class IoArtifactServer implements ArtifactServer {
   /// Start serving [rootDir] on a random localhost port.
   static Future<ArtifactServer> start(String rootDir) async {
     final server = await HttpServer.bind("127.0.0.1", 0);
-    final instance = IoArtifactServer._(server, rootDir);
+    final instance = ArtifactServer._(server, rootDir);
     server.listen(instance._handle);
     return instance;
   }
 
-  @override
   String get baseUrl => "http://127.0.0.1:${_server.port}";
 
   Future<void> _handle(HttpRequest request) async {
@@ -63,6 +61,5 @@ class IoArtifactServer implements ArtifactServer {
     await request.response.close();
   }
 
-  @override
   Future<void> stop() => _server.close(force: true);
 }

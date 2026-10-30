@@ -7,8 +7,7 @@ name: Release
 # TestFlight in a job of its own, Apple's processing wall clock running beside
 # the attachments rather than ahead of them. There is no release APK;
 # `debug-build.yml` builds an APK by hand. `release-build.yml` is what builds
-# them and can be run on its own; `pages.yml` answers the same event for the
-# web app. See "Releasing" in AGENTS.md.
+# them and can be run on its own. See "Releasing" in AGENTS.md.
 on:
   release:
     types: [published]

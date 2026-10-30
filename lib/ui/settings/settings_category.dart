@@ -46,10 +46,9 @@ enum SettingsCategory {
   /// Whether this platform can do anything the category sets. One it cannot
   /// is neither listed nor opened, so its page never has to say so. On-device
   /// holds the model server's downloads and the voice models', so a build with
-  /// neither (iOS, the web) has no page to offer.
+  /// neither has no page to offer.
   bool offered(WidgetRef ref) => switch (this) {
         agentBrowser => ref.watch(agentBrowserProvider).available,
-        voice => ref.watch(voiceProvider).available,
         triggers => ref.watch(reminderAlarmsProvider).available,
         onDevice =>
           ref.watch(localEngineProvider).available || ref.watch(voiceProvider).hasModelCatalog,

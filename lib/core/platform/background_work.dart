@@ -3,7 +3,7 @@ import "dart:async";
 import "package:flutter/services.dart";
 
 import "../../domain/background_work.dart";
-import "../../core/log.dart";
+import "../log.dart";
 
 /// Android's foreground services, on the other end of `agent_chat/background`
 /// and implemented by `ForegroundWork.kt` and the services beside it. Not

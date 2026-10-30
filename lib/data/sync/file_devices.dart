@@ -1,4 +1,7 @@
 import "dart:convert";
+import "dart:io";
+
+import "package:path/path.dart" as p;
 
 import "../../core/config.dart";
 import "../../domain/documents.dart" show RenameWriter;
@@ -14,18 +17,18 @@ import "../../domain/sync/devices.dart";
 /// wherever there is one.
 class FileDeviceRegistry implements DeviceRegistry {
   FileDeviceRegistry(this._config, this._secrets)
-      : _writer = RenameWriter.fs(_config.fs);
+      : _writer = RenameWriter();
 
   final AppConfig _config;
   final SecretStore _secrets;
   final RenameWriter _writer;
 
-  String get _file => _config.fs.path.join(_config.syncDir, "devices.json");
+  String get _file => p.join(_config.syncDir, "devices.json");
 
   Future<Map<String, dynamic>> _read() async {
     try {
-      final file = _config.fs.file(_file);
-      if (!await file.exists()) return {};
+      final file = File(_file);
+      if (!file.existsSync()) return {};
       return jsonDecode(await file.readAsString()) as Map<String, dynamic>;
     } catch (_) {
       return {};

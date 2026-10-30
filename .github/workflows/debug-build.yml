@@ -3,7 +3,7 @@ name: Debug build
 # Asked for, never automatic: these are minutes-long native builds, and a debug
 # artifact is wanted when someone means to install one, not on every commit. A
 # run builds whichever ref it was dispatched from; `release-build.yml` is the
-# same two native builds cut from a tag, and `pages.yml` ships the web app.
+# same two native builds cut from a tag.
 on:
   workflow_dispatch:
 
@@ -85,19 +85,4 @@ jobs:
           if-no-files-found: error
           # squashfs already; compressing it again buys nothing.
           compression-level: 0
-          retention-days: 14
-
-  web:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7.0.1
-
-      - uses: ./.github/actions/flutter-setup
-
-      - run: flutter build web --debug
-
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: web-debug
-          path: build/web
           retention-days: 14

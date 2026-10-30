@@ -11,9 +11,6 @@ class IoFileWatches implements FileWatches {
   const IoFileWatches();
 
   @override
-  bool get available => true;
-
-  @override
   Stream<FileWatchEvent> watch(String root) {
     // A path may be a file — the build-log case the tool schema itself
     // suggests — and `Directory.watch` works over one on the platforms this

@@ -1,6 +1,6 @@
 /// Content type for a file path, inferred from its extension. Used by the
-/// web blob URL builder and the Android local HTTP server — both serve
-/// artifact files and need to set the right `Content-Type` header.
+/// phones' local HTTP server, which serves artifact files and needs to set the
+/// right `Content-Type` header.
 String contentTypeFor(String path) {
   final ext = path.lastIndexOf(".");
   if (ext < 0) return "application/octet-stream";

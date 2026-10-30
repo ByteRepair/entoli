@@ -276,11 +276,7 @@ class ClockKind extends TriggerKind {
 class FileKind extends TriggerKind {
   FileKind({required this.fileWatches, this.resolve});
 
-  /// The platform's watcher, or the unavailable one: a browser is where
-  /// this kind has nothing to watch with, the way the alarms port is what
-  /// the clock kinds' answer rides on. Consulted at [armed] rather than
-  /// answered with silence at runtime, so the settings pages can say what
-  /// cannot fire.
+  /// The platform's watcher, or a test's.
   final FileWatches fileWatches;
 
   /// Resolves a stored path to a watchable root, through the same rules the
@@ -304,8 +300,7 @@ class FileKind extends TriggerKind {
     return trigger.enabled &&
         source is FileSource &&
         source.paths.isNotEmpty &&
-        resolve != null &&
-        fileWatches.available;
+        resolve != null;
   }
 
   @override

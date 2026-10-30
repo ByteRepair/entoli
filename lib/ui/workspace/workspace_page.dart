@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:path/path.dart" as p;
 
 import "../../domain/file_handoff.dart";
 import "../../domain/workspace.dart";
@@ -38,8 +39,7 @@ class WorkspaceTile extends StatelessWidget {
 }
 
 /// A workspace folder, and what can be done with what is in it. Listing,
-/// creating a folder and deleting go through the `FileSystem` and are on every
-/// platform; the routes out of the app are `FileHandoff`'s, and each is drawn
+/// creating a folder and deleting are on every platform; the routes out of the app are `FileHandoff`'s, and each is drawn
 /// only where it leads somewhere — see AGENTS.md, "The workspace explorer".
 class WorkspacePage extends ConsumerStatefulWidget {
   const WorkspacePage({super.key, required this.root, required this.title});
@@ -85,7 +85,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
       });
 
   Future<List<WorkspaceEntry>> _read() =>
-      listWorkspace(ref.read(appConfigProvider).fs, _dir);
+      listWorkspace(_dir);
 
   /// A selection is one folder's, which is what lets the share sheet be handed
   /// a flat staging directory — so leaving the folder ends it.
@@ -112,7 +112,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   /// before it leaves the page, unwinding the way the taps wound it up.
   void _back() {
     if (_atRoot) return Navigator.of(context).pop();
-    _goTo(ref.read(appConfigProvider).fs.path.dirname(_dir));
+    _goTo(p.dirname(_dir));
   }
 
   Future<void> _guard(Future<void> Function() work) =>
@@ -123,7 +123,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   /// out not to be text, and the hand-off below runs after all.
   Future<void> _open(WorkspaceEntry entry) async {
     if (entry.isDirectory) return _goTo(entry.path);
-    if (looksTextual(ref.read(appConfigProvider).fs, entry.name)) {
+    if (looksTextual(entry.name)) {
       final handOff = await Navigator.of(context).push<bool>(MaterialPageRoute(
         builder: (_) => TextFilePage(path: entry.path, name: entry.name),
       ));
@@ -139,13 +139,6 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     if (mounted) setState(_clearSelection);
   }
 
-  Future<void> _import({required bool folders}) => _guard(() async {
-        final files = await ref.read(fileHandoffProvider).import(folders: folders);
-        if (files.isEmpty) return;
-        await writeIncoming(ref.read(appConfigProvider).fs, _dir, files);
-        _reload();
-      });
-
   Future<void> _newFolder() async {
     final name = await promptForText(
       context,
@@ -156,7 +149,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     );
     if (name == null) return;
     await _guard(() async {
-      await createFolder(ref.read(appConfigProvider).fs, _dir, name);
+      await createFolder(_dir, name);
       _reload();
     });
   }
@@ -164,11 +157,10 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   Future<void> _delete() async {
     final paths = _selected.toList();
     if (paths.isEmpty) return;
-    final fs = ref.read(appConfigProvider).fs;
     final agreed = await confirm(
       context,
       title: paths.length == 1
-          ? "Delete \"${fs.path.basename(paths.first)}\"?"
+          ? "Delete \"${p.basename(paths.first)}\"?"
           : "Delete ${paths.length} items?",
       message: "A folder goes with everything in it. This cannot be undone.",
       confirmLabel: "Delete",
@@ -176,7 +168,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     );
     if (!agreed) return;
     await _guard(() async {
-      await deleteEntries(fs, paths);
+      await deleteEntries(paths);
       setState(() {
         _clearSelection();
         _entries = _read();
@@ -187,8 +179,6 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   @override
   Widget build(BuildContext context) {
     final handoff = ref.watch(fileHandoffProvider);
-    final fs = ref.watch(appConfigProvider).fs;
-    final export = handoff.exportKind;
     return PopScope(
       canPop: _atRoot,
       onPopInvokedWithResult: (didPop, _) {
@@ -200,17 +190,17 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
         title: _Title(
           text: _selected.isNotEmpty
               ? "${_selected.length} selected"
-              : (_atRoot ? widget.title : fs.path.basename(_dir)),
-          under: _atRoot ? null : fs.path.relative(_dir, from: widget.root),
+              : (_atRoot ? widget.title : p.basename(_dir)),
+          under: _atRoot ? null : p.relative(_dir, from: widget.root),
         ),
         actions: _selecting ? _selectionActions() : _browseActions(handoff),
       ),
-      floatingActionButton: export == null || _selected.isEmpty
+      floatingActionButton: !handoff.canShare || _selected.isEmpty
           ? null
           : FloatingActionButton.extended(
               onPressed: _export,
-              icon: Icon(_exportIcons[export]),
-              label: Text(_exportLabels[export]!),
+              icon: const Icon(Icons.ios_share),
+              label: const Text("Share"),
             ),
       body: Column(
         children: [
@@ -287,16 +277,6 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
           tooltip: "New folder",
           onPressed: _newFolder,
         ),
-        if (handoff.canImport)
-          PopupMenuButton<bool>(
-            icon: const Icon(Icons.upload_file),
-            tooltip: "Upload",
-            onSelected: (folders) => _import(folders: folders),
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: false, child: Text("Upload files")),
-              PopupMenuItem(value: true, child: Text("Upload folder")),
-            ],
-          ),
         IconButton(
           icon: const Icon(Icons.checklist),
           tooltip: "Select",
@@ -313,24 +293,10 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
         _selected.add(entry.path);
       });
 
-  /// What the empty state offers, which is whichever route in the toolbar
-  /// actually drew. The upload button wins where a platform has both: it is one
-  /// tap away, where a share is another app away.
-  String? _inboundRoute(FileHandoff handoff) {
-    if (handoff.canImport) return "Upload your own from the toolbar.";
-    if (handoff.exportKind == ExportKind.share) {
-      return "Share files to Entoli to add your own.";
-    }
-    return null;
-  }
+  /// What the empty state offers: the share sheet, where there is one.
+  String? _inboundRoute(FileHandoff handoff) =>
+      handoff.canShare ? "Share files to Entoli to add your own." : null;
 }
-
-const _exportLabels = {ExportKind.share: "Share", ExportKind.download: "Download"};
-
-const _exportIcons = {
-  ExportKind.share: Icons.ios_share,
-  ExportKind.download: Icons.download,
-};
 
 /// The folder's name over where it sits under the root. `AppBar` has one line
 /// to give, and losing the path is losing the only thing that says which of two

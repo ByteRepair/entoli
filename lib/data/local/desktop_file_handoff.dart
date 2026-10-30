@@ -18,10 +18,7 @@ class DesktopFileHandoff implements FileHandoff {
   bool get canReveal => true;
 
   @override
-  ExportKind? get exportKind => null;
-
-  @override
-  bool get canImport => false;
+  bool get canShare => false;
 
   @override
   Future<void> open(String path) => _launch(path);
@@ -31,9 +28,6 @@ class DesktopFileHandoff implements FileHandoff {
 
   @override
   Future<void> export(List<String> paths) async {}
-
-  @override
-  Future<List<IncomingFile>> import({required bool folders}) async => const [];
 
   @override
   Future<List<IncomingFile>> takeShare() async => const [];

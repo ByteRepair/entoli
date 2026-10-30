@@ -1,8 +1,7 @@
 import "package:flutter/foundation.dart";
 import "package:flutter/services.dart";
 
-/// Whether the platform's chord key is Cmd rather than Ctrl. A browser on a
-/// Mac answers macOS here too, which is the keyboard it has.
+/// Whether the platform's chord key is Cmd rather than Ctrl.
 bool get appleKeyboard =>
     defaultTargetPlatform == TargetPlatform.macOS ||
     defaultTargetPlatform == TargetPlatform.iOS;

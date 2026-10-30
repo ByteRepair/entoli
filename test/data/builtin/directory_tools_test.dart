@@ -1,7 +1,6 @@
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
@@ -69,7 +68,6 @@ void main() {
       session: session,
       client: client,
       shell: shell,
-      fs: fileSystemIo,
       workspace: chatWs,
       projectWorkspace: projectWs,
       model: "fake-model",
@@ -118,6 +116,26 @@ void main() {
       expect(textOf(results(events, which: 2)), contains("not grantable"));
       expect(textOf(results(events, which: 3)),
           contains(outside));
+    });
+
+    test("a link to the data directory refuses as the directory does", () async {
+      makeRooms();
+      final dir = Directory.systemTemp.createTempSync("agent-dir-house");
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final dataDir = p.join(dir.path, "agent-data");
+      Directory(dataDir).createSync();
+      final alias = p.join(outside, "alias");
+      Link(alias).createSync(dataDir);
+      addTearDown(() => Link(alias).deleteSync());
+      final client = FakeLlmClient([
+        [fileCall(addDirectoryName, {"path": alias})],
+        [finish],
+      ]);
+      final events = await agentOver(client, dataDir: dataDir)
+          .run(userMessage("go"))
+          .toList();
+      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
+      expect(textOf(results(events)), contains("not grantable"));
     });
 
     test("a path that names nothing refuses", () async {
@@ -319,8 +337,7 @@ void main() {
       final tools = offeredTools(ToolOffer(
           caps: AgentCapabilities.forTurn(
               commands: true,
-              webSearch: false,
-              disabled: {AgentCapability.ask})));
+              disabled: {AgentCapability.ask, AgentCapability.webSearch})));
       expect(tools.map((t) => t.name), isNot(contains(addDirectoryName)));
       expect(tools.map((t) => t.name), contains(writableDirectoriesName));
     });
@@ -330,7 +347,7 @@ void main() {
     test("a granted directory makes the file tools free", () {
       final granted = p.join("/roots", "granted");
       expect(
-          outsideWorkspaces(fileSystemIo, p.join(granted, "x.txt"), "/ws",
+          outsideWorkspaces(p.join(granted, "x.txt"), "/ws",
               "/pws", granted: [granted]),
           isFalse);
     });

@@ -12,9 +12,7 @@ import "../../domain/rootfs_store.dart";
 import "tree_ops.dart";
 
 /// A downloaded Linux in a directory of its own, outside the data directory —
-/// see [RootfsStore] for why that matters. `dart:io` rather than the config's
-/// `FileSystem` for the reason `LocalShell` is: this side of the conditional
-/// import is the only one that can run what is in there.
+/// see [RootfsStore] for why that matters.
 class FileRootfsStore extends RootfsStore {
   FileRootfsStore(this.root, {this.tar = _systemTar, this.client});
 

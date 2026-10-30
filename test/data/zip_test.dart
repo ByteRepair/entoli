@@ -2,7 +2,6 @@ import "dart:io";
 
 import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
 
 import "package:agent_chat/data/zip.dart";
 
@@ -13,8 +12,12 @@ void main() {
 
   setUp(() => dir = tempConfig().projectWorkspaceDir());
 
-  Future<Archive> unzip(List<String> paths) async =>
-      ZipDecoder().decodeBytes(await zipEntries(fileSystemIo, paths));
+  Future<Archive> unzip(List<String> paths) async {
+    final out = await Directory.systemTemp.createTemp("zip_out_");
+    addTearDown(() => out.delete(recursive: true));
+    await zipTo("${out.path}/out.zip", paths);
+    return ZipDecoder().decodeBytes(File("${out.path}/out.zip").readAsBytesSync());
+  }
 
   test("a file is named without the folder it came out of", () async {
     File("$dir/a.txt").writeAsStringSync("one");
@@ -49,8 +52,8 @@ void main() {
   });
 
   test("zipNameFor: one folder names itself, several their parent", () {
-    expect(zipNameFor(fileSystemIo, ["$dir/notes"]), "notes.zip");
-    expect(zipNameFor(fileSystemIo, ["$dir/a.txt", "$dir/sub"]), "workspace.zip");
+    expect(zipNameFor(["$dir/notes"]), "notes.zip");
+    expect(zipNameFor(["$dir/a.txt", "$dir/sub"]), "workspace.zip");
   });
 
   test("a selection of several goes in as several", () async {

@@ -155,30 +155,13 @@ void main() {
   });
 
   test("a POST that carries no body is not drained for one", () {
-    // The io side asks before reading: it binds a well-known port on every
+    // The server asks before reading: it binds a well-known port on every
     // interface, so a POST to a path that is not here is the ordinary case.
     expect(SignalingRoutes.carriesBody("POST", SignalingRoutes.offerPath),
-        isTrue);
-    expect(SignalingRoutes.carriesBody("POST", SignalingRoutes.answerPath),
         isTrue);
     expect(SignalingRoutes.carriesBody("POST", "/wp-login.php"), isFalse);
     expect(SignalingRoutes.carriesBody("GET", SignalingRoutes.offerPath),
         isFalse);
-  });
-
-  test("the host's answer completes the offer when it comes over the wire",
-      () async {
-    // Which is how the browser build answers, having no `postAnswer` to call.
-    routes.arm("123456");
-    final ids = <String>[];
-    routes.offers.listen((offer) => ids.add(offer.id));
-
-    final waiting = offer(code: "123456");
-    await pumpEventQueue();
-    await routes.handle(SignalingRequest("POST", "/entoli/answer",
-        body: jsonEncode({"id": ids.single, "sdp": "v=0 answer"})));
-
-    expect(sdpOf(await waiting), "v=0 answer");
   });
 
   test("an offer sent as anything but a POST is refused", () async {
@@ -226,23 +209,5 @@ void main() {
   test("a path that is not one of the routes is a 404", () async {
     expect(
         (await routes.handle(const SignalingRequest("GET", "/"))).status, 404);
-  });
-
-  group("what a browser needs before it will dial a LAN address", () {
-    test("an ordinary response carries CORS too", () async {
-      final reply =
-          await routes.handle(const SignalingRequest("GET", "/entoli/health"));
-
-      expect(reply.status, 200);
-      expect(reply.headers["Access-Control-Allow-Origin"], "*");
-
-      // And the preflight that lets Chrome dial at all: 204 with the
-      // private-network answer beside it.
-      final preflight = await routes
-          .handle(const SignalingRequest("OPTIONS", "/entoli/offer"));
-      expect(preflight.status, 204);
-      expect(
-          preflight.headers["Access-Control-Allow-Private-Network"], "true");
-    });
   });
 }

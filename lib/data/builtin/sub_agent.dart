@@ -1,7 +1,5 @@
 import "dart:async";
 
-import "package:fs_shim/fs.dart";
-
 import "../../domain/agent_backend.dart";
 import "../../domain/agent_definition.dart";
 import "../../domain/chat_log.dart";
@@ -31,7 +29,6 @@ class SubAgentRunner implements SubAgents {
   SubAgentRunner({
     required this.client,
     required this.shell,
-    required this.fs,
     required this.workspace,
     required this.projectWorkspace,
     this.environment = const {},
@@ -54,7 +51,6 @@ class SubAgentRunner implements SubAgents {
 
   final LlmClient client;
   final Shell shell;
-  final FileSystem fs;
   final String workspace;
   final String projectWorkspace;
   final Map<String, String> environment;
@@ -159,7 +155,6 @@ class SubAgentRunner implements SubAgents {
       // One-shot over the same shell: a fresh subshell per command, so the
       // fan-out's commands never share a directory or an environment.
       oneShot: true,
-      fs: fs,
       workspace: workspace,
       projectWorkspace: projectWorkspace,
       environment: environment,

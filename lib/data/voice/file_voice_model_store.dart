@@ -3,7 +3,6 @@ import "dart:io";
 import "dart:isolate";
 
 import "package:archive/archive.dart";
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 import "package:http/http.dart" as http;
 
@@ -14,9 +13,7 @@ import "../../domain/voice_model_store.dart";
 import "../../domain/workspace.dart";
 
 /// Voice models in a directory of their own, outside the data directory — see
-/// [VoiceModelStore] for why that matters. `dart:io` rather than the config's
-/// `FileSystem` for the same reason `LocalShell` is: this side of the
-/// conditional import is the only one that has models at all.
+/// [VoiceModelStore] for why that matters.
 class FileVoiceModelStore extends VoiceModelStore {
   FileVoiceModelStore(this.root, {this.client});
 
@@ -48,10 +45,10 @@ class FileVoiceModelStore extends VoiceModelStore {
     final out = <String>{};
     for (final folder in voiceFolders) {
       final dir = Directory(p.join(root, folder));
-      if (!await dir.exists()) continue;
+      if (!dir.existsSync()) continue;
       await for (final entry in dir.list()) {
         if (entry is! Directory) continue;
-        if (await File(p.join(entry.path, _marker)).exists()) {
+        if (File(p.join(entry.path, _marker)).existsSync()) {
           out.add(p.basename(entry.path));
         }
       }
@@ -62,7 +59,7 @@ class FileVoiceModelStore extends VoiceModelStore {
   @override
   Future<void> delete(VoiceModel model) async {
     final dir = Directory(directoryFor(model));
-    if (await dir.exists()) await dir.delete(recursive: true);
+    if (dir.existsSync()) await dir.delete(recursive: true);
   }
 
   /// Two to four files, or one archive, into the model's own directory. The
@@ -160,6 +157,6 @@ class FileVoiceModelStore extends VoiceModelStore {
   static String? _strip(String name) {
     final parts = p.posix.split(name).where((s) => s.isNotEmpty && s != ".").toList();
     if (parts.length < 2) return null;
-    return safeRelativePath(fileSystemIo, p.posix.joinAll(parts.skip(1)));
+    return safeRelativePath(p.posix.joinAll(parts.skip(1)));
   }
 }

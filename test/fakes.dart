@@ -1,9 +1,11 @@
 import "dart:async";
 import "dart:convert";
+import "dart:io";
 
 import "package:archive/archive.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/widgets.dart";
+import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/llm/hosted_models.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
@@ -247,18 +249,13 @@ class FakeAttachmentPicker implements AttachmentPicker {
   }
 }
 
-/// Stands in for the runner's clipboard channel and the browser's paste event.
+/// Stands in for the runner's clipboard channel.
 class FakeClipboardFiles implements ClipboardFiles {
   /// What a paste finds. Empty is a clipboard holding text.
   List<Attachment> files = const [];
 
-  final pastedEvents = StreamController<List<Attachment>>.broadcast();
-
   @override
   Future<List<Attachment>> read() async => files;
-
-  @override
-  Stream<List<Attachment>> get pasted => pastedEvents.stream;
 }
 
 /// The app building itself again, which a test has no `AppRoot` to do. The work
@@ -278,17 +275,18 @@ class FakeAppRestart implements AppRestart {
 /// of which a test can answer. What was saved is kept so a test can read the
 /// document back, which is the only witness there is that Export did anything.
 class FakeBackupHandoff implements BackupHandoff {
+  /// Read back at once, since the caller removes the file when this returns.
   final List<({String name, Uint8List bytes})> saved = [];
 
-  /// What the next pick answers. Null is a cancelled chooser.
-  Uint8List? scripted;
+  /// Where the next pick answers. Null is a cancelled chooser.
+  String? scripted;
 
   @override
-  Future<void> save(String name, Uint8List bytes) async =>
-      saved.add((name: name, bytes: bytes));
+  Future<void> save(String path) async =>
+      saved.add((name: p.basename(path), bytes: await File(path).readAsBytes()));
 
   @override
-  Future<Uint8List?> pick() async => scripted;
+  Future<String?> pick() async => scripted;
 }
 
 /// The system's assistant gesture, as the app sees it. [pending] is a launch
@@ -448,38 +446,26 @@ class FakeReminderAlarms implements ReminderAlarms {
 }
 
 /// What a workspace file can do outside the app, which no test can drive: no
-/// viewer opens, no share sheet appears, no chooser is answered. The capability
-/// flags are the point — the explorer draws a different toolbar on each of the
-/// three platforms, and the named constructors are those three.
+/// viewer opens, no share sheet appears. The capability flags are the point —
+/// the explorer draws a different toolbar on a desktop and on Android, and the
+/// named constructors are those two.
 class FakeFileHandoff implements FileHandoff {
-  FakeFileHandoff({this.canReveal = false, this.exportKind, this.canImport = false});
+  FakeFileHandoff({this.canReveal = false, this.canShare = false});
 
   /// A desktop: a file manager and a viewer, nothing else.
   factory FakeFileHandoff.desktop() => FakeFileHandoff(canReveal: true);
 
-  /// Android: the share sheet both ways, and no chooser of its own.
-  factory FakeFileHandoff.android() => FakeFileHandoff(exportKind: ExportKind.share);
-
-  /// A browser: a download out, a file input in.
-  factory FakeFileHandoff.web() =>
-      FakeFileHandoff(exportKind: ExportKind.download, canImport: true);
+  /// Android: the share sheet both ways.
+  factory FakeFileHandoff.android() => FakeFileHandoff(canShare: true);
 
   @override
   final bool canReveal;
   @override
-  final ExportKind? exportKind;
-  @override
-  final bool canImport;
+  final bool canShare;
 
   final List<String> opened = [];
   final List<String> revealed = [];
   final List<List<String>> exported = [];
-
-  /// Whether each import asked for folders.
-  final List<bool> imports = [];
-
-  /// What the next import answers. Empty is a cancelled chooser.
-  List<IncomingFile> scriptedImport = const [];
 
   /// What another app has shared and nothing has claimed. Emptied by
   /// [takeShare], the way the real one is.
@@ -506,12 +492,6 @@ class FakeFileHandoff implements FileHandoff {
   Future<void> export(List<String> paths) async => exported.add(paths);
 
   @override
-  Future<List<IncomingFile>> import({required bool folders}) async {
-    imports.add(folders);
-    return scriptedImport;
-  }
-
-  @override
   Future<List<IncomingFile>> takeShare() async {
     final files = pendingShare;
     pendingShare = const [];
@@ -520,9 +500,19 @@ class FakeFileHandoff implements FileHandoff {
 }
 
 /// A file arriving from outside, with recognisable bytes so a test can follow
-/// the same one from a chooser or a share into a workspace.
-IncomingBytes incomingFile(String path, [String text = "hi"]) =>
-    IncomingBytes(path, Uint8List.fromList(text.codeUnits));
+/// the same one from a share into a workspace.
+IncomingFile incomingFile(String path, [String text = "hi"]) =>
+    _IncomingBytes(path, Uint8List.fromList(text.codeUnits));
+
+class _IncomingBytes extends IncomingFile {
+  const _IncomingBytes(super.path, this.bytes);
+
+  final Uint8List bytes;
+
+  @override
+  Future<void> writeTo(String target) =>
+      File(target).writeAsBytes(bytes);
+}
 
 /// A chat's background jobs as a test sets them.
 class FakeShellJobs implements ChatShellJobs {
@@ -909,11 +899,6 @@ class FakeChatStore implements ChatStore {
     _artifacts.putIfAbsent(chatId, () => {}).putIfAbsent(artifactId, () => {});
   }
 
-  @override
-  Future<Uint8List?> readArtifactFile(
-    String chatId, String artifactId, String relativePath, {String? project}) async =>
-      _artifacts[chatId]?[artifactId]?[relativePath];
-
   final Map<String, String> _plans = {};
 
   /// A chat's `PLAN.md`, as [readPlan] answers it.
@@ -969,15 +954,11 @@ class FakeChatStore implements ChatStore {
 /// test is written against.
 class FakeVoice extends Voice {
   FakeVoice({
-    this.available = true,
     this.hasEngineInstalls = true,
     this.hasModelCatalog = true,
   });
 
-  @override
-  final bool available;
-
-  /// False is a browser: no engine installs to offer, so no missing-engine
+  /// False is a desktop: no engine installs to offer, so no missing-engine
   /// block. True is Android, the one platform the block is drawn for.
   @override
   final bool hasEngineInstalls;
@@ -1572,9 +1553,6 @@ class FakeTriggerTurnDriver implements TriggerTurnDriver {
 class FakeFileWatches implements FileWatches {
   final _events = StreamController<FileWatchEvent>.broadcast();
   final roots = <String>[];
-
-  @override
-  bool get available => true;
 
   @override
   Stream<FileWatchEvent> watch(String root) {

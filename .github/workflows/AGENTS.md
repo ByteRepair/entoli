@@ -1,10 +1,8 @@
 # Releasing
 
-A release event starts two workflows that share nothing but the event:
-`release.yml` attaches the binaries and uploads the App Bundle to Google
-Play, `pages.yml` deploys the web app from the same tag. Either can fail
-without the other, and only the first checks the tag against pubspec — a
-version disagreement stops the binaries and deploys the site anyway.
+A release event starts `release.yml`, which attaches the binaries and
+uploads the App Bundle to Google Play. It checks the tag against pubspec
+first, so a version disagreement stops it before anything is attached.
 
 Three files are attached, each with a provenance attestation beside it
 (`<file>.sigstore.json`), named after the app and not the package or the
