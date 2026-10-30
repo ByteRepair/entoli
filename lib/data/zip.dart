@@ -24,7 +24,7 @@ Future<void> zipTo(
     await for (final entry in _entries(paths, base, skip, skipDir)) {
       entry.isDirectory
           ? encoder.addArchiveFile(ArchiveFile.directory(entry.name))
-          : await encoder.addFile(File(entry.path), entry.name);
+          : await _addStreamed(encoder, entry.path, entry.name);
     }
     extra.forEach(encoder.addArchiveFile);
   } finally {
@@ -49,6 +49,20 @@ Future<Archive> archiveOf(
   return archive;
 }
 
+/// [path] into [encoder] as [name], read as it is compressed. One stat for the
+/// time and the mode, where `ZipFileEncoder.addFile` takes two.
+Future<void> _addStreamed(ZipFileEncoder encoder, String path, String name) async {
+  final stat = File(path).statSync();
+  final input = InputFileStream(path);
+  try {
+    encoder.addArchiveFile(ArchiveFile.stream(name, input)
+      ..lastModTime = stat.modified.millisecondsSinceEpoch ~/ 1000
+      ..mode = stat.mode);
+  } finally {
+    await input.close();
+  }
+}
+
 /// What the archive is called: the folder that was picked, or the one
 /// everything selected sits in.
 String zipNameFor(List<String> paths) {
@@ -68,7 +82,7 @@ Stream<({String path, String name, bool isDirectory})> _entries(
       String from, String path, bool isDirectory) async* {
     if (!isDirectory) {
       if (skip == null || !skip(path)) {
-        yield (path: path, name: p.relative(path, from: from), isDirectory: false);
+        yield (path: path, name: _member(path, from), isDirectory: false);
       }
       return;
     }
@@ -76,7 +90,7 @@ Stream<({String path, String name, bool isDirectory})> _entries(
     // Its own entry as well as its contents': an empty folder is otherwise
     // nothing at all, and a zip of one alone would come out empty. The base
     // itself is not one of its own entries — `.` names nothing to unzip.
-    final name = p.relative(path, from: from);
+    final name = _member(path, from);
     if (name != ".") yield (path: path, name: name, isDirectory: true);
     // On the entity rather than its path: `list` has already answered which
     // each one is, and asking again is a stat per file.
@@ -90,3 +104,8 @@ Stream<({String path, String name, bool isDirectory})> _entries(
         FileSystemEntity.isDirectorySync(path));
   }
 }
+
+/// A member's name: [path] under [from], with `/` between its parts whatever
+/// this platform separates them with, which is what a zip names a path with.
+String _member(String path, String from) =>
+    p.split(p.relative(path, from: from)).join("/");

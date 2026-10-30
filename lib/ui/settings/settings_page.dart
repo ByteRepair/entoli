@@ -1251,7 +1251,7 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
 
     final Backup backup;
     try {
-      backup = await openBackup(ref.read(appConfigProvider), path);
+      backup = await openBackup(path);
     } on BackupFormatException catch (e) {
       return _say("That file cannot be restored: $e.");
     }

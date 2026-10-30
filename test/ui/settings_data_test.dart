@@ -65,7 +65,7 @@ void main() {
     expect(app.backups.saved, hasLength(1));
     expect(app.backups.saved.single.name, endsWith(".zip"));
     final backup =
-        await io(tester, () => openBackup(app.config, app.backups.saved.single.path));
+        await io(tester, () => openBackup(app.backups.saved.single.path));
     addTearDown(backup.close);
     expect(backup.chats, 1);
     expect(backup.entries.map((e) => e.name), contains(endsWith("state.json")));

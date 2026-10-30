@@ -1,5 +1,6 @@
 import "dart:async";
 import "dart:io";
+import "dart:isolate";
 
 import "package:flutter/services.dart";
 import "package:path/path.dart" as p;
@@ -83,7 +84,8 @@ class AndroidFileHandoff implements FileHandoff {
     final folders = await Future.wait(paths.map(FileSystemEntity.isDirectory));
     if (folders.contains(true)) {
       final zip = p.join(dir, zipNameFor(paths));
-      await zipTo(zip, paths);
+      // Its own isolate, so a large file compressing does not hold up a frame.
+      await Isolate.run(() => zipTo(zip, paths));
       return [zip];
     }
     return Future.wait(paths.map((path) async {

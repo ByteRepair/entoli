@@ -48,7 +48,7 @@ const instructionBlockHeader = "Workspace instructions are shown below";
 /// `WorkspaceProvider` — it answers Android's Files app with no engine running,
 /// so moving `workspace/` or `chats/` has to move there too.
 class AppConfig {
-  /// Over [dataDir] as it is: creates nothing and hydrates nothing, which is
+  /// Over [dataDir] as it is: creates nothing and migrates nothing, which is
   /// [load]'s to do — a test that wants neither builds one directly.
   AppConfig.forDirectory(this.dataDir) : documents = Documents();
 
@@ -58,14 +58,15 @@ class AppConfig {
   final Documents documents;
 
   static Future<AppConfig> load(String dataDir) async {
+    // A restore killed between its two renames leaves the data directory
+    // missing and the one it was replacing beside it; that one is still whole.
+    final replaced = Directory(replacedDirOf(dataDir));
+    if (!Directory(dataDir).existsSync() && replaced.existsSync()) {
+      await replaced.rename(dataDir);
+    }
     final config = AppConfig.forDirectory(dataDir);
     await runMigrations(config.dataDir,
         fresh: await config.ensureDirs());
-    await config.documents.hydrate([
-      config.settingsFile,
-      for (final project in everyProject(await config.projectNames()))
-        config.projectSettingsFile(project: project),
-    ]);
     return config;
   }
 
@@ -277,3 +278,11 @@ class AppConfig {
   String projectSettingsFile({String? project}) =>
       p.join(projectDir(project: project), "project.json");
 }
+
+/// Where a restore unpacks a backup before swapping it in, beside [dataDir] so
+/// the swap is a rename on one filesystem.
+String restoringDirOf(String dataDir) => "$dataDir.restoring";
+
+/// Where a restore moves the data directory it replaces, until the backup is
+/// in its place.
+String replacedDirOf(String dataDir) => "$dataDir.replaced";
