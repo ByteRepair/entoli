@@ -1,9 +1,7 @@
 name: Publish to Google Play
 
-# Uploads the App Bundle built by release-build.yml to Google Play, which
-# resigns it into per-device APKs of its own. Called by release.yml and nothing
-# else. Setup is documented under "Releasing" in AGENTS.md.
-
+# Uploads release-build.yml's App Bundle to Google Play; called by release.yml.
+# Setup is under "Releasing" in AGENTS.md.
 on:
   workflow_call:
     inputs:
@@ -27,15 +25,11 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # Narrower than the build: this reads a release and uploads to Google.
-    # Nothing here writes to the repository or mints an attestation.
     permissions:
       contents: read
     env:
       TAG: ${{ inputs.tag }}
       BUNDLE: dist/entoli.aab
-      # Uploaded and reported from one value, so the summary cannot claim a
-      # track the release did not go to.
       TRACK: alpha
       # Back to production and `${{ inputs.publish && 'completed' || 'draft'
       # }}` together when Play unlocks it; a draft reaches no tester.
@@ -45,19 +39,16 @@ jobs:
         env:
           SERVICE_ACCOUNT_JSON: ${{ secrets.service_account_json }}
         run: |
-          set -euo pipefail
-          if [ -z "$SERVICE_ACCOUNT_JSON" ]; then
-            echo "::error::Secret PLAY_SERVICE_ACCOUNT_JSON is not available to this repository"
-            exit 1
-          fi
+          [ -n "$SERVICE_ACCOUNT_JSON" ] ||
+            { echo "::error::Secret PLAY_SERVICE_ACCOUNT_JSON is not available to this repository"; exit 1; }
 
       - uses: actions/download-artifact@v8.0.1
         with:
           name: aab
           path: dist
 
-      # From the artifact: GitHub drops a job output whose value contains a
-      # secret, and the key alias is a substring of the id.
+      # From a file: GitHub drops an output containing a secret, and the key
+      # alias is a substring of the id.
       - name: Read the application id
         id: package
         run: |
@@ -69,18 +60,14 @@ jobs:
           fi
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
-      # Play caps notes at 500 characters and rejects rather than truncating.
-      # Over the cap they are dropped, a listing cut mid-sentence being worse.
+      # Play rejects notes over 500 characters; they are dropped rather than
+      # cut mid-sentence.
       - name: Collect the release notes
         id: notes
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # Unreadable is not fatal: the notes are optional and the bundle is
-          # what matters. release.yml's gate already refuses an unpublished
-          # release (a draft is invisible to this read-only token, which is
-          # how v6.0.0's Play upload failed here), so this is the second line.
           if ! body="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body)"; then
             echo "::warning title=Play release notes::Release $TAG could not be read (a draft is invisible to this job's token); uploading without notes"
             echo "directory=" >> "$GITHUB_OUTPUT"
@@ -92,8 +79,7 @@ jobs:
           elif [ "$(printf '%s' "$body" | wc -m)" -gt 500 ]; then
             echo "::warning title=Play release notes::Notes for $TAG are over Play's 500-character limit and were not uploaded; write them in the Console"
           else
-            # whatsnew-<BCP 47 locale> is the API's filename. Only en-US: the
-            # release body is English, and Greek keeps what the Console holds.
+            # en-US only: Greek keeps what the Console holds.
             mkdir -p whatsnew
             printf '%s' "$body" > whatsnew/whatsnew-en-US
             echo "directory=whatsnew" >> "$GITHUB_OUTPUT"
@@ -110,8 +96,6 @@ jobs:
           releaseName: ${{ inputs.version }}
           tracks: ${{ env.TRACK }}
           status: ${{ env.STATUS }}
-          # Empty where the notes were skipped above, which the action reads as
-          # having none rather than as a missing directory.
           whatsNewDirectory: ${{ steps.notes.outputs.directory }}
 
       - name: Report what reached Play

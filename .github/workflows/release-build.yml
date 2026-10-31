@@ -1,15 +1,8 @@
 name: Release build
 
-# The binaries a release is downloaded from, and the checks that stop a bad one
-# being built: a signed App Bundle for Google Play, a Linux AppImage, a macOS
-# DMG, an iOS App Store ipa and a Windows MSI, named after the app and not the
-# version, so the same names serve every release. No APK: Play is the Android
-# channel a release serves, and a hand install builds one with `flutter build
-# apk` — locally, or through debug-build.yml's dispatch. The ipa goes to
-# TestFlight from release.yml's `testflight` job, not from here; the store is
-# the channel it is distributed through. `release.yml` calls this and attaches what comes out; a dispatch
-# says whether a tag builds without publishing anything.
-# See "Releasing" in AGENTS.md.
+# Builds what release.yml attaches: a signed App Bundle, a Linux AppImage, a
+# macOS DMG, an iOS ipa and a Windows MSI. Dispatched by hand, it checks a tag
+# builds without publishing anything. See "Releasing" in AGENTS.md.
 on:
   workflow_call:
     inputs:
@@ -17,8 +10,8 @@ on:
         description: Tag to build, and to check pubspec's version against.
         type: string
         required: true
-    # Named rather than inherited: the AAB is signed, and a caller should not
-    # be handing over every secret the repository holds.
+    # Named rather than inherited, so a caller hands over only these. Apple's
+    # are optional: without them the ios and macos jobs fail fast.
     secrets:
       ANDROID_KEYSTORE_BASE64:
         required: true
@@ -28,40 +21,25 @@ on:
         required: true
       ANDROID_KEY_PASSWORD:
         required: true
-      # Apple's are optional here: a dispatch without them gets every build
-      # but the ipa and the DMG, whose jobs fail fast on the empties instead
-      # of building something unsigned. Through release.yml that failure
-      # publishes nothing at all, since a release is every platform or none.
-      # The App Store Connect API key signs as well as uploads: the export
-      # asks Apple for the distribution certificate and profile with it.
       APPLE_API_ISSUER:
         required: false
       APPLE_API_KEY_ID:
         required: false
       APPLE_API_KEY_P8:
         required: false
-      # The Developer ID Application certificate and its key, a base64 .p12,
-      # which the macos job signs the app and the DMG with; the API key above
-      # is what notarizes them. Optional the same way: a caller without them
-      # gets a macos job that fails fast.
       MACOS_CERT_P12:
         required: false
       MACOS_CERT_PASSWORD:
         required: false
     outputs:
       version:
-        description: The pubspec version, for the Play publisher's release name.
         value: ${{ jobs.version.outputs.version }}
       code:
-        description: The version code, for the Play publisher's summary.
         value: ${{ jobs.version.outputs.code }}
       ipa:
-        description: The ipa's file name, for the TestFlight uploader.
         value: ${{ jobs.version.outputs.ipa }}
       assets:
-        description: >
-          Every file to attach, as `{file, artifact}` objects naming the
-          upload each is in. A caller drives one publish per entry.
+        description: Every file to attach, as `{file, artifact}` objects.
         value: ${{ jobs.version.outputs.assets }}
   workflow_dispatch:
     inputs:
@@ -74,9 +52,7 @@ permissions:
   contents: read
 
 jobs:
-  # A job of its own because both builds are named after what it resolves, and
-  # a tag that disagrees with pubspec then costs seconds rather than two
-  # toolchain installs.
+  # First, so a tag that disagrees with pubspec fails in seconds.
   version:
     runs-on: ubuntu-latest
     outputs:
@@ -91,8 +67,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
-          # Empty is the ref the run was started from, which is what a dispatch
-          # with no tag means.
           ref: ${{ inputs.tag }}
 
       - id: version
@@ -102,9 +76,6 @@ jobs:
           set -euo pipefail
           version="$(sed -n 's/^version: *\([^+ ]*\).*/\1/p' pubspec.yaml)"
 
-          # A tag disagreeing with pubspec would ship a binary reporting a
-          # version nobody released. Dispatched without one there is nothing to
-          # disagree with, and pubspec is the answer.
           if [ -n "$TAG" ] && [ "$version" != "${TAG#v}" ]; then
             echo "::error::Release $TAG does not match pubspec version $version"
             exit 1
@@ -116,46 +87,27 @@ jobs:
           fi
           IFS=. read -r major minor patch <<<"$version"
 
-          # 10# so a patch of 08 is eight, not a bad octal literal. The bound
-          # keeps the mapping one-to-one.
+          # 10# so 08 is eight rather than bad octal; the bound keeps the code
+          # one-to-one with the version.
           if [ "$((10#$minor))" -ge 100 ] || [ "$((10#$patch))" -ge 100 ]; then
             echo "::error::Version $version overflows the version code; minor and patch must stay below 100"
             exit 1
           fi
 
-          # The names are composed once, here: the publisher names the file it
-          # uploads from a different job than the one that built it. None
-          # carries the version — the tag says it, and one name on every
-          # release is one name for a downloader to know.
-          aab="entoli.aab"
-          appimage="entoli-x86_64.AppImage"
-          dmg="entoli-arm64.dmg"
-          msi="entoli-installer.msi"
-          ipa="entoli.ipa"
-
+          # Unversioned, so every release has the same download names.
+          assets='[{"file": "entoli.aab", "artifact": "aab"},
+                   {"file": "entoli-x86_64.AppImage", "artifact": "appimage"},
+                   {"file": "entoli-arm64.dmg", "artifact": "dmg"},
+                   {"file": "entoli-installer.msi", "artifact": "msi"},
+                   {"file": "entoli.ipa", "artifact": "ipa"}]'
           {
             echo "version=$version"
             echo "code=$((10#$major * 10000 + 10#$minor * 100 + 10#$patch))"
-            echo "aab=$aab"
-            echo "appimage=$appimage"
-            echo "dmg=$dmg"
-            echo "msi=$msi"
-            echo "ipa=$ipa"
-            echo "assets=$(jq -nc --arg aab "$aab" --arg appimage "$appimage" --arg dmg "$dmg" --arg msi "$msi" --arg ipa "$ipa" \
-              '[{file: $aab, artifact: "aab"},
-                 {file: $appimage, artifact: "appimage"},
-                 {file: $dmg, artifact: "dmg"},
-                 {file: $msi, artifact: "msi"},
-                 {file: $ipa, artifact: "ipa"}]')"
+            jq -r '.[] | "\(.artifact)=\(.file)"' <<<"$assets"
+            echo "assets=$(jq -c . <<<"$assets")"
           } >> "$GITHUB_OUTPUT"
 
-  # The native tools build and the bundle build run on separate runners. The
-  # tools job fetches the 660 MiB Hexagon SDK and cross-compiles proot and
-  # llama.cpp — several gigabytes of intermediates that the app build does not
-  # need and that left a single runner with no disk. It builds only, uploads
-  # the stripped dist/ as an artifact, and the runner is recycled with all its
-  # build directories. The aab job downloads that artifact onto a fresh runner
-  # with the full disk free for Gradle.
+  # Apart from the aab job: the tools' intermediates left one runner no disk.
   android-tools:
     needs: version
     runs-on: ubuntu-latest
@@ -169,26 +121,7 @@ jobs:
 
       - id: tools
         uses: ./.github/actions/bundled-tools
-        with:
-          stage: false
 
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: bundled-tools
-          path: tool/android/dist/
-          if-no-files-found: error
-          # Already stripped .so files; recompressing buys little and costs time.
-          compression-level: 0
-          # Read by the aab job right after; no re-run of a publisher wants it,
-          # unlike the aab itself.
-          retention-days: 1
-
-  # The App Bundle for Google Play. One file carrying every ABI. Its whole
-  # Gradle setup happens here, inline: a priming job and a warm cache existed
-  # to be shared between two build jobs, and with the APK builds gone there is
-  # one consumer, for whom priming paid the same configure twice and moved a
-  # multi-gigabyte cache nobody else read. `flutter build appbundle`
-  # regenerates `android/gradlew` — gitignored — on its way.
   aab:
     needs: [version, android-tools]
     runs-on: ubuntu-latest
@@ -208,10 +141,8 @@ jobs:
           key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
           key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
-      # From Gradle, so the id uploaded under cannot drift from the id the app
-      # is built with. A file rather than a job output: GitHub drops an output
-      # whose value contains a registered secret, and the key alias is a
-      # substring of io.byterepair.entoli — see "Releasing" in AGENTS.md.
+      # A file rather than a job output: GitHub drops an output containing a
+      # secret, and the key alias is a substring of the id.
       - name: Record the application id
         run: |
           set -euo pipefail
@@ -229,26 +160,22 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: flutter build appbundle --release --build-number="$VERSION_CODE"
+        run: |
+          set -euo pipefail
+          flutter build appbundle --release --build-number="$VERSION_CODE"
+          cp build/app/outputs/bundle/release/app-release.aab "dist/$AAB"
 
-      # A bundle is a signed jar rather than an APK, so keytool reads its
-      # certificate.
+      # A changed signer is the one thing a user cannot recover from, so its
+      # fingerprint goes in the summary.
       - name: Check the bundle is signed with the release key
         run: |
           set -euo pipefail
-          built="build/app/outputs/bundle/release/app-release.aab"
-          if [ ! -f "$built" ]; then
-            echo "::error::The build produced no App Bundle"
-            exit 1
-          fi
-          certs="$(keytool -printcert -jarfile "$built")"
+          certs="$(keytool -printcert -jarfile "dist/$AAB")"
           echo "$certs"
           if grep -q 'CN=Android Debug' <<<"$certs"; then
             echo "::error::The App Bundle is signed with the debug key"
             exit 1
           fi
-          # The one change a user cannot recover from, so it is in the summary
-          # where a release is read, not only in this log.
           {
             echo "### Signer"
             echo
@@ -257,75 +184,43 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Name the bundle after the release
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          cp build/app/outputs/bundle/release/app-release.aab "dist/$AAB"
-
-      # A bundle carries every ABI in one file: every tool ABI must be
-      # present, and the llama.cpp set is checked on arm64 only.
       - name: Check the bundle carries every ABI's tools
         env:
           TOOL_ABIS: ${{ needs.android-tools.outputs.abis }}
           LLAMA_ABIS: ${{ needs.android-tools.outputs.llama-abis }}
         run: |
           set -euo pipefail
-          has() { [[ " $1 " == *" $2 "* ]]; }
           libs="$(unzip -l "dist/$AAB" | grep -o 'lib/[^/]*/[^ ]*' || true)"
+          need() {
+            grep -q "$1" <<<"$libs" || { echo "::error::dist/$AAB has no $2"; exit 1; }
+          }
 
           for abi in $TOOL_ABIS; do
             for tool in libproot.so libproot-loader.so; do
-              if ! grep -qx "lib/$abi/$tool" <<<"$libs"; then
-                echo "::error::dist/$AAB has no $tool for $abi"
-                exit 1
-              fi
+              need "^lib/$abi/$tool\$" "$tool for $abi"
             done
           done
 
           for abi in $LLAMA_ABIS; do
-            # The baseline CPU variant by name, and more than one beside it, so
-            # the check survives ggml renaming the others.
+            # The baseline by name and others beside it, so ggml renaming the
+            # rest does not break this.
             if [ "$(grep -c "^lib/$abi/libggml-cpu-" <<<"$libs")" -lt 2 ]; then
               echo "::error::dist/$AAB has no CPU backend variants for $abi"
               exit 1
             fi
             for tool in libllama-server.so libggml-cpu-android_armv8.0_1.so libggml-hexagon.so; do
-              if ! grep -qx "lib/$abi/$tool" <<<"$libs"; then
-                echo "::error::dist/$AAB has no $tool for $abi"
-                exit 1
-              fi
+              need "^lib/$abi/$tool\$" "$tool for $abi"
             done
-            if ! grep -q "^lib/$abi/libggml-htp-" <<<"$libs"; then
-              echo "::error::dist/$AAB has no DSP libraries for the NPU backend"
-              exit 1
-            fi
+            need "^lib/$abi/libggml-htp-" "DSP libraries for the NPU backend"
           done
 
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: aab
-          path: |
-            dist/${{ env.AAB }}
-            dist/package.txt
-          if-no-files-found: error
-          compression-level: 0
-          # Long enough to re-run the publisher by hand after a failure.
-          retention-days: 7
-
-      - uses: ./.github/actions/report-built
+      - uses: ./.github/actions/upload-built
         with:
           file: dist/${{ env.AAB }}
+          extra: dist/package.txt
+          artifact: aab
           version-code: ${{ env.VERSION_CODE }}
 
-  # The desktop model server and the app run on separate runners, the way the
-  # Android tools and bundle do: the server build is a native cmake of
-  # llama.cpp with minutes of its own, and the app build has no use for the
-  # toolchain under it. The llama job builds and uploads the stage as an
-  # artifact; the linux job downloads it before `flutter build linux`, so the
-  # bundle either carries the server whole or not at all. The cache lives on
-  # the llama job, whose only other content is two apt packages, so a cache
-  # miss costs the build alone rather than a Flutter setup too.
   llama-linux:
     needs: version
     runs-on: ubuntu-latest
@@ -336,24 +231,33 @@ jobs:
 
       - uses: ./.github/actions/linux-llama
 
-  # The iOS App Store ipa. One macos runner rather than a tools/application
-  # split: the iSH core is a minutes-long clang build of one library, not a
-  # toolchain the app build never needs, and the app build wants the
-  # xcframework in tool/ios/ish/dist/ already in the tree — the xcconfig
-  # force-loads it from there. Signing is Xcode's automatic signing, driven
-  # by the App Store Connect API key: the archive is built unsigned and the
-  # export signs it, asking Apple for a cloud-managed distribution
-  # certificate and a profile as it goes. No certificate or profile is
-  # stored anywhere, and an unsigned archive means no fresh runner mints an
-  # Apple Development certificate of its own.
+  linux:
+    needs: [version, llama-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+
+      - id: build
+        uses: ./.github/actions/linux-appimage
+        with:
+          mode: release
+          name: ${{ needs.version.outputs.appimage }}
+          build-number: ${{ needs.version.outputs.code }}
+
+      - uses: ./.github/actions/upload-built
+        with:
+          file: ${{ steps.build.outputs.appimage }}
+          artifact: appimage
+          version-code: ${{ needs.version.outputs.code }}
+
+  # Archived unsigned, then exported with Xcode's automatic signing driven by
+  # the App Store Connect API key (Admin role), so no certificate or profile is
+  # stored anywhere.
   #
-  # On the xcode-27 image, not macos-latest: AppleFmChannel.swift reaches
-  # FoundationModels API that only the iOS 27 SDK declares
-  # (`LanguageModelError`, `session.usage`), and `#available` gates the call,
-  # not the compile — macos-26's newest Xcode, 26.6, fails the archive on
-  # them. 27.1 by path because the image defaults to 27.0, and 27.1 is what
-  # the app is built with locally. The image is a public preview; when an
-  # Xcode 27 lands on macos-latest this goes back.
+  # xcode-27 rather than macos-latest: AppleFmChannel.swift needs the iOS 27
+  # SDK to compile. Back to macos-latest once that carries Xcode 27.
   ios:
     needs: version
     runs-on: xcode-27
@@ -361,38 +265,25 @@ jobs:
       IPA: ${{ needs.version.outputs.ipa }}
       VERSION_CODE: ${{ needs.version.outputs.code }}
     steps:
-      # The Apple material is checked before the runner fetches anything:
-      # a wrong or empty secret is a seconds-long failure on the cheapest
-      # possible step, ahead of the checkout's submodule fetch and the
-      # Flutter setup.
-      - name: Check the Apple signing secrets
+      - name: Check the signing secrets
         env:
           API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
         run: |
-          set -euo pipefail
-          if [ -z "$API_ISSUER" ] || [ -z "$API_KEY_ID" ] || [ -z "$API_KEY_P8" ]; then
-            echo "::error::APPLE_API_ISSUER, APPLE_API_KEY_ID or APPLE_API_KEY_P8 is empty"
-            exit 1
-          fi
+          for name in API_ISSUER API_KEY_ID API_KEY_P8; do
+            [ -n "${!name}" ] || { echo "::error::Secret APPLE_$name is empty"; exit 1; }
+          done
 
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.tag }}
           submodules: recursive
 
-      - name: Select Xcode 27.1
-        run: |
-          set -euo pipefail
-          sudo xcode-select -s /Applications/Xcode_27.1.app
-          xcodebuild -version
+      - uses: ./.github/actions/apple-setup
+        with:
+          slice: ios
 
-      - uses: ./.github/actions/flutter-setup
-
-      # Cached on the submodule gitlink and the repo's own inputs to the
-      # build, so a release whose iSH pin has not moved restores the
-      # xcframework and skips both the brew bottles and the compile.
       - id: ishkey
         run: |
           set -euo pipefail
@@ -416,8 +307,6 @@ jobs:
           brew install --quiet llvm lld
           tool/ios/ish/build.sh
 
-      # From a branch only: a release's tag scope is one no later release
-      # reads, so it is a dispatch from master that warms this.
       - name: Save the IshCore xcframework
         if: github.ref_type != 'tag' && steps.ishcache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6.1.0
@@ -425,35 +314,16 @@ jobs:
           path: tool/ios/ish/dist/
           key: ${{ steps.ishkey.outputs.key }}
 
-      - uses: ./.github/actions/apple-mlx
-        with:
-          slice: ios
-
-      # Archived unsigned, then exported with automatic signing. The key is
-      # decoded into runner temp and dies with the runner; it needs the
-      # Admin role, since the export creates the distribution certificate
-      # and the profile when Apple has none to hand back.
-      - name: Archive the app unsigned
-        run: |
-          set -euo pipefail
-          flutter build ipa --release --build-number="$VERSION_CODE" --no-codesign
-          if [ ! -d build/ios/archive/Runner.xcarchive ]; then
-            echo "::error::flutter build ipa produced no archive"
-            exit 1
-          fi
-
-      # The export options are tool/ios/ExportOptions.plist, the file an
-      # upload from a Mac uses, so the two cannot drift; the team is the one
-      # it names. Its destination is the one difference: that file uploads
-      # as it exports, and here the ipa is written to disk for the release
-      # and the testflight job uploads it.
-      - name: Sign and export the ipa
+      # The export options are the ones an upload from a Mac uses, writing to
+      # disk instead; the testflight job uploads.
+      - name: Archive and export the ipa
         env:
           API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
         run: |
           set -euo pipefail
+          flutter build ipa --release --build-number="$VERSION_CODE" --no-codesign
           key="$RUNNER_TEMP/AuthKey_$API_KEY_ID.p8"
           printf '%s' "$API_KEY_P8" | base64 -D -o "$key"
           options="$RUNNER_TEMP/ExportOptions.plist"
@@ -467,10 +337,6 @@ jobs:
             -authenticationKeyPath "$key" \
             -authenticationKeyID "$API_KEY_ID" \
             -authenticationKeyIssuerID "$API_ISSUER"
-
-      - name: Name the ipa after the release
-        run: |
-          set -euo pipefail
           built="$(ls build/ios/ipa/*.ipa 2>/dev/null | head -1 || true)"
           if [ -z "$built" ]; then
             echo "::error::The export produced no ipa"
@@ -479,93 +345,24 @@ jobs:
           mkdir -p dist
           cp "$built" "dist/$IPA"
 
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: ipa
-          path: dist/${{ env.IPA }}
-          if-no-files-found: error
-          # The ipa is already a zip.
-          compression-level: 0
-          retention-days: 7
-
-      - uses: ./.github/actions/report-built
+      - uses: ./.github/actions/upload-built
         with:
           file: dist/${{ env.IPA }}
+          artifact: ipa
           version-code: ${{ env.VERSION_CODE }}
 
-  # The app half of the llama-linux split above.
-  linux:
-    needs: [version, llama-linux]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7.0.1
-        with:
-          ref: ${{ inputs.tag }}
-
-      # `linux-appimage` downloads, unpacks and checks the llama stage first.
-      - id: build
-        uses: ./.github/actions/linux-appimage
-        with:
-          mode: release
-          name: ${{ needs.version.outputs.appimage }}
-          build-number: ${{ needs.version.outputs.code }}
-
-      # The AppImage alone: a release asset is a file, and the bundle it was
-      # built from is a directory nobody downloads a release to get.
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: appimage
-          path: ${{ steps.build.outputs.appimage }}
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 7
-
-  # The macOS DMG, built from the same tree the AppImage is, for Apple
-  # silicon alone: `flutter build macos` thins its engine and the app to
-  # arm64, and the asset says so as the AppImage's names x86_64. It ships
-  # signed with the Developer ID Application certificate (MACOS_CERT_P12) and
-  # notarized with the App Store Connect API key the ios job signs with, the
-  # ticket stapled into the image, so Gatekeeper opens it without a prompt;
-  # see "The DMG" in macos/AGENTS.md.
-  #
-  # On the xcode-27 image with 27.1 selected, as the ios job is: EntoliMLX
-  # needs the 27 SDK, and refuses to build without it.
+  # Signed with the Developer ID certificate and notarized with the ios job's
+  # API key, the ticket stapled; see "The DMG" in macos/AGENTS.md.
   macos:
     needs: version
     runs-on: xcode-27
     env:
       DMG: ${{ needs.version.outputs.dmg }}
     steps:
-      # Checked before anything is fetched, as the ios job does: an empty
-      # secret is a seconds-long failure, not one after the build.
-      - name: Check the signing secrets
-        env:
-          CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
-          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
-        run: |
-          set -euo pipefail
-          if [ -z "$CERT_P12" ] || [ -z "$CERT_PASSWORD" ]; then
-            echo "::error::MACOS_CERT_P12 or MACOS_CERT_PASSWORD is empty"
-            exit 1
-          fi
-          if [ -z "$API_ISSUER" ] || [ -z "$API_KEY_ID" ] || [ -z "$API_KEY_P8" ]; then
-            echo "::error::APPLE_API_ISSUER, APPLE_API_KEY_ID or APPLE_API_KEY_P8 is empty"
-            exit 1
-          fi
-
-      # Also before the build, for the same reason: a wrong password, a .p12
-      # that is not a Developer ID one or a revoked API key would otherwise
-      # surface minutes of macOS runner time later. The keychain is the job's
-      # own, with a random password nobody needs to know, put on the search
-      # list so codesign finds the identity; the partition list is what lets
-      # codesign use the key without the prompt a runner cannot answer. The
-      # identity is found by its hash rather than spelled out, so a renewed
-      # certificate is a changed secret and nothing else. The keychain path is
-      # an output the moment it exists, so the removal step runs even when the
-      # import fails.
+      # Before the build, so a bad certificate or key fails in seconds. The
+      # partition list lets codesign use the key without a prompt. The
+      # keychain path is an output at once, so the removal step runs even when
+      # the import fails.
       - name: Import the Developer ID certificate and the API key
         id: cert
         env:
@@ -576,6 +373,9 @@ jobs:
           API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
         run: |
           set -euo pipefail
+          for name in CERT_P12 CERT_PASSWORD API_ISSUER API_KEY_ID API_KEY_P8; do
+            [ -n "${!name}" ] || { echo "::error::Secret for $name is empty"; exit 1; }
+          done
           keychain="$RUNNER_TEMP/signing.keychain-db"
           kpass="$(openssl rand -hex 24)"
           p12="$RUNNER_TEMP/cert.p12"
@@ -591,13 +391,12 @@ jobs:
           identity="$(security find-identity -v -p codesigning "$keychain" \
             | awk '/Developer ID Application/ {print $2; exit}')"
           if [ -z "$identity" ]; then
-            echo "::error::MACOS_CERT_P12 holds no valid Developer ID Application identity (a wrong certificate, or a chain this runner cannot verify)"
+            echo "::error::MACOS_CERT_P12 holds no valid Developer ID Application identity"
             exit 1
           fi
           echo "identity=$identity" >> "$GITHUB_OUTPUT"
           key="$RUNNER_TEMP/AuthKey_$API_KEY_ID.p8"
           printf '%s' "$API_KEY_P8" | base64 -D -o "$key"
-          # A listing is the cheapest call the key can be refused on.
           xcrun notarytool history --key "$key" --key-id "$API_KEY_ID" \
             --issuer "$API_ISSUER" >/dev/null
           echo "key=$key" >> "$GITHUB_OUTPUT"
@@ -606,46 +405,20 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
 
-      - name: Select Xcode 27.1
-        run: |
-          set -euo pipefail
-          sudo xcode-select -s /Applications/Xcode_27.1.app
-          xcodebuild -version
-
-      - uses: ./.github/actions/flutter-setup
-
-      - uses: ./.github/actions/apple-mlx
+      - uses: ./.github/actions/apple-setup
         with:
           slice: macos
 
-      - name: Build the app bundle
-        run: flutter build macos --release --build-number="${{ needs.version.outputs.code }}"
-
-      # make-dmg.sh fails when the app is not there, and codesign's verify step
-      # refuses to pass an image whose signature does not check out — there is
-      # no second place to catch a half-built one.
-      - name: Package and sign the DMG
+      - name: Build and sign the DMG
         env:
           IDENTITY: ${{ steps.cert.outputs.identity }}
         run: |
           set -euo pipefail
-          app="build/macos/Build/Products/Release/Entoli.app"
-          [ -d "$app" ] || {
-            echo "::error::flutter build macos produced no $app"
-            exit 1
-          }
-          tool/macos/make-dmg.sh "$app" "dist/$DMG" --sign "$IDENTITY"
+          flutter build macos --release --build-number="${{ needs.version.outputs.code }}"
+          tool/macos/make-dmg.sh build/macos/Build/Products/Release/Entoli.app "dist/$DMG" --sign "$IDENTITY"
 
-      # One submission for the image, which notarizes everything inside it;
-      # the ticket is stapled into the DMG so a first open needs no network.
-      # notarytool's own exit is not trusted to stop the step: the status
-      # decides, so a rejection or a timeout still prints Apple's log, which
-      # names the file that failed.
-      #
-      # Three hours rather than one: v6.0.0's submission, the team's first,
-      # was still in Apple's queue when an hour ran out. A wait is free on a
-      # public repository's runner, and a timeout is not a rejection — Apple
-      # carries on, so the error names the submission to look up afterwards.
+      # The status decides, not notarytool's exit, so a rejection still prints
+      # Apple's log. Three hours: the team's first submission outlasted one.
       - name: Notarize the DMG
         env:
           KEY: ${{ steps.cert.outputs.key }}
@@ -675,30 +448,17 @@ jobs:
         if: always() && steps.cert.outputs.keychain != ''
         run: security delete-keychain "${{ steps.cert.outputs.keychain }}"
 
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: dmg
-          path: dist/${{ env.DMG }}
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 7
-
-      - uses: ./.github/actions/report-built
+      - uses: ./.github/actions/upload-built
         with:
           file: dist/${{ env.DMG }}
+          artifact: dmg
 
-  # The Windows MSI, built on the Windows runner nothing on this host can stand
-  # in for. Like the macos job it builds the app alone — no model server is
-  # cross-compiled for it, and what a Release build without one produces is
-  # what the installer packages — and unlike the DMG nothing signs it yet,
-  # SmartScreen's Run anyway being how the first run goes until a certificate
-  # exists; see windows/AGENTS.md.
+  # Unsigned for now; see windows/AGENTS.md.
   windows:
     needs: version
     runs-on: windows-latest
     env:
       MSI: ${{ needs.version.outputs.msi }}
-      VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -706,30 +466,13 @@ jobs:
 
       - uses: ./.github/actions/flutter-setup
 
-      - name: Build the app
-        # Not the Android code: the build number lands in FILEVERSION's last
-        # 16-bit field, which major*10000+minor*100+patch overflows from 6.56.
-        run: flutter build windows --release --build-number=0
+      # Not the version code: FILEVERSION's 16-bit field overflows on it.
+      - run: flutter build windows --release --build-number=0
 
-      # make-msi.ps1 refuses a bundle with no exe and an MSI with no exe in it:
-      # there is no second place to catch a half-built one or an empty harvest.
-      - name: Package the MSI
-        shell: pwsh
-        run: ./tool/windows/make-msi.ps1 "build/windows/x64/runner/Release" "dist/${{ env.MSI }}" -Version "${{ env.VERSION }}"
+      - shell: pwsh
+        run: ./tool/windows/make-msi.ps1 "build/windows/x64/runner/Release" "dist/$env:MSI" -Version "${{ needs.version.outputs.version }}"
 
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: ./.github/actions/upload-built
         with:
-          name: msi
-          path: dist/${{ env.MSI }}
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 7
-
-      - name: Report what was built
-        shell: pwsh
-        run: |
-          # A fence without quoting games: one backtick, three times.
-          $fence = [string][char]96 * 3
-          $hash = (Get-FileHash "dist/$env:MSI" -Algorithm SHA256).Hash.ToLower()
-          @("### $env:MSI", "", $fence, $hash, $fence) |
-            Add-Content $env:GITHUB_STEP_SUMMARY
+          file: dist/${{ env.MSI }}
+          artifact: msi

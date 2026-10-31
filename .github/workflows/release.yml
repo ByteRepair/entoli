@@ -1,13 +1,8 @@
 name: Release
 
-# Attaches the binaries a published release is downloaded from — a signed App
-# Bundle for Google Play, a Linux AppImage, a macOS DMG, an iOS App Store ipa
-# and a Windows MSI — to the tag they were built from, each with a provenance
-# attestation beside it, and uploads the bundle to Play. The ipa goes to
-# TestFlight in a job of its own, Apple's processing wall clock running beside
-# the attachments rather than ahead of them. There is no release APK;
-# `debug-build.yml` builds an APK by hand. `release-build.yml` is what builds
-# them and can be run on its own. See "Releasing" in AGENTS.md.
+# Builds a published release's binaries, attaches each with a provenance
+# attestation, and sends them to TestFlight and Google Play. See "Releasing"
+# in AGENTS.md.
 on:
   release:
     types: [published]
@@ -17,8 +12,7 @@ on:
         description: Tag of an existing release to build and attach to
         required: true
 
-# Queue rather than cancel: a superseded run leaves a release published with
-# nothing on it.
+# Queue rather than cancel: a cancelled run leaves a release with nothing on it.
 concurrency:
   group: release-${{ inputs.tag || github.event.release.tag_name }}
   cancel-in-progress: false
@@ -28,8 +22,7 @@ env:
 
 jobs:
   build:
-    # The tag is spelled out again rather than read from `env.TAG`: a called
-    # workflow's `with` cannot see the env context.
+    # Spelled out: a called workflow's `with` cannot see `env`.
     uses: ./.github/workflows/release-build.yml
     with:
       tag: ${{ inputs.tag || github.event.release.tag_name }}
@@ -44,14 +37,10 @@ jobs:
       MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
       MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
 
-  # The one thing every channel waits on besides the builds: a published
-  # release. Without it the channels drift apart — v6.0.0's tag was moved by
-  # force, which left its release a draft, and the publish matrix attached to
-  # the draft and TestFlight uploaded while Play, unable to see it, failed.
-  # Read-only on purpose: to that token a draft does not exist, so the same
-  # 404 answers "no release" and "not published yet". After building, so the
-  # builds are not held back while the release is published; then *Re-run
-  # failed jobs* runs this and every channel with it.
+  # Every channel waits on a published release, or they drift apart: v6.0.0's
+  # draft got assets and TestFlight while Play failed. To this read-only token
+  # a draft does not exist. After the build, so publishing can catch up; then
+  # re-run the failed jobs.
   gate:
     needs: build
     runs-on: ubuntu-latest
@@ -68,15 +57,8 @@ jobs:
             exit 1
           fi
 
-  # A job of its own so the keystore and `contents: write` are never held by
-  # the same one, and one run of it per file so a bundle on the release is
-  # about the file it sits beside rather than naming all of them.
-  #
-  # All or nothing: `needs: build` is the whole called workflow, which fails
-  # if any one job in it does, and then this, `testflight` and `play` are all
-  # skipped. A release goes out with every platform or none — a failed build
-  # is fixed and the failed jobs re-run, and the publishers run once they pass.
-  # The gate holds all three the same way on an unpublished release.
+  # A release goes out with every platform or none: `needs: build` fails if any
+  # build does. One run per file, so each attestation is about one file.
   publish:
     needs: [build, gate]
     runs-on: ubuntu-latest
@@ -85,8 +67,6 @@ jobs:
       id-token: write # mint the short-lived Sigstore signing certificate
       attestations: write # record the attestation against the repository
     strategy:
-      # Each entry attests and uploads a different file, so one that fails
-      # should leave the other binaries attached rather than cancel them.
       fail-fast: false
       matrix:
         asset: ${{ fromJSON(needs.build.outputs.assets) }}
@@ -110,8 +90,7 @@ jobs:
         run: |
           set -euo pipefail
           cp "$BUNDLE" "dist/$FILE.sigstore.json"
-          # --repo because gh reads it off the git remote otherwise, and this
-          # job never checks out. --clobber so a re-run replaces the assets.
+          # --clobber so a re-run replaces the assets.
           gh release upload "$TAG" \
             "dist/$FILE" \
             "dist/$FILE.sigstore.json" \
@@ -127,10 +106,6 @@ jobs:
             echo "$FILE attached."
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # The Google Play and App Store Connect channels run beside the publish
-  # matrix, both holding Apple's/Google's wall clock off it: a build, then
-  # two upload jobs and the attachments, each failable without the others.
-  # See "Google Play" below and the ipa notes in AGENTS.md.
   testflight:
     needs: [build, gate]
     runs-on: macos-latest
@@ -149,10 +124,8 @@ jobs:
           API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
         run: |
           set -euo pipefail
-          # First, so every arm says it: uploaded here, skipped, or left to an
-          # upload by hand. The ipa says ITSAppUsesNonExemptEncryption=false,
-          # which holds only with France out of the availability; see "Export
-          # compliance" in ios/AGENTS.md.
+          # The ipa's ITSAppUsesNonExemptEncryption=false holds only with
+          # France out; see "Export compliance" in ios/AGENTS.md.
           echo "Check: France is excluded from App Store availability, or the ANSSI declaration is filed (ios/AGENTS.md, Export compliance)." >> "$GITHUB_STEP_SUMMARY"
           if [ -z "$API_ISSUER" ] || [ -z "$API_KEY_ID" ] || [ -z "$API_KEY_P8" ]; then
             echo "::notice::No App Store Connect API key secrets; skipping the TestFlight upload"
@@ -163,9 +136,7 @@ jobs:
           mkdir -p "$keys"
           printf '%s' "$API_KEY_P8" | base64 -D -o "$keys/AuthKey_$API_KEY_ID.p8"
           export API_PRIVATE_KEYS_DIR="$keys"
-          # altool is deprecated on Apple's road map; when a runner's Xcode
-          # no longer ships it the step says so in the summary as well as the
-          # log, and the artifact goes up by hand.
+          # altool is deprecated; without it the ipa goes up by hand.
           if xcrun --find altool >/dev/null 2>&1; then
             xcrun altool --upload-package "dist/$IPA" --type ios \
               --apiKey "$API_KEY_ID" --apiIssuer "$API_ISSUER"
@@ -175,10 +146,6 @@ jobs:
             echo "TestFlight: altool absent; upload dist/$IPA by hand." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-  # Upload the App Bundle to Google Play. Separate from the publish matrix,
-  # which attaches binaries to the GitHub release: this is the one path that
-  # sends the bundle to Play, which resigns it into per-device APKs of its own.
-  # See "Releasing" in AGENTS.md.
   play:
     needs: [build, gate]
     uses: ./.github/workflows/publish-play.yml
