@@ -414,6 +414,10 @@ jobs:
           IDENTITY: ${{ steps.cert.outputs.identity }}
         run: |
           set -euo pipefail
+          # Apple silicon only: x86_64 is not supported on macOS, and
+          # EntoliMLX has no slice for it. Flutter's default under Xcode 27
+          # still adds x86_64, where `import EntoliMLX` resolves to nothing.
+          flutter config --enable-macos-arm64-only
           flutter build macos --release --build-number="${{ needs.version.outputs.code }}"
           tool/macos/make-dmg.sh build/macos/Build/Products/Release/Entoli.app "dist/$DMG" --sign "$IDENTITY"
 

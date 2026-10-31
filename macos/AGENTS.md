@@ -319,9 +319,12 @@ shape the AppImage's is: staging of app and `/Applications` symlink, one
 artifact out. The volume takes the app's name plus Installer — "Entoli
 Installer" — so what a user sees mounted reads as the thing being installed,
 not the app itself; the staged item inside stays `<Name>.app`. The build
-produces an arm64 binary — Flutter thins its universal engine to arm64 for
-the release build, the app and frameworks with it, which is why the asset is
-`entoli-arm64.dmg` — ad-hoc signed. An ad-hoc build runs on the
+produces an arm64 binary, which is why the asset is `entoli-arm64.dmg` —
+ad-hoc signed. **x86_64 is not supported on macOS**: Apple silicon only,
+and `EntoliMLX` has no Intel slice. Flutter under Xcode 27 still builds
+x86_64 too unless told `flutter config --enable-macos-arm64-only`, and then
+fails on the Runner's `import EntoliMLX` — CI's macOS job sets it, and a
+local build wants it set as well. An ad-hoc build runs on the
 machine that made it; another Mac's Gatekeeper refuses it until Privacy &
 Security's Open Anyway is clicked. `--sign` adds the Developer ID identity
 under hardened runtime — `--deep` re-signs the engine and plugin frameworks
