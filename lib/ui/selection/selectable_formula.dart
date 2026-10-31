@@ -243,7 +243,7 @@ class RenderSelectableFormula extends RenderProxyBox
     if (!attached || drawn is! RenderRepaintBoundary || !drawn.hasSize) {
       return null;
     }
-    final image = await drawn.toImage(pixelRatio: 3);
+    final image = await drawn.toImage(pixelRatio: _ratio);
     try {
       final bytes = await image.toByteData(
         format: ui.ImageByteFormat.rawStraightRgba,
@@ -258,7 +258,7 @@ class RenderSelectableFormula extends RenderProxyBox
         final png = await black.toByteData(format: ui.ImageByteFormat.png);
         if (png == null) return null;
         return FormulaPicture(
-          png.buffer.asUint8List(),
+          withDensity(png.buffer.asUint8List(), _ratio),
           width: drawn.size.width,
           height: drawn.size.height,
         );
@@ -269,6 +269,8 @@ class RenderSelectableFormula extends RenderProxyBox
       image.dispose();
     }
   }
+
+  static const _ratio = 3.0;
 
   static Future<ui.Image> _imageOf(Uint8List rgba, int width, int height) {
     final done = Completer<ui.Image>();
@@ -287,4 +289,47 @@ class RenderSelectableFormula extends RenderProxyBox
     _geometry.dispose();
     super.dispose();
   }
+}
+
+/// [png] saying it holds [ratio] pixels to the point. A paste target reading
+/// RTF — Pages, TextEdit — sizes a picture by its density and not by the
+/// HTML's width and height, and a PNG that says nothing is 72 dots to the
+/// inch: a formula drawn at three times its size pasted three times too big.
+/// The density is a `pHYs` chunk, placed after the header as the format asks.
+@visibleForTesting
+Uint8List withDensity(Uint8List png, double ratio) {
+  const signature = 8, header = 8 + 13 + 4;
+  final perMetre = (72 * ratio / 0.0254).round();
+  final chunk = ByteData(4 + 4 + 9 + 4)
+    ..setUint32(0, 9)
+    ..setUint8(4, 0x70) // p
+    ..setUint8(5, 0x48) // H
+    ..setUint8(6, 0x59) // Y
+    ..setUint8(7, 0x73) // s
+    ..setUint32(8, perMetre)
+    ..setUint32(12, perMetre)
+    ..setUint8(16, 1); // per metre
+  final bytes = chunk.buffer.asUint8List();
+  chunk.setUint32(17, _crc32(bytes.sublist(4, 17)));
+  return Uint8List.fromList([
+    ...png.sublist(0, signature + header),
+    ...bytes,
+    ...png.sublist(signature + header),
+  ]);
+}
+
+final _crcTable = List<int>.generate(256, (n) {
+  var c = n;
+  for (var k = 0; k < 8; k++) {
+    c = c & 1 != 0 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+  }
+  return c;
+});
+
+int _crc32(List<int> bytes) {
+  var crc = 0xFFFFFFFF;
+  for (final byte in bytes) {
+    crc = _crcTable[(crc ^ byte) & 0xFF] ^ (crc >>> 8);
+  }
+  return crc ^ 0xFFFFFFFF;
 }
