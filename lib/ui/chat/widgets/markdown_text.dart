@@ -6,11 +6,6 @@ import "code_block.dart";
 import "math_block.dart";
 import "reply_style.dart";
 
-final _builders = <String, MarkdownElementBuilder>{
-  ...codeBlockBuilders,
-  ...mathBuilders,
-};
-
 /// Markdown as the app sets it, wherever it is shown — a reply, a skill, a
 /// file in the workspace, a README: the reply's style sheet, code blocks with
 /// their bar, formulas drawn, and the grammar the copy reads
@@ -35,6 +30,13 @@ class MarkdownText extends StatefulWidget {
 class _MarkdownTextState extends State<MarkdownText> {
   late MarkdownStyleSheet _styleSheet;
 
+  /// This widget's own: a formula's tree may be drawn in one place alone.
+  final _formulas = MathBuilders();
+  late final _builders = <String, MarkdownElementBuilder>{
+    ...codeBlockBuilders,
+    ..._formulas.builders,
+  };
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -47,16 +49,21 @@ class _MarkdownTextState extends State<MarkdownText> {
   // each a selection region to itself, which is what made a selection stop at
   // the paragraph it started in.
   @override
-  Widget build(BuildContext context) => MarkdownBody(
-    data: widget.data,
-    styleSheet: _styleSheet,
-    builders: _builders,
-    extensionSet: replyExtensionSet,
-    bulletBuilder: _bullet,
-    onTapLink: (text, href, title) {
-      if (href != null) widget.onTapLink?.call(href);
-    },
-  );
+  Widget build(BuildContext context) {
+    // The body below re-parses in this build, and counts its formulas from
+    // the first again.
+    _formulas.restart();
+    return MarkdownBody(
+      data: widget.data,
+      styleSheet: _styleSheet,
+      builders: _builders,
+      extensionSet: replyExtensionSet,
+      bulletBuilder: _bullet,
+      onTapLink: (text, href, title) {
+        if (href != null) widget.onTapLink?.call(href);
+      },
+    );
+  }
 
   /// The bullets are chrome, like a code block's bar: on screen, but not part
   /// of what a drag picks up, so what a selection copies reads as the list's

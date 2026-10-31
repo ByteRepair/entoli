@@ -2,6 +2,8 @@ import "package:flutter/material.dart";
 import "package:flutter_math_fork/flutter_math.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/ui/chat/widgets/markdown_text.dart";
+
 import "../harness.dart";
 
 void main() {
@@ -31,5 +33,27 @@ void main() {
   testWidgets("shows TeX it cannot parse as it was written", (tester) async {
     await app.pumpReply(tester, r"$$\frac{a$$");
     expect(find.textContaining(r"\frac{a"), findsOneWidget);
+  });
+
+  // A parsed tree carries the widget it built, keys and all, so one tree
+  // drawn twice failed layout and left the whole chat blank.
+  testWidgets("draws the same formula twice in one reply", (tester) async {
+    await app.pumpReply(tester, r"inside $D$, since outside $D$ it holds");
+    expect(tester.takeException(), isNull);
+    expect(find.byType(Math), findsNWidgets(2));
+  });
+
+  testWidgets("draws the same formula in two replies at once", (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [MarkdownText(r"one $x$"), MarkdownText(r"two $x$")],
+          ),
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    expect(find.byType(Math), findsNWidgets(2));
   });
 }
