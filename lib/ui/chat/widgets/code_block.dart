@@ -266,9 +266,20 @@ TextStyle _codeFont(ThemeData theme) => TextStyle(
 /// which is what a block gets — but a block is one thing on a line of its own,
 /// while inline code has to wrap with the sentence, and a `WidgetSpan` cannot
 /// break across lines.
-TextStyle inlineCodeStyle(ThemeData theme) => _codeFont(
-  theme,
-).copyWith(backgroundColor: theme.colorScheme.surfaceContainerHighest);
+///
+/// **Translucent, not a surface colour.** A paragraph paints its selection
+/// highlight first and its text after, span backgrounds included, so an
+/// opaque background hid the highlight wherever it fell on inline code.
+/// [inlineCodeTint] of the text colour over the page reads as the same
+/// raised surface and lets the highlight show through.
+TextStyle inlineCodeStyle(ThemeData theme) => _codeFont(theme).copyWith(
+  backgroundColor: theme.colorScheme.onSurface.withValues(
+    alpha: inlineCodeTint,
+  ),
+);
+
+/// How much of the text colour inline code's background carries.
+const inlineCodeTint = 0.08;
 
 /// What a block adds: room between the lines, because a block is read as lines
 /// where an inline span is read as part of a sentence. Public because the

@@ -226,7 +226,10 @@ the order a copy passes through them:
   (`core/platform/rich_clipboard.dart`) writes both through a channel,
   `agent_chat/clipboard`, answered by a few lines in each runner (GTK targets,
   `NSPasteboard`, `UIPasteboard`, `ClipData.newHtmlText`, `CF_HTML`); a runner
-  that does not answer gets the plain text. The Apple halves sit in
+  that does not answer gets the plain text. The Apple runners write RTF too,
+  converted from the HTML by the system's own reader: Pages, TextEdit and
+  Notes read RTF and not HTML, and without it pasted the plain half — which
+  is markdown — as it stood. The Apple halves sit in
   `MainFlutterWindow` and `AppDelegate` rather than files of their own.
 
 What is not text contributes nothing — an image, and chrome wrapped in
@@ -241,6 +244,11 @@ selection crossing it: the scroll drew its highlight and handles, and what
 it copied was its text alone. `SidewaysScroll` hands the registrar above it
 straight through (`SelectionRegistrarScope`), so the lines inside register
 with the message's container like any paragraph's.
+
+**Inline code's background is translucent.** A paragraph paints its
+selection highlight first and its text after, span backgrounds included, so
+the opaque surface inline `code` sat on hid the highlight wherever it fell
+(`inlineCodeStyle`).
 
 **A formula is selected whole** (`SelectableFormula`): a drag that passes
 most of the way over it picks it up and washes it in the selection colour,

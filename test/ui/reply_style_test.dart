@@ -3,6 +3,7 @@ import "package:flutter/material.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/ui/chat/widgets/code_block.dart" show inlineCodeTint;
 import "package:agent_chat/ui/chat/widgets/reply_style.dart";
 import "package:agent_chat/ui/fonts.dart";
 
@@ -37,7 +38,12 @@ void main() {
     final scheme = Theme.of(tester.element(find.byType(SizedBox))).colorScheme;
 
     expect(sheet.code?.fontFamily, monoFamily);
-    expect(sheet.code?.backgroundColor, scheme.surfaceContainerHighest);
+    // Translucent, so the selection highlight painted under it shows.
+    expect(
+      sheet.code?.backgroundColor,
+      scheme.onSurface.withValues(alpha: inlineCodeTint),
+    );
+    expect(sheet.code!.backgroundColor!.a, lessThan(1));
     expect(sheet.code!.fontSize, lessThan(sheet.p!.fontSize!));
   });
 

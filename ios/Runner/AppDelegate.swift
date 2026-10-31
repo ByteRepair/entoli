@@ -52,7 +52,11 @@ enum ClipboardChannel {
         guard let args = call.arguments as? [String: Any],
               let plain = args["plain"] as? String, let html = args["html"] as? String
         else { return result(FlutterError(code: "bad-args", message: "plain and html", details: nil)) }
-        UIPasteboard.general.items = [["public.html": html, "public.utf8-plain-text": plain]]
+        var item: [String: Any] = ["public.html": html, "public.utf8-plain-text": plain]
+        // Pages and Notes read RTF and not HTML, and fall back to the plain
+        // entry — which is markdown — without it.
+        if let rtf = rtfOf(html) { item["public.rtf"] = rtf }
+        UIPasteboard.general.items = [item]
         result(nil)
       case "readFiles":
         let pasteboard = UIPasteboard.general
@@ -68,5 +72,22 @@ enum ClipboardChannel {
       }
     }
     self.channel = channel
+  }
+
+  /// [html] as RTF, through UIKit's own HTML reader: the formatting a target
+  /// that reads no HTML keeps. Nil where it will not read it.
+  private static func rtfOf(_ html: String) -> Data? {
+    guard let data = html.data(using: .utf8),
+          let text = try? NSAttributedString(
+            data: data,
+            options: [
+              .documentType: NSAttributedString.DocumentType.html,
+              .characterEncoding: String.Encoding.utf8.rawValue,
+            ],
+            documentAttributes: nil)
+    else { return nil }
+    return try? text.data(
+      from: NSRange(location: 0, length: text.length),
+      documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf])
   }
 }

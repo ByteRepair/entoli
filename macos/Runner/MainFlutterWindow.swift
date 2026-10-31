@@ -200,6 +200,9 @@ enum ClipboardChannel {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(html, forType: .html)
+        // Pages, TextEdit and Notes read RTF and not HTML, and fall back to
+        // the plain entry — which is markdown — without it.
+        if let rtf = rtfOf(html) { pasteboard.setData(rtf, forType: .rtf) }
         pasteboard.setString(plain, forType: .string)
         result(nil)
       case "readFiles":
@@ -209,6 +212,15 @@ enum ClipboardChannel {
       }
     }
     self.channel = channel
+  }
+
+  /// [html] as RTF, through AppKit's own HTML reader: the formatting a
+  /// target that reads no HTML keeps. Nil where it will not read it.
+  private static func rtfOf(_ html: String) -> Data? {
+    guard let data = html.data(using: .utf8),
+          let text = NSAttributedString(html: data, documentAttributes: nil)
+    else { return nil }
+    return text.rtf(from: NSRange(location: 0, length: text.length), documentAttributes: [:])
   }
 
   /// A Finder copy carries the names as text too, so files win over text, and
