@@ -7,7 +7,7 @@ import "package:flutter/widgets.dart" show WidgetsFlutterBinding;
 import "../../core/log.dart";
 import "host_connection.dart";
 import "host_frame.dart";
-import "model_host.dart";
+import "model_process.dart";
 import "worker.dart";
 
 /// The environment variable the app hands the host its key in. Beside the

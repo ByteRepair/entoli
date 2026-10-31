@@ -40,6 +40,24 @@ class GenerationChannel: NSObject {
     }
   }
 
+  /// Runs `body` off the main thread and answers the call with what it
+  /// returns, on the main thread, or with a `FlutterError` coded `code`
+  /// whose message is what it threw — for a call that is not a generation.
+  func answer(
+    _ result: @escaping FlutterResult, code: String = "failed",
+    _ body: @escaping () async throws -> Any?
+  ) {
+    Task.detached(priority: .userInitiated) {
+      let value: Any?
+      do {
+        value = try await body()
+      } catch {
+        value = FlutterError(code: code, message: "\(error)", details: nil)
+      }
+      DispatchQueue.main.async { result(value) }
+    }
+  }
+
   func send(_ method: String, _ arguments: [String: Any]) {
     DispatchQueue.main.async { [weak self] in
       self?.channel.invokeMethod(method, arguments: arguments)

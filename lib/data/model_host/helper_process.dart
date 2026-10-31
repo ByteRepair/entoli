@@ -41,7 +41,7 @@ class HelperProcess {
   }();
 
   /// Whether there is a [bundle] to [launch]; the composition root asks,
-  /// once, and builds an in-process host where there is not.
+  /// once, and runs the models in its own process where there is not.
   static bool get canLaunch => bundle != null;
 
   static Future<HostConnection> launch() async {

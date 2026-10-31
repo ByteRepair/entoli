@@ -13,7 +13,7 @@ import "android_voice.dart";
 /// Recognition is asked on-device only, as on iOS: a language the Mac cannot
 /// hear without Apple's servers is not offered.
 class MacosVoice extends AndroidVoice {
-  MacosVoice(super.store, super.cacheDir, super.host);
+  MacosVoice(super.store, super.cacheDir, super.process);
 
   @override
   bool get hasEngineInstalls => false;

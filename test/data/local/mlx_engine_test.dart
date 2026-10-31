@@ -8,8 +8,7 @@ import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/local/local_engine.dart";
 import "package:agent_chat/data/local/mlx_engine.dart";
 import "package:agent_chat/data/local/prompt_cache.dart";
-import "package:agent_chat/data/model_host/model_host.dart";
-import "package:agent_chat/data/model_host/worker.dart";
+import "package:agent_chat/data/model_host/model_process.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/local_llm.dart";
 import "package:agent_chat/domain/local_model.dart";
@@ -402,18 +401,10 @@ void main() {
 
 /// The models' process in this one, but one whose leases the test can end
 /// the way a process that went ends them.
-class _Dying implements ModelProcess {
+class _Dying extends InAppModelProcess {
+  _Dying();
+
   final leases = <ModelProcessLease>[];
-
-  @override
-  ModelChannel channel(String name) => const InAppModelProcess().channel(name);
-
-  @override
-  Future<Worker> spawn(WorkerKind kind, List<Object?> argument) =>
-      throw UnimplementedError();
-
-  @override
-  Future<int?> footprint() async => null;
 
   @override
   ModelProcessLease hold() {

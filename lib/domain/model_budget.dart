@@ -37,9 +37,11 @@ class ModelBudget {
 
   /// An iPhone or iPad: three fifths of the smaller of Metal's [workingSet]
   /// and [available], what the OS still lets this process grow by — the
-  /// limit that binds there, where it is known.
-  factory ModelBudget.phone({required int workingSet, int? available}) =>
-      ModelBudget(min(workingSet, available ?? workingSet) * 3 ~/ 5);
+  /// limit that binds there.
+  factory ModelBudget.phone({
+    required int workingSet,
+    required int available,
+  }) => ModelBudget(min(workingSet, available) * 3 ~/ 5);
 
   /// Out of [total] bytes of RAM.
   factory ModelBudget.memory(int total) => ModelBudget(total * 3 ~/ 5);

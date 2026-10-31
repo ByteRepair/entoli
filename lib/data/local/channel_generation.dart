@@ -4,7 +4,7 @@ import "package:flutter/services.dart";
 
 import "../builtin/llm/llm_client.dart";
 import "../model_host/host_connection.dart";
-import "../model_host/model_host.dart";
+import "../model_host/model_process.dart";
 
 /// One generation over a channel whose native half answers in frames —
 /// `text`, `reasoning`, `toolCall`, `done`, `error`, each carrying the id it

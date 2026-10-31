@@ -12,7 +12,7 @@ import "../../domain/loudness.dart";
 import "../../domain/voice.dart";
 import "../../domain/voice_model.dart";
 import "../../domain/voice_model_store.dart";
-import "../model_host/model_host.dart";
+import "../model_host/model_process.dart";
 import "../model_host/worker.dart";
 import "pcm.dart";
 import "played_speaker.dart";
@@ -26,13 +26,13 @@ import "wav.dart";
 /// hands them to a [ComposedVoiceSession], which forwards both halves' events.
 /// See "Hearing and speaking" in AGENTS.md for the two-worker design.
 class SherpaVoice extends Voice {
-  SherpaVoice(this._store, this._cacheDir, this._host);
+  SherpaVoice(this._store, this._cacheDir, this._process);
 
   final VoiceModelStore _store;
 
   /// Where the two workers run: the model host on macOS, this process
   /// elsewhere.
-  final ModelProcess _host;
+  final ModelProcess _process;
 
   /// Where the Silero model is unpacked to. The bundled asset cannot be given
   /// to sherpa as bytes: every model it takes, it takes as a path.
@@ -72,7 +72,7 @@ class SherpaVoice extends Voice {
     }
     final recorder = await openMicrophone();
     final vad = await _vadPath();
-    final worker = await _host.spawn(listenWorker, [vad, ...model]);
+    final worker = await _process.spawn(listenWorker, [vad, ...model]);
     return SherpaListener(
       recorder,
       worker,
@@ -85,7 +85,7 @@ class SherpaVoice extends Voice {
   Future<SherpaSpeaker> sherpaSpeaker(SpeechModel speech, int speaker) async {
     final speakDir = await _store.directoryOf(speech);
     if (speakDir == null) throw StateError("${speech.name} is not downloaded.");
-    final worker = await _host.spawn(speakWorker, [
+    final worker = await _process.spawn(speakWorker, [
       speech.id,
       speakDir,
       speaker,

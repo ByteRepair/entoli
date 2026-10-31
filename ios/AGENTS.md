@@ -346,7 +346,9 @@ keeping MLX's GPU work out of the Mac's window process is a fact of what each
 process registers rather than of which way Dart routes a call.
 `AppleFmChannel.swift` stays the system model's and the app's: `handshake`,
 `generate` and `cancel`. Both are `GenerationChannel`s, which keep the
-generations in flight a `cancel` reaches.
+generations in flight a `cancel {id}` reaches, and both end every generation
+with `done` or `error`: the system model's one tool call is its `toolCall`
+frame and then `done` with `finish: tool_calls`.
 
 The handshake also says what the device offers MLX — `mlx: true` on iOS 27
 and macOS 27 (`Mlx.isAvailable`), and the memory `ModelBudget` reads
@@ -391,10 +393,6 @@ else of it.
   the maps itself (`MlxMessage(channel:)`, `MlxTool(channel:)`), the Runner
   only forwards them. It answers `reasoning`, `text`, `toolCall` (with
   `callId`) and `done` frames, or `error`.
-- Every generation, the system model's included, ends with `done` or
-  `error`: the system model's one tool call is its `toolCall` frame and then
-  `done` with `finish: tool_calls`.
-- `cancel {id}` → the generation stopped.
 - `save` / `restore {model, path}` → whether the prompt state was
   written or read.
 - `usage {model}` → `{weightBytes, tokens}`: the weights' bytes, counted

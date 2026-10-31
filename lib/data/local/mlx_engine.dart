@@ -5,7 +5,7 @@ import "package:flutter/services.dart";
 import "../../domain/local_model.dart";
 import "../../domain/local_model_store.dart";
 import "../builtin/llm/llm_client.dart";
-import "../model_host/model_host.dart";
+import "../model_host/model_process.dart";
 import "channel_generation.dart";
 import "local_engine.dart";
 import "local_instance.dart";
@@ -79,7 +79,13 @@ class MlxInstance extends LocalInstance {
     super.load, {
     required super.onChange,
   }) {
-    unawaited(_lease.lost.then((_) => _processGone()));
+    // A row that says why, as a llama.cpp server that exited leaves one, and
+    // the next turn to ask for the model loads it again in a new process.
+    unawaited(
+      _lease.lost.then(
+        (_) => markFailed("The model host quit, taking the model with it."),
+      ),
+    );
   }
 
   final ModelChannel _channel;
@@ -88,17 +94,6 @@ class MlxInstance extends LocalInstance {
   /// model it displaces lets go of its own, so a switch of models is not the
   /// process going idle — until it is unloaded, or the process goes.
   final ModelProcessLease _lease;
-
-  /// The process it was loaded in went, and the model with it: there is
-  /// nothing left to evict, and asking would only start another process.
-  var _gone = false;
-
-  /// A row that says why, as a llama.cpp server that exited leaves one, and
-  /// the next turn to ask for the model loads it again in a new process.
-  void _processGone() {
-    _gone = true;
-    markFailed("The model host quit, taking the model with it.");
-  }
 
   @override
   String get deviceLabel => "Metal";
@@ -156,6 +151,9 @@ class MlxInstance extends LocalInstance {
   /// holds at what one costs this model.
   @override
   Future<LocalUsage?> usage() async {
+    // Asked of a model whose process went, a channel call would start
+    // another for nothing: the Running row polls this.
+    if (_lease.isLost) return null;
     try {
       final usage = await _channel.invokeMethod<Map<Object?, Object?>>(
         "usage",
@@ -187,6 +185,7 @@ class MlxInstance extends LocalInstance {
   Future<bool> restoreState(String path) => _state("restore", path);
 
   Future<bool> _state(String method, String path) async {
+    if (_lease.isLost) return false;
     try {
       return await _channel.invokeMethod<bool>(method, {
             "model": model.id,
@@ -200,7 +199,9 @@ class MlxInstance extends LocalInstance {
 
   @override
   Future<void> unload() async {
-    if (_gone) return;
+    // Its process went, and the model with it: there is nothing left to
+    // evict, and asking would only start another process.
+    if (_lease.isLost) return;
     try {
       await _channel.invokeMethod("evict", {"model": model.id});
     } catch (_) {

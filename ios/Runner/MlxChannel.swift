@@ -32,54 +32,37 @@ final class MlxChannel: GenerationChannel {
     await instance?.stopGenerations()
   }
 
+  /// `load` and `evict` are the residency Dart decides: a load that fails
+  /// answers a `FlutterError` whose message is the reason, which is what the
+  /// settings row shows.
   override func handle(call: FlutterMethodCall, result: @escaping FlutterResult) {
     let args = call.arguments as? [String: Any] ?? [:]
     let model = args["model"] as? String ?? ""
+    let path = args["path"] as? String ?? ""
     switch call.method {
-    case "load", "evict":
-      residency(call.method, model, args, result)
+    case "load":
+      let directory = args["directory"] as? String ?? ""
+      answer(result, code: "load") {
+        try await Mlx.load(model, directory)
+        return nil
+      }
+    case "evict":
+      answer(result) {
+        await Mlx.evict(model)
+        return nil
+      }
     case "generate":
       startGeneration(call, result, generate)
-    case "save", "restore":
-      let path = args["path"] as? String ?? ""
-      let saving = call.method == "save"
-      Task {
-        let ok =
-          saving
-          ? await Mlx.save(model, to: path) : await Mlx.restore(model, from: path)
-        DispatchQueue.main.async { result(ok) }
-      }
+    case "save":
+      answer(result) { await Mlx.save(model, to: path) }
+    case "restore":
+      answer(result) { await Mlx.restore(model, from: path) }
     case "usage":
-      Task {
-        let usage = await Mlx.usage(model)
-        DispatchQueue.main.async {
-          result(usage.map { ["weightBytes": $0.weightBytes, "tokens": $0.tokens] })
-        }
+      answer(result) {
+        await Mlx.usage(model).map { ["weightBytes": $0.weightBytes, "tokens": $0.tokens] }
       }
     default:
       super.handle(call: call, result: result)
-    }
-  }
-
-  /// `load` and `evict`: the residency Dart decides. A load that fails
-  /// answers a `FlutterError` whose message is the reason, which is what the
-  /// settings row shows.
-  private func residency(
-    _ method: String, _ model: String, _ args: [String: Any],
-    _ result: @escaping FlutterResult
-  ) {
-    let reply = { (value: Any?) in DispatchQueue.main.async { result(value) } }
-    Task.detached(priority: .userInitiated) {
-      do {
-        if method == "load" {
-          try await Mlx.load(model, args["directory"] as? String ?? "")
-        } else {
-          await Mlx.evict(model)
-        }
-        reply(nil)
-      } catch {
-        reply(FlutterError(code: "load", message: "\(error)", details: nil))
-      }
     }
   }
 

@@ -39,7 +39,7 @@ import "../../data/local/shared_backup.dart";
 import "../../data/local/tree_ops.dart";
 import "../../data/local/desktop_file_handoff.dart";
 import "../../data/model_host/helper_process.dart";
-import "../../data/model_host/model_host.dart";
+import "../../data/model_host/model_process.dart";
 import "../../data/local/io_file_watches.dart";
 import "../../data/local/linux_reminder_alarms.dart";
 import "../../data/local/macos_reminder_alarms.dart";
@@ -310,7 +310,7 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
               p.join(cacheDir, "llm"),
               format: const MlxFormat(),
             ),
-            _modelHost,
+            _modelProcess,
             prompts: PromptCache(_kvCacheDir(cacheDir)),
             budget: probe.budget,
           )
@@ -395,16 +395,21 @@ Future<AppleFmProbe?> _appleProbe() => _appleHandshake ??= () async {
     final handshake = answer as Map<Object?, Object?>? ?? const {};
     final memory = handshake["memory"] as Map<Object?, Object?>? ?? const {};
     final workingSet = memory["workingSet"] as int?;
+    final available = memory["available"] as int?;
     return AppleFmProbe(
       handshake["reason"] as String? ?? "other",
       mlx: handshake["mlx"] as bool? ?? false,
-      budget: switch (workingSet) {
-        null => const ModelBudget.unknown(),
-        _ when Platform.isMacOS => ModelBudget.mac(workingSet),
-        _ => ModelBudget.phone(
-          workingSet: workingSet,
-          available: memory["available"] as int?,
+      // A phone's binding limit is the one it may not have said, and a
+      // budget without it would be the Mac's guess: nothing measured then.
+      budget: switch ((workingSet, available)) {
+        (final workingSet?, _) when Platform.isMacOS => ModelBudget.mac(
+          workingSet,
         ),
+        (final workingSet?, final available?) => ModelBudget.phone(
+          workingSet: workingSet,
+          available: available,
+        ),
+        _ => const ModelBudget.unknown(),
       },
     );
   } catch (e) {
@@ -519,7 +524,7 @@ void registerRecorder() {
 /// window starves the window's frames, and this process everywhere else. See
 /// "The model host" in macos/AGENTS.md. Only an app bundle has an executable
 /// to launch again, so a macOS process outside one runs them here too.
-final ModelProcess _modelHost = Platform.isMacOS && HelperProcess.canLaunch
+final ModelProcess _modelProcess = Platform.isMacOS && HelperProcess.canLaunch
     ? HelperModelProcess(HelperProcess.launch)
     : const InAppModelProcess();
 
@@ -527,10 +532,10 @@ final ModelProcess _modelHost = Platform.isMacOS && HelperProcess.canLaunch
 /// engines (see [AndroidVoice], [MacosVoice]); iOS has Apple's alone (see
 /// [IosVoice]).
 Voice createVoice(VoiceModelStore store, String cacheDir) {
-  if (Platform.isAndroid) return AndroidVoice(store, cacheDir, _modelHost);
+  if (Platform.isAndroid) return AndroidVoice(store, cacheDir, _modelProcess);
   if (Platform.isIOS) return const IosVoice();
-  if (Platform.isMacOS) return MacosVoice(store, cacheDir, _modelHost);
-  return SherpaVoice(store, cacheDir, _modelHost);
+  if (Platform.isMacOS) return MacosVoice(store, cacheDir, _modelProcess);
+  return SherpaVoice(store, cacheDir, _modelProcess);
 }
 
 /// The process's environment. The Dart VM's iOS build leaves

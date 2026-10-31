@@ -7,7 +7,7 @@ import "../../domain/model_budget.dart";
 import "../builtin/llm/llm_client.dart";
 import "../builtin/llm/providers/provider.dart";
 import "channel_generation.dart";
-import "../model_host/model_host.dart";
+import "../model_host/model_process.dart";
 
 // The ids live in the domain beside `localProviderId`, exported here for the
 // tests and the pages that name the model.

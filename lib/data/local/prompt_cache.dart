@@ -114,13 +114,6 @@ class PromptCache {
     unawaited(_evict(namespace, count));
   }
 
-  /// A generation that did not finish, on an instance that drops what it
-  /// held when that happens: whatever [_live] said is no longer so, and the
-  /// next turn restores rather than reading the whole prompt again.
-  void _unfinished(LocalInstance instance) {
-    if (!instance.keepsUnfinished) _live[instance] = null;
-  }
-
   /// What makes [promptEvictions] an LRU rather than a first-in-first-out: a
   /// file's date is when it was last restored, not when it was written. The
   /// body every chat starts from is written once by the prefill and read
@@ -211,8 +204,13 @@ class PromptEntry {
     }
   }
 
-  /// The generation this entry was for did not finish.
-  void unfinished() => _cache._unfinished(_instance);
+  /// The generation this entry was for did not finish. On an instance that
+  /// drops what it held when that happens, whatever the cache believed it
+  /// held is no longer so, and the next turn restores rather than reading
+  /// the whole prompt again.
+  void unfinished() {
+    if (!_instance.keepsUnfinished) _cache._live[_instance] = null;
+  }
 
   /// Saves the instance's state after a turn under the whole prompt's key,
   /// then evicts down to the count and under the disk budget.

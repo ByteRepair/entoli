@@ -8,7 +8,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/model_host/host_connection.dart";
 import "package:agent_chat/data/model_host/host_frame.dart";
-import "package:agent_chat/data/model_host/model_host.dart";
+import "package:agent_chat/data/model_host/model_process.dart";
 import "package:agent_chat/data/model_host/model_host_server.dart";
 import "package:agent_chat/data/model_host/worker.dart";
 
@@ -74,11 +74,11 @@ void main() {
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   late Launches launches;
-  late HelperModelProcess host;
+  late HelperModelProcess process;
 
   setUp(() {
     launches = Launches();
-    host = HelperModelProcess(launches.launch);
+    process = HelperModelProcess(launches.launch);
     messenger.setMockMethodCallHandler(native, (call) async {
       if (call.method == "refuse") {
         throw PlatformException(code: "no", message: "refused");
@@ -134,7 +134,7 @@ void main() {
   });
 
   test("a call crosses and answers as a channel here would", () async {
-    final channel = host.channel(native.name);
+    final channel = process.channel(native.name);
 
     expect(
       await channel.invokeMethod<Map<Object?, Object?>>("load", {"x": 1}),
@@ -155,7 +155,7 @@ void main() {
   });
 
   test("what the native half says unasked arrives as calls", () async {
-    final channel = host.channel(native.name);
+    final channel = process.channel(native.name);
     final said = channel.calls.first;
     // The host starts on first use; a call is what starts it here.
     await channel.invokeMethod("handshake");
@@ -168,7 +168,7 @@ void main() {
   });
 
   test("a worker runs in the host by name", () async {
-    final worker = await host.spawn(echo, ["started"]);
+    final worker = await process.spawn(echo, ["started"]);
     final heard = worker.messages.first;
 
     worker.send(["speak", 7, "hello"]);
@@ -183,9 +183,9 @@ void main() {
 
   test("a host that goes fails what waits on it, and the next ask starts "
       "another", () async {
-    final channel = host.channel(native.name);
+    final channel = process.channel(native.name);
     await channel.invokeMethod("handshake");
-    final worker = await host.spawn(echo, ["started"]);
+    final worker = await process.spawn(echo, ["started"]);
     final workerSaid = <Object?>[];
     final workerErrors = <Object>[];
     final workerDone = Completer<void>();
@@ -196,7 +196,7 @@ void main() {
     );
     final channelErrors = <Object>[];
     channel.calls.listen((_) {}, onError: channelErrors.add);
-    final lease = host.hold();
+    final lease = process.hold();
 
     launches.hostEnd!.close();
     await lease.lost.timeout(const Duration(seconds: 5));
@@ -212,7 +212,7 @@ void main() {
 
   test("a worker the host cannot start ends in an error, not in the "
       "worker's words", () async {
-    final worker = await host.spawn(
+    final worker = await process.spawn(
       const WorkerKind("unknown", _echo),
       const [],
     );
@@ -233,11 +233,11 @@ void main() {
 
   group("held and idle", () {
     const idle = Duration(milliseconds: 50);
-    setUp(() => host = HelperModelProcess(launches.launch, idle: idle));
+    setUp(() => process = HelperModelProcess(launches.launch, idle: idle));
 
     test("nothing held for the wait lets it go, and is no loss", () async {
-      final lease = host.hold();
-      await host.channel(native.name).invokeMethod("load");
+      final lease = process.hold();
+      await process.channel(native.name).invokeMethod("load");
       final hostEnd = launches.hostEnd!;
       var lost = false;
       unawaited(lease.lost.then((_) => lost = true));
@@ -248,42 +248,42 @@ void main() {
       // Nothing was in it: the holder was not told it lost anything.
       expect(lost, isFalse);
       // The next ask starts another.
-      host.hold();
-      await host.channel(native.name).invokeMethod("load");
+      process.hold();
+      await process.channel(native.name).invokeMethod("load");
       expect(launches.count, 2);
     });
 
     test("held again within the wait, it stays", () async {
-      final first = host.hold();
-      await host.channel(native.name).invokeMethod("load");
+      final first = process.hold();
+      await process.channel(native.name).invokeMethod("load");
 
       // A model switch: the next lease is taken before the last is given up.
-      final second = host.hold();
+      final second = process.hold();
       first.release();
       await Future<void>.delayed(idle * 4);
 
-      await host.channel(native.name).invokeMethod("load");
+      await process.channel(native.name).invokeMethod("load");
       expect(launches.count, 1);
       second.release();
     });
 
     test("a host that goes gives up what held it, so the next one can go "
         "idle", () async {
-      final lease = host.hold();
-      await host.channel(native.name).invokeMethod("load");
+      final lease = process.hold();
+      await process.channel(native.name).invokeMethod("load");
 
       launches.hostEnd!.close();
       await lease.lost.timeout(const Duration(seconds: 5));
 
       // Nothing new holds the next one: it goes once the wait is up, though
       // the first lease was never released by its holder.
-      await host.channel(native.name).invokeMethod("load");
+      await process.channel(native.name).invokeMethod("load");
       expect(launches.count, 2);
       await launches.hostEnd!.done.timeout(const Duration(seconds: 5));
     });
 
     test("a running worker holds it, and its end lets it go", () async {
-      final worker = await host.spawn(echo, ["started"]);
+      final worker = await process.spawn(echo, ["started"]);
       final hostEnd = launches.hostEnd!;
       await Future<void>.delayed(idle * 4);
       expect(launches.count, 1);
@@ -303,10 +303,10 @@ void main() {
       () => messenger.setMockMethodCallHandler(modelHostChannel, null),
     );
 
-    expect(await host.footprint(), isNull);
+    expect(await process.footprint(), isNull);
     expect(launches.count, 0);
 
-    await host.channel(native.name).invokeMethod("load");
-    expect(await host.footprint(), 4096);
+    await process.channel(native.name).invokeMethod("load");
+    expect(await process.footprint(), 4096);
   });
 }

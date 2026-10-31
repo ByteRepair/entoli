@@ -51,6 +51,9 @@ class ModelProcessLease {
   /// process owes this holder nothing.
   Future<void> get lost => _lost.future;
 
+  /// Whether [lost] has completed: the process, and what was in it, gone.
+  bool get isLost => _lost.isCompleted;
+
   void release() {
     final release = _release;
     _release = null;
@@ -58,9 +61,11 @@ class ModelProcessLease {
   }
 
   /// The process going, said by the [ModelProcess] that granted it.
+  /// Not a release: the process that would have gone idle has gone already,
+  /// and its holds with it.
   void lose() {
     if (_release == null) return;
-    release();
+    _release = null;
     _lost.complete();
   }
 }
@@ -156,6 +161,9 @@ class HelperModelProcess implements ModelProcess {
       final connection = await _launch();
       final current = _connection;
       connection.frames.listen(_route);
+      // Started by an ask that holds nothing — a channel call with no model
+      // behind it — it waits out the idle time like any process let go of.
+      if (_leases.isEmpty) _waitIdle();
       // Only the process still in use going is a loss: one let go of, idle,
       // ends the same way and takes nothing with it.
       unawaited(
@@ -185,6 +193,9 @@ class HelperModelProcess implements ModelProcess {
 
   void _gone() {
     _connection = null;
+    // A wait armed for the process that went would close the next one.
+    _idleTimer?.cancel();
+    _idleTimer = null;
     for (final worker in _workers.values) {
       worker._ended(const ModelProcessGone());
     }
@@ -193,8 +204,12 @@ class HelperModelProcess implements ModelProcess {
       channel._gone();
     }
     // Every holder hears it went, and none of them still holds it: a lease
-    // left out would keep the next process from ever going idle.
-    for (final lease in [..._leases]) {
+    // left out would keep the next process from ever going idle. Taken
+    // rather than released, so no idle wait starts for a process that is
+    // not there.
+    final leases = [..._leases];
+    _leases.clear();
+    for (final lease in leases) {
       lease.lose();
     }
   }
@@ -206,14 +221,18 @@ class HelperModelProcess implements ModelProcess {
     late final ModelProcessLease lease;
     lease = ModelProcessLease(() {
       _leases.remove(lease);
-      if (_leases.isNotEmpty) return;
-      _idleTimer = Timer(idle, () {
-        _idleTimer = null;
-        unawaited(_letGo());
-      });
+      if (_leases.isEmpty) _waitIdle();
     });
     _leases.add(lease);
     return lease;
+  }
+
+  void _waitIdle() {
+    _idleTimer?.cancel();
+    _idleTimer = Timer(idle, () {
+      _idleTimer = null;
+      unawaited(_letGo());
+    });
   }
 
   /// Closing the connection is what ends the process: it leaves when the app
@@ -273,15 +292,15 @@ class HelperModelProcess implements ModelProcess {
 }
 
 class _RemoteChannel implements ModelChannel {
-  _RemoteChannel(this._host, this._name);
+  _RemoteChannel(this._process, this._name);
 
-  final HelperModelProcess _host;
+  final HelperModelProcess _process;
   final String _name;
   final _calls = StreamController<MethodCall>.broadcast();
 
   @override
   Future<T?> invokeMethod<T>(String method, [Object? arguments]) async {
-    final connection = await _host._connect();
+    final connection = await _process._connect();
     return await connection.call(_name, method, arguments) as T?;
   }
 
