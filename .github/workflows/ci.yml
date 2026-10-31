@@ -2,22 +2,17 @@ name: CI
 
 # Notes-only changes run nothing: the AGENTS.md files and the READMEs reach no
 # build. Every other markdown file can — `PRIVACY.md` and everything under
-# `assets/` are compiled into the app — so the filter names the ones it skips
+# `assets/` are compiled into the app — so `changes` names the ones it skips
 # and puts `assets/` back after them, rather than skipping `**.md`.
+#
+# That is decided in a job rather than by `paths:` on the trigger, because
+# `check` is a required status check on master: a workflow the trigger filtered
+# out reports nothing and leaves the PR waiting on it forever, where a job
+# skipped by its `if:` reports success.
 on:
   push:
     branches: [master]
-    paths:
-      - '**'
-      - '!**/AGENTS.md'
-      - '!**/README.md'
-      - 'assets/**'
   pull_request:
-    paths:
-      - '**'
-      - '!**/AGENTS.md'
-      - '!**/README.md'
-      - 'assets/**'
 
 permissions:
   contents: read
@@ -31,11 +26,47 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      # A PR is checked out as its merge commit, whose first parent is the
+      # base it would land on; a push is compared with the tip it replaced.
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 2
+
+      - id: diff
+        env:
+          BEFORE: ${{ github.event_name == 'push' && github.event.before || '' }}
+        run: |
+          base=HEAD^1
+          if [ -n "$BEFORE" ]; then
+            # A tip that cannot be fetched leaves nothing to compare with, so
+            # everything runs.
+            git fetch -q --depth=1 origin "$BEFORE" && base=$BEFORE || {
+              echo code=true >> "$GITHUB_OUTPUT"
+              exit 0
+            }
+          fi
+          code=false
+          while IFS= read -r f; do
+            case "$f" in
+              assets/*) code=true ;;
+              AGENTS.md | */AGENTS.md | README.md | */README.md) ;;
+              *) code=true ;;
+            esac
+          done < <(git diff --name-only "$base" HEAD)
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
   # One job rather than analyze beside test: each paid its own runner and its
   # own Flutter setup (one to two and a half minutes, rounded up to a billed
   # minute), and analyze is a minute against test's thirteen, so running it
   # first costs little wall clock and fails a broken tree before the suite.
   check:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
