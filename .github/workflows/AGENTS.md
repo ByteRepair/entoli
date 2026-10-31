@@ -386,3 +386,11 @@ dispatches of `debug-build.yml` or `release-build.yml` on master, and the
 Windows SDK and the iSH xcframework from a `release-build.yml` dispatch
 alone — which is the way to warm them before a release that moved their
 inputs.
+
+The EntoliMLX framework warms itself: `mlx-cache.yml` builds both slices on
+a master push that touches `tool/apple/mlx/` or `apple-setup`, through
+`apple-setup` itself (`flutter: false`, since nothing of Flutter's is
+needed), so its key is the release's by construction. Without it every
+release built MLX from scratch, five minutes a slice, and a package that
+stopped building was found on the tag. It is not part of CI: a macOS runner
+on every PR is too much to pay for a framework most PRs never touch.

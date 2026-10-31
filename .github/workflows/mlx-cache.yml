@@ -1,0 +1,39 @@
+name: MLX cache
+
+# A tag run reads master's caches and saves none (see "Caches" in AGENTS.md),
+# so a release that finds no EntoliMLX on master builds it, five minutes a
+# slice. This writes both slices on master whenever their key's inputs move,
+# so the release restores them instead — and a package that no longer builds
+# fails here, on the push that broke it, rather than on the tag.
+on:
+  push:
+    branches: [master]
+    paths:
+      - tool/apple/mlx/**
+      - "!tool/apple/mlx/**/AGENTS.md"
+      - .github/actions/apple-setup/action.yml
+      - .github/workflows/mlx-cache.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mlx-cache
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        slice: [ios, macos]
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      # Restores, builds on a miss, and saves under the key the release
+      # restores: the same action, so the two cannot disagree on it.
+      - uses: ./.github/actions/apple-setup
+        with:
+          slice: ${{ matrix.slice }}
+          flutter: "false"
