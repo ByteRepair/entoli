@@ -359,8 +359,14 @@ picking it up; the copy button is what copies one.
 The renderer and the copy read one grammar, `replyExtensionSet`, beside
 `parseReply` in `domain/formatted_text.dart`. Parsed TeX is kept the way a code
 block's spans are, and for the same re-parse on every frame of a cross-fade —
-keyed on the TeX alone, since the tree carries no style, so a theme change
-keeps every entry. A wide display formula scrolls in `SidewaysScroll`, the
+keyed on the TeX, since the tree carries no style, so a theme change keeps
+every entry. **But a tree is drawn in one place at a time**:
+`flutter_math_fork` keeps the widget it built on each node, an equation row's
+with a `GlobalKey` in it, so one tree drawn twice fails layout and blanks the
+whole chat — which v7.3.0 did to any chat with the same formula twice. So
+the trees are each `MarkdownText`'s own (`MathBuilders`), never shared with
+another reply, and one per occurrence: the second `$x$` is the second tree
+for `x`, counted from the first again at every build. A wide display formula scrolls in `SidewaysScroll`, the
 code block's own scroller, scrollbar and all.
 
 ### Code blocks

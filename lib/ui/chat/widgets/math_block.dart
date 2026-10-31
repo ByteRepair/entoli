@@ -8,40 +8,62 @@ import "../../../domain/math_syntax.dart";
 import "../../fonts.dart";
 import "code_block.dart";
 
-final _math = _MathBuilder();
+typedef _Parsed = ({SyntaxTree? tree, ParseException? error});
 
-/// A formula for each of the elements `math_syntax.dart` reads out of the
-/// text; `MarkdownText` is what hands these to a `MarkdownBody`.
-final mathBuilders = <String, MarkdownElementBuilder>{
-  mathInlineTag: _math,
-  mathDisplayTag: _math,
-};
-
-/// Parsed formulas, kept for the reason the code blocks' spans are:
+/// One `MarkdownText`'s formulas: the builders that draw them, and the parsed
+/// trees they draw from, kept for the reason the code blocks' spans are —
 /// `MarkdownBody` re-parses whenever its style sheet changes, which is every
 /// frame of a palette's cross-fade, and `Math.tex` parses its TeX as it is
-/// constructed. A tree is the TeX's alone — the style is applied as it is
-/// drawn — so the key is the source and an entry outlives a theme change.
-/// Bounded and evicted oldest-first, as that cache is.
-final _trees = <String, ({SyntaxTree? tree, ParseException? error})>{};
-const _treeCacheLimit = 64;
+/// constructed.
+///
+/// **A tree is drawn in one place at a time.** `flutter_math_fork` keeps
+/// the widget it built on each node, and an equation row's carries a
+/// `GlobalKey`, so one tree drawn twice puts one key in two places: layout
+/// fails, and the whole chat with it. Trees are therefore this widget's own,
+/// not shared with another reply, and one per occurrence of a TeX string —
+/// the second `$x$` in a reply is the second tree for `x`. [restart] begins
+/// the count again before each build, so a re-parse hands each formula the
+/// tree it had, and a re-parse is still not a re-parse of the TeX.
+class MathBuilders {
+  late final Map<String, MarkdownElementBuilder> builders = {
+    mathInlineTag: _MathBuilder(this),
+    mathDisplayTag: _MathBuilder(this),
+  };
 
-({SyntaxTree? tree, ParseException? error}) _parsed(String tex) {
-  final cached = _trees[tex];
-  if (cached != null) return cached;
-  if (_trees.length >= _treeCacheLimit) _trees.remove(_trees.keys.first);
+  final _trees = <String, List<_Parsed>>{};
+  final _taken = <String, int>{};
+
+  /// Bounded and evicted oldest-first, as the code blocks' cache is.
+  static const _limit = 64;
+
+  void restart() => _taken.clear();
+
+  _Parsed _take(String tex) {
+    final n = _taken[tex] = (_taken[tex] ?? 0) + 1;
+    if (!_trees.containsKey(tex) && _trees.length >= _limit) {
+      _trees.remove(_trees.keys.first);
+    }
+    final trees = _trees.putIfAbsent(tex, () => []);
+    while (trees.length < n) {
+      trees.add(_parse(tex));
+    }
+    return trees[n - 1];
+  }
+}
+
+_Parsed _parse(String tex) {
   try {
-    return _trees[tex] = (
+    return (
       tree: SyntaxTree(
         greenRoot: TexParser(tex, const TexParserSettings()).parse(),
       ),
       error: null,
     );
   } on ParseException catch (e) {
-    return _trees[tex] = (tree: null, error: e);
+    return (tree: null, error: e);
   } on Object catch (e) {
     // What `Math.tex` does with a throw that is not the parser's own.
-    return _trees[tex] = (tree: null, error: ParseException("$e"));
+    return (tree: null, error: ParseException("$e"));
   }
 }
 
@@ -53,6 +75,10 @@ const _treeCacheLimit = 64;
 /// spans into the paragraph's own, where any other widget would be laid beside
 /// the paragraph in a `Wrap` and break the line around it.
 class _MathBuilder extends MarkdownElementBuilder {
+  _MathBuilder(this._formulas);
+
+  final MathBuilders _formulas;
+
   @override
   Widget visitElementAfterWithContext(
     BuildContext context,
@@ -61,7 +87,7 @@ class _MathBuilder extends MarkdownElementBuilder {
     TextStyle? parentStyle,
   ) {
     final style = parentStyle ?? Theme.of(context).textTheme.bodyMedium;
-    final parsed = _parsed(element.attributes[mathTexAttribute] ?? "");
+    final parsed = _formulas._take(element.attributes[mathTexAttribute] ?? "");
     final math = Math(
       ast: parsed.tree,
       parseError: parsed.error,
