@@ -23,7 +23,7 @@ class ModelHostServer {
     required List<MethodChannel> channels,
     required List<WorkerKind> workers,
   }) : _kinds = {for (final kind in workers) kind.name: kind} {
-    for (final channel in channels) {
+    for (final channel in [modelHostChannel, ...channels]) {
       final local = _channels[channel.name] = PlatformModelChannel(channel);
       local.calls.listen(
         (call) => _connection.send(
@@ -64,7 +64,7 @@ class ModelHostServer {
     } catch (e) {
       logFailure("model-host", "could not reach the app", e);
     }
-    await const MethodChannel("agent_chat/model_host").invokeMethod("quit");
+    await modelHostChannel.invokeMethod("quit");
   }
 
   void _receive(HostFrame frame) => switch (frame) {

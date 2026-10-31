@@ -14,12 +14,23 @@ internal import MLXLMCommon
 /// tool round of seconds and one of a minute. A model whose cache cannot be
 /// rewound — Qwen3.5's recurrent layers — is served by exactly this, since an
 /// agent's turn only ever extends what came before.
+///
+/// **It owns its model, and lets go of it in one place.** The weights are held
+/// by the container, and by the session built over it; a generation, a save
+/// or a restore holds them too while it runs, and so does the task
+/// mlx-swift-lm runs each reply in. Each of ours runs as an operation the
+/// conversation counts, and `unload` refuses new ones, stops a generation,
+/// waits for the rest and for the session's own task, and then drops the
+/// session and the container itself — so when it returns, nothing holds the
+/// model, rather than whenever a straggler finishes.
 actor MlxConversation {
-  init(_ container: ModelContainer) {
+  init(_ container: ModelContainer, weightBytes: Int) {
     self.container = container
+    self.weightBytes = weightBytes
   }
 
-  private let container: ModelContainer
+  /// The model: what holds its weights. Nil once unloaded.
+  private var container: ModelContainer?
 
   private var session: ChatSession?
 
@@ -36,93 +47,161 @@ actor MlxConversation {
   /// never stops.
   private static let maxTokens = 8192
 
+  /// Stops the generation under way: a model let go of is not one a reply may
+  /// go on coming from.
+  private var stopGeneration: (@Sendable () -> Void)?
+  private var unloaded = false
+
+  /// How many operations are running, and the unload waiting for none to be.
+  private var operations = 0
+  private var whenIdle: [CheckedContinuation<Void, Never>] = []
+
+  /// Runs `body` as one of the operations an unload waits for, handing it the
+  /// model; throws `MlxUnloaded` once the model is being let go of. Whatever
+  /// `body` holds is let go of before the count falls, since nothing awaits
+  /// between its return and the unload that count wakes running on this
+  /// actor.
+  private func operation<T>(_ body: (ModelContainer) async throws -> T) async throws -> T {
+    guard !unloaded, let container else { throw MlxUnloaded() }
+    operations += 1
+    defer {
+      operations -= 1
+      if operations == 0 {
+        whenIdle.forEach { $0.resume() }
+        whenIdle = []
+      }
+    }
+    return try await body(container)
+  }
+
+  /// Refuses what comes next, stops a generation, waits for every operation
+  /// to end, then lets go of the model. Returns once nothing holds it.
+  ///
+  /// A generation's end here is not the end of its work: mlx-swift-lm runs
+  /// each reply in a task of its own, which a stopped reader only asks to
+  /// stop, and which goes on holding the model and its cache until the
+  /// generation has wound down — for the rest of a prompt still being read.
+  /// `synchronize` is the session's own wait for that.
+  func unload() async {
+    unloaded = true
+    stopGeneration?()
+    while operations > 0 {
+      await withCheckedContinuation { whenIdle.append($0) }
+    }
+    await session?.synchronize()
+    session = nil
+    held = nil
+    container = nil
+  }
+
   func generate(
     messages: [MlxMessage], tools: [MlxTool], temperature: Double?,
-    emit: @Sendable (MlxEvent) -> Void
+    emit: @escaping @Sendable (MlxEvent) -> Void
   ) async throws {
-    guard let last = messages.last else { return }
-    var parameters = GenerateParameters(maxTokens: Self.maxTokens)
-    if let temperature { parameters.temperature = Float(temperature) }
+    try await operation { container in
+      guard let last = messages.last else { return }
+      var parameters = GenerateParameters(maxTokens: Self.maxTokens)
+      if let temperature { parameters.temperature = Float(temperature) }
 
-    let fresh: [MlxMessage]
-    if let session, let held, held.carriesOn(messages, tools) {
-      session.generateParameters = parameters
-      fresh = Array(messages[held.messages.count...])
-    } else {
-      session = ChatSession(
-        container, history: messages.dropLast().map(\.chat),
-        generateParameters: parameters, tools: tools.map(\.spec))
-      fresh = [last]
-    }
-    // Cleared until the reply is in: a generation stopped part-way leaves a
-    // cache that holds some of a reply nobody kept, so the next call starts
-    // over rather than carrying on from that.
-    held = nil
+      let fresh: [MlxMessage]
+      if let session, let held, held.carriesOn(messages, tools) {
+        session.generateParameters = parameters
+        fresh = Array(messages[held.messages.count...])
+      } else {
+        session = ChatSession(
+          container, history: messages.dropLast().map(\.chat),
+          generateParameters: parameters, tools: tools.map(\.spec))
+        fresh = [last]
+      }
+      // Cleared until the reply is in: a generation stopped part-way leaves a
+      // cache that holds some of a reply nobody kept, so the next call starts
+      // over rather than carrying on from that.
+      held = nil
 
-    if markers == nil { markers = try await ThinkingMarkers(container) }
-    var thinking = ThinkingSplitter(markers!)
-    var reply = ""
-    // Said as they come, the reply's text kept for the record.
-    func say(_ events: [MlxEvent]) {
-      for event in events {
-        emit(event)
-        if case .text(let text) = event { reply += text }
+      if markers == nil { markers = try await ThinkingMarkers(container) }
+      let markers = self.markers!
+      let stream = session!.streamDetails(to: fresh.map(\.chat))
+      // In a task of its own, so an unload can cancel it whoever is waiting
+      // on it; a stop from the caller reaches it the same way.
+      let work = Task { () throws -> (reply: String, calls: [MlxToolCall], counts: (Int, Int)) in
+        var thinking = ThinkingSplitter(markers)
+        var reply = ""
+        // Said as they come, the reply's text kept for the record.
+        func say(_ events: [MlxEvent]) {
+          for event in events {
+            emit(event)
+            if case .text(let text) = event { reply += text }
+          }
+        }
+        var calls: [MlxToolCall] = []
+        var counts = (prompt: 0, generated: 0)
+        for try await generation in stream {
+          try Task.checkCancellation()
+          switch generation {
+          case .chunk(let chunk):
+            say(thinking.feed(chunk))
+          case .toolCall(let call):
+            let made = MlxToolCall(
+              id: "c\(calls.count)", name: call.function.name,
+              arguments: Self.json(call.function.arguments))
+            calls.append(made)
+            emit(.toolCall(made))
+          case .rejectedToolCall(let rejection):
+            throw MlxRejected(description: "\(rejection)")
+          case .info(let info):
+            counts = (info.promptTokenCount, info.generationTokenCount)
+          }
+        }
+        try Task.checkCancellation()
+        say(thinking.finish())
+        return (reply, calls, counts)
       }
-    }
-    var calls: [MlxToolCall] = []
-    var counts = (prompt: 0, generated: 0)
-    for try await generation in session!.streamDetails(to: fresh.map(\.chat)) {
-      switch generation {
-      case .chunk(let chunk):
-        say(thinking.feed(chunk))
-      case .toolCall(let call):
-        let made = MlxToolCall(
-          id: "c\(calls.count)", name: call.function.name,
-          arguments: Self.json(call.function.arguments))
-        calls.append(made)
-        emit(.toolCall(made))
-      case .rejectedToolCall(let rejection):
-        throw MlxRejected(description: "\(rejection)")
-      case .info(let info):
-        counts = (info.promptTokenCount, info.generationTokenCount)
+      stopGeneration = { work.cancel() }
+      defer { stopGeneration = nil }
+      let outcome: (reply: String, calls: [MlxToolCall], counts: (Int, Int))
+      do {
+        outcome = try await withTaskCancellationHandler {
+          try await work.value
+        } onCancel: {
+          work.cancel()
+        }
+      } catch {
+        if unloaded { throw MlxUnloaded() }
+        throw error
       }
+      held = HeldRecord(
+        messages: messages + [
+          MlxMessage(role: .assistant, content: outcome.reply, toolCalls: outcome.calls)
+        ],
+        tools: tools)
+      heldTokens = (try? await session?.cacheStatus().processedTokenCount ?? nil) ?? 0
+      emit(.done(promptTokens: outcome.counts.0, generatedTokens: outcome.counts.1))
     }
-    say(thinking.finish())
-    held = HeldRecord(
-      messages: messages + [MlxMessage(role: .assistant, content: reply, toolCalls: calls)],
-      tools: tools)
-    emit(.done(promptTokens: counts.prompt, generatedTokens: counts.generated))
   }
 
-  /// Counted once: the weights do not change while the model is loaded.
-  private var weightBytes: Int?
+  /// The weights' bytes, counted at load, and the tokens the cache held when
+  /// a generation last ended — what the settings page shows, answered from
+  /// what is already known: asking the model would wait out a generation's
+  /// whole reading of its prompt, which holds it.
+  private let weightBytes: Int
+  private var heldTokens = 0
 
-  func usage() async -> (weightBytes: Int, tokens: Int) {
-    if weightBytes == nil {
-      weightBytes = await container.perform { context in
-        context.model.parameters().flattened().reduce(0) { $0 + $1.1.nbytes }
-      }
-    }
-    let tokens = (try? await session?.cacheStatus().processedTokenCount) ?? nil
-    return (weightBytes ?? 0, tokens ?? 0)
-  }
+  func usage() -> (weightBytes: Int, tokens: Int) { (weightBytes, heldTokens) }
 
   /// Writes the cache to `path` and what it holds beside it, `path.json`: a
   /// cache file says nothing of which messages it covers, and a session
   /// restored without that would read its own reply a second time.
   func save(to path: String) async -> Bool {
-    guard let session, let held else { return false }
-    do {
+    (try? await operation { _ in
+      guard let session, let held else { return false }
       try await session.saveCache(to: URL(fileURLWithPath: path))
       try JSONEncoder().encode(held).write(to: Self.companion(path), options: .atomic)
       return true
-    } catch {
-      return false
-    }
+    }) ?? false
   }
 
   func restore(from path: String) async -> Bool {
-    do {
+    (try? await operation { container in
       let record = try JSONDecoder().decode(
         HeldRecord.self, from: Data(contentsOf: Self.companion(path)))
       let snapshot = try loadPromptCacheSnapshot(url: URL(fileURLWithPath: path))
@@ -130,11 +209,11 @@ actor MlxConversation {
         container, cache: snapshot.cache, state: snapshot.state,
         tools: record.tools.map(\.spec))
       held = record
+      heldTokens = (try? await session?.cacheStatus().processedTokenCount ?? nil) ?? 0
       return true
-    } catch {
-      return false
-    }
+    }) ?? false
   }
+
 
   private static func companion(_ path: String) -> URL {
     URL(fileURLWithPath: path + ".json")

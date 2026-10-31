@@ -148,6 +148,11 @@ public struct MlxNotLoaded: Error, CustomStringConvertible {
   public var description: String { "The model is not loaded." }
 }
 
+/// A generation ended because its model was unloaded under it.
+public struct MlxUnloaded: Error, CustomStringConvertible {
+  public var description: String { "The model was unloaded." }
+}
+
 /// The MLX models loaded now, by catalog id. Dart decides which are loaded —
 /// see `Residency` — so this keeps what it is told and nothing more.
 actor MlxModels {
@@ -161,10 +166,15 @@ actor MlxModels {
   /// The model in `directory`, loaded and kept as `id`. A load that throws
   /// leaves nothing behind for the next ask to find.
   func load(_ id: String, _ directory: String) async throws -> MlxConversation {
+    Memory.cacheLimit = defaultCacheLimit
     let loading = models[id] ?? Task {
       let container = try await loadModelContainer(
         from: URL(fileURLWithPath: directory), using: #huggingFaceTokenizerLoader())
-      return MlxConversation(container)
+      // Counted now, while nothing else holds the model.
+      let weightBytes = await container.perform { context in
+        context.model.parameters().flattened().reduce(0) { $0 + $1.1.nbytes }
+      }
+      return MlxConversation(container, weightBytes: weightBytes)
     }
     models[id] = loading
     do {
@@ -179,12 +189,27 @@ actor MlxModels {
     try? await models[id]?.value
   }
 
-  /// MLX keeps the buffers a model let go of for the next allocation, so
-  /// dropping one frees nothing the system sees until its cache is emptied —
-  /// a model unloaded from the settings page would otherwise go on holding
-  /// its gigabytes.
-  func evict(_ id: String) {
-    models.removeValue(forKey: id)
+  /// What MLX keeps of the buffers it frees, for the next allocation, while
+  /// a model is loaded: its own default, which is its to manage.
+  private let defaultCacheLimit = Memory.cacheLimit
+
+  /// MLX keeps what a model lets go of in its buffer cache and never gives it
+  /// back on its own, so an unloaded model's gigabytes would stay with the
+  /// process. The model is let go of before its unload returns — see
+  /// `MlxConversation` — and the cache is emptied of it once, here.
+  ///
+  /// Not quite all of it is let go of by then: mlx-swift-lm's reply task
+  /// drops its hold on the model as it exits, a moment after the session's
+  /// wait for it returns, and nothing says when. So with no model left the
+  /// cache's limit is taken to nothing, and MLX hands back whatever is freed
+  /// from then on as it is freed; the next load gives MLX its default back.
+  /// While a model is loaded, what is freed is kept for it.
+  func evict(_ id: String) async {
+    if let conversation = try? await models.removeValue(forKey: id)?.value {
+      await conversation.unload()
+    }
+    if models.isEmpty { Memory.cacheLimit = 0 }
     Memory.clearCache()
   }
+
 }

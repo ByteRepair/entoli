@@ -271,7 +271,9 @@ void main() {
       tester.getTopLeft(find.text("Running models")).dy,
       lessThan(tester.getTopLeft(find.text("Text models")).dy),
     );
-    expect(find.textContaining("3.0 GB in memory"), findsOneWidget);
+    // The row's own, and the header's for all of them together.
+    expect(find.textContaining("· 3.0 GB in memory"), findsOneWidget);
+    expect(find.text("3.0 GB in memory"), findsOneWidget);
     expect(find.textContaining("9K tokens cached"), findsOneWidget);
   });
 

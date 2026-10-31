@@ -207,6 +207,29 @@ void main() {
     await reply;
   });
 
+  test("a reply whose model is unloaded under it ends saying so", () async {
+    final mlx = engine();
+    final reply = mlx.client(() => AppSettings()).stream(const [
+      LlmMessage(role: LlmRole.user, text: "hi"),
+    ], model: small.id).toList();
+    await channel.until("mlxGenerate");
+    final ended = expectLater(
+      reply,
+      throwsA(
+        isA<LlmException>()
+            .having((e) => e.message, "message", contains("was unloaded"))
+            .having((e) => e.retryable, "retryable", isFalse),
+      ),
+    );
+
+    await channel.incoming("error", {
+      "id": channel.outgoing("mlxGenerate")["id"],
+      "code": "unloaded",
+      "message": "The model was unloaded.",
+    });
+    await ended;
+  });
+
   test("every tool call of a reply arrives before it ends", () async {
     final mlx = engine();
     final reply = mlx.client(() => AppSettings()).stream(const [

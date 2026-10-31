@@ -27,7 +27,7 @@ class RunningModelsSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeader("Running models"),
+        const _Header(),
         const _Prefilling(),
         if (running.isEmpty)
           const ListTile(
@@ -49,6 +49,53 @@ class RunningModelsSection extends ConsumerWidget {
     );
   }
 }
+
+/// The section's title, and under it what the models take up together —
+/// the model host's whole footprint on a Mac, where several models share it
+/// and the rows cannot say what is between them.
+class _Header extends ConsumerStatefulWidget {
+  const _Header();
+
+  @override
+  ConsumerState<_Header> createState() => _HeaderState();
+}
+
+class _HeaderState extends ConsumerState<_Header> {
+  int? _total;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_measure());
+    _timer = Timer.periodic(usageRefresh, (_) => unawaited(_measure()));
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _measure() async {
+    final total = await ref.read(localEngineProvider).totalBytes();
+    if (mounted) setState(() => _total = total);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = _total;
+    return SectionHeader(
+      "Running models",
+      description: total == null ? null : "${formatSize(total)} in memory",
+    );
+  }
+}
+
+/// How often what the models take up is asked again while it is drawn: a
+/// model's cache grows as a chat goes on, and this is a place to watch that
+/// happen.
+const usageRefresh = Duration(seconds: 3);
 
 /// The warm-up in progress, drawn only while there is one — the rest of the
 /// time it has nothing to say. Its own row rather than a line on a model's
@@ -89,11 +136,6 @@ class _RunningRow extends ConsumerStatefulWidget {
 }
 
 class _RunningRowState extends ConsumerState<_RunningRow> {
-  /// How often what it takes up is asked again while the row is drawn: a
-  /// model's cache grows as a chat goes on, and the page is a place to watch
-  /// that happen.
-  static const _refresh = Duration(seconds: 3);
-
   LocalUsage? _usage;
   Timer? _timer;
 
@@ -101,7 +143,7 @@ class _RunningRowState extends ConsumerState<_RunningRow> {
   void initState() {
     super.initState();
     unawaited(_measure());
-    _timer = Timer.periodic(_refresh, (_) => unawaited(_measure()));
+    _timer = Timer.periodic(usageRefresh, (_) => unawaited(_measure()));
   }
 
   @override

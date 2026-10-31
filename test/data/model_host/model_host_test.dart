@@ -277,4 +277,21 @@ void main() {
       await hostEnd.done.timeout(const Duration(seconds: 5));
     });
   });
+
+  test("its footprint is asked of a running host, and none is started to "
+      "answer", () async {
+    messenger.setMockMethodCallHandler(
+      modelHostChannel,
+      (call) async => call.method == "footprint" ? 4096 : null,
+    );
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(modelHostChannel, null),
+    );
+
+    expect(await host.footprint(), isNull);
+    expect(launches.count, 0);
+
+    await host.channel(native.name).invokeMethod("load");
+    expect(await host.footprint(), 4096);
+  });
 }

@@ -328,6 +328,10 @@ class AppleFmChannel: NSObject {
       }
     } catch is CancellationError {
       // A stop: cancelled, not failed, so nothing is said.
+    } catch is MlxUnloaded {
+      // Not a stop the turn asked for: it is waiting, and is told why its
+      // reply ended.
+      sendError(id, "unloaded", "The model was unloaded.")
     } catch {
       sendError(id, "other", "\(error)")
     }

@@ -56,6 +56,10 @@ abstract class LocalEngine {
   /// where its runtime cannot say.
   Future<LocalUsage?> usage(String modelId) async => null;
 
+  /// What the loaded models take up together, in bytes; null where nothing
+  /// can be said.
+  Future<int?> totalBytes() async => null;
+
   /// Unload everything.
   Future<void> stopAll();
 
@@ -146,6 +150,18 @@ abstract class RuntimeEngine extends LocalEngine {
   @override
   Future<LocalUsage?> usage(String modelId) async =>
       residency.instanceOf(modelId)?.usage();
+
+  /// The rows added up, which is the whole where each model is a process of
+  /// its own.
+  @override
+  Future<int?> totalBytes() async {
+    int? total;
+    for (final state in residency.running.value) {
+      final usage = await this.usage(state.modelId);
+      if (usage != null) total = (total ?? 0) + usage.bytes;
+    }
+    return total;
+  }
 
   @override
   Future<void> stopAll() => residency.stopAll();

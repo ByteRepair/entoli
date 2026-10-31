@@ -347,7 +347,22 @@ model) and `cancel`, the residency Dart decides and the MLX generations:
   message is what the settings row shows.
 - `evict {model}` drops that model and empties MLX's buffer cache — the
   buffers a dropped model let go of are otherwise kept for the next
-  allocation, and the gigabytes stay with the process.
+  allocation, and the gigabytes stay with the process. Emptied once, after
+  the model is gone: `MlxConversation.unload` refuses new work, stops a
+  generation, waits for its own operations — a generation, a save, a
+  restore, each of which holds the model while it runs — and for the task
+  mlx-swift-lm runs each reply in (`ChatSession.synchronize`), which a
+  stopped reader only asks to stop and which holds the model and its cache
+  until the generation has wound down. Only then does it drop the session
+  and the model, and the cache is emptied. Not quite everything is freed by
+  then — the reply task drops its hold as it exits, a moment after that
+  wait returns — so with no model left the cache's limit goes to zero, and
+  MLX hands back whatever is freed later as it is freed; the next `load`
+  restores MLX's default. That is the only place the app touches the
+  cache: while a model is loaded, it is MLX's to keep. A generation still
+  running on it is cancelled first and ends with an `error` frame, code
+  `unloaded`: the reply stops where the user let the model go, and the turn
+  is told why rather than left waiting.
 - `mlxGenerate {id, model, messages, tools, temperature}` → that model's
   `MlxConversation`, which `load` must have kept: a generation never loads,
   since Dart's `Residency` is the one account of what is loaded, and one

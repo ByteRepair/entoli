@@ -97,15 +97,36 @@ enum ModelHost {
     let channel = FlutterMethodChannel(
       name: "agent_chat/model_host", binaryMessenger: engine.binaryMessenger)
     channel.setMethodCallHandler { call, result in
-      guard call.method == "quit" else { return result(FlutterMethodNotImplemented) }
-      result(nil)
-      quit()
+      switch call.method {
+      case "quit":
+        result(nil)
+        quit()
+      case "footprint":
+        result(footprint())
+      default:
+        result(FlutterMethodNotImplemented)
+      }
     }
     engine.run(withEntrypoint: "modelHostMain")
     self.engine = engine
     // Opened through LaunchServices, this host's parent is launchd: the app
     // is the pid it was handed.
     watch(arguments.count > 1 ? pid_t(arguments[1]) ?? 0 : 0)
+  }
+
+  /// This process's memory as Activity Monitor counts it: `phys_footprint`,
+  /// which takes in the GPU buffers MLX keeps — resident size alone leaves
+  /// out the gigabytes a model is.
+  static func footprint() -> Int? {
+    var info = task_vm_info_data_t()
+    var count = mach_msg_type_number_t(
+      MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+    let status = withUnsafeMutablePointer(to: &info) {
+      $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+        task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+      }
+    }
+    return status == KERN_SUCCESS ? Int(info.phys_footprint) : nil
   }
 
   /// Stops the generations, then leaves through `_exit`. `exit` runs the C++

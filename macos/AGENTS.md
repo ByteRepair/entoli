@@ -231,6 +231,11 @@ and the rest run their models as a server of their own or on the CPU.
   relaunch is a second a model's load hides and a tap on the microphone does
   not. The app decides rather than the host, since only it knows a load is
   about to arrive.
+- **It says what it takes up.** Its `agent_chat/model_host` channel, which
+  every host serves beside the channels it is given, answers `footprint`:
+  `phys_footprint`, Activity Monitor's figure, since resident size leaves out
+  the GPU buffers that are most of a model. The Running models header shows
+  it; asking never starts a host that is not running.
 - **The host goes with the app, however it goes.** Its parent is launchd, so
   it watches the pid it was handed, and leaves when that exits or the socket
   closes. A host lost is every model in it lost, and `ModelHost.lost` tells

@@ -176,6 +176,9 @@ LlmException _errorOf(
     "The $label does not support this conversation's language.",
   ),
   "resources" => LlmException("The $label ran short of device resources."),
+  // Let go of from the settings page mid-reply: the reply ends there, and a
+  // retry would only load it again.
+  "unloaded" => LlmException("The $label was unloaded."),
   _ => LlmException(
     message.isEmpty ? "The $label failed." : "The $label failed: $message",
   ),

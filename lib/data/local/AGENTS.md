@@ -484,9 +484,15 @@ since the prefill watches the list rather than the buttons. A ready row says
 what the model takes up (`LocalInstance.usage`), asked again every few
 seconds while it is drawn: a llama.cpp server's resident memory, read off
 `/proc/<pid>/status` since each model is a process of its own; an MLX model's
-weights, counted by the Swift half, and its cache as the tokens it holds at
-the model's `kvBytesPerToken`, since several share one process and its
-footprint would say nothing of which.
+weights, counted by the Swift half when it loads, and its cache as the tokens
+it held when its last generation ended, at the model's `kvBytesPerToken`,
+since several share one process and its footprint would say nothing of which.
+Both are numbers already known rather than asked of the model: a generation
+holds the model for the whole of its prompt's reading, and a figure that waits
+on that is blank exactly while it would be watched. Over the rows, the header
+says what they take together (`LocalEngine.totalBytes`): on a Mac the model
+host's whole footprint, which also holds what the models share — the runtime,
+the Metal device, MLX's buffer cache — and elsewhere the rows added up.
 
 **`Residency.serve` is the only thing that reconciles what is loaded with the
 settings**, and there is no second path to forget. It answers from a model

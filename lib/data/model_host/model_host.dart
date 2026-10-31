@@ -6,6 +6,11 @@ import "host_connection.dart";
 import "host_frame.dart";
 import "worker.dart";
 
+/// The host process's own native half: `quit`, which it is asked as it
+/// leaves, and `footprint`, its memory as the app shows it. Served beside
+/// whatever channels the host was given, since every host has one.
+const modelHostChannel = MethodChannel("agent_chat/model_host");
+
 /// Where the on-device models run. The engines ask this for what they talk
 /// to — a [ModelChannel] for the native half, a [Worker] for an isolate — and
 /// never learn which process answers. See "The model host" in
@@ -24,6 +29,11 @@ abstract interface class ModelHost {
   /// Each time the models' process went, and every model loaded in it with
   /// it.
   Stream<void> get lost;
+
+  /// The memory the models' process takes, where they have one of their own
+  /// and it is running; null where they share the app's, or nothing has
+  /// started it. Never starts one to answer.
+  Future<int?> footprint();
 
   /// Keeps the models' process for as long as the lease is held: a loaded
   /// model holds one, and so does every worker [spawn] makes. With none held
@@ -97,6 +107,11 @@ class InProcessModelHost implements ModelHost {
   /// This process runs whatever is held.
   @override
   ModelHostLease hold() => ModelHostLease(() {});
+
+  /// The models are in the app's own process, which is the app's memory and
+  /// not theirs to report.
+  @override
+  Future<int?> footprint() async => null;
 }
 
 /// The models in a second process, started on first use and again after it
@@ -198,6 +213,23 @@ class HelperModelHost implements ModelHost {
       (await idle).close();
     } catch (_) {
       // It never connected, which leaves nothing to close.
+    }
+  }
+
+  @override
+  Future<int?> footprint() async {
+    final connection = _connection;
+    if (connection == null) return null;
+    try {
+      return await (await connection).call(
+            modelHostChannel.name,
+            "footprint",
+            null,
+          )
+          as int?;
+    } catch (_) {
+      // Going, or gone: there is no figure to give.
+      return null;
     }
   }
 

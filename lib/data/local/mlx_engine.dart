@@ -21,14 +21,24 @@ class MlxEngine extends RuntimeEngine {
     ModelHost host, {
     super.prompts,
     super.budget,
-  }) : super(MlxRuntime(host), store) {
+  }) : _host = host,
+       super(MlxRuntime(host), store) {
     // The models were the host process's, and it has gone: a new one starts
     // with none loaded.
     host.lost.listen((_) => residency.lost());
   }
 
+  final ModelHost _host;
+
   @override
   List<LocalModel> get catalog => mlxCatalog;
+
+  /// Where the models have a process of their own, all of it: every model
+  /// in it shares one runtime, one Metal device and one buffer cache, which
+  /// the rows' sum would leave out. In the app's own process, the rows.
+  @override
+  Future<int?> totalBytes() async =>
+      await _host.footprint() ?? await super.totalBytes();
 }
 
 /// How an MLX model is loaded: by name and directory, over the channel to its
