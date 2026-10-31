@@ -9,25 +9,36 @@ import "package:flutter/services.dart";
 
 import "../log.dart";
 
+/// One copy: [plain] for a target that reads text, and [html] — a whole
+/// document, as `htmlClipboardDocument` makes one — for one that keeps
+/// formatting. A paste takes whichever it reads.
+class ClipboardContent {
+  const ClipboardContent({required this.plain, this.html});
+
+  final String plain;
+  final String? html;
+}
+
 const _channel = MethodChannel("agent_chat/clipboard");
 
-/// Put [plain] and [html] on the clipboard as one entry, a paste target
-/// taking whichever it reads. [html] is a whole document, as
-/// `htmlClipboardDocument` makes one.
-Future<void> setRichClipboard({
-  required String plain,
-  required String html,
-}) async {
-  try {
-    await _channel.invokeMethod<void>("setHtml", {
-      "plain": plain,
-      "html": html,
-    });
-    return;
-  } on MissingPluginException catch (_) {
-    // A runner without the channel, and the tests: the text is still a copy.
-  } on PlatformException catch (e) {
-    logFailure("clipboard", "rich copy refused, copying text", e);
+/// Put [content] on the clipboard: both entries through `agent_chat/clipboard`
+/// where the runner answers it, the text alone through Flutter's where it
+/// does not.
+Future<void> writeClipboard(ClipboardContent content) async {
+  final html = content.html;
+  if (html != null) {
+    try {
+      await _channel.invokeMethod<void>("setHtml", {
+        "plain": content.plain,
+        "html": html,
+      });
+      return;
+    } on MissingPluginException catch (_) {
+      // A runner without the channel, and the tests: the text is still a
+      // copy.
+    } on PlatformException catch (e) {
+      logFailure("clipboard", "rich copy refused, copying text", e);
+    }
   }
-  await Clipboard.setData(ClipboardData(text: plain));
+  await Clipboard.setData(ClipboardData(text: content.plain));
 }

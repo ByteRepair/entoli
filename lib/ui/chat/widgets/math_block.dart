@@ -6,6 +6,7 @@ import "package:markdown/markdown.dart" as md;
 
 import "../../../domain/math_syntax.dart";
 import "../../fonts.dart";
+import "../../selection/selectable_formula.dart";
 import "code_block.dart";
 
 typedef _Parsed = ({SyntaxTree? tree, ParseException? error});
@@ -88,20 +89,26 @@ class _MathBuilder extends MarkdownElementBuilder {
   ) {
     final style = parentStyle ?? Theme.of(context).textTheme.bodyMedium;
     final parsed = _formulas._take(element.attributes[mathTexAttribute] ?? "");
-    final math = Math(
-      ast: parsed.tree,
-      parseError: parsed.error,
-      mathStyle: element.tag == mathDisplayTag
-          ? MathStyle.display
-          : MathStyle.text,
-      // The line height is the prose's and not the formula's: a fraction is
-      // taller than a line, and carrying the 1.5 into it spaces it out twice.
-      textStyle: style?.copyWith(height: 1),
-      // TeX the parser will not take is shown as it was written, which still
-      // says what the model meant; a blank or an error box says nothing.
-      onErrorFallback: (_) => Text(
-        element.textContent,
-        style: style?.copyWith(fontFamily: monoFamily),
+    // Selected whole, and copied as the TeX it was written as — the
+    // element's text is its source, delimiters and all.
+    final math = SelectableFormula(
+      written: element.textContent,
+      ink: style?.color ?? Theme.of(context).colorScheme.onSurface,
+      child: Math(
+        ast: parsed.tree,
+        parseError: parsed.error,
+        mathStyle: element.tag == mathDisplayTag
+            ? MathStyle.display
+            : MathStyle.text,
+        // The line height is the prose's and not the formula's: a fraction is
+        // taller than a line, and carrying the 1.5 into it spaces it out twice.
+        textStyle: style?.copyWith(height: 1),
+        // TeX the parser will not take is shown as it was written, which still
+        // says what the model meant; a blank or an error box says nothing.
+        onErrorFallback: (_) => Text(
+          element.textContent,
+          style: style?.copyWith(fontFamily: monoFamily),
+        ),
       ),
     );
     if (element.attributes[mathBlockAttribute] != null) {

@@ -164,14 +164,15 @@ Where there is no transcript the drawer shows what the call returned instead.
 
 ### Selecting a reply, and copying it
 
-The **message** is one `SelectionArea`, with one `SelectionContainer` under it
-and nothing between that and the fragments — heading, paragraph, list item,
-code block — so a drag runs from the first paragraph to the last, and copy
-answers from the same fragments the highlight is drawn from. The per-part
+The **message** is one `RichSelectionArea` (`lib/ui/selection/`): a
+`SelectionArea` with one `SelectionContainer` under it and nothing between
+that and the fragments — heading, paragraph, list item, code line, formula —
+so a drag runs from the first paragraph to the last, and copy answers from
+the same fragments the highlight is drawn from. The per-part
 container this replaced built a region to itself per text part, which is what
 stopped a drag at the paragraph it started in; `MarkdownBody(selectable:
 true)` is worse still, a `SelectableText` per element. The container delegate
-is held on the bubble's state rather than per build: a streamed delta rebuilds
+is held on the area's state rather than per build: a streamed delta rebuilds
 the message every frame, and a delegate per build would drop the selection
 under the drag that is making it.
 
@@ -187,45 +188,94 @@ said, so each is wrapped in `SelectionContainer.disabled` — dragging past one
 must not put "Thought for 12 seconds" on the clipboard. The `SelectableText` in
 a label's drawer is on its own route, so nothing nests.
 
-What a selection copies is **the rendered text, the words on screen** —
-`_RenderedSelection` answers `getSelectedContent` from each selected fragment
-and joins the blocks with a newline, so Ctrl+C, the context menu and the
-mobile toolbar all write exactly what is highlighted. The newline is the one
-thing the base delegate does not answer: the gaps between blocks live in
-widgets, not in text, so the framework's own answer glues a heading to its
-paragraph. What is not text contributes nothing — an image and anything a
-custom element builder drew is outside the fragments — and selection can also
-not cross messages, one region per message as ever.
+**Everything a copy of a selection is lives in `lib/ui/selection/`**, behind
+interfaces, so the bubble says only which markdown it drew. The pieces, in
+the order a copy passes through them:
 
-**A copy carries its formatting too**, so a word processor pastes headings,
-bold and lists rather than flat words. Flutter cannot do this alone: the
-selection API answers in plain text only, and `Clipboard.setData` sends one
-string to an embedder that writes it as `text/plain` — so overriding the
-selection decides *what* is copied, but only `setRichClipboard`
-(`core/platform/rich_clipboard.dart`) can write it with an HTML entry beside
-it. That is a channel, `agent_chat/clipboard`, answered by a few lines in each
-runner (GTK targets, `NSPasteboard`, `UIPasteboard`, `ClipData.newHtmlText`,
-`CF_HTML`); a runner that does not answer gets the plain text. The Apple halves sit in `MainFlutterWindow` and
-`AppDelegate` rather than files of their own, which would want an Xcode
-project entry this host cannot make.
+- `RichSelectionArea` owns the delegate (`RichSelectionDelegate`), Ctrl+C
+  and the menu's Copy. The region's own copy writes plain text, so both ways
+  in are taken over: Ctrl+C by an `Actions` above the `SelectionArea` (the
+  region's copy action is overridable, and defers to it), and the menu's Copy
+  by swapping that one item and doing after it what the framework's does.
+  Both read the selection before anything is awaited, because the menu
+  clears it.
+- `SelectionReader` reads the selected fragments into a `CopiedDocument`:
+  blocks of `CopiedText` runs, each with its marks and link, and
+  `CopiedFormula`s. The selection API answers in plain text only, so it reads
+  the drawn paragraphs themselves. The **spans** under a selected range say
+  what was bold, italic, code or a link — the fragment type is private, so
+  its paragraph is found by the transform both report and the text it
+  indexes. A **placeholder** says where a formula sits. The **markdown** says
+  what kind of block each paragraph was (`RenderedOutline`, keyed by the
+  paragraph's words, a formula left out on both sides): a list item,
+  a cell, a heading, a quote, which the spans cannot say, a list item and a
+  paragraph being drawn alike. A block the app draws itself says what it is
+  with a `CopiedBlockScope` — a code block, and which language it was fenced
+  as — rather than being guessed at from its font.
+- A `CopyFormat` writes the document. **`MarkdownCopyFormat` is the plain
+  half**: an editor, a terminal or another markdown field gets the reply as
+  it was written — heading marks, list markers, fences with their language,
+  table pipes, quote marks, emphasis, code spans, links, and every formula as
+  its TeX — rather than the words with the rest gone. **`HtmlCopyFormat` is
+  the rich half**, so a word processor pastes headings, bold, lists and tables
+  (styles inline, since it reads no stylesheet; a formula as a picture of
+  itself, since none of them can typeset TeX — see below).
+- `writeClipboard` is where it goes. Flutter cannot do this alone:
+  `Clipboard.setData` sends one string to an embedder that writes it as
+  `text/plain`, so it (`core/platform/rich_clipboard.dart`) writes both through a channel,
+  `agent_chat/clipboard`, answered by a few lines in each runner (GTK targets,
+  `NSPasteboard`, `UIPasteboard`, `ClipData.newHtmlText`, `CF_HTML`); a runner
+  that does not answer gets the plain text. The Apple runners write RTFD and
+  RTF too, converted from the HTML by the system's own reader: Pages,
+  TextEdit and Notes read those and not HTML, and without them pasted the
+  plain half — which is markdown — as it stood. RTFD carries a formula's
+  picture as an attachment, which RTF drops. The Apple halves sit in
+  `MainFlutterWindow` and `AppDelegate` rather than files of their own.
 
-The region's own copy writes plain text, so both ways in are taken over: Ctrl+C
-by an `Actions` above the `SelectionArea` (the region's copy action is
-overridable, and defers to it), and the menu's Copy by `_selectionMenu`, which
-does what the framework's item does after it. Both read the selection before
-anything is awaited, because the menu clears it.
+What is not text contributes nothing — an image, and chrome wrapped in
+`SelectionContainer.disabled` — and selection cannot cross messages, one area
+per message as ever. An item picked up from the middle is its words, not an
+item, since the bullet was not part of what was selected.
 
-What the HTML says comes from two places, since a fragment knows neither alone
-(`selection_html.dart`). The **spans** under the selected range say what was
-bold, italic, code or a link — the fragment type is private, so its paragraph
-is found by the transform both report and the text it indexes. The **markdown**
-says what kind of block each paragraph was (`RenderedOutline`, keyed by the
-paragraph's text): a list item, a cell, a heading, a quote — which the spans
-cannot, a list item and a paragraph being drawn alike. A code block or table
-under a scroll is a selection container of its own rather than a fragment, so
-it copies as its text, a code block as `pre`. The copy button needs none of
-this and renders the markdown whole (`formattedHtmlOf`), escaping HTML the
-model wrote the way the screen shows it.
+**A scroll inside the reply does not get a selection of its own.** A
+`SingleChildScrollView` is a selection container, which made a code block —
+and a display formula, which scrolls the same way — a block apart from the
+selection crossing it: the scroll drew its highlight and handles, and what
+it copied was its text alone. `SidewaysScroll` hands the registrar above it
+straight through (`SelectionRegistrarScope`), so the lines inside register
+with the message's container like any paragraph's.
+
+**Inline code's background is translucent.** A paragraph paints its
+selection highlight first and its text after, span backgrounds included, so
+the opaque surface inline `code` sat on hid the highlight wherever it fell
+(`inlineCodeStyle`).
+
+**A formula is selected whole** (`SelectableFormula`): a drag that passes
+most of the way over it picks it up and washes it in the selection colour.
+Part of a formula is no TeX, and the glyphs are the maths library's own
+drawing, not text a selection could take a range of. It follows the same two
+rules as everything else: the plain half is the TeX as it was written,
+delimiters and all, and the formatted half is **the formula as drawn** — a
+PNG it draws of itself on copy (`FormulaDrawing`), from a repaint boundary of
+its own so the highlight is not in it, at three times its size, and with the
+theme's text colour recoloured black, since the page it lands on is white
+whatever the app's theme. Only that colour: a `\textcolor` the TeX asked for
+is what was meant, and pastes as it was drawn. Its TeX
+is the picture's alt text. Drawing is asynchronous, so a copy reads the
+selection on its first line and only then waits; `dragCopy` settles in real
+rounds for the same reason.
+
+A paragraph is matched to what registered for it by position and offsets,
+not by its words: every `Text` registers through a container of its own,
+which answers a formula as its TeX where the paragraph holds a one-character
+placeholder — and `SelectableFormula` counts as one offset to match it.
+
+The copy **button** is apart from all this: it renders the whole message's
+markdown (`formattedHtmlOf`), escaping HTML the model wrote the way the
+screen shows it, beside the formatted words (`formattedTextOf`); raw copy is
+the markdown. Its formulas are the selection's pictures all the same
+(`replyContentOf`, from every `SelectableFormula` the bubble drew), so a
+formula pastes alike whichever way it was copied.
 
 What can be done to a message is a row under it rather than a menu, uncovered by
 hovering the message or, where there is no pointer to hover with, by touching
@@ -234,8 +284,9 @@ raw copy, delete, then Edit and Regenerate. **Copy takes the formatted text**
 (`formattedTextOf`, in `lib/domain/formatted_text.dart`, parsed with the same
 grammar the renderer reads, so the two cannot disagree about what a fence is)
 — what a reader would paste into
-another document, and the same answer at message scale the selection is,
-formatted beside it as above.
+another document, with its HTML beside it. A selection's plain half is
+markdown instead, since a range is more often pasted where it was written;
+the button for that at message scale is raw copy.
 **Raw copy (`<>`) takes the markdown**, every text part and no thinking — the
 same rule a rewound session is seeded by — and the Edit field reads that too,
 since editing the rendered text would not resend to what produced it. Copy is
@@ -353,8 +404,8 @@ copies as the TeX it was written as, delimiters and all.
 An inline formula is a `Text.rich` holding one `WidgetSpan`, because the
 builder merges a `Text`'s spans into the paragraph and lays any other widget
 beside it in a `Wrap`, which breaks the line around it. TeX the parser refuses
-is shown as it was written. A drag selection passes over a formula without
-picking it up; the copy button is what copies one.
+is shown as it was written. A formula is selected whole and copies as its
+TeX; see "Selecting a reply, and copying it".
 
 The renderer and the copy read one grammar, `replyExtensionSet`, beside
 `parseReply` in `domain/formatted_text.dart`. Parsed TeX is kept the way a code

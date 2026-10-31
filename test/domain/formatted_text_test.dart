@@ -64,6 +64,19 @@ void main() {
       );
     });
 
+    test("a formula is what the caller draws of it, else its TeX", () {
+      expect(formattedHtmlOf(r"so $a<b$"), r"<p>so $a&lt;b$</p>");
+      expect(
+        formattedHtmlOf(r"so $x$", formula: (written) => "<img alt=$written>"),
+        r"<p>so <img alt=$x$></p>",
+      );
+      // One on a line of its own is centred, as it was drawn.
+      expect(
+        formattedHtmlOf("\$\$x\$\$", formula: (written) => "[$written]"),
+        r'<p style="text-align: center">[$$x$$]</p>',
+      );
+    });
+
     test("styles code inline, since a word processor reads no stylesheet", () {
       expect(
         formattedHtmlOf("```\nx\n```"),
