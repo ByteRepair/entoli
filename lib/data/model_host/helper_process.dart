@@ -1,9 +1,8 @@
-import "dart:convert";
 import "dart:io";
-import "dart:math";
 
 import "package:path/path.dart" as p;
 
+import "../../core/random_token.dart";
 import "host_connection.dart";
 import "host_frame.dart";
 import "model_host_server.dart";
@@ -20,18 +19,26 @@ class HelperProcess {
 
   static const _connectTimeout = Duration(seconds: 30);
 
-  static Future<HostConnection> launch() async {
-    // The host is this app's executable run again, which only an app bundle
-    // has: under `flutter test` it is the tester, which would sit waiting on
-    // arguments it does not know until the connect timed out.
+  /// The app bundle this process runs from, decided once: the host is this
+  /// app's executable run again, which only a bundle has. Null outside one —
+  /// under `flutter test` the executable is the tester, which would sit
+  /// waiting on arguments it does not know until the connect timed out.
+  static final String? bundle = () {
     final executable = Platform.resolvedExecutable;
-    if (!executable.contains(".app/Contents/MacOS/")) {
-      throw StateError("No app bundle to start a model host from.");
-    }
-    final bundle = executable.substring(0, executable.indexOf(".app/") + 4);
+    final at = executable.indexOf(".app/Contents/MacOS/");
+    return at < 0 ? null : executable.substring(0, at + 4);
+  }();
+
+  /// Whether there is a [bundle] to [launch]; the composition root asks,
+  /// once, and builds an in-process host where there is not.
+  static bool get canLaunch => bundle != null;
+
+  static Future<HostConnection> launch() async {
+    assert(canLaunch, "No app bundle to start a model host from.");
+    final bundle = HelperProcess.bundle!;
     final dir = await Directory.systemTemp.createTemp("entoli-models-");
     final path = p.join(dir.path, "s");
-    final key = _newKey();
+    final key = randomToken(24);
     final server = await ServerSocket.bind(
       InternetAddress(path, type: InternetAddressType.unix),
       0,
@@ -70,10 +77,5 @@ class HelperProcess {
       await server.close();
       await dir.delete(recursive: true);
     }
-  }
-
-  static String _newKey() {
-    final random = Random.secure();
-    return base64Url.encode(List.generate(24, (_) => random.nextInt(256)));
   }
 }

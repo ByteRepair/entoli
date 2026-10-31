@@ -326,8 +326,9 @@ covers, since a cache says nothing of which messages made it. Eviction takes
 that record with the file.
 
 The thinking is split from the reply by the model's own markers
-(`reasoningConfig`), the prompt rendered once to tell whether the template
-opened the thinking itself, as Qwen3.5's does. Everything streams: thinking,
+(`reasoningConfig`), a one-message prompt rendered once per loaded model to
+tell whether the template opens the thinking itself, as Qwen3.5's does — the
+template's property, so not the whole conversation re-rendered every step. Everything streams: thinking,
 reply text and each tool call as mlx-swift-lm parses it.
 
 ### The channel
@@ -337,19 +338,26 @@ model) and `cancel`, the residency Dart decides and the MLX generations:
 
 - `handshake` → `mlx: true` on iOS 27 and macOS 27 (`Mlx.isAvailable`).
   Every MLX call goes through `EntoliMLX`'s `Mlx`, which answers on any OS
-  and holds the one `#available` gate; below 27 a load throws and an evict
-  is nothing.
+  and holds the one `#available` gate; below 27 the handshake says no and
+  Dart asks nothing else of it.
 - `load {model, directory}` → `loadModelContainer(from:using:
   #huggingFaceTokenizerLoader())`, kept by `model` in `EntoliMLX`'s
   `MlxModels` — a second ask while it loads waits on the first, and a failed
   load leaves nothing behind. A failure answers a `FlutterError` whose
   message is what the settings row shows.
-- `evict {model}` drops that model, and `evictAll` all of them.
-- `mlxGenerate {model, directory, messages, tools, temperature}` → that
-  model's `MlxConversation`, loaded first if it is not kept. Messages are
-  `role`, `content`, `toolCalls` (`id`, `name`, `arguments` as JSON text) and
-  `toolCallId`; it answers `reasoning`, `text`, `toolCall` (with `callId`)
-  and `done` frames, or `error`.
+- `evict {model}` drops that model.
+- `mlxGenerate {id, model, messages, tools, temperature}` → that model's
+  `MlxConversation`, which `load` must have kept: a generation never loads,
+  since Dart's `Residency` is the one account of what is loaded, and one
+  asked of a model not kept ends in an `error`. Messages are `role`,
+  `content`, `toolCalls` (`id`, `name`, `arguments` as JSON text) and
+  `toolCallId`, tools `name`, `description` and `schema`; `EntoliMLX` reads
+  the maps itself (`MlxMessage(channel:)`, `MlxTool(channel:)`), the Runner
+  only forwards them. It answers `reasoning`, `text`, `toolCall` (with
+  `callId`) and `done` frames, or `error`.
+- Every generation, the system model's included, ends with `done` or
+  `error`: the system model's one tool call is its `toolCall` frame and then
+  `done` with `finish: tool_calls`.
 - `mlxSave` / `mlxRestore {model, path}` → whether the prompt state was
   written or read.
 

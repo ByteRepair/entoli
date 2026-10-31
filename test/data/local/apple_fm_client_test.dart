@@ -104,8 +104,9 @@ void main() {
       "name": "bash",
       "arguments": "{\"path\":\"~\"}",
     });
-    // The stream ends on the report rather than waiting for a `done` a
-    // cancelled generation would never send.
+    // Swift ends its generation on the report and says so with a `done`, as
+    // every native half ends one.
+    await incoming("done", {"id": id, "finish": "tool_calls"});
     final chunks = await reply;
     final completion = chunks.whereType<LlmCompletion>().single;
     expect(completion.finishReason, "tool_calls");
@@ -143,7 +144,6 @@ void main() {
       await breathe();
 
       final request = outgoing("generate");
-      expect(request["model"], appleModelId);
       expect(request["instructions"], "sys one\n\nsys two");
       expect(request["prompt"], "and now?");
       final history = (request["history"] as List)

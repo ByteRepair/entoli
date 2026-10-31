@@ -6,7 +6,12 @@ import "dart:isolate";
 /// a list crosses an isolate port and a process boundary alike, where a
 /// record crosses only the first.
 abstract interface class Worker {
-  /// What the worker said, in order, from the first word on.
+  /// What the worker said, in order, from the first word on. An error here is
+  /// the worker ended under it rather than in its own words — the model
+  /// host's process gone (`ModelHostGone`), or the worker never started there
+  /// ([WorkerFailed]) — and the stream closes after it. In this process
+  /// neither reaches here: there is no second process to lose, and a worker
+  /// that cannot start fails its `spawn`.
   Stream<Object?> get messages;
 
   void send(Object? message);
@@ -78,4 +83,15 @@ class IsolateWorker implements Worker {
     _to.send(["close"]);
     unawaited(_out.close());
   }
+}
+
+/// A worker the model host could not start, with the host's reason: the
+/// remote counterpart of a `spawn` in this process that threw.
+class WorkerFailed implements Exception {
+  const WorkerFailed(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }

@@ -1,23 +1,9 @@
-import "../../domain/app_settings.dart";
 import "../../domain/local_llm.dart";
 import "../builtin/llm/llm_client.dart";
+import "../builtin/llm/openai_client.dart";
 import "local_instance.dart";
 import "prompt_cache.dart";
 import "residency.dart";
-
-/// The options the settings have. One mapper so the client that reaches a
-/// model and the prefill that warms it read them the same way — a loaded model
-/// is reused only under the same [LocalLoad], so a warm built from a different
-/// reading would be thrown away rather than reused. `keptPrompts` collapses the
-/// "Default (10)" the UI shows into the number the cache counts.
-LocalOptions localOptions(AppSettings settings) => (
-  device: settings.localModelDevice,
-  contextLength: settings.localModelContext,
-  maxRunning: settings.maxLocalModels,
-  threads: settings.localModelThreads,
-  keptPrompts:
-      settings.localModelKvCachePrompts ?? AppSettings.defaultKvCachePrompts,
-);
 
 /// The on-device provider, as one client over whichever models are loaded.
 ///
@@ -49,40 +35,28 @@ class LocalClient implements LlmClient {
 
     // Restore before, save after — content-addressed, so the whole of it is
     // this model's own and no chat id is anywhere in it. Best-effort by
-    // construction: a miss just pays the prompt the way it did before. The
-    // keys are hashed once here and handed to both halves.
-    final prompts = _prompts;
-    final lookup = prompts == null
-        ? null
-        : promptLookup(
-            instance: instance,
-            options: options,
-            messages: messages,
-            tools: tools,
-          );
-    if (prompts != null && lookup != null) {
-      await prompts.warm(
-        instance,
-        namespace: lookup.namespace,
-        keys: lookup.keys,
-      );
-    }
+    // construction: a miss just pays the prompt the way it did before. Keyed
+    // on the messages as the agent sent them, its two system messages apart,
+    // so the body every chat shares is a key of its own.
+    final entry = _prompts?.lookup(instance, options, messages, tools);
+    await entry?.warm();
 
-    yield* instance.generate(
-      messages,
+    String? finish;
+    // One system message to the model: a chat template refuses a second.
+    await for (final chunk in instance.generate(
+      mergeLeadingSystem(messages),
       tools: tools,
       temperature: temperature,
       reasoningEffort: reasoningEffort,
-    );
-
-    if (prompts != null && lookup != null) {
-      await prompts.keep(
-        instance,
-        namespace: lookup.namespace,
-        key: lookup.keys.first,
-        count: options.keptPrompts,
-      );
+    )) {
+      if (chunk is LlmCompletion) finish = chunk.finishReason;
+      yield chunk;
     }
+
+    // Saved where the turn ends, not at every step of it: the next step is
+    // served by what the model still holds, and a write of the whole state
+    // per tool round would hold each one up for nothing.
+    if (finish != "tool_calls") await entry?.keep();
   }
 
   @override

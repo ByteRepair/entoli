@@ -7,7 +7,6 @@ import "../../domain/local_llm.dart";
 import "../builtin/llm/llm_client.dart";
 import "local_engine.dart";
 import "local_instance.dart";
-import "prompt_cache.dart";
 
 /// The whole of what to warm a model with, read together so the serve options
 /// and the prompt cannot come from two different snapshots of the settings.
@@ -71,7 +70,7 @@ class LocalPrefill {
 
   /// Warm [modelId], unless it is already the one being warmed. Cancels a warm
   /// of any other model first: the active default is the one to have ready, and
-  /// two prefills would only evict each other in the pool's slots.
+  /// two prefills would only evict each other.
   Future<void> warm(String modelId) async {
     if (_active == modelId) return;
     await cancel();
@@ -81,7 +80,7 @@ class LocalPrefill {
     if (_generation == gen) await _clear();
   }
 
-  /// Stop warming, if anything is. Leaves the pool as it is — whatever got into
+  /// Stop warming, if anything is. Leaves the loaded models as they are — whatever got into
   /// the cache before the stop stays there and is that much a real turn saves.
   Future<void> cancel() async {
     if (_active == null) return;
@@ -126,47 +125,21 @@ class LocalPrefill {
     }
     if (gen != _generation) return;
 
-    final prompts = engine.prompts;
-    final lookup = prompts == null
-        ? null
-        : promptLookup(
-            instance: instance,
-            options: spec.options,
-            messages: spec.messages,
-            tools: spec.tools,
-          );
+    final entry = engine.prompts?.lookup(
+      instance,
+      spec.options,
+      spec.messages,
+      spec.tools,
+    );
     // An earlier run already wrote this body to disk, so restoring it is the
     // whole of the warm-up and there is nothing to read again. Without this
     // the cache only ever helped a chat, and every launch paid the prompt.
-    try {
-      if (prompts != null &&
-          lookup != null &&
-          await prompts.warm(
-            instance,
-            namespace: lookup.namespace,
-            keys: lookup.keys,
-          )) {
-        return;
-      }
-    } catch (_) {
-      // A cache that will not answer leaves the prompt to be read below,
-      // which is where this was before there was one.
-    }
+    if (await entry?.warm() ?? false) return;
 
     if (!await _readPrompt(instance, spec, gen, name)) return;
     // Persist the warmed body so it survives a reload — the disk half of
-    // what the live state already holds. The shortest key is the
-    // system+tools body every chat shares. Best-effort, like the warm-up.
-    if (gen == _generation && prompts != null && lookup != null) {
-      try {
-        await prompts.keep(
-          instance,
-          namespace: lookup.namespace,
-          key: lookup.keys.last,
-          count: spec.options.keptPrompts,
-        );
-      } catch (_) {}
-    }
+    // what the live state already holds.
+    if (gen == _generation) await entry?.keepBody();
   }
 
   /// Reads the prompt into [instance] and stops at the first chunk that is not
@@ -214,18 +187,18 @@ class LocalPrefill {
     if (read != null && !read.isCompleted) read.complete();
   }
 
-  /// Cancels the warm-up if the model it is warming leaves the pool, and
+  /// Cancels the warm-up if the model it is warming is unloaded, and
   /// answers with how to stop watching.
   ///
   /// **The invariant is here rather than at the button that broke it first.**
   /// Unload all is one way a warmed server goes; deleting a model is another
   /// (`unpick` stops everything), and a turn asking for a second model past
   /// `maxLocalModels` is a third, which no button could have known about. What
-  /// they share is [LocalEngine.running] losing the row, and the pool publishes
-  /// that before it kills anything.
+  /// they share is [LocalEngine.running] losing the row, and [Residency]
+  /// publishes that before it stops anything.
   ///
-  /// It fires only after the model has been seen running, since before the pool
-  /// has published the row "not in the list" is a warm-up that has not started
+  /// It fires only after the model has been seen running, since before
+  /// [Residency] has published the row "not in the list" is a warm-up that has not started
   /// rather than one whose server has gone.
   VoidCallback _whileServed(String modelId, int gen) {
     var seen = false;

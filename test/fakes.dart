@@ -10,7 +10,6 @@ import "package:path/path.dart" as p;
 import "package:agent_chat/data/builtin/llm/hosted_models.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/providers/provider.dart";
-import "package:agent_chat/data/local/local_client.dart";
 import "package:agent_chat/data/local/local_instance.dart";
 import "package:agent_chat/data/local/local_prefill.dart";
 import "package:agent_chat/data/sync/channel.dart";
@@ -34,7 +33,6 @@ import "package:agent_chat/domain/assistant_launch.dart";
 import "package:agent_chat/domain/file_handoff.dart";
 import "package:agent_chat/domain/link_opener.dart";
 import "package:agent_chat/domain/llm_provider.dart";
-import "package:agent_chat/domain/local_llm.dart";
 import "package:agent_chat/domain/local_model.dart";
 import "package:agent_chat/domain/local_model_store.dart";
 import "package:agent_chat/domain/model_capability.dart";
@@ -228,7 +226,7 @@ LocalOptions testLocalOptions({
   String? device,
   int keptPrompts = 0,
   int maxRunning = 1,
-}) => localOptions(
+}) => LocalOptions.fromSettings(
   AppSettings(
     localModelDevice: device,
     localModelKvCachePrompts: keptPrompts,
@@ -1382,31 +1380,17 @@ class FakeLocalRuntime extends LocalRuntime {
 }
 
 class FakeLocalInstance extends LocalInstance {
-  FakeLocalInstance(this._runtime, this.model, this.load, this._onChange);
+  FakeLocalInstance(
+    this._runtime,
+    super.model,
+    super.load,
+    void Function() onChange,
+  ) : super(onChange: onChange);
 
   final FakeLocalRuntime _runtime;
-  final void Function() _onChange;
 
   @override
-  final DownloadedModel model;
-
-  @override
-  final LocalLoad load;
-
-  final _ready = Completer<void>();
-  var _phase = LocalLlmPhase.starting;
-
-  @override
-  Future<void> get ready => _ready.future;
-
-  @override
-  LocalLlmState get state => LocalLlmState(
-    modelId: model.id,
-    phase: _phase,
-    device: load.device,
-    contextLength: load.contextLength,
-    failure: _phase == LocalLlmPhase.failed ? _runtime.failure : null,
-  );
+  String get stateFormat => "fake";
 
   @override
   void start() {
@@ -1418,14 +1402,10 @@ class FakeLocalInstance extends LocalInstance {
     final loading = _runtime.loading;
     if (loading != null) await loading.future;
     if (_runtime.ready) {
-      _phase = LocalLlmPhase.ready;
-      _ready.complete();
+      markReady();
     } else {
-      _phase = LocalLlmPhase.failed;
-      _ready.completeError(LocalLlmFailure(_runtime.failure));
-      _ready.future.ignore();
+      markFailed(_runtime.failure);
     }
-    _onChange();
   }
 
   @override
@@ -1444,19 +1424,19 @@ class FakeLocalInstance extends LocalInstance {
   }
 
   @override
-  Future<bool> saveState(String file) async {
-    _runtime.saved.add(file);
+  Future<bool> saveState(String path) async {
+    _runtime.saved.add(path);
     return true;
   }
 
   @override
-  Future<bool> restoreState(String file) async {
-    _runtime.restored.add(file);
+  Future<bool> restoreState(String path) async {
+    _runtime.restored.add(path);
     return _runtime.restores;
   }
 
   @override
-  Future<void> stop() async {
+  Future<void> unload() async {
     _runtime.stops++;
     _runtime.events.add("stop ${model.id}");
   }

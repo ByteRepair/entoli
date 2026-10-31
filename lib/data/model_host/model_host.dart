@@ -110,14 +110,17 @@ class HelperModelHost implements ModelHost {
     PostFrame(:final worker, :final message) => _workers[worker]?._said(
       message,
     ),
-    CloseFrame(:final worker) => _workers.remove(worker)?._ended(),
+    CloseFrame(:final worker, :final error) =>
+      _workers
+          .remove(worker)
+          ?._ended(error == null ? null : WorkerFailed(error)),
     _ => null,
   };
 
   void _gone() {
     _connection = null;
     for (final worker in _workers.values) {
-      worker._ended(failed: true);
+      worker._ended(const ModelHostGone());
     }
     _workers.clear();
     for (final channel in _channels.values) {
@@ -195,11 +198,13 @@ class _RemoteWorker implements Worker {
     if (!_out.isClosed) _out.add(message);
   }
 
-  /// A worker whose process went says so the way one whose model would not
-  /// load does, so its owner needs no second way to hear it.
-  void _ended({bool failed = false}) {
+  /// Ended by the host rather than in the worker's own words: [error] is
+  /// why — its process went ([ModelHostGone]) or it never started
+  /// ([WorkerFailed]) — and the host has no business speaking the worker's
+  /// vocabulary to say so.
+  void _ended([Object? error]) {
     if (_out.isClosed) return;
-    if (failed) _out.add(["failed", const ModelHostGone().toString()]);
+    if (error != null) _out.addError(error);
     unawaited(_out.close());
   }
 }

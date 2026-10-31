@@ -33,7 +33,9 @@ class HostConnection {
 
   void send(HostFrame frame) {
     if (!isOpen) return;
-    _socket.add(const FrameCodec().encode(frame));
+    for (final part in const FrameCodec().encode(frame)) {
+      _socket.add(part);
+    }
   }
 
   /// [method] on the other end's [channel], answered the way a channel in

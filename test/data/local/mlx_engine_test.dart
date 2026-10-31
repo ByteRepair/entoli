@@ -125,71 +125,67 @@ void main() {
     expect(mlx.running.value, isEmpty);
   });
 
-  test(
-    "a generation names the model, its directory and the whole conversation",
-    () async {
-      final mlx = engine();
-      final reply = mlx
-          .client(() => AppSettings())
-          .stream(
-            const [
-              LlmMessage(role: LlmRole.system, text: "be brief"),
-              LlmMessage(role: LlmRole.user, text: "list it"),
-              LlmMessage(
-                role: LlmRole.assistant,
-                text: "",
-                toolCalls: [
-                  LlmToolCall(
-                    id: "c0",
-                    name: "bash",
-                    argumentsJson: '{"c":"ls"}',
-                  ),
-                ],
-              ),
-              LlmMessage(role: LlmRole.tool, text: "a.txt", toolCallId: "c0"),
-            ],
-            model: small.id,
-            tools: const [
-              LlmTool(
-                name: "bash",
-                description: "run",
-                schema: {"type": "object"},
-              ),
-            ],
-          )
-          .toList();
-      // The load, then the generation behind it.
-      await channel.until("mlxGenerate");
-
-      final generate = channel.outgoing("mlxGenerate");
-      expect(generate["model"], small.id);
-      expect(generate["directory"], mlx.store.downloadedOfSync(small.id)!.file);
-      // Every message, every call: the Swift half decides what to reuse.
-      expect(generate["messages"], [
-        {"role": "system", "content": "be brief"},
-        {"role": "user", "content": "list it"},
-        {
-          "role": "assistant",
-          "content": "",
-          "toolCalls": [
-            {"id": "c0", "name": "bash", "arguments": '{"c":"ls"}'},
+  test("a generation names the model and the whole conversation", () async {
+    final mlx = engine();
+    final reply = mlx
+        .client(() => AppSettings())
+        .stream(
+          const [
+            LlmMessage(role: LlmRole.system, text: "be brief"),
+            LlmMessage(role: LlmRole.user, text: "list it"),
+            LlmMessage(
+              role: LlmRole.assistant,
+              text: "",
+              toolCalls: [
+                LlmToolCall(
+                  id: "c0",
+                  name: "bash",
+                  argumentsJson: '{"c":"ls"}',
+                ),
+              ],
+            ),
+            LlmMessage(role: LlmRole.tool, text: "a.txt", toolCallId: "c0"),
           ],
-        },
-        {"role": "tool", "content": "a.txt", "toolCallId": "c0"},
-      ]);
-      expect((generate["tools"] as List).single, {
-        "name": "bash",
-        "description": "run",
-        "schema": {"type": "object"},
-      });
+          model: small.id,
+          tools: const [
+            LlmTool(
+              name: "bash",
+              description: "run",
+              schema: {"type": "object"},
+            ),
+          ],
+        )
+        .toList();
+    // The load, then the generation behind it.
+    await channel.until("mlxGenerate");
 
-      await channel.incoming("done", {"id": generate["id"]});
-      expect(
-        (await reply).whereType<LlmCompletion>().single.finishReason,
-        "stop",
-      );
-    },
-  );
+    final generate = channel.outgoing("mlxGenerate");
+    expect(generate["model"], small.id);
+    // Every message, every call: the Swift half decides what to reuse.
+    expect(generate["messages"], [
+      {"role": "system", "content": "be brief"},
+      {"role": "user", "content": "list it"},
+      {
+        "role": "assistant",
+        "content": "",
+        "toolCalls": [
+          {"id": "c0", "name": "bash", "arguments": '{"c":"ls"}'},
+        ],
+      },
+      {"role": "tool", "content": "a.txt", "toolCallId": "c0"},
+    ]);
+    expect((generate["tools"] as List).single, {
+      "name": "bash",
+      "description": "run",
+      "schema": {"type": "object"},
+    });
+
+    await channel.incoming("done", {"id": generate["id"]});
+    expect(
+      (await reply).whereType<LlmCompletion>().single.finishReason,
+      "stop",
+    );
+  });
 
   test("the leading system messages go as one", () async {
     final mlx = engine();
@@ -243,28 +239,52 @@ void main() {
     ]);
   });
 
-  test("prompt state is saved and restored in the cache's directory", () async {
+  /// One turn on [small] through the client, its reply ending as [finish].
+  Future<void> turn(MlxEngine mlx, AppSettings settings, String finish) async {
+    final reply = mlx.client(() => settings).stream(const [
+      LlmMessage(role: LlmRole.user, text: "hi"),
+    ], model: small.id).toList();
+    await channel.until("mlxGenerate");
+    final id = channel.outgoing("mlxGenerate")["id"];
+    if (finish == "tool_calls") {
+      await channel.incoming("toolCall", {
+        "id": id,
+        "callId": "c0",
+        "name": "read",
+        "arguments": "{}",
+      });
+    }
+    await channel.incoming("done", {"id": id});
+    await reply;
+  }
+
+  test("a turn's prompt state is kept in the cache's directory", () async {
     final dir = tempDir();
     final mlx = MlxEngine(
       FakeLocalModelStore(installed: {small.id}),
       const InProcessModelHost(),
       prompts: PromptCache(dir.path),
     );
-    channel.answer = (call) =>
-        call.method == "mlxSave" || call.method == "mlxRestore" ? true : null;
+    channel.answer = (call) => call.method == "mlxSave" ? true : null;
 
-    final loaded = await mlx.serve(small.id, testLocalOptions(keptPrompts: 5));
+    await turn(mlx, AppSettings(localModelKvCachePrompts: 5), "stop");
 
-    expect(await loaded.saveState("ns.key.bin"), isTrue);
-    expect(await loaded.restoreState("ns.key.bin"), isTrue);
-    expect(channel.outgoing("mlxSave"), {
-      "model": small.id,
-      "path": p.join(dir.path, "ns.key.bin"),
-    });
-    expect(
-      channel.outgoing("mlxRestore")["path"],
-      p.join(dir.path, "ns.key.bin"),
+    final path = channel.outgoing("mlxSave")["path"] as String;
+    expect(p.dirname(path), dir.path);
+  });
+
+  test("a step that ends in tool calls is not saved", () async {
+    final mlx = MlxEngine(
+      FakeLocalModelStore(installed: {small.id}),
+      const InProcessModelHost(),
+      prompts: PromptCache(tempDir().path),
     );
+
+    // The next step is served by what the model still holds; a write of it
+    // all per tool round would hold each one up for nothing.
+    await turn(mlx, AppSettings(localModelKvCachePrompts: 5), "tool_calls");
+
+    expect(calls(), isNot(contains("mlxSave ${small.id}")));
   });
 
   test("with prompts not kept, nothing is saved", () async {
@@ -273,10 +293,10 @@ void main() {
       const InProcessModelHost(),
       prompts: PromptCache(tempDir().path),
     );
-    final loaded = await mlx.serve(small.id, testLocalOptions());
 
-    expect(await loaded.saveState("ns.key.bin"), isFalse);
-    expect(calls(), ["load ${small.id}"]);
+    await turn(mlx, AppSettings(localModelKvCachePrompts: 0), "stop");
+
+    expect(calls(), ["load ${small.id}", "mlxGenerate ${small.id}"]);
   });
 
   test("how many may be resident and whether prompts are kept are offered", () {

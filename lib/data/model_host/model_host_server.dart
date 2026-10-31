@@ -98,8 +98,8 @@ class ModelHostServer {
   }
 
   /// Registered before its first await, so a message the app sent straight
-  /// after finds it. One that never starts says so the way a worker whose
-  /// model would not load does.
+  /// after finds it. One that never starts is closed with the reason, which
+  /// the app's end hands its owner as an error.
   Future<void> _spawn(SpawnFrame spawn) async {
     final kind = _kinds[spawn.kind];
     final starting = _workers[spawn.worker] = kind == null
@@ -113,7 +113,7 @@ class ModelHostServer {
     } catch (e) {
       _workers.remove(spawn.worker);
       logFailure("model-host", "worker ${spawn.kind} would not start", e);
-      _connection.send(PostFrame(spawn.worker, ["failed", "$e"]));
+      _connection.send(CloseFrame(spawn.worker, error: "$e"));
     }
   }
 

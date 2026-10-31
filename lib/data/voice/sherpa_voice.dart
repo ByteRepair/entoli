@@ -116,7 +116,10 @@ class SherpaVoice extends Voice {
 class SherpaListener extends MicrophoneListener {
   SherpaListener(this._recorder, this._worker, {this._transcribe})
     : super(LoudnessGate()) {
-    _worker.messages.listen(_fromWorker);
+    // An error is the worker ended under it — its process gone, or it never
+    // started — which is a listener as broken as one whose model would not
+    // load.
+    _worker.messages.listen(_fromWorker, onError: (Object e) => fail("$e"));
   }
 
   final AudioRecorder _recorder;
@@ -251,7 +254,8 @@ class SherpaListener extends MicrophoneListener {
 /// samples played by [PlayingSpeaker].
 class SherpaSpeaker extends PlayingSpeaker {
   SherpaSpeaker(this._worker) {
-    _worker.messages.listen(_fromWorker);
+    // The worker ended under it: its process gone, or it never started.
+    _worker.messages.listen(_fromWorker, onError: (Object e) => broke("$e"));
   }
 
   final Worker _worker;
@@ -268,7 +272,7 @@ class SherpaSpeaker extends PlayingSpeaker {
         generated(generation, wav);
       case ["dropped", final int generation]:
         lost(generation);
-      // The model would not load, or the process it was in went.
+      // The model would not load.
       case ["failed", final String message]:
         broke(message);
     }

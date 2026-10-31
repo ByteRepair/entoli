@@ -474,8 +474,9 @@ void registerRecorder() {
 /// Where this process's on-device models run, one for the process so MLX and
 /// voice share it: a model host on macOS, where MLX's GPU work beside the
 /// window starves the window's frames, and this process everywhere else. See
-/// "The model host" in macos/AGENTS.md.
-final ModelHost _modelHost = Platform.isMacOS
+/// "The model host" in macos/AGENTS.md. Only an app bundle has an executable
+/// to launch again, so a macOS process outside one runs them here too.
+final ModelHost _modelHost = Platform.isMacOS && HelperProcess.canLaunch
     ? HelperModelHost(HelperProcess.launch)
     : const InProcessModelHost();
 
@@ -483,7 +484,7 @@ final ModelHost _modelHost = Platform.isMacOS
 /// engines (see [AndroidVoice], [MacosVoice]); iOS has Apple's alone (see
 /// [IosVoice]).
 Voice createVoice(VoiceModelStore store, String cacheDir) {
-  if (Platform.isAndroid) return AndroidVoice(store, cacheDir);
+  if (Platform.isAndroid) return AndroidVoice(store, cacheDir, _modelHost);
   if (Platform.isIOS) return const IosVoice();
   if (Platform.isMacOS) return MacosVoice(store, cacheDir, _modelHost);
   return SherpaVoice(store, cacheDir, _modelHost);

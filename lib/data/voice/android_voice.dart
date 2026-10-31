@@ -21,11 +21,8 @@ import "voice_strategies.dart";
 /// `MacosVoice` is this over Apple's engines. The `Native*` classes below are
 /// the native contract `ios_voice.dart` shares too.
 class AndroidVoice extends Voice {
-  AndroidVoice(
-    VoiceModelStore store,
-    String cacheDir, [
-    ModelHost host = const InProcessModelHost(),
-  ]) : _sherpa = SherpaVoice(store, cacheDir, host);
+  AndroidVoice(VoiceModelStore store, String cacheDir, ModelHost host)
+    : _sherpa = SherpaVoice(store, cacheDir, host);
 
   /// The sherpa halves, composed where a pick names a downloaded model rather
   /// than a system engine.
@@ -142,26 +139,18 @@ Future<List<VoiceLanguage>> nativeLanguages({
 }
 
 /// Everything the channel says, as a broadcast stream: `setMethodCallHandler`
-/// takes one handler, and both strategies listen on the one channel.
-class NativeVoiceBridge {
-  NativeVoiceBridge._() {
-    voiceChannel.setMethodCallHandler((call) async {
-      // The engine side's chatter on the one subject none of the strategies
-      // owns: said through the module's own volume rule, which is debug-only.
-      if (call.method == "voiceDebug") {
-        voiceLog(() => "channel: ${call.arguments}");
-        return;
-      }
-      _calls.add(call);
-    });
-  }
-
-  static final NativeVoiceBridge instance = NativeVoiceBridge._();
-
-  final _calls = StreamController<MethodCall>.broadcast();
-
-  Stream<MethodCall> get calls => _calls.stream;
-}
+/// takes one handler, and both strategies listen on the one channel — which
+/// is what [PlatformModelChannel] owns. Built on first use.
+final Stream<MethodCall> nativeVoiceCalls = () {
+  final calls = PlatformModelChannel(voiceChannel).calls;
+  // The engine side's chatter on the one subject none of the strategies owns:
+  // said through the module's own volume rule, which is debug-only. Listened
+  // to once here, so a line is said once however many strategies listen.
+  calls
+      .where((call) => call.method == "voiceDebug")
+      .listen((call) => voiceLog(() => "channel: ${call.arguments}"));
+  return calls.where((call) => call.method != "voiceDebug");
+}();
 
 /// Listening through the platform's own recognizer behind the shared native
 /// contract: Android's `SpeechRecognizer`, iOS's on-device `SFSpeechRecognizer`.
@@ -171,7 +160,7 @@ class NativeVoiceBridge {
 /// level and the event stream are. What is left here is the channel.
 class NativeSpeechRecognizer extends MicrophoneListener {
   NativeSpeechRecognizer({this.language}) : super(LoudnessGate()) {
-    _calls = NativeVoiceBridge.instance.calls.listen(_onCall);
+    _calls = nativeVoiceCalls.listen(_onCall);
   }
 
   /// The BCP-47 tag to hear in, or null for the device's own.
@@ -231,7 +220,7 @@ class NativeSpeechRecognizer extends MicrophoneListener {
 /// failed engine: it is dropped, and only repeated failures are reported up.
 class NativeTextToSpeech implements Speaker {
   NativeTextToSpeech({this.language}) {
-    _calls = NativeVoiceBridge.instance.calls.listen(_onCall);
+    _calls = nativeVoiceCalls.listen(_onCall);
     unawaited(_init());
   }
 

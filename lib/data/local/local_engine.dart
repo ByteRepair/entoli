@@ -126,8 +126,11 @@ abstract class RuntimeEngine extends LocalEngine {
   Future<void> stopAll() => residency.stopAll();
 
   @override
-  LlmClient client(AppSettings Function() settings) =>
-      LocalClient(residency, () => localOptions(settings()), prompts: prompts);
+  LlmClient client(AppSettings Function() settings) => LocalClient(
+    residency,
+    () => LocalOptions.fromSettings(settings()),
+    prompts: prompts,
+  );
 
   @override
   Future<List<LocalDevice>>? devices() => runtime.devices();

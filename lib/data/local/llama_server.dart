@@ -4,10 +4,12 @@ import "dart:io";
 import "dart:math";
 
 import "package:http/http.dart" as http;
+import "package:path/path.dart" as p;
 
 import "../../domain/local_llm.dart";
 import "../../domain/local_model.dart";
 import "../../core/log.dart";
+import "../../core/random_token.dart";
 import "../builtin/llm/llm_client.dart";
 import "../builtin/llm/openai_client.dart";
 import "local_instance.dart";
@@ -52,18 +54,15 @@ class LlamaBinaries {
 ({List<String> command, Map<String, String> environment}) llamaLaunch({
   required LlamaBinaries binaries,
   required DownloadedModel model,
-  required String modelFile,
+  required LocalLoad load,
   required int port,
   required String apiKey,
-  required int contextLength,
-  required String device,
-  int? threads,
   String? slotSavePath,
   bool fitLayers = false,
 }) => (
   command: [
     binaries.server,
-    "-m", modelFile,
+    "-m", model.file,
     // Loopback only. Anything else would put an unauthenticated model
     // server on the phone's network, which is a thing to be asked for
     // rather than a default.
@@ -80,7 +79,7 @@ class LlamaBinaries {
     // otherwise size this against the phone's whole RAM, since the CPU
     // backend reports every physical page as free. See "How much context"
     // in AGENTS.md.
-    "-c", "$contextLength",
+    "-c", "${load.contextLength}",
     // One slot, since the disk cache is `/slots/0`'s, and no 8 GiB RAM
     // prompt cache beside it. See "That `/slots/0` is why the server has
     // one slot" in AGENTS.md.
@@ -94,7 +93,7 @@ class LlamaBinaries {
     // from the binary either way.
     "--no-webui",
     // Null is llama.cpp's own answer, which is every physical core.
-    if (threads != null) ...["-t", "$threads"],
+    if (load.threads case final threads?) ...["-t", "$threads"],
     // Where the slot dumps go, and — with it — quantised KV so a saved
     // conversation is half the bytes on disk. Both ride on the cache being
     // on: q8_0 KV is near-lossless but still a change to generation, so a
@@ -111,11 +110,11 @@ class LlamaBinaries {
     ],
     // Always named, [noDevice] included. See "The CPU is a device to name"
     // in AGENTS.md.
-    "-dev", device,
+    "-dev", load.device ?? noDevice,
     // Every layer on a phone, whose accelerators share the RAM the weights
     // are in; `--fit`'s split on a laptop. See "How many layers go to the
     // GPU" in AGENTS.md.
-    if (device != noDevice && !fitLayers) ...["-ngl", "999"],
+    if (load.device != noDevice && !fitLayers) ...["-ngl", "999"],
   ],
   environment: binaries.environment,
 );
@@ -298,8 +297,8 @@ class LlamaRuntime extends LocalRuntime {
     LocalLoad load, {
     required void Function() onChange,
   }) => LlamaInstance(
-    model: model,
-    load: load,
+    model,
+    load,
     binaries: _binaries,
     fitLayers: _fitLayers,
     slotSavePath: load.keepsPrompts ? _slotSaveDir : null,
@@ -311,34 +310,22 @@ class LlamaRuntime extends LocalRuntime {
 /// with the `/chat/completions` shape [OpenAiClient] speaks — tool calls
 /// included, which is what the server is for.
 class LlamaInstance extends LocalInstance {
-  LlamaInstance({
-    required this.model,
-    required this.load,
+  LlamaInstance(
+    super.model,
+    super.load, {
     required this._binaries,
     required this._fitLayers,
     required this.slotSavePath,
-    required this._onChange,
-    http.Client? client,
-  }) : _http = client ?? http.Client();
+    required super.onChange,
+  });
 
   final LlamaBinaries _binaries;
   final bool _fitLayers;
-  final void Function() _onChange;
-
-  @override
-  final DownloadedModel model;
-
-  @override
-  final LocalLoad load;
 
   /// Where the server writes slot files, or null where it keeps none.
   final String? slotSavePath;
 
-  final http.Client _http;
-
-  String get device => load.device!;
-  int get contextLength => load.contextLength;
-  int? get threads => load.threads;
+  final _http = http.Client();
 
   /// One client for the server's life, made once it answers.
   OpenAiClient? _client;
@@ -350,29 +337,22 @@ class LlamaInstance extends LocalInstance {
   /// whole of "it has not been spawned yet".
   ({int port, String key})? _at;
 
-  final _ready = Completer<void>();
-  var _phase = LocalLlmPhase.starting;
-  String? _failure;
-
   /// The tail of what the server said. Kept because the one failure that
   /// matters — a model that does not fit — is reported there and nowhere else.
   final _log = <String>[];
 
   static const _logLines = 40;
 
+  /// In the picker's word rather than llama.cpp's: [noDevice] is a flag
+  /// value, and what reads this is the settings page.
   @override
-  Future<void> get ready => _ready.future;
+  String? get deviceLabel =>
+      load.device == noDevice ? LocalDevice.cpu : load.device;
 
+  /// The fixed KV quant llama.cpp runs with when caching is on, named so that
+  /// turning the cache off (f16) and on again cannot cross-load a file.
   @override
-  LocalLlmState get state => LocalLlmState(
-    modelId: model.id,
-    phase: _phase,
-    // In the picker's word rather than llama.cpp's: [noDevice] is a flag
-    // value, and what reads this is the settings page.
-    device: device == noDevice ? LocalDevice.cpu : device,
-    contextLength: contextLength,
-    failure: _failure,
-  );
+  String get stateFormat => "q8";
 
   /// llama.cpp's own `prompt_progress` is asked for, which is what turns a
   /// minute of reading the prompt into something the chat can draw. A hosted
@@ -398,14 +378,15 @@ class LlamaInstance extends LocalInstance {
       );
 
   @override
-  Future<bool> saveState(String file) => _slot("save", file);
+  Future<bool> saveState(String path) => _slot("save", path);
 
   @override
-  Future<bool> restoreState(String file) => _slot("restore", file);
+  Future<bool> restoreState(String path) => _slot("restore", path);
 
   /// The server's slot save and restore. One slot (`-np 1`), so `/slots/0` is
-  /// the state every turn ran in.
-  Future<bool> _slot(String action, String file) async {
+  /// the state every turn ran in. The server takes a name in its
+  /// `--slot-save-path`, which is the prompt cache's directory.
+  Future<bool> _slot(String action, String path) async {
     final at = _at;
     if (at == null || slotSavePath == null) return false;
     try {
@@ -416,7 +397,7 @@ class LlamaInstance extends LocalInstance {
               "content-type": "application/json",
               "authorization": "Bearer ${at.key}",
             },
-            body: jsonEncode({"filename": file}),
+            body: jsonEncode({"filename": p.basename(path)}),
           )
           .timeout(const Duration(seconds: 30));
       final ok = response.statusCode == 200;
@@ -448,29 +429,22 @@ class LlamaInstance extends LocalInstance {
   void start() => unawaited(_spawn());
 
   Future<void> _spawn() async {
-    final binaries = _binaries;
-    final fitLayers = _fitLayers;
-    final onChange = _onChange;
-    final modelFile = model.file;
     // Asked of the OS rather than picked: a fixed port is one another app can
     // already be on, and the failure that gives is the server exiting a second
     // after it started for a reason nothing here would think to report.
     final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
-    final at = (port: socket.port, key: _newKey());
+    final at = (port: socket.port, key: randomToken(16));
     await socket.close();
     _at = at;
 
     final launch = llamaLaunch(
-      binaries: binaries,
+      binaries: _binaries,
       model: model,
-      modelFile: modelFile,
+      load: load,
       port: at.port,
       apiKey: at.key,
-      contextLength: contextLength,
-      device: device,
-      threads: threads,
       slotSavePath: slotSavePath,
-      fitLayers: fitLayers,
+      fitLayers: _fitLayers,
     );
 
     try {
@@ -493,25 +467,21 @@ class LlamaInstance extends LocalInstance {
       // Named, rather than read off the field when it fires: by then the field
       // may hold nothing, and reporting this one's exit against it would fail a
       // model that is loading perfectly well.
-      unawaited(
-        process.exitCode.then((code) => _exited(process, code, onChange)),
-      );
-      unawaited(_waitForHealth(at, onChange));
+      unawaited(process.exitCode.then((code) => _exited(process, code)));
+      unawaited(_waitForHealth(at));
     } on ProcessException catch (e) {
-      _fail(e.message);
-      onChange();
+      markFailed(e.message);
     }
   }
 
+  /// The process is let go of before the kill, so the exit handler does not
+  /// report a failure for a server that was asked to go.
   @override
-  Future<void> stop() async {
+  Future<void> unload() async {
     final process = _process;
     _process = null;
     _client?.close();
     _http.close();
-    // Before the kill, so the exit handler does not report a failure for a
-    // server that was asked to go.
-    _abandon(const LocalLlmFailure("The on-device model was stopped."));
     if (process == null) return;
     process.kill(ProcessSignal.sigterm);
     await process.exitCode.timeout(
@@ -525,13 +495,10 @@ class LlamaInstance extends LocalInstance {
 
   /// Polled rather than watched for a line, since what the server prints when
   /// it is up is not part of any contract and its `/health` is.
-  Future<void> _waitForHealth(
-    ({int port, String key}) at,
-    void Function() onChange,
-  ) async {
+  Future<void> _waitForHealth(({int port, String key}) at) async {
     final client = http.Client();
     try {
-      while (!_ready.isCompleted) {
+      while (state.phase == LocalLlmPhase.starting && _process != null) {
         try {
           final response = await client
               .get(
@@ -540,9 +507,7 @@ class LlamaInstance extends LocalInstance {
               )
               .timeout(const Duration(seconds: 5));
           if (response.statusCode == 200) {
-            _phase = LocalLlmPhase.ready;
-            _ready.complete();
-            onChange();
+            markReady();
             return;
           }
         } catch (_) {
@@ -562,37 +527,13 @@ class LlamaInstance extends LocalInstance {
     logDetail("llama", () => "${model.id}: $line");
   }
 
-  void _exited(Process process, int code, void Function() onChange) {
-    // Asked to stop, or already gone: [stop] has said so.
+  void _exited(Process process, int code) {
+    // Asked to stop, or already gone: [unload] has let it go.
     if (!identical(_process, process)) return;
     _process = null;
-    _fail(_log.isEmpty ? "The model server exited ($code)." : _log.join("\n"));
-    onChange();
-  }
-
-  /// Kept rather than cleared, so a turn sent at a model that will not load is
-  /// told why instead of being told nothing is loaded.
-  void _fail(String why) {
-    _phase = LocalLlmPhase.failed;
-    _failure = why;
-    _abandon(LocalLlmFailure(why));
-  }
-
-  /// Tell whoever is waiting that this attempt is over. [Future.ignore] is the
-  /// half that is easy to forget: an error completed into a future nobody is
-  /// waiting on is otherwise reported as unhandled, and usually nobody is.
-  void _abandon(Object why) {
-    if (_ready.isCompleted) return;
-    _ready.completeError(why);
-    _ready.future.ignore();
-  }
-
-  static String _newKey() {
-    final random = Random.secure();
-    return [
-      for (var i = 0; i < 16; i++)
-        random.nextInt(256).toRadixString(16).padLeft(2, "0"),
-    ].join();
+    markFailed(
+      _log.isEmpty ? "The model server exited ($code)." : _log.join("\n"),
+    );
   }
 }
 

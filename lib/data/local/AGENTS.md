@@ -418,7 +418,10 @@ one place each — their `LocalRuntime`:
 - `LocalInstance` is one loaded model: `generate`, `saveState` and
   `restoreState` of its prompt state, and `stop`. It is made by the runtime
   and told to `start` loading by `Residency`, separately, so a model it
-  displaces is stopped first.
+  displaces is stopped first. The load's progress is the base class's — a
+  runtime says `markReady` or `markFailed`, and what `unload` is — so every
+  runtime's row and every turn's failure read the same, and a stop ends a
+  load still under way for whoever waits on it.
 - `Residency` is which models are loaded — see "Loading one, and when".
 - `LocalClient` is the turn: serve, restore, generate, save.
 - `PromptCache` is the prompt state on disk — see "Persisting the KV cache
@@ -446,8 +449,12 @@ commit.
 Some rows are drawn from what the engine answers rather than from
 `controls`: the device picker from `devices()`, the cores slider from
 `maxThreads`, Add model from `fromLink`, each null where the engine has no
-such choice, and the prefill toggle from there being a prefill — which only
-`createLocalPrefill` decides, building one for a `LlamaEngine` alone.
+such choice, and the prefill toggle from there being a prefill — which
+`createLocalPrefill` builds only for a runtime whose controls name
+`LocalControl.prefill`. llama.cpp's does: its slot reuses any token prefix, so
+the warmed body is the start of every turn. MLX's does not: its session is
+carried on from by whole messages, and a warm-up's `[body, "Hello"]` is never
+the start of a turn, which merges the two system messages into one.
 
 The endpoint is composed by `modelProvidersProvider` rather than written into
 `settings.json`, and it has no address to write: each model is its own process
@@ -803,7 +810,7 @@ first turn — so nothing rewarms on a profile change.
 
 **A warm-up reads the disk before it reads the prompt.** The body is written to
 disk by the mechanism the next section describes, so the second launch has one
-already: `LocalPrefill` serves the model, asks `PromptCache.warm` for the body,
+already: `LocalPrefill` serves the model, asks the cache's `PromptEntry.warm` for the body,
 and — where that hits — is finished, having sent no prompt at all. It is why
 `warm` answers `bool` where a turn ignores it; a turn sends its prompt either
 way, and only this can be over before it starts. Without it the disk cache only
@@ -843,13 +850,18 @@ reading one is the instance's.
 **It is content-addressed, and that is what keeps it the provider's own.**
 Nothing hands it a chat id: a dump is keyed on a hash of the prompt prefix that
 produced it (`promptPrefixKeys` — one key per message boundary, over the messages
-and the tools that head every request), so no identifier crosses
+and the tools that head every request, each the hash of the key before it and
+its own message, so the whole is one pass), so no identifier crosses
 `LlmClient.stream` and no interface a hosted provider shares grew a method — the
-same constraint the prefill kept. `LocalClient` restores the longest saved
-prefix of a request before the turn and saves the whole prompt after it; both
-are best-effort, so a miss or a build without slot save/restore just pays the
-prompt the way it did before. The code is `prompt_cache.dart` (the disk and
-the pure key/eviction math) and `LlamaInstance`'s `/slots/0` requests.
+same constraint the prefill kept. `PromptCache.lookup` is one request's place
+in the cache, a `PromptEntry`: `LocalClient` warms it before the call and keeps
+it after, the prefill warms it and keeps its body. Both are best-effort, so a
+miss or a build without slot save/restore just pays the prompt the way it did
+before. The keys are over the messages as the agent sent them, its two system
+messages apart, so the body is a key of its own; the instance is handed them
+merged (`mergeLeadingSystem`), since a chat template refuses a second. The code
+is `prompt_cache.dart` (the disk and the pure key/eviction math) and each
+instance's `saveState`/`restoreState`, handed the file's whole path.
 
 **That `/slots/0` is why the server has one slot (`-np 1`).** Its default is
 four sharing the pool, each request routed to whichever slot's prompt matches
@@ -862,16 +874,17 @@ and the disk cache is this app's answer to the same question.
 
 **Invalidation is the keying, not a bookkeeping step.** A rewound or edited chat
 hashes to a different key, misses, and its stale dump ages out of the LRU on its
-own. A dump is also unreadable by a different model, context length, or KV quant,
-so the filename carries a `promptNamespace` of exactly those — plus the device
-setting, which is the picker's word rather than the resolved one, so Auto and CPU
-keep separate dumps on a phone where they launch the same server. A change to any
-of them lands the dump where nothing looks for it, and the old namespace's files are
-reaped by the byte budget rather than tracked. One directory holds every
-namespace, because `--slot-save-path` takes a basename and the name is where the
-namespace rides; the pool and the cache are built from the one join
-(`PromptCache.dir`, handed to `LlamaRuntime` as its slot save path) so they
-cannot disagree on it.
+own. A dump is also unreadable by a different model, context length, device or
+kind of file, so the filename carries a namespace of exactly those, which the
+instance says (`LocalInstance.stateNamespace`): llama.cpp's kind is its `q8`
+KV quant, MLX's its own. A change to any of them lands the dump where nothing
+looks for it, and the old namespace's files are reaped by the byte budget rather
+than tracked. One directory holds every namespace, because `--slot-save-path`
+takes a basename and the name is where the namespace rides; the server and the
+cache are built from the one join (`PromptCache.dir`, handed to `LlamaRuntime`
+as its slot save path) so they cannot disagree on it. A file a runtime keeps
+beside a dump under the same name and more — MLX's `<dump>.json`, the messages
+it covers — goes with the dump when it is evicted.
 
 **On by default at ten prefixes** (the "Cached prompts" picker; `Off` writes
 nothing), because the win is large and the reopen is the common case. The dumps
@@ -883,10 +896,10 @@ near-lossless but still a change to generation, so it rides on the cache being
 on: turn it off and the server runs f16, the behaviour it had before this.
 
 **The number counts prompts, and the picker used to say chats.** One dump is one
-request: `LocalClient.stream` saves after each, and the agent calls it once
-per step, so a turn that runs five commands writes five — and the bound is over
-every chat at once rather than per chat. "10 chats" promised ten conversations
-kept warm and, for a turn of any length, meant closer to two. The setting is
+turn: `LocalClient.stream` saves after a reply that ends the turn, not after a
+step that ends in tool calls — the next step is served by what the model still
+holds, and a write of its whole state per tool round would hold each one up for
+nothing. The bound is over every chat at once rather than per chat. The setting is
 `localModelKvCachePrompts` now and still reads the old key, so nobody's choice is
 reset. Which bound actually bites is the disk budget more often than the count:
 at 128 KiB a token for the 4B, halved by `q8_0`, a 3,000-token prompt is around

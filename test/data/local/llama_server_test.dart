@@ -6,7 +6,7 @@ import "package:agent_chat/data/builtin/llm/hosted_models.dart";
 import "package:agent_chat/data/builtin/llm/on_device_provider.dart";
 import "package:agent_chat/data/local/llama_engine.dart";
 import "package:agent_chat/data/local/llama_server.dart";
-import "package:agent_chat/data/local/local_engine.dart";
+import "package:agent_chat/data/local/local_instance.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/local_llm.dart";
 import "package:agent_chat/domain/model_registry.dart";
@@ -14,7 +14,7 @@ import "package:agent_chat/domain/local_model.dart";
 import "package:agent_chat/domain/download.dart";
 import "package:agent_chat/domain/local_model_store.dart";
 
-import "../../fakes.dart" show downloadedAs;
+import "../../fakes.dart" show downloadedAs, testLocalOptions;
 
 /// What the server is asked to do is the whole of what running a model on the
 /// device does, and it is the part of it that can be pinned on a machine with
@@ -24,7 +24,10 @@ void main() {
     server: "/data/app/pkg/lib/arm64/libllama-server.so",
     libDir: "/data/app/pkg/lib/arm64",
   );
-  final model = downloadedAs(ggufCatalog.first);
+  final model = downloadedAs(
+    ggufCatalog.first,
+    file: "/cache/llm/${ggufCatalog.first.id}/model.gguf",
+  );
 
   /// The real engine over a server that cannot come up.
   LlamaEngine failing([LocalModelStore store = const _AlwaysInstalled()]) =>
@@ -41,14 +44,6 @@ void main() {
     voices: () => const {},
   );
 
-  LocalOptions options({int maxRunning = 1}) => (
-    device: null,
-    contextLength: null,
-    maxRunning: maxRunning,
-    threads: null,
-    keptPrompts: 0,
-  );
-
   ({List<String> command, Map<String, String> environment}) launch({
     String device = noDevice,
     int? contextLength,
@@ -58,12 +53,13 @@ void main() {
   }) => llamaLaunch(
     binaries: binaries,
     model: model,
-    modelFile: "/cache/llm/${model.id}/model.gguf",
+    load: LocalLoad(
+      contextLength: contextLength ?? model.defaultContext,
+      device: device,
+      threads: threads,
+    ),
     port: 41234,
     apiKey: "abcdef",
-    device: device,
-    contextLength: contextLength ?? model.defaultContext,
-    threads: threads,
     slotSavePath: slotSavePath,
     fitLayers: fitLayers,
   );
@@ -345,7 +341,7 @@ something else entirely
   group("the pool, over a server that will not start", () {
     Future<void> askFor(LlamaEngine pool, String id, {int maxRunning = 1}) =>
         expectLater(
-          pool.serve(id, options(maxRunning: maxRunning)),
+          pool.serve(id, testLocalOptions(maxRunning: maxRunning)),
           throwsA(isA<LocalLlmFailure>()),
         );
 
@@ -445,7 +441,7 @@ something else entirely
         final pool = failing(const UnavailableLocalModelStore());
 
         await expectLater(
-          pool.serve(model.id, options()),
+          pool.serve(model.id, testLocalOptions()),
           throwsA(isA<LocalLlmFailure>()),
         );
 
@@ -465,7 +461,7 @@ something else entirely
       final pool = failing();
 
       await expectLater(
-        pool.serve("gone-in-a-later-build", options()),
+        pool.serve("gone-in-a-later-build", testLocalOptions()),
         throwsA(isA<LocalLlmFailure>()),
       );
 

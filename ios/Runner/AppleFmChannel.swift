@@ -73,22 +73,19 @@ class AppleFmChannel: NSObject {
     }
   }
 
-  /// `load`, `evict` and `evictAll`: the residency Dart decides. A load
-  /// that fails answers a `FlutterError` whose message is the reason, which
-  /// is what the settings row shows.
+  /// `load` and `evict`: the residency Dart decides. A load that fails
+  /// answers a `FlutterError` whose message is the reason, which is what the
+  /// settings row shows.
   private func residency(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
     let args = call.arguments as? [String: Any] ?? [:]
     let model = args["model"] as? String ?? ""
     let reply = { (value: Any?) in DispatchQueue.main.async { result(value) } }
     Task.detached(priority: .userInitiated) {
       do {
-        switch call.method {
-        case "load":
+        if call.method == "load" {
           try await Mlx.load(model, args["directory"] as? String ?? "")
-        case "evict":
+        } else {
           await Mlx.evict(model)
-        default:
-          await Mlx.evictAll()
         }
         reply(nil)
       } catch {
@@ -102,28 +99,13 @@ class AppleFmChannel: NSObject {
     case "handshake":
       result(["reason": availabilityReason(), "mlx": Mlx.isAvailable])
     case "generate":
-      let args = call.arguments as? [String: Any] ?? [:]
-      let id = args["id"] as? String ?? ""
-      // Held before the reply, so a cancel racing the start finds the task.
-      // Retained until the generation ends, which is what breaks the cycle
-      // the captured self would otherwise hold.
-      let task = Task.detached(priority: .userInitiated) {
-        await self.generate(id, args)
-      }
-      generations[id] = task
-      result(nil)
+      startGeneration(call, result, generate)
     case "cancel":
       let id = (call.arguments as? [String: Any])?["id"] as? String ?? ""
       finishGeneration(id)
       result(nil)
     case "mlxGenerate":
-      let args = call.arguments as? [String: Any] ?? [:]
-      let id = args["id"] as? String ?? ""
-      let task = Task.detached(priority: .userInitiated) {
-        await self.mlxGenerate(id, args)
-      }
-      generations[id] = task
-      result(nil)
+      startGeneration(call, result, mlxGenerate)
     case "mlxSave", "mlxRestore":
       let args = call.arguments as? [String: Any] ?? [:]
       let model = args["model"] as? String ?? ""
@@ -135,7 +117,7 @@ class AppleFmChannel: NSObject {
           ? await Mlx.save(model, to: path) : await Mlx.restore(model, from: path)
         DispatchQueue.main.async { result(ok) }
       }
-    case "load", "evict", "evictAll":
+    case "load", "evict":
       residency(call, result)
     default:
       result(FlutterMethodNotImplemented)
@@ -152,6 +134,30 @@ class AppleFmChannel: NSObject {
     for task in tasks { await task.value }
   }
 
+  /// Starts the generation the call's `id` names and answers at once, its
+  /// frames following on the channel. Held before the reply, so a cancel
+  /// racing the start finds the task; retained until the generation ends,
+  /// which is what breaks the cycle the captured self would otherwise hold —
+  /// so every exit of `body`, the early ones included, ends it here.
+  private func startGeneration(
+    _ call: FlutterMethodCall, _ result: FlutterResult,
+    _ body: @escaping (String, [String: Any]) async -> Void
+  ) {
+    let args = call.arguments as? [String: Any] ?? [:]
+    let id = args["id"] as? String ?? ""
+    generations[id] = Task.detached(priority: .userInitiated) {
+      await body(id, args)
+      self.finishGeneration(id)
+    }
+    result(nil)
+  }
+
+  /// The one ending a generation that failed: every generation ends with
+  /// `done` or this.
+  private func sendError(_ id: String, _ code: String, _ message: String) {
+    send("error", ["id": id, "code": code, "message": message])
+  }
+
   private func finishGeneration(_ id: String) {
     DispatchQueue.main.async { [weak self] in
       self?.generations.removeValue(forKey: id)?.cancel()
@@ -162,13 +168,8 @@ class AppleFmChannel: NSObject {
   /// the text streamed out as it is produced. Nothing is held here between
   /// asks — the Dart client composes every request whole.
   private func generate(_ id: String, _ args: [String: Any]) async {
-    // Every exit, the early ones included, or the task stays in `generations`.
-    defer { finishGeneration(id) }
     guard #available(iOS 26.0, macOS 26.0, *) else {
-      send("error", [
-        "id": id, "code": "os",
-        "message": "This OS carries no Foundation Models framework.",
-      ])
+      sendError(id, "os", "This OS carries no Foundation Models framework.")
       return
     }
     do {
@@ -185,13 +186,12 @@ class AppleFmChannel: NSObject {
         // untyped ones, said as they are.
         if mapError(id, error) { return }
       }
-      send("error", ["id": id, "code": "other", "message": "\(error)"])
+      sendError(id, "other", "\(error)")
     }
   }
 
   @available(iOS 26.0, macOS 26.0, *)
   private func runGeneration(_ id: String, _ args: [String: Any]) async throws {
-    let model = args["model"] as? String ?? ""
     let instructions = args["instructions"] as? String ?? ""
     let prompt = args["prompt"] as? String ?? ""
     let temperature = args["temperature"] as? Double
@@ -279,18 +279,12 @@ class AppleFmChannel: NSObject {
   /// `reasoning`, `text`, `toolCall`, `done`, `error` — so the client reads
   /// both the same way.
   private func mlxGenerate(_ id: String, _ args: [String: Any]) async {
-    defer { finishGeneration(id) }
-    let messages = (args["messages"] as? [[String: Any]] ?? []).map(Self.mlxMessage)
-    let tools = (args["tools"] as? [[String: Any]] ?? []).map {
-      MlxTool(
-        name: $0["name"] as? String ?? "",
-        description: $0["description"] as? String ?? "",
-        parameters: Self.jsonText($0["schema"] ?? [:]))
-    }
     do {
       try await Mlx.generate(
-        args["model"] as? String ?? "", args["directory"] as? String ?? "",
-        messages: messages, tools: tools, temperature: args["temperature"] as? Double
+        args["model"] as? String ?? "",
+        messages: (args["messages"] as? [[String: Any]] ?? []).map(MlxMessage.init(channel:)),
+        tools: (args["tools"] as? [[String: Any]] ?? []).map(MlxTool.init(channel:)),
+        temperature: args["temperature"] as? Double
       ) { [weak self] event in
         switch event {
         case .reasoning(let text): self?.send("reasoning", ["id": id, "text": text])
@@ -309,34 +303,16 @@ class AppleFmChannel: NSObject {
     } catch is CancellationError {
       // A stop: cancelled, not failed, so nothing is said.
     } catch {
-      send("error", ["id": id, "code": "other", "message": "\(error)"])
+      sendError(id, "other", "\(error)")
     }
-  }
-
-  private static func mlxMessage(_ map: [String: Any]) -> MlxMessage {
-    MlxMessage(
-      role: MlxMessage.Role(rawValue: map["role"] as? String ?? "") ?? .user,
-      content: map["content"] as? String ?? "",
-      toolCalls: (map["toolCalls"] as? [[String: Any]] ?? []).map {
-        MlxToolCall(
-          id: $0["id"] as? String ?? "", name: $0["name"] as? String ?? "",
-          arguments: $0["arguments"] as? String ?? "{}")
-      },
-      toolCallID: map["toolCallId"] as? String)
-  }
-
-  private static func jsonText(_ value: Any) -> String {
-    guard JSONSerialization.isValidJSONObject(value),
-      let data = try? JSONSerialization.data(withJSONObject: value)
-    else { return "{}" }
-    return String(decoding: data, as: UTF8.self)
   }
 
   private func toolCall(_ id: String, _ name: String, _ arguments: String) {
     send("toolCall", ["id": id, "name": name, "arguments": arguments])
-    // The generation stops here even where the framework would have carried
-    // on: the client stops reading at this frame, and this is what makes the
-    // reported call the only one a turn answers.
+    // The generation ends here even where the framework would have carried
+    // on, and says so the way every generation ends, with `done`: this is
+    // what makes the reported call the only one a turn answers.
+    send("done", ["id": id, "finish": "tool_calls"])
     finishGeneration(id)
   }
 
@@ -346,10 +322,10 @@ class AppleFmChannel: NSObject {
   private func mapError(_ id: String, _ error: Error) -> Bool {
     switch error {
     case let modelError as LanguageModelError:
-      send("error", ["id": id, "code": code(of: modelError), "message": "\(modelError)"])
+      sendError(id, code(of: modelError), "\(modelError)")
       return true
     case let assets as SystemLanguageModel.Error:
-      send("error", ["id": id, "code": "assets", "message": "\(assets)"])
+      sendError(id, "assets", "\(assets)")
       return true
     default:
       return false

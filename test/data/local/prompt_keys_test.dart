@@ -1,6 +1,10 @@
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:agent_chat/data/local/local_instance.dart";
 import "package:agent_chat/data/local/prompt_cache.dart";
+import "package:agent_chat/domain/local_model.dart";
 import "package:flutter_test/flutter_test.dart";
+
+import "../../fakes.dart";
 
 void main() {
   const tools = [
@@ -13,34 +17,36 @@ void main() {
   LlmMessage sys(String t) => LlmMessage(role: LlmRole.system, text: t);
   LlmMessage user(String t) => LlmMessage(role: LlmRole.user, text: t);
 
-  group("promptNamespace", () {
-    test("is a faithful function of what the dump is tied to", () {
+  group("stateNamespace", () {
+    LocalInstance instance(String id, {int context = 8192, String? device}) =>
+        FakeLocalRuntime().create(
+          DownloadedModel(
+            id: id,
+            name: id,
+            file: "/models/$id",
+            bytes: 0,
+            quantisation: "Q4_0",
+            contextLength: context,
+            kvBytesPerToken: 0,
+          ),
+          LocalLoad(contextLength: context, device: device),
+          onChange: () {},
+        );
+
+    test("is a faithful function of what the state is tied to", () {
       // The same binding answers the same string: no hidden entropy to make
-      // two dumps land apart for no reason.
+      // two files land apart for no reason.
       expect(
-        promptNamespace(modelId: "qwen", contextLength: 8192, device: "HTP0"),
-        promptNamespace(modelId: "qwen", contextLength: 8192, device: "HTP0"),
+        instance("qwen", device: "HTP0").stateNamespace,
+        instance("qwen", device: "HTP0").stateNamespace,
       );
 
-      final base = promptNamespace(
-        modelId: "qwen",
-        contextLength: 8192,
-        device: null,
-      );
-      // A different model, context, or device makes another namespace — which is
-      // the whole of the invalidation: the dump lands where nothing looks.
-      expect(
-        promptNamespace(modelId: "llama", contextLength: 8192, device: null),
-        isNot(base),
-      );
-      expect(
-        promptNamespace(modelId: "qwen", contextLength: 4096, device: null),
-        isNot(base),
-      );
-      expect(
-        promptNamespace(modelId: "qwen", contextLength: 8192, device: "HTP0"),
-        isNot(base),
-      );
+      final base = instance("qwen").stateNamespace;
+      // A different model, context, or device makes another namespace — which
+      // is the whole of the invalidation: the file lands where nothing looks.
+      expect(instance("llama").stateNamespace, isNot(base));
+      expect(instance("qwen", context: 4096).stateNamespace, isNot(base));
+      expect(instance("qwen", device: "HTP0").stateNamespace, isNot(base));
     });
   });
 

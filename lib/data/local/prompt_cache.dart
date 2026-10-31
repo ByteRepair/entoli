@@ -3,6 +3,7 @@ import "dart:convert";
 import "dart:io";
 
 import "package:crypto/crypto.dart";
+import "package:flutter/foundation.dart" show visibleForTesting;
 import "package:path/path.dart" as p;
 
 import "../../core/log.dart";
@@ -47,19 +48,41 @@ class PromptCache {
   /// not see.
   static const _budgetBytes = 4 * 1024 * 1024 * 1024;
 
-  /// Restores the longest of [keys] (a request's prefix keys, longest first)
-  /// that has a file into [instance] before a turn, unless it already holds at
-  /// least that much — a continuation of the same chat, which its live state
-  /// serves.
-  ///
-  /// True when the instance ends up holding one of [keys], however it got
-  /// there. A turn ignores it — it sends the prompt either way — but the
-  /// prefill does not: a hit is the whole of what its warm-up was going to do.
-  Future<bool> warm(
-    LocalInstance instance, {
-    required String namespace,
-    required List<String> keys,
-  }) async {
+  /// Where [messages] and [tools] would be kept for [instance], or null
+  /// where nothing is looked for: the setting off, or a request with no
+  /// messages. The turn and the prefill both reach the cache through this, so
+  /// the one that saves a file and the one that reads it cannot disagree about
+  /// where it is.
+  PromptEntry? lookup(
+    LocalInstance instance,
+    LocalOptions options,
+    List<LlmMessage> messages,
+    List<LlmTool> tools,
+  ) {
+    if (!options.keepsPrompts) return null;
+    final keys = promptPrefixKeys(messages, tools);
+    if (keys.isEmpty) return null;
+    return PromptEntry._(this, instance, keys, options.keptPrompts);
+  }
+
+  /// The file [key] of [instance]'s is kept in.
+  @visibleForTesting
+  String fileOf(LocalInstance instance, String key) =>
+      _file(_namespaceFor(instance), key);
+
+  String _file(String namespace, String key) =>
+      p.join(dir, "$namespace.$key.bin");
+
+  /// The namespace a file belongs to: everything that makes one model's state
+  /// unreadable by another, as the instance says
+  /// ([LocalInstance.stateNamespace]). A change to any of it is invalidation,
+  /// done by the file landing under a name nothing looks for rather than by
+  /// dropping files.
+  static String _namespaceFor(LocalInstance instance) =>
+      _hash(instance.stateNamespace).substring(0, 16);
+
+  Future<bool> _warm(LocalInstance instance, List<String> keys) async {
+    final namespace = _namespaceFor(instance);
     final candidate = _longestSaved(namespace, keys);
     if (candidate == null) return false;
     // Restoring a shorter or equal file would only throw progress away.
@@ -67,7 +90,7 @@ class PromptCache {
     if (live != null && _upto(keys, live) >= _upto(keys, candidate)) {
       return true;
     }
-    if (!await instance.restoreState(promptFilename(namespace, candidate))) {
+    if (!await instance.restoreState(_file(namespace, candidate))) {
       return false;
     }
     _live[instance] = candidate;
@@ -75,19 +98,10 @@ class PromptCache {
     return true;
   }
 
-  /// Saves [instance]'s state after a turn under [key], then evicts down to
-  /// [count] files of this namespace and under the disk budget. A turn passes
-  /// the whole prompt's key (`keys.first`); the prefill passes the body's
-  /// (`keys.last`), so the warmed body survives a reload and every chat's
-  /// [warm] finds it.
-  Future<void> keep(
-    LocalInstance instance, {
-    required String namespace,
-    required String key,
-    required int count,
-  }) async {
+  Future<void> _keep(LocalInstance instance, String key, int count) async {
     if (_saved[instance] == key) return;
-    if (!await instance.saveState(promptFilename(namespace, key))) return;
+    final namespace = _namespaceFor(instance);
+    if (!await instance.saveState(_file(namespace, key))) return;
     _saved[instance] = key;
     // The instance now holds this prefix (and, for a real turn, the reply
     // after it), so it is what a continuation reuses without a restore.
@@ -104,15 +118,13 @@ class PromptCache {
   /// two and both bounds reap it first — the one file they should reach last.
   Future<void> _touch(String namespace, String key) async {
     try {
-      await File(
-        p.join(dir, promptFilename(namespace, key)),
-      ).setLastModified(DateTime.now());
+      await File(_file(namespace, key)).setLastModified(DateTime.now());
     } catch (_) {}
   }
 
   String? _longestSaved(String namespace, List<String> keys) {
     for (final key in keys) {
-      if (File(p.join(dir, promptFilename(namespace, key))).existsSync()) {
+      if (File(_file(namespace, key)).existsSync()) {
         return key;
       }
     }
@@ -168,65 +180,68 @@ class PromptCache {
   }
 }
 
-/// What a request needs to reach the cache with: which instance's files, under
-/// which namespace, and which prefixes to look for.
-typedef PromptLookup = ({String namespace, List<String> keys});
+/// One request's place in a [PromptCache]: its instance and its prefix keys,
+/// longest first. Best-effort throughout — a cache that will not answer is a
+/// prompt read the way it was before there was one, never a broken turn.
+class PromptEntry {
+  PromptEntry._(this._cache, this._instance, this._keys, this._count);
 
-/// The one derivation of that, so the turn that saves a file and the warm-up
-/// that reads it cannot disagree about where it is. Null where there is
-/// nothing to look for: the setting off, or a request with no messages.
-PromptLookup? promptLookup({
-  required LocalInstance instance,
-  required LocalOptions options,
-  required List<LlmMessage> messages,
-  required List<LlmTool> tools,
-}) {
-  if (!options.keepsPrompts) return null;
-  final keys = promptPrefixKeys(messages, tools);
-  if (keys.isEmpty) return null;
-  return (
-    // Over the context it actually loaded with rather than the one asked for,
-    // so a file is never filed under a size nothing serves.
-    namespace: promptNamespace(
-      modelId: instance.model.id,
-      contextLength: instance.load.contextLength,
-      device: options.device,
-    ),
-    keys: keys,
-  );
+  final PromptCache _cache;
+  final LocalInstance _instance;
+  final List<String> _keys;
+
+  /// How many files of this namespace to keep.
+  final int _count;
+
+  /// Restores the longest saved prefix into the instance, unless it already
+  /// holds at least that much — a continuation of the same chat, which its
+  /// live state serves.
+  ///
+  /// True when the instance ends up holding one of the prefixes, however it
+  /// got there. A turn ignores it — it sends the prompt either way — but the
+  /// prefill does not: a hit is the whole of what its warm-up was going to do.
+  Future<bool> warm() async {
+    try {
+      return await _cache._warm(_instance, _keys);
+    } catch (e) {
+      logFailure("prompt-cache", "restore failed", e);
+      return false;
+    }
+  }
+
+  /// Saves the instance's state after a turn under the whole prompt's key,
+  /// then evicts down to the count and under the disk budget.
+  Future<void> keep() => _keepAs(_keys.first);
+
+  /// Saves it under the body's key — the system message and tools every chat
+  /// shares — so a warmed body survives a reload and every chat's [warm]
+  /// finds it.
+  Future<void> keepBody() => _keepAs(_keys.last);
+
+  Future<void> _keepAs(String key) async {
+    try {
+      await _cache._keep(_instance, key, _count);
+    } catch (e) {
+      logFailure("prompt-cache", "save failed", e);
+    }
+  }
 }
-
-/// The namespace a file belongs to: everything that makes one model's state
-/// unreadable by another. A change to any of these is invalidation, done by the
-/// file landing under a name nothing looks for rather than by dropping files.
-/// `q8` is the fixed KV quant llama.cpp runs with when caching is on, named so
-/// that turning the cache off (f16) and on again cannot cross-load a file.
-///
-/// The device is the picker's word rather than the resolved one, so Auto and
-/// CPU keep separate files where they load the same way.
-///
-/// The separator is a NUL, written as an escape rather than as the byte: a
-/// device name cannot contain one, so no two readings of these fields can hash
-/// alike — and the source file stays text.
-String promptNamespace({
-  required String modelId,
-  required int contextLength,
-  String? device,
-}) => _hash(
-  "$modelId\u0000$contextLength\u0000${device ?? ''}\u0000q8",
-).substring(0, 16);
 
 /// One key per message boundary of [messages], longest prefix first, each over
 /// that prefix plus the [tools] that head every request. The longest is the
 /// whole conversation — an exact reopen — and the shortest is the system+tools
 /// body the prefill warms; anything between is a continuation caught
 /// mid-history.
+///
+/// Chained rather than each over its whole prefix: a key is the hash of the
+/// key before it and its own message, which identifies the same prefix and
+/// costs one pass over the conversation rather than one per message.
 List<String> promptPrefixKeys(List<LlmMessage> messages, List<LlmTool> tools) {
-  final buffer = StringBuffer(_encodeTools(tools));
+  var key = _hash(_encodeTools(tools));
   final atBoundary = <String>[];
   for (final message in messages) {
-    buffer.write(_encodeMessage(message));
-    atBoundary.add(_hash(buffer.toString()));
+    key = _hash("$key${_encodeMessage(message)}");
+    atBoundary.add(key);
   }
   // Longest first, and never the empty prefix — restoring the bare tools head
   // would throw away warmer state to load almost nothing.
@@ -265,10 +280,6 @@ Set<String> promptEvictions(
   }
   return doomed;
 }
-
-/// The filename for a namespace and a key. Flat — llama.cpp's
-/// `--slot-save-path` takes a basename, so the namespace rides in the name.
-String promptFilename(String namespace, String key) => "$namespace.$key.bin";
 
 String? _namespaceOf(String filename) {
   final dot = filename.indexOf(".");

@@ -12,6 +12,8 @@ import "package:agent_chat/data/model_host/model_host.dart";
 import "package:agent_chat/data/model_host/model_host_server.dart";
 import "package:agent_chat/data/model_host/worker.dart";
 
+import "../../harness.dart";
+
 // The app's half and the host's half of the model host, wired over a real
 // Unix socket in this process: what crosses is the real framing, and nothing
 // is launched. The host's native half is a mock channel of the test's own.
@@ -43,8 +45,7 @@ class Launches {
 
   Future<HostConnection> launch() async {
     count++;
-    final dir = Directory.systemTemp.createTempSync("model_host_test_");
-    addTearDown(() => dir.deleteSync(recursive: true));
+    final dir = tempDir("model_host_test_");
     final address = InternetAddress(
       "${dir.path}/s",
       type: InternetAddressType.unix,
@@ -107,7 +108,10 @@ void main() {
           ]),
           const CloseFrame(2),
         ];
-        final bytes = [for (final f in frames) ...codec.encode(f)];
+        final bytes = [
+          for (final f in frames)
+            for (final part in codec.encode(f)) ...part,
+        ];
 
         for (final step in [1, 3, 7, bytes.length]) {
           final chunks = [
@@ -182,7 +186,14 @@ void main() {
     final channel = host.channel(native.name);
     await channel.invokeMethod("handshake");
     final worker = await host.spawn(echo, ["started"]);
-    final workerSaid = worker.messages.toList();
+    final workerSaid = <Object?>[];
+    final workerErrors = <Object>[];
+    final workerDone = Completer<void>();
+    worker.messages.listen(
+      workerSaid.add,
+      onError: workerErrors.add,
+      onDone: workerDone.complete,
+    );
     final channelErrors = <Object>[];
     channel.calls.listen((_) {}, onError: channelErrors.add);
     final lost = host.lost.first;
@@ -191,11 +202,32 @@ void main() {
     await lost.timeout(const Duration(seconds: 5));
 
     expect(channelErrors.single, isA<ModelHostGone>());
-    expect(await workerSaid, [
-      ["failed", const ModelHostGone().toString()],
-    ]);
+    await workerDone.future.timeout(const Duration(seconds: 5));
+    expect(workerSaid, isEmpty);
+    expect(workerErrors.single, isA<ModelHostGone>());
 
     expect(await channel.invokeMethod("load"), isNotNull);
     expect(launches.count, 2);
+  });
+
+  test("a worker the host cannot start ends in an error, not in the "
+      "worker's words", () async {
+    final worker = await host.spawn(
+      const WorkerKind("unknown", _echo),
+      const [],
+    );
+    final errors = <Object>[];
+    final done = Completer<void>();
+    worker.messages.listen((_) {}, onError: errors.add, onDone: done.complete);
+
+    await done.future.timeout(const Duration(seconds: 5));
+    expect(
+      errors.single,
+      isA<WorkerFailed>().having(
+        (e) => e.message,
+        "message",
+        contains("unknown"),
+      ),
+    );
   });
 }

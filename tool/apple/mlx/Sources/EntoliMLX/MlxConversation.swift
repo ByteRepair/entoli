@@ -23,9 +23,13 @@ actor MlxConversation {
   private var session: ChatSession?
 
   /// What `session`'s cache covers, in the app's words, with the tools it was
-  /// rendered under: a different tool list is a different prompt.
-  private var held: [MlxMessage] = []
-  private var heldTools: [MlxTool] = []
+  /// rendered under: a different tool list is a different prompt. Nothing
+  /// where the session holds nothing a call could carry on from.
+  private var held: HeldRecord?
+
+  /// The template's thinking markers, read at the first generation and kept:
+  /// they are the model's, not the conversation's.
+  private var markers: ThinkingMarkers?
 
   /// Long enough for any reply an agent's step has, short of a model that
   /// never stops.
@@ -40,9 +44,9 @@ actor MlxConversation {
     if let temperature { parameters.temperature = Float(temperature) }
 
     let fresh: [MlxMessage]
-    if let session, carriesOn(messages, tools) {
+    if let session, let held, held.carriesOn(messages, tools) {
       session.generateParameters = parameters
-      fresh = Array(messages[held.count...])
+      fresh = Array(messages[held.messages.count...])
     } else {
       session = ChatSession(
         container, history: messages.dropLast().map(\.chat),
@@ -52,19 +56,24 @@ actor MlxConversation {
     // Cleared until the reply is in: a generation stopped part-way leaves a
     // cache that holds some of a reply nobody kept, so the next call starts
     // over rather than carrying on from that.
-    held = []
+    held = nil
 
-    var thinking = try await ThinkingSplitter(container, messages, tools)
+    if markers == nil { markers = try await ThinkingMarkers(container) }
+    var thinking = ThinkingSplitter(markers!)
     var reply = ""
+    // Said as they come, the reply's text kept for the record.
+    func say(_ events: [MlxEvent]) {
+      for event in events {
+        emit(event)
+        if case .text(let text) = event { reply += text }
+      }
+    }
     var calls: [MlxToolCall] = []
     var counts = (prompt: 0, generated: 0)
     for try await generation in session!.streamDetails(to: fresh.map(\.chat)) {
       switch generation {
       case .chunk(let chunk):
-        for piece in thinking.feed(chunk) {
-          emit(piece.reasoning ? .reasoning(piece.text) : .text(piece.text))
-          if !piece.reasoning { reply += piece.text }
-        }
+        say(thinking.feed(chunk))
       case .toolCall(let call):
         let made = MlxToolCall(
           id: "c\(calls.count)", name: call.function.name,
@@ -77,33 +86,21 @@ actor MlxConversation {
         counts = (info.promptTokenCount, info.generationTokenCount)
       }
     }
-    for piece in thinking.finish() {
-      emit(piece.reasoning ? .reasoning(piece.text) : .text(piece.text))
-      if !piece.reasoning { reply += piece.text }
-    }
-    held = messages + [MlxMessage(role: .assistant, content: reply, toolCalls: calls)]
-    heldTools = tools
+    say(thinking.finish())
+    held = HeldRecord(
+      messages: messages + [MlxMessage(role: .assistant, content: reply, toolCalls: calls)],
+      tools: tools)
     emit(.done(promptTokens: counts.prompt, generatedTokens: counts.generated))
-  }
-
-  /// Whether `messages` is what the session holds and more: the same messages
-  /// in the same order, under the same tools. A reply this session wrote comes
-  /// back as the app recorded it, so it is matched by its text and calls
-  /// rather than by the ids the app gave them.
-  private func carriesOn(_ messages: [MlxMessage], _ tools: [MlxTool]) -> Bool {
-    !held.isEmpty && messages.count > held.count && tools == heldTools
-      && zip(held, messages).allSatisfy { $0.sameAs($1) }
   }
 
   /// Writes the cache to `path` and what it holds beside it, `path.json`: a
   /// cache file says nothing of which messages it covers, and a session
   /// restored without that would read its own reply a second time.
   func save(to path: String) async -> Bool {
-    guard let session, !held.isEmpty else { return false }
+    guard let session, let held else { return false }
     do {
       try await session.saveCache(to: URL(fileURLWithPath: path))
-      let record = HeldRecord(messages: held, tools: heldTools)
-      try JSONEncoder().encode(record).write(to: Self.companion(path), options: .atomic)
+      try JSONEncoder().encode(held).write(to: Self.companion(path), options: .atomic)
       return true
     } catch {
       return false
@@ -118,8 +115,7 @@ actor MlxConversation {
       session = ChatSession(
         container, cache: snapshot.cache, state: snapshot.state,
         tools: record.tools.map(\.spec))
-      held = record.messages
-      heldTools = record.tools
+      held = record
       return true
     } catch {
       return false
@@ -142,15 +138,49 @@ struct MlxRejected: Error, CustomStringConvertible {
   let description: String
 }
 
+/// The messages a session's cache covers and the tools they were rendered
+/// under — kept with the session, and written beside a saved cache.
 private struct HeldRecord: Codable {
   let messages: [MlxMessage]
   let tools: [MlxTool]
+
+  /// Whether `messages` is this and more: the same messages in the same
+  /// order, under the same tools. A reply the session wrote comes back as the
+  /// app recorded it, so it is matched by its text and calls rather than by
+  /// the ids the app gave them.
+  func carriesOn(_ messages: [MlxMessage], _ tools: [MlxTool]) -> Bool {
+    !self.messages.isEmpty && messages.count > self.messages.count && tools == self.tools
+      && zip(self.messages, messages).allSatisfy { $0.sameAs($1) }
+  }
 }
 
-/// A model's output split into its thinking and its reply, by the markers its
-/// configuration names. A template that opens the thinking itself — Qwen3.5's,
-/// which ends the prompt inside `<think>` — starts the output inside it, which
-/// is told by rendering the prompt and reading its end, as the model will.
+/// A model's thinking markers, as its configuration names them, and whether
+/// its template opens the thinking itself — Qwen3.5's ends the prompt inside
+/// `<think>`, so the output starts inside it. That is the template's doing,
+/// not the conversation's, so it is told once per model from the smallest
+/// prompt there is, one user message and no tools, rendered and its end read
+/// as the model will: rendering the whole conversation for it held back the
+/// first output of every step.
+struct ThinkingMarkers: Sendable {
+  let start: String
+  let end: String
+  let primed: Bool
+
+  init(_ container: ModelContainer) async throws {
+    let found: (String, String, Bool)? = try await container.perform { context in
+      guard let config = context.configuration.reasoningConfig else { return nil }
+      let tokens = try context.tokenizer.applyChatTemplate(
+        messages: [["role": "user", "content": "Hi"]], tools: nil, additionalContext: nil)
+      let tail = context.tokenizer.decode(tokenIds: Array(tokens.suffix(8)))
+      let primed = tail.trimmingCharacters(in: .whitespacesAndNewlines)
+        .hasSuffix(config.startDelimiter)
+      return (config.startDelimiter, config.endDelimiter, primed)
+    }
+    (start, end, primed) = found ?? ("", "", false)
+  }
+}
+
+/// A model's output split into its thinking and its reply, by its markers.
 struct ThinkingSplitter {
   private let start: String
   private let end: String
@@ -162,33 +192,23 @@ struct ThinkingSplitter {
   /// its first words.
   private var replyStarted = false
 
-  init(_ container: ModelContainer, _ messages: [MlxMessage], _ tools: [MlxTool]) async throws {
-    let found: (String, String, Bool)? = try await container.perform { context in
-      guard let config = context.configuration.reasoningConfig else { return nil }
-      let tokens = try context.tokenizer.applyChatTemplate(
-        messages: messages.map(\.dictionary), tools: tools.map(\.spec),
-        additionalContext: nil)
-      let tail = context.tokenizer.decode(tokenIds: Array(tokens.suffix(8)))
-      let primed = tail.trimmingCharacters(in: .whitespacesAndNewlines)
-        .hasSuffix(config.startDelimiter)
-      return (config.startDelimiter, config.endDelimiter, primed)
-    }
-    (start, end, inside) = found ?? ("", "", false)
+  init(_ markers: ThinkingMarkers) {
+    (start, end, inside) = (markers.start, markers.end, markers.primed)
   }
 
   /// No markers is a model that does not think: everything is reply.
   private var thinks: Bool { !start.isEmpty && !end.isEmpty }
 
-  mutating func feed(_ chunk: String) -> [(reasoning: Bool, text: String)] {
+  mutating func feed(_ chunk: String) -> [MlxEvent] {
     guard thinks else { return reply(chunk) }
     var text = pending + chunk
     pending = ""
-    var pieces: [(reasoning: Bool, text: String)] = []
+    var events: [MlxEvent] = []
     while !text.isEmpty {
       let marker = inside ? end : start
       if let found = text.range(of: marker) {
         let before = String(text[..<found.lowerBound])
-        pieces += inside ? thought(before) : reply(before)
+        events += inside ? thought(before) : reply(before)
         inside.toggle()
         text = String(text[found.upperBound...])
         continue
@@ -197,30 +217,30 @@ struct ThinkingSplitter {
       let keep = Self.partialSuffix(of: text, prefixing: marker)
       let ready = String(text.dropLast(keep))
       pending = String(text.suffix(keep))
-      pieces += inside ? thought(ready) : reply(ready)
+      events += inside ? thought(ready) : reply(ready)
       break
     }
-    return pieces
+    return events
   }
 
-  mutating func finish() -> [(reasoning: Bool, text: String)] {
+  mutating func finish() -> [MlxEvent] {
     let rest = pending
     pending = ""
     return inside ? thought(rest) : reply(rest)
   }
 
-  private func thought(_ text: String) -> [(reasoning: Bool, text: String)] {
-    text.isEmpty ? [] : [(true, text)]
+  private func thought(_ text: String) -> [MlxEvent] {
+    text.isEmpty ? [] : [.reasoning(text)]
   }
 
-  private mutating func reply(_ text: String) -> [(reasoning: Bool, text: String)] {
+  private mutating func reply(_ text: String) -> [MlxEvent] {
     var text = text
     if !replyStarted {
       text = String(text.drop { $0.isWhitespace })
       if text.isEmpty { return [] }
       replyStarted = true
     }
-    return [(false, text)]
+    return [.text(text)]
   }
 
   /// How many trailing characters of `text` are the start of `marker`.
@@ -237,8 +257,9 @@ extension MlxMessage {
   /// and the calls an assistant made, ids aside.
   func sameAs(_ other: MlxMessage) -> Bool {
     role == other.role
-      && content.trimmingCharacters(in: .whitespacesAndNewlines)
-        == other.content.trimmingCharacters(in: .whitespacesAndNewlines)
+      && (content == other.content
+        || content.trimmingCharacters(in: .whitespacesAndNewlines)
+          == other.content.trimmingCharacters(in: .whitespacesAndNewlines))
       && toolCalls.map { [$0.name, $0.arguments] } == other.toolCalls.map { [$0.name, $0.arguments] }
       && (role != .tool || toolCallID == other.toolCallID)
   }
@@ -258,21 +279,6 @@ extension MlxMessage {
               function: .init(name: $0.name, arguments: jsonObject($0.arguments)), id: $0.id)
           })
     }
-  }
-
-  /// The OpenAI shape a chat template reads.
-  var dictionary: [String: any Sendable] {
-    var out: [String: any Sendable] = ["role": role.rawValue, "content": content]
-    if !toolCalls.isEmpty {
-      out["tool_calls"] = toolCalls.map { call -> [String: any Sendable] in
-        [
-          "id": call.id, "type": "function",
-          "function": ["name": call.name, "arguments": jsonObject(call.arguments)] as [String: any Sendable],
-        ]
-      }
-    }
-    if let toolCallID { out["tool_call_id"] = toolCallID }
-    return out
   }
 }
 
@@ -295,6 +301,16 @@ func jsonObject(_ text: String) -> [String: any Sendable] {
     let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
   else { return [:] }
   return object.mapValues(sendable)
+}
+
+/// Values as JSON text, the keys sorted so the same values are the same text
+/// — a tool's schema is compared by it. Anything that will not serialise is
+/// an empty object.
+func jsonText(_ value: Any) -> String {
+  guard JSONSerialization.isValidJSONObject(value),
+    let data = try? JSONSerialization.data(withJSONObject: value, options: .sortedKeys)
+  else { return "{}" }
+  return String(decoding: data, as: UTF8.self)
 }
 
 private func sendable(_ value: Any) -> any Sendable {

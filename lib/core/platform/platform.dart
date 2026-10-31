@@ -11,7 +11,6 @@ import "../../data/builtin/llm/llm_client.dart";
 import "../../data/builtin/llm/llm_registry.dart";
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../data/local/file_chat_store.dart";
-import "../../data/local/local_client.dart";
 import "../../data/local/local_engine.dart";
 import "../../data/local/local_prefill.dart";
 import "../../data/prompts/prompt_sources.dart";
@@ -165,7 +164,7 @@ LocalPrefill? createLocalPrefill(
   BackgroundWork background,
   AppConfig config,
 ) {
-  if (!engine.available) return null;
+  if (!engine.controls.contains(LocalControl.prefill)) return null;
   final shell = backend.shell;
   return LocalPrefill(
     engine: engine,
@@ -199,7 +198,7 @@ LocalPrefill? createLocalPrefill(
         background: shell.canRunInBackground,
       );
       return (
-        options: localOptions(now),
+        options: LocalOptions.fromSettings(now),
         messages: [
           agentSystemMessage(
             platform: shell.platformDescription,

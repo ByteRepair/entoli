@@ -23,19 +23,19 @@ public enum Mlx {
     await MlxModels.shared.evict(id)
   }
 
-  public static func evictAll() async {
-    await MlxModels.shared.evictAll()
-  }
-
   /// One model call over `messages`, the whole conversation: what the model
   /// already holds of it is reused, and only the rest is read. `emit` hears
   /// the thinking, the reply and any tool calls as they come.
+  ///
+  /// **The model is the one `load` kept, never loaded here.** Dart's
+  /// residency is the one account of what is loaded, and a generation that
+  /// loaded behind it would hold weights that account does not know of.
   public static func generate(
-    _ id: String, _ directory: String,
+    _ id: String,
     messages: [MlxMessage], tools: [MlxTool], temperature: Double?,
     emit: @escaping @Sendable (MlxEvent) -> Void
   ) async throws {
-    let conversation = try await MlxModels.shared.load(id, directory)
+    guard let conversation = await MlxModels.shared.loaded(id) else { throw MlxNotLoaded() }
     try await conversation.generate(
       messages: messages, tools: tools, temperature: temperature, emit: emit)
   }
@@ -71,6 +71,21 @@ public struct MlxMessage: Sendable, Codable {
     self.toolCalls = toolCalls
     self.toolCallID = toolCallID
   }
+
+  /// The message as the channel carries it: `role`, `content`, `toolCalls`
+  /// (`id`, `name`, `arguments` as JSON text) and `toolCallId`. The keys are
+  /// read here, beside the type, so the Runner only forwards the map.
+  public init(channel map: [String: Any]) {
+    self.init(
+      role: Role(rawValue: map["role"] as? String ?? "") ?? .user,
+      content: map["content"] as? String ?? "",
+      toolCalls: (map["toolCalls"] as? [[String: Any]] ?? []).map {
+        MlxToolCall(
+          id: $0["id"] as? String ?? "", name: $0["name"] as? String ?? "",
+          arguments: $0["arguments"] as? String ?? "{}")
+      },
+      toolCallID: map["toolCallId"] as? String)
+  }
 }
 
 /// A tool call, its arguments as the JSON text they were written as.
@@ -86,7 +101,9 @@ public struct MlxToolCall: Sendable, Codable, Equatable {
   }
 }
 
-/// A tool the model is offered, its parameters as a JSON schema's text.
+/// A tool the model is offered, its parameters as a JSON schema's text —
+/// text rather than the values, so the record a saved cache keeps can be
+/// written and compared as it is.
 public struct MlxTool: Sendable, Codable, Equatable {
   public var name: String
   public var description: String
@@ -96,6 +113,15 @@ public struct MlxTool: Sendable, Codable, Equatable {
     self.name = name
     self.description = description
     self.parameters = parameters
+  }
+
+  /// The tool as the channel carries it: `name`, `description` and `schema`,
+  /// the JSON schema as a map.
+  public init(channel map: [String: Any]) {
+    self.init(
+      name: map["name"] as? String ?? "",
+      description: map["description"] as? String ?? "",
+      parameters: jsonText(map["schema"] ?? [String: Any]()))
   }
 }
 
@@ -108,8 +134,9 @@ public enum MlxEvent: Sendable {
   case done(promptTokens: Int, generatedTokens: Int)
 }
 
-public struct MlxUnavailable: Error, CustomStringConvertible {
-  public var description: String { "This OS does not carry MLX models." }
+/// A generation asked of a model `load` does not hold.
+public struct MlxNotLoaded: Error, CustomStringConvertible {
+  public var description: String { "The model is not loaded." }
 }
 
 /// The MLX models loaded now, by catalog id. Dart decides which are loaded —
@@ -145,9 +172,5 @@ actor MlxModels {
 
   func evict(_ id: String) {
     models.removeValue(forKey: id)
-  }
-
-  func evictAll() {
-    models.removeAll()
   }
 }
