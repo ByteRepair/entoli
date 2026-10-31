@@ -15,6 +15,7 @@ import "../../widgets/attachment_chip.dart";
 import "../../widgets/completion_field.dart";
 import "../../widgets/dialogs.dart";
 import "code_block.dart";
+import "composer_controller.dart";
 
 class _SendIntent extends Intent {
   const _SendIntent();
@@ -69,7 +70,9 @@ class Composer extends ConsumerStatefulWidget {
     this.workspaceHome,
   });
 
-  final TextEditingController controller;
+  /// The field, and the quotes and other embeds in it. What is sent is its
+  /// `message`, never its `text`.
+  final ComposerController controller;
 
   /// The main agent is speaking: Send becomes Stop and the voice button
   /// stands down.
@@ -125,6 +128,11 @@ class ComposerState extends ConsumerState<Composer> {
   /// it, not from the turn that follows.
   bool _wired = false;
 
+  /// How many embeds the field holds: each is taller than a line, so the
+  /// field is let grow by two lines for every one rather than scroll them
+  /// away under the line being typed.
+  int _embeds = 0;
+
   /// Whether Send would do anything. Kept here so only the button redraws when
   /// the answer flips, which is about twice a message.
   final ValueNotifier<bool> _canSend = ValueNotifier(false);
@@ -165,12 +173,15 @@ class ComposerState extends ConsumerState<Composer> {
     // the field's decoration and the buttons either side of it, and that has no
     // business re-running because Send went live.
     _refresh();
-    final shell = shellBypassCommand(widget.controller.text) != null;
-    final wired = wiredSkillFromText(widget.controller.text) != null;
-    if (shell == _shell && wired == _wired) return;
+    final message = widget.controller.message;
+    final shell = shellBypassCommand(message) != null;
+    final wired = wiredSkillFromText(message) != null;
+    final embeds = widget.controller.embeds.length;
+    if (shell == _shell && wired == _wired && embeds == _embeds) return;
     setState(() {
       _shell = shell;
       _wired = wired;
+      _embeds = embeds;
     });
   }
 
@@ -183,7 +194,7 @@ class ComposerState extends ConsumerState<Composer> {
         canSend &&
         widget.agentSpeaking &&
         widget.onQueue != null &&
-        (widget.steers?.call(widget.controller.text) ?? false);
+        (widget.steers?.call(widget.controller.message) ?? false);
   }
 
   Future<void> _attach(AttachmentKind kind) async {
@@ -221,11 +232,19 @@ class ComposerState extends ConsumerState<Composer> {
 
   /// Put back a message that was sent and taken back, ahead of whatever has
   /// been typed or attached since.
+  ///
+  /// A quote either side of the join is kept a paragraph of its own, or the
+  /// line beside it would read as more of the quote and the card would not
+  /// come back.
   void restore(Draft said) {
     final (:text, :attachments) = said;
-    final typed = widget.controller.text;
-    widget.controller.text = typed.isEmpty || text.isEmpty
+    final typed = widget.controller.message;
+    final quoted =
+        text.split("\n").last.startsWith(">") || typed.startsWith(">");
+    widget.controller.message = typed.isEmpty || text.isEmpty
         ? "$text$typed"
+        : quoted
+        ? "$text\n\n$typed"
         : "$text\n$typed";
     setState(() => _attachments.insertAll(0, attachments));
     _refresh();
@@ -233,14 +252,14 @@ class ComposerState extends ConsumerState<Composer> {
 
   /// A file on its own is worth sending, and whitespace on its own is not.
   bool get _worthSending =>
-      widget.controller.text.trim().isNotEmpty || _attachments.isNotEmpty;
+      widget.controller.message.trim().isNotEmpty || _attachments.isNotEmpty;
 
   void _submit({bool queue = false}) {
     // The button is dead when this is false, but Ctrl/Cmd+Enter reaches here
     // without passing it.
     if (!_worthSending) return;
     final send = queue && _queues.value ? widget.onQueue! : widget.onSend;
-    send(widget.controller.text.trim(), List.of(_attachments));
+    send(widget.controller.message.trim(), List.of(_attachments));
     widget.controller.clear();
     setState(_attachments.clear);
     _refresh();
@@ -266,10 +285,16 @@ class ComposerState extends ConsumerState<Composer> {
           project: widget.project,
           device: widget.device,
           minLines: 1,
-          maxLines: 6,
+          maxLines: 6 + 2 * _embeds.clamp(0, 4),
           // The command in the face a command is read in, so what is about to
           // run looks like what it is while it is still being typed.
           style: _shell ? codeBlockStyle(theme) : null,
+          // A field's lines are held to the text's height unless told
+          // otherwise, which would lay a card over the lines either side of
+          // it; the strut is then a floor rather than the height.
+          strutStyle: _embeds > 0
+              ? const StrutStyle(forceStrutHeight: false)
+              : null,
           decoration: _shell
               ? _shellField(theme)
               : _wired

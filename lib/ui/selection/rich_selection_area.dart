@@ -23,6 +23,7 @@ class RichSelectionArea extends StatefulWidget {
   const RichSelectionArea({
     super.key,
     required this.markdown,
+    this.onReply,
     required this.child,
   });
 
@@ -30,6 +31,11 @@ class RichSelectionArea extends StatefulWidget {
   /// paragraph was — and only then, since a streamed reply rebuilds every
   /// frame and building it is a join over the whole reply.
   final String Function() markdown;
+
+  /// Answer what is selected: the menu offers Reply beside Copy, and this
+  /// gets the selection as markdown — what a copy's plain half is. Null
+  /// offers no Reply.
+  final ValueChanged<String>? onReply;
 
   final Widget child;
 
@@ -59,13 +65,14 @@ class _RichSelectionAreaState extends State<RichSelectionArea> {
   }
 
   /// The framework's menu with its Copy swapped for [_copy]; what follows a
-  /// copy is what the framework's own does.
+  /// copy is what the framework's own does. Reply follows Copy, on offer
+  /// wherever Copy is — wherever something is selected.
   Widget _menu(BuildContext context, SelectableRegionState region) =>
       AdaptiveTextSelectionToolbar.buttonItems(
         anchors: region.contextMenuAnchors,
         buttonItems: [
           for (final item in region.contextMenuButtonItems)
-            if (item.type == ContextMenuButtonType.copy)
+            if (item.type == ContextMenuButtonType.copy) ...[
               item.copyWith(
                 onPressed: () {
                   unawaited(_copy());
@@ -80,8 +87,23 @@ class _RichSelectionAreaState extends State<RichSelectionArea> {
                       region.hideToolbar();
                   }
                 },
-              )
-            else
+              ),
+              if (widget.onReply case final reply?)
+                ContextMenuButtonItem(
+                  label: "Reply",
+                  onPressed: () {
+                    // Read before the selection is cleared, which it is: the
+                    // passage has gone to the composer, and a highlight left
+                    // behind would say it is still waiting for something.
+                    final document = _selection.selectedDocument();
+                    region.clearSelection();
+                    region.hideToolbar();
+                    if (document != null) {
+                      reply(const MarkdownCopyFormat().write(document));
+                    }
+                  },
+                ),
+            ] else
               item,
         ],
       );
