@@ -5,8 +5,11 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
+import "package:agent_chat/domain/quote.dart";
 import "package:agent_chat/domain/room/roster.dart" show isCommand;
 import "package:agent_chat/ui/chat/widgets/composer.dart";
+import "package:agent_chat/ui/chat/widgets/composer_controller.dart";
+import "package:agent_chat/ui/chat/widgets/composer_embed.dart";
 import "package:agent_chat/ui/widgets/attachment_chip.dart";
 
 import "../data/builtin/builtin_fakes.dart";
@@ -15,7 +18,7 @@ import "../harness.dart";
 
 void main() {
   late TestApp app;
-  final controller = TextEditingController();
+  final controller = ComposerController();
   final sent = <String>[];
   final sentAttachments = <List<Attachment>>[];
   final queued = <String>[];
@@ -281,6 +284,85 @@ void main() {
 
     expect(sent, ["taken back\ntyped since"]);
     expect(sentAttachments.single.single.filename, "shot.png");
+  });
+
+  group("quotes", () {
+    Future<void> send(WidgetTester tester) async {
+      await tester.tap(find.byTooltip("Send"));
+      await settleIo(tester);
+    }
+
+    Future<void> quote(WidgetTester tester, String text, {String? handle}) {
+      controller.append(QuoteEmbed(Quote(text, handle: handle)));
+      return settleIo(tester);
+    }
+
+    // Quoted with nothing typed between, each is left a line to be answered
+    // on later; sent, each is a blockquote a paragraph apart.
+    testWidgets("stack a line apart and send as blockquotes", (tester) async {
+      await pump(tester);
+      await quote(tester, "one");
+      await quote(tester, "two");
+
+      expect(find.byType(QuoteCard), findsNWidgets(2));
+      expect(controller.text.split("\n"), hasLength(4));
+      await send(tester);
+      expect(sent, ["> one\n\n> two"]);
+    });
+
+    // A line straight after a `>` line is more of the quote to markdown, so
+    // the answer typed under the card is sent a blank line apart from it.
+    testWidgets("send what is typed under one as a paragraph of its own", (
+      tester,
+    ) async {
+      await pump(tester);
+      await quote(tester, "one", handle: "@scout");
+      await type(tester, "${controller.text}answer");
+
+      expect(find.text("@scout"), findsOneWidget);
+      await send(tester);
+      expect(sent, ["> @scout\n>\n> one\n\nanswer"]);
+    });
+
+    testWidgets("the card's close button takes its quote out", (tester) async {
+      await pump(tester);
+      await quote(tester, "one");
+      await quote(tester, "two");
+
+      await tester.tap(find.byTooltip("Remove quote").first);
+      await settleIo(tester);
+
+      expect(find.byType(QuoteCard), findsOneWidget);
+      await send(tester);
+      expect(sent, ["> two"]);
+    });
+
+    testWidgets("a message put back comes back with its cards", (tester) async {
+      final key = GlobalKey<ComposerState>();
+      await app.pump(
+        tester,
+        Scaffold(
+          body: Composer(
+            key: key,
+            controller: controller,
+            agentSpeaking: false,
+            onSend: (text, _) => sent.add(text),
+            onAbort: () {},
+          ),
+        ),
+      );
+      await type(tester, "typed since");
+
+      key.currentState!.restore((
+        text: "> @scout\n>\n> one\n\nanswer",
+        attachments: const [],
+      ));
+      await settleIo(tester);
+
+      expect(find.byType(QuoteCard), findsOneWidget);
+      await send(tester);
+      expect(sent, ["> @scout\n>\n> one\n\nanswer\ntyped since"]);
+    });
   });
 
   Future<void> insertVia(WidgetTester tester, String label) async {
