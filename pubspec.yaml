@@ -120,6 +120,11 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
+  # Apple silicon only on macOS: x86_64 is not supported, and EntoliMLX has
+  # no slice for it. Flutter under Xcode 27 still builds one unless told.
+  config:
+    enable-macos-arm64-only: true
+
   assets:
     # Bundled skills and agents are embedded in code by
     # tool/gen_bundled_skills.dart, not shipped as Flutter assets.
