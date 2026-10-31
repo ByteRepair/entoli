@@ -3,7 +3,6 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../data/local/local_engine.dart" show LocalControl;
 import "../../domain/app_settings.dart";
-import "../../domain/local_llm.dart";
 import "../../domain/local_model.dart";
 import "../../domain/local_model_store.dart";
 import "../../providers.dart";
@@ -35,7 +34,7 @@ class LocalModelSection extends ConsumerWidget {
     }
     return ListTile(
       title: const Text("LLM settings"),
-      subtitle: const Text("Hardware, context, caching and loaded models"),
+      subtitle: const Text("Hardware, context and caching"),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => Navigator.of(
         context,
@@ -75,8 +74,6 @@ class LocalLlmSettingsPage extends ConsumerWidget {
           const _ThreadsSlider(),
           if (prefill) const _PrefillToggle(),
           if (controls.contains(LocalControl.kvCache)) const _KvCachePicker(),
-          const _Prefilling(),
-          const _Running(),
         ],
       ),
     );
@@ -308,131 +305,6 @@ class _PrefillToggle extends ConsumerWidget {
       value: on,
       onChanged: ref.read(appSettingsProvider.notifier).setLocalPrefill,
     );
-  }
-}
-
-/// The warm-up in progress, drawn only while there is one — the rest of the
-/// time it has nothing to say. Its own row rather than a line on [_Running]
-/// because a model can be warming before any chat has loaded one.
-class _Prefilling extends ConsumerWidget {
-  const _Prefilling();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(localPrefillStateProvider);
-    if (state == null) return const SizedBox.shrink();
-    final pct = state.fraction == null
-        ? ""
-        : " · ${(state.fraction! * 100).round()}%";
-    return ListTile(
-      leading: const SizedBox(
-        width: 20,
-        height: 20,
-        child: CircularProgressIndicator(strokeWidth: 2),
-      ),
-      title: Text("Prefilling ${state.name}…"),
-      subtitle: Text(
-        "Warming its system prompt so the first chat starts "
-        "sooner$pct",
-      ),
-    );
-  }
-}
-
-/// What is loaded right now, one row each. The only thing on this page that
-/// changes without being touched: loading takes the better part of a minute,
-/// nothing here started it, and a model that will not fit says so here and
-/// nowhere else.
-class _Running extends ConsumerWidget {
-  const _Running();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final running = ref.watch(localLlmStateProvider);
-    if (running.isEmpty) {
-      return const ListTile(
-        title: Text("Nothing loaded"),
-        subtitle: Text("The first chat to ask for one loads it."),
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final state in running) _RunningRow(state),
-        Padding(
-          padding: const EdgeInsets.only(left: 16, bottom: 8),
-          child: TextButton(
-            onPressed: () => ref.read(localEngineProvider).stopAll(),
-            child: const Text("Unload all"),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _RunningRow extends ConsumerWidget {
-  const _RunningRow(this.state);
-
-  final LocalLlmState state;
-
-  /// Where it actually ended up, which is the one thing the picker cannot say:
-  /// Auto is resolved when the model loads, and a phone whose accelerator this
-  /// build cannot reach answers on the CPU whatever was picked.
-  static String? _where(String? device) => switch (device) {
-    null => null,
-    LocalDevice.cpu => "the CPU",
-    final name => "the ${LocalDevice.computeOf(name).label} ($name)",
-  };
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final name = ref.watch(localEngineProvider).nameOf(state.modelId);
-    final where = _where(state.device);
-    // One model let go of, the rest left loaded — and a load still under way
-    // or one that failed cleared the same way, so no row is stuck on the page.
-    final stop = IconButton(
-      icon: const Icon(Icons.stop_circle_outlined),
-      tooltip: "Unload $name",
-      onPressed: () => ref.read(localEngineProvider).stop(state.modelId),
-    );
-    return switch (state.phase) {
-      LocalLlmPhase.starting => ListTile(
-        leading: const SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-        title: Text("Loading $name…"),
-        subtitle: const Text("A chat sent before this finishes waits for it."),
-        trailing: stop,
-      ),
-      LocalLlmPhase.ready => ListTile(
-        leading: Icon(
-          Icons.check_circle_outline,
-          color: theme.colorScheme.primary,
-        ),
-        title: Text(name),
-        subtitle: Text(
-          "${where == null ? "Answering" : "Answering on $where"}"
-          " · ${state.contextLength} tokens of context",
-        ),
-        trailing: stop,
-      ),
-      LocalLlmPhase.failed => ListTile(
-        isThreeLine: true,
-        leading: Icon(Icons.error_outline, color: theme.colorScheme.error),
-        title: Text("$name would not load"),
-        subtitle: Text(
-          state.failure ?? "",
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.error,
-          ),
-        ),
-        trailing: stop,
-      ),
-    };
   }
 }
 

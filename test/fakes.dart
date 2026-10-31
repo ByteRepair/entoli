@@ -1313,7 +1313,12 @@ class FakeLocalRuntime extends LocalRuntime {
     this.maxThreads,
     this.chunks = const [],
     this.restores = false,
+    this.usage,
   });
+
+  /// What every loaded model reports it takes up, or null for a runtime that
+  /// cannot say.
+  final LocalUsage? usage;
 
   final List<LocalDevice> devicesFound;
   final bool ready;
@@ -1422,6 +1427,9 @@ class FakeLocalInstance extends LocalInstance {
       if (i == 0 && hold != null) await hold.future;
     }
   }
+
+  @override
+  Future<LocalUsage?> usage() async => _runtime.usage;
 
   @override
   Future<bool> saveState(String path) async {

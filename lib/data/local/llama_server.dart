@@ -377,6 +377,22 @@ class LlamaInstance extends LocalInstance {
         reasoningEffort: reasoningEffort,
       );
 
+  /// The server's resident memory: one process per model, so all of it is
+  /// this model's — the weights, the KV cache and whatever the server keeps
+  /// beside them.
+  @override
+  Future<LocalUsage?> usage() async {
+    final process = _process;
+    if (process == null) return null;
+    try {
+      final status = await File("/proc/${process.pid}/status").readAsString();
+      final bytes = residentBytes(status);
+      return bytes == null ? null : LocalUsage(bytes: bytes);
+    } on FileSystemException {
+      return null;
+    }
+  }
+
   @override
   Future<bool> saveState(String path) => _slot("save", path);
 
@@ -535,6 +551,16 @@ class LlamaInstance extends LocalInstance {
       _log.isEmpty ? "The model server exited ($code)." : _log.join("\n"),
     );
   }
+}
+
+/// `VmRSS` out of a `/proc/<pid>/status`, in bytes. Null where it is not
+/// there.
+int? residentBytes(String status) {
+  final match = RegExp(
+    r"^VmRSS:\s+(\d+) kB",
+    multiLine: true,
+  ).firstMatch(status);
+  return match == null ? null : int.parse(match.group(1)!) * 1024;
 }
 
 /// What `--list-devices` printed. Accelerators only — ggml leaves the CPU out

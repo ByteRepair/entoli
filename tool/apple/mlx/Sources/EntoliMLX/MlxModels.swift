@@ -1,4 +1,5 @@
 import Foundation
+internal import MLX
 internal import MLXHuggingFace
 internal import MLXLLM
 internal import MLXLMCommon
@@ -50,6 +51,14 @@ public enum Mlx {
   public static func restore(_ id: String, from path: String) async -> Bool {
     guard let conversation = await MlxModels.shared.loaded(id) else { return false }
     return await conversation.restore(from: path)
+  }
+
+  /// What `id` takes up: its weights' bytes, and how many tokens its cache
+  /// holds — which the app turns into bytes by what one costs. Nil where it
+  /// is not loaded.
+  public static func usage(_ id: String) async -> (weightBytes: Int, tokens: Int)? {
+    guard let conversation = await MlxModels.shared.loaded(id) else { return nil }
+    return await conversation.usage()
   }
 }
 
@@ -170,7 +179,12 @@ actor MlxModels {
     try? await models[id]?.value
   }
 
+  /// MLX keeps the buffers a model let go of for the next allocation, so
+  /// dropping one frees nothing the system sees until its cache is emptied —
+  /// a model unloaded from the settings page would otherwise go on holding
+  /// its gigabytes.
   func evict(_ id: String) {
     models.removeValue(forKey: id)
+    Memory.clearCache()
   }
 }

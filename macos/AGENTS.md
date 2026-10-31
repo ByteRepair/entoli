@@ -221,6 +221,16 @@ and the rest run their models as a server of their own or on the CPU.
   read, where `open --env` put it on a command line any process of the user's
   could. The frames are
   `StandardMessageCodec` messages, length-prefixed (`host_frame.dart`).
+- **It runs while something holds it, and five minutes past.** A loaded MLX
+  model holds the host from the moment it is made — before the model it
+  displaces lets go, so a switch is never idle — until it is unloaded, and
+  every voice worker holds it while it runs (`ModelHost.hold`). With nothing
+  held for five minutes the app closes the connection and the host leaves; the
+  next ask starts another. The wait is for what comes back — a voice
+  conversation picked up again, a model unloaded and asked for — since a
+  relaunch is a second a model's load hides and a tap on the microphone does
+  not. The app decides rather than the host, since only it knows a load is
+  about to arrive.
 - **The host goes with the app, however it goes.** Its parent is launchd, so
   it watches the pid it was handed, and leaves when that exits or the socket
   closes. A host lost is every model in it lost, and `ModelHost.lost` tells

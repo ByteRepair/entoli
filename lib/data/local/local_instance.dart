@@ -163,6 +163,10 @@ abstract class LocalInstance {
     _onChange();
   }
 
+  /// What it takes up now, as the runtime can measure it; null where it
+  /// cannot.
+  Future<LocalUsage?> usage() async => null;
+
   /// One model call. Where the runtime can say how far through the prompt it
   /// is, that arrives as `LlmPromptProgress` before the first token.
   Stream<LlmChunk> generate(
@@ -215,6 +219,15 @@ abstract class LocalInstance {
     _ready.completeError(why);
     _ready.future.ignore();
   }
+}
+
+/// What a loaded model takes up: the memory it holds, and — where the runtime
+/// can say — how many tokens of conversation are in its cache.
+class LocalUsage {
+  const LocalUsage({required this.bytes, this.tokens});
+
+  final int bytes;
+  final int? tokens;
 }
 
 /// What differs between the engines that run downloaded models: how a model

@@ -75,6 +75,9 @@ class Residency {
   }
 
   /// Unloads [modelId], where it is loaded.
+  /// The loaded instance of [modelId], or null where it is not loaded.
+  LocalInstance? instanceOf(String modelId) => _of(modelId);
+
   Future<void> stop(String modelId) async {
     final instance = _of(modelId);
     if (instance == null) return;

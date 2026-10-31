@@ -3,6 +3,7 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/data/local/local_instance.dart" show LocalUsage;
 import "package:agent_chat/domain/local_llm.dart";
 import "package:agent_chat/domain/local_model.dart";
 import "package:agent_chat/domain/model_budget.dart";
@@ -105,17 +106,19 @@ void main() {
       localRuntime: FakeLocalRuntime(),
       localModels: {model.id},
     );
-    await pumpLlmSettings(tester);
+    await pumpOnDevice(tester);
+    // Downloaded is not loaded. A gigabyte of memory is spent when a chat asks
+    // for the model, not when the file lands.
+    expect(app.localRuntime.served, isEmpty);
+    expect(find.text("Nothing loaded"), findsOneWidget);
 
+    await tester.tap(find.text("LLM settings"));
+    await settleIo(tester);
     // The pick used to live here, and having moved it there must be nothing
     // left that looks like one: two places to say which model answers is one
     // that can disagree with the other.
     expect(find.text("Model"), findsNothing);
     expect(find.text("Max LLMs running"), findsOneWidget);
-    // Downloaded is not loaded. A gigabyte of memory is spent when a chat asks
-    // for the model, not when the file lands.
-    expect(app.localRuntime.served, isEmpty);
-    expect(find.text("Nothing loaded"), findsOneWidget);
   });
 
   testWidgets("the cap on how many run at once is stored", (tester) async {
@@ -186,7 +189,7 @@ void main() {
     final llm = FakeLocalRuntime();
     app = TestApp.create(localRuntime: llm, localModels: {model.id});
     await io(tester, () => app.serveLocal(model.id, device: "Vulkan0"));
-    await pumpLlmSettings(tester);
+    await pumpOnDevice(tester);
 
     // The resolved device, not the setting: Auto is decided when the model
     // loads, so this row is the only place the answer appears.
@@ -202,7 +205,7 @@ void main() {
     final llm = FakeLocalRuntime();
     app = TestApp.create(localRuntime: llm, localModels: {model.id});
     await io(tester, () => app.serveLocal(model.id, device: LocalDevice.cpu));
-    await pumpLlmSettings(tester);
+    await pumpOnDevice(tester);
 
     expect(find.textContaining("Answering on the CPU"), findsOneWidget);
   });
@@ -222,7 +225,7 @@ void main() {
         // Expected.
       }
     });
-    await pumpLlmSettings(tester);
+    await pumpOnDevice(tester);
 
     // The server's own last words. For a model too large to fit this is the
     // only place it is said at all.
@@ -242,7 +245,7 @@ void main() {
       await app.serveLocal(model.id, maxRunning: 2);
       await app.serveLocal(other.id, maxRunning: 2);
     });
-    await pumpLlmSettings(tester);
+    await pumpOnDevice(tester);
 
     await tester.tap(find.byTooltip("Unload ${model.name}"));
     await settleIo(tester);
@@ -250,6 +253,26 @@ void main() {
     expect(app.localRuntime.events.last, "stop ${model.id}");
     expect(find.byTooltip("Unload ${model.name}"), findsNothing);
     expect(find.byTooltip("Unload ${other.name}"), findsOneWidget);
+  });
+
+  testWidgets("what is loaded leads the On-device page, with what it takes "
+      "up", (tester) async {
+    app = TestApp.create(
+      localRuntime: FakeLocalRuntime(
+        usage: const LocalUsage(bytes: 3 * 1024 * 1024 * 1024, tokens: 9000),
+      ),
+      localModels: {model.id},
+    );
+    await io(tester, () => app.serveLocal(model.id));
+    await pumpOnDevice(tester);
+
+    // Above the catalog, where it is seen without going looking.
+    expect(
+      tester.getTopLeft(find.text("Running models")).dy,
+      lessThan(tester.getTopLeft(find.text("Text models")).dy),
+    );
+    expect(find.textContaining("3.0 GB in memory"), findsOneWidget);
+    expect(find.textContaining("9K tokens cached"), findsOneWidget);
   });
 
   testWidgets("unloading everything takes the warm-up with it", (tester) async {
@@ -260,7 +283,7 @@ void main() {
       prefill: true,
     );
     await io(tester, () => app.serveLocal(model.id));
-    await pumpLlmSettings(tester);
+    await pumpOnDevice(tester);
 
     // Held at its serve, which is where a warm-up spends most of its life. From
     // here the page has a spinner on it, so it is pumped rather than settled.

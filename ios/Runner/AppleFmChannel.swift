@@ -137,6 +137,14 @@ class AppleFmChannel: NSObject {
       }
     case "load", "evict":
       residency(call, result)
+    case "mlxUsage":
+      let model = (call.arguments as? [String: Any])?["model"] as? String ?? ""
+      Task {
+        let usage = await Mlx.usage(model)
+        DispatchQueue.main.async {
+          result(usage.map { ["weightBytes": $0.weightBytes, "tokens": $0.tokens] })
+        }
+      }
     default:
       result(FlutterMethodNotImplemented)
     }

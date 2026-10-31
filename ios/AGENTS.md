@@ -345,7 +345,9 @@ model) and `cancel`, the residency Dart decides and the MLX generations:
   `MlxModels` — a second ask while it loads waits on the first, and a failed
   load leaves nothing behind. A failure answers a `FlutterError` whose
   message is what the settings row shows.
-- `evict {model}` drops that model.
+- `evict {model}` drops that model and empties MLX's buffer cache — the
+  buffers a dropped model let go of are otherwise kept for the next
+  allocation, and the gigabytes stay with the process.
 - `mlxGenerate {id, model, messages, tools, temperature}` → that model's
   `MlxConversation`, which `load` must have kept: a generation never loads,
   since Dart's `Residency` is the one account of what is loaded, and one
@@ -360,6 +362,9 @@ model) and `cancel`, the residency Dart decides and the MLX generations:
   `done` with `finish: tool_calls`.
 - `mlxSave` / `mlxRestore {model, path}` → whether the prompt state was
   written or read.
+- `mlxUsage {model}` → `{weightBytes, tokens}`: the weights' bytes, counted
+  once, and the tokens its cache holds, which Dart prices at the model's KV
+  bytes per token for the Running models row. Nil where it is not loaded.
 
 ### The build
 

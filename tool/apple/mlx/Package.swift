@@ -15,12 +15,16 @@ let package = Package(
     // carry is built with its validation skipped, so what runs is only ever
     // the code a person chose by bumping the number.
     .package(url: "https://github.com/ml-explore/mlx-swift-lm", exact: "3.32.3"),
+    // The version mlx-swift-lm resolves to, named so its buffer cache can be
+    // emptied when a model is let go.
+    .package(url: "https://github.com/ml-explore/mlx-swift", exact: "0.32.3"),
     .package(url: "https://github.com/huggingface/swift-transformers", exact: "1.3.0"),
   ],
   targets: [
     .target(
       name: "EntoliMLX",
       dependencies: [
+        .product(name: "MLX", package: "mlx-swift"),
         .product(name: "MLXLLM", package: "mlx-swift-lm"),
         .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
         .product(name: "MLXHuggingFace", package: "mlx-swift-lm"),

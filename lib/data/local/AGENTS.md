@@ -475,10 +475,18 @@ place to say the same thing and the one place that could disagree with the rest.
 It also means a launch loads nothing at all, where it used to spend a minute and
 a gigabyte restoring a pick the user might not have been about to use.
 
-**A loaded model is let go from its own row.** Each row of the Running list on
-the LLM settings page has an Unload button (`LocalEngine.stop`), loading and
-failed rows included, beside Unload all; a warm-up of the model it unloads
-stops with it, since the prefill watches the list rather than the buttons.
+**What is loaded leads the On-device page.** "Running models"
+(`running_models.dart`) is the page's first section rather than a row of LLM
+settings, three taps deep: it is what the page is most often opened for. Each
+row has an Unload button (`LocalEngine.stop`), loading and failed rows
+included, beside Unload all; a warm-up of the model it unloads stops with it,
+since the prefill watches the list rather than the buttons. A ready row says
+what the model takes up (`LocalInstance.usage`), asked again every few
+seconds while it is drawn: a llama.cpp server's resident memory, read off
+`/proc/<pid>/status` since each model is a process of its own; an MLX model's
+weights, counted by the Swift half, and its cache as the tokens it holds at
+the model's `kvBytesPerToken`, since several share one process and its
+footprint would say nothing of which.
 
 **`Residency.serve` is the only thing that reconciles what is loaded with the
 settings**, and there is no second path to forget. It answers from a model

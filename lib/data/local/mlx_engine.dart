@@ -21,7 +21,7 @@ class MlxEngine extends RuntimeEngine {
     ModelHost host, {
     super.prompts,
     super.budget,
-  }) : super(MlxRuntime(host.channel(appleChannel.name)), store) {
+  }) : super(MlxRuntime(host), store) {
     // The models were the host process's, and it has gone: a new one starts
     // with none loaded.
     host.lost.listen((_) => residency.lost());
@@ -37,8 +37,9 @@ class MlxEngine extends RuntimeEngine {
 /// sized at load, so there is no context to choose either. Keeping prompts
 /// changes nothing about a load, so it is not in one.
 class MlxRuntime extends LocalRuntime {
-  const MlxRuntime(this._channel);
+  MlxRuntime(this._host) : _channel = _host.channel(appleChannel.name);
 
+  final ModelHost _host;
   final ModelChannel _channel;
 
   @override
@@ -58,19 +59,25 @@ class MlxRuntime extends LocalRuntime {
     DownloadedModel model,
     LocalLoad load, {
     required void Function() onChange,
-  }) => MlxInstance(_channel, model, load, onChange: onChange);
+  }) => MlxInstance(_channel, _host.hold(), model, load, onChange: onChange);
 }
 
 /// One MLX model, loaded in the Swift half and kept there until it is stopped.
 class MlxInstance extends LocalInstance {
   MlxInstance(
     this._channel,
+    this._lease,
     super.model,
     super.load, {
     required super.onChange,
   });
 
   final ModelChannel _channel;
+
+  /// Keeps the process the model is in, from when it is made — before the
+  /// model it displaces lets go of its own, so a switch of models is not the
+  /// process going idle — until it is unloaded.
+  final ModelHostLease _lease;
 
   @override
   String get deviceLabel => "Metal";
@@ -125,6 +132,28 @@ class MlxInstance extends LocalInstance {
     "toolCallId": ?message.toolCallId,
   };
 
+  /// The weights, counted by the Swift half, and the cache, as the tokens it
+  /// holds at what one costs this model.
+  @override
+  Future<LocalUsage?> usage() async {
+    try {
+      final usage = await _channel.invokeMethod<Map<Object?, Object?>>(
+        "mlxUsage",
+        {"model": model.id},
+      );
+      if (usage == null) return null;
+      final tokens = usage["tokens"] as int? ?? 0;
+      return LocalUsage(
+        bytes:
+            (usage["weightBytes"] as int? ?? 0) +
+            tokens * model.kvBytesPerToken,
+        tokens: tokens,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   Future<bool> saveState(String path) => _state("mlxSave", path);
 
@@ -149,6 +178,8 @@ class MlxInstance extends LocalInstance {
       await _channel.invokeMethod("evict", {"model": model.id});
     } catch (_) {
       // Its process may have gone already, which is the same answer.
+    } finally {
+      _lease.release();
     }
   }
 }

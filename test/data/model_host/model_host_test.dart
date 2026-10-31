@@ -230,4 +230,51 @@ void main() {
       ),
     );
   });
+
+  group("held and idle", () {
+    const idle = Duration(milliseconds: 50);
+    setUp(() => host = HelperModelHost(launches.launch, idle: idle));
+
+    test("nothing held for the wait lets it go, and is no loss", () async {
+      final lease = host.hold();
+      await host.channel(native.name).invokeMethod("load");
+      final hostEnd = launches.hostEnd!;
+      var lost = false;
+      host.lost.listen((_) => lost = true);
+
+      lease.release();
+      await hostEnd.done.timeout(const Duration(seconds: 5));
+
+      // Nothing was in it: the app was not told it lost anything.
+      expect(lost, isFalse);
+      // The next ask starts another.
+      host.hold();
+      await host.channel(native.name).invokeMethod("load");
+      expect(launches.count, 2);
+    });
+
+    test("held again within the wait, it stays", () async {
+      final first = host.hold();
+      await host.channel(native.name).invokeMethod("load");
+
+      // A model switch: the next lease is taken before the last is given up.
+      final second = host.hold();
+      first.release();
+      await Future<void>.delayed(idle * 4);
+
+      await host.channel(native.name).invokeMethod("load");
+      expect(launches.count, 1);
+      second.release();
+    });
+
+    test("a running worker holds it, and its end lets it go", () async {
+      final worker = await host.spawn(echo, ["started"]);
+      final hostEnd = launches.hostEnd!;
+      await Future<void>.delayed(idle * 4);
+      expect(launches.count, 1);
+
+      worker.close();
+      await hostEnd.done.timeout(const Duration(seconds: 5));
+    });
+  });
 }

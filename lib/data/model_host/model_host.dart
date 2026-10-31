@@ -24,6 +24,25 @@ abstract interface class ModelHost {
   /// Each time the models' process went, and every model loaded in it with
   /// it.
   Stream<void> get lost;
+
+  /// Keeps the models' process for as long as the lease is held: a loaded
+  /// model holds one, and so does every worker [spawn] makes. With none held
+  /// a process of their own has no reason to run, and goes; the next ask
+  /// starts another.
+  ModelHostLease hold();
+}
+
+/// One reason for the models' process to keep running, given up once.
+class ModelHostLease {
+  ModelHostLease(this._release);
+
+  void Function()? _release;
+
+  void release() {
+    final release = _release;
+    _release = null;
+    release?.call();
+  }
 }
 
 /// A method channel's two directions, wherever its native half is: calls out,
@@ -74,17 +93,36 @@ class InProcessModelHost implements ModelHost {
 
   @override
   Stream<void> get lost => const Stream.empty();
+
+  /// This process runs whatever is held.
+  @override
+  ModelHostLease hold() => ModelHostLease(() {});
 }
 
 /// The models in a second process, started on first use and again after it
-/// goes. [_launch] starts one and answers its connection; see
-/// `HelperProcess.launch`.
+/// goes, and let go once nothing has held it for [idle]. [_launch] starts one
+/// and answers its connection; see `HelperProcess.launch`.
+///
+/// The wait is for the uses that come back: a voice conversation picked up
+/// again, a model unloaded and asked for. Relaunching costs a second, which a
+/// model's load hides and a tap on the microphone does not; five idle minutes
+/// is the point past which the process is only taking up room.
 class HelperModelHost implements ModelHost {
-  HelperModelHost(this._launch);
+  HelperModelHost(this._launch, {this.idle = const Duration(minutes: 5)});
 
   final Future<HostConnection> Function() _launch;
 
+  final Duration idle;
+
+  /// Running while nothing holds the process; held again, it is called off.
+  Timer? _idleTimer;
+
   Future<HostConnection>? _connection;
+
+  /// How many leases are out. The app decides when the process is done
+  /// rather than the process itself, since only this side knows a load is
+  /// about to arrive.
+  var _holds = 0;
   final _channels = <String, _RemoteChannel>{};
   final _workers = <int, _RemoteWorker>{};
   final _lost = StreamController<void>.broadcast();
@@ -95,8 +133,15 @@ class HelperModelHost implements ModelHost {
   Future<HostConnection> _start() async {
     try {
       final connection = await _launch();
+      final current = _connection;
       connection.frames.listen(_route);
-      unawaited(connection.done.then((_) => _gone()));
+      // Only the process still in use going is a loss: one let go of, idle,
+      // ends the same way and takes nothing with it.
+      unawaited(
+        connection.done.then((_) {
+          if (identical(_connection, current)) _gone();
+        }),
+      );
       return connection;
     } catch (_) {
       // The next ask tries again rather than meeting this failure forever.
@@ -130,16 +175,51 @@ class HelperModelHost implements ModelHost {
   }
 
   @override
+  ModelHostLease hold() {
+    _holds++;
+    _idleTimer?.cancel();
+    _idleTimer = null;
+    return ModelHostLease(() {
+      if (--_holds > 0) return;
+      _idleTimer = Timer(idle, () {
+        _idleTimer = null;
+        unawaited(_letGo());
+      });
+    });
+  }
+
+  /// Closing the connection is what ends the process: it leaves when the app
+  /// does, and a socket closed is the app gone as far as it can tell.
+  Future<void> _letGo() async {
+    final idle = _connection;
+    _connection = null;
+    if (idle == null) return;
+    try {
+      (await idle).close();
+    } catch (_) {
+      // It never connected, which leaves nothing to close.
+    }
+  }
+
+  @override
   ModelChannel channel(String name) =>
       _channels[name] ??= _RemoteChannel(this, name);
 
   @override
   Future<Worker> spawn(WorkerKind kind, List<Object?> argument) async {
-    final connection = await _connect();
+    final lease = hold();
+    final HostConnection connection;
+    try {
+      connection = await _connect();
+    } catch (_) {
+      lease.release();
+      rethrow;
+    }
     final id = _nextWorker++;
     final worker = _workers[id] = _RemoteWorker(
       connection,
       id,
+      lease,
       onClose: () => _workers.remove(id),
     );
     connection.send(SpawnFrame(id, kind.name, argument));
@@ -174,10 +254,18 @@ class _RemoteChannel implements ModelChannel {
 }
 
 class _RemoteWorker implements Worker {
-  _RemoteWorker(this._connection, this._id, {required this.onClose});
+  _RemoteWorker(
+    this._connection,
+    this._id,
+    this._lease, {
+    required this.onClose,
+  });
 
   final HostConnection _connection;
   final int _id;
+
+  /// Given up when the worker ends, however it ends.
+  final ModelHostLease _lease;
   final void Function() onClose;
   final _out = StreamController<Object?>();
 
@@ -203,6 +291,7 @@ class _RemoteWorker implements Worker {
   /// ([WorkerFailed]) — and the host has no business speaking the worker's
   /// vocabulary to say so.
   void _ended([Object? error]) {
+    _lease.release();
     if (_out.isClosed) return;
     if (error != null) _out.addError(error);
     unawaited(_out.close());

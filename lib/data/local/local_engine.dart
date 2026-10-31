@@ -52,6 +52,10 @@ abstract class LocalEngine {
   /// Unload [modelId], where it is loaded.
   Future<void> stop(String modelId);
 
+  /// What [modelId] takes up while it is loaded; null where it is not, or
+  /// where its runtime cannot say.
+  Future<LocalUsage?> usage(String modelId) async => null;
+
   /// Unload everything.
   Future<void> stopAll();
 
@@ -138,6 +142,10 @@ abstract class RuntimeEngine extends LocalEngine {
 
   @override
   Future<void> stop(String modelId) => residency.stop(modelId);
+
+  @override
+  Future<LocalUsage?> usage(String modelId) async =>
+      residency.instanceOf(modelId)?.usage();
 
   @override
   Future<void> stopAll() => residency.stopAll();

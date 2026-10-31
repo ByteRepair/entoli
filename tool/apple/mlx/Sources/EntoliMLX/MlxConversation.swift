@@ -1,4 +1,5 @@
 import Foundation
+internal import MLX
 internal import MLXLMCommon
 
 /// One loaded model and the conversation its cache holds.
@@ -91,6 +92,19 @@ actor MlxConversation {
       messages: messages + [MlxMessage(role: .assistant, content: reply, toolCalls: calls)],
       tools: tools)
     emit(.done(promptTokens: counts.prompt, generatedTokens: counts.generated))
+  }
+
+  /// Counted once: the weights do not change while the model is loaded.
+  private var weightBytes: Int?
+
+  func usage() async -> (weightBytes: Int, tokens: Int) {
+    if weightBytes == nil {
+      weightBytes = await container.perform { context in
+        context.model.parameters().flattened().reduce(0) { $0 + $1.1.nbytes }
+      }
+    }
+    let tokens = (try? await session?.cacheStatus().processedTokenCount) ?? nil
+    return (weightBytes ?? 0, tokens ?? 0)
   }
 
   /// Writes the cache to `path` and what it holds beside it, `path.json`: a
