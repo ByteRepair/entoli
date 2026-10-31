@@ -15,6 +15,10 @@ class HostConnection {
         .cast<Uint8List>()
         .transform(const FrameCodec().decoder)
         .listen(_receive, onError: _lost, onDone: () => _lost(null));
+    // The writing half fails on its own: Linux resets a Unix socket whose
+    // peer went with bytes unread, and a write after that errors here —
+    // unheard, an unhandled error in whatever zone made the socket.
+    unawaited(_socket.done.then<void>((_) {}, onError: _lost));
   }
 
   final Socket _socket;

@@ -115,7 +115,12 @@ void main() {
       events.add(event);
       if (!stopped && event is ToolResultEvent) {
         stopped = true;
-        await jobs.forChat("chat-1").stop(1);
+        // Ended past reading its log, which is real I/O: waited on, not
+        // given one event-queue turn, so the next call hears it.
+        final chat = jobs.forChat("chat-1");
+        final ended = chat.ended.first;
+        await chat.stop(1);
+        await ended;
         await pumpEventQueue();
       }
     }
