@@ -507,6 +507,29 @@ class TestApp {
     if (settle) await settleIo(tester);
   }
 
+  /// A finished reply holding [markdown], which is the only state that renders
+  /// it — a streaming one shows raw text.
+  Future<void> pumpReply(
+    WidgetTester tester,
+    String markdown, {
+    Brightness brightness = Brightness.light,
+  }) => pump(
+    tester,
+    Scaffold(
+      body: MessageBubble(
+        chatId: "chat-1",
+        message: Message(
+          id: "m1",
+          role: MessageRole.assistant,
+          createdAt: DateTime(2026),
+          parts: [TextPart(text: markdown)],
+        ),
+        isWaiting: false,
+      ),
+    ),
+    brightness: brightness,
+  );
+
   /// `tempConfig` already registers the directory's own teardown.
   void dispose() {
     prefill?.dispose();

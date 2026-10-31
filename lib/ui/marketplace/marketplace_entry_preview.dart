@@ -4,8 +4,8 @@ import "dart:typed_data";
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
+import "../chat/widgets/markdown_text.dart";
 import "../../core/log.dart";
 import "../../core/platform/platform.dart" as platform;
 import "../../data/prompts/agent_pictures.dart";
@@ -13,7 +13,6 @@ import "../../data/prompts/skill_import.dart";
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
 import "../../providers.dart";
-import "../chat/widgets/reply_style.dart";
 import "../widgets/agent_picture.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/install_bar.dart";
@@ -365,7 +364,7 @@ class _MarketplaceEntryPreviewPageState
       widget.kind == CompletionKind.skill ? "skill" : "agent";
 }
 
-class _Body extends StatefulWidget {
+class _Body extends StatelessWidget {
   const _Body({
     required this.entry,
     required this.preview,
@@ -379,26 +378,8 @@ class _Body extends StatefulWidget {
   final ValueChanged<String?> destinationChanged;
 
   @override
-  State<_Body> createState() => _BodyState();
-}
-
-class _BodyState extends State<_Body> {
-  /// Built once per theme, not per build: a fresh [replyStyleSheet] on every
-  /// rebuild re-parses the whole README, `MarkdownBody` reading a new style
-  /// sheet as new content. The same memo `MessageText` keeps.
-  MarkdownStyleSheet? _styleSheet;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _styleSheet = replyStyleSheet(Theme.of(context));
-  }
-
-  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final preview = widget.preview;
-    final entry = widget.entry;
     final meta = entry.metaLine;
     final files = preview.package?.entries
         .where((e) => e.$1 != "SKILL.md")
@@ -426,7 +407,7 @@ class _BodyState extends State<_Body> {
         ],
         const SizedBox(height: 24),
         if (preview.readme != null)
-          MarkdownBody(data: preview.readme!, styleSheet: _styleSheet)
+          MarkdownText(preview.readme!)
         else
           const Nothing("This entry ships no README."),
         if (preview.packageProblem != null) ...[
@@ -439,8 +420,8 @@ class _BodyState extends State<_Body> {
         ],
         const SizedBox(height: 24),
         InstallDestination(
-          value: widget.destinationValue,
-          onChanged: widget.destinationChanged,
+          value: destinationValue,
+          onChanged: destinationChanged,
         ),
         const SizedBox(height: 8),
       ],

@@ -4,13 +4,12 @@ import "dart:typed_data";
 import "package:collection/collection.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
+import "../chat/widgets/markdown_text.dart";
 import "../../data/prompts/prompt_export.dart";
 import "../../data/prompts/skill_validate.dart";
 import "../../domain/frontmatter.dart";
 import "../../providers.dart";
-import "../chat/widgets/reply_style.dart";
 import "../../core/formatting.dart" show formatSize;
 import "../widgets/install_bar.dart";
 
@@ -166,10 +165,7 @@ class _SkillViewPageState extends ConsumerState<SkillViewPage> {
                 borderRadius: BorderRadius.circular(12),
               ),
               padding: const EdgeInsets.all(16),
-              child: MarkdownBody(
-                data: parsed.body,
-                styleSheet: replyStyleSheet(theme),
-              ),
+              child: MarkdownText(parsed.body),
             ),
           if (_otherFiles.isNotEmpty) ...[
             const SizedBox(height: 24),
