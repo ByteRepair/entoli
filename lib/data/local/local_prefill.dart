@@ -210,6 +210,9 @@ class LocalPrefill {
       }
     }
 
+    // Already loaded is already seen: serving a loaded model publishes
+    // nothing, so the list's next change may be the one that drops it.
+    check();
     engine.running.addListener(check);
     return () => engine.running.removeListener(check);
   }

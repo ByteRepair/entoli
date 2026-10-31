@@ -43,7 +43,7 @@ class Residency {
     // A failed one is never the one being asked for: being asked again is the
     // user asking for another go, and there is nothing else they could press
     // to get one.
-    final already = _of(modelId);
+    final already = instanceOf(modelId);
     if (already != null && !already.failed && already.load == load) {
       _touch(already);
       await already.ready;
@@ -66,20 +66,15 @@ class Residency {
     _loaded.add(instance);
     _publish();
 
-    for (final old in stopping) {
-      await old.stop();
-    }
+    await Future.wait([for (final old in stopping) old.stop()]);
     instance.start();
     await instance.ready;
     return instance;
   }
 
   /// Unloads [modelId], where it is loaded.
-  /// The loaded instance of [modelId], or null where it is not loaded.
-  LocalInstance? instanceOf(String modelId) => _of(modelId);
-
   Future<void> stop(String modelId) async {
-    final instance = _of(modelId);
+    final instance = instanceOf(modelId);
     if (instance == null) return;
     _loaded.remove(instance);
     _publish();
@@ -90,9 +85,7 @@ class Residency {
     final all = [..._loaded];
     _loaded.clear();
     _publish();
-    for (final instance in all) {
-      await instance.stop();
-    }
+    await Future.wait([for (final instance in all) instance.stop()]);
   }
 
   /// Forgets every instance without stopping it: the process they were in has
@@ -102,7 +95,8 @@ class Residency {
     _publish();
   }
 
-  LocalInstance? _of(String modelId) {
+  /// The loaded instance of [modelId], or null where it is not loaded.
+  LocalInstance? instanceOf(String modelId) {
     for (final instance in _loaded) {
       if (instance.model.id == modelId) return instance;
     }
@@ -110,8 +104,11 @@ class Residency {
   }
 
   /// Most recently served last, since that is the end [serve] evicts from.
+  /// Already last is the common case — every step of a turn — and publishes
+  /// nothing, since nothing moved.
   void _touch(LocalInstance instance) {
-    if (_loaded.remove(instance)) _loaded.add(instance);
+    if (_loaded.last == instance || !_loaded.remove(instance)) return;
+    _loaded.add(instance);
     _publish();
   }
 

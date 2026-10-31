@@ -83,13 +83,16 @@ class PromptCache {
 
   Future<bool> _warm(LocalInstance instance, List<String> keys) async {
     final namespace = _namespaceFor(instance);
-    final candidate = _longestSaved(namespace, keys);
-    if (candidate == null) return false;
-    // Restoring a shorter or equal file would only throw progress away.
+    // Restoring a shorter or equal file would only throw progress away, so
+    // only the keys longer than the live one are looked for on disk — which
+    // mid-turn is none of the history, rather than a stat per message.
     final live = _live[instance];
-    if (live != null && _upto(keys, live) >= _upto(keys, candidate)) {
-      return true;
-    }
+    final liveAt = live == null ? -1 : keys.indexOf(live);
+    final candidate = _longestSaved(
+      namespace,
+      liveAt < 0 ? keys : keys.take(liveAt),
+    );
+    if (candidate == null) return liveAt >= 0;
     if (!await instance.restoreState(_file(namespace, candidate))) {
       return false;
     }
@@ -122,21 +125,13 @@ class PromptCache {
     } catch (_) {}
   }
 
-  String? _longestSaved(String namespace, List<String> keys) {
+  String? _longestSaved(String namespace, Iterable<String> keys) {
     for (final key in keys) {
       if (File(_file(namespace, key)).existsSync()) {
         return key;
       }
     }
     return null;
-  }
-
-  /// How much of the prefix a key covers, as its position in the
-  /// longest-first list read as a length. A key not in the list is -1 — a
-  /// different chat, which is cold state to restore into.
-  int _upto(List<String> keys, String key) {
-    final i = keys.indexOf(key);
-    return i < 0 ? -1 : keys.length - i;
   }
 
   /// Nobody awaits it, so nothing it throws has anywhere to go: a directory

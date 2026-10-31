@@ -37,8 +37,7 @@ class MlxEngine extends RuntimeEngine {
   /// in it shares one runtime, one Metal device and one buffer cache, which
   /// the rows' sum would leave out. In the app's own process, the rows.
   @override
-  Future<int?> totalBytes() async =>
-      await _host.footprint() ?? await super.totalBytes();
+  Future<int?> footprint() => _host.footprint();
 }
 
 /// How an MLX model is loaded: by name and directory, over the channel to its

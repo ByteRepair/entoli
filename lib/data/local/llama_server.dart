@@ -555,11 +555,15 @@ class LlamaInstance extends LocalInstance {
 
 /// `VmRSS` out of a `/proc/<pid>/status`, in bytes. Null where it is not
 /// there.
-int? residentBytes(String status) {
+int? residentBytes(String status) => procBytes(status, "VmRSS");
+
+/// The `kB` line [field] of a `/proc` file's [text], in bytes. Null where it
+/// is not there.
+int? procBytes(String? text, String field) {
   final match = RegExp(
-    r"^VmRSS:\s+(\d+) kB",
+    "^$field:\\s+(\\d+) kB",
     multiLine: true,
-  ).firstMatch(status);
+  ).firstMatch(text ?? "");
   return match == null ? null : int.parse(match.group(1)!) * 1024;
 }
 

@@ -31,8 +31,8 @@ abstract class LocalEngine {
   /// Every model this engine's catalog has.
   List<LocalModel> get catalog;
 
-  /// The catalog as this device is offered it: the models that run here.
-  List<LocalModel> get offered => catalog;
+  /// Whether [model] is offered to this device: whether it runs here.
+  bool offers(LocalModel model) => true;
 
   LocalModelStore get store;
 
@@ -56,9 +56,10 @@ abstract class LocalEngine {
   /// where its runtime cannot say.
   Future<LocalUsage?> usage(String modelId) async => null;
 
-  /// What the loaded models take up together, in bytes; null where nothing
-  /// can be said.
-  Future<int?> totalBytes() async => null;
+  /// What the loaded models take up together, in bytes, where that is more
+  /// than the rows added up — one process they share, whose runtime and
+  /// caches no row counts. Null where the rows are the whole.
+  Future<int?> footprint() async => null;
 
   /// Unload everything.
   Future<void> stopAll();
@@ -117,14 +118,11 @@ abstract class RuntimeEngine extends LocalEngine {
 
   final LocalRuntime runtime;
 
-  /// What this device can give a model, which narrows [offered].
+  /// What this device can give a model, which narrows what it [offers].
   final ModelBudget budget;
 
   @override
-  List<LocalModel> get offered => [
-    for (final model in catalog)
-      if (budget.fits(model)) model,
-  ];
+  bool offers(LocalModel model) => budget.fits(model);
 
   @override
   final LocalModelStore store;
@@ -150,18 +148,6 @@ abstract class RuntimeEngine extends LocalEngine {
   @override
   Future<LocalUsage?> usage(String modelId) async =>
       residency.instanceOf(modelId)?.usage();
-
-  /// The rows added up, which is the whole where each model is a process of
-  /// its own.
-  @override
-  Future<int?> totalBytes() async {
-    int? total;
-    for (final state in residency.running.value) {
-      final usage = await this.usage(state.modelId);
-      if (usage != null) total = (total ?? 0) + usage.bytes;
-    }
-    return total;
-  }
 
   @override
   Future<void> stopAll() => residency.stopAll();

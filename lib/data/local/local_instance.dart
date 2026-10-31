@@ -47,16 +47,6 @@ class LocalOptions {
   /// Whether prompts are kept on disk between turns: the one place
   /// zero-means-off is read as a yes or no.
   bool get keepsPrompts => keptPrompts > 0;
-
-  ({String? d, int? c, int m, int? t, int k}) get _fields =>
-      (d: device, c: contextLength, m: maxRunning, t: threads, k: keptPrompts);
-
-  @override
-  bool operator ==(Object other) =>
-      other is LocalOptions && other._fields == _fields;
-
-  @override
-  int get hashCode => _fields.hashCode;
 }
 
 /// What a loaded model was loaded with, resolved: the device "auto" became,

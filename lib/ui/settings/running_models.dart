@@ -20,48 +20,25 @@ class RunningModelsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (!ref.watch(localEngineProvider).available) {
-      return const SizedBox.shrink();
-    }
-    final running = ref.watch(localLlmStateProvider);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _Header(),
-        const _Prefilling(),
-        if (running.isEmpty)
-          const ListTile(
-            title: Text("Nothing loaded"),
-            subtitle: Text("The first chat to ask for one loads it."),
-          )
-        else ...[
-          for (final state in running)
-            _RunningRow(state, key: ValueKey(state.modelId)),
-          Padding(
-            padding: const EdgeInsets.only(left: 16, bottom: 8),
-            child: TextButton(
-              onPressed: () => ref.read(localEngineProvider).stopAll(),
-              child: const Text("Unload all"),
-            ),
-          ),
-        ],
-      ],
-    );
+    return ref.watch(localEngineProvider).available
+        ? const _Running()
+        : const SizedBox.shrink();
   }
 }
 
-/// The section's title, and under it what the models take up together —
-/// the model host's whole footprint on a Mac, where several models share it
-/// and the rows cannot say what is between them.
-class _Header extends ConsumerStatefulWidget {
-  const _Header();
+class _Running extends ConsumerStatefulWidget {
+  const _Running();
 
   @override
-  ConsumerState<_Header> createState() => _HeaderState();
+  ConsumerState<_Running> createState() => _RunningState();
 }
 
-class _HeaderState extends ConsumerState<_Header> {
+/// Asks what each loaded model takes up, and what they take together, once
+/// per [usageRefresh] for the whole section — every model at once — rather
+/// than by each row and again by the header.
+class _RunningState extends ConsumerState<_Running> {
   int? _total;
+  Map<String, LocalUsage> _usage = const {};
   Timer? _timer;
 
   @override
@@ -78,13 +55,68 @@ class _HeaderState extends ConsumerState<_Header> {
   }
 
   Future<void> _measure() async {
-    final total = await ref.read(localEngineProvider).totalBytes();
-    if (mounted) setState(() => _total = total);
+    final engine = ref.read(localEngineProvider);
+    final ids = [for (final state in engine.running.value) state.modelId];
+    final (usages, footprint) = await (
+      Future.wait(ids.map(engine.usage)),
+      engine.footprint(),
+    ).wait;
+    final usage = {for (final (i, one) in usages.indexed) ids[i]: ?one};
+    final sum = usage.isEmpty
+        ? null
+        : usage.values.fold(0, (total, one) => total + one.bytes);
+    if (!mounted) return;
+    setState(() {
+      _total = footprint ?? sum;
+      _usage = usage;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final total = _total;
+    final running = ref.watch(localLlmStateProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _Header(_total),
+        const _Prefilling(),
+        if (running.isEmpty)
+          const ListTile(
+            title: Text("Nothing loaded"),
+            subtitle: Text("The first chat to ask for one loads it."),
+          )
+        else ...[
+          for (final state in running)
+            _RunningRow(
+              state,
+              _usage[state.modelId],
+              key: ValueKey(state.modelId),
+            ),
+          Padding(
+            padding: const EdgeInsets.only(left: 16, bottom: 8),
+            child: TextButton(
+              onPressed: () => ref.read(localEngineProvider).stopAll(),
+              child: const Text("Unload all"),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// The section's title, and under it what the models take up together —
+/// the model host's whole footprint on a Mac, where several models share it
+/// and the rows cannot say what is between them, and elsewhere the rows
+/// added up.
+class _Header extends StatelessWidget {
+  const _Header(this.total);
+
+  final int? total;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = this.total;
     return SectionHeader(
       "Running models",
       description: total == null ? null : "${formatSize(total)} in memory",
@@ -126,38 +158,13 @@ class _Prefilling extends ConsumerWidget {
 }
 
 /// One loaded model: where it answers, what it takes up, and its own Unload.
-class _RunningRow extends ConsumerStatefulWidget {
-  const _RunningRow(this.state, {super.key});
+class _RunningRow extends ConsumerWidget {
+  const _RunningRow(this.state, this.usage, {super.key});
 
   final LocalLlmState state;
 
-  @override
-  ConsumerState<_RunningRow> createState() => _RunningRowState();
-}
-
-class _RunningRowState extends ConsumerState<_RunningRow> {
-  LocalUsage? _usage;
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_measure());
-    _timer = Timer.periodic(usageRefresh, (_) => unawaited(_measure()));
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _measure() async {
-    final usage = await ref
-        .read(localEngineProvider)
-        .usage(widget.state.modelId);
-    if (mounted) setState(() => _usage = usage);
-  }
+  /// What it takes up, where that has been measured.
+  final LocalUsage? usage;
 
   /// Where it actually ended up, which is the one thing the picker cannot say:
   /// Auto is resolved when the model loads, and a phone whose accelerator this
@@ -169,12 +176,11 @@ class _RunningRowState extends ConsumerState<_RunningRow> {
   };
 
   @override
-  Widget build(BuildContext context) {
-    final state = widget.state;
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final name = ref.watch(localEngineProvider).nameOf(state.modelId);
     final where = _where(state.device);
-    final usage = _usage;
+    final usage = this.usage;
     // One model let go of, the rest left loaded — and a load still under way
     // or one that failed cleared the same way, so no row is stuck here.
     final stop = IconButton(

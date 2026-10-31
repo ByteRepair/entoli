@@ -311,12 +311,15 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
               format: const MlxFormat(),
             ),
             _modelHost,
-            prompts: PromptCache(p.join(cacheDir, "kv-cache")),
+            prompts: PromptCache(_kvCacheDir(cacheDir)),
             budget: probe.budget,
           )
         : const NoLocalEngine();
   }
   if (!Platform.isAndroid && !Platform.isLinux) return const NoLocalEngine();
+  // Asked alongside the library directory rather than after it: on Android
+  // both are a channel round trip, and this is on the way to the first frame.
+  final budget = _memoryBudget();
   final (String? libDir, String serverName) = Platform.isAndroid
       ? (await BundledTools.nativeLibraryDir(), "libllama-server.so")
       : (bundledLinuxLibDir(), "llama-server");
@@ -329,7 +332,7 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
     p.join(cacheDir, "llm"),
     format: const GgufFormat(),
   );
-  final prompts = PromptCache(p.join(cacheDir, "kv-cache"));
+  final prompts = PromptCache(_kvCacheDir(cacheDir));
   return LlamaEngine(
     LlamaRuntime(
       LlamaBinaries(server: server, libDir: libDir),
@@ -338,9 +341,13 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
     ),
     store,
     prompts: prompts,
-    budget: await _memoryBudget(),
+    budget: await budget,
   );
 }
+
+/// Where both engines keep prompts — llama.cpp's `--slot-save-path` among
+/// them: one join so the two cannot disagree.
+String _kvCacheDir(String cacheDir) => p.join(cacheDir, "kv-cache");
 
 /// What llama.cpp may have of this device: its RAM, asked of Android and read
 /// off `/proc/meminfo` on Linux. Unknown where neither answers, which offers
@@ -363,13 +370,7 @@ String? _readMeminfo() {
 }
 
 /// `MemTotal` out of [meminfo], in bytes. Null where it is not there.
-int? linuxTotalMemory(String? meminfo) {
-  final match = RegExp(
-    r"^MemTotal:\s+(\d+) kB",
-    multiLine: true,
-  ).firstMatch(meminfo ?? "");
-  return match == null ? null : int.parse(match.group(1)!) * 1024;
-}
+int? linuxTotalMemory(String? meminfo) => procBytes(meminfo, "MemTotal");
 
 /// [AppleFm] where the device could carry Apple's on-device model. Hardware
 /// that never could is null, out of every picker; a model that is merely not

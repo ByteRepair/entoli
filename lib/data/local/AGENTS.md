@@ -490,7 +490,7 @@ since several share one process and its footprint would say nothing of which.
 Both are numbers already known rather than asked of the model: a generation
 holds the model for the whole of its prompt's reading, and a figure that waits
 on that is blank exactly while it would be watched. Over the rows, the header
-says what they take together (`LocalEngine.totalBytes`): on a Mac the model
+says what they take together (`LocalEngine.footprint`): on a Mac the model
 host's whole footprint, which also holds what the models share — the runtime,
 the Metal device, MLX's buffer cache — and elsewhere the rows added up.
 
@@ -588,7 +588,7 @@ release that reads its architecture.
 (`lib/domain/model_budget.dart`) holds a model to its footprint — its weights
 and the `kvBudgetBytes` every loaded model may have — against what the device
 says it can give, and the page offers only the entries that fit
-(`LocalEngine.offered`). A list of devices and what each can run would be a list
+(`LocalEngine.offers`). A list of devices and what each can run would be a list
 to keep; the device can answer for itself. Android's RAM comes from the tools
 channel (`ActivityManager`'s `totalMem`), Linux's from `/proc/meminfo`, and
 llama.cpp gets three fifths of it, since a phone shares that RAM with

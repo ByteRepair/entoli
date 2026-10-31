@@ -54,8 +54,7 @@ class _TextModels extends ConsumerWidget {
     // is downloaded already, which keeps its row and runs as before.
     final offered = [
       for (final model in engine.catalog)
-        if (engine.offered.contains(model) || installed.contains(model.id))
-          model,
+        if (engine.offers(model) || installed.contains(model.id)) model,
       ...added,
     ];
     final listed = {for (final model in offered) model.id};
