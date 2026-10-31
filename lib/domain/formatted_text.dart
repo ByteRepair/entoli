@@ -210,10 +210,10 @@ class RenderedOutline {
 
   RenderedBlock? blockOf(String text) => _blocks[_key(text)];
 
-  /// What [node] reads as once drawn: a formula is no text but a placeholder
-  /// in its paragraph, the character every placeholder reads as.
+  /// What [node] reads as once drawn: its words, a formula being none — what
+  /// stands in for one on screen is the renderer's to leave out.
   static String _drawn(md.Node node) => switch (node) {
-    md.Element(:final tag) when mathTags.contains(tag) => "\uFFFC",
+    md.Element(:final tag) when mathTags.contains(tag) => "",
     md.Element(:final children) =>
       (children ?? const <md.Node>[]).map(_drawn).join(),
     _ => node.textContent,

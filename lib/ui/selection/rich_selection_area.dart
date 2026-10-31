@@ -23,15 +23,14 @@ class RichSelectionArea extends StatefulWidget {
   const RichSelectionArea({
     super.key,
     required this.markdown,
-    this.clipboard = richClipboard,
     required this.child,
   });
 
   /// What [child] rendered, read when a copy asks which kind of block each
-  /// paragraph was.
-  final String markdown;
+  /// paragraph was — and only then, since a streamed reply rebuilds every
+  /// frame and building it is a join over the whole reply.
+  final String Function() markdown;
 
-  final RichClipboard clipboard;
   final Widget child;
 
   @override
@@ -42,7 +41,7 @@ class _RichSelectionAreaState extends State<RichSelectionArea> {
   /// Held across rebuilds: a streamed reply rebuilds every frame, and a
   /// delegate per build would drop the selection under the drag making it.
   late final _selection = RichSelectionDelegate(
-    markdown: () => widget.markdown,
+    markdown: () => widget.markdown(),
     root: () => mounted ? context.findRenderObject() : null,
   );
 
@@ -56,7 +55,7 @@ class _RichSelectionAreaState extends State<RichSelectionArea> {
   /// as its item returns.
   Future<void> _copy() async {
     final content = await _selection.clipboardContent();
-    if (content != null) await widget.clipboard.write(content);
+    if (content != null) await writeClipboard(content);
   }
 
   /// The framework's menu with its Copy swapped for [_copy]; what follows a

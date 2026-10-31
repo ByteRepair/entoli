@@ -19,39 +19,26 @@ class ClipboardContent {
   final String? html;
 }
 
-/// Where a copy goes. One interface so a page copies through it without
-/// knowing which runner answers, or whether any does.
-abstract interface class RichClipboard {
-  Future<void> write(ClipboardContent content);
-}
+const _channel = MethodChannel("agent_chat/clipboard");
 
-/// The runner's clipboard: both entries through `agent_chat/clipboard` where
-/// the runner answers it, the text alone through Flutter's where it does not.
-class PlatformRichClipboard implements RichClipboard {
-  const PlatformRichClipboard();
-
-  static const _channel = MethodChannel("agent_chat/clipboard");
-
-  @override
-  Future<void> write(ClipboardContent content) async {
-    final html = content.html;
-    if (html != null) {
-      try {
-        await _channel.invokeMethod<void>("setHtml", {
-          "plain": content.plain,
-          "html": html,
-        });
-        return;
-      } on MissingPluginException catch (_) {
-        // A runner without the channel, and the tests: the text is still a
-        // copy.
-      } on PlatformException catch (e) {
-        logFailure("clipboard", "rich copy refused, copying text", e);
-      }
+/// Put [content] on the clipboard: both entries through `agent_chat/clipboard`
+/// where the runner answers it, the text alone through Flutter's where it
+/// does not.
+Future<void> writeClipboard(ClipboardContent content) async {
+  final html = content.html;
+  if (html != null) {
+    try {
+      await _channel.invokeMethod<void>("setHtml", {
+        "plain": content.plain,
+        "html": html,
+      });
+      return;
+    } on MissingPluginException catch (_) {
+      // A runner without the channel, and the tests: the text is still a
+      // copy.
+    } on PlatformException catch (e) {
+      logFailure("clipboard", "rich copy refused, copying text", e);
     }
-    await Clipboard.setData(ClipboardData(text: content.plain));
   }
+  await Clipboard.setData(ClipboardData(text: content.plain));
 }
-
-/// The clipboard every copy in the app writes to.
-const RichClipboard richClipboard = PlatformRichClipboard();

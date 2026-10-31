@@ -2,7 +2,7 @@ import "dart:typed_data";
 
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/ui/selection/selectable_formula.dart";
+import "package:agent_chat/ui/selection/png_density.dart";
 
 // A formula pastes as a PNG drawn at three times its size; a target that
 // sizes a picture by its density — Pages, TextEdit — has to be told so, or

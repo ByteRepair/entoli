@@ -4,7 +4,6 @@ import "dart:typed_data";
 import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-// `SelectedContent`, which material does not re-export.
 
 import "../../../domain/formatted_text.dart";
 import "../../../domain/models.dart";
@@ -307,7 +306,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                   // inside stay disabled. What it copies is the area's own
                   // business: see `RichSelectionArea`.
                   RichSelectionArea(
-                    markdown: widget.message.plainText,
+                    markdown: () => widget.message.plainText,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: align,

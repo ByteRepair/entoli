@@ -207,7 +207,7 @@ the order a copy passes through them:
   its paragraph is found by the transform both report and the text it
   indexes. A **placeholder** says where a formula sits. The **markdown** says
   what kind of block each paragraph was (`RenderedOutline`, keyed by the
-  paragraph's drawn text, a formula its placeholder character): a list item,
+  paragraph's words, a formula left out on both sides): a list item,
   a cell, a heading, a quote, which the spans cannot say, a list item and a
   paragraph being drawn alike. A block the app draws itself says what it is
   with a `CopiedBlockScope` — a code block, and which language it was fenced
@@ -220,10 +220,9 @@ the order a copy passes through them:
   the rich half**, so a word processor pastes headings, bold, lists and tables
   (styles inline, since it reads no stylesheet; a formula as a picture of
   itself, since none of them can typeset TeX — see below).
-- `RichClipboard` is where it goes. Flutter cannot do this alone:
+- `writeClipboard` is where it goes. Flutter cannot do this alone:
   `Clipboard.setData` sends one string to an embedder that writes it as
-  `text/plain`, so `PlatformRichClipboard`
-  (`core/platform/rich_clipboard.dart`) writes both through a channel,
+  `text/plain`, so it (`core/platform/rich_clipboard.dart`) writes both through a channel,
   `agent_chat/clipboard`, answered by a few lines in each runner (GTK targets,
   `NSPasteboard`, `UIPasteboard`, `ClipData.newHtmlText`, `CF_HTML`); a runner
   that does not answer gets the plain text. The Apple runners write RTFD and

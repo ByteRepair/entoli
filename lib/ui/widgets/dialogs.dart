@@ -15,7 +15,7 @@ Future<void> copyToClipboard(
   required String said,
   String? html,
 }) async {
-  await richClipboard.write(ClipboardContent(plain: text, html: html));
+  await writeClipboard(ClipboardContent(plain: text, html: html));
   if (!context.mounted) return;
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(said)));
 }

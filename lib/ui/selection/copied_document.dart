@@ -20,30 +20,34 @@ class CopiedDocument {
   bool get isEmpty => blocks.every((block) => block.inlines.isEmpty);
 
   /// This document with every formula that can draw itself drawn: what the
-  /// formatted half pastes as a picture. Asynchronous because drawing is.
-  Future<CopiedDocument> drawn() async => CopiedDocument([
-    for (final block in blocks)
-      CopiedBlock(
-        block.kind,
-        [
+  /// formatted half pastes as a picture. Asynchronous because drawing is;
+  /// the formulas draw at once rather than one after another.
+  Future<CopiedDocument> drawn() async {
+    final pictures = {
+      for (final block in blocks)
+        for (final inline in block.inlines)
+          if (inline case CopiedFormula(:final drawing?))
+            inline: drawing.picture(),
+    };
+    final drawn = Map.fromIterables(
+      pictures.keys,
+      await Future.wait(pictures.values),
+    );
+    return CopiedDocument([
+      for (final block in blocks)
+        block.withInlines([
           for (final inline in block.inlines)
             switch (inline) {
-              CopiedFormula(:final drawing?) => CopiedFormula(
+              CopiedFormula() when drawn.containsKey(inline) => CopiedFormula(
                 inline.written,
                 display: inline.display,
-                picture: await drawing.picture(),
+                picture: drawn[inline],
               ),
               _ => inline,
             },
-        ],
-        level: block.level,
-        ordered: block.ordered,
-        number: block.number,
-        quoted: block.quoted,
-        language: block.language,
-        sameRow: block.sameRow,
-      ),
-  ]);
+        ]),
+    ]);
+  }
 }
 
 /// One block on screen: a paragraph, a heading, a list item, a cell, a code
@@ -78,6 +82,18 @@ class CopiedBlock {
 
   /// A cell on the rendered row of the cell before it.
   final bool sameRow;
+
+  /// This block with [inlines] in place of its own.
+  CopiedBlock withInlines(List<CopiedInline> inlines) => CopiedBlock(
+    kind,
+    inlines,
+    level: level,
+    ordered: ordered,
+    number: number,
+    quoted: quoted,
+    language: language,
+    sameRow: sameRow,
+  );
 
   bool get isCell => kind == BlockKind.cell || kind == BlockKind.headerCell;
 

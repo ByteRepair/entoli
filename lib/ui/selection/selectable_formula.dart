@@ -1,12 +1,11 @@
-import "dart:async";
 import "dart:math" as math;
-import "dart:typed_data";
 import "dart:ui" as ui;
 
 import "package:flutter/rendering.dart";
 import "package:flutter/widgets.dart";
 
 import "copied_document.dart";
+import "png_density.dart";
 
 /// A drawn formula as one thing to select: a drag that passes over it picks
 /// it up whole and highlights it, and what it copies is the TeX it was
@@ -236,7 +235,8 @@ class RenderSelectableFormula extends RenderProxyBox
   /// Drawn at three times its size so it stays sharp in a document zoomed
   /// in, and in black whatever the theme drew it in, since what it pastes
   /// into is a page. One colour throughout — a formula's glyphs and rules
-  /// are all the text's — so only the coverage is kept.
+  /// are all the text's — so only the coverage is kept, recoloured as the
+  /// image is drawn again rather than pixel by pixel.
   @override
   Future<FormulaPicture?> picture() async {
     final drawn = child;
@@ -244,92 +244,42 @@ class RenderSelectableFormula extends RenderProxyBox
       return null;
     }
     final image = await drawn.toImage(pixelRatio: _ratio);
+    final recorder = ui.PictureRecorder();
+    Canvas(recorder).drawImage(
+      image,
+      Offset.zero,
+      Paint()
+        ..colorFilter = const ColorFilter.mode(
+          Color(0xFF000000),
+          BlendMode.srcIn,
+        ),
+    );
+    final recording = recorder.endRecording();
+    final ui.Image black;
     try {
-      final bytes = await image.toByteData(
-        format: ui.ImageByteFormat.rawStraightRgba,
-      );
-      if (bytes == null) return null;
-      final pixels = bytes.buffer.asUint8List();
-      for (var i = 0; i < pixels.length; i += 4) {
-        pixels[i] = pixels[i + 1] = pixels[i + 2] = 0;
-      }
-      final black = await _imageOf(pixels, image.width, image.height);
-      try {
-        final png = await black.toByteData(format: ui.ImageByteFormat.png);
-        if (png == null) return null;
-        return FormulaPicture(
-          withDensity(png.buffer.asUint8List(), _ratio),
-          width: drawn.size.width,
-          height: drawn.size.height,
-        );
-      } finally {
-        black.dispose();
-      }
+      black = await recording.toImage(image.width, image.height);
     } finally {
+      recording.dispose();
       image.dispose();
+    }
+    try {
+      final png = await black.toByteData(format: ui.ImageByteFormat.png);
+      if (png == null) return null;
+      return FormulaPicture(
+        withDensity(png.buffer.asUint8List(), _ratio),
+        width: drawn.size.width,
+        height: drawn.size.height,
+      );
+    } finally {
+      black.dispose();
     }
   }
 
   static const _ratio = 3.0;
-
-  static Future<ui.Image> _imageOf(Uint8List rgba, int width, int height) {
-    final done = Completer<ui.Image>();
-    ui.decodeImageFromPixels(
-      rgba,
-      width,
-      height,
-      ui.PixelFormat.rgba8888,
-      done.complete,
-    );
-    return done.future;
-  }
 
   @override
   void dispose() {
     _geometry.dispose();
     super.dispose();
   }
-}
-
-/// [png] saying it holds [ratio] pixels to the point. A paste target reading
-/// RTF — Pages, TextEdit — sizes a picture by its density and not by the
-/// HTML's width and height, and a PNG that says nothing is 72 dots to the
-/// inch: a formula drawn at three times its size pasted three times too big.
-/// The density is a `pHYs` chunk, placed after the header as the format asks.
-@visibleForTesting
-Uint8List withDensity(Uint8List png, double ratio) {
-  const signature = 8, header = 8 + 13 + 4;
-  final perMetre = (72 * ratio / 0.0254).round();
-  final chunk = ByteData(4 + 4 + 9 + 4)
-    ..setUint32(0, 9)
-    ..setUint8(4, 0x70) // p
-    ..setUint8(5, 0x48) // H
-    ..setUint8(6, 0x59) // Y
-    ..setUint8(7, 0x73) // s
-    ..setUint32(8, perMetre)
-    ..setUint32(12, perMetre)
-    ..setUint8(16, 1); // per metre
-  final bytes = chunk.buffer.asUint8List();
-  chunk.setUint32(17, _crc32(bytes.sublist(4, 17)));
-  return Uint8List.fromList([
-    ...png.sublist(0, signature + header),
-    ...bytes,
-    ...png.sublist(signature + header),
-  ]);
-}
-
-final _crcTable = List<int>.generate(256, (n) {
-  var c = n;
-  for (var k = 0; k < 8; k++) {
-    c = c & 1 != 0 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
-  }
-  return c;
-});
-
-int _crc32(List<int> bytes) {
-  var crc = 0xFFFFFFFF;
-  for (final byte in bytes) {
-    crc = _crcTable[(crc ^ byte) & 0xFF] ^ (crc >>> 8);
-  }
-  return crc ^ 0xFFFFFFFF;
 }

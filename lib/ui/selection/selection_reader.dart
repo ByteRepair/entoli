@@ -10,6 +10,8 @@ library;
 
 import "dart:math" as math;
 
+import "package:collection/collection.dart" show IterableNumberExtension;
+import "package:flutter/foundation.dart" show setEquals;
 import "package:flutter/rendering.dart";
 
 import "../../domain/formatted_text.dart" show RenderedBlock, RenderedOutline;
@@ -39,31 +41,38 @@ class SelectionReader {
   /// split by a formula is several fragments and one block.
   CopiedDocument read(List<SelectedFragment> fragments) {
     final entries = <_Entry>[];
+    _Entry entryFor(RenderParagraph paragraph, bool sameLine) =>
+        entries.lastOrNull?.paragraph == paragraph
+        ? entries.last
+        : (entries..add(_Entry(paragraph, sameLine: sameLine))).last;
     for (final (:selectable, :selected, :sameLine) in fragments) {
-      final paragraph = selectable is RenderSelectableFormula
-          ? _paragraphAbove(selectable)
-          : _paragraphOf(selectable, selected);
-      if (paragraph == null) {
-        entries.add(
-          _Entry.loose(
-            selectable is RenderSelectableFormula
-                ? CopiedFormula(
-                    selectable.written,
-                    display: true,
-                    drawing: selectable,
-                  )
-                : CopiedText(selected),
-            sameLine: sameLine,
-          ),
-        );
+      if (selectable is RenderSelectableFormula) {
+        // One in a paragraph is read from the paragraph's placeholder; one
+        // on a line of its own is a block.
+        final paragraph = _ancestor<RenderParagraph>(selectable);
+        if (paragraph != null) {
+          entryFor(paragraph, sameLine);
+        } else {
+          entries.add(
+            _Entry.loose(
+              CopiedFormula(
+                selectable.written,
+                display: true,
+                drawing: selectable,
+              ),
+              sameLine: sameLine,
+            ),
+          );
+        }
         continue;
       }
-      final entry = entries.lastOrNull?.paragraph == paragraph
-          ? entries.last
-          : (entries..add(_Entry(paragraph, sameLine: sameLine))).last;
-      if (selectable is RenderSelectableFormula) continue;
+      final paragraph = _paragraphOf(selectable);
+      if (paragraph == null) {
+        entries.add(_Entry.loose(CopiedText(selected), sameLine: sameLine));
+        continue;
+      }
       final range = selectable.getSelection()!;
-      entry.ranges.add((
+      entryFor(paragraph, sameLine).ranges.add((
         start: math.min(range.startOffset, range.endOffset),
         end: math.max(range.startOffset, range.endOffset),
       ));
@@ -78,22 +87,15 @@ class SelectionReader {
         entry.loose!,
       ], sameRow: entry.sameLine);
     }
-    final scope = RenderCopiedBlockScope.of(paragraph, _root);
+    final scope = _ancestor<RenderCopiedBlockScope>(paragraph);
     var block = scope != null
-        ? RenderedBlock(scope.kind)
-        : _outline.blockOf(_textOf(paragraph)) ??
-              RenderedBlock(
-                _isMonospace(paragraph) ? BlockKind.code : BlockKind.paragraph,
-              );
+        ? const RenderedBlock(BlockKind.code)
+        : _outline.blockOf(_wordsOf(paragraph)) ??
+              const RenderedBlock(BlockKind.paragraph);
     // An item picked up from the middle is its words, not an item: the bullet
     // was not part of what was selected.
-    final from = entry.ranges
-        .map((range) => range.start)
-        .fold<int?>(
-          null,
-          (low, start) => low == null ? start : math.min(low, start),
-        );
-    if (block.kind == BlockKind.listItem && (from ?? 0) > 0) {
+    final from = entry.ranges.map((range) => range.start).minOrNull ?? 0;
+    if (block.kind == BlockKind.listItem && from > 0) {
       block = RenderedBlock(BlockKind.paragraph, quoted: block.quoted);
     }
     return CopiedBlock(
@@ -148,16 +150,12 @@ class SelectionReader {
         if (buffer.isNotEmpty) {
           final href = span.recognizer == null ? null : _outline.hrefOf(text);
           final marks = _marks(style, kind);
-          final run = CopiedText(buffer.toString(), marks: marks, href: href);
+          final run = buffer.toString();
           if (out.lastOrNull case final CopiedText last
-              when last.href == href && _sameMarks(last.marks, marks)) {
-            out.last = CopiedText(
-              last.text + run.text,
-              marks: marks,
-              href: href,
-            );
+              when last.href == href && setEquals(last.marks, marks)) {
+            out.last = CopiedText(last.text + run, marks: marks, href: href);
           } else {
-            out.add(run);
+            out.add(CopiedText(run, marks: marks, href: href));
           }
         }
       }
@@ -169,9 +167,6 @@ class SelectionReader {
     visit(paragraph.text, null);
     return out;
   }
-
-  static bool _sameMarks(Set<TextMark> a, Set<TextMark> b) =>
-      a.length == b.length && a.containsAll(b);
 
   /// The marks [style] reads as. What the whole block is drawn in is not a
   /// mark: a heading is bold, and a code block monospace, without either
@@ -194,27 +189,10 @@ class SelectionReader {
   static String _textOf(RenderParagraph paragraph) =>
       paragraph.text.toPlainText(includeSemanticsLabels: false);
 
-  /// Every word of [paragraph] is in the code face: a block the markdown
-  /// drew in it with no scope of its own to say so. The root span is the
-  /// ambient style, so it is the words that are asked.
-  static bool _isMonospace(RenderParagraph paragraph) {
-    var words = false;
-    var mono = true;
-    void visit(InlineSpan span, TextStyle? inherited) {
-      final style = inherited?.merge(span.style) ?? span.style;
-      if (span is! TextSpan) return;
-      if (span.text?.trim().isNotEmpty ?? false) {
-        words = true;
-        mono &= style?.fontFamily == monoFamily;
-      }
-      for (final child in span.children ?? const <InlineSpan>[]) {
-        visit(child, style);
-      }
-    }
-
-    visit(paragraph.text, null);
-    return words && mono;
-  }
+  /// [paragraph]'s words, as the outline keys them: a formula's placeholder,
+  /// the character every `WidgetSpan` reads as, is not one.
+  static String _wordsOf(RenderParagraph paragraph) =>
+      _textOf(paragraph).replaceAll("\uFFFC", "");
 
   static List<RenderParagraph> _paragraphsUnder(RenderObject? root) {
     final found = <RenderParagraph>[];
@@ -234,7 +212,7 @@ class SelectionReader {
   /// is matched: both types are private to the framework. The words are not
   /// compared: a container answers a formula as its TeX, where the paragraph
   /// holds a placeholder.
-  RenderParagraph? _paragraphOf(Selectable selectable, String selected) {
+  RenderParagraph? _paragraphOf(Selectable selectable) {
     final range = selectable.getSelection();
     if (range == null) return null;
     final transform = selectable.getTransformTo(null);
@@ -249,15 +227,11 @@ class SelectionReader {
     return null;
   }
 
-  /// The paragraph an inline formula sits in; null for one on a line of its
-  /// own.
-  RenderParagraph? _paragraphAbove(RenderSelectableFormula formula) {
-    for (
-      RenderObject? node = formula.parent;
-      node != null;
-      node = node.parent
-    ) {
-      if (node is RenderParagraph) return node;
+  /// The nearest [T] [object] is drawn in, looking no further up than the
+  /// root: the paragraph an inline formula sits in, the scope a block is in.
+  T? _ancestor<T extends RenderObject>(RenderObject object) {
+    for (RenderObject? node = object.parent; node != null; node = node.parent) {
+      if (node is T) return node;
       if (identical(node, _root)) return null;
     }
     return null;
