@@ -7,6 +7,9 @@ inputs:
   slice:
     description: The one slice the job ships, `ios` or `macos`.
     required: true
+  flutter:
+    description: Whether to set up Flutter too; a job that only builds MLX does not.
+    default: "true"
 
 runs:
   using: composite
@@ -19,7 +22,8 @@ runs:
         sudo xcode-select -s /Applications/Xcode_27.1.app
         echo "build=$(xcodebuild -version | awk '/Build version/ {print $3}')" >> "$GITHUB_OUTPUT"
 
-    - uses: ./.github/actions/flutter-setup
+    - if: inputs.flutter == 'true'
+      uses: ./.github/actions/flutter-setup
 
     - name: Restore the MLX framework
       id: mlx-cache
