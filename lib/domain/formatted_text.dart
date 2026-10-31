@@ -210,6 +210,15 @@ class RenderedOutline {
 
   RenderedBlock? blockOf(String text) => _blocks[_key(text)];
 
+  /// What [node] reads as once drawn: a formula is no text but a placeholder
+  /// in its paragraph, the character every placeholder reads as.
+  static String _drawn(md.Node node) => switch (node) {
+    md.Element(:final tag) when mathTags.contains(tag) => "\uFFFC",
+    md.Element(:final children) =>
+      (children ?? const <md.Node>[]).map(_drawn).join(),
+    _ => node.textContent,
+  };
+
   /// The target of the link whose words include [text]: a link with bold
   /// inside it renders as more than one span.
   String? hrefOf(String text) {
@@ -226,7 +235,7 @@ class RenderedOutline {
       text.replaceAll(RegExp(r"\s+"), " ").trim();
 
   void _add(md.Node node, RenderedBlock block) =>
-      _blocks.putIfAbsent(_key(node.textContent), () => block);
+      _blocks.putIfAbsent(_key(_drawn(node)), () => block);
 
   void _walk(md.Node node, {required bool quoted, RenderedBlock? item}) {
     if (node is! md.Element) return;
@@ -251,7 +260,7 @@ class RenderedOutline {
         _add(node, RenderedBlock(BlockKind.cell, quoted: quoted));
       case "a":
         if (node.attributes["href"] case final href?) {
-          _links.putIfAbsent(_key(node.textContent), () => href);
+          _links.putIfAbsent(_key(_drawn(node)), () => href);
         }
       case "blockquote":
         for (final child in node.children ?? const <md.Node>[]) {
@@ -278,10 +287,7 @@ class RenderedOutline {
                 child,
           ];
           if (inline.isNotEmpty) {
-            _blocks.putIfAbsent(
-              _key(inline.map((child) => child.textContent).join()),
-              () => block,
-            );
+            _blocks.putIfAbsent(_key(inline.map(_drawn).join()), () => block);
           }
           for (final child in li.children ?? const <md.Node>[]) {
             _walk(child, quoted: quoted, item: block);

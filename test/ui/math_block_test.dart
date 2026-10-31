@@ -56,4 +56,55 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byType(Math), findsNWidgets(2));
   });
+
+  group("selected", () {
+    Future<void> dragAll(WidgetTester tester) async {
+      final reply = find.byType(MarkdownText);
+      await dragCopy(
+        tester,
+        tester.getTopLeft(reply) + const Offset(2, 4),
+        to: tester.getBottomRight(reply) - const Offset(2, 4),
+      );
+    }
+
+    // A formula is drawn by the maths library, not as text a selection
+    // could take a range of, so a drag passed over it and the copy lost it.
+    testWidgets("an inline formula is picked up whole, as its TeX", (
+      tester,
+    ) async {
+      final html = <String>[];
+      final copied = clipboard(tester, html: html);
+      await app.pumpReply(tester, r"inside $D$, since outside $D$ it holds");
+
+      await dragAll(tester);
+
+      expect(copied.single, r"inside $D$, since outside $D$ it holds");
+      expect(html.single, contains(r"<p>inside $D$, since outside $D$"));
+    });
+
+    testWidgets("a display formula is a block of its own", (tester) async {
+      final copied = clipboard(tester);
+      await app.pumpReply(tester, "before\n\n\$\$x^2\$\$\n\nafter");
+
+      await dragAll(tester);
+
+      expect(copied.single, "before\n\n\$\$x^2\$\$\n\nafter");
+    });
+
+    testWidgets("a formula the drag does not reach is not copied", (
+      tester,
+    ) async {
+      final copied = clipboard(tester);
+      await app.pumpReply(tester, r"words first $x$");
+
+      final words = find.textContaining("words", findRichText: true);
+      await dragCopy(
+        tester,
+        tester.getTopLeft(words) + const Offset(1, 4),
+        to: tester.getTopLeft(words) + const Offset(40, 4),
+      );
+
+      expect(copied.single, isNot(contains(r"$x$")));
+    });
+  });
 }

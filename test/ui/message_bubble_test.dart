@@ -1378,7 +1378,10 @@ void main() {
 
     // A selection used to stop at the element it started in, and copied whole
     // parts as markdown rather than what was highlighted.
-    testWidgets("selecting a rendered reply copies the words on screen", (
+    // Plain text is what an editor, a terminal or another markdown field
+    // takes, so it gets the reply as written; the HTML beside it is what a
+    // word processor takes.
+    testWidgets("selecting a rendered reply copies it as markdown", (
       tester,
     ) async {
       final copied = clipboard(tester);
@@ -1396,7 +1399,7 @@ void main() {
         to: tester.getBottomRight(rendered) - const Offset(2, 4),
       );
 
-      expect(copied, ["Heading\nhere is bold code"]);
+      expect(copied, ["# Heading\n\nhere is **bold** code"]);
     });
 
     // The bubble closes at every tool call, so a region per bubble would stop
@@ -1423,14 +1426,14 @@ void main() {
         to: tester.getBottomRight(said.last) - const Offset(2, 4),
       );
 
-      expect(copied.single, contains("before the call"));
-      expect(copied.single, contains("after it"));
+      expect(copied.single, contains("before **the** call"));
+      expect(copied.single, contains("after *it*"));
       expect(copied.single, isNot(contains("bash")));
     });
 
-    // The bullets are chrome like a code block's bar: what a selection reads
-    // is what the copy button reads, the list's items and not `•Item`.
-    testWidgets("a drag over a list copies its items without the bullets", (
+    // The bullets are chrome like a code block's bar: what is copied is the
+    // list as it was written, not the `•` that was drawn.
+    testWidgets("a drag over a list copies it as a markdown list", (
       tester,
     ) async {
       final copied = clipboard(tester);
@@ -1446,7 +1449,7 @@ void main() {
         to: tester.getBottomRight(rendered) - const Offset(2, 4),
       );
 
-      expect(copied.single, "one\ntwo");
+      expect(copied.single, "- one\n- two");
     });
 
     // Whole-part copy answered a three-word drag with the whole paragraph's

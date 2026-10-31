@@ -9,25 +9,49 @@ import "package:flutter/services.dart";
 
 import "../log.dart";
 
-const _channel = MethodChannel("agent_chat/clipboard");
+/// One copy: [plain] for a target that reads text, and [html] — a whole
+/// document, as `htmlClipboardDocument` makes one — for one that keeps
+/// formatting. A paste takes whichever it reads.
+class ClipboardContent {
+  const ClipboardContent({required this.plain, this.html});
 
-/// Put [plain] and [html] on the clipboard as one entry, a paste target
-/// taking whichever it reads. [html] is a whole document, as
-/// `htmlClipboardDocument` makes one.
-Future<void> setRichClipboard({
-  required String plain,
-  required String html,
-}) async {
-  try {
-    await _channel.invokeMethod<void>("setHtml", {
-      "plain": plain,
-      "html": html,
-    });
-    return;
-  } on MissingPluginException catch (_) {
-    // A runner without the channel, and the tests: the text is still a copy.
-  } on PlatformException catch (e) {
-    logFailure("clipboard", "rich copy refused, copying text", e);
-  }
-  await Clipboard.setData(ClipboardData(text: plain));
+  final String plain;
+  final String? html;
 }
+
+/// Where a copy goes. One interface so a page copies through it without
+/// knowing which runner answers, or whether any does.
+abstract interface class RichClipboard {
+  Future<void> write(ClipboardContent content);
+}
+
+/// The runner's clipboard: both entries through `agent_chat/clipboard` where
+/// the runner answers it, the text alone through Flutter's where it does not.
+class PlatformRichClipboard implements RichClipboard {
+  const PlatformRichClipboard();
+
+  static const _channel = MethodChannel("agent_chat/clipboard");
+
+  @override
+  Future<void> write(ClipboardContent content) async {
+    final html = content.html;
+    if (html != null) {
+      try {
+        await _channel.invokeMethod<void>("setHtml", {
+          "plain": content.plain,
+          "html": html,
+        });
+        return;
+      } on MissingPluginException catch (_) {
+        // A runner without the channel, and the tests: the text is still a
+        // copy.
+      } on PlatformException catch (e) {
+        logFailure("clipboard", "rich copy refused, copying text", e);
+      }
+    }
+    await Clipboard.setData(ClipboardData(text: content.plain));
+  }
+}
+
+/// The clipboard every copy in the app writes to.
+const RichClipboard richClipboard = PlatformRichClipboard();

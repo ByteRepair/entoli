@@ -1,7 +1,6 @@
 import "dart:async";
 
 import "package:flutter/material.dart";
-import "package:flutter/services.dart";
 
 import "../../core/platform/rich_clipboard.dart";
 import "../../domain/project.dart";
@@ -16,11 +15,7 @@ Future<void> copyToClipboard(
   required String said,
   String? html,
 }) async {
-  if (html != null) {
-    await setRichClipboard(plain: text, html: html);
-  } else {
-    await Clipboard.setData(ClipboardData(text: text));
-  }
+  await richClipboard.write(ClipboardContent(plain: text, html: html));
   if (!context.mounted) return;
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(said)));
 }
