@@ -1,0 +1,50 @@
+name: Apple build setup
+description: >
+  Selects Xcode 27.1, sets up Flutter, and builds the EntoliMLX XCFramework
+  both Apple Runners link from `tool/apple/mlx/dist/`.
+
+inputs:
+  slice:
+    description: The one slice the job ships, `ios` or `macos`.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # The xcode-27 image defaults to 27.0; the app is built with 27.1.
+    - id: xcode
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo xcode-select -s /Applications/Xcode_27.1.app
+        echo "build=$(xcodebuild -version | awk '/Build version/ {print $3}')" >> "$GITHUB_OUTPUT"
+
+    - uses: ./.github/actions/flutter-setup
+
+    - name: Restore the MLX framework
+      id: mlx-cache
+      uses: actions/cache/restore@v6.1.0
+      with:
+        path: tool/apple/mlx/dist/
+        key: apple-mlx-${{ inputs.slice }}-${{ steps.xcode.outputs.build }}-${{ hashFiles('tool/apple/mlx/Package.swift', 'tool/apple/mlx/Package.resolved', 'tool/apple/mlx/Sources/**', 'tool/apple/mlx/build.sh', '.github/actions/apple-setup/action.yml') }}
+
+    # The image's Xcode ships without the Metal compiler MLX's kernels need.
+    - name: Install the Metal Toolchain
+      if: steps.mlx-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: xcrun metal --version >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
+
+    - name: Build the MLX framework
+      if: steps.mlx-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: tool/apple/mlx/build.sh "${{ inputs.slice }}"
+
+    - name: Save the MLX framework
+      if: github.ref_type != 'tag' && steps.mlx-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6.1.0
+      with:
+        path: tool/apple/mlx/dist/
+        key: ${{ steps.mlx-cache.outputs.cache-primary-key }}
+
+    - shell: bash
+      run: test -f tool/apple/mlx/dist/EntoliMLX.xcframework/Info.plist

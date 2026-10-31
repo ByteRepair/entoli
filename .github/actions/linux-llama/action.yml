@@ -1,11 +1,8 @@
 name: Build the Linux model server
 description: >
-  Builds llama.cpp's server for the desktop — `tool/linux/build-llama.sh` — and
-  stages it where `linux/CMakeLists.txt` installs the bundle's lib/ from, then
-  uploads the stage as the `llama-linux` artifact. Cached on what decides the
-  output, the way the Android tools are: the versions and the recipe, and this
-  file. Only the stage is cached — the sources and objects in the work dir are
-  nothing a hit reads.
+  Builds llama.cpp's server for the desktop with `tool/linux/build-llama.sh`
+  and uploads the stage as the `llama-linux` artifact, which linux-appimage
+  installs into the bundle.
 
 runs:
   using: composite
@@ -17,8 +14,6 @@ runs:
         path: build/llama
         key: linux-llama-${{ hashFiles('tool/android/versions.sh', 'tool/linux/build-llama.sh', '.github/actions/linux-llama/action.yml') }}
 
-    # Nothing on a hit path reaches for a toolchain, so the install is gated
-    # with the build — the same shape bundled-tools' Ninja step has.
     - name: Install build dependencies
       if: steps.llama-cache.outputs.cache-hit != 'true'
       shell: bash
@@ -26,12 +21,11 @@ runs:
         sudo apt-get update
         sudo apt-get install -y cmake ninja-build glslc patchelf binutils
 
-    - name: Build the bundled llama.cpp server
+    - name: Build the model server
       if: steps.llama-cache.outputs.cache-hit != 'true'
       shell: bash
       run: tool/linux/build-llama.sh
 
-    # From a branch only, as bundled-tools saves.
     - name: Save the built model server
       if: github.ref_type != 'tag' && steps.llama-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v6.1.0
@@ -39,17 +33,12 @@ runs:
         path: build/llama
         key: ${{ steps.llama-cache.outputs.cache-primary-key }}
 
-    # The upload below names the stage either way; this is what fails the
-    # job with its own line where a cache hit restored nothing.
-    - name: Confirm the stage holds a build
-      shell: bash
-      run: test -x build/llama/llama-server
-
-    # Tarred because upload-artifact drops the exec bit and the symlinks the
-    # sonames need; `linux-appimage` unpacks it.
+    # Tarred because upload-artifact drops the exec bit and the soname symlinks.
     - name: Pack the stage
       shell: bash
       run: |
+        set -euo pipefail
+        test -x build/llama/llama-server
         mkdir -p dist
         tar -C build/llama -cf dist/llama-linux.tar .
 
@@ -58,7 +47,5 @@ runs:
         name: llama-linux
         path: dist/llama-linux.tar
         if-no-files-found: error
-        # Already stripped .so files; recompressing buys little and costs time.
         compression-level: 0
-        # Read by the linux job right after, so one day is enough.
         retention-days: 1
