@@ -13,6 +13,7 @@ import "package:agent_chat/domain/project.dart" show localProject;
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
+import "package:agent_chat/ui/chat/widgets/composer_controller.dart";
 import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/voice/read_aloud.dart";
 import "package:agent_chat/ui/voice/transcript.dart";
@@ -999,24 +1000,22 @@ void main() {
   });
 
   group("the composer's voice button", () {
-    Future<void> pumpComposer(
-      WidgetTester tester,
-      TextEditingController text,
-    ) => app.pump(
-      tester,
-      Scaffold(
-        body: Composer(
-          controller: text,
-          agentSpeaking: false,
-          onSend: (_, _) {},
-          onAbort: () {},
-          onVoice: () {},
-        ),
-      ),
-    );
+    Future<void> pumpComposer(WidgetTester tester, ComposerController text) =>
+        app.pump(
+          tester,
+          Scaffold(
+            body: Composer(
+              controller: text,
+              agentSpeaking: false,
+              onSend: (_, _) {},
+              onAbort: () {},
+              onVoice: () {},
+            ),
+          ),
+        );
 
     testWidgets("goes when there is a message to send instead", (tester) async {
-      final text = TextEditingController();
+      final text = ComposerController();
       addTearDown(text.dispose);
       await pumpComposer(tester, text);
       expect(find.byTooltip("Voice mode"), findsOneWidget);

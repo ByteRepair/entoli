@@ -6,6 +6,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../domain/models.dart";
+import "../../../domain/quote.dart";
 import "../../../domain/shell.dart";
 import "../../../domain/wired_skill.dart";
 import "../../widgets/action_icon.dart";
@@ -41,6 +42,7 @@ class MessageBubble extends ConsumerStatefulWidget {
     this.onSpeak,
     this.isSpeaking = false,
     this.onTapLink,
+    this.onReply,
     this.steerKey,
   });
 
@@ -109,6 +111,11 @@ class MessageBubble extends ConsumerStatefulWidget {
 
   /// Open a link tapped in the rendered markdown. Receives the `href`.
   final ValueChanged<String>? onTapLink;
+
+  /// Answer a passage selected in this message: the selection menu's Reply.
+  /// The quote carries the author's handle where [entoli] says this section
+  /// is Omada's and a member wrote it, so the answer is addressed to them.
+  final ValueChanged<Quote>? onReply;
 
   /// The key for the bubble of a steer read into this reply, by the steer's
   /// id: what the chapter rail finds it by.
@@ -314,6 +321,19 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                   // business: see `RichSelectionArea`.
                   RichSelectionArea(
                     markdown: () => widget.message.plainText,
+                    onReply: widget.onReply == null
+                        ? null
+                        : (text) => widget.onReply!(
+                            Quote(
+                              text,
+                              handle:
+                                  widget.entoli &&
+                                      widget.message.role ==
+                                          MessageRole.assistant
+                                  ? widget.message.author
+                                  : null,
+                            ),
+                          ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: align,

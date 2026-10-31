@@ -307,6 +307,41 @@ gesture arena, so one touch both starts a selection in the bubble and shows the
 actions. It writes a `ValueNotifier` rather than calling `setState`, so
 uncovering the icons does not rebuild the message's labels behind them.
 
+### Replying to a passage
+
+The selection menu offers **Reply** beside Copy, wherever Copy is. It hands
+the composer the selection as a copy's plain half reads — markdown — and
+clears the selection, the passage having gone somewhere. The composer draws
+it as a card; the message sends it as a blockquote, a blank line either side
+of it, because markdown reads a line straight after a `>` line as more of the
+quote. In an Omada section a member's reply is quoted under their handle,
+`> @scout` and an empty `>` line above the passage: the handle is an ordinary
+mention, which is what routes the answer to them (see "The contract between
+direct and Omada chats" in `lib/domain/room/AGENTS.md`), and the main agent's
+reply carries none, since nobody is to be addressed. `Quote`
+(`domain/quote.dart`) is that blockquote both ways.
+
+**A card is one character of the field.** `ComposerController` hands each
+`ComposerEmbed` a private-use code point and draws it as a `WidgetSpan`, so
+the composer is still one `TextField` and everything it does — the `/` and
+`@` menus, the shortcuts, paste, undo, the keyboard and its IME — carries on
+across a card without being told about one: the caret steps over it,
+Backspace deletes it, undo brings it back. A column of fields and cards was
+the other design, and every one of those would have had to be taught to cross
+a seam. Its `text` holds the characters; its `message` is what is sent, each
+embed written out, and is what everything asking what the user is saying
+reads. `message =` is the inverse — a paragraph a reader claims comes back as
+its card — so a message taken back returns as it was composed. A new kind of
+thing in a message is a subclass of `ComposerEmbed` and, if it should come
+back, a reader.
+
+Quotes are added at the end with the caret put under them, so what is typed
+next answers the last; with nothing typed between, they stack a blank line
+apart, a line left to answer the one above later. A field's lines are held to
+the text's height unless it is given a strut that is not forced, so the
+composer gives one while it holds a card — and two more lines of height for
+each, rather than scrolling the cards away under the line being typed.
+
 ### How a reply is set
 
 **Markdown anywhere is `MarkdownText`** — a reply, a skill, a README, a

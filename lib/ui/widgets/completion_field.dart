@@ -139,6 +139,7 @@ class CompletionField extends ConsumerStatefulWidget {
     this.device,
     this.decoration,
     this.style,
+    this.strutStyle,
     this.minLines,
     this.maxLines = 1,
     this.expands = false,
@@ -161,6 +162,9 @@ class CompletionField extends ConsumerStatefulWidget {
   final String? device;
   final InputDecoration? decoration;
   final TextStyle? style;
+
+  /// The field's, where the caller wants lines other than the text's own height.
+  final StrutStyle? strutStyle;
   final int? minLines;
   final int? maxLines;
   final bool expands;
@@ -323,6 +327,7 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
           autofocus: widget.autofocus,
           textAlignVertical: widget.textAlignVertical,
           style: widget.style,
+          strutStyle: widget.strutStyle,
           decoration: widget.decoration,
           contentInsertionConfiguration: widget.contentInsertionConfiguration,
         ),
