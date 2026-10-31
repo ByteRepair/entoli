@@ -93,6 +93,7 @@ class _MathBuilder extends MarkdownElementBuilder {
     // element's text is its source, delimiters and all.
     final math = SelectableFormula(
       written: element.textContent,
+      ink: style?.color ?? Theme.of(context).colorScheme.onSurface,
       child: Math(
         ast: parsed.tree,
         parseError: parsed.error,

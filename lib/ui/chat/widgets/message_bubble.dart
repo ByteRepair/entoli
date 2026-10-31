@@ -5,7 +5,6 @@ import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../../domain/formatted_text.dart";
 import "../../../domain/models.dart";
 import "../../../domain/shell.dart";
 import "../../../domain/wired_skill.dart";
@@ -16,6 +15,7 @@ import "../../theme.dart" show onFillTheme;
 import "../../widgets/dialogs.dart";
 import "../activity/activity.dart" show Run, activityCatalogProvider;
 import "../activity/label.dart" show ActivityGroup;
+import "../../selection/copy_format.dart" show replyContentOf;
 import "../../selection/rich_selection_area.dart";
 import "message_text.dart";
 import "shell_run.dart";
@@ -180,15 +180,22 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     if (ok) widget.onDelete!();
   }
 
-  Future<void> _copy() => copyToClipboard(
-    context,
-    // What the message reads, not what conv.jsonl keeps: the formatted
-    // text is what a reader would paste into another document. Raw
-    // markdown is the button beside it.
-    formattedTextOf(widget.message.plainText),
-    html: htmlClipboardDocument(formattedHtmlOf(widget.message.plainText)),
-    said: "Message copied",
-  );
+  /// What the message reads, not what conv.jsonl keeps: the formatted
+  /// text is what a reader would paste into another document, its formulas
+  /// drawn as they are here. Raw markdown is the button beside it.
+  Future<void> _copy() async {
+    final content = await replyContentOf(
+      widget.message.plainText,
+      context.findRenderObject(),
+    );
+    if (!mounted) return;
+    await copyToClipboard(
+      context,
+      content.plain,
+      html: content.html,
+      said: "Message copied",
+    );
+  }
 
   Future<void> _copyRaw() => copyToClipboard(
     context,

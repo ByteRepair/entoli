@@ -257,8 +257,10 @@ drawing, not text a selection could take a range of. It follows the same two
 rules as everything else: the plain half is the TeX as it was written,
 delimiters and all, and the formatted half is **the formula as drawn** — a
 PNG it draws of itself on copy (`FormulaDrawing`), from a repaint boundary of
-its own so the highlight is not in it, at three times its size and recoloured
-black, since the page it lands on is white whatever the app's theme. Its TeX
+its own so the highlight is not in it, at three times its size, and with the
+theme's text colour recoloured black, since the page it lands on is white
+whatever the app's theme. Only that colour: a `\textcolor` the TeX asked for
+is what was meant, and pastes as it was drawn. Its TeX
 is the picture's alt text. Drawing is asynchronous, so a copy reads the
 selection on its first line and only then waits; `dragCopy` settles in real
 rounds for the same reason.
@@ -271,7 +273,9 @@ placeholder — and `SelectableFormula` counts as one offset to match it.
 The copy **button** is apart from all this: it renders the whole message's
 markdown (`formattedHtmlOf`), escaping HTML the model wrote the way the
 screen shows it, beside the formatted words (`formattedTextOf`); raw copy is
-the markdown.
+the markdown. Its formulas are the selection's pictures all the same
+(`replyContentOf`, from every `SelectableFormula` the bubble drew), so a
+formula pastes alike whichever way it was copied.
 
 What can be done to a message is a row under it rather than a menu, uncovered by
 hovering the message or, where there is no pointer to hover with, by touching

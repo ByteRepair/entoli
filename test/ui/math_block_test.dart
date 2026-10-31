@@ -1,3 +1,6 @@
+import "dart:convert";
+import "dart:ui" as ui;
+
 import "package:flutter/material.dart";
 import "package:flutter_math_fork/flutter_math.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -112,6 +115,27 @@ void main() {
       expect(copied.single, "before\n\n\$\$x^2\$\$\n\nafter");
     });
 
+    // Black is for what the theme drew, which is white on a dark screen and
+    // would vanish on a page; red the TeX asked for is what it meant.
+    testWidgets("a formula pastes black, the colours it asked for kept", (
+      tester,
+    ) async {
+      final html = <String>[];
+      clipboard(tester, html: html);
+      await app.pumpReply(
+        tester,
+        r"see $\textcolor{red}{x} + y$ here",
+        brightness: Brightness.dark,
+      );
+
+      await dragAll(tester);
+
+      final colours = await _coloursOf(tester, html.single);
+      expect(colours, contains((0, 0, 0)));
+      expect(colours, contains((255, 0, 0)));
+      expect(colours, isNot(contains((255, 255, 255))));
+    });
+
     testWidgets("a formula the drag does not reach is not copied", (
       tester,
     ) async {
@@ -128,4 +152,55 @@ void main() {
       expect(copied.single, isNot(contains(r"$x$")));
     });
   });
+
+  // The copy button wrote a formula as its TeX, where a selection of the
+  // same reply pasted it drawn.
+  testWidgets("the copy button pastes a formula drawn, as a selection does", (
+    tester,
+  ) async {
+    final html = <String>[];
+    final copied = clipboard(tester, html: html);
+    await app.pumpReply(tester, "inside \$D\$\n\n\$\$x^2\$\$");
+    await tester.tap(
+      find.textContaining("inside", findRichText: true),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip("Copy message"));
+    await settleIo(tester);
+
+    expect(copied.single, contains(r"$D$"));
+    expect(html.single, contains('alt="\$D\$"'));
+    // A formula on a line of its own is centred, as it was drawn.
+    expect(
+      html.single,
+      matches(
+        RegExp(r'<p style="text-align: center"><img [^>]*alt="\$\$x\^2\$\$"'),
+      ),
+    );
+  });
+}
+
+/// Each fully drawn colour of the picture [html] pastes a formula as.
+Future<Set<(int, int, int)>> _coloursOf(
+  WidgetTester tester,
+  String html,
+) async {
+  final png = base64Decode(
+    RegExp(r'base64,([^"]+)"').firstMatch(html)!.group(1)!,
+  );
+  final pixels = await tester.runAsync(() async {
+    final codec = await ui.instantiateImageCodec(png);
+    final image = (await codec.getNextFrame()).image;
+    final bytes = await image.toByteData(
+      format: ui.ImageByteFormat.rawStraightRgba,
+    );
+    image.dispose();
+    return bytes!.buffer.asUint8List();
+  });
+  return {
+    for (var i = 0; i < pixels!.length; i += 4)
+      if (pixels[i + 3] == 255) (pixels[i], pixels[i + 1], pixels[i + 2]),
+  };
 }

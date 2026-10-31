@@ -72,9 +72,17 @@ class _FormattedTextVisitor implements md.NodeVisitor {
 /// where the renderer shows it as the characters it is. Every text node is
 /// escaped here, so `<div>` in prose pastes as `<div>`. Styles are inline,
 /// since a word processor reads no stylesheet.
-String formattedHtmlOf(String markdown) {
+///
+/// A formula is what [formula] makes of its TeX as written — a picture of
+/// it, where the screen has one to give — or that TeX, escaped: a word
+/// processor has no element that draws it, and an unknown one would be
+/// dropped with its text. One on a line of its own is centred, as drawn.
+String formattedHtmlOf(
+  String markdown, {
+  String Function(String written)? formula,
+}) {
   final buffer = StringBuffer();
-  final visitor = _HtmlVisitor(buffer);
+  final visitor = _HtmlVisitor(buffer, formula ?? escapeHtml);
   for (final node in parseReply(markdown)) {
     node.accept(visitor);
   }
@@ -129,22 +137,22 @@ List<md.Node> parseReply(String markdown) => md.Document(
 ).parseLines(markdown.split("\n"));
 
 class _HtmlVisitor implements md.NodeVisitor {
-  _HtmlVisitor(this.buffer);
+  _HtmlVisitor(this.buffer, this.formula);
 
   final StringBuffer buffer;
+  final String Function(String written) formula;
 
   @override
   bool visitElementBefore(md.Element element) {
-    // A formula pastes as the TeX it was written as: a word processor has no
-    // element that draws it, and an unknown one would be dropped with its text.
     if (mathTags.contains(element.tag)) {
-      buffer.write(escapeHtml(element.textContent));
+      buffer.write(formula(element.textContent));
       return false;
     }
     buffer.write("<${element.tag}");
     final style = [
       ?htmlTagStyles[element.tag],
       ?element.attributes["style"],
+      if (_standsAlone(element)) "text-align: center",
     ].join("; ");
     for (final MapEntry(:key, :value) in element.attributes.entries) {
       if (key == "style") continue;
@@ -157,6 +165,14 @@ class _HtmlVisitor implements md.NodeVisitor {
     // A void element — `br`, `hr`, `img` — has no children and no end tag.
     return element.children != null;
   }
+
+  /// A paragraph that is one formula on a line of its own, which is drawn
+  /// centred.
+  static bool _standsAlone(md.Element element) =>
+      switch (element.children?.singleOrNull) {
+        md.Element(:final attributes) => attributes[mathBlockAttribute] != null,
+        _ => false,
+      };
 
   @override
   void visitText(md.Text text) => buffer.write(escapeHtml(text.text));

@@ -1,4 +1,6 @@
+import "dart:async";
 import "dart:math" as math;
+import "dart:typed_data";
 import "dart:ui" as ui;
 
 import "package:flutter/rendering.dart";
@@ -19,16 +21,24 @@ import "png_density.dart";
 /// keeps formatting pastes: the drawing is in a repaint boundary of its own,
 /// so the picture is the formula without the highlight washed over it.
 class SelectableFormula extends SingleChildRenderObjectWidget {
-  SelectableFormula({super.key, required this.written, required Widget child})
-    : super(child: RepaintBoundary(child: child));
+  SelectableFormula({
+    super.key,
+    required this.written,
+    required this.ink,
+    required Widget child,
+  }) : super(child: RepaintBoundary(child: child));
 
   /// The TeX with its delimiters, as the reply has it.
   final String written;
+
+  /// The colour the theme draws the formula in, which a copy draws black.
+  final Color ink;
 
   @override
   RenderSelectableFormula createRenderObject(BuildContext context) =>
       RenderSelectableFormula(
         written: written,
+        ink: ink,
         selectionColor: _colorOf(context),
         registrar: SelectionContainer.maybeOf(context),
       );
@@ -39,6 +49,7 @@ class SelectableFormula extends SingleChildRenderObjectWidget {
     RenderSelectableFormula renderObject,
   ) => renderObject
     ..written = written
+    ..ink = ink
     ..selectionColor = _colorOf(context)
     ..registrar = SelectionContainer.maybeOf(context);
 
@@ -52,6 +63,7 @@ class RenderSelectableFormula extends RenderProxyBox
     implements FormulaDrawing {
   RenderSelectableFormula({
     required this.written,
+    required this.ink,
     required this._selectionColor,
     SelectionRegistrar? registrar,
   }) {
@@ -60,6 +72,7 @@ class RenderSelectableFormula extends RenderProxyBox
   }
 
   String written;
+  Color ink;
 
   Color _selectionColor;
   set selectionColor(Color value) {
@@ -233,10 +246,9 @@ class RenderSelectableFormula extends RenderProxyBox
   }
 
   /// Drawn at three times its size so it stays sharp in a document zoomed
-  /// in, and in black whatever the theme drew it in, since what it pastes
-  /// into is a page. One colour throughout — a formula's glyphs and rules
-  /// are all the text's — so only the coverage is kept, recoloured as the
-  /// image is drawn again rather than pixel by pixel.
+  /// in, and in black where the theme drew it in [ink], since what it pastes
+  /// into is a page. A colour the TeX asked for — `\color{red}` — is what
+  /// was meant, and stays.
   @override
   Future<FormulaPicture?> picture() async {
     final drawn = child;
@@ -244,42 +256,89 @@ class RenderSelectableFormula extends RenderProxyBox
       return null;
     }
     final image = await drawn.toImage(pixelRatio: _ratio);
-    final recorder = ui.PictureRecorder();
-    Canvas(recorder).drawImage(
-      image,
-      Offset.zero,
-      Paint()
-        ..colorFilter = const ColorFilter.mode(
-          Color(0xFF000000),
-          BlendMode.srcIn,
-        ),
-    );
-    final recording = recorder.endRecording();
-    final ui.Image black;
     try {
-      black = await recording.toImage(image.width, image.height);
-    } finally {
-      recording.dispose();
-      image.dispose();
-    }
-    try {
-      final png = await black.toByteData(format: ui.ImageByteFormat.png);
-      if (png == null) return null;
-      return FormulaPicture(
-        withDensity(png.buffer.asUint8List(), _ratio),
-        width: drawn.size.width,
-        height: drawn.size.height,
+      final bytes = await image.toByteData(
+        format: ui.ImageByteFormat.rawStraightRgba,
       );
+      if (bytes == null) return null;
+      final pixels = bytes.buffer.asUint8List();
+      _blacken(pixels, ink);
+      final black = await _imageOf(pixels, image.width, image.height);
+      try {
+        final png = await black.toByteData(format: ui.ImageByteFormat.png);
+        if (png == null) return null;
+        return FormulaPicture(
+          withDensity(png.buffer.asUint8List(), _ratio),
+          width: drawn.size.width,
+          height: drawn.size.height,
+        );
+      } finally {
+        black.dispose();
+      }
     } finally {
-      black.dispose();
+      image.dispose();
     }
   }
 
   static const _ratio = 3.0;
+
+  /// Every pixel of [rgba] drawn in [ink] made black, its coverage kept. An
+  /// edge's colour is only as exact as its coverage allows — a pixel a tenth
+  /// covered carries a tenth of the precision — so a pixel is the ink's when
+  /// it is within two steps of it once multiplied by its coverage.
+  static void _blacken(Uint8List rgba, Color ink) {
+    final r = (ink.r * 255).round();
+    final g = (ink.g * 255).round();
+    final b = (ink.b * 255).round();
+    for (var i = 0; i < rgba.length; i += 4) {
+      final alpha = rgba[i + 3];
+      if (alpha == 0) continue;
+      if ((rgba[i] - r).abs() * alpha <= 510 &&
+          (rgba[i + 1] - g).abs() * alpha <= 510 &&
+          (rgba[i + 2] - b).abs() * alpha <= 510) {
+        rgba[i] = rgba[i + 1] = rgba[i + 2] = 0;
+      }
+    }
+  }
+
+  static Future<ui.Image> _imageOf(Uint8List rgba, int width, int height) {
+    final done = Completer<ui.Image>();
+    ui.decodeImageFromPixels(
+      rgba,
+      width,
+      height,
+      ui.PixelFormat.rgba8888,
+      done.complete,
+    );
+    return done.future;
+  }
 
   @override
   void dispose() {
     _geometry.dispose();
     super.dispose();
   }
+}
+
+/// Every formula drawn under [root], each drawn again for a copy, by the TeX
+/// it was written as; one that could not be drawn is left out.
+Future<Map<String, FormulaPicture>> formulaPicturesUnder(
+  RenderObject? root,
+) async {
+  final formulas = <String, RenderSelectableFormula>{};
+  void visit(RenderObject node) {
+    if (node is RenderSelectableFormula) {
+      formulas.putIfAbsent(node.written, () => node);
+    } else {
+      node.visitChildren(visit);
+    }
+  }
+
+  if (root != null) visit(root);
+  final pictures = await Future.wait([
+    for (final formula in formulas.values) formula.picture(),
+  ]);
+  return {
+    for (final (i, written) in formulas.keys.indexed) written: ?pictures[i],
+  };
 }
