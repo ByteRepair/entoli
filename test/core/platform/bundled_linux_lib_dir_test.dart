@@ -32,4 +32,13 @@ void main() {
       "/usr/bin/lib",
     );
   });
+
+  test("the RAM is read off MemTotal, in bytes", () {
+    expect(
+      linuxTotalMemory("MemTotal:       16314552 kB\nMemFree: 1 kB\n"),
+      16314552 * 1024,
+    );
+    expect(linuxTotalMemory("MemFree: 1 kB\n"), isNull);
+    expect(linuxTotalMemory(null), isNull);
+  });
 }

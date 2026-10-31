@@ -16,8 +16,12 @@ import "local_instance.dart";
 /// whichever process the [ModelHost] says — the model host on macOS, this one
 /// on iOS. See "The MLX models" in `ios/AGENTS.md`.
 class MlxEngine extends RuntimeEngine {
-  MlxEngine(LocalModelStore store, ModelHost host, {super.prompts})
-    : super(MlxRuntime(host.channel(appleChannel.name)), store) {
+  MlxEngine(
+    LocalModelStore store,
+    ModelHost host, {
+    super.prompts,
+    super.budget,
+  }) : super(MlxRuntime(host.channel(appleChannel.name)), store) {
     // The models were the host process's, and it has gone: a new one starts
     // with none loaded.
     host.lost.listen((_) => residency.lost());

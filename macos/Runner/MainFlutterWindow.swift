@@ -38,6 +38,7 @@ class MainFlutterWindow: NSWindow {
     self.setFrame(windowFrame, display: true)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
+    ModelHostLauncher.register(with: flutterViewController.engine.binaryMessenger)
 
     RemindersPlugin.register(with: flutterViewController.engine.binaryMessenger)
     ClipboardChannel.register(with: flutterViewController.engine.binaryMessenger)
@@ -82,7 +83,11 @@ enum ModelHost {
   private static var parent: DispatchSourceProcess?
 
   static func start() {
-    let project = FlutterDartProject()
+    // The Dart code is the app's: this bundle is `Contents/Helpers/Entoli
+    // Models.app` inside it, and carries no copy of its own.
+    let app = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent()
+    let project = FlutterDartProject(
+      precompiledDartBundle: Bundle(url: app.appendingPathComponent("Frameworks/App.framework")))
     // What follows the flag is the socket to connect to, then the app's pid.
     let arguments = Array(
       ProcessInfo.processInfo.arguments.drop { $0 != "entoli-models" }.dropFirst())
@@ -126,6 +131,42 @@ enum ModelHost {
     parent = source
     // Gone before the source was armed, which it would never report.
     if kill(pid, 0) != 0 { quit() }
+  }
+}
+
+/// Opens the model host — `Contents/Helpers/Entoli Models.app` — as an
+/// application of its own, through LaunchServices rather than as a child: a
+/// child is this app's to macOS, its GPU work scheduled as the app's own
+/// beside the window's frames. The key the host proves itself with goes in
+/// its environment, which no other process can read, where an `open --env`
+/// would have put it on a command line any process can. In this file rather
+/// than its own so the Xcode project needs no new entry.
+enum ModelHostLauncher {
+  static func register(with messenger: FlutterBinaryMessenger) {
+    FlutterMethodChannel(name: "agent_chat/model_host_launcher", binaryMessenger: messenger)
+      .setMethodCallHandler { call, result in
+        guard call.method == "open", let args = call.arguments as? [String: Any] else {
+          return result(FlutterMethodNotImplemented)
+        }
+        let helper = Bundle.main.bundleURL.appendingPathComponent(
+          "Contents/Helpers/Entoli Models.app")
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = false
+        configuration.addsToRecentItems = false
+        configuration.createsNewApplicationInstance = true
+        configuration.arguments = args["arguments"] as? [String] ?? []
+        configuration.environment = args["environment"] as? [String: String] ?? [:]
+        NSWorkspace.shared.openApplication(at: helper, configuration: configuration) {
+          _, error in
+          DispatchQueue.main.async {
+            if let error {
+              result(FlutterError(code: "open", message: error.localizedDescription, details: nil))
+            } else {
+              result(nil)
+            }
+          }
+        }
+      }
   }
 }
 

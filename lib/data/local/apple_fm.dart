@@ -3,6 +3,7 @@ import "package:http/http.dart" as http;
 
 import "../../domain/local_model.dart";
 import "../../domain/llm_provider.dart";
+import "../../domain/model_budget.dart";
 import "../builtin/llm/llm_client.dart";
 import "../builtin/llm/providers/provider.dart";
 import "channel_generation.dart";
@@ -54,9 +55,16 @@ const appleChannel = MethodChannel("agent_chat/apple_fm");
 /// offers it — the wording below is then the one place that says why
 /// nothing came back.
 class AppleFmProbe {
-  const AppleFmProbe(this.reason, {this.mlx = false});
+  const AppleFmProbe(
+    this.reason, {
+    this.mlx = false,
+    this.budget = const ModelBudget.unknown(),
+  });
 
   final String reason;
+
+  /// What the device can give an MLX model, from what Metal and the OS said.
+  final ModelBudget budget;
 
   /// Whether the build carries the MLX models' package and the OS can run
   /// one, which is what decides the platform's engine is `MlxEngine`. The

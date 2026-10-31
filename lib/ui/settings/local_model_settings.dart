@@ -390,6 +390,13 @@ class _RunningRow extends ConsumerWidget {
     final theme = Theme.of(context);
     final name = ref.watch(localEngineProvider).nameOf(state.modelId);
     final where = _where(state.device);
+    // One model let go of, the rest left loaded — and a load still under way
+    // or one that failed cleared the same way, so no row is stuck on the page.
+    final stop = IconButton(
+      icon: const Icon(Icons.stop_circle_outlined),
+      tooltip: "Unload $name",
+      onPressed: () => ref.read(localEngineProvider).stop(state.modelId),
+    );
     return switch (state.phase) {
       LocalLlmPhase.starting => ListTile(
         leading: const SizedBox(
@@ -399,6 +406,7 @@ class _RunningRow extends ConsumerWidget {
         ),
         title: Text("Loading $name…"),
         subtitle: const Text("A chat sent before this finishes waits for it."),
+        trailing: stop,
       ),
       LocalLlmPhase.ready => ListTile(
         leading: Icon(
@@ -410,6 +418,7 @@ class _RunningRow extends ConsumerWidget {
           "${where == null ? "Answering" : "Answering on $where"}"
           " · ${state.contextLength} tokens of context",
         ),
+        trailing: stop,
       ),
       LocalLlmPhase.failed => ListTile(
         isThreeLine: true,
@@ -421,6 +430,7 @@ class _RunningRow extends ConsumerWidget {
             color: theme.colorScheme.error,
           ),
         ),
+        trailing: stop,
       ),
     };
   }

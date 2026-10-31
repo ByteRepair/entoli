@@ -475,6 +475,11 @@ place to say the same thing and the one place that could disagree with the rest.
 It also means a launch loads nothing at all, where it used to spend a minute and
 a gigabyte restoring a pick the user might not have been about to use.
 
+**A loaded model is let go from its own row.** Each row of the Running list on
+the LLM settings page has an Unload button (`LocalEngine.stop`), loading and
+failed rows included, beside Unload all; a warm-up of the model it unloads
+stops with it, since the prefill watches the list rather than the buttons.
+
 **`Residency.serve` is the only thing that reconciles what is loaded with the
 settings**, and there is no second path to forget. It answers from a model
 already loaded under the same `LocalLoad`, reloads one loaded under a
@@ -564,6 +569,22 @@ for one with 8 GB, Ornith-1.5 9B (a Qwen3.5 9B fine-tune, so the same
 architecture) for one with 12. Ornith publishes no Q4_0, so its file is
 bartowski's. LFM3 is why `LLAMA_CPP_VERSION` is at least `b11951`, the first
 release that reads its architecture.
+
+**What a device is offered is measured, not listed.** `ModelBudget`
+(`lib/domain/model_budget.dart`) holds a model to its footprint — its weights
+and the `kvBudgetBytes` every loaded model may have — against what the device
+says it can give, and the page offers only the entries that fit
+(`LocalEngine.offered`). A list of devices and what each can run would be a list
+to keep; the device can answer for itself. Android's RAM comes from the tools
+channel (`ActivityManager`'s `totalMem`), Linux's from `/proc/meminfo`, and
+llama.cpp gets three fifths of it, since a phone shares that RAM with
+everything else. Apple's comes from the handshake: Metal's
+`recommendedMaxWorkingSetSize`, the GPU the window draws on too, of which a Mac
+gets three quarters; on iOS also what the OS still lets the app grow by, which
+is what ends an app there, and a phone gets three fifths of the smaller — on an
+8 GB iPhone the 2B and nothing larger, since a model that slows the UI slows
+the whole phone with it. A model already downloaded keeps its row whatever it
+measures, and a device that answers nothing is offered everything.
 
 ### What the NPU actually is
 

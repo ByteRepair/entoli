@@ -3,6 +3,7 @@ import "package:flutter/foundation.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/local_llm.dart";
 import "../../domain/local_model.dart";
+import "../../domain/model_budget.dart";
 import "../../domain/local_model_store.dart";
 import "../builtin/llm/llm_client.dart";
 import "local_client.dart";
@@ -27,8 +28,11 @@ abstract class LocalEngine {
   /// not, which the On-device page says rather than leaving the section out.
   bool get missingFromBuild => false;
 
-  /// What is offered for download.
+  /// Every model this engine's catalog has.
   List<LocalModel> get catalog;
+
+  /// The catalog as this device is offered it: the models that run here.
+  List<LocalModel> get offered => catalog;
 
   LocalModelStore get store;
 
@@ -96,10 +100,23 @@ typedef ModelLink = ({
 /// llama.cpp and MLX differ only in their runtime. See "The engine" in
 /// `lib/data/local/AGENTS.md`.
 abstract class RuntimeEngine extends LocalEngine {
-  RuntimeEngine(this.runtime, this.store, {this.prompts})
-    : residency = Residency(runtime, store);
+  RuntimeEngine(
+    this.runtime,
+    this.store, {
+    this.prompts,
+    this.budget = const ModelBudget.unknown(),
+  }) : residency = Residency(runtime, store);
 
   final LocalRuntime runtime;
+
+  /// What this device can give a model, which narrows [offered].
+  final ModelBudget budget;
+
+  @override
+  List<LocalModel> get offered => [
+    for (final model in catalog)
+      if (budget.fits(model)) model,
+  ];
 
   @override
   final LocalModelStore store;

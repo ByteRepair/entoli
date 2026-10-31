@@ -10,6 +10,10 @@ import FoundationModels
 // XCFramework both Runners link — which answers on any OS and gates on its
 // own. They share this channel, not the system model's framework.
 import EntoliMLX
+import Metal
+#if os(iOS)
+import os
+#endif
 
 /// The Apple half of the `agent_chat/apple_fm` channel — `AppleFm` and its
 /// client are the Dart half — compiled into both Runners. The system model
@@ -62,6 +66,20 @@ class AppleFmChannel: NSObject {
     }
   }
 
+  /// What the device can give a model, as Dart's `ModelBudget` reads it:
+  /// how much Metal keeps resident before it pages, and on iOS how much more
+  /// the OS lets this process grow by — the limit that ends an app there.
+  private func memory() -> [String: Any] {
+    var memory: [String: Any] = [:]
+    if let device = MTLCreateSystemDefaultDevice() {
+      memory["workingSet"] = Int(device.recommendedMaxWorkingSetSize)
+    }
+    #if os(iOS)
+    memory["available"] = Int(os_proc_available_memory())
+    #endif
+    return memory
+  }
+
   private func availabilityReason() -> String {
     guard #available(iOS 26.0, macOS 26.0, *) else { return "os" }
     switch SystemLanguageModel.default.availability {
@@ -97,7 +115,7 @@ class AppleFmChannel: NSObject {
   private func handle(call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
     case "handshake":
-      result(["reason": availabilityReason(), "mlx": Mlx.isAvailable])
+      result(["reason": availabilityReason(), "mlx": Mlx.isAvailable, "memory": memory()])
     case "generate":
       startGeneration(call, result, generate)
     case "cancel":

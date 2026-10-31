@@ -5,6 +5,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/local_llm.dart";
 import "package:agent_chat/domain/local_model.dart";
+import "package:agent_chat/domain/model_budget.dart";
 import "package:agent_chat/providers.dart";
 
 import "../fakes.dart";
@@ -72,6 +73,30 @@ void main() {
     // The settings are a page of their own, so the catalog leads this one.
     expect(find.text("LLM settings"), findsOneWidget);
     expect(find.text("Max LLMs running"), findsNothing);
+  });
+
+  testWidgets("a model too heavy for the device is not offered, unless it is "
+      "downloaded already", (tester) async {
+    final heavy = ggufCatalog.last;
+    // Room for every model but the largest.
+    final budget = ModelBudget(ModelBudget.footprintOf(heavy) - 1);
+    app = TestApp.create(localRuntime: FakeLocalRuntime(), localBudget: budget);
+    await pumpOnDevice(tester);
+
+    expect(find.text(model.name), findsOneWidget);
+    expect(find.text(heavy.name), findsNothing);
+    app.dispose();
+
+    // Downloaded on a device it fits, or before there was a measure: kept,
+    // since it is the user's to delete.
+    app = TestApp.create(
+      localRuntime: FakeLocalRuntime(),
+      localBudget: budget,
+      localModels: {heavy.id},
+    );
+    await pumpOnDevice(tester);
+
+    expect(find.text(heavy.name), findsOneWidget);
   });
 
   testWidgets("there is no model picker — every downloaded one is offered "
@@ -203,6 +228,28 @@ void main() {
     // only place it is said at all.
     expect(find.text("${model.name} would not load"), findsOneWidget);
     expect(find.text("not enough memory"), findsOneWidget);
+  });
+
+  testWidgets("one loaded model can be unloaded and the rest left", (
+    tester,
+  ) async {
+    final other = ggufCatalog[1];
+    app = TestApp.create(
+      localRuntime: FakeLocalRuntime(),
+      localModels: {model.id, other.id},
+    );
+    await io(tester, () async {
+      await app.serveLocal(model.id, maxRunning: 2);
+      await app.serveLocal(other.id, maxRunning: 2);
+    });
+    await pumpLlmSettings(tester);
+
+    await tester.tap(find.byTooltip("Unload ${model.name}"));
+    await settleIo(tester);
+
+    expect(app.localRuntime.events.last, "stop ${model.id}");
+    expect(find.byTooltip("Unload ${model.name}"), findsNothing);
+    expect(find.byTooltip("Unload ${other.name}"), findsOneWidget);
   });
 
   testWidgets("unloading everything takes the warm-up with it", (tester) async {

@@ -52,6 +52,7 @@ import "../../data/voice/file_voice_model_store.dart";
 import "../../data/voice/ios_voice.dart";
 import "../../data/voice/macos_voice.dart";
 import "../../data/voice/sherpa_voice.dart";
+import "../../domain/model_budget.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/agent_browser.dart";
 import "../../domain/app_update.dart";
@@ -311,6 +312,7 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
             ),
             _modelHost,
             prompts: PromptCache(p.join(cacheDir, "kv-cache")),
+            budget: probe.budget,
           )
         : const NoLocalEngine();
   }
@@ -336,7 +338,37 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
     ),
     store,
     prompts: prompts,
+    budget: await _memoryBudget(),
   );
+}
+
+/// What llama.cpp may have of this device: its RAM, asked of Android and read
+/// off `/proc/meminfo` on Linux. Unknown where neither answers, which offers
+/// every model.
+Future<ModelBudget> _memoryBudget() async {
+  final total = Platform.isAndroid
+      ? await BundledTools.totalMemory()
+      : linuxTotalMemory(_readMeminfo());
+  return total == null
+      ? const ModelBudget.unknown()
+      : ModelBudget.memory(total);
+}
+
+String? _readMeminfo() {
+  try {
+    return File("/proc/meminfo").readAsStringSync();
+  } on FileSystemException {
+    return null;
+  }
+}
+
+/// `MemTotal` out of [meminfo], in bytes. Null where it is not there.
+int? linuxTotalMemory(String? meminfo) {
+  final match = RegExp(
+    r"^MemTotal:\s+(\d+) kB",
+    multiLine: true,
+  ).firstMatch(meminfo ?? "");
+  return match == null ? null : int.parse(match.group(1)!) * 1024;
 }
 
 /// [AppleFm] where the device could carry Apple's on-device model. Hardware
@@ -360,9 +392,17 @@ Future<AppleFmProbe?> _appleProbe() => _appleHandshake ??= () async {
         .invokeMethod<Object?>("handshake")
         .timeout(const Duration(seconds: 3));
     final handshake = answer as Map<Object?, Object?>? ?? const {};
+    final memory = handshake["memory"] as Map<Object?, Object?>? ?? const {};
+    final workingSet = memory["workingSet"] as int?;
     return AppleFmProbe(
       handshake["reason"] as String? ?? "other",
       mlx: handshake["mlx"] as bool? ?? false,
+      budget: workingSet == null
+          ? const ModelBudget.unknown()
+          : ModelBudget.apple(
+              workingSet: workingSet,
+              available: memory["available"] as int?,
+            ),
     );
   } catch (e) {
     logFailure("apple-fm", "handshake failed", e);

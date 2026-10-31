@@ -195,17 +195,31 @@ and they never learn which process answers. macOS gets `HelperModelHost`;
 every other platform `InProcessModelHost`, since iOS cannot start a process
 and the rest run their models as a server of their own or on the CPU.
 
-- **It is this app's executable, launched again.** `HelperProcess` runs
-  `/usr/bin/open -n -g -a <bundle> --args entoli-models <socket> <pid>`
-  rather than spawning a child: a child is this app's to macOS, its GPU work
-  scheduled as the app's own. Launched with that flag, `AppDelegate` keeps no
-  window and `ModelHost` (in `MainFlutterWindow.swift`) runs a headless
-  engine on `modelHostMain` with `AppleFmChannel` registered on it. Only an
-  app bundle has an executable to launch again, so under `flutter test` it
-  refuses rather than wait on a connect that never comes.
+- **It is a helper bundle around this app's executable.**
+  `Contents/Helpers/Entoli Models.app` is made by the Runner's last build
+  phase (`tool/macos/embed-model-host.sh`): a copy of the Runner binary, an
+  rpath to the app's `Frameworks` — the engine, EntoliMLX and the Dart code
+  are the app's, not copies — and an `Info.plist` of its own:
+  `io.byterepair.entoli.models`, `LSBackgroundOnly`, so no Dock icon and no
+  second Entoli to LaunchServices. A copy rather than a target of its own,
+  since the host runs the app's own code and a second source list would only
+  drift. It is signed before the app's signature seals it as nested code; the
+  DMG's `--deep` pass re-signs it with the rest.
+- **It is opened, not spawned.** `HelperProcess` asks the app's native half
+  (`ModelHostLauncher` in `MainFlutterWindow.swift`), which opens the helper
+  with `NSWorkspace` as a new instance, not activated, with
+  `entoli-models <socket> <pid>` as its arguments. A child would be this
+  app's to macOS, its GPU work scheduled as the app's own. Launched with that
+  flag, `AppDelegate` keeps no window and `ModelHost` runs a headless engine
+  on `modelHostMain`, the app's `App.framework` as its Dart bundle, with
+  `AppleFmChannel` registered on it. A build with no helper — a test, a build
+  that skipped the phase — is decided once at the composition root and runs
+  the models in-process instead.
 - **The socket is the only way in.** A Unix socket in a directory only this
   user can enter, removed once connected, and the host's first frame must
-  carry the key handed to it in its environment. The frames are
+  carry the key handed to it in its environment — which no other process can
+  read, where `open --env` put it on a command line any process of the user's
+  could. The frames are
   `StandardMessageCodec` messages, length-prefixed (`host_frame.dart`).
 - **The host goes with the app, however it goes.** Its parent is launchd, so
   it watches the pid it was handed, and leaves when that exits or the socket
@@ -215,10 +229,6 @@ and the rest run their models as a server of their own or on the CPU.
   Metal device among them, while a generation may still be encoding on
   another thread — the crash every quit during an MLX turn ended in. `quit`
   stops the generations first, bounded at three seconds.
-
-Still owed: a helper bundle (`Contents/Helpers/`, `LSBackgroundOnly`, opened
-through `NSWorkspace`) in place of `open -n`, so LaunchServices sees a
-background-only helper rather than a second launch of Entoli itself.
 
 ## What is absent, and honestly so
 

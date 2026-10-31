@@ -44,6 +44,17 @@ class BundledTools {
     }
   }
 
+  /// The RAM this device has, in bytes. Null where nothing answers.
+  static Future<int?> totalMemory() async {
+    try {
+      return await _channel.invokeMethod<int>("totalMemory");
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    }
+  }
+
   static Future<String?> _ask(String method) async {
     try {
       return await _channel.invokeMethod<String>(method);

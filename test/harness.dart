@@ -21,6 +21,7 @@ import "package:agent_chat/data/local/byte_repair_store.dart";
 import "package:agent_chat/data/sync/peers.dart" show PeerState, PeerStatus;
 import "package:agent_chat/data/sync/sync_hub.dart"
     show RemoteChatEntry, RemoteProject, SyncHub;
+import "package:agent_chat/domain/model_budget.dart";
 import "package:agent_chat/domain/confinement.dart";
 import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/identity.dart";
@@ -184,6 +185,7 @@ class TestApp {
     List<String> byteRepairBrewPaths = const [],
     Set<String> localModels = const {},
     FakeLocalRuntime? localRuntime,
+    ModelBudget localBudget = const ModelBudget.unknown(),
     bool localEngineMissing = false,
     bool prefill = false,
     String? abi,
@@ -217,7 +219,7 @@ class TestApp {
     final onDevice = FakeLocalModelStore(installed: localModels);
     final runtime = localRuntime ?? FakeLocalRuntime();
     final LocalEngine engine = localRuntime != null
-        ? LlamaEngine(runtime, onDevice)
+        ? LlamaEngine(runtime, onDevice, budget: localBudget)
         : NoLocalEngine(missingFromBuild: localEngineMissing);
     final work = FakeBackgroundWork();
     // The real one over the two fakes it sits between: what a page shows of a
@@ -412,11 +414,14 @@ class TestApp {
   ChatRepository get repo => container.read(chatRepositoryProvider);
 
   /// Loads [modelId] the way a turn would, under the default settings but for
-  /// [device].
-  Future<LocalInstance> serveLocal(String modelId, {String? device}) =>
-      container
-          .read(localEngineProvider)
-          .serve(modelId, testLocalOptions(device: device));
+  /// [device] and how many may be loaded at once.
+  Future<LocalInstance> serveLocal(
+    String modelId, {
+    String? device,
+    int maxRunning = 1,
+  }) => container
+      .read(localEngineProvider)
+      .serve(modelId, testLocalOptions(device: device, maxRunning: maxRunning));
 
   /// Settings on disk, written the way the app writes them — which is also
   /// what puts them in the synchronous copy `AppSettings.load` reads.
