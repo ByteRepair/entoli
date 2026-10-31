@@ -6,7 +6,7 @@
 # in macos/AGENTS.md.
 #
 # A copy rather than a second target: the host runs the code the app runs —
-# `modelHostMain` through the same engine, the same `AppleFmChannel` — and a
+# `modelHostMain` through the same engine, the same `MlxChannel` — and a
 # target of its own would be a second list of sources to keep in step. What
 # differs is the bundle around it: its own identifier, no Dock icon, and an
 # rpath to the app's Frameworks, where the engine, EntoliMLX and the Dart code
@@ -18,17 +18,15 @@ helper="$app/Contents/Helpers/Entoli Models.app"
 executable="Entoli Models"
 
 rm -rf "$helper"
-mkdir -p "$helper/Contents/MacOS" "$helper/Contents/Resources/Base.lproj"
+mkdir -p "$helper/Contents/MacOS"
 
 cp "$app/Contents/MacOS/$EXECUTABLE_NAME" "$helper/Contents/MacOS/$executable"
 # @executable_path is the helper's own MacOS directory, four levels inside the
 # app's Contents.
 install_name_tool -add_rpath "@executable_path/../../../../Frameworks" \
   "$helper/Contents/MacOS/$executable"
-# The menu nib is what AppKit loads to reach `MainFlutterWindow`, which is
-# where a launch with `entoli-models` starts the host.
-cp -R "$app/Contents/Resources/Base.lproj/MainMenu.nib" \
-  "$helper/Contents/Resources/Base.lproj/"
+# No nib: `AppDelegate.main` starts the host on `entoli-models` before AppKit
+# would load one, so the bundle carries no window to load.
 
 version="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$app/Contents/Info.plist")"
 build="$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$app/Contents/Info.plist")"
@@ -53,8 +51,6 @@ cat > "$helper/Contents/Info.plist" <<EOF
 	<string>$MACOSX_DEPLOYMENT_TARGET</string>
 	<key>LSBackgroundOnly</key>
 	<true/>
-	<key>NSMainNibFile</key>
-	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

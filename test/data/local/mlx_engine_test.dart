@@ -1,3 +1,5 @@
+import "dart:io";
+
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
@@ -7,21 +9,22 @@ import "package:agent_chat/data/local/local_engine.dart";
 import "package:agent_chat/data/local/mlx_engine.dart";
 import "package:agent_chat/data/local/prompt_cache.dart";
 import "package:agent_chat/data/model_host/model_host.dart";
+import "package:agent_chat/data/model_host/worker.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/local_llm.dart";
 import "package:agent_chat/domain/local_model.dart";
 
 import "../../fakes.dart";
 import "../../harness.dart" show tempDir;
-import "apple_channel_mock.dart";
+import "channel_mock.dart";
 
 // What the engine asks the Swift half to load and evict, over
-// [AppleChannelMock], and what a generation carries to name the model it runs.
+// [ChannelMock], and what a generation carries to name the model it runs.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   final small = mlxCatalog[0], large = mlxCatalog[1];
-  final channel = AppleChannelMock();
+  final channel = ChannelMock(mlxChannel);
   final asked = channel.asked;
 
   /// Load failures by model id, answered as the Swift half throws them.
@@ -45,7 +48,7 @@ void main() {
 
   MlxEngine engine() => MlxEngine(
     FakeLocalModelStore(installed: {small.id, large.id}),
-    const InProcessModelHost(),
+    const InAppModelProcess(),
   );
 
   List<String> calls() => [
@@ -157,9 +160,9 @@ void main() {
         )
         .toList();
     // The load, then the generation behind it.
-    await channel.until("mlxGenerate");
+    await channel.until("generate");
 
-    final generate = channel.outgoing("mlxGenerate");
+    final generate = channel.outgoing("generate");
     expect(generate["model"], small.id);
     // Every message, every call: the Swift half decides what to reuse.
     expect(generate["messages"], [
@@ -194,10 +197,10 @@ void main() {
       LlmMessage(role: LlmRole.system, text: "turn"),
       LlmMessage(role: LlmRole.user, text: "hi"),
     ], model: small.id).toList();
-    await channel.until("mlxGenerate");
+    await channel.until("generate");
 
     // Qwen3.5's template raises on a system message past the first.
-    final generate = channel.outgoing("mlxGenerate");
+    final generate = channel.outgoing("generate");
     expect(generate["messages"], [
       {"role": "system", "content": "body\n\nturn"},
       {"role": "user", "content": "hi"},
@@ -212,7 +215,7 @@ void main() {
     final reply = mlx.client(() => AppSettings()).stream(const [
       LlmMessage(role: LlmRole.user, text: "hi"),
     ], model: small.id).toList();
-    await channel.until("mlxGenerate");
+    await channel.until("generate");
     final ended = expectLater(
       reply,
       throwsA(
@@ -223,7 +226,7 @@ void main() {
     );
 
     await channel.incoming("error", {
-      "id": channel.outgoing("mlxGenerate")["id"],
+      "id": channel.outgoing("generate")["id"],
       "code": "unloaded",
       "message": "The model was unloaded.",
     });
@@ -235,8 +238,8 @@ void main() {
     final reply = mlx.client(() => AppSettings()).stream(const [
       LlmMessage(role: LlmRole.user, text: "two things"),
     ], model: small.id).toList();
-    await channel.until("mlxGenerate");
-    final id = channel.outgoing("mlxGenerate")["id"];
+    await channel.until("generate");
+    final id = channel.outgoing("generate")["id"];
 
     // Unlike the system model's framework, MLX reports every call and then
     // its end, so the first call is not the end of the reply.
@@ -267,8 +270,8 @@ void main() {
     final reply = mlx.client(() => settings).stream(const [
       LlmMessage(role: LlmRole.user, text: "hi"),
     ], model: small.id).toList();
-    await channel.until("mlxGenerate");
-    final id = channel.outgoing("mlxGenerate")["id"];
+    await channel.until("generate");
+    final id = channel.outgoing("generate")["id"];
     if (finish == "tool_calls") {
       await channel.incoming("toolCall", {
         "id": id,
@@ -285,21 +288,21 @@ void main() {
     final dir = tempDir();
     final mlx = MlxEngine(
       FakeLocalModelStore(installed: {small.id}),
-      const InProcessModelHost(),
+      const InAppModelProcess(),
       prompts: PromptCache(dir.path),
     );
-    channel.answer = (call) => call.method == "mlxSave" ? true : null;
+    channel.answer = (call) => call.method == "save" ? true : null;
 
     await turn(mlx, AppSettings(localModelKvCachePrompts: 5), "stop");
 
-    final path = channel.outgoing("mlxSave")["path"] as String;
+    final path = channel.outgoing("save")["path"] as String;
     expect(p.dirname(path), dir.path);
   });
 
   test("a step that ends in tool calls is not saved", () async {
     final mlx = MlxEngine(
       FakeLocalModelStore(installed: {small.id}),
-      const InProcessModelHost(),
+      const InAppModelProcess(),
       prompts: PromptCache(tempDir().path),
     );
 
@@ -307,23 +310,115 @@ void main() {
     // all per tool round would hold each one up for nothing.
     await turn(mlx, AppSettings(localModelKvCachePrompts: 5), "tool_calls");
 
-    expect(calls(), isNot(contains("mlxSave ${small.id}")));
+    expect(calls(), isNot(contains("save ${small.id}")));
+  });
+
+  test("a reply stopped part-way is not taken for one the model still "
+      "holds: the next turn restores what was kept", () async {
+    final mlx = MlxEngine(
+      FakeLocalModelStore(installed: {small.id}),
+      const InAppModelProcess(),
+      prompts: PromptCache(tempDir().path),
+    );
+    channel.answer = (call) {
+      if (call.method == "save") {
+        File((call.arguments as Map)["path"] as String).writeAsStringSync("");
+        return true;
+      }
+      return call.method == "restore" ? true : null;
+    };
+    final settings = AppSettings(localModelKvCachePrompts: 5);
+    await turn(mlx, settings, "stop");
+    final kept = channel.outgoing("save")["path"];
+
+    // The next turn is stopped while its prompt is read: the Swift half
+    // drops what it held when a reply does not finish.
+    const longer = [
+      LlmMessage(role: LlmRole.user, text: "hi"),
+      LlmMessage(role: LlmRole.assistant, text: "hello"),
+      LlmMessage(role: LlmRole.user, text: "again"),
+    ];
+    asked.clear();
+    final stopped = mlx
+        .client(() => settings)
+        .stream(longer, model: small.id)
+        .listen((_) {});
+    await channel.until("generate");
+    final stopping = stopped.cancel();
+    // A stop lands at the next frame the reply sends.
+    await channel.incoming("text", {
+      "id": channel.outgoing("generate")["id"],
+      "text": "par",
+    });
+    await stopping;
+
+    asked.clear();
+    final again = mlx
+        .client(() => settings)
+        .stream(longer, model: small.id)
+        .toList();
+    await channel.until("generate");
+    expect(channel.outgoing("restore")["path"], kept);
+    await channel.incoming("done", {"id": channel.outgoing("generate")["id"]});
+    await again;
   });
 
   test("with prompts not kept, nothing is saved", () async {
     final mlx = MlxEngine(
       FakeLocalModelStore(installed: {small.id}),
-      const InProcessModelHost(),
+      const InAppModelProcess(),
       prompts: PromptCache(tempDir().path),
     );
 
     await turn(mlx, AppSettings(localModelKvCachePrompts: 0), "stop");
 
-    expect(calls(), ["load ${small.id}", "mlxGenerate ${small.id}"]);
+    expect(calls(), ["load ${small.id}", "generate ${small.id}"]);
+  });
+
+  test("a model whose process went says so on its row, is not evicted from "
+      "the next one, and loads again when asked", () async {
+    final process = _Dying();
+    final mlx = MlxEngine(FakeLocalModelStore(installed: {small.id}), process);
+    await mlx.serve(small.id, testLocalOptions());
+
+    process.leases.single.lose();
+    await pumpEventQueue();
+
+    final row = mlx.running.value.single;
+    expect(row.phase, LocalLlmPhase.failed);
+    expect(row.failure, contains("model host quit"));
+
+    asked.clear();
+    await mlx.serve(small.id, testLocalOptions());
+    expect(calls(), ["load ${small.id}"]);
+    expect(mlx.running.value.single.phase, LocalLlmPhase.ready);
   });
 
   test("how many may be resident and whether prompts are kept are offered", () {
     expect(engine().controls, {LocalControl.maxRunning, LocalControl.kvCache});
     expect(engine().catalog, mlxCatalog);
   });
+}
+
+/// The models' process in this one, but one whose leases the test can end
+/// the way a process that went ends them.
+class _Dying implements ModelProcess {
+  final leases = <ModelProcessLease>[];
+
+  @override
+  ModelChannel channel(String name) => const InAppModelProcess().channel(name);
+
+  @override
+  Future<Worker> spawn(WorkerKind kind, List<Object?> argument) =>
+      throw UnimplementedError();
+
+  @override
+  Future<int?> footprint() async => null;
+
+  @override
+  ModelProcessLease hold() {
+    final lease = ModelProcessLease(() {});
+    leases.add(lease);
+    return lease;
+  }
 }

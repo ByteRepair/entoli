@@ -28,8 +28,8 @@ void main() {
 
   test("a 16 GB Mac is offered every MLX model, an 8 GB one not the 9B", () {
     // Metal's working set is about two thirds of a Mac's memory.
-    final big = ModelBudget.apple(workingSet: 10 * gib + gib ~/ 2);
-    final small = ModelBudget.apple(workingSet: 5 * gib + gib ~/ 3);
+    final big = ModelBudget.mac(10 * gib + gib ~/ 2);
+    final small = ModelBudget.mac(5 * gib + gib ~/ 3);
 
     expect(offered(big, mlxCatalog), mlxCatalog.map((m) => m.id));
     expect(offered(small, mlxCatalog), [mlxCatalog[0].id, mlxCatalog[1].id]);
@@ -37,10 +37,10 @@ void main() {
 
   test("a phone is held to a share of what its app may still grow by", () {
     // An 8 GB iPhone whose app may grow by about six: the 2B, and no larger.
-    final phone = ModelBudget.apple(workingSet: 5 * gib, available: 6 * gib);
+    final phone = ModelBudget.phone(workingSet: 5 * gib, available: 6 * gib);
     expect(offered(phone, mlxCatalog), [mlxCatalog.first.id]);
     // However much Metal could keep resident, the app's own limit binds.
-    final limited = ModelBudget.apple(workingSet: 12 * gib, available: 5 * gib);
+    final limited = ModelBudget.phone(workingSet: 12 * gib, available: 5 * gib);
     expect(offered(limited, mlxCatalog), [mlxCatalog.first.id]);
   });
 

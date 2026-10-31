@@ -1313,6 +1313,7 @@ class FakeLocalRuntime extends LocalRuntime {
     this.maxThreads,
     this.chunks = const [],
     this.restores = false,
+    this.keepsUnfinished = true,
     this.usage,
   });
 
@@ -1329,6 +1330,10 @@ class FakeLocalRuntime extends LocalRuntime {
 
   /// Whether a restore finds the file it is asked for.
   final bool restores;
+
+  /// Whether a generation that did not finish leaves its prompt held — no
+  /// for a runtime that starts over after one, as MLX does.
+  final bool keepsUnfinished;
 
   /// What the cores slider tops out at, and whether it is drawn at all. Null by
   /// default, which takes the slider off the page.
@@ -1396,6 +1401,9 @@ class FakeLocalInstance extends LocalInstance {
 
   @override
   String get stateFormat => "fake";
+
+  @override
+  bool get keepsUnfinished => _runtime.keepsUnfinished;
 
   @override
   void start() {

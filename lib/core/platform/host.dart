@@ -398,12 +398,14 @@ Future<AppleFmProbe?> _appleProbe() => _appleHandshake ??= () async {
     return AppleFmProbe(
       handshake["reason"] as String? ?? "other",
       mlx: handshake["mlx"] as bool? ?? false,
-      budget: workingSet == null
-          ? const ModelBudget.unknown()
-          : ModelBudget.apple(
-              workingSet: workingSet,
-              available: memory["available"] as int?,
-            ),
+      budget: switch (workingSet) {
+        null => const ModelBudget.unknown(),
+        _ when Platform.isMacOS => ModelBudget.mac(workingSet),
+        _ => ModelBudget.phone(
+          workingSet: workingSet,
+          available: memory["available"] as int?,
+        ),
+      },
     );
   } catch (e) {
     logFailure("apple-fm", "handshake failed", e);
@@ -517,9 +519,9 @@ void registerRecorder() {
 /// window starves the window's frames, and this process everywhere else. See
 /// "The model host" in macos/AGENTS.md. Only an app bundle has an executable
 /// to launch again, so a macOS process outside one runs them here too.
-final ModelHost _modelHost = Platform.isMacOS && HelperProcess.canLaunch
-    ? HelperModelHost(HelperProcess.launch)
-    : const InProcessModelHost();
+final ModelProcess _modelHost = Platform.isMacOS && HelperProcess.canLaunch
+    ? HelperModelProcess(HelperProcess.launch)
+    : const InAppModelProcess();
 
 /// sherpa-onnx on the desktops; Android and macOS also have their system
 /// engines (see [AndroidVoice], [MacosVoice]); iOS has Apple's alone (see

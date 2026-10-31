@@ -3,10 +3,10 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/local/apple_fm.dart";
 
-import "apple_channel_mock.dart";
+import "channel_mock.dart";
 
 // What Dart asks of the Swift half, and what it does with what the
-// framework reports, over [AppleChannelMock]. `AppleFmBridge.shared`
+// framework reports, over [ChannelMock]. `AppleFmBridge.shared`
 // installs the one handler the mock's deliveries reach.
 //
 // Plain `test`s, not `testWidgets`: the client is protocol machinery driven
@@ -25,7 +25,7 @@ const sampleSchema = {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  final channel = AppleChannelMock();
+  final channel = ChannelMock(appleChannel);
   final asked = channel.asked;
   final incoming = channel.incoming;
   final breathe = channel.breathe;

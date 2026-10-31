@@ -6,29 +6,28 @@ import "../../domain/local_model.dart";
 import "../../domain/local_model_store.dart";
 import "../builtin/llm/llm_client.dart";
 import "../model_host/model_host.dart";
-import "apple_fm.dart";
 import "channel_generation.dart";
 import "local_engine.dart";
 import "local_instance.dart";
 
+/// The MLX models' channel, whose Swift half (`MlxChannel.swift`) is
+/// registered only where they run: the model host on macOS, the app on iOS.
+const mlxChannel = MethodChannel("agent_chat/mlx");
+
 /// MLX through mlx-swift-lm: iOS 27 and macOS 27, where the build links the
-/// package. Its models are loaded by the Swift half of [appleChannel], in
-/// whichever process the [ModelHost] says — the model host on macOS, this one
+/// package. Its models are loaded by the Swift half of [mlxChannel], in
+/// whichever process the [ModelProcess] says — the model host on macOS, this one
 /// on iOS. See "The MLX models" in `ios/AGENTS.md`.
 class MlxEngine extends RuntimeEngine {
   MlxEngine(
     LocalModelStore store,
-    ModelHost host, {
+    ModelProcess process, {
     super.prompts,
     super.budget,
-  }) : _host = host,
-       super(MlxRuntime(host), store) {
-    // The models were the host process's, and it has gone: a new one starts
-    // with none loaded.
-    host.lost.listen((_) => residency.lost());
-  }
+  }) : _process = process,
+       super(MlxRuntime(process), store);
 
-  final ModelHost _host;
+  final ModelProcess _process;
 
   @override
   List<LocalModel> get catalog => mlxCatalog;
@@ -37,7 +36,7 @@ class MlxEngine extends RuntimeEngine {
   /// in it shares one runtime, one Metal device and one buffer cache, which
   /// the rows' sum would leave out. In the app's own process, the rows.
   @override
-  Future<int?> footprint() => _host.footprint();
+  Future<int?> footprint() => _process.footprint();
 }
 
 /// How an MLX model is loaded: by name and directory, over the channel to its
@@ -46,9 +45,9 @@ class MlxEngine extends RuntimeEngine {
 /// sized at load, so there is no context to choose either. Keeping prompts
 /// changes nothing about a load, so it is not in one.
 class MlxRuntime extends LocalRuntime {
-  MlxRuntime(this._host) : _channel = _host.channel(appleChannel.name);
+  MlxRuntime(this._process) : _channel = _process.channel(mlxChannel.name);
 
-  final ModelHost _host;
+  final ModelProcess _process;
   final ModelChannel _channel;
 
   @override
@@ -68,7 +67,7 @@ class MlxRuntime extends LocalRuntime {
     DownloadedModel model,
     LocalLoad load, {
     required void Function() onChange,
-  }) => MlxInstance(_channel, _host.hold(), model, load, onChange: onChange);
+  }) => MlxInstance(_channel, _process.hold(), model, load, onChange: onChange);
 }
 
 /// One MLX model, loaded in the Swift half and kept there until it is stopped.
@@ -79,14 +78,27 @@ class MlxInstance extends LocalInstance {
     super.model,
     super.load, {
     required super.onChange,
-  });
+  }) {
+    unawaited(_lease.lost.then((_) => _processGone()));
+  }
 
   final ModelChannel _channel;
 
   /// Keeps the process the model is in, from when it is made — before the
   /// model it displaces lets go of its own, so a switch of models is not the
-  /// process going idle — until it is unloaded.
-  final ModelHostLease _lease;
+  /// process going idle — until it is unloaded, or the process goes.
+  final ModelProcessLease _lease;
+
+  /// The process it was loaded in went, and the model with it: there is
+  /// nothing left to evict, and asking would only start another process.
+  var _gone = false;
+
+  /// A row that says why, as a llama.cpp server that exited leaves one, and
+  /// the next turn to ask for the model loads it again in a new process.
+  void _processGone() {
+    _gone = true;
+    markFailed("The model host quit, taking the model with it.");
+  }
 
   @override
   String get deviceLabel => "Metal";
@@ -121,13 +133,12 @@ class MlxInstance extends LocalInstance {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
-  }) =>
-      ChannelGeneration(_channel, label: "on-device model").run("mlxGenerate", {
-        "model": model.id,
-        "messages": [for (final message in messages) _wire(message)],
-        "tools": [for (final tool in tools) channelTool(tool)],
-        "temperature": ?temperature,
-      });
+  }) => ChannelGeneration(_channel, label: "on-device model").run("generate", {
+    "model": model.id,
+    "messages": [for (final message in messages) _wire(message)],
+    "tools": [for (final tool in tools) channelTool(tool)],
+    "temperature": ?temperature,
+  });
 
   /// A message as the Swift half reads it.
   static Map<String, Object?> _wire(LlmMessage message) => {
@@ -147,7 +158,7 @@ class MlxInstance extends LocalInstance {
   Future<LocalUsage?> usage() async {
     try {
       final usage = await _channel.invokeMethod<Map<Object?, Object?>>(
-        "mlxUsage",
+        "usage",
         {"model": model.id},
       );
       if (usage == null) return null;
@@ -163,11 +174,17 @@ class MlxInstance extends LocalInstance {
     }
   }
 
+  /// The Swift half drops its session's record at the start of a generation
+  /// and takes it up again only when one finishes: a reply stopped part-way
+  /// leaves a cache holding some of a reply nobody kept.
   @override
-  Future<bool> saveState(String path) => _state("mlxSave", path);
+  bool get keepsUnfinished => false;
 
   @override
-  Future<bool> restoreState(String path) => _state("mlxRestore", path);
+  Future<bool> saveState(String path) => _state("save", path);
+
+  @override
+  Future<bool> restoreState(String path) => _state("restore", path);
 
   Future<bool> _state(String method, String path) async {
     try {
@@ -183,6 +200,7 @@ class MlxInstance extends LocalInstance {
 
   @override
   Future<void> unload() async {
+    if (_gone) return;
     try {
       await _channel.invokeMethod("evict", {"model": model.id});
     } catch (_) {

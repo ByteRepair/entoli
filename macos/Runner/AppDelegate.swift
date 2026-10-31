@@ -14,16 +14,26 @@ class AppDelegate: FlutterAppDelegate {
   /// Set by `MainFlutterWindow`'s activation watcher.
   static var userShowedUp = false
 
-  /// A model host launch: the app started this copy of its own executable to
-  /// run the on-device models, so their GPU work is not in the process that
-  /// draws the window. No window and no Dock icon; `ModelHost` is all it
-  /// runs. See "The model host" in macos/AGENTS.md.
-  static let modelHost = ProcessInfo.processInfo.arguments.contains("entoli-models")
+  /// The process's one fork in the road, before AppKit loads anything. A
+  /// model host launch — the app started this copy of its own executable,
+  /// with `entoli-models`, to run the on-device models so their GPU work is
+  /// not in the process that draws the window — never loads the main nib, so
+  /// it has no window, no menu and no delegate of the app's: `ModelHost` is
+  /// all it runs. Everything else is the app. See "The model host" in
+  /// macos/AGENTS.md.
+  static func main() {
+    if ProcessInfo.processInfo.arguments.contains("entoli-models") {
+      let app = NSApplication.shared
+      app.setActivationPolicy(.prohibited)
+      ModelHost.start()
+      app.run()
+    } else {
+      _ = NSApplicationMain(CommandLine.argc, CommandLine.unsafeArgv)
+    }
+  }
 
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-    // A model host has closed its window by design and lives until the app
-    // that started it goes.
-    return !AppDelegate.modelHost
+    return true
   }
 
   override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {

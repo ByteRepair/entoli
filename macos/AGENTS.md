@@ -189,10 +189,10 @@ own process put its work beside every frame the window drew, and a turn on a
 own the stutter drops to slight. It is also what keeps a quit during an MLX
 turn from crashing — see below.
 
-`ModelHost` (`lib/data/model_host/`) is what the engines ask for what they
+`ModelProcess` (`lib/data/model_host/`) is what the engines ask for what they
 talk to — a `ModelChannel` for the native half, a `Worker` for an isolate —
-and they never learn which process answers. macOS gets `HelperModelHost`;
-every other platform `InProcessModelHost`, since iOS cannot start a process
+and they never learn which process answers. macOS gets `HelperModelProcess`;
+every other platform `InAppModelProcess`, since iOS cannot start a process
 and the rest run their models as a server of their own or on the CPU.
 
 - **It is a helper bundle around this app's executable.**
@@ -210,9 +210,12 @@ and the rest run their models as a server of their own or on the CPU.
   with `NSWorkspace` as a new instance, not activated, with
   `entoli-models <socket> <pid>` as its arguments. A child would be this
   app's to macOS, its GPU work scheduled as the app's own. Launched with that
-  flag, `AppDelegate` keeps no window and `ModelHost` runs a headless engine
-  on `modelHostMain`, the app's `App.framework` as its Dart bundle, with
-  `AppleFmChannel` registered on it. A build with no helper — a test, a build
+  flag, `AppDelegate.main` branches before AppKit loads anything: no main
+  nib, so no window, menu or app delegate, and the helper bundle carries no
+  nib at all. `ModelHost` runs a headless engine on `modelHostMain`, the
+  app's `App.framework` as its Dart bundle, with `MlxChannel` registered on
+  it and nothing else — the system model and every other channel stay in
+  the app. A build with no helper — a test, a build
   that skipped the phase — is decided once at the composition root and runs
   the models in-process instead.
 - **The socket is the only way in.** A Unix socket in a directory only this
@@ -224,7 +227,7 @@ and the rest run their models as a server of their own or on the CPU.
 - **It runs while something holds it, and five minutes past.** A loaded MLX
   model holds the host from the moment it is made — before the model it
   displaces lets go, so a switch is never idle — until it is unloaded, and
-  every voice worker holds it while it runs (`ModelHost.hold`). With nothing
+  every voice worker holds it while it runs (`ModelProcess.hold`). With nothing
   held for five minutes the app closes the connection and the host leaves; the
   next ask starts another. The wait is for what comes back — a voice
   conversation picked up again, a model unloaded and asked for — since a
@@ -238,8 +241,12 @@ and the rest run their models as a server of their own or on the CPU.
   it; asking never starts a host that is not running.
 - **The host goes with the app, however it goes.** Its parent is launchd, so
   it watches the pid it was handed, and leaves when that exits or the socket
-  closes. A host lost is every model in it lost, and `ModelHost.lost` tells
-  the engines so their Running lists empty.
+  closes. A host lost is every model in it lost, and every lease on it ends
+  with it (`ModelProcessLease.lost`): each MLX model's row says the host quit,
+  is not evicted from the next host, and loads again when next asked for. The
+  leases end on the process's side rather than their holders', so one held by
+  something that never hears is not left keeping the next host from going
+  idle.
 - **It leaves through `_exit`.** `exit` runs C++ static destructors, MLX's
   Metal device among them, while a generation may still be encoding on
   another thread — the crash every quit during an MLX turn ended in. `quit`
@@ -250,8 +257,9 @@ and the rest run their models as a server of their own or on the CPU.
 No llama.cpp: the bundled server is built for Android and Linux. The
 on-device text models here are MLX's, as on iOS — `MlxEngine`, on macOS 27
 where the build links `EntoliMLX` (`tool/apple/mlx/build.sh`, which this
-Runner now needs before it links at all). The channel is iOS's own
-`AppleFmChannel.swift`, compiled into this Runner by reference; below 27 the
+Runner now needs before it links at all). The channels are iOS's own
+`AppleFmChannel.swift` and `MlxChannel.swift`, compiled into this Runner by
+reference, the second registered only in the model host; below 27 the
 handshake answers `mlx: false`, `createLocalEngine` answers `NoLocalEngine`
 and the On-device page holds only the voice downloads. See "The MLX models"
 in `ios/AGENTS.md`.

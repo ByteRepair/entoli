@@ -14,7 +14,7 @@ import "core/platform/system_palette.dart";
 import "core/tls.dart";
 import "data/backup.dart" show recoverRestore;
 import "data/builtin/llm/providers/provider.dart" show LlmProvider;
-import "data/local/apple_fm.dart" show appleChannel;
+import "data/local/mlx_engine.dart" show mlxChannel;
 import "data/local/file_trigger_store.dart";
 import "data/model_host/model_host_server.dart";
 import "data/voice/sherpa_voice.dart" show sherpaWorkers;
@@ -59,7 +59,7 @@ import "ui/theme.dart";
 @pragma("vm:entry-point")
 void modelHostMain(List<String> arguments) => ModelHostServer.run(
   arguments,
-  channels: [appleChannel],
+  channels: [mlxChannel],
   workers: sherpaWorkers,
 );
 

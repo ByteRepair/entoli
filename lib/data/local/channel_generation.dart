@@ -106,7 +106,7 @@ class ChannelGeneration {
         }
       }
       throw LlmException("The $label never answered.", statusCode: 502);
-    } on ModelHostGone {
+    } on ModelProcessGone {
       // Its process went mid-turn, and the next turn starts another: worth
       // the retry a dropped connection to a provider gets.
       finished = true;

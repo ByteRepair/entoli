@@ -189,6 +189,12 @@ abstract class LocalInstance {
   /// not.
   Future<bool> restoreState(String path);
 
+  /// Whether a generation that did not finish — stopped, or failed — leaves
+  /// the prompt it was given in the live state. llama.cpp's slot keeps the
+  /// tokens it read; a runtime that starts over after one ([MlxInstance])
+  /// says no, so the prompt cache stops believing it holds what it held.
+  bool get keepsUnfinished => true;
+
   /// Never awaited past a moment: nothing waiting on this is waiting on the
   /// memory coming back. A load still under way is over, for whoever waits
   /// on [ready], before the model is let go.

@@ -42,7 +42,7 @@ class HostConnection {
   /// this process would answer: its result, or the [PlatformException] it
   /// threw.
   Future<Object?> call(String channel, String method, Object? arguments) {
-    if (!isOpen) return Future.error(const ModelHostGone());
+    if (!isOpen) return Future.error(const ModelProcessGone());
     final id = _nextId++;
     final answer = _pending[id] = Completer<Object?>();
     send(CallFrame(id, channel, method, arguments));
@@ -64,7 +64,7 @@ class HostConnection {
     if (error != null) logFailure("model-host", "connection failed", error);
     _done.complete();
     for (final answer in _pending.values) {
-      answer.completeError(const ModelHostGone());
+      answer.completeError(const ModelProcessGone());
     }
     _pending.clear();
     unawaited(_frames.close());
@@ -76,8 +76,8 @@ class HostConnection {
 
 /// The model host went while something was still waiting on it: a crash, a
 /// kill, or the app quitting under it.
-class ModelHostGone implements Exception {
-  const ModelHostGone();
+class ModelProcessGone implements Exception {
+  const ModelProcessGone();
 
   @override
   String toString() => "The on-device model process stopped.";

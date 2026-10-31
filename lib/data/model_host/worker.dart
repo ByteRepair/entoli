@@ -8,7 +8,7 @@ import "dart:isolate";
 abstract interface class Worker {
   /// What the worker said, in order, from the first word on. An error here is
   /// the worker ended under it rather than in its own words — the model
-  /// host's process gone (`ModelHostGone`), or the worker never started there
+  /// host's process gone (`ModelProcessGone`), or the worker never started there
   /// ([WorkerFailed]) — and the stream closes after it. In this process
   /// neither reaches here: there is no second process to lose, and a worker
   /// that cannot start fails its `spawn`.

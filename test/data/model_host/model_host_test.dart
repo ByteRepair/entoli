@@ -74,11 +74,11 @@ void main() {
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   late Launches launches;
-  late HelperModelHost host;
+  late HelperModelProcess host;
 
   setUp(() {
     launches = Launches();
-    host = HelperModelHost(launches.launch);
+    host = HelperModelProcess(launches.launch);
     messenger.setMockMethodCallHandler(native, (call) async {
       if (call.method == "refuse") {
         throw PlatformException(code: "no", message: "refused");
@@ -196,15 +196,15 @@ void main() {
     );
     final channelErrors = <Object>[];
     channel.calls.listen((_) {}, onError: channelErrors.add);
-    final lost = host.lost.first;
+    final lease = host.hold();
 
     launches.hostEnd!.close();
-    await lost.timeout(const Duration(seconds: 5));
+    await lease.lost.timeout(const Duration(seconds: 5));
 
-    expect(channelErrors.single, isA<ModelHostGone>());
+    expect(channelErrors.single, isA<ModelProcessGone>());
     await workerDone.future.timeout(const Duration(seconds: 5));
     expect(workerSaid, isEmpty);
-    expect(workerErrors.single, isA<ModelHostGone>());
+    expect(workerErrors.single, isA<ModelProcessGone>());
 
     expect(await channel.invokeMethod("load"), isNotNull);
     expect(launches.count, 2);
@@ -233,19 +233,19 @@ void main() {
 
   group("held and idle", () {
     const idle = Duration(milliseconds: 50);
-    setUp(() => host = HelperModelHost(launches.launch, idle: idle));
+    setUp(() => host = HelperModelProcess(launches.launch, idle: idle));
 
     test("nothing held for the wait lets it go, and is no loss", () async {
       final lease = host.hold();
       await host.channel(native.name).invokeMethod("load");
       final hostEnd = launches.hostEnd!;
       var lost = false;
-      host.lost.listen((_) => lost = true);
+      unawaited(lease.lost.then((_) => lost = true));
 
       lease.release();
       await hostEnd.done.timeout(const Duration(seconds: 5));
 
-      // Nothing was in it: the app was not told it lost anything.
+      // Nothing was in it: the holder was not told it lost anything.
       expect(lost, isFalse);
       // The next ask starts another.
       host.hold();
@@ -265,6 +265,21 @@ void main() {
       await host.channel(native.name).invokeMethod("load");
       expect(launches.count, 1);
       second.release();
+    });
+
+    test("a host that goes gives up what held it, so the next one can go "
+        "idle", () async {
+      final lease = host.hold();
+      await host.channel(native.name).invokeMethod("load");
+
+      launches.hostEnd!.close();
+      await lease.lost.timeout(const Duration(seconds: 5));
+
+      // Nothing new holds the next one: it goes once the wait is up, though
+      // the first lease was never released by its holder.
+      await host.channel(native.name).invokeMethod("load");
+      expect(launches.count, 2);
+      await launches.hostEnd!.done.timeout(const Duration(seconds: 5));
     });
 
     test("a running worker holds it, and its end lets it go", () async {

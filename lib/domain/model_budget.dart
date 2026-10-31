@@ -31,13 +31,15 @@ class ModelBudget {
   /// one to second-guess.
   const ModelBudget.unknown() : bytes = null;
 
-  /// On Apple's GPU: [workingSet] is Metal's own answer, and [available] what
-  /// the OS still lets this process grow by — given on iOS alone, where that
-  /// is the limit that binds.
-  factory ModelBudget.apple({required int workingSet, int? available}) =>
-      available == null
-      ? ModelBudget(workingSet * 3 ~/ 4)
-      : ModelBudget(min(workingSet, available) * 3 ~/ 5);
+  /// A Mac: three quarters of [workingSet], Metal's own answer for what it
+  /// can keep resident.
+  factory ModelBudget.mac(int workingSet) => ModelBudget(workingSet * 3 ~/ 4);
+
+  /// An iPhone or iPad: three fifths of the smaller of Metal's [workingSet]
+  /// and [available], what the OS still lets this process grow by — the
+  /// limit that binds there, where it is known.
+  factory ModelBudget.phone({required int workingSet, int? available}) =>
+      ModelBudget(min(workingSet, available ?? workingSet) * 3 ~/ 5);
 
   /// Out of [total] bytes of RAM.
   factory ModelBudget.memory(int total) => ModelBudget(total * 3 ~/ 5);

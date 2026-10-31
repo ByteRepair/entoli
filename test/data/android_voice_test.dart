@@ -302,7 +302,7 @@ void main() {
     final voice = AndroidVoice(
       FakeVoiceModelStore(),
       "/cache",
-      const InProcessModelHost(),
+      const InAppModelProcess(),
     );
     await expectLater(
       voice.start(

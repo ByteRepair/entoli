@@ -314,13 +314,18 @@ more than the next call shares is no use to it — which an agent's turn never
 asks for, since it only ever extends what came before.
 
 The held messages are cleared while a reply is generated, so one stopped
-part-way leaves a session the next call does not carry on from. The two
+part-way leaves a session the next call does not carry on from. The prompt
+cache hears the same (`LocalInstance.keepsUnfinished`, false here): a
+generation that does not finish clears what it believed the model held, so
+the next turn restores the longest kept prefix from disk rather than reading
+the whole prompt again. llama.cpp's slot keeps what it read, so there the
+record stands. The two
 system messages the agent sends are merged before they cross
 (`mergeLeadingSystem`): Qwen3.5's template raises on a second.
 
 The kept prompts are the llama.cpp ones: `PromptCache` saves after a call and
 restores the longest saved prefix before, and the instance answers with
-`mlxSave`/`mlxRestore` — `saveCache` and `loadPromptCacheSnapshot` — plus
+`save`/`restore` — `saveCache` and `loadPromptCacheSnapshot` — plus
 a `<file>.json` beside the cache file naming the messages and tools it
 covers, since a cache says nothing of which messages made it. Eviction takes
 that record with the file.
@@ -333,13 +338,27 @@ reply text and each tool call as mlx-swift-lm parses it.
 
 ### The channel
 
-`AppleFmChannel.swift` answers, beside `handshake`, `generate` (the system
-model) and `cancel`, the residency Dart decides and the MLX generations:
+The MLX models have a channel of their own, `agent_chat/mlx`
+(`MlxChannel.swift`, `mlxChannel` in Dart), registered only where they run:
+this app on iOS, the model host on macOS (see "The model host" in
+`macos/AGENTS.md`). A process that never registers it cannot load a model, so
+keeping MLX's GPU work out of the Mac's window process is a fact of what each
+process registers rather than of which way Dart routes a call.
+`AppleFmChannel.swift` stays the system model's and the app's: `handshake`,
+`generate` and `cancel`. Both are `GenerationChannel`s, which keep the
+generations in flight a `cancel` reaches.
 
-- `handshake` → `mlx: true` on iOS 27 and macOS 27 (`Mlx.isAvailable`).
-  Every MLX call goes through `EntoliMLX`'s `Mlx`, which answers on any OS
-  and holds the one `#available` gate; below 27 the handshake says no and
-  Dart asks nothing else of it.
+The handshake also says what the device offers MLX — `mlx: true` on iOS 27
+and macOS 27 (`Mlx.isAvailable`), and the memory `ModelBudget` reads
+(`ModelBudget.mac`, `ModelBudget.phone`). Those are the device's and the
+OS's, the same whichever process asks, so the app asks them of its own
+process at startup rather than starting a model host to answer. Every MLX
+call goes through `EntoliMLX`'s `Mlx`, which answers on any OS and holds the
+one `#available` gate; below 27 the handshake says no and Dart asks nothing
+else of it.
+
+`MlxChannel.swift` answers:
+
 - `load {model, directory}` → `loadModelContainer(from:using:
   #huggingFaceTokenizerLoader())`, kept by `model` in `EntoliMLX`'s
   `MlxModels` — a second ask while it loads waits on the first, and a failed
@@ -363,7 +382,7 @@ model) and `cancel`, the residency Dart decides and the MLX generations:
   running on it is cancelled first and ends with an `error` frame, code
   `unloaded`: the reply stops where the user let the model go, and the turn
   is told why rather than left waiting.
-- `mlxGenerate {id, model, messages, tools, temperature}` → that model's
+- `generate {id, model, messages, tools, temperature}` → that model's
   `MlxConversation`, which `load` must have kept: a generation never loads,
   since Dart's `Residency` is the one account of what is loaded, and one
   asked of a model not kept ends in an `error`. Messages are `role`,
@@ -375,9 +394,10 @@ model) and `cancel`, the residency Dart decides and the MLX generations:
 - Every generation, the system model's included, ends with `done` or
   `error`: the system model's one tool call is its `toolCall` frame and then
   `done` with `finish: tool_calls`.
-- `mlxSave` / `mlxRestore {model, path}` → whether the prompt state was
+- `cancel {id}` → the generation stopped.
+- `save` / `restore {model, path}` → whether the prompt state was
   written or read.
-- `mlxUsage {model}` → `{weightBytes, tokens}`: the weights' bytes, counted
+- `usage {model}` → `{weightBytes, tokens}`: the weights' bytes, counted
   once, and the tokens its cache holds, which Dart prices at the model's KV
   bytes per token for the Running models row. Nil where it is not loaded.
 
@@ -427,7 +447,8 @@ run on the `xcode-27` image. The deployment targets are
 the package's floor, iOS 17 and macOS 14 — the app's, not just the
 feature's. The simulator is built arm64 alone (`ios/Flutter/Mlx.xcconfig`):
 Flutter's simulator build adds x86_64, where the import has no module, and
-Xcode 27 runs on no Intel Mac to want one. The macOS Runner compiles `AppleFmChannel.swift` by reference, the
+Xcode 27 runs on no Intel Mac to want one. The macOS Runner compiles `AppleFmChannel.swift`, `MlxChannel.swift` and
+`GenerationChannel.swift` by reference, the
 way iOS compiles `RemindersShared.swift`.
 
 Still owed: the licences MLX and swift-transformers ship, on the About page.

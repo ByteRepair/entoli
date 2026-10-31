@@ -6,9 +6,8 @@ import FlutterMacOS
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
-// The MLX models are `EntoliMLX`'s — tool/apple/mlx, prebuilt into the
-// XCFramework both Runners link — which answers on any OS and gates on its
-// own. They share this channel, not the system model's framework.
+// Only for whether this device can run MLX models, which the handshake
+// says: the models themselves are `MlxChannel`'s.
 import EntoliMLX
 import Metal
 #if os(iOS)
@@ -16,13 +15,15 @@ import os
 #endif
 
 /// The Apple half of the `agent_chat/apple_fm` channel — `AppleFm` and its
-/// client are the Dart half — compiled into both Runners. The system model
-/// is the OS's own: the availability the handshake reports, and one
-/// generation per ask, is the whole of what this class owns for it. An MLX
-/// model is loaded from the directory Dart downloaded it to and kept
-/// (`EntoliMLX`'s `Mlx`) until Dart evicts it, with the conversation its
-/// cache holds — `mlxGenerate`, `mlxSave` and `mlxRestore`; Dart decides
-/// which are loaded.
+/// client are the Dart half — compiled into both Runners and registered in
+/// the app's own process. The system model is the OS's own: the availability
+/// the handshake reports, and one generation per ask, is the whole of what
+/// this class owns for it.
+///
+/// The handshake also says what this device offers MLX — whether it can run
+/// it, and how much memory a model may have — since those are the device's
+/// and the OS's, the same whichever process asks; the MLX models are loaded
+/// and run on `agent_chat/mlx` (`MlxChannel`), wherever they run.
 ///
 /// **A tool call is reported and ended, not run.** The agent in Dart owns
 /// the loop the way it owns every other model's — approvals, the recorder
@@ -37,33 +38,11 @@ import os
 /// `Transcript.ToolCalls`/`ToolOutput` to a hand-run for their exactness,
 /// and what a 3B model reads out of an inline wording is the same facts
 /// either way.
-class AppleFmChannel: NSObject {
+final class AppleFmChannel: GenerationChannel {
   private static var instance: AppleFmChannel?
 
   static func register(with messenger: FlutterBinaryMessenger) {
-    instance = AppleFmChannel(messenger: messenger)
-  }
-
-  private let channel: FlutterMethodChannel
-
-  /// The generations in flight, by id — the handle a stop reaches the
-  /// running generation through. Written on the main thread only: the
-  /// handler inserts, and everything the generation itself does to the
-  /// dictionary is posted, so a background Task never touches it.
-  private var generations: [String: Task<Void, Never>] = [:]
-
-  init(messenger: FlutterBinaryMessenger) {
-    channel = FlutterMethodChannel(name: "agent_chat/apple_fm", binaryMessenger: messenger)
-    super.init()
-    channel.setMethodCallHandler { [weak self] call, result in
-      self?.handle(call: call, result: result)
-    }
-  }
-
-  private func send(_ method: String, _ arguments: [String: Any]) {
-    DispatchQueue.main.async { [weak self] in
-      self?.channel.invokeMethod(method, arguments: arguments)
-    }
+    instance = AppleFmChannel(name: "agent_chat/apple_fm", messenger: messenger)
   }
 
   /// What the device can give a model, as Dart's `ModelBudget` reads it:
@@ -91,102 +70,14 @@ class AppleFmChannel: NSObject {
     }
   }
 
-  /// `load` and `evict`: the residency Dart decides. A load that fails
-  /// answers a `FlutterError` whose message is the reason, which is what the
-  /// settings row shows.
-  private func residency(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
-    let args = call.arguments as? [String: Any] ?? [:]
-    let model = args["model"] as? String ?? ""
-    let reply = { (value: Any?) in DispatchQueue.main.async { result(value) } }
-    Task.detached(priority: .userInitiated) {
-      do {
-        if call.method == "load" {
-          try await Mlx.load(model, args["directory"] as? String ?? "")
-        } else {
-          await Mlx.evict(model)
-        }
-        reply(nil)
-      } catch {
-        reply(FlutterError(code: "load", message: "\(error)", details: nil))
-      }
-    }
-  }
-
-  private func handle(call: FlutterMethodCall, result: @escaping FlutterResult) {
+  override func handle(call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
     case "handshake":
       result(["reason": availabilityReason(), "mlx": Mlx.isAvailable, "memory": memory()])
     case "generate":
       startGeneration(call, result, generate)
-    case "cancel":
-      let id = (call.arguments as? [String: Any])?["id"] as? String ?? ""
-      finishGeneration(id)
-      result(nil)
-    case "mlxGenerate":
-      startGeneration(call, result, mlxGenerate)
-    case "mlxSave", "mlxRestore":
-      let args = call.arguments as? [String: Any] ?? [:]
-      let model = args["model"] as? String ?? ""
-      let path = args["path"] as? String ?? ""
-      let saving = call.method == "mlxSave"
-      Task {
-        let ok =
-          saving
-          ? await Mlx.save(model, to: path) : await Mlx.restore(model, from: path)
-        DispatchQueue.main.async { result(ok) }
-      }
-    case "load", "evict":
-      residency(call, result)
-    case "mlxUsage":
-      let model = (call.arguments as? [String: Any])?["model"] as? String ?? ""
-      Task {
-        let usage = await Mlx.usage(model)
-        DispatchQueue.main.async {
-          result(usage.map { ["weightBytes": $0.weightBytes, "tokens": $0.tokens] })
-        }
-      }
     default:
-      result(FlutterMethodNotImplemented)
-    }
-  }
-
-  /// Every generation cancelled, returning once each has ended: what a model
-  /// host does before it leaves, so no generation is still encoding GPU work
-  /// as the process goes.
-  @MainActor static func stopAll() async {
-    guard let instance else { return }
-    let tasks = Array(instance.generations.values)
-    tasks.forEach { $0.cancel() }
-    for task in tasks { await task.value }
-  }
-
-  /// Starts the generation the call's `id` names and answers at once, its
-  /// frames following on the channel. Held before the reply, so a cancel
-  /// racing the start finds the task; retained until the generation ends,
-  /// which is what breaks the cycle the captured self would otherwise hold —
-  /// so every exit of `body`, the early ones included, ends it here.
-  private func startGeneration(
-    _ call: FlutterMethodCall, _ result: FlutterResult,
-    _ body: @escaping (String, [String: Any]) async -> Void
-  ) {
-    let args = call.arguments as? [String: Any] ?? [:]
-    let id = args["id"] as? String ?? ""
-    generations[id] = Task.detached(priority: .userInitiated) {
-      await body(id, args)
-      self.finishGeneration(id)
-    }
-    result(nil)
-  }
-
-  /// The one ending a generation that failed: every generation ends with
-  /// `done` or this.
-  private func sendError(_ id: String, _ code: String, _ message: String) {
-    send("error", ["id": id, "code": code, "message": message])
-  }
-
-  private func finishGeneration(_ id: String) {
-    DispatchQueue.main.async { [weak self] in
-      self?.generations.removeValue(forKey: id)?.cancel()
+      super.handle(call: call, result: result)
     }
   }
 
@@ -297,44 +188,6 @@ class AppleFmChannel: NSObject {
     var done = ["id": id, "finish": "stop"] as [String: Any]
     done.merge(usage) { first, _ in first }
     send("done", done)
-  }
-
-  /// One MLX generation: the whole conversation in the OpenAI shape the
-  /// Dart client already has, of which `EntoliMLX` reads only what the
-  /// model's cache does not hold. Its events are the system model's frames —
-  /// `reasoning`, `text`, `toolCall`, `done`, `error` — so the client reads
-  /// both the same way.
-  private func mlxGenerate(_ id: String, _ args: [String: Any]) async {
-    do {
-      try await Mlx.generate(
-        args["model"] as? String ?? "",
-        messages: (args["messages"] as? [[String: Any]] ?? []).map(MlxMessage.init(channel:)),
-        tools: (args["tools"] as? [[String: Any]] ?? []).map(MlxTool.init(channel:)),
-        temperature: args["temperature"] as? Double
-      ) { [weak self] event in
-        switch event {
-        case .reasoning(let text): self?.send("reasoning", ["id": id, "text": text])
-        case .text(let text): self?.send("text", ["id": id, "text": text])
-        case .toolCall(let call):
-          self?.send("toolCall", [
-            "id": id, "callId": call.id, "name": call.name, "arguments": call.arguments,
-          ])
-        case .done(let prompt, let generated):
-          self?.send("done", [
-            "id": id, "finish": "stop", "inputTokens": prompt, "outputTokens": generated,
-          ])
-        @unknown default: break
-        }
-      }
-    } catch is CancellationError {
-      // A stop: cancelled, not failed, so nothing is said.
-    } catch is MlxUnloaded {
-      // Not a stop the turn asked for: it is waiting, and is told why its
-      // reply ended.
-      sendError(id, "unloaded", "The model was unloaded.")
-    } catch {
-      sendError(id, "other", "\(error)")
-    }
   }
 
   private func toolCall(_ id: String, _ name: String, _ arguments: String) {

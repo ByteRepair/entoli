@@ -82,13 +82,4 @@ void main() {
     expect(loaded(), ["b"]);
     expect(runtime.events.last, "stop a");
   });
-
-  test("a lost process forgets its models without stopping them", () async {
-    await residency.serve("a", testLocalOptions());
-
-    residency.lost();
-
-    expect(loaded(), isEmpty);
-    expect(runtime.stops, 0);
-  });
 }

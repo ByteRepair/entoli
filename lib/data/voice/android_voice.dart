@@ -21,7 +21,7 @@ import "voice_strategies.dart";
 /// `MacosVoice` is this over Apple's engines. The `Native*` classes below are
 /// the native contract `ios_voice.dart` shares too.
 class AndroidVoice extends Voice {
-  AndroidVoice(VoiceModelStore store, String cacheDir, ModelHost host)
+  AndroidVoice(VoiceModelStore store, String cacheDir, ModelProcess host)
     : _sherpa = SherpaVoice(store, cacheDir, host);
 
   /// The sherpa halves, composed where a pick names a downloaded model rather

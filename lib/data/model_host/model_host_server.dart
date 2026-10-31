@@ -14,7 +14,7 @@ import "worker.dart";
 /// arguments rather than in them, where `ps` would show it.
 const modelHostKeyVariable = "ENTOLI_MODEL_HOST_KEY";
 
-/// The model host's half: what the app asks of [HelperModelHost], done in
+/// The model host's half: what the app asks of [HelperModelProcess], done in
 /// this process. Calls go to this process's own native channels, what those
 /// say unasked goes back as events, and workers run in isolates here.
 class ModelHostServer {

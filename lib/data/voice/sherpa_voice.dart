@@ -32,7 +32,7 @@ class SherpaVoice extends Voice {
 
   /// Where the two workers run: the model host on macOS, this process
   /// elsewhere.
-  final ModelHost _host;
+  final ModelProcess _host;
 
   /// Where the Silero model is unpacked to. The bundled asset cannot be given
   /// to sherpa as bytes: every model it takes, it takes as a path.

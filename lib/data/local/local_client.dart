@@ -42,15 +42,23 @@ class LocalClient implements LlmClient {
     await entry?.warm();
 
     String? finish;
-    // One system message to the model: a chat template refuses a second.
-    await for (final chunk in instance.generate(
-      mergeLeadingSystem(messages),
-      tools: tools,
-      temperature: temperature,
-      reasoningEffort: reasoningEffort,
-    )) {
-      if (chunk is LlmCompletion) finish = chunk.finishReason;
-      yield chunk;
+    var finished = false;
+    try {
+      // One system message to the model: a chat template refuses a second.
+      await for (final chunk in instance.generate(
+        mergeLeadingSystem(messages),
+        tools: tools,
+        temperature: temperature,
+        reasoningEffort: reasoningEffort,
+      )) {
+        if (chunk is LlmCompletion) finish = chunk.finishReason;
+        yield chunk;
+      }
+      finished = true;
+    } finally {
+      // Stopped by whoever was reading, or failed: what the model holds now
+      // is the runtime's to say, not the cache's to remember.
+      if (!finished) entry?.unfinished();
     }
 
     // Saved where the turn ends, not at every step of it: the next step is

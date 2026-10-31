@@ -88,13 +88,6 @@ class Residency {
     await Future.wait([for (final instance in all) instance.stop()]);
   }
 
-  /// Forgets every instance without stopping it: the process they were in has
-  /// gone, and them with it.
-  void lost() {
-    _loaded.clear();
-    _publish();
-  }
-
   /// The loaded instance of [modelId], or null where it is not loaded.
   LocalInstance? instanceOf(String modelId) {
     for (final instance in _loaded) {

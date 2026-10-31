@@ -21,17 +21,6 @@ class MainFlutterWindow: NSWindow {
       }
     }
 
-    // A model host runs a headless engine of its own instead of this window's:
-    // the storyboard's window still loads, so it is closed once AppKit has
-    // finished putting it up, and the policy keeps a Dock icon from showing.
-    if AppDelegate.modelHost {
-      NSApp.setActivationPolicy(.prohibited)
-      ModelHost.start()
-      super.awakeFromNib()
-      DispatchQueue.main.async { self.close() }
-      return
-    }
-
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
@@ -93,7 +82,9 @@ enum ModelHost {
       ProcessInfo.processInfo.arguments.drop { $0 != "entoli-models" }.dropFirst())
     project.dartEntrypointArguments = arguments
     let engine = FlutterEngine(name: "models", project: project, allowHeadlessExecution: true)
-    AppleFmChannel.register(with: engine.binaryMessenger)
+    // The models, and nothing else: the system model and every other channel
+    // are the app's, in the app's process.
+    MlxChannel.register(with: engine.binaryMessenger)
     let channel = FlutterMethodChannel(
       name: "agent_chat/model_host", binaryMessenger: engine.binaryMessenger)
     channel.setMethodCallHandler { call, result in
@@ -136,7 +127,7 @@ enum ModelHost {
   /// cannot keep a host alive past its app.
   static func quit() {
     Task { @MainActor in
-      await AppleFmChannel.stopAll()
+      await MlxChannel.stopAll()
       _exit(0)
     }
     DispatchQueue.main.asyncAfter(deadline: .now() + 3) { _exit(0) }

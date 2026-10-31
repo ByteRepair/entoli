@@ -93,6 +93,32 @@ void main() {
     expect(runtime.restored, isEmpty);
   });
 
+  test("a stopped generation on a runtime that starts over after one is "
+      "restored from disk next time", () async {
+    runtime = FakeLocalRuntime(restores: true, keepsUnfinished: false);
+    model = runtime.create(model.model, model.load, onChange: () {});
+    final file = saved(turn);
+
+    // The turn finished and was kept; the next one was stopped part-way, and
+    // the model holds nothing of either now.
+    await entry(turn).keep();
+    entry(next).unfinished();
+    expect(await entry(next).warm(), isTrue);
+
+    expect(runtime.restored, [file.path]);
+  });
+
+  test("a stopped generation on a runtime that keeps what it read is still "
+      "served live", () async {
+    saved(turn);
+
+    await entry(turn).keep();
+    entry(next).unfinished();
+    expect(await entry(next).warm(), isTrue);
+
+    expect(runtime.restored, isEmpty);
+  });
+
   test("an unchanged prompt is not saved twice", () async {
     await entry(turn).keep();
     await entry(turn).keep();

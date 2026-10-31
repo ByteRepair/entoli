@@ -16,19 +16,15 @@ const modelHostChannel = MethodChannel("agent_chat/model_host");
 /// never learn which process answers. See "The model host" in
 /// macos/AGENTS.md.
 ///
-/// macOS runs them in a second process ([HelperModelHost]) because MLX's GPU
+/// macOS runs them in a second process ([HelperModelProcess]) because MLX's GPU
 /// work in the process that draws the window starves the window's frames:
 /// the GPU interleaves processes, not the queues of one. Everywhere else they
-/// run here ([InProcessModelHost]) — iOS cannot start a process, and the
+/// run here ([InAppModelProcess]) — iOS cannot start a process, and the
 /// other platforms' models are a server of their own or run on the CPU.
-abstract interface class ModelHost {
+abstract interface class ModelProcess {
   ModelChannel channel(String name);
 
   Future<Worker> spawn(WorkerKind kind, List<Object?> argument);
-
-  /// Each time the models' process went, and every model loaded in it with
-  /// it.
-  Stream<void> get lost;
 
   /// The memory the models' process takes, where they have one of their own
   /// and it is running; null where they share the app's, or nothing has
@@ -39,19 +35,33 @@ abstract interface class ModelHost {
   /// model holds one, and so does every worker [spawn] makes. With none held
   /// a process of their own has no reason to run, and goes; the next ask
   /// starts another.
-  ModelHostLease hold();
+  ModelProcessLease hold();
 }
 
-/// One reason for the models' process to keep running, given up once.
-class ModelHostLease {
-  ModelHostLease(this._release);
+/// One reason for the models' process to keep running, given up once —
+/// by its holder, or by the process going while it was held.
+class ModelProcessLease {
+  ModelProcessLease(this._release);
 
   void Function()? _release;
+  final _lost = Completer<void>();
+
+  /// Completes if the process went while this was held, and everything the
+  /// holder had in it with it. The lease is given up by then: the next
+  /// process owes this holder nothing.
+  Future<void> get lost => _lost.future;
 
   void release() {
     final release = _release;
     _release = null;
     release?.call();
+  }
+
+  /// The process going, said by the [ModelProcess] that granted it.
+  void lose() {
+    if (_release == null) return;
+    release();
+    _lost.complete();
   }
 }
 
@@ -61,7 +71,7 @@ class ModelHostLease {
 abstract interface class ModelChannel {
   Future<T?> invokeMethod<T>(String method, [Object? arguments]);
 
-  /// Broadcast. An error here is the native half gone ([ModelHostGone]).
+  /// Broadcast. An error here is the native half gone ([ModelProcessGone]).
   Stream<MethodCall> get calls;
 }
 
@@ -90,8 +100,8 @@ class PlatformModelChannel implements ModelChannel {
 }
 
 /// The models in this process.
-class InProcessModelHost implements ModelHost {
-  const InProcessModelHost();
+class InAppModelProcess implements ModelProcess {
+  const InAppModelProcess();
 
   @override
   ModelChannel channel(String name) =>
@@ -101,12 +111,9 @@ class InProcessModelHost implements ModelHost {
   Future<Worker> spawn(WorkerKind kind, List<Object?> argument) =>
       IsolateWorker.spawn(kind, argument);
 
+  /// This process runs whatever is held, and goes with the app.
   @override
-  Stream<void> get lost => const Stream.empty();
-
-  /// This process runs whatever is held.
-  @override
-  ModelHostLease hold() => ModelHostLease(() {});
+  ModelProcessLease hold() => ModelProcessLease(() {});
 
   /// The models are in the app's own process, which is the app's memory and
   /// not theirs to report.
@@ -122,8 +129,8 @@ class InProcessModelHost implements ModelHost {
 /// again, a model unloaded and asked for. Relaunching costs a second, which a
 /// model's load hides and a tap on the microphone does not; five idle minutes
 /// is the point past which the process is only taking up room.
-class HelperModelHost implements ModelHost {
-  HelperModelHost(this._launch, {this.idle = const Duration(minutes: 5)});
+class HelperModelProcess implements ModelProcess {
+  HelperModelProcess(this._launch, {this.idle = const Duration(minutes: 5)});
 
   final Future<HostConnection> Function() _launch;
 
@@ -134,13 +141,12 @@ class HelperModelHost implements ModelHost {
 
   Future<HostConnection>? _connection;
 
-  /// How many leases are out. The app decides when the process is done
-  /// rather than the process itself, since only this side knows a load is
-  /// about to arrive.
-  var _holds = 0;
+  /// The leases out. The app decides when the process is done rather than
+  /// the process itself, since only this side knows a load is about to
+  /// arrive.
+  final _leases = <ModelProcessLease>{};
   final _channels = <String, _RemoteChannel>{};
   final _workers = <int, _RemoteWorker>{};
-  final _lost = StreamController<void>.broadcast();
   var _nextWorker = 0;
 
   Future<HostConnection> _connect() => _connection ??= _start();
@@ -180,27 +186,34 @@ class HelperModelHost implements ModelHost {
   void _gone() {
     _connection = null;
     for (final worker in _workers.values) {
-      worker._ended(const ModelHostGone());
+      worker._ended(const ModelProcessGone());
     }
     _workers.clear();
     for (final channel in _channels.values) {
       channel._gone();
     }
-    _lost.add(null);
+    // Every holder hears it went, and none of them still holds it: a lease
+    // left out would keep the next process from ever going idle.
+    for (final lease in [..._leases]) {
+      lease.lose();
+    }
   }
 
   @override
-  ModelHostLease hold() {
-    _holds++;
+  ModelProcessLease hold() {
     _idleTimer?.cancel();
     _idleTimer = null;
-    return ModelHostLease(() {
-      if (--_holds > 0) return;
+    late final ModelProcessLease lease;
+    lease = ModelProcessLease(() {
+      _leases.remove(lease);
+      if (_leases.isNotEmpty) return;
       _idleTimer = Timer(idle, () {
         _idleTimer = null;
         unawaited(_letGo());
       });
     });
+    _leases.add(lease);
+    return lease;
   }
 
   /// Closing the connection is what ends the process: it leaves when the app
@@ -257,15 +270,12 @@ class HelperModelHost implements ModelHost {
     connection.send(SpawnFrame(id, kind.name, argument));
     return worker;
   }
-
-  @override
-  Stream<void> get lost => _lost.stream;
 }
 
 class _RemoteChannel implements ModelChannel {
   _RemoteChannel(this._host, this._name);
 
-  final HelperModelHost _host;
+  final HelperModelProcess _host;
   final String _name;
   final _calls = StreamController<MethodCall>.broadcast();
 
@@ -282,7 +292,7 @@ class _RemoteChannel implements ModelChannel {
 
   /// Whatever was waiting on the native half is told it went, rather than
   /// left waiting for a frame that will never come.
-  void _gone() => _calls.addError(const ModelHostGone());
+  void _gone() => _calls.addError(const ModelProcessGone());
 }
 
 class _RemoteWorker implements Worker {
@@ -297,7 +307,7 @@ class _RemoteWorker implements Worker {
   final int _id;
 
   /// Given up when the worker ends, however it ends.
-  final ModelHostLease _lease;
+  final ModelProcessLease _lease;
   final void Function() onClose;
   final _out = StreamController<Object?>();
 
@@ -319,7 +329,7 @@ class _RemoteWorker implements Worker {
   }
 
   /// Ended by the host rather than in the worker's own words: [error] is
-  /// why — its process went ([ModelHostGone]) or it never started
+  /// why — its process went ([ModelProcessGone]) or it never started
   /// ([WorkerFailed]) — and the host has no business speaking the worker's
   /// vocabulary to say so.
   void _ended([Object? error]) {
