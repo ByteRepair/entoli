@@ -1,0 +1,50 @@
+name: Upload what was built
+description: >
+  Uploads one built file as an artifact and puts its SHA-256 in the run summary.
+
+inputs:
+  file:
+    required: true
+  artifact:
+    required: true
+  extra:
+    description: Further paths to put in the same artifact, one per line.
+    required: false
+    default: ""
+  retention-days:
+    required: false
+    default: "7"
+  version-code:
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/upload-artifact@v7.0.1
+      with:
+        name: ${{ inputs.artifact }}
+        path: |
+          ${{ inputs.file }}
+          ${{ inputs.extra }}
+        if-no-files-found: error
+        compression-level: 0
+        retention-days: ${{ inputs.retention-days }}
+
+    - shell: bash
+      env:
+        FILE: ${{ inputs.file }}
+        VERSION_CODE: ${{ inputs.version-code }}
+      run: |
+        set -euo pipefail
+        sum=$(command -v sha256sum || echo "shasum -a 256")
+        {
+          echo "### $(basename "$FILE")"
+          echo
+          echo '```'
+          (cd "$(dirname "$FILE")" && $sum "$(basename "$FILE")")
+          if [ -n "$VERSION_CODE" ]; then
+            echo "version code         $VERSION_CODE"
+          fi
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"

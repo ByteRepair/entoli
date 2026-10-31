@@ -1,35 +1,18 @@
 name: Bundled tools
 description: >
-  Build the tools Entoli ships inside the Android app — proot and its loader,
-  and llama.cpp's server for arm64 — and stage them where the Android build
-  packages them from. Cached on what decides the output, so a run that changes
-  neither the versions nor the recipe pays for a download rather than three
-  cross-compiles.
-
-inputs:
-  stage:
-    description: >
-      Whether to stage the built tools into jniLibs. The tools job sets this
-      false and uploads dist/ as an artifact; the app build jobs download it
-      and runs stage.sh itself, so the two never share a runner.
-    required: false
-    default: 'true'
+  Builds the tools Entoli ships inside the Android app — proot and its loader
+  for every ABI, llama.cpp's server for arm64 — and uploads them as the
+  `bundled-tools` artifact, which android-build-setup stages on its own runner.
 
 outputs:
   abis:
-    description: The ABIs built, for a caller that has to check what shipped.
     value: ${{ steps.abis.outputs.list }}
   llama-abis:
-    description: >
-      The ABIs llama.cpp was built for, which is a subset — see build.sh for
-      why it is only arm64.
     value: ${{ steps.abis.outputs.llama }}
 
 runs:
   using: composite
   steps:
-    # One authority for the list: the build below and the release build's check
-    # that the tools actually made it into the bundle both read it from here.
     - id: abis
       shell: bash
       run: |
@@ -41,27 +24,19 @@ runs:
       uses: actions/cache/restore@v6.1.0
       with:
         path: tool/android/dist
-        # The recipe and the versions between them decide every byte of the
-        # output — this file included, since whether it fetches the Hexagon SDK
-        # below is the difference between an arm64 build with an NPU backend in
-        # it and one without, and nothing under tool/ changes when that does.
+        # This file is in the key: whether it fetches the Hexagon SDK decides
+        # whether arm64 has an NPU backend, and nothing under tool/ says so.
         key: bundled-tools-${{ steps.abis.outputs.list }}-${{ hashFiles('tool/android/versions.sh', 'tool/android/build.sh', 'tool/android/talloc-config.h', '.github/actions/bundled-tools/action.yml') }}
 
-    # The runner image ships one, and llama.cpp's build is generated for it.
-    # Checked rather than assumed: an image that dropped it would otherwise fail
-    # in the middle of a cross-compile with a message about a generator.
-    - name: Ninja, which llama.cpp is built with
+    - name: Install Ninja
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
       run: |
         command -v ninja >/dev/null ||
           { sudo apt-get update && sudo apt-get install -y ninja-build; }
 
-    # build.sh builds the NPU backend only where it finds this, and says so
-    # nowhere a runner log is read — an app without it installs, runs, and tells
-    # the one kind of phone that has an NPU that it has no NPU. 660 MiB, on the
-    # runs that build rather than restore.
-    - name: Fetch the Hexagon SDK the NPU backend is built against
+    # build.sh silently skips the NPU backend without it.
+    - name: Fetch the Hexagon SDK
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
       run: tool/android/setup.sh
@@ -69,9 +44,7 @@ runs:
     - name: Build the tools
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
-      # ANDROID_NDK_ROOT is the runner image's own, and pinning a version here
-      # would be a second one to keep in step with the app's. Naming it in an
-      # `env:` blanks it: that context holds only what a workflow set.
+      # Not through `env:`, which would blank the image's ANDROID_NDK_ROOT.
       run: |
         set -euo pipefail
         export LLAMA_ABIS="${{ steps.abis.outputs.llama }}"
@@ -79,8 +52,6 @@ runs:
           tool/android/build.sh "$abi"
         done
 
-    # From a branch only: a tag's cache scope is one no later run reads. See
-    # "Caches" in .github/workflows/AGENTS.md.
     - name: Save the built tools
       if: github.ref_type != 'tag' && steps.cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v6.1.0
@@ -88,7 +59,10 @@ runs:
         path: tool/android/dist
         key: ${{ steps.cache.outputs.cache-primary-key }}
 
-    - name: Stage them into the app's native libraries
-      if: inputs.stage == 'true'
-      shell: bash
-      run: tool/android/stage.sh
+    - uses: actions/upload-artifact@v7.0.1
+      with:
+        name: bundled-tools
+        path: tool/android/dist/
+        if-no-files-found: error
+        compression-level: 0
+        retention-days: 1

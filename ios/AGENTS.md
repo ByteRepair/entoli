@@ -339,7 +339,7 @@ Runners:
   pins in `Package.swift` are exact and `Package.resolved` is committed and
   enforced: what runs is the code a person chose by bumping a number.
 - **The MLX compile is minutes of C++ and Metal**, which CI caches
-  (`.github/actions/apple-mlx`) on the package, its pins, the script and the
+  (`.github/actions/apple-setup`) on the package, its pins, the script and the
   Xcode build — one slice per job, the one it ships.
 
 The module is built with library evolution and its imports `internal`, so its

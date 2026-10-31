@@ -1,9 +1,5 @@
 name: Debug build
 
-# Asked for, never automatic: these are minutes-long native builds, and a debug
-# artifact is wanted when someone means to install one, not on every commit. A
-# run builds whichever ref it was dispatched from; `release-build.yml` is the
-# same two native builds cut from a tag.
 on:
   workflow_dispatch:
 
@@ -16,19 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
-
-      - id: tools
-        uses: ./.github/actions/bundled-tools
-        with:
-          stage: false
-
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: bundled-tools
-          path: tool/android/dist/
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 1
+      - uses: ./.github/actions/bundled-tools
 
   android:
     needs: android-tools
@@ -40,25 +24,19 @@ jobs:
         with:
           release: false
 
-      # Every APK is otherwise version code 1, Flutter's default where pubspec
-      # names no build number, and an installer refuses to replace an installed
-      # build with one no newer. The run number counts runs of *this* workflow,
-      # so renaming the file restarts it at 1.
+      # An installer refuses to replace a build with one whose code is no newer.
       - run: flutter build apk --debug --build-number=${{ github.run_number }}
 
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: ./.github/actions/upload-built
         with:
-          name: android-debug
-          path: build/app/outputs/flutter-apk/app-debug.apk
-          # An APK is already a zip; compressing it again buys nothing.
-          compression-level: 0
+          file: build/app/outputs/flutter-apk/app-debug.apk
+          artifact: android-debug
           retention-days: 14
 
   llama-linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
-
       - uses: ./.github/actions/linux-llama
 
   linux:
@@ -71,18 +49,11 @@ jobs:
         uses: ./.github/actions/linux-appimage
         with:
           mode: debug
-          # Unversioned: dispatched from a branch, so pubspec's version would
-          # name a build nobody released.
           name: entoli-debug-x86_64.AppImage
           build-number: ${{ github.run_number }}
 
-      # The AppImage alone, as the release ships: the bundle it was packed
-      # from is the same files again, uncompressed into a zip of its own.
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: ./.github/actions/upload-built
         with:
-          name: linux-debug-appimage
-          path: ${{ steps.build.outputs.appimage }}
-          if-no-files-found: error
-          # squashfs already; compressing it again buys nothing.
-          compression-level: 0
+          file: ${{ steps.build.outputs.appimage }}
+          artifact: linux-debug-appimage
           retention-days: 14

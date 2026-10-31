@@ -1,49 +1,51 @@
 name: CI
 
-# Notes-only changes run nothing: the AGENTS.md files and the READMEs reach no
-# build. Every other markdown file can — `PRIVACY.md` and everything under
-# `assets/` are compiled into the app — so the filter names the ones it skips
-# and puts `assets/` back after them, rather than skipping `**.md`.
 on:
   push:
     branches: [master]
-    paths:
-      - '**'
-      - '!**/AGENTS.md'
-      - '!**/README.md'
-      - 'assets/**'
   pull_request:
-    paths:
-      - '**'
-      - '!**/AGENTS.md'
-      - '!**/README.md'
-      - 'assets/**'
 
 permissions:
   contents: read
 
-# A PR's newer push supersedes its older one. Master's do not: each is a merge
-# that should be tested, and cancelling one leaves it with no result at all —
-# so a push to master is a group of its own by its sha, where a shared group
-# would still drop a queued one in favour of the next.
+# Each master push is a group of its own: cancelling one leaves a merge with
+# no result at all.
 concurrency:
   group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: true
 
 jobs:
-  # One job rather than analyze beside test: each paid its own runner and its
-  # own Flutter setup (one to two and a half minutes, rounded up to a billed
-  # minute), and analyze is a minute against test's thirteen, so running it
-  # first costs little wall clock and fails a broken tree before the suite.
+  # Decided here rather than by `paths:` on the trigger: `check` is required on
+  # master, and a filtered-out workflow never reports, where a skipped job
+  # passes. Notes (AGENTS.md, README.md) reach no build; `assets/` always does.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 2
+
+      # A PR's merge commit, and a squash on master, have the base as HEAD^1.
+      - id: diff
+        run: |
+          if git diff --name-only HEAD^1 HEAD |
+            awk '/^assets\// || !/(^|\/)(AGENTS|README)\.md$/ { found = 1 } END { exit !found }'
+          then echo code=true; else echo code=false; fi >> "$GITHUB_OUTPUT"
+
+  # Format and analyze ahead of the suite, on its runner: a second job would
+  # pay for a second Flutter setup.
   check:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
 
       - uses: ./.github/actions/flutter-setup
 
-      # The tracked files alone: the generated sources `tool/prepare.sh` wrote
-      # during setup are not the repository's to keep formatted.
+      # Tracked files only: the generated sources are not the repository's.
       - run: git ls-files '*.dart' | xargs dart format --output=none --set-exit-if-changed
 
       - run: flutter analyze

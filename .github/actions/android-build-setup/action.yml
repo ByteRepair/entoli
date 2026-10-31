@@ -1,39 +1,27 @@
 name: Android build setup
 description: >
-  The setup every Android build shares: the release keystore (gated on
-  `release`), Java 17, Flutter, the bundled-tools artifact and staging. One
-  composite so the debug and release AAB jobs do not copy it. The keystore
-  decode runs before the SDK installs so a missing one fails in seconds rather
-  than after a toolchain download.
+  The release keystore (when `release`), Java 17, Flutter, and the
+  `bundled-tools` artifact staged into the native libraries.
 
 inputs:
   release:
-    description: Decode the release keystore; false for debug.
     required: true
   keystore-base64:
-    description: Base64 of the release keystore. Required when release is true.
     required: false
   keystore-password:
-    description: Keystore password. Required when release is true.
     required: false
   key-alias:
-    description: Key alias. Required when release is true.
     required: false
   key-password:
-    description: Key password. Required when release is true.
     required: false
 
 runs:
   using: composite
   steps:
-    # The 8G heap and 4G metaspace are a workstation's figures. A hosted
-    # runner has 16 GB and its own processes beside the daemon, and a build
-    # that pushes the JVM past what is left does not fail — the runner is
-    # lost mid-build instead, and every step it was running with it.
+    # The workstation's 8G heap takes a 16 GB runner down mid-build.
     - name: Fit the Gradle heap to the runner
       shell: bash
       run: |
-        set -euo pipefail
         sed -i -e 's/-Xmx[0-9]*[GgMm]/-Xmx4G/' \
                -e 's/-XX:MaxMetaspaceSize=[0-9]*[GgMm]/-XX:MaxMetaspaceSize=1G/' \
                android/gradle.properties
@@ -56,33 +44,21 @@ runs:
         done
         echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
 
-    # Java 17 to match android/app/build.gradle.kts. No `cache: gradle` on a
-    # tag build: it can only ever write a scope no later run can read.
     - uses: actions/setup-java@v5.7.0
       with:
         distribution: temurin
         java-version: "17"
         cache: ${{ inputs.release != 'true' && 'gradle' || '' }}
 
-    # The image ships NDKs under $ANDROID_HOME/ndk that no build of ours
-    # reads: ndkVersion comes from Flutter, not from the image. On
-    # ubuntu-24.04 three of them (~7 GB) sat beside the fourth Gradle went on
-    # to install, and at v4.6.0 the aab job died on a full disk inside
-    # signReleaseBundle with 82 MB left — this is that room back. The version
-    # Flutter pins is kept where the image carries it: ubuntu-26.04 (which
-    # ubuntu-latest migrates to) preinstalls exactly it.
-    #
-    # The number is flutter.ndkVersion of the SDK flutter-setup pins —
-    # FlutterExtension.kt's hardcoded one. A stale value never breaks the
-    # build: the worst it does is leave an unused NDK behind.
-    - name: Remove the preinstalled NDKs we do not build with
+    # The image's other NDKs (~7 GB) once filled the disk mid-signing. The
+    # number is flutter.ndkVersion of the SDK flutter-setup pins; a stale one
+    # only leaves an unused NDK behind.
+    - name: Remove the NDKs we do not build with
       shell: bash
       run: |
         pinned=28.2.13676358
         for d in "$ANDROID_HOME/ndk/"*; do
-          if [ "$(basename "$d")" != "$pinned" ]; then
-            rm -rf "$d"
-          fi
+          [ "$(basename "$d")" = "$pinned" ] || rm -rf "$d"
         done
 
     - uses: ./.github/actions/flutter-setup
@@ -92,6 +68,5 @@ runs:
         name: bundled-tools
         path: tool/android/dist
 
-    - name: Stage the tools into the native libraries
-      shell: bash
+    - shell: bash
       run: tool/android/stage.sh
