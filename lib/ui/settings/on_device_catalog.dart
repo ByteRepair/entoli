@@ -50,7 +50,13 @@ class _TextModels extends ConsumerWidget {
     final added = ref.watch(addedLocalModelsProvider);
     final engine = ref.watch(localEngineProvider);
     final store = engine.store;
-    final offered = [...engine.catalog, ...added];
+    // A catalog entry too heavy for this device is not offered — unless it
+    // is downloaded already, which keeps its row and runs as before.
+    final offered = [
+      for (final model in engine.catalog)
+        if (engine.offers(model) || installed.contains(model.id)) model,
+      ...added,
+    ];
     final listed = {for (final model in offered) model.id};
     // A model added by link in an earlier session, or one an older catalog
     // offered: kept, and run, until it is deleted.

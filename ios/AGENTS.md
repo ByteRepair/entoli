@@ -276,7 +276,7 @@ the streaming, the handoff ending, the history wording, the error map.
 The On-device page's text models here are MLX's: `MlxEngine`
 (`lib/data/local/mlx_engine.dart`) is this platform's `LocalEngine`, and
 macOS's, wherever the handshake answers `mlx: true` — this build links
-mlx-swift-lm's `MLXFoundationModels` and the OS is 27. Below that, or with
+`EntoliMLX` and the OS is 27. Below that, or with
 the package missing, the engine is `NoLocalEngine` and the page has no text
 section. Requiring 27 is for the feature, not the app.
 
@@ -288,35 +288,116 @@ loading needs are fetched. LFM3 has no architecture in mlx-swift-lm, so the
 smallest row is Qwen3.5 2B. `MlxFormat` describes a download from its
 `config.json`.
 
-The engine decides residency, the way the llama pool does: past
-`maxLocalModels` the least recently served is evicted before the next loads.
-A generation crosses the same channel and the same client code as the system
-model's (`FoundationModelsClient`); what differs is the route — an MLX
-generation carries `model` (the catalog id) and `directory`.
+It is a `RuntimeEngine` like llama.cpp's — see "The engine" in
+`lib/data/local/AGENTS.md` — so residency, the Running list, the kept prompts
+and the prefill are the shared ones: `MlxRuntime` says what MLX offers
+(how many may be resident, and whether prompts are kept; no device, threads or
+context control) and `MlxInstance` is one loaded model over the channel. A
+generation's frames are read by the same `ChannelGeneration` as the system
+model's (`FoundationModelsClient`), told only that an MLX reply may make
+several tool calls before it ends where Apple's ends at its one.
+
+### What a model holds between calls
+
+The app sends the whole conversation on every call, and an agent's turn is
+many calls, each the last plus a tool's result. Read whole each time, the
+agent's prompt is half a minute of a 4B model's time per step. So
+`EntoliMLX` keeps, per model, a live `MLXLMCommon` `ChatSession` and the
+messages it has taken in, its own reply included (`MlxConversation`): a call
+whose messages are those and more, under the same tools, sends the session
+only the new ones; anything else starts a session over the whole of it. A
+reply comes back as the app recorded it, so it is matched by its text and
+calls, not by the ids the app gave the calls. Measured on Qwen3.5 4B: 33s to
+first output for a 9,033-token prompt, 0.8s for the next step's 20 new
+tokens. Qwen3.5's recurrent layers cannot be trimmed, so a cache that holds
+more than the next call shares is no use to it — which an agent's turn never
+asks for, since it only ever extends what came before.
+
+The held messages are cleared while a reply is generated, so one stopped
+part-way leaves a session the next call does not carry on from. The prompt
+cache hears the same (`LocalInstance.keepsUnfinished`, false here): a
+generation that does not finish clears what it believed the model held, so
+the next turn restores the longest kept prefix from disk rather than reading
+the whole prompt again. llama.cpp's slot keeps what it read, so there the
+record stands. The two
+system messages the agent sends are merged before they cross
+(`mergeLeadingSystem`): Qwen3.5's template raises on a second.
+
+The kept prompts are the llama.cpp ones: `PromptCache` saves after a call and
+restores the longest saved prefix before, and the instance answers with
+`save`/`restore` — `saveCache` and `loadPromptCacheSnapshot` — plus
+a `<file>.json` beside the cache file naming the messages and tools it
+covers, since a cache says nothing of which messages made it. Eviction takes
+that record with the file.
+
+The thinking is split from the reply by the model's own markers
+(`reasoningConfig`), a one-message prompt rendered once per loaded model to
+tell whether the template opens the thinking itself, as Qwen3.5's does — the
+template's property, so not the whole conversation re-rendered every step. Everything streams: thinking,
+reply text and each tool call as mlx-swift-lm parses it.
 
 ### The channel
 
-`AppleFmChannel.swift` answers, beside `handshake`, `generate` and `cancel`,
-the residency Dart decides:
+The MLX models have a channel of their own, `agent_chat/mlx`
+(`MlxChannel.swift`, `mlxChannel` in Dart), registered only where they run:
+this app on iOS, the model host on macOS (see "The model host" in
+`macos/AGENTS.md`). A process that never registers it cannot load a model, so
+keeping MLX's GPU work out of the Mac's window process is a fact of what each
+process registers rather than of which way Dart routes a call.
+`AppleFmChannel.swift` stays the system model's and the app's: `handshake`,
+`generate` and `cancel`. Both are `GenerationChannel`s, which keep the
+generations in flight a `cancel {id}` reaches, and both end every generation
+with `done` or `error`: the system model's one tool call is its `toolCall`
+frame and then `done` with `finish: tool_calls`.
 
-- `handshake` → `mlx: true` on iOS 27 and macOS 27 (`Mlx.isAvailable`).
-  Every MLX call goes through `EntoliMLX`'s `Mlx`, which answers on any OS
-  and holds the one `#available` gate; below 27 a load throws and an evict
-  is nothing.
-- `load {model, directory}` → an `MLXLanguageModel` over
-  `ModelConfiguration(directory:)`, capabilities `[.guidedGeneration,
-  .toolCalling, .reasoning]`, its `load` closure
-  `loadModelContainer(from:using: #huggingFaceTokenizerLoader())`, preloaded
-  and kept by `model` in `EntoliMLX`'s `MlxModels` (below) — only once its
-  weights are in, so a failed load leaves nothing behind. A failure answers a `FlutterError` whose
+The handshake also says what the device offers MLX — `mlx: true` on iOS 27
+and macOS 27 (`Mlx.isAvailable`), and the memory `ModelBudget` reads
+(`ModelBudget.mac`, `ModelBudget.phone`). Those are the device's and the
+OS's, the same whichever process asks, so the app asks them of its own
+process at startup rather than starting a model host to answer. Every MLX
+call goes through `EntoliMLX`'s `Mlx`, which answers on any OS and holds the
+one `#available` gate; below 27 the handshake says no and Dart asks nothing
+else of it.
+
+`MlxChannel.swift` answers:
+
+- `load {model, directory}` → `loadModelContainer(from:using:
+  #huggingFaceTokenizerLoader())`, kept by `model` in `EntoliMLX`'s
+  `MlxModels` — a second ask while it loads waits on the first, and a failed
+  load leaves nothing behind. A failure answers a `FlutterError` whose
   message is what the settings row shows.
-- `evict {model}` → that instance's `evict()`, and it is dropped;
-  `evictAll` → `MLXLanguageModel.evictAll()`, and all of them are.
-- `generate` with a `directory` → the session is built on the kept instance,
-  loaded first if it is not kept; without one, the system model.
-
-Still the hand-run's to confirm: whether a thinking model's trace stays out
-of `part.content` with `.reasoning` declared.
+- `evict {model}` drops that model and empties MLX's buffer cache — the
+  buffers a dropped model let go of are otherwise kept for the next
+  allocation, and the gigabytes stay with the process. Emptied once, after
+  the model is gone: `MlxConversation.unload` refuses new work, stops a
+  generation, waits for its own operations — a generation, a save, a
+  restore, each of which holds the model while it runs — and for the task
+  mlx-swift-lm runs each reply in (`ChatSession.synchronize`), which a
+  stopped reader only asks to stop and which holds the model and its cache
+  until the generation has wound down. Only then does it drop the session
+  and the model, and the cache is emptied. Not quite everything is freed by
+  then — the reply task drops its hold as it exits, a moment after that
+  wait returns — so with no model left the cache's limit goes to zero, and
+  MLX hands back whatever is freed later as it is freed; the next `load`
+  restores MLX's default. That is the only place the app touches the
+  cache: while a model is loaded, it is MLX's to keep. A generation still
+  running on it is cancelled first and ends with an `error` frame, code
+  `unloaded`: the reply stops where the user let the model go, and the turn
+  is told why rather than left waiting.
+- `generate {id, model, messages, tools, temperature}` → that model's
+  `MlxConversation`, which `load` must have kept: a generation never loads,
+  since Dart's `Residency` is the one account of what is loaded, and one
+  asked of a model not kept ends in an `error`. Messages are `role`,
+  `content`, `toolCalls` (`id`, `name`, `arguments` as JSON text) and
+  `toolCallId`, tools `name`, `description` and `schema`; `EntoliMLX` reads
+  the maps itself (`MlxMessage(channel:)`, `MlxTool(channel:)`), the Runner
+  only forwards them. It answers `reasoning`, `text`, `toolCall` (with
+  `callId`) and `done` frames, or `error`.
+- `save` / `restore {model, path}` → whether the prompt state was
+  written or read.
+- `usage {model}` → `{weightBytes, tokens}`: the weights' bytes, counted
+  once, and the tokens its cache holds, which Dart prices at the model's KV
+  bytes per token for the Running models row. Nil where it is not loaded.
 
 ### The build
 
@@ -343,16 +424,16 @@ Runners:
   Xcode build — one slice per job, the one it ships.
 
 The module is built with library evolution and its imports `internal`, so its
-interface names nothing of MLX's — `Mlx.session` hands the channel a
-`LanguageModelSession` — and the Runners import one module and nothing
-behind it. MLX finds its Metal kernels beside its own binary before anywhere else,
+interface names nothing of MLX's — `Mlx` takes and gives its own
+`MlxMessage`, `MlxTool` and `MlxEvent` — and the Runners import one module
+and nothing behind it. MLX finds its Metal kernels beside its own binary before anywhere else,
 so they travel inside the framework (`mlx.metallib` in the flat iOS one,
 `Resources/default.metallib` in the versioned macOS one) and the app copies
 nothing; the packages' resource bundles sit in the framework's resource
-directory, where their accessors look. FoundationModels is weak-linked in
-the framework as in the app.
+directory, where their accessors look. It links nothing of FoundationModels:
+the system model is the app's, through `LanguageModelSession` directly.
 
-It pins mlx-swift-lm 3.32.3 (`MLXFoundationModels`, `MLXLLM` — which
+It pins mlx-swift-lm 3.32.3 (`MLXLLM` — which
 registers the architectures; without it a load fails with
 `noModelFactoryAvailable` — `MLXLMCommon` and `MLXHuggingFace`) and
 swift-transformers 1.3.0 (`Tokenizers`, which the tokenizer macro expands
@@ -364,7 +445,8 @@ run on the `xcode-27` image. The deployment targets are
 the package's floor, iOS 17 and macOS 14 — the app's, not just the
 feature's. The simulator is built arm64 alone (`ios/Flutter/Mlx.xcconfig`):
 Flutter's simulator build adds x86_64, where the import has no module, and
-Xcode 27 runs on no Intel Mac to want one. The macOS Runner compiles `AppleFmChannel.swift` by reference, the
+Xcode 27 runs on no Intel Mac to want one. The macOS Runner compiles `AppleFmChannel.swift`, `MlxChannel.swift` and
+`GenerationChannel.swift` by reference, the
 way iOS compiles `RemindersShared.swift`.
 
 Still owed: the licences MLX and swift-transformers ship, on the About page.

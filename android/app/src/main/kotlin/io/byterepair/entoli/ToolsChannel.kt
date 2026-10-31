@@ -1,5 +1,6 @@
 package io.byterepair.entoli
 
+import android.app.ActivityManager
 import android.content.Context
 import android.net.ConnectivityManager
 import android.os.Build
@@ -22,9 +23,17 @@ object ToolsChannel {
                 // wrong word size is not something to download by accident.
                 "abi" -> result.success(Build.SUPPORTED_ABIS.firstOrNull())
                 "dnsServers" -> result.success(dnsServers(appContext))
+                "totalMemory" -> result.success(totalMemory(appContext))
                 else -> result.notImplemented()
             }
         }
+    }
+
+    // The RAM the device has, which is what bounds the models it is offered:
+    // llama.cpp reads the weights into it whichever processor runs them.
+    private fun totalMemory(context: Context): Long? {
+        val manager = context.getSystemService(ActivityManager::class.java) ?: return null
+        return ActivityManager.MemoryInfo().also { manager.getMemoryInfo(it) }.totalMem
     }
 
     // What the network this device is on resolves names with. A Linux in app

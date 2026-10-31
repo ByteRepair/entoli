@@ -24,6 +24,10 @@ import UserNotifications
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "AppleFmChannel") {
       AppleFmChannel.register(with: registrar.messenger())
     }
+    // The models run in the app's own process here: iOS cannot start one.
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "MlxChannel") {
+      MlxChannel.register(with: registrar.messenger())
+    }
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ClipboardChannel") {
       ClipboardChannel.register(with: registrar.messenger())
     }

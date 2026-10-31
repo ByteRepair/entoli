@@ -10,6 +10,15 @@
 include: package:flutter_lints/flutter.yaml
 
 analyzer:
+  # Flutter 3.50 deprecates `package:flutter/material.dart` for
+  # `package:material_ui`, and the SDK is pinned to its beta for
+  # flutter/flutter#188965. The two are separate copies of Material rather
+  # than one forwarding to the other, so moving our imports while the
+  # packages we use still take Flutter's would mix two `ThemeData`s in one
+  # app. Silenced until those packages move; this hides every other
+  # deprecation too, so it comes out with that migration.
+  errors:
+    deprecated_member_use: ignore
   exclude:
     - lib/data/prompts/bundled_skill_data.dart
     - lib/domain/bundled_project_prompts.dart

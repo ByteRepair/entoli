@@ -179,13 +179,87 @@ binary it was written for first and takes its plist and its service out
 itself when the check fails. Nothing is left behind after an uninstall, and
 nothing needs a hand.
 
+## The model host
+
+The on-device models — MLX's text models and sherpa-onnx's voice — run in a
+second process, `entoli-models`, not in the one that draws the window. The
+GPU interleaves processes, not the queues of one: MLX encoding in the app's
+own process put its work beside every frame the window drew, and a turn on a
+4B model held frames for hundreds of milliseconds. Opened as an app of its
+own the stutter drops to slight. It is also what keeps a quit during an MLX
+turn from crashing — see below.
+
+`ModelProcess` (`lib/data/model_host/`) is what the engines ask for what they
+talk to — a `ModelChannel` for the native half, a `Worker` for an isolate —
+and they never learn which process answers. macOS gets `HelperModelProcess`;
+every other platform `InAppModelProcess`, since iOS cannot start a process
+and the rest run their models as a server of their own or on the CPU.
+
+- **It is a helper bundle around this app's executable.**
+  `Contents/Helpers/Entoli Models.app` is made by the Runner's last build
+  phase (`tool/macos/embed-model-host.sh`): a copy of the Runner binary, an
+  rpath to the app's `Frameworks` — the engine, EntoliMLX and the Dart code
+  are the app's, not copies — and an `Info.plist` of its own:
+  `io.byterepair.entoli.models`, `LSBackgroundOnly`, so no Dock icon and no
+  second Entoli to LaunchServices. A copy rather than a target of its own,
+  since the host runs the app's own code and a second source list would only
+  drift. It is signed before the app's signature seals it as nested code; the
+  DMG's `--deep` pass re-signs it with the rest.
+- **It is opened, not spawned.** `HelperProcess` asks the app's native half
+  (`ModelHostLauncher` in `MainFlutterWindow.swift`), which opens the helper
+  with `NSWorkspace` as a new instance, not activated, with
+  `entoli-models <socket> <pid>` as its arguments. A child would be this
+  app's to macOS, its GPU work scheduled as the app's own. Launched with that
+  flag, `AppDelegate.main` branches before AppKit loads anything: no main
+  nib, so no window, menu or app delegate, and the helper bundle carries no
+  nib at all. `ModelHost` runs a headless engine on `modelHostMain`, the
+  app's `App.framework` as its Dart bundle, with `MlxChannel` registered on
+  it and nothing else — the system model and every other channel stay in
+  the app. A build with no helper — a test, a build
+  that skipped the phase — is decided once at the composition root and runs
+  the models in-process instead.
+- **The socket is the only way in.** A Unix socket in a directory only this
+  user can enter, removed once connected, and the host's first frame must
+  carry the key handed to it in its environment — which no other process can
+  read, where `open --env` put it on a command line any process of the user's
+  could. The frames are
+  `StandardMessageCodec` messages, length-prefixed (`host_frame.dart`).
+- **It runs while something holds it, and five minutes past.** A loaded MLX
+  model holds the host from the moment it is made — before the model it
+  displaces lets go, so a switch is never idle — until it is unloaded, and
+  every voice worker holds it while it runs (`ModelProcess.hold`). With nothing
+  held for five minutes the app closes the connection and the host leaves; the
+  next ask starts another. The wait is for what comes back — a voice
+  conversation picked up again, a model unloaded and asked for — since a
+  relaunch is a second a model's load hides and a tap on the microphone does
+  not. The app decides rather than the host, since only it knows a load is
+  about to arrive.
+- **It says what it takes up.** Its `agent_chat/model_host` channel, which
+  every host serves beside the channels it is given, answers `footprint`:
+  `phys_footprint`, Activity Monitor's figure, since resident size leaves out
+  the GPU buffers that are most of a model. The Running models header shows
+  it; asking never starts a host that is not running.
+- **The host goes with the app, however it goes.** Its parent is launchd, so
+  it watches the pid it was handed, and leaves when that exits or the socket
+  closes. A host lost is every model in it lost, and every lease on it ends
+  with it (`ModelProcessLease.lost`): each MLX model's row says the host quit,
+  is not evicted from the next host, and loads again when next asked for. The
+  leases end on the process's side rather than their holders', so one held by
+  something that never hears is not left keeping the next host from going
+  idle.
+- **It leaves through `_exit`.** `exit` runs C++ static destructors, MLX's
+  Metal device among them, while a generation may still be encoding on
+  another thread — the crash every quit during an MLX turn ended in. `quit`
+  stops the generations first, bounded at three seconds.
+
 ## What is absent, and honestly so
 
 No llama.cpp: the bundled server is built for Android and Linux. The
 on-device text models here are MLX's, as on iOS — `MlxEngine`, on macOS 27
 where the build links `EntoliMLX` (`tool/apple/mlx/build.sh`, which this
-Runner now needs before it links at all). The channel is iOS's own
-`AppleFmChannel.swift`, compiled into this Runner by reference; below 27 the
+Runner now needs before it links at all). The channels are iOS's own
+`AppleFmChannel.swift` and `MlxChannel.swift`, compiled into this Runner by
+reference, the second registered only in the model host; below 27 the
 handshake answers `mlx: false`, `createLocalEngine` answers `NoLocalEngine`
 and the On-device page holds only the voice downloads. See "The MLX models"
 in `ios/AGENTS.md`.

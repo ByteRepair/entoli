@@ -3,13 +3,16 @@ import "dart:convert";
 import "dart:io";
 import "dart:math";
 
-import "package:flutter/foundation.dart";
 import "package:http/http.dart" as http;
+import "package:path/path.dart" as p;
 
 import "../../domain/local_llm.dart";
 import "../../domain/local_model.dart";
-import "../../domain/local_model_store.dart";
 import "../../core/log.dart";
+import "../../core/random_token.dart";
+import "../builtin/llm/llm_client.dart";
+import "../builtin/llm/openai_client.dart";
+import "local_instance.dart";
 
 /// What is bundled to run a model with: llama.cpp's server, and the directory
 /// its libraries and the NPU's own are in.
@@ -51,18 +54,15 @@ class LlamaBinaries {
 ({List<String> command, Map<String, String> environment}) llamaLaunch({
   required LlamaBinaries binaries,
   required DownloadedModel model,
-  required String modelFile,
+  required LocalLoad load,
   required int port,
   required String apiKey,
-  required int contextLength,
-  required String device,
-  int? threads,
   String? slotSavePath,
   bool fitLayers = false,
 }) => (
   command: [
     binaries.server,
-    "-m", modelFile,
+    "-m", model.file,
     // Loopback only. Anything else would put an unauthenticated model
     // server on the phone's network, which is a thing to be asked for
     // rather than a default.
@@ -79,7 +79,7 @@ class LlamaBinaries {
     // otherwise size this against the phone's whole RAM, since the CPU
     // backend reports every physical page as free. See "How much context"
     // in AGENTS.md.
-    "-c", "$contextLength",
+    "-c", "${load.contextLength}",
     // One slot, since the disk cache is `/slots/0`'s, and no 8 GiB RAM
     // prompt cache beside it. See "That `/slots/0` is why the server has
     // one slot" in AGENTS.md.
@@ -93,7 +93,7 @@ class LlamaBinaries {
     // from the binary either way.
     "--no-webui",
     // Null is llama.cpp's own answer, which is every physical core.
-    if (threads != null) ...["-t", "$threads"],
+    if (load.threads case final threads?) ...["-t", "$threads"],
     // Where the slot dumps go, and — with it — quantised KV so a saved
     // conversation is half the bytes on disk. Both ride on the cache being
     // on: q8_0 KV is near-lossless but still a change to generation, so a
@@ -110,11 +110,11 @@ class LlamaBinaries {
     ],
     // Always named, [noDevice] included. See "The CPU is a device to name"
     // in AGENTS.md.
-    "-dev", device,
+    "-dev", load.device ?? noDevice,
     // Every layer on a phone, whose accelerators share the RAM the weights
     // are in; `--fit`'s split on a laptop. See "How many layers go to the
     // GPU" in AGENTS.md.
-    if (device != noDevice && !fitLayers) ...["-ngl", "999"],
+    if (load.device != noDevice && !fitLayers) ...["-ngl", "999"],
   ],
   environment: binaries.environment,
 );
@@ -189,7 +189,7 @@ int? bigCoreCount(List<int> ceilings) {
 /// P-cores in twice.
 ///
 /// Linux rather than Android, and it needs no guard for it: this is only ever
-/// reached from [LlamaServerPool], which `platformLocalLlm` builds on Android
+/// reached from [LlamaRuntime], which `createLocalEngine` builds on Android
 /// and Linux, and a desktop Linux answering about its own cores is the right
 /// answer there too. Anywhere else the files are missing and the list is empty.
 ///
@@ -222,14 +222,10 @@ int _firstSibling(String root, int cpu) {
 final _listSeparator = RegExp("[,-]");
 
 /// llama.cpp's servers, running beside the app on the loopback address — one
-/// process per model, up to what the settings allow.
-class LlamaServerPool extends LocalLlm {
-  LlamaServerPool(
-    this._binaries,
-    this._store, {
-    this._slotSaveDir,
-    this._fitLayers = false,
-  });
+/// process per model. Which ones are loaded is [Residency]'s; what is here is
+/// how one is loaded, and what a device and a thread count mean to it.
+class LlamaRuntime extends LocalRuntime {
+  LlamaRuntime(this._binaries, {this._slotSaveDir, this._fitLayers = false});
 
   /// Whether llama.cpp sizes the GPU layers itself — a laptop, whose GPU may
   /// have less memory than the model — rather than taking all of them, as a
@@ -237,30 +233,23 @@ class LlamaServerPool extends LocalLlm {
   final bool _fitLayers;
 
   /// Never null: `createLocalEngine` answers with `NoLocalEngine` where this
-  /// build shipped no server, so a pool that exists has one.
+  /// build shipped no server, so a runtime that exists has one.
   final LlamaBinaries _binaries;
 
-  /// Where the server writes and reads its slot dumps, or null where this build
-  /// has nowhere to keep them. One directory for every model — the dump's
-  /// filename carries the namespace, so the server needs no per-model path. See
-  /// [LocalKvCache].
+  /// Where the server writes and reads its slot files: the prompt cache's
+  /// directory, or null where this build keeps none. One directory for every
+  /// model — the file's name carries the namespace.
   final String? _slotSaveDir;
 
-  /// Where the weights are. Asked synchronously at the moment of starting, so
-  /// that a model deleted behind the app's back is a refusal here rather than a
-  /// server that exits three seconds later saying it could not open a file.
-  final LocalModelStore _store;
-
-  /// Least recently served first, which is the order [serve] evicts in.
-  final _servers = <_Server>[];
-
   /// The device probe, run once. What the phone has cannot change while the
-  /// process lives, and [serve] reads it on every auto turn — a fresh
+  /// process lives, and [resolve] reads it on every auto turn — a fresh
   /// `--list-devices`, which spawns the server binary, is a cost to pay once.
   Future<List<LocalDevice>>? _deviceProbe;
 
+  static final _controls = LocalControl.values.toSet();
+
   @override
-  final ValueNotifier<List<LocalLlmState>> running = ValueNotifier(const []);
+  Set<LocalControl> get controls => _controls;
 
   @override
   int? get maxThreads => _bigCores ?? Platform.numberOfProcessors;
@@ -280,130 +269,66 @@ class LlamaServerPool extends LocalLlm {
     }
   }
 
+  /// Auto by default: a turn asks for a model, not a processor, and the best
+  /// accelerator the phone has beats the CPU by enough that picking it is not a
+  /// thing to make the user do. Only auto reads the device list, and probing it
+  /// spawns the server — so a named device, or the CPU chosen outright, skips
+  /// it. Resolved before [Residency] compares, so it compares the device
+  /// actually used and not the word "auto".
   @override
-  Future<LocalEndpoint> serve(
-    String modelId, {
-    String? device,
-    int? contextLength,
-    int maxRunning = 1,
-    int? threads,
-    bool kvCache = false,
-  }) async {
-    final model = _store.downloadedOfSync(modelId);
-    if (model == null) throw LocalLlmFailure("$modelId is not downloaded.");
-    final wanted = contextLength ?? model.defaultContext;
-    // Only where there is somewhere to write them: a build with no cache dir
-    // serves f16 whatever the setting says.
-    final slotSavePath = kvCache ? _slotSaveDir : null;
-    final wantThreads = threads ?? _bigCores;
-    // Auto by default: a turn asks for a model, not a processor, and the best
-    // accelerator the phone has beats the CPU by enough that picking it is not
-    // a thing to make the user do. Only auto reads the device list, and probing
-    // it spawns the server — so a named device, or the CPU chosen outright,
-    // skips it. Resolved before the list below is touched, so the running-server
-    // check compares the device actually used and not the word "auto", and two
-    // auto turns arriving together still edit the list one after the other, each
-    // resuming from this same await without yielding into it again.
-    final resolved = resolveLocalDevice(
-      device,
-      device == null ? await devices() : const [],
+  Future<LocalLoad> resolve(DownloadedModel model, LocalOptions options) async {
+    final device = resolveLocalDevice(
+      options.device,
+      options.device == null ? await devices() : const [],
     );
-
-    final already = _serverFor(modelId);
-    if (already != null &&
-        already.serves(
-          device: resolved,
-          contextLength: wanted,
-          threads: wantThreads,
-          slotSavePath: slotSavePath,
-        )) {
-      _touch(already);
-      await already.ready;
-      return already.endpoint;
-    }
-
-    final file = model.file;
-
-    // Every list edit below happens before the first await, so two turns asking
-    // at once cannot both decide to start the same model — the second finds the
-    // first already in the list and waits on it.
-    final stopping = <_Server>[];
-    if (already != null) {
-      _servers.remove(already);
-      stopping.add(already);
-    }
-    final cap = maxRunning.clamp(1, maxLocalModelsAllowed);
-    while (_servers.length >= cap) {
-      stopping.add(_servers.removeAt(0));
-    }
-    final server = _Server(
-      model: model,
-      device: resolved,
-      contextLength: wanted,
-      threads: wantThreads,
-      slotSavePath: slotSavePath,
+    return LocalLoad(
+      contextLength: options.contextLength ?? model.defaultContext,
+      device: device,
+      threads: options.threads ?? _bigCores,
+      // Only where there is somewhere to write them: a build with no cache
+      // directory serves f16 whatever the setting says.
+      keepsPrompts: options.keepsPrompts && _slotSaveDir != null,
     );
-    _servers.add(server);
-    _publish();
-
-    // The old ones go before the new one arrives. Overlapping them would put
-    // two sets of weights in memory at once, which is the thing the cap exists
-    // to prevent.
-    for (final old in stopping) {
-      await old.stop();
-    }
-    await server.spawn(
-      _binaries,
-      file,
-      fitLayers: _fitLayers,
-      onChange: _publish,
-    );
-    await server.ready;
-    return server.endpoint;
   }
 
   @override
-  Future<void> stopAll() async {
-    final all = [..._servers];
-    _servers.clear();
-    _publish();
-    for (final server in all) {
-      await server.stop();
-    }
-  }
-
-  _Server? _serverFor(String modelId) {
-    for (final server in _servers) {
-      if (server.model.id == modelId) return server;
-    }
-    return null;
-  }
-
-  /// Most recently served last, since that is the end [serve] evicts from.
-  void _touch(_Server server) {
-    if (_servers.remove(server)) _servers.add(server);
-    _publish();
-  }
-
-  void _publish() =>
-      running.value = [for (final server in _servers) server.state];
+  LocalInstance create(
+    DownloadedModel model,
+    LocalLoad load, {
+    required void Function() onChange,
+  }) => LlamaInstance(
+    model,
+    load,
+    binaries: _binaries,
+    fitLayers: _fitLayers,
+    slotSavePath: load.keepsPrompts ? _slotSaveDir : null,
+    onChange: onChange,
+  );
 }
 
-/// One model, one process.
-class _Server {
-  _Server({
-    required this.model,
-    required this.device,
-    required this.contextLength,
-    required this.threads,
+/// One model, one process: a llama.cpp server on a port of its own, reached
+/// with the `/chat/completions` shape [OpenAiClient] speaks — tool calls
+/// included, which is what the server is for.
+class LlamaInstance extends LocalInstance {
+  LlamaInstance(
+    super.model,
+    super.load, {
+    required this._binaries,
+    required this._fitLayers,
     required this.slotSavePath,
+    required super.onChange,
   });
 
-  final DownloadedModel model;
-  final String device;
-  final int contextLength;
-  final int? threads;
+  final LlamaBinaries _binaries;
+  final bool _fitLayers;
+
+  /// Where the server writes slot files, or null where it keeps none.
   final String? slotSavePath;
+
+  final _http = http.Client();
+
+  /// One client for the server's life, made once it answers.
+  OpenAiClient? _client;
 
   Process? _process;
 
@@ -412,50 +337,95 @@ class _Server {
   /// whole of "it has not been spawned yet".
   ({int port, String key})? _at;
 
-  final _ready = Completer<void>();
-  var _phase = LocalLlmPhase.starting;
-  String? _failure;
-
   /// The tail of what the server said. Kept because the one failure that
   /// matters — a model that does not fit — is reported there and nowhere else.
   final _log = <String>[];
 
   static const _logLines = 40;
 
-  Future<void> get ready => _ready.future;
+  /// In the picker's word rather than llama.cpp's: [noDevice] is a flag
+  /// value, and what reads this is the settings page.
+  @override
+  String? get deviceLabel =>
+      load.device == noDevice ? LocalDevice.cpu : load.device;
 
-  LocalLlmState get state => LocalLlmState(
-    modelId: model.id,
-    phase: _phase,
-    // In the picker's word rather than llama.cpp's: [noDevice] is a flag
-    // value, and what reads this is the settings page.
-    device: device == noDevice ? LocalDevice.cpu : device,
-    contextLength: contextLength,
-    failure: _failure,
-  );
+  /// The fixed KV quant llama.cpp runs with when caching is on, named so that
+  /// turning the cache off (f16) and on again cannot cross-load a file.
+  @override
+  String get stateFormat => "q8";
 
-  /// Only read after [ready] has completed, which is the only point at which
-  /// there is something on the other end of it.
-  LocalEndpoint get endpoint => LocalEndpoint(
-    baseUrl: "http://127.0.0.1:${_at!.port}/v1",
-    apiKey: _at!.key,
-    contextLength: contextLength,
-  );
-
-  /// Whether this is still the server that would be started for these settings.
-  /// A failed one never is: being asked again is the user asking for another
-  /// go, and there is nothing else they could press to get one.
-  bool serves({
-    required String device,
-    required int contextLength,
-    required int? threads,
-    required String? slotSavePath,
+  /// llama.cpp's own `prompt_progress` is asked for, which is what turns a
+  /// minute of reading the prompt into something the chat can draw. A hosted
+  /// provider would reject the field, which is why it rides on this client
+  /// rather than on every request the app makes.
+  @override
+  Stream<LlmChunk> generate(
+    List<LlmMessage> messages, {
+    List<LlmTool> tools = const [],
+    double? temperature,
+    String? reasoningEffort,
   }) =>
-      _phase != LocalLlmPhase.failed &&
-      this.device == device &&
-      this.contextLength == contextLength &&
-      this.threads == threads &&
-      this.slotSavePath == slotSavePath;
+      (_client ??= OpenAiClient(
+        baseUrl: Uri.parse("http://127.0.0.1:${_at!.port}/v1"),
+        apiKey: _at!.key,
+        returnProgress: true,
+      )).stream(
+        messages,
+        model: model.id,
+        tools: tools,
+        temperature: temperature,
+        reasoningEffort: reasoningEffort,
+      );
+
+  /// The server's resident memory: one process per model, so all of it is
+  /// this model's — the weights, the KV cache and whatever the server keeps
+  /// beside them.
+  @override
+  Future<LocalUsage?> usage() async {
+    final process = _process;
+    if (process == null) return null;
+    try {
+      final status = await File("/proc/${process.pid}/status").readAsString();
+      final bytes = residentBytes(status);
+      return bytes == null ? null : LocalUsage(bytes: bytes);
+    } on FileSystemException {
+      return null;
+    }
+  }
+
+  @override
+  Future<bool> saveState(String path) => _slot("save", path);
+
+  @override
+  Future<bool> restoreState(String path) => _slot("restore", path);
+
+  /// The server's slot save and restore. One slot (`-np 1`), so `/slots/0` is
+  /// the state every turn ran in. The server takes a name in its
+  /// `--slot-save-path`, which is the prompt cache's directory.
+  Future<bool> _slot(String action, String path) async {
+    final at = _at;
+    if (at == null || slotSavePath == null) return false;
+    try {
+      final response = await _http
+          .post(
+            Uri.parse("http://127.0.0.1:${at.port}/slots/0?action=$action"),
+            headers: {
+              "content-type": "application/json",
+              "authorization": "Bearer ${at.key}",
+            },
+            body: jsonEncode({"filename": p.basename(path)}),
+          )
+          .timeout(const Duration(seconds: 30));
+      final ok = response.statusCode == 200;
+      // A build without slot save/restore compiled in answers 501, and a
+      // restore of a file the current weights cannot read fails too — both
+      // are a miss to fall back from, not a turn to break.
+      if (!ok) logFailure("kv-cache", "$action refused", response.statusCode);
+      return ok;
+    } catch (_) {
+      return false;
+    }
+  }
 
   /// `setpriv --pdeathsig` has the kernel stop the server when the app dies,
   /// which a crash or a SIGKILL otherwise leaves holding the model's memory.
@@ -471,31 +441,26 @@ class _Server {
     return const <String>[];
   }();
 
-  Future<void> spawn(
-    LlamaBinaries binaries,
-    String modelFile, {
-    required bool fitLayers,
-    required void Function() onChange,
-  }) async {
+  @override
+  void start() => unawaited(_spawn());
+
+  Future<void> _spawn() async {
     // Asked of the OS rather than picked: a fixed port is one another app can
     // already be on, and the failure that gives is the server exiting a second
     // after it started for a reason nothing here would think to report.
     final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
-    final at = (port: socket.port, key: _newKey());
+    final at = (port: socket.port, key: randomToken(16));
     await socket.close();
     _at = at;
 
     final launch = llamaLaunch(
-      binaries: binaries,
+      binaries: _binaries,
       model: model,
-      modelFile: modelFile,
+      load: load,
       port: at.port,
       apiKey: at.key,
-      contextLength: contextLength,
-      device: device,
-      threads: threads,
       slotSavePath: slotSavePath,
-      fitLayers: fitLayers,
+      fitLayers: _fitLayers,
     );
 
     try {
@@ -518,24 +483,21 @@ class _Server {
       // Named, rather than read off the field when it fires: by then the field
       // may hold nothing, and reporting this one's exit against it would fail a
       // model that is loading perfectly well.
-      unawaited(
-        process.exitCode.then((code) => _exited(process, code, onChange)),
-      );
-      unawaited(_waitForHealth(at, onChange));
+      unawaited(process.exitCode.then((code) => _exited(process, code)));
+      unawaited(_waitForHealth(at));
     } on ProcessException catch (e) {
-      _fail(e.message);
-      onChange();
+      markFailed(e.message);
     }
   }
 
-  /// Never awaited past a moment: a server mapping a large model can be slow to
-  /// notice, and nothing waiting on this is waiting on the memory coming back.
-  Future<void> stop() async {
+  /// The process is let go of before the kill, so the exit handler does not
+  /// report a failure for a server that was asked to go.
+  @override
+  Future<void> unload() async {
     final process = _process;
     _process = null;
-    // Before the kill, so the exit handler does not report a failure for a
-    // server that was asked to go.
-    _abandon(const LocalLlmFailure("The on-device model was stopped."));
+    _client?.close();
+    _http.close();
     if (process == null) return;
     process.kill(ProcessSignal.sigterm);
     await process.exitCode.timeout(
@@ -549,13 +511,10 @@ class _Server {
 
   /// Polled rather than watched for a line, since what the server prints when
   /// it is up is not part of any contract and its `/health` is.
-  Future<void> _waitForHealth(
-    ({int port, String key}) at,
-    void Function() onChange,
-  ) async {
+  Future<void> _waitForHealth(({int port, String key}) at) async {
     final client = http.Client();
     try {
-      while (!_ready.isCompleted) {
+      while (state.phase == LocalLlmPhase.starting && _process != null) {
         try {
           final response = await client
               .get(
@@ -564,9 +523,7 @@ class _Server {
               )
               .timeout(const Duration(seconds: 5));
           if (response.statusCode == 200) {
-            _phase = LocalLlmPhase.ready;
-            _ready.complete();
-            onChange();
+            markReady();
             return;
           }
         } catch (_) {
@@ -586,38 +543,28 @@ class _Server {
     logDetail("llama", () => "${model.id}: $line");
   }
 
-  void _exited(Process process, int code, void Function() onChange) {
-    // Asked to stop, or already gone: [stop] has said so.
+  void _exited(Process process, int code) {
+    // Asked to stop, or already gone: [unload] has let it go.
     if (!identical(_process, process)) return;
     _process = null;
-    _fail(_log.isEmpty ? "The model server exited ($code)." : _log.join("\n"));
-    onChange();
+    markFailed(
+      _log.isEmpty ? "The model server exited ($code)." : _log.join("\n"),
+    );
   }
+}
 
-  /// Kept rather than cleared, so a turn sent at a model that will not load is
-  /// told why instead of being told nothing is loaded.
-  void _fail(String why) {
-    _phase = LocalLlmPhase.failed;
-    _failure = why;
-    _abandon(LocalLlmFailure(why));
-  }
+/// `VmRSS` out of a `/proc/<pid>/status`, in bytes. Null where it is not
+/// there.
+int? residentBytes(String status) => procBytes(status, "VmRSS");
 
-  /// Tell whoever is waiting that this attempt is over. [Future.ignore] is the
-  /// half that is easy to forget: an error completed into a future nobody is
-  /// waiting on is otherwise reported as unhandled, and usually nobody is.
-  void _abandon(Object why) {
-    if (_ready.isCompleted) return;
-    _ready.completeError(why);
-    _ready.future.ignore();
-  }
-
-  static String _newKey() {
-    final random = Random.secure();
-    return [
-      for (var i = 0; i < 16; i++)
-        random.nextInt(256).toRadixString(16).padLeft(2, "0"),
-    ].join();
-  }
+/// The `kB` line [field] of a `/proc` file's [text], in bytes. Null where it
+/// is not there.
+int? procBytes(String? text, String field) {
+  final match = RegExp(
+    "^$field:\\s+(\\d+) kB",
+    multiLine: true,
+  ).firstMatch(text ?? "");
+  return match == null ? null : int.parse(match.group(1)!) * 1024;
 }
 
 /// What `--list-devices` printed. Accelerators only — ggml leaves the CPU out

@@ -12,6 +12,8 @@ import "../../domain/loudness.dart";
 import "../../domain/voice.dart";
 import "../../domain/voice_model.dart";
 import "../../domain/voice_model_store.dart";
+import "../model_host/model_process.dart";
+import "../model_host/worker.dart";
 import "pcm.dart";
 import "played_speaker.dart";
 import "remote_speaker.dart";
@@ -24,9 +26,13 @@ import "wav.dart";
 /// hands them to a [ComposedVoiceSession], which forwards both halves' events.
 /// See "Hearing and speaking" in AGENTS.md for the two-worker design.
 class SherpaVoice extends Voice {
-  SherpaVoice(this._store, this._cacheDir);
+  SherpaVoice(this._store, this._cacheDir, this._process);
 
   final VoiceModelStore _store;
+
+  /// Where the two workers run: the model host on macOS, this process
+  /// elsewhere.
+  final ModelProcess _process;
 
   /// Where the Silero model is unpacked to. The bundled asset cannot be given
   /// to sherpa as bytes: every model it takes, it takes as a path.
@@ -56,17 +62,17 @@ class SherpaVoice extends Voice {
   /// refuse runs before the worker is spawned, which would otherwise load a
   /// hundred megabytes only to free them.
   Future<SherpaListener> sherpaListener(Hearing hearing) async {
-    (RecognitionModel, String)? model;
+    final model = <Object?>[];
     if (hearing case HearOnDevice(model: final recognition)) {
       final dir = await _store.directoryOf(recognition);
       if (dir == null) {
         throw StateError("${recognition.name} is not downloaded.");
       }
-      model = (recognition, dir);
+      model.addAll([recognition.id, dir]);
     }
     final recorder = await openMicrophone();
     final vad = await _vadPath();
-    final worker = await Worker.spawn(_listenWorker, (vad, model));
+    final worker = await _process.spawn(listenWorker, [vad, ...model]);
     return SherpaListener(
       recorder,
       worker,
@@ -79,11 +85,11 @@ class SherpaVoice extends Voice {
   Future<SherpaSpeaker> sherpaSpeaker(SpeechModel speech, int speaker) async {
     final speakDir = await _store.directoryOf(speech);
     if (speakDir == null) throw StateError("${speech.name} is not downloaded.");
-    final worker = await Worker.spawn(_speakWorker, (
-      speech,
+    final worker = await _process.spawn(speakWorker, [
+      speech.id,
       speakDir,
       speaker,
-    ));
+    ]);
     return SherpaSpeaker(worker);
   }
 
@@ -110,7 +116,10 @@ class SherpaVoice extends Voice {
 class SherpaListener extends MicrophoneListener {
   SherpaListener(this._recorder, this._worker, {this._transcribe})
     : super(LoudnessGate()) {
-    _worker.messages.listen(_fromWorker);
+    // An error is the worker ended under it — its process gone, or it never
+    // started — which is a listener as broken as one whose model would not
+    // load.
+    _worker.messages.listen(_fromWorker, onError: (Object e) => fail("$e"));
   }
 
   final AudioRecorder _recorder;
@@ -145,7 +154,7 @@ class SherpaListener extends MicrophoneListener {
       // The detector is holding whatever has not fallen silent yet, and no more
       // audio is coming to end it. Flushed rather than dropped where the
       // microphone closed because the sentence was over.
-      if (finish) _worker.send(("flush",));
+      if (finish) _worker.send(["flush"]);
       await _mic?.cancel();
       _mic = null;
       await _recorder.stop();
@@ -186,7 +195,7 @@ class SherpaListener extends MicrophoneListener {
       _square += value * value;
       _window[_filled++] = value;
       if (_filled < _windowSize) continue;
-      _worker.send(("audio", _window));
+      _worker.send(["audio", _window]);
       // Per window rather than per chunk, so a reading is always the same
       // length of time: the gate counts readings out, and how much audio the
       // platform hands over at once is the platform's business.
@@ -198,11 +207,11 @@ class SherpaListener extends MicrophoneListener {
 
   void _fromWorker(Object? message) {
     switch (message) {
-      case ("heard", final String text):
+      case ["heard", final String text]:
         heard(text);
-      case ("segment", final Uint8List wav):
+      case ["segment", final Uint8List wav]:
         _send(wav);
-      case ("failed", final String message):
+      case ["failed", final String message]:
         fail(message);
     }
   }
@@ -245,7 +254,8 @@ class SherpaListener extends MicrophoneListener {
 /// samples played by [PlayingSpeaker].
 class SherpaSpeaker extends PlayingSpeaker {
   SherpaSpeaker(this._worker) {
-    _worker.messages.listen(_fromWorker);
+    // The worker ended under it: its process gone, or it never started.
+    _worker.messages.listen(_fromWorker, onError: (Object e) => broke("$e"));
   }
 
   final Worker _worker;
@@ -253,17 +263,17 @@ class SherpaSpeaker extends PlayingSpeaker {
   @override
   Future<void> speak(String text) async {
     if (!usable || text.trim().isEmpty) return;
-    _worker.send(("speak", queued(), text));
+    _worker.send(["speak", queued(), text]);
   }
 
   void _fromWorker(Object? message) {
     switch (message) {
-      case ("audio", final int generation, final Uint8List wav):
+      case ["audio", final int generation, final Uint8List wav]:
         generated(generation, wav);
-      case ("dropped", final int generation):
+      case ["dropped", final int generation]:
         lost(generation);
       // The model would not load.
-      case ("failed", final String message):
+      case ["failed", final String message]:
         broke(message);
     }
   }
@@ -275,55 +285,6 @@ class SherpaSpeaker extends PlayingSpeaker {
   }
 }
 
-/// One isolate and the port to it. Both workers talk the same way: records in,
-/// records out, `("close",)` to stop.
-class Worker {
-  Worker._(this._to, this._out);
-
-  final SendPort _to;
-  final StreamController<Object?> _out;
-
-  /// Buffered rather than handed the port directly: a `ReceivePort` can only be
-  /// listened to once, and the first thing through it is the worker's own send
-  /// port. A single-subscription controller keeps whatever arrives between that
-  /// and the session subscribing — which is where a worker that failed to load
-  /// its model says so.
-  Stream<Object?> get messages => _out.stream;
-
-  static Future<Worker> spawn<T>(
-    void Function((SendPort, T)) entry,
-    T argument,
-  ) async {
-    final port = ReceivePort();
-    final out = StreamController<Object?>();
-    final ready = Completer<SendPort>();
-    port.listen((message) {
-      if (message is SendPort && !ready.isCompleted) {
-        return ready.complete(message);
-      }
-      // The worker's last word, once it has freed its models. Closing here
-      // rather than in `close` is what keeps this side listening long enough
-      // to know the native handles have actually gone.
-      if (message case ("closed",)) return port.close();
-      out.add(message);
-    });
-    await Isolate.spawn(entry, (port.sendPort, argument));
-    return Worker._(await ready.future, out);
-  }
-
-  void send(Object? message) => _to.send(message);
-
-  /// The close message and nothing else. `Isolate.kill` was here too, and it is
-  /// a control message that pre-empts anything queued — so the worker never
-  /// reached the arm that frees its recognizer, its detector or its voice, and
-  /// those are native handles rather than Dart objects. Ending the loop is what
-  /// releases them; the isolate then exits because its port is closed.
-  void close() {
-    _to.send(("close",));
-    unawaited(_out.close());
-  }
-}
-
 /// Everything sampled and generated at 16 kHz, which is what every recognition
 /// model here was trained on. Speech comes back at whatever the speech model
 /// runs at, which is its own business.
@@ -331,11 +292,26 @@ const sampleRate = 16000;
 
 /// The listening half: voice activity, then the words. Runs until it is told to
 /// close. With no model, each utterance is sent back as samples for a provider
-/// to transcribe.
-void _listenWorker(
-  (SendPort, (String, (RecognitionModel, String)?)) init,
-) async {
-  final (reply, (vadPath, model)) = init;
+/// to transcribe. Its argument is Silero's path, then the recognition model's
+/// id and directory where there is one.
+const listenWorker = WorkerKind("sherpa-listen", _listenWorker);
+
+/// The speaking half: a speech model's id, its directory and the speaker.
+const speakWorker = WorkerKind("sherpa-speak", _speakWorker);
+
+/// Every worker this file runs, for the model host to start by name.
+const sherpaWorkers = [listenWorker, speakWorker];
+
+void _listenWorker((SendPort, List<Object?>) init) async {
+  final (reply, argument) = init;
+  final vadPath = argument[0] as String;
+  final model = switch (argument) {
+    [_, final String id, final String dir] => (
+      recognitionModels.firstWhere((m) => m.id == id),
+      dir,
+    ),
+    _ => null,
+  };
   final port = ReceivePort();
   reply.send(port.sendPort);
 
@@ -360,7 +336,7 @@ void _listenWorker(
       bufferSizeInSeconds: 30,
     );
   } catch (e) {
-    reply.send(("failed", "$e"));
+    reply.send(["failed", "$e"]);
   }
 
   void drain(
@@ -371,7 +347,7 @@ void _listenWorker(
       final segment = vad.front();
       vad.pop();
       if (engine == null) {
-        reply.send(("segment", wavOf(segment.samples, sampleRate)));
+        reply.send(["segment", wavOf(segment.samples, sampleRate)]);
         continue;
       }
       final stream = engine.createStream();
@@ -381,20 +357,20 @@ void _listenWorker(
       stream.free();
       // A cough is a speech segment to a detector and nothing to a
       // conversation.
-      if (text.isNotEmpty) reply.send(("heard", text));
+      if (text.isNotEmpty) reply.send(["heard", text]);
     }
   }
 
   await for (final message in port) {
-    if (message case ("close",)) break;
+    if (message case ["close"]) break;
     if (vad == null) continue;
-    if (message case ("audio", final Float32List frame)) {
+    if (message case ["audio", final Float32List frame]) {
       vad.acceptWaveform(frame);
       drain(vad, recognizer);
     }
     // No more audio is coming to end the segment the detector is holding, so
     // it is ended here — the microphone closed because the sentence was over.
-    else if (message case ("flush",)) {
+    else if (message case ["flush"]) {
       vad.flush();
       drain(vad, recognizer);
     }
@@ -402,12 +378,15 @@ void _listenWorker(
   vad?.free();
   recognizer?.free();
   port.close();
-  reply.send(("closed",));
+  reply.send(["closed"]);
 }
 
-/// The speaking half. One sentence per message, and the samples straight back.
-void _speakWorker((SendPort, (SpeechModel, String, int)) init) async {
-  final (reply, (model, dir, speaker)) = init;
+/// One sentence per message, and the samples straight back.
+void _speakWorker((SendPort, List<Object?>) init) async {
+  final (reply, argument) = init;
+  final model = speechModels.firstWhere((m) => m.id == argument[0]);
+  final dir = argument[1] as String;
+  final speaker = argument[2] as int;
   final port = ReceivePort();
   reply.send(port.sendPort);
 
@@ -416,13 +395,13 @@ void _speakWorker((SendPort, (SpeechModel, String, int)) init) async {
     sherpa.initBindings();
     tts = sherpa.OfflineTts(_ttsConfig(model, dir));
   } catch (e) {
-    reply.send(("failed", "$e"));
+    reply.send(["failed", "$e"]);
   }
 
   await for (final message in port) {
-    if (message case ("close",)) break;
+    if (message case ["close"]) break;
     if (tts == null) continue;
-    if (message case ("speak", final int generation, final String text)) {
+    if (message case ["speak", final int generation, final String text]) {
       try {
         final audio = tts.generate(text: text, sid: speaker);
         // Always answered, even with nothing to say: the other side counts what
@@ -430,25 +409,25 @@ void _speakWorker((SendPort, (SpeechModel, String, int)) init) async {
         // count standing — so the queue never drained and silence was never
         // reported, which is the microphone never opening again.
         if (audio.samples.isEmpty) {
-          reply.send(("dropped", generation));
+          reply.send(["dropped", generation]);
         } else {
           // Encoded here rather than on the UI isolate.
-          reply.send((
+          reply.send([
             "audio",
             generation,
             wavOf(audio.samples, audio.sampleRate),
-          ));
+          ]);
         }
       } catch (_) {
         // One sentence this voice will not say, rather than a voice that has
         // stopped working. Which of the two it is, is the count's to decide.
-        reply.send(("dropped", generation));
+        reply.send(["dropped", generation]);
       }
     }
   }
   tts?.free();
   port.close();
-  reply.send(("closed",));
+  reply.send(["closed"]);
 }
 
 String _at(String dir, String? name) => name == null ? "" : p.join(dir, name);

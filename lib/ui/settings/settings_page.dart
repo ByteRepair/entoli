@@ -42,6 +42,7 @@ import "assistant_settings.dart";
 import "browser_settings.dart";
 import "byte_repair_settings.dart";
 import "llm_settings.dart";
+import "running_models.dart";
 import "local_model_settings.dart";
 import "memory_settings.dart";
 import "on_device_catalog.dart";
@@ -212,6 +213,9 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
   // Every download, text and speech: Voice and LLMs only pick, and offer
   // what is here beside the providers' models.
   SettingsCategory.onDevice => const [
+    // What is loaded leads the page: it is what is most often come here for,
+    // and three taps deep under LLM settings was too far.
+    RunningModelsSection(),
     LocalModelSection(),
     // Draws its own dividers, since a kind nothing here can run has no
     // catalog to put under one.

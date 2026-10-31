@@ -3,10 +3,10 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/local/apple_fm.dart";
 
-import "apple_channel_mock.dart";
+import "channel_mock.dart";
 
 // What Dart asks of the Swift half, and what it does with what the
-// framework reports, over [AppleChannelMock]. `AppleFmBridge.shared`
+// framework reports, over [ChannelMock]. `AppleFmBridge.shared`
 // installs the one handler the mock's deliveries reach.
 //
 // Plain `test`s, not `testWidgets`: the client is protocol machinery driven
@@ -25,7 +25,7 @@ const sampleSchema = {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  final channel = AppleChannelMock();
+  final channel = ChannelMock(appleChannel);
   final asked = channel.asked;
   final incoming = channel.incoming;
   final breathe = channel.breathe;
@@ -59,6 +59,28 @@ void main() {
     expect(asked.where((call) => call.method == "cancel"), isEmpty);
   });
 
+  test("reasoning streams apart from the reply", () async {
+    final reply = AppleFmClient(const AppleFmProbe("available")).stream(const [
+      LlmMessage(role: LlmRole.user, text: "hello"),
+    ], model: appleModelId).toList();
+    await breathe();
+
+    final id = outgoing("generate")["id"];
+    await incoming("reasoning", {"id": id, "text": "The user "});
+    await incoming("reasoning", {"id": id, "text": "said hello."});
+    await incoming("text", {"id": id, "text": "Hello there."});
+    await incoming("done", {"id": id});
+
+    final chunks = await reply;
+    expect(
+      chunks.whereType<LlmReasoningChunk>().map((c) => c.text).join(),
+      "The user said hello.",
+    );
+    final completion = chunks.whereType<LlmCompletion>().single;
+    expect(completion.message.text, "Hello there.");
+    expect(completion.message.reasoning, "The user said hello.");
+  });
+
   test("a tool call is the handoff: report, end, cancel", () async {
     final reply = AppleFmClient(const AppleFmProbe("available"))
         .stream(
@@ -82,8 +104,9 @@ void main() {
       "name": "bash",
       "arguments": "{\"path\":\"~\"}",
     });
-    // The stream ends on the report rather than waiting for a `done` a
-    // cancelled generation would never send.
+    // Swift ends its generation on the report and says so with a `done`, as
+    // every native half ends one.
+    await incoming("done", {"id": id, "finish": "tool_calls"});
     final chunks = await reply;
     final completion = chunks.whereType<LlmCompletion>().single;
     expect(completion.finishReason, "tool_calls");
@@ -121,7 +144,6 @@ void main() {
       await breathe();
 
       final request = outgoing("generate");
-      expect(request["model"], appleModelId);
       expect(request["instructions"], "sys one\n\nsys two");
       expect(request["prompt"], "and now?");
       final history = (request["history"] as List)

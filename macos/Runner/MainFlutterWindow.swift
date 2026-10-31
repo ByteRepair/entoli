@@ -27,6 +27,7 @@ class MainFlutterWindow: NSWindow {
     self.setFrame(windowFrame, display: true)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
+    ModelHostLauncher.register(with: flutterViewController.engine.binaryMessenger)
 
     RemindersPlugin.register(with: flutterViewController.engine.binaryMessenger)
     ClipboardChannel.register(with: flutterViewController.engine.binaryMessenger)
@@ -59,6 +60,125 @@ class MainFlutterWindow: NSWindow {
     }
 
     super.awakeFromNib()
+  }
+}
+
+/// The model host's engine: `modelHostMain` with no view, `AppleFmChannel`
+/// the one native piece registered on it, and a watch on the app that
+/// started it. In this file rather than its own so the Xcode project needs no
+/// new entry. See "The model host" in macos/AGENTS.md.
+enum ModelHost {
+  private static var engine: FlutterEngine?
+  private static var parent: DispatchSourceProcess?
+
+  static func start() {
+    // The Dart code is the app's: this bundle is `Contents/Helpers/Entoli
+    // Models.app` inside it, and carries no copy of its own.
+    let app = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent()
+    let project = FlutterDartProject(
+      precompiledDartBundle: Bundle(url: app.appendingPathComponent("Frameworks/App.framework")))
+    // What follows the flag is the socket to connect to, then the app's pid.
+    let arguments = Array(
+      ProcessInfo.processInfo.arguments.drop { $0 != "entoli-models" }.dropFirst())
+    project.dartEntrypointArguments = arguments
+    let engine = FlutterEngine(name: "models", project: project, allowHeadlessExecution: true)
+    // The models, and nothing else: the system model and every other channel
+    // are the app's, in the app's process.
+    MlxChannel.register(with: engine.binaryMessenger)
+    let channel = FlutterMethodChannel(
+      name: "agent_chat/model_host", binaryMessenger: engine.binaryMessenger)
+    channel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "quit":
+        result(nil)
+        quit()
+      case "footprint":
+        result(footprint())
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    engine.run(withEntrypoint: "modelHostMain")
+    self.engine = engine
+    // Opened through LaunchServices, this host's parent is launchd: the app
+    // is the pid it was handed.
+    watch(arguments.count > 1 ? pid_t(arguments[1]) ?? 0 : 0)
+  }
+
+  /// This process's memory as Activity Monitor counts it: `phys_footprint`,
+  /// which takes in the GPU buffers MLX keeps — resident size alone leaves
+  /// out the gigabytes a model is.
+  static func footprint() -> Int? {
+    var info = task_vm_info_data_t()
+    var count = mach_msg_type_number_t(
+      MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+    let status = withUnsafeMutablePointer(to: &info) {
+      $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+        task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+      }
+    }
+    return status == KERN_SUCCESS ? Int(info.phys_footprint) : nil
+  }
+
+  /// Stops the generations, then leaves through `_exit`. `exit` runs the C++
+  /// static destructors, MLX's Metal device among them, while a generation
+  /// may still be encoding on another thread — the crash every quit during an
+  /// MLX turn used to end in. Bounded, so a generation that will not stop
+  /// cannot keep a host alive past its app.
+  static func quit() {
+    Task { @MainActor in
+      await MlxChannel.stopAll()
+      _exit(0)
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 3) { _exit(0) }
+  }
+
+  /// The app going, however it goes — a crash closes no socket in time to be
+  /// read — is this host going. No pid to watch is no app to serve.
+  private static func watch(_ pid: pid_t) {
+    guard pid > 1 else { return quit() }
+    let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .main)
+    source.setEventHandler { quit() }
+    source.resume()
+    parent = source
+    // Gone before the source was armed, which it would never report.
+    if kill(pid, 0) != 0 { quit() }
+  }
+}
+
+/// Opens the model host — `Contents/Helpers/Entoli Models.app` — as an
+/// application of its own, through LaunchServices rather than as a child: a
+/// child is this app's to macOS, its GPU work scheduled as the app's own
+/// beside the window's frames. The key the host proves itself with goes in
+/// its environment, which no other process can read, where an `open --env`
+/// would have put it on a command line any process can. In this file rather
+/// than its own so the Xcode project needs no new entry.
+enum ModelHostLauncher {
+  static func register(with messenger: FlutterBinaryMessenger) {
+    FlutterMethodChannel(name: "agent_chat/model_host_launcher", binaryMessenger: messenger)
+      .setMethodCallHandler { call, result in
+        guard call.method == "open", let args = call.arguments as? [String: Any] else {
+          return result(FlutterMethodNotImplemented)
+        }
+        let helper = Bundle.main.bundleURL.appendingPathComponent(
+          "Contents/Helpers/Entoli Models.app")
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = false
+        configuration.addsToRecentItems = false
+        configuration.createsNewApplicationInstance = true
+        configuration.arguments = args["arguments"] as? [String] ?? []
+        configuration.environment = args["environment"] as? [String: String] ?? [:]
+        NSWorkspace.shared.openApplication(at: helper, configuration: configuration) {
+          _, error in
+          DispatchQueue.main.async {
+            if let error {
+              result(FlutterError(code: "open", message: error.localizedDescription, details: nil))
+            } else {
+              result(nil)
+            }
+          }
+        }
+      }
   }
 }
 

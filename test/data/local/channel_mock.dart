@@ -1,14 +1,17 @@
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/data/local/apple_fm.dart";
+/// The Swift half behind a mock of one of the native channels —
+/// `agent_chat/apple_fm` or `agent_chat/mlx`: what Dart asks for, and the
+/// door Swift's `send` knocks on. The real channels have no implementation on
+/// a test host. The channel under the mock is the export itself
+/// ([appleChannel], [mlxChannel]), so a name drift on the port is a compile
+/// error at the test rather than a hung test.
+class ChannelMock {
+  ChannelMock(this.channel);
 
-/// The Swift half behind a mock `agent_chat/apple_fm`: what Dart asks for,
-/// and the door Swift's `send` knocks on. The real channel has no
-/// implementation on a test host. The channel under the mock is the export
-/// [appleChannel] itself, so a name drift on the port is a compile error here
-/// rather than a hung test.
-class AppleChannelMock {
+  final MethodChannel channel;
+
   /// Every call Dart made, in order.
   final asked = <MethodCall>[];
 
@@ -18,14 +21,14 @@ class AppleChannelMock {
   void install() => TestDefaultBinaryMessengerBinding
       .instance
       .defaultBinaryMessenger
-      .setMockMethodCallHandler(appleChannel, (call) async {
+      .setMockMethodCallHandler(channel, (call) async {
         asked.add(call);
         return answer(call);
       });
 
   void uninstall() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(appleChannel, null);
+        .setMockMethodCallHandler(channel, null);
     asked.clear();
     answer = (_) => null;
   }
@@ -34,8 +37,8 @@ class AppleChannelMock {
   Future<void> incoming(String method, [Object? arguments]) async {
     await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .handlePlatformMessage(
-          appleChannel.name,
-          appleChannel.codec.encodeMethodCall(MethodCall(method, arguments)),
+          channel.name,
+          channel.codec.encodeMethodCall(MethodCall(method, arguments)),
           (_) {},
         );
     // The delivery's chain is microtasks through the broadcast; one zero

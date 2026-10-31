@@ -20,7 +20,6 @@ import "../../data/local/bundled_tools.dart";
 import "../../data/local/byte_repair_store.dart";
 import "../../data/local/file_secret_store.dart";
 import "../../data/local/ios_reminder_alarms.dart";
-import "../../data/local/file_kv_cache.dart";
 import "../../data/local/file_modes.dart";
 import "../read_only_dirs.dart";
 import "../../data/local/file_local_model_store.dart";
@@ -32,12 +31,15 @@ import "../../data/local/llama_server.dart";
 import "../../data/local/local_engine.dart";
 import "../../data/local/mlx_engine.dart";
 import "../../data/local/model_format.dart";
+import "../../data/local/prompt_cache.dart";
 import "../../data/local/proot.dart";
 import "../../data/local/apple_fm.dart";
 import "../../data/local/landlock.dart";
 import "../../data/local/shared_backup.dart";
 import "../../data/local/tree_ops.dart";
 import "../../data/local/desktop_file_handoff.dart";
+import "../../data/model_host/helper_process.dart";
+import "../../data/model_host/model_process.dart";
 import "../../data/local/io_file_watches.dart";
 import "../../data/local/linux_reminder_alarms.dart";
 import "../../data/local/macos_reminder_alarms.dart";
@@ -50,6 +52,7 @@ import "../../data/voice/file_voice_model_store.dart";
 import "../../data/voice/ios_voice.dart";
 import "../../data/voice/macos_voice.dart";
 import "../../data/voice/sherpa_voice.dart";
+import "../../domain/model_budget.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/agent_browser.dart";
 import "../../domain/app_update.dart";
@@ -307,10 +310,16 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
               p.join(cacheDir, "llm"),
               format: const MlxFormat(),
             ),
+            _modelProcess,
+            prompts: PromptCache(_kvCacheDir(cacheDir)),
+            budget: probe.budget,
           )
         : const NoLocalEngine();
   }
   if (!Platform.isAndroid && !Platform.isLinux) return const NoLocalEngine();
+  // Asked alongside the library directory rather than after it: on Android
+  // both are a channel round trip, and this is on the way to the first frame.
+  final budget = _memoryBudget();
   final (String? libDir, String serverName) = Platform.isAndroid
       ? (await BundledTools.nativeLibraryDir(), "libllama-server.so")
       : (bundledLinuxLibDir(), "llama-server");
@@ -323,14 +332,45 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
     p.join(cacheDir, "llm"),
     format: const GgufFormat(),
   );
-  final pool = LlamaServerPool(
-    LlamaBinaries(server: server, libDir: libDir),
+  final prompts = PromptCache(_kvCacheDir(cacheDir));
+  return LlamaEngine(
+    LlamaRuntime(
+      LlamaBinaries(server: server, libDir: libDir),
+      slotSaveDir: prompts.dir,
+      fitLayers: !Platform.isAndroid,
+    ),
     store,
-    slotSaveDir: _kvCacheDir(cacheDir),
-    fitLayers: !Platform.isAndroid,
+    prompts: prompts,
+    budget: await budget,
   );
-  return LlamaEngine(pool, store, kvCache: FileKvCache(_kvCacheDir(cacheDir)));
 }
+
+/// Where both engines keep prompts — llama.cpp's `--slot-save-path` among
+/// them: one join so the two cannot disagree.
+String _kvCacheDir(String cacheDir) => p.join(cacheDir, "kv-cache");
+
+/// What llama.cpp may have of this device: its RAM, asked of Android and read
+/// off `/proc/meminfo` on Linux. Unknown where neither answers, which offers
+/// every model.
+Future<ModelBudget> _memoryBudget() async {
+  final total = Platform.isAndroid
+      ? await BundledTools.totalMemory()
+      : linuxTotalMemory(_readMeminfo());
+  return total == null
+      ? const ModelBudget.unknown()
+      : ModelBudget.memory(total);
+}
+
+String? _readMeminfo() {
+  try {
+    return File("/proc/meminfo").readAsStringSync();
+  } on FileSystemException {
+    return null;
+  }
+}
+
+/// `MemTotal` out of [meminfo], in bytes. Null where it is not there.
+int? linuxTotalMemory(String? meminfo) => procBytes(meminfo, "MemTotal");
 
 /// [AppleFm] where the device could carry Apple's on-device model. Hardware
 /// that never could is null, out of every picker; a model that is merely not
@@ -353,9 +393,24 @@ Future<AppleFmProbe?> _appleProbe() => _appleHandshake ??= () async {
         .invokeMethod<Object?>("handshake")
         .timeout(const Duration(seconds: 3));
     final handshake = answer as Map<Object?, Object?>? ?? const {};
+    final memory = handshake["memory"] as Map<Object?, Object?>? ?? const {};
+    final workingSet = memory["workingSet"] as int?;
+    final available = memory["available"] as int?;
     return AppleFmProbe(
       handshake["reason"] as String? ?? "other",
       mlx: handshake["mlx"] as bool? ?? false,
+      // A phone's binding limit is the one it may not have said, and a
+      // budget without it would be the Mac's guess: nothing measured then.
+      budget: switch ((workingSet, available)) {
+        (final workingSet?, _) when Platform.isMacOS => ModelBudget.mac(
+          workingSet,
+        ),
+        (final workingSet?, final available?) => ModelBudget.phone(
+          workingSet: workingSet,
+          available: available,
+        ),
+        _ => const ModelBudget.unknown(),
+      },
     );
   } catch (e) {
     logFailure("apple-fm", "handshake failed", e);
@@ -372,10 +427,6 @@ String bundledLinuxLibDir({String? executablePath}) {
   final dir = p.dirname(path);
   return p.basename(dir) == "lib" ? dir : p.join(dir, "lib");
 }
-
-/// The server's `--slot-save-path` and [FileKvCache]'s directory: one join so
-/// the two cannot disagree.
-String _kvCacheDir(String cacheDir) => p.join(cacheDir, "kv-cache");
 
 FileHandoff createFileHandoff() =>
     Platform.isAndroid ? AndroidFileHandoff() : const DesktopFileHandoff();
@@ -468,14 +519,23 @@ void registerRecorder() {
   if (Platform.isLinux) RecordPlatform.instance = LinuxRecorder();
 }
 
+/// Where this process's on-device models run, one for the process so MLX and
+/// voice share it: a model host on macOS, where MLX's GPU work beside the
+/// window starves the window's frames, and this process everywhere else. See
+/// "The model host" in macos/AGENTS.md. Only an app bundle has an executable
+/// to launch again, so a macOS process outside one runs them here too.
+final ModelProcess _modelProcess = Platform.isMacOS && HelperProcess.canLaunch
+    ? HelperModelProcess(HelperProcess.launch)
+    : const InAppModelProcess();
+
 /// sherpa-onnx on the desktops; Android and macOS also have their system
 /// engines (see [AndroidVoice], [MacosVoice]); iOS has Apple's alone (see
 /// [IosVoice]).
 Voice createVoice(VoiceModelStore store, String cacheDir) {
-  if (Platform.isAndroid) return AndroidVoice(store, cacheDir);
+  if (Platform.isAndroid) return AndroidVoice(store, cacheDir, _modelProcess);
   if (Platform.isIOS) return const IosVoice();
-  if (Platform.isMacOS) return MacosVoice(store, cacheDir);
-  return SherpaVoice(store, cacheDir);
+  if (Platform.isMacOS) return MacosVoice(store, cacheDir, _modelProcess);
+  return SherpaVoice(store, cacheDir, _modelProcess);
 }
 
 /// The process's environment. The Dart VM's iOS build leaves

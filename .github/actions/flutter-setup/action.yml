@@ -6,11 +6,16 @@ runs:
   steps:
     # The one pin. A dry run only resolves the paths and keys, so the caches
     # below can be restored everywhere and saved off tags alone.
+    #
+    # A beta, for flutter/flutter#188965: before it, Impeller on macOS reused
+    # a frame's vertex memory while the GPU was still reading it, and an
+    # on-device model's GPU work garbled the window. No stable carries the
+    # fix yet; the next one that does is where this goes back to stable.
     - id: flutter
       uses: subosito/flutter-action@v2.23.0
       with:
-        flutter-version: 3.47.7
-        channel: stable
+        flutter-version: 3.50.0-0.3.pre
+        channel: beta
         dry-run: true
 
     - name: Restore the Flutter SDK
@@ -31,7 +36,7 @@ runs:
     - uses: subosito/flutter-action@v2.23.0
       with:
         flutter-version: ${{ steps.flutter.outputs.VERSION }}
-        channel: stable
+        channel: beta
 
     # Keyed on the lock: build_runner's time goes on compiling its own
     # entrypoint, and it rebuilds whatever a restored graph has stale.

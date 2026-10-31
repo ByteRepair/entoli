@@ -1,6 +1,7 @@
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/data/model_host/model_process.dart";
 import "package:agent_chat/data/voice/android_voice.dart";
 import "package:agent_chat/data/voice/voice_strategies.dart"
     show SpeechFailed, SpeechSignal, SpeechSilent;
@@ -298,7 +299,11 @@ void main() {
   final sherpaSpeech = speechModels.first;
 
   testWidgets("a pick is the store's to answer, either half", (tester) async {
-    final voice = AndroidVoice(FakeVoiceModelStore(), "/cache");
+    final voice = AndroidVoice(
+      FakeVoiceModelStore(),
+      "/cache",
+      const InAppModelProcess(),
+    );
     await expectLater(
       voice.start(
         hearing: HearOnDevice(sherpaRecognition),

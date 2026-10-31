@@ -1,12 +1,13 @@
-import "dart:async";
-
 import "package:flutter/services.dart";
 import "package:http/http.dart" as http;
 
 import "../../domain/local_model.dart";
 import "../../domain/llm_provider.dart";
+import "../../domain/model_budget.dart";
 import "../builtin/llm/llm_client.dart";
 import "../builtin/llm/providers/provider.dart";
+import "channel_generation.dart";
+import "../model_host/model_process.dart";
 
 // The ids live in the domain beside `localProviderId`, exported here for the
 // tests and the pages that name the model.
@@ -54,9 +55,16 @@ const appleChannel = MethodChannel("agent_chat/apple_fm");
 /// offers it — the wording below is then the one place that says why
 /// nothing came back.
 class AppleFmProbe {
-  const AppleFmProbe(this.reason, {this.mlx = false});
+  const AppleFmProbe(
+    this.reason, {
+    this.mlx = false,
+    this.budget = const ModelBudget.unknown(),
+  });
 
   final String reason;
+
+  /// What the device can give an MLX model, from what Metal and the OS said.
+  final ModelBudget budget;
 
   /// Whether the build carries the MLX models' package and the OS can run
   /// one, which is what decides the platform's engine is `MlxEngine`. The
@@ -115,42 +123,17 @@ class AppleFmProvider extends LlmProvider with KeyFree {
   }) async => [appleModelId];
 }
 
-/// Everything the channel says, broadcast — the `NativeVoiceBridge` shape:
-/// `setMethodCallHandler` takes one handler, so a second client's
-/// registration would land on the first's, and the bridge owns it while the
-/// clients filter by generation id.
-class AppleFmBridge {
-  AppleFmBridge._install() {
-    appleChannel.setMethodCallHandler((call) async {
-      incoming.add(call);
-    });
-  }
+/// The Apple system model, gated on its own availability. Nothing is held
+/// between calls, so [close] is nothing and a rebuilt client costs nothing —
+/// the registry can cache or drop this as it likes.
+class AppleFmClient implements LlmClient {
+  AppleFmClient(this.probe);
 
-  static final shared = AppleFmBridge._install();
+  final AppleFmProbe probe;
 
-  final incoming = StreamController<MethodCall>.broadcast();
-
-  Stream<MethodCall> get calls => incoming.stream;
-}
-
-/// A model the Foundation Models framework runs, as a client: the Apple
-/// system model ([AppleFmClient]) or an MLX model (`MlxEngine`'s). Both cross
-/// the same channel and differ only in [route], what the channel is told runs
-/// the model. Nothing is held between calls, so [close] is nothing and a
-/// rebuilt client costs nothing — the registry can cache or drop this as it
-/// likes.
-abstract class FoundationModelsClient implements LlmClient {
-  /// One counter for the whole process, across every client the registry
-  /// ever built: a generation id must not mean two things to one bridge.
-  static var _generations = 0;
-
-  /// What the model is called in an error, after "the": "Apple on-device
-  /// model".
-  String get label;
-
-  /// The channel arguments naming what runs [model], once it can run: throws
-  /// an [LlmException] where it never will.
-  Future<Map<String, Object?>> route(String model);
+  /// The system model is the OS's own process already, so its channel is
+  /// always this one's.
+  final ModelChannel _channel = PlatformModelChannel(appleChannel);
 
   @override
   void close() {}
@@ -163,160 +146,22 @@ abstract class FoundationModelsClient implements LlmClient {
     double? temperature,
     String? reasoningEffort,
   }) async* {
-    final target = await route(model);
-    final generation = "fm${++_generations}";
-
-    // The state the completion's message is assembled from — locals, not
-    // fields: one client is the registry's one cache entry, and concurrent
-    // streams of its own would have been one buffer each.
-    final textSoFar = StringBuffer();
-    final calls = <LlmToolCall>[];
-
-    // Registered before the request goes out, so a frame the platform sent
-    // early cannot fall between the request and its listener.
-    final events = StreamController<MethodCall>();
-    final subscription = AppleFmBridge.shared.calls
-        .where((call) => (call.arguments as Map?)?["id"] == generation)
-        .listen(events.add);
-    var finished = false;
-    try {
-      await appleChannel.invokeMethod("generate", {
-        "id": generation,
-        ...target,
+    if (probe.reason != "available") throw probe.unavailable;
+    yield* ChannelGeneration(_channel, label: "Apple on-device model").run(
+      "generate",
+      {
         "instructions": joinedSystemText(messages),
         "history": _transcript(messages),
         // A trailing tool result is worded the way the history words one, or
         // the model reads it as something the user typed.
         "prompt": messages.last.role == LlmRole.tool
             ? _toolResultText(messages.last, _toolNames(messages))
-            : _promptText(messages.last),
-        "tools": [
-          for (final tool in tools)
-            {
-              "name": tool.name,
-              "description": tool.description,
-              "schema": tool.schema,
-            },
-        ],
+            : channelText(messages.last),
+        "tools": [for (final tool in tools) channelTool(tool)],
         "temperature": ?temperature,
-      });
-
-      await for (final call in events.stream) {
-        switch (call.method) {
-          case "text":
-            final text = (call.arguments as Map?)?["text"] as String?;
-            if (text != null && text.isNotEmpty) {
-              textSoFar.write(text);
-              yield LlmTextChunk(text);
-            }
-          case "toolCall":
-            final args = call.arguments as Map?;
-            calls.add(
-              LlmToolCall(
-                id: "c${calls.length}",
-                name: args?["name"] as String? ?? "",
-                argumentsJson: args?["arguments"] as String? ?? "{}",
-              ),
-            );
-            // The handoff is the whole protocol here: the framework reports
-            // one call and stops, so the reply is complete now. Waiting for a
-            // `done` that may never come — a cancelled framework does not
-            // send one — is how this stream became a hang.
-            finished = true;
-            yield LlmCompletion(
-              message: LlmMessage(
-                role: LlmRole.assistant,
-                text: textSoFar.toString(),
-                toolCalls: List.of(calls),
-              ),
-              finishReason: "tool_calls",
-            );
-            return;
-          case "done":
-            finished = true;
-            final args = call.arguments as Map?;
-            final input = (args?["inputTokens"] as num?)?.toInt();
-            final output = (args?["outputTokens"] as num?)?.toInt();
-            yield LlmCompletion(
-              message: LlmMessage(
-                role: LlmRole.assistant,
-                text: textSoFar.toString(),
-              ),
-              finishReason: args?["finish"] as String? ?? "stop",
-              // Real counts where the session keeps them (iOS 27 and
-              // later); null where it does not, and the estimate path
-              // stands in — the same answer a provider that reports
-              // nothing gives.
-              usage: input == null && output == null
-                  ? null
-                  : LlmUsage(
-                      inputTokens: input ?? 0,
-                      outputTokens: output ?? 0,
-                      cacheReadTokens:
-                          (args?["cachedTokens"] as num?)?.toInt() ?? 0,
-                    ),
-            );
-            return;
-          case "error":
-            final args = call.arguments as Map?;
-            throw _errorOf(
-              label,
-              args?["code"] as String? ?? "other",
-              args?["message"] as String? ?? "",
-            );
-        }
-      }
-      throw LlmException("The $label never answered.", statusCode: 502);
-    } finally {
-      // Unsubscribe first: a cancel arriving at the Swift half cannot race a
-      // generation this client is still reading.
-      await subscription.cancel();
-      await events.close();
-      if (!finished) {
-        try {
-          await appleChannel.invokeMethod("cancel", {"id": generation});
-        } catch (_) {
-          // Best-effort by construction: an engine mid-teardown, or a test
-          // host with nothing behind the channel. The Swift side's own
-          // handoff cancellation is the other half of stopping a generation,
-          // and the turn's stop has no second path to wait on.
-        }
-      }
-    }
+      },
+    );
   }
-}
-
-/// The Apple system model, gated on its own availability.
-class AppleFmClient extends FoundationModelsClient {
-  AppleFmClient(this.probe);
-
-  final AppleFmProbe probe;
-
-  @override
-  String get label => "Apple on-device model";
-
-  @override
-  Future<Map<String, Object?>> route(String model) async {
-    if (probe.reason != "available") throw probe.unavailable;
-    return {"model": appleModelId};
-  }
-}
-
-/// The user's words, with what rode with them. Text attachments are inlined;
-/// anything else is named, because a model that cannot read it is better
-/// told it exists than handed bytes — the same rule the wire shape carries.
-String _promptText(LlmMessage message) {
-  final text = StringBuffer(message.text);
-  for (final attachment in message.attachments) {
-    if (attachment.isText) {
-      text.writeln("\n${attachment.filename}:\n${attachment.asText}");
-    } else {
-      text.writeln(
-        "\n[Attached file, not readable by this model: ${attachment.filename}]",
-      );
-    }
-  }
-  return text.toString().trim();
 }
 
 /// The conversation before the prompt, as dialogue entries — everything but
@@ -341,7 +186,7 @@ List<Map<String, String>> _transcript(List<LlmMessage> messages) {
             ].join("\n"),
           },
           LlmRole.assistant => {"role": "assistant", "text": message.text},
-          LlmRole.user => {"role": "user", "text": _promptText(message)},
+          LlmRole.user => {"role": "user", "text": channelText(message)},
           LlmRole.tool => {
             "role": "user",
             "text": _toolResultText(message, names),
@@ -359,32 +204,3 @@ Map<String, String> _toolNames(List<LlmMessage> messages) => {
 String _toolResultText(LlmMessage message, Map<String, String> names) =>
     "[Result of the ${names[message.toolCallId] ?? "tool"} call:]\n"
     "${message.text}";
-
-/// The framework's failures, in the words the agent's retry machinery acts
-/// on. `context` is deliberately not retryable: the same oversized request
-/// re-sent is the same refusal, and the turn's honest answer is the wording
-/// — the compaction ladder, which bounds its own asks and halves on any
-/// error, is what recovers the session.
-LlmException _errorOf(
-  String label,
-  String code,
-  String message,
-) => switch (code) {
-  "context" => LlmException(
-    "The conversation has outgrown the $label's context window. Compact "
-    "the chat, or lower Total Context under Settings > LLMs.",
-  ),
-  "guardrail" => LlmException("The $label's guardrails refused this request."),
-  "rate-limit" => LlmException("The $label is rate limited.", retryable: true),
-  "assets" => LlmException(
-    "The $label's assets are not ready; the system is still fetching them.",
-    retryable: true,
-  ),
-  "language" => LlmException(
-    "The $label does not support this conversation's language.",
-  ),
-  "resources" => LlmException("The $label ran short of device resources."),
-  _ => LlmException(
-    message.isEmpty ? "The $label failed." : "The $label failed: $message",
-  ),
-};

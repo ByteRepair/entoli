@@ -26,6 +26,8 @@
 		F01CE00000000000000000D1 /* AppleFmChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE00000000000000000D0 /* AppleFmChannel.swift */; };
 		F01CE00000000000000000E1 /* BrowserChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE00000000000000000E0 /* BrowserChannel.swift */; };
 		FC942E4D954581A69F70C2AB /* IshCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = E2AD518B0A99A053D1A7C29F /* IshCore.xcframework */; };
+		F01CE0000000000000000A11 /* GenerationChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000000A10 /* GenerationChannel.swift */; };
+		F01CE0000000000000000A13 /* MlxChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000000A12 /* MlxChannel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -79,6 +81,8 @@
 		F01CE00000000000000000C0 /* VoiceChannel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = VoiceChannel.swift; path = ../macos/Runner/VoiceChannel.swift; sourceTree = SOURCE_ROOT; };
 		F01CE00000000000000000D0 /* AppleFmChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleFmChannel.swift; sourceTree = "<group>"; };
 		F01CE00000000000000000E0 /* BrowserChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserChannel.swift; sourceTree = "<group>"; };
+		F01CE0000000000000000A10 /* GenerationChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationChannel.swift; sourceTree = "<group>"; };
+		F01CE0000000000000000A12 /* MlxChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MlxChannel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -150,6 +154,8 @@
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				F01CE00000000000000000C0 /* VoiceChannel.swift */,
 				F01CE00000000000000000D0 /* AppleFmChannel.swift */,
+				F01CE0000000000000000A12 /* MlxChannel.swift */,
+				F01CE0000000000000000A10 /* GenerationChannel.swift */,
 				F01CE00000000000000000E0 /* BrowserChannel.swift */,
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				E1D2B33A4C5D6E7F8A90B1C2 /* RemindersPlugin.swift */,
@@ -317,6 +323,8 @@
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				F01CE00000000000000000C1 /* VoiceChannel.swift in Sources */,
 				F01CE00000000000000000D1 /* AppleFmChannel.swift in Sources */,
+				F01CE0000000000000000A13 /* MlxChannel.swift in Sources */,
+				F01CE0000000000000000A11 /* GenerationChannel.swift in Sources */,
 				F01CE00000000000000000E1 /* BrowserChannel.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,

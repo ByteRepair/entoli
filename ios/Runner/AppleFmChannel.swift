@@ -6,18 +6,24 @@ import FlutterMacOS
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
-// The MLX models ride the same `LanguageModelSession` the system model does,
-// through `EntoliMLX` — tool/apple/mlx, prebuilt into the XCFramework both
-// Runners link — which answers on any OS and gates on its own.
+// Only for whether this device can run MLX models, which the handshake
+// says: the models themselves are `MlxChannel`'s.
 import EntoliMLX
+import Metal
+#if os(iOS)
+import os
+#endif
 
 /// The Apple half of the `agent_chat/apple_fm` channel — `AppleFm` and its
-/// client are the Dart half — compiled into both Runners. The system model
-/// is the OS's own: the availability the handshake reports, and one
-/// generation per ask, is the whole of what this class owns for it. An MLX
-/// model is loaded from the directory Dart downloaded it to and kept
-/// resident (`EntoliMLX`'s `Mlx`) until Dart evicts it; Dart decides
-/// residency.
+/// client are the Dart half — compiled into both Runners and registered in
+/// the app's own process. The system model is the OS's own: the availability
+/// the handshake reports, and one generation per ask, is the whole of what
+/// this class owns for it.
+///
+/// The handshake also says what this device offers MLX — whether it can run
+/// it, and how much memory a model may have — since those are the device's
+/// and the OS's, the same whichever process asks; the MLX models are loaded
+/// and run on `agent_chat/mlx` (`MlxChannel`), wherever they run.
 ///
 /// **A tool call is reported and ended, not run.** The agent in Dart owns
 /// the loop the way it owns every other model's — approvals, the recorder
@@ -32,33 +38,25 @@ import EntoliMLX
 /// `Transcript.ToolCalls`/`ToolOutput` to a hand-run for their exactness,
 /// and what a 3B model reads out of an inline wording is the same facts
 /// either way.
-class AppleFmChannel: NSObject {
+final class AppleFmChannel: GenerationChannel {
   private static var instance: AppleFmChannel?
 
   static func register(with messenger: FlutterBinaryMessenger) {
-    instance = AppleFmChannel(messenger: messenger)
+    instance = AppleFmChannel(name: "agent_chat/apple_fm", messenger: messenger)
   }
 
-  private let channel: FlutterMethodChannel
-
-  /// The generations in flight, by id — the handle a stop reaches the
-  /// running generation through. Written on the main thread only: the
-  /// handler inserts, and everything the generation itself does to the
-  /// dictionary is posted, so a background Task never touches it.
-  private var generations: [String: Task<Void, Never>] = [:]
-
-  init(messenger: FlutterBinaryMessenger) {
-    channel = FlutterMethodChannel(name: "agent_chat/apple_fm", binaryMessenger: messenger)
-    super.init()
-    channel.setMethodCallHandler { [weak self] call, result in
-      self?.handle(call: call, result: result)
+  /// What the device can give a model, as Dart's `ModelBudget` reads it:
+  /// how much Metal keeps resident before it pages, and on iOS how much more
+  /// the OS lets this process grow by — the limit that ends an app there.
+  private func memory() -> [String: Any] {
+    var memory: [String: Any] = [:]
+    if let device = MTLCreateSystemDefaultDevice() {
+      memory["workingSet"] = Int(device.recommendedMaxWorkingSetSize)
     }
-  }
-
-  private func send(_ method: String, _ arguments: [String: Any]) {
-    DispatchQueue.main.async { [weak self] in
-      self?.channel.invokeMethod(method, arguments: arguments)
-    }
+    #if os(iOS)
+    memory["available"] = Int(os_proc_available_memory())
+    #endif
+    return memory
   }
 
   private func availabilityReason() -> String {
@@ -72,59 +70,14 @@ class AppleFmChannel: NSObject {
     }
   }
 
-  /// `load`, `evict` and `evictAll`: the residency Dart decides. A load
-  /// that fails answers a `FlutterError` whose message is the reason, which
-  /// is what the settings row shows.
-  private func residency(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
-    let args = call.arguments as? [String: Any] ?? [:]
-    let model = args["model"] as? String ?? ""
-    let reply = { (value: Any?) in DispatchQueue.main.async { result(value) } }
-    Task.detached(priority: .userInitiated) {
-      do {
-        switch call.method {
-        case "load":
-          try await Mlx.load(model, args["directory"] as? String ?? "")
-        case "evict":
-          await Mlx.evict(model)
-        default:
-          await Mlx.evictAll()
-        }
-        reply(nil)
-      } catch {
-        reply(FlutterError(code: "load", message: "\(error)", details: nil))
-      }
-    }
-  }
-
-  private func handle(call: FlutterMethodCall, result: @escaping FlutterResult) {
+  override func handle(call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
     case "handshake":
-      result(["reason": availabilityReason(), "mlx": Mlx.isAvailable])
+      result(["reason": availabilityReason(), "mlx": Mlx.isAvailable, "memory": memory()])
     case "generate":
-      let args = call.arguments as? [String: Any] ?? [:]
-      let id = args["id"] as? String ?? ""
-      // Held before the reply, so a cancel racing the start finds the task.
-      // Retained until the generation ends, which is what breaks the cycle
-      // the captured self would otherwise hold.
-      let task = Task.detached(priority: .userInitiated) {
-        await self.generate(id, args)
-      }
-      generations[id] = task
-      result(nil)
-    case "cancel":
-      let id = (call.arguments as? [String: Any])?["id"] as? String ?? ""
-      finishGeneration(id)
-      result(nil)
-    case "load", "evict", "evictAll":
-      residency(call, result)
+      startGeneration(call, result, generate)
     default:
-      result(FlutterMethodNotImplemented)
-    }
-  }
-
-  private func finishGeneration(_ id: String) {
-    DispatchQueue.main.async { [weak self] in
-      self?.generations.removeValue(forKey: id)?.cancel()
+      super.handle(call: call, result: result)
     }
   }
 
@@ -132,13 +85,8 @@ class AppleFmChannel: NSObject {
   /// the text streamed out as it is produced. Nothing is held here between
   /// asks — the Dart client composes every request whole.
   private func generate(_ id: String, _ args: [String: Any]) async {
-    // Every exit, the early ones included, or the task stays in `generations`.
-    defer { finishGeneration(id) }
     guard #available(iOS 26.0, macOS 26.0, *) else {
-      send("error", [
-        "id": id, "code": "os",
-        "message": "This OS carries no Foundation Models framework.",
-      ])
+      sendError(id, "os", "This OS carries no Foundation Models framework.")
       return
     }
     do {
@@ -155,13 +103,12 @@ class AppleFmChannel: NSObject {
         // untyped ones, said as they are.
         if mapError(id, error) { return }
       }
-      send("error", ["id": id, "code": "other", "message": "\(error)"])
+      sendError(id, "other", "\(error)")
     }
   }
 
   @available(iOS 26.0, macOS 26.0, *)
   private func runGeneration(_ id: String, _ args: [String: Any]) async throws {
-    let model = args["model"] as? String ?? ""
     let instructions = args["instructions"] as? String ?? ""
     let prompt = args["prompt"] as? String ?? ""
     let temperature = args["temperature"] as? Double
@@ -203,8 +150,8 @@ class AppleFmChannel: NSObject {
           : .prompt(Transcript.Prompt(segments: [segment])))
     }
 
-    let session = try await sessionFor(
-      model, args["directory"] as? String, tools, Transcript(entries: entries))
+    let session = LanguageModelSession(
+      model: .default, tools: tools, transcript: Transcript(entries: entries))
     let stream = session.streamResponse(
       to: prompt,
       options: GenerationOptions(temperature: temperature))
@@ -243,25 +190,12 @@ class AppleFmChannel: NSObject {
     send("done", done)
   }
 
-  /// A generation with a `directory` is an MLX model's, built on the kept
-  /// instance — loaded first where Dart's load has not run or was evicted
-  /// under it. Without one it is the system model's.
-  @available(iOS 26.0, macOS 26.0, *)
-  private func sessionFor(
-    _ model: String, _ directory: String?, _ tools: [any Tool], _ transcript: Transcript
-  ) async throws -> LanguageModelSession {
-    guard let directory else {
-      return LanguageModelSession(
-        model: .default, tools: tools, transcript: transcript)
-    }
-    return try await Mlx.session(model, directory, tools: tools, transcript: transcript)
-  }
-
   private func toolCall(_ id: String, _ name: String, _ arguments: String) {
     send("toolCall", ["id": id, "name": name, "arguments": arguments])
-    // The generation stops here even where the framework would have carried
-    // on: the client stops reading at this frame, and this is what makes the
-    // reported call the only one a turn answers.
+    // The generation ends here even where the framework would have carried
+    // on, and says so the way every generation ends, with `done`: this is
+    // what makes the reported call the only one a turn answers.
+    send("done", ["id": id, "finish": "tool_calls"])
     finishGeneration(id)
   }
 
@@ -271,10 +205,10 @@ class AppleFmChannel: NSObject {
   private func mapError(_ id: String, _ error: Error) -> Bool {
     switch error {
     case let modelError as LanguageModelError:
-      send("error", ["id": id, "code": code(of: modelError), "message": "\(modelError)"])
+      sendError(id, code(of: modelError), "\(modelError)")
       return true
     case let assets as SystemLanguageModel.Error:
-      send("error", ["id": id, "code": "assets", "message": "\(assets)"])
+      sendError(id, "assets", "\(assets)")
       return true
     default:
       return false

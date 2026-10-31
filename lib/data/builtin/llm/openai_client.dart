@@ -467,7 +467,7 @@ class _PartialCall {
 /// A blank line between them, which leaves the body a byte prefix of the merged
 /// text and so still a token prefix of the rendered prompt: the warmed KV is
 /// found the way it was. Done here rather than where the two are built because
-/// `kvPrefixKeys` hashes per message and the body's own key is the shortest of
+/// `promptPrefixKeys` hashes per message and the body's own key is the shortest of
 /// them — merged any earlier, the prefill would warm a prefix no turn looks for.
 List<LlmMessage> mergeLeadingSystem(List<LlmMessage> messages) {
   final head = messages.takeWhile((m) => m.role == LlmRole.system).toList();

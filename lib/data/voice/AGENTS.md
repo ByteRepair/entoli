@@ -627,10 +627,10 @@ touched from the main one. Everything Dart hears goes through `send`, which
 posts. Invoked where it happened it would be a crash in the one path nothing on
 a desktop exercises.
 
-`NativeVoiceBridge` is the Dart mirror of the same constraint from the other
+`nativeVoiceCalls` is the Dart mirror of the same constraint from the other
 end: `setMethodCallHandler` takes one handler and two strategies each setting
-one would leave the second overwriting the first, so the bridge owns the handler
-and the strategies subscribe to its broadcast stream.
+one would leave the second overwriting the first, so `PlatformModelChannel`
+owns the handler and the strategies subscribe to its broadcast stream.
 
 No new permissions — `RECORD_AUDIO` was already declared and the synthesiser and
 recognizer need none. The **grant** is a different matter: `SpeechRecognizer`
