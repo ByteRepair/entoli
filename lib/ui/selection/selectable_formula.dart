@@ -1,7 +1,12 @@
+import "dart:async";
 import "dart:math" as math;
+import "dart:typed_data";
+import "dart:ui" as ui;
 
 import "package:flutter/rendering.dart";
 import "package:flutter/widgets.dart";
+
+import "copied_document.dart";
 
 /// A drawn formula as one thing to select: a drag that passes over it picks
 /// it up whole and highlights it, and what it copies is the TeX it was
@@ -10,13 +15,13 @@ import "package:flutter/widgets.dart";
 ///
 /// It registers with the selection container above it like any paragraph's
 /// fragment, so it takes its place in a drag's order and in Select All, and
-/// the reader of a copy finds it by type (`RenderSelectableFormula`).
+/// the reader of a copy finds it by type (`RenderSelectableFormula`). It can
+/// also draw itself again ([FormulaDrawing]), which is what a target that
+/// keeps formatting pastes: the drawing is in a repaint boundary of its own,
+/// so the picture is the formula without the highlight washed over it.
 class SelectableFormula extends SingleChildRenderObjectWidget {
-  const SelectableFormula({
-    super.key,
-    required this.written,
-    required super.child,
-  });
+  SelectableFormula({super.key, required this.written, required Widget child})
+    : super(child: RepaintBoundary(child: child));
 
   /// The TeX with its delimiters, as the reply has it.
   final String written;
@@ -44,7 +49,8 @@ class SelectableFormula extends SingleChildRenderObjectWidget {
 }
 
 class RenderSelectableFormula extends RenderProxyBox
-    with Selectable, SelectionRegistrant {
+    with Selectable, SelectionRegistrant
+    implements FormulaDrawing {
   RenderSelectableFormula({
     required this.written,
     required this._selectionColor,
@@ -225,6 +231,55 @@ class RenderSelectableFormula extends RenderProxyBox
         Offset.zero,
       );
     }
+  }
+
+  /// Drawn at three times its size so it stays sharp in a document zoomed
+  /// in, and in black whatever the theme drew it in, since what it pastes
+  /// into is a page. One colour throughout — a formula's glyphs and rules
+  /// are all the text's — so only the coverage is kept.
+  @override
+  Future<FormulaPicture?> picture() async {
+    final drawn = child;
+    if (!attached || drawn is! RenderRepaintBoundary || !drawn.hasSize) {
+      return null;
+    }
+    final image = await drawn.toImage(pixelRatio: 3);
+    try {
+      final bytes = await image.toByteData(
+        format: ui.ImageByteFormat.rawStraightRgba,
+      );
+      if (bytes == null) return null;
+      final pixels = bytes.buffer.asUint8List();
+      for (var i = 0; i < pixels.length; i += 4) {
+        pixels[i] = pixels[i + 1] = pixels[i + 2] = 0;
+      }
+      final black = await _imageOf(pixels, image.width, image.height);
+      try {
+        final png = await black.toByteData(format: ui.ImageByteFormat.png);
+        if (png == null) return null;
+        return FormulaPicture(
+          png.buffer.asUint8List(),
+          width: drawn.size.width,
+          height: drawn.size.height,
+        );
+      } finally {
+        black.dispose();
+      }
+    } finally {
+      image.dispose();
+    }
+  }
+
+  static Future<ui.Image> _imageOf(Uint8List rgba, int width, int height) {
+    final done = Completer<ui.Image>();
+    ui.decodeImageFromPixels(
+      rgba,
+      width,
+      height,
+      ui.PixelFormat.rgba8888,
+      done.complete,
+    );
+    return done.future;
   }
 
   @override

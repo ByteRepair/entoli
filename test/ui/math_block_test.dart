@@ -79,7 +79,28 @@ void main() {
       await dragAll(tester);
 
       expect(copied.single, r"inside $D$, since outside $D$ it holds");
-      expect(html.single, contains(r"<p>inside $D$, since outside $D$"));
+      // A word processor gets it drawn, its TeX the picture's alt text.
+      expect(
+        RegExp(
+          r'<img src="data:image/png;base64,[^"]+" alt="\$D\$"',
+        ).allMatches(html.single),
+        hasLength(2),
+      );
+    });
+
+    // A paragraph holding a formula answered as one opaque container whose
+    // text did not match the paragraph's, and copied with every mark gone.
+    testWidgets("the words around a formula keep their formatting", (
+      tester,
+    ) async {
+      final html = <String>[];
+      final copied = clipboard(tester, html: html);
+      await app.pumpReply(tester, r"some **bold** and `code` with $D$.");
+
+      await dragAll(tester);
+
+      expect(copied.single, r"some **bold** and `code` with $D$.");
+      expect(html.single, contains("<b>bold</b>"));
     });
 
     testWidgets("a display formula is a block of its own", (tester) async {

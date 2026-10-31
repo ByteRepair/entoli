@@ -54,8 +54,17 @@ enum ClipboardChannel {
         else { return result(FlutterError(code: "bad-args", message: "plain and html", details: nil)) }
         var item: [String: Any] = ["public.html": html, "public.utf8-plain-text": plain]
         // Pages and Notes read RTF and not HTML, and fall back to the plain
-        // entry — which is markdown — without it.
-        if let rtf = rtfOf(html) { item["public.rtf"] = rtf }
+        // entry — which is markdown — without it. RTFD too: it carries a
+        // formula's picture, which RTF drops.
+        if let text = attributedOf(html) {
+          let all = NSRange(location: 0, length: text.length)
+          for (type, kind) in [
+            ("com.apple.flat-rtfd", NSAttributedString.DocumentType.rtfd),
+            ("public.rtf", NSAttributedString.DocumentType.rtf),
+          ] {
+            item[type] = try? text.data(from: all, documentAttributes: [.documentType: kind])
+          }
+        }
         UIPasteboard.general.items = [item]
         result(nil)
       case "readFiles":
@@ -74,20 +83,17 @@ enum ClipboardChannel {
     self.channel = channel
   }
 
-  /// [html] as RTF, through UIKit's own HTML reader: the formatting a target
-  /// that reads no HTML keeps. Nil where it will not read it.
-  private static func rtfOf(_ html: String) -> Data? {
-    guard let data = html.data(using: .utf8),
-          let text = try? NSAttributedString(
-            data: data,
-            options: [
-              .documentType: NSAttributedString.DocumentType.html,
-              .characterEncoding: String.Encoding.utf8.rawValue,
-            ],
-            documentAttributes: nil)
-    else { return nil }
-    return try? text.data(
-      from: NSRange(location: 0, length: text.length),
-      documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf])
+  /// [html] read by UIKit's own HTML reader — a formula's picture becomes
+  /// an attachment — for the RTF a target that reads no HTML keeps. Nil
+  /// where it will not read it.
+  private static func attributedOf(_ html: String) -> NSAttributedString? {
+    guard let data = html.data(using: .utf8) else { return nil }
+    return try? NSAttributedString(
+      data: data,
+      options: [
+        .documentType: NSAttributedString.DocumentType.html,
+        .characterEncoding: String.Encoding.utf8.rawValue,
+      ],
+      documentAttributes: nil)
   }
 }

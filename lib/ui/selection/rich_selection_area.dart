@@ -55,7 +55,7 @@ class _RichSelectionAreaState extends State<RichSelectionArea> {
   /// Read before anything is awaited: the menu clears the selection as soon
   /// as its item returns.
   Future<void> _copy() async {
-    final content = _selection.clipboardContent();
+    final content = await _selection.clipboardContent();
     if (content != null) await widget.clipboard.write(content);
   }
 
@@ -129,7 +129,9 @@ class RichSelectionDelegate extends StaticSelectionContainerDelegate {
     return document.isEmpty ? null : document;
   }
 
-  ClipboardContent? clipboardContent() {
+  /// Both halves of a copy. The selection is read on the first line, before
+  /// anything is awaited; only drawing its formulas waits.
+  Future<ClipboardContent?> clipboardContent() async {
     final document = selectedDocument();
     return document == null ? null : clipboardContentOf(document);
   }

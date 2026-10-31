@@ -5,6 +5,8 @@
 /// See "Selecting a reply, and copying it" in `lib/ui/chat/AGENTS.md`.
 library;
 
+import "dart:typed_data";
+
 import "../../domain/formatted_text.dart" show BlockKind;
 
 export "../../domain/formatted_text.dart" show BlockKind;
@@ -16,6 +18,32 @@ class CopiedDocument {
   final List<CopiedBlock> blocks;
 
   bool get isEmpty => blocks.every((block) => block.inlines.isEmpty);
+
+  /// This document with every formula that can draw itself drawn: what the
+  /// formatted half pastes as a picture. Asynchronous because drawing is.
+  Future<CopiedDocument> drawn() async => CopiedDocument([
+    for (final block in blocks)
+      CopiedBlock(
+        block.kind,
+        [
+          for (final inline in block.inlines)
+            switch (inline) {
+              CopiedFormula(:final drawing?) => CopiedFormula(
+                inline.written,
+                display: inline.display,
+                picture: await drawing.picture(),
+              ),
+              _ => inline,
+            },
+        ],
+        level: block.level,
+        ordered: block.ordered,
+        number: block.number,
+        quoted: block.quoted,
+        language: block.language,
+        sameRow: block.sameRow,
+      ),
+  ]);
 }
 
 /// One block on screen: a paragraph, a heading, a list item, a cell, a code
@@ -79,14 +107,45 @@ final class CopiedText extends CopiedInline {
 
 /// A formula, which is selected whole: a part of a drawn formula is no TeX.
 final class CopiedFormula extends CopiedInline {
-  const CopiedFormula(this.written);
+  const CopiedFormula(
+    this.written, {
+    this.display = false,
+    this.drawing,
+    this.picture,
+  });
 
   /// The TeX as it was written, delimiters and all — the one form every
-  /// place a formula is pasted can read back.
+  /// plain-text place a formula is pasted can read back.
   final String written;
+
+  /// On a line of its own rather than in a sentence.
+  final bool display;
+
+  /// What can draw it, where it was on screen.
+  final FormulaDrawing? drawing;
+
+  /// It drawn, once [CopiedDocument.drawn] has asked: what a target that
+  /// keeps formatting pastes, since none of them can typeset TeX.
+  final FormulaPicture? picture;
 
   @override
   String get source => written;
+}
+
+/// A formula on screen, able to draw itself again for a copy.
+abstract interface class FormulaDrawing {
+  /// Null where it cannot be drawn — gone from the screen since the copy.
+  Future<FormulaPicture?> picture();
+}
+
+/// A formula drawn in black on nothing, at [width] by [height] logical
+/// pixels — the size it was on screen, which is the size it pastes at.
+class FormulaPicture {
+  const FormulaPicture(this.png, {required this.width, required this.height});
+
+  final Uint8List png;
+  final double width;
+  final double height;
 }
 
 /// What a run's style said, as the formats name it.

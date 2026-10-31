@@ -47,7 +47,11 @@ class SelectionReader {
         entries.add(
           _Entry.loose(
             selectable is RenderSelectableFormula
-                ? CopiedFormula(selectable.written)
+                ? CopiedFormula(
+                    selectable.written,
+                    display: true,
+                    drawing: selectable,
+                  )
                 : CopiedText(selected),
             sameLine: sameLine,
           ),
@@ -59,8 +63,10 @@ class SelectionReader {
           : (entries..add(_Entry(paragraph, sameLine: sameLine))).last;
       if (selectable is RenderSelectableFormula) continue;
       final range = selectable.getSelection()!;
-      final start = math.min(range.startOffset, range.endOffset);
-      entry.ranges.add((start: start, end: start + selected.length));
+      entry.ranges.add((
+        start: math.min(range.startOffset, range.endOffset),
+        end: math.max(range.startOffset, range.endOffset),
+      ));
     }
     return CopiedDocument([for (final entry in entries) _blockOf(entry)]);
   }
@@ -126,7 +132,7 @@ class SelectionReader {
             ? _formulaIn(placeholders[placeholder])
             : null;
         if (formula != null && formula.isSelected) {
-          out.add(CopiedFormula(formula.written));
+          out.add(CopiedFormula(formula.written, drawing: formula));
         }
         placeholder++;
         offset++;
@@ -221,21 +227,22 @@ class SelectionReader {
     return found;
   }
 
-  /// The paragraph [selectable] is a fragment of. A fragment reports its
-  /// paragraph's transform as its own and indexes its paragraph's whole text,
-  /// which is what is matched: the fragment type is private to the framework.
+  /// The paragraph [selectable] stands for. Every `Text` registers through a
+  /// selection container of its own around its paragraph, and that container
+  /// reports the paragraph's transform as its own and indexes the paragraph's
+  /// text — a formula in it one offset, as its placeholder is — which is what
+  /// is matched: both types are private to the framework. The words are not
+  /// compared: a container answers a formula as its TeX, where the paragraph
+  /// holds a placeholder.
   RenderParagraph? _paragraphOf(Selectable selectable, String selected) {
     final range = selectable.getSelection();
     if (range == null) return null;
     final transform = selectable.getTransformTo(null);
-    final start = math.min(range.startOffset, range.endOffset);
-    final end = start + selected.length;
+    final end = math.max(range.startOffset, range.endOffset);
     for (final paragraph in _paragraphs) {
-      if (!paragraph.attached || paragraph.getTransformTo(null) != transform) {
-        continue;
-      }
-      final text = _textOf(paragraph);
-      if (end <= text.length && text.substring(start, end) == selected) {
+      if (paragraph.attached &&
+          paragraph.getTransformTo(null) == transform &&
+          end <= _textOf(paragraph).length) {
         return paragraph;
       }
     }

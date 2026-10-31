@@ -201,8 +201,17 @@ enum ClipboardChannel {
         pasteboard.clearContents()
         pasteboard.setString(html, forType: .html)
         // Pages, TextEdit and Notes read RTF and not HTML, and fall back to
-        // the plain entry — which is markdown — without it.
-        if let rtf = rtfOf(html) { pasteboard.setData(rtf, forType: .rtf) }
+        // the plain entry — which is markdown — without it. RTFD first: it
+        // carries a formula's picture, which RTF drops.
+        if let text = attributedOf(html) {
+          let all = NSRange(location: 0, length: text.length)
+          if let rtfd = text.rtfd(from: all, documentAttributes: [:]) {
+            pasteboard.setData(rtfd, forType: .rtfd)
+          }
+          if let rtf = text.rtf(from: all, documentAttributes: [:]) {
+            pasteboard.setData(rtf, forType: .rtf)
+          }
+        }
         pasteboard.setString(plain, forType: .string)
         result(nil)
       case "readFiles":
@@ -214,13 +223,12 @@ enum ClipboardChannel {
     self.channel = channel
   }
 
-  /// [html] as RTF, through AppKit's own HTML reader: the formatting a
-  /// target that reads no HTML keeps. Nil where it will not read it.
-  private static func rtfOf(_ html: String) -> Data? {
-    guard let data = html.data(using: .utf8),
-          let text = NSAttributedString(html: data, documentAttributes: nil)
-    else { return nil }
-    return text.rtf(from: NSRange(location: 0, length: text.length), documentAttributes: [:])
+  /// [html] read by AppKit's own HTML reader — a formula's picture becomes
+  /// an attachment — for the RTF a target that reads no HTML keeps. Nil
+  /// where it will not read it.
+  private static func attributedOf(_ html: String) -> NSAttributedString? {
+    guard let data = html.data(using: .utf8) else { return nil }
+    return NSAttributedString(html: data, documentAttributes: nil)
   }
 
   /// A Finder copy carries the names as text too, so files win over text, and

@@ -218,18 +218,19 @@ the order a copy passes through them:
   table pipes, quote marks, emphasis, code spans, links, and every formula as
   its TeX — rather than the words with the rest gone. **`HtmlCopyFormat` is
   the rich half**, so a word processor pastes headings, bold, lists and tables
-  (styles inline, since it reads no stylesheet; a formula as its TeX, since it
-  has no element that draws one).
+  (styles inline, since it reads no stylesheet; a formula as a picture of
+  itself, since none of them can typeset TeX — see below).
 - `RichClipboard` is where it goes. Flutter cannot do this alone:
   `Clipboard.setData` sends one string to an embedder that writes it as
   `text/plain`, so `PlatformRichClipboard`
   (`core/platform/rich_clipboard.dart`) writes both through a channel,
   `agent_chat/clipboard`, answered by a few lines in each runner (GTK targets,
   `NSPasteboard`, `UIPasteboard`, `ClipData.newHtmlText`, `CF_HTML`); a runner
-  that does not answer gets the plain text. The Apple runners write RTF too,
-  converted from the HTML by the system's own reader: Pages, TextEdit and
-  Notes read RTF and not HTML, and without it pasted the plain half — which
-  is markdown — as it stood. The Apple halves sit in
+  that does not answer gets the plain text. The Apple runners write RTFD and
+  RTF too, converted from the HTML by the system's own reader: Pages,
+  TextEdit and Notes read those and not HTML, and without them pasted the
+  plain half — which is markdown — as it stood. RTFD carries a formula's
+  picture as an attachment, which RTF drops. The Apple halves sit in
   `MainFlutterWindow` and `AppDelegate` rather than files of their own.
 
 What is not text contributes nothing — an image, and chrome wrapped in
@@ -251,10 +252,22 @@ the opaque surface inline `code` sat on hid the highlight wherever it fell
 (`inlineCodeStyle`).
 
 **A formula is selected whole** (`SelectableFormula`): a drag that passes
-most of the way over it picks it up and washes it in the selection colour,
-and it copies as the TeX it was written as, delimiters and all, in both
-halves. Part of a formula is no TeX, and the glyphs are the maths library's
-own drawing, not text a selection could take a range of.
+most of the way over it picks it up and washes it in the selection colour.
+Part of a formula is no TeX, and the glyphs are the maths library's own
+drawing, not text a selection could take a range of. It follows the same two
+rules as everything else: the plain half is the TeX as it was written,
+delimiters and all, and the formatted half is **the formula as drawn** — a
+PNG it draws of itself on copy (`FormulaDrawing`), from a repaint boundary of
+its own so the highlight is not in it, at three times its size and recoloured
+black, since the page it lands on is white whatever the app's theme. Its TeX
+is the picture's alt text. Drawing is asynchronous, so a copy reads the
+selection on its first line and only then waits; `dragCopy` settles in real
+rounds for the same reason.
+
+A paragraph is matched to what registered for it by position and offsets,
+not by its words: every `Text` registers through a container of its own,
+which answers a formula as its TeX where the paragraph holds a one-character
+placeholder — and `SelectableFormula` counts as one offset to match it.
 
 The copy **button** is apart from all this: it renders the whole message's
 markdown (`formattedHtmlOf`), escaping HTML the model wrote the way the

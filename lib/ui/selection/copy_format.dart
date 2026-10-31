@@ -5,6 +5,7 @@
 /// is the reply as it was written rather than the words with the rest gone.
 library;
 
+import "dart:convert";
 import "dart:math" as math;
 
 import "../../core/platform/rich_clipboard.dart";
@@ -17,17 +18,21 @@ abstract interface class CopyFormat {
   String write(CopiedDocument document);
 }
 
-/// What a copy puts on the clipboard: both formats of one [document].
-ClipboardContent clipboardContentOf(CopiedDocument document) =>
+/// What a copy puts on the clipboard: both formats of one [document], its
+/// formulas drawn for the formatted half.
+Future<ClipboardContent> clipboardContentOf(CopiedDocument document) async =>
     ClipboardContent(
       plain: const MarkdownCopyFormat().write(document),
-      html: htmlClipboardDocument(const HtmlCopyFormat().write(document)),
+      html: htmlClipboardDocument(
+        const HtmlCopyFormat().write(await document.drawn()),
+      ),
     );
 
 /// An HTML fragment, blocks grouped back into the lists, tables and quotes
 /// they were drawn in. Styles are inline, since a word processor reads no
-/// stylesheet; a formula is its TeX, since a word processor has no element
-/// that draws one and would drop an unknown one with its text.
+/// stylesheet; a formula is its picture, at the size it was on screen — no
+/// word processor can typeset TeX, and an unknown element would be dropped
+/// with its text — or its TeX where it could not be drawn.
 class HtmlCopyFormat implements CopyFormat {
   const HtmlCopyFormat();
 
@@ -88,7 +93,14 @@ class HtmlCopyFormat implements CopyFormat {
         case BlockKind.code:
           out.write("${_open("pre")}$inline</pre>");
         case BlockKind.paragraph:
-          out.write("<p>$inline</p>");
+          final display = block.inlines.any(
+            (inline) => inline is CopiedFormula && inline.display,
+          );
+          out.write(
+            display
+                ? '<p style="text-align: center">$inline</p>'
+                : "<p>$inline</p>",
+          );
       }
     }
     closeList();
@@ -105,6 +117,13 @@ class HtmlCopyFormat implements CopyFormat {
     final out = StringBuffer();
     for (final inline in block.inlines) {
       switch (inline) {
+        case CopiedFormula(:final written, :final picture?):
+          out.write(
+            '<img src="data:image/png;base64,${base64Encode(picture.png)}" '
+            'alt="${escapeHtmlAttribute(written)}" '
+            'width="${picture.width.round()}" height="${picture.height.round()}" '
+            'style="vertical-align: middle">',
+          );
         case CopiedFormula(:final written):
           out.write(escapeHtml(written));
         case CopiedText(:final text, :final marks, :final href):
