@@ -9,7 +9,7 @@ import "package:agent_chat/domain/chat_intents.dart";
 import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/intent_action.dart";
 import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/trigger_runner.dart";
+import "package:agent_chat/domain/turn_sender.dart";
 
 import "../fakes.dart";
 
@@ -24,7 +24,7 @@ void main() {
   late Directory tmp;
   late AppConfig config;
   late ChatRepository repo;
-  late FakeTriggerTurnDriver driver;
+  late FakeTurnSender driver;
   late _Presenter presenter;
   late Set<String?> notSetUp;
   late int listChanges;
@@ -39,7 +39,7 @@ void main() {
       () => AppSettings(defaultProviderId: "anthropic", defaultModelId: "m"),
       config,
     );
-    driver = FakeTriggerTurnDriver();
+    driver = FakeTurnSender();
     presenter = _Presenter();
     notSetUp = {};
     listChanges = 0;
@@ -47,7 +47,7 @@ void main() {
       ChatIntentAction.over(
         ChatIntents(
           repo: repo,
-          driver: driver,
+          sender: driver,
           presenter: presenter,
           isSetUp: (project) => !notSetUp.contains(project),
           onListChanged: () => listChanges++,
@@ -151,7 +151,7 @@ void main() {
       final chatId = (result["chat"] as Map)["id"];
       expect(driver.calls.single, (chatId: chatId, prompt: "Hello"));
       expect(result["reply"], "Hello back");
-      expect(result["outcome"], TriggerOutcome.done.name);
+      expect(result["outcome"], TurnOutcome.done.name);
     });
 
     test("says it into the chat named", () async {

@@ -11,6 +11,7 @@ import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/reminder_alarms.dart";
 import "package:agent_chat/domain/trigger.dart";
 import "package:agent_chat/domain/trigger_runner.dart";
+import "package:agent_chat/domain/turn_sender.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 
 import "../fakes.dart";
@@ -37,17 +38,17 @@ void main() {
 
   /// The runner with its two callbacks and the fake driver captured, so a test
   /// can assert what it stamped, when it told the sidebar, and what it drove.
-  (TriggerRunner, List<Trigger>, List<String>, FakeTriggerTurnDriver) runner(
+  (TriggerRunner, List<Trigger>, List<String>, FakeTurnSender) runner(
     ChatRepository repository, {
     ReminderAlarms? alarms,
   }) {
     final stamped = <Trigger>[];
     final listed = <String>[];
-    final driver = FakeTriggerTurnDriver();
+    final driver = FakeTurnSender();
     return (
       TriggerRunner(
         repo: repository,
-        driver: driver,
+        sender: driver,
         alarms: alarms ?? const UnavailableReminderAlarms(),
         onListChanged: listed.add,
         onTriggerFired: (t) async => stamped.add(t),
@@ -81,7 +82,7 @@ void main() {
     // No fire reason, no added line: the user set this prompt, and it sends
     // as written.
     expect(driver.calls.single.prompt, "Check the builds");
-    expect(result.outcome, TriggerOutcome.done);
+    expect(result.outcome, TurnOutcome.done);
   });
 
   test("a named project is resolved against the ones that exist", () async {
@@ -145,11 +146,11 @@ void main() {
   test("stamps fired before the turn runs", () async {
     final repository = repo();
     final stamped = <Trigger>[];
-    final driver = FakeTriggerTurnDriver();
+    final driver = FakeTurnSender();
 
     final run = TriggerRunner(
       repo: repository,
-      driver: driver,
+      sender: driver,
       alarms: const UnavailableReminderAlarms(),
       onListChanged: (_) {},
       onTriggerFired: (t) async => stamped.add(t),
@@ -166,11 +167,11 @@ void main() {
   test("returns the driver's outcome and snippet", () async {
     final repository = repo();
     final (run, _, _, driver) = runner(repository);
-    driver.outcome = TriggerOutcome.error;
+    driver.outcome = TurnOutcome.error;
     driver.snippet = "partial reply";
     final result = await run.run(trigger(), "", const []);
 
-    expect(result.outcome, TriggerOutcome.error);
+    expect(result.outcome, TurnOutcome.error);
     expect(result.snippet, "partial reply");
   });
 
@@ -229,7 +230,7 @@ void main() {
         // disarm itself (targetGone), from the fire's own copy.
         expect(driver.calls, isEmpty);
         expect(result.targetGone, isTrue);
-        expect(result.outcome, TriggerOutcome.error);
+        expect(result.outcome, TurnOutcome.error);
         expect(alarms.posted.single.body, contains("no longer exists"));
         // No stamp mid-run: nothing fired, lastFiredAt is the manager's to
         // decide with.

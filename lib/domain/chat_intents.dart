@@ -6,7 +6,7 @@ import "chat_search.dart";
 import "intent_action.dart";
 import "models.dart";
 import "project.dart";
-import "trigger_runner.dart";
+import "turn_sender.dart";
 
 /// A chat as an intent hands it out: what Shortcuts shows of one and what a
 /// later action names it by.
@@ -49,7 +49,7 @@ final class AskResult {
 
   final IntentChat chat;
   final String reply;
-  final TriggerOutcome? outcome;
+  final TurnOutcome? outcome;
 
   Map<String, Object?> toArgs() => {
     "chat": chat.toArgs(),
@@ -70,21 +70,21 @@ abstract interface class ChatPresenter {
 /// launches in the background still finds it.
 ///
 /// Only this device's chats: a mirror's are its home device's to list and
-/// drive. A turn goes through the same [TriggerTurnDriver] a trigger's does,
+/// drive. A turn goes through the same [TurnSender] a trigger's does,
 /// so it is the turn the user sees on opening the chat while it runs. It
 /// runs under the chat's own settings: an action never loosens what the
 /// agent may do, since a shortcut's input can come from anywhere.
 final class ChatIntents {
   ChatIntents({
     required this.repo,
-    required this.driver,
+    required this.sender,
     required this.presenter,
     required this.isSetUp,
     required this.onListChanged,
   });
 
   final ChatRepository repo;
-  final TriggerTurnDriver driver;
+  final TurnSender sender;
   final ChatPresenter presenter;
 
   /// Whether [project]'s setup step, where it has one, has been run.
@@ -150,7 +150,7 @@ final class ChatIntents {
     } else {
       chat = await _create(project?.dir);
     }
-    final turn = driver.send(chat.id, prompt);
+    final turn = sender.send(chat.id, prompt);
     if (!wait) {
       unawaited(
         turn.then<void>(

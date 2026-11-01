@@ -561,7 +561,7 @@ recorded as though they had.
 
 It reaches only the chats a `ChatController` is already driving, and a
 trigger's turn now has one — `TriggerRunner` drives the turn through
-`ChatController` via `TriggerTurnDriver`, the same path the user and
+`ChatController` via `TurnSender`, the same path the user and
 `VoiceController` take, so `interruptLiveTurns` reaches it.
 
 `Chat.unfinished` carries the answer out of the store as a bool — an id would
@@ -949,7 +949,9 @@ flat `at`/`repeat` shape a reminder was.
   headless (its `ask_user` has an owner); a chat that has been deleted
   disarms the trigger, with a notification saying so, and never re-points
   the prompt at some other conversation.
-- **The driver** is the one `ChatController.send` path, as before.
+- **The sender** (`TurnSender`, `turn_sender.dart`) is the one
+  `ChatController.send` path, as before — and the one Shortcuts' Ask
+  takes, which is why it is not named for triggers.
 
 ### The agent's own
 

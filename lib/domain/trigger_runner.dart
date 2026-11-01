@@ -6,9 +6,7 @@ import "project.dart";
 import "reminder_alarms.dart";
 import "../core/log.dart";
 import "trigger.dart";
-
-/// How a trigger's turn ended, worded for the completion notification.
-enum TriggerOutcome { done, error, aborted }
+import "turn_sender.dart";
 
 /// What one trigger run produced. [targetGone] is whether the fire found
 /// its target chat deleted — no turn ran; the trigger was disarmed by the
@@ -16,7 +14,7 @@ enum TriggerOutcome { done, error, aborted }
 /// was worded by the runner.
 typedef TriggerRunResult = ({
   String chatId,
-  TriggerOutcome outcome,
+  TurnOutcome outcome,
   String snippet,
   bool targetGone,
 });
@@ -33,19 +31,8 @@ abstract interface class TriggerRuns {
   );
 }
 
-/// Drives a trigger's turn through the same [ChatController] the UI uses, so
-/// a turn started headlessly is the one the user sees if they open the chat
-/// while it is running. The implementation lives in the UI layer; the domain
-/// only knows the interface.
-abstract interface class TriggerTurnDriver {
-  Future<({TriggerOutcome outcome, String snippet})> send(
-    String chatId,
-    String prompt,
-  );
-}
-
 /// Creates the chat or finds the target, stamps the trigger fired, and hands
-/// the turn to a [TriggerTurnDriver]. The driver — wired from the UI layer —
+/// the turn to a [TurnSender]. The sender — wired from the UI layer —
 /// runs the turn through [ChatController], so the controller's `isRunning`
 /// and the backend's `runningTurns` are always in sync. There is one path
 /// that drives a turn, not two, and the desync a separate recorder caused (a
@@ -60,7 +47,7 @@ abstract interface class TriggerTurnDriver {
 class TriggerRunner implements TriggerRuns {
   TriggerRunner({
     required this.repo,
-    required this.driver,
+    required this.sender,
     required this.alarms,
     required this.onListChanged,
     required this.onTriggerFired,
@@ -68,7 +55,7 @@ class TriggerRunner implements TriggerRuns {
   });
 
   final ChatRepository repo;
-  final TriggerTurnDriver driver;
+  final TurnSender sender;
 
   /// Notifies the one thing no one else words: a fire whose target chat has
   /// gone, which is no turn's completion. Completions are the manager's.
@@ -84,7 +71,7 @@ class TriggerRunner implements TriggerRuns {
 
   @override
   Future<
-    ({String chatId, TriggerOutcome outcome, String snippet, bool targetGone})
+    ({String chatId, TurnOutcome outcome, String snippet, bool targetGone})
   >
   run(Trigger trigger, String reason, List<String> projects) async {
     final target = trigger.chatId;
@@ -96,7 +83,7 @@ class TriggerRunner implements TriggerRuns {
   /// The headless half: the prompt the trigger set, the reason a line under
   /// it, in a chat made for the fire.
   Future<
-    ({String chatId, TriggerOutcome outcome, String snippet, bool targetGone})
+    ({String chatId, TurnOutcome outcome, String snippet, bool targetGone})
   >
   _runNewChat(Trigger trigger, String reason, List<String> projects) async {
     final project = projectOrDefault(trigger.project, projects);
@@ -107,7 +94,7 @@ class TriggerRunner implements TriggerRuns {
     );
     await onTriggerFired(trigger.copyWith(lastFiredAt: clock.now()));
     onListChanged(chat.state.id);
-    final result = await driver.send(
+    final result = await sender.send(
       chat.state.id,
       prompted(trigger.prompt, reason, member: trigger.member),
     );
@@ -126,10 +113,10 @@ class TriggerRunner implements TriggerRuns {
   /// runs nothing. Nothing re-points the prompt at some other conversation.
   ///
   /// A same-chat fire while the user's own turn runs queues behind it on the
-  /// room rather than being swallowed by Send's refusal — the driver awaits
+  /// room rather than being swallowed by Send's refusal — the sender awaits
   /// the running turn before speaking.
   Future<
-    ({String chatId, TriggerOutcome outcome, String snippet, bool targetGone})
+    ({String chatId, TurnOutcome outcome, String snippet, bool targetGone})
   >
   _runIntoChat(Trigger trigger, String reason, String chatId) async {
     Chat? chat;
@@ -150,7 +137,7 @@ class TriggerRunner implements TriggerRuns {
       );
       return (
         chatId: chatId,
-        outcome: TriggerOutcome.error,
+        outcome: TurnOutcome.error,
         snippet: "",
         targetGone: false,
       );
@@ -165,13 +152,13 @@ class TriggerRunner implements TriggerRuns {
       );
       return (
         chatId: chatId,
-        outcome: TriggerOutcome.error,
+        outcome: TurnOutcome.error,
         snippet: "",
         targetGone: true,
       );
     }
     await onTriggerFired(trigger.copyWith(lastFiredAt: clock.now()));
-    final result = await driver.send(
+    final result = await sender.send(
       chatId,
       prompted(trigger.prompt, reason, member: trigger.member),
     );

@@ -62,6 +62,7 @@ import "domain/reminder_alarms.dart";
 import "domain/trigger.dart";
 import "domain/trigger_kinds.dart";
 import "domain/trigger_runner.dart";
+import "domain/turn_sender.dart";
 import "domain/trigger_manager.dart";
 import "domain/rootfs_store.dart";
 import "domain/shell.dart";
@@ -1422,7 +1423,7 @@ String _resolveTriggerPath(
   );
 }
 
-final triggerTurnDriverProvider = Provider<TriggerTurnDriver>(
+final turnSenderProvider = Provider<TurnSender>(
   (ref) => throw UnimplementedError(),
 );
 
@@ -1436,7 +1437,7 @@ final chatPresenterProvider = Provider<ChatPresenter>(
 final chatIntentsProvider = Provider<ChatIntents>(
   (ref) => ChatIntents(
     repo: ref.watch(chatRepositoryProvider),
-    driver: ref.watch(triggerTurnDriverProvider),
+    sender: ref.watch(turnSenderProvider),
     presenter: ref.watch(chatPresenterProvider),
     isSetUp: (project) => ref.read(setupCompleteProvider(project)),
     onListChanged: () => ref.invalidate(chatListProvider),
@@ -1468,7 +1469,7 @@ final triggerManagerProvider = Provider<TriggerManager>((ref) {
     alarmPort: alarms,
     runner: TriggerRunner(
       repo: ref.watch(chatRepositoryProvider),
-      driver: ref.watch(triggerTurnDriverProvider),
+      sender: ref.watch(turnSenderProvider),
       alarms: alarms,
       onListChanged: (_) => ref.invalidate(chatListProvider),
       onTriggerFired: (trigger) =>

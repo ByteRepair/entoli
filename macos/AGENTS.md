@@ -123,7 +123,7 @@ whether) and a refusal carries to Shortcuts as the sentence it shows.
 
 What an action may not do is decided here, not by the shortcut. Only this
 device's chats are listed or driven — a mirror's are its home device's. A
-turn goes through the `TriggerTurnDriver` a trigger's does, the turn the user
+turn goes through `TurnSender`, as a trigger's does, the turn the user
 sees on opening the chat, under the chat's own settings: an action never
 loosens what the agent may do, since a shortcut's input can be anything it
 was handed. So a turn that stops for an approval holds a waiting shortcut

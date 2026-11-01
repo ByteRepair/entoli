@@ -279,7 +279,7 @@ class TestApp {
           assistantLaunchProvider.overrideWithValue(assist),
           reminderAlarmsProvider.overrideWithValue(alarms),
           triggersProvider.overrideWith(() => Triggers(triggers)),
-          triggerTurnDriverProvider.overrideWithValue(FakeTriggerTurnDriver()),
+          turnSenderProvider.overrideWithValue(FakeTurnSender()),
           // Pinned so a trigger's fire time is not judged against the wall
           // clock the suite happens to run on.
           clockProvider.overrideWithValue(clock ?? Clock.fixed(_testNow)),
