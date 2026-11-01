@@ -1,5 +1,6 @@
 import "package:flutter/foundation.dart" show ValueListenable;
 import "package:flutter/material.dart";
+import "package:flutter/rendering.dart" show RenderEditable;
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 
@@ -364,6 +365,26 @@ void main() {
       final lines = controller.text.split("\n");
       expect(lines, hasLength(2));
       expect(controller.selection.baseOffset, controller.text.length);
+
+      // Drawn there too: a card as wide as the line overflowed it, the line
+      // under it was never laid out, and the caret sat at the card's edge.
+      final editable = tester.renderObject<RenderEditable>(
+        find.descendant(
+          of: find.byType(EditableText),
+          matching: find.byWidgetPredicate(
+            (w) => w.runtimeType.toString() == "_Editable",
+          ),
+        ),
+      );
+      final caret = editable.getLocalRectForCaret(
+        TextPosition(offset: controller.text.length),
+      );
+      final card = tester.getRect(find.byType(QuoteCard));
+      expect(caret.left, closeTo(0, 1));
+      expect(
+        editable.localToGlobal(caret.topLeft).dy,
+        greaterThan(card.bottom),
+      );
     });
 
     // A card is most of the field, so a click lands the caret beside one:

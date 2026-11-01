@@ -1,4 +1,7 @@
+import "dart:math" show max;
+
 import "package:flutter/material.dart";
+import "package:flutter/rendering.dart";
 
 import "composer_embed.dart";
 
@@ -319,22 +322,46 @@ class ComposerController extends TextEditingController {
     return TextSpan(style: style, children: children);
   }
 
-  /// A block takes the line's whole width, less a little: the field keeps a
-  /// margin for the caret past the end of a line, and a placeholder laid out
-  /// at the full width would be clipped by it.
+  /// A block takes the line's width less the field's caret margin. Laid out
+  /// any wider it overflows the line, and the line under it — the one the
+  /// caret is put on to answer it — is not laid out at all: the caret is
+  /// drawn at the card's right edge instead.
   WidgetSpan _span(BuildContext context, ComposerEmbed embed) {
     final drawn = embed.build(context, () => remove(embed));
     return WidgetSpan(
       alignment: PlaceholderAlignment.middle,
-      child: embed.block
-          ? SizedBox(
-              width: double.infinity,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: drawn,
-              ),
-            )
-          : drawn,
+      child: embed.block ? _LineWide(child: drawn) : drawn,
     );
   }
+}
+
+/// As wide as the line it is placed on, less [inset]. A `SizedBox` of
+/// infinite width is the whole of the line, and a `LayoutBuilder` cannot
+/// answer the intrinsic sizes a field asks its placeholders for.
+class _LineWide extends SingleChildRenderObjectWidget {
+  const _LineWide({required Widget super.child});
+
+  /// More than the field's caret margin: the caret's width and the gap
+  /// before it.
+  static const inset = 6.0;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderLineWide();
+}
+
+class _RenderLineWide extends RenderProxyBox {
+  BoxConstraints _inner(BoxConstraints constraints) => BoxConstraints.tightFor(
+    width: max(0, constraints.maxWidth - _LineWide.inset),
+  );
+
+  @override
+  void performLayout() {
+    final child = this.child!;
+    child.layout(_inner(constraints), parentUsesSize: true);
+    size = constraints.constrain(child.size);
+  }
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) =>
+      constraints.constrain(child!.getDryLayout(_inner(constraints)));
 }
