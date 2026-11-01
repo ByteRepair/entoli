@@ -8,6 +8,7 @@ import "package:http/http.dart" as http;
 import "package:uuid/uuid.dart";
 
 import "../core/config.dart";
+import "domain/chat_intents.dart";
 import "domain/file_tools.dart" show resolveWorkspacePath;
 import "../core/platform/platform.dart"
     show createFileWatches, createPromptSources, processEnv, setupComplete;
@@ -1423,6 +1424,23 @@ String _resolveTriggerPath(
 
 final triggerTurnDriverProvider = Provider<TriggerTurnDriver>(
   (ref) => throw UnimplementedError(),
+);
+
+/// Puts a chat on screen for [chatIntentsProvider]. Overridden in `main`,
+/// which binds the UI's.
+final chatPresenterProvider = Provider<ChatPresenter>(
+  (ref) => throw UnimplementedError(),
+);
+
+/// What Shortcuts can do with chats. See "Shortcuts" in macos/AGENTS.md.
+final chatIntentsProvider = Provider<ChatIntents>(
+  (ref) => ChatIntents(
+    repo: ref.watch(chatRepositoryProvider),
+    driver: ref.watch(triggerTurnDriverProvider),
+    presenter: ref.watch(chatPresenterProvider),
+    isSetUp: (project) => ref.read(setupCompleteProvider(project)),
+    onListChanged: () => ref.invalidate(chatListProvider),
+  ),
 );
 
 /// Started once beside the sweep timer. It listens to the list from here, so

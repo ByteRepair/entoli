@@ -3,6 +3,7 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/chat_search.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
 import "../../providers.dart";

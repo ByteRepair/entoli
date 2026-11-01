@@ -5,12 +5,12 @@ import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../core/log.dart";
+import "../../domain/chat_search.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
 import "../../domain/project_settings.dart";
 import "../../providers.dart";
 import "../widgets/nav_drawer.dart";
-import "chat_groups.dart";
 import "remote_projects.dart";
 import "../selection.dart";
 

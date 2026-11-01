@@ -4,6 +4,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
+import "../domain/availability.dart";
 import "../domain/builtin_project.dart";
 import "../domain/project.dart";
 import "../providers.dart";
@@ -87,9 +88,13 @@ class Commands {
   final bool running;
   final bool sidebarShown;
 
-  bool canRun(AppCommand command) {
-    if (!command.anywhere && !front) return false;
-    return switch (command) {
+  /// Whether [command] can run now, and why not where it cannot: the one
+  /// answer the keys, the menus and Shortcuts all ask.
+  Availability availability(AppCommand command) {
+    if (!command.anywhere && !front) {
+      return const Unavailable("A page is open over the chat.");
+    }
+    final ok = switch (command) {
       AppCommand.pinChat ||
       AppCommand.renameChat ||
       AppCommand.moveChat ||
@@ -103,6 +108,14 @@ class Commands {
       AppCommand.projectSettings => projectHasSettings(project),
       _ => true,
     };
+    if (ok) return const Available();
+    return Unavailable(switch (command) {
+      AppCommand.stopTurn => "No turn is running.",
+      AppCommand.projectWorkspace => "This project has no workspace.",
+      AppCommand.projectMemories => "This project keeps no memories.",
+      AppCommand.projectSettings => "This project has no settings.",
+      _ => "No chat is open.",
+    });
   }
 
   /// [command]'s label, saying which way a toggle goes.
@@ -112,11 +125,11 @@ class Commands {
     _ => command.label,
   };
 
-  /// Run [command] if it can be, false where it cannot.
-  bool run(AppCommand command) {
-    if (!canRun(command)) return false;
-    unawaited(_run(command));
-    return true;
+  /// Run [command] if it can be; what stopped it where it cannot.
+  Availability run(AppCommand command) {
+    final availability = this.availability(command);
+    if (availability.isAvailable) unawaited(_run(command));
+    return availability;
   }
 
   Future<void> _run(AppCommand command) async {

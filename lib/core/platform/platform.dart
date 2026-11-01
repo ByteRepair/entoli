@@ -55,6 +55,7 @@ export "host.dart"
         deviceHostname,
         hostConfinement,
         installBundledTools,
+        listenForIntents,
         registerRecorder,
         readOnlyDirs,
         registerVoiceLicences,

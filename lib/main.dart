@@ -26,6 +26,8 @@ import "data/sync/file_devices.dart";
 import "data/sync/sync_hub.dart";
 import "domain/app_restart.dart";
 import "domain/app_secrets.dart";
+import "domain/chat_intents.dart" show ChatIntentAction;
+import "domain/intent_action.dart" show IntentRegistry;
 import "domain/app_settings.dart" show AppSettings;
 import "domain/trigger_manager.dart" show TriggerRegistryFactory;
 import "domain/project.dart" show everyProject;
@@ -38,6 +40,7 @@ import "ui/chat/remote_turns.dart";
 import "ui/app_licence.dart";
 import "ui/app_menu_bar.dart";
 import "ui/app_shell.dart";
+import "ui/command_intents.dart";
 import "ui/initial_setup_gate.dart";
 import "ui/routes.dart";
 import "ui/welcome_gate.dart";
@@ -306,6 +309,7 @@ class AppSession {
         triggerTurnDriverProvider.overrideWith(
           (ref) => ChatControllerTriggerTurnDriver(ref),
         ),
+        chatPresenterProvider.overrideWith(SelectionChatPresenter.new),
         backupHandoffProvider.overrideWithValue(
           platform.createBackupHandoff(handoff),
         ),
@@ -357,6 +361,14 @@ class AppSession {
     container.read(remoteTurnDriverProvider);
     container.read(localPrefillTriggerProvider);
     container.read(chatDeletionRefreshProvider);
+    // After every port it reaches is bound: an action can be waiting on the
+    // platform side for this, having launched the app itself.
+    platform.listenForIntents(
+      IntentRegistry([
+        ...ChatIntentAction.over(container.read(chatIntentsProvider)),
+        ...CommandIntent.all(container.read(commandScopeProvider)),
+      ]),
+    );
     // The automatic update check, started and not awaited: the release tag is
     // a network round trip and a newer build a download, and startup must not
     // wait on either. Once per process — see [_updateChecked]. Nothing the

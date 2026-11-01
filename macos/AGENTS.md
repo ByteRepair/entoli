@@ -74,6 +74,68 @@ Window tabbing is off (`NSWindow.allowsAutomaticWindowTabbing`, in
 `MainFlutterWindow.awakeFromNib`): the app has one window, and AppKit would
 otherwise add Show Tab Bar and Show All Tabs to the View menu.
 
+## Shortcuts
+
+Entoli's actions in the Shortcuts app, and through it Siri and Spotlight, on
+macOS and iOS alike. **The actions are Dart's; Swift is only their face.**
+`Runner/EntoliIntents.swift`, which both Runners compile (the iOS project
+references it here), holds the App Intents — New Chat, Open Chat, Find
+Chats, Ask Entoli, Run Entoli Command — the entities they pass (a chat, a
+project, a command, a reply), and `IntentBridge`, the one way any of them
+reaches Dart: `perform` on `agent_chat/intents` with an action's id and its
+arguments. Nothing in the Swift decides anything, so the rules have one home
+and the tests reach them.
+
+An intent can be what launched the app, and a call sent before Dart listens
+finds nobody to answer it. So Dart says `ready` once its handler is in
+place — `listenForIntents`, in `main` after every port is bound — and the
+bridge holds each call until it has heard that, a minute at most. A new
+engine is not ready until its own Dart says so.
+
+The Dart half has two subsystems behind one boundary, and they are kept
+apart on purpose. **`IntentAction` (`domain/intent_action.dart`) is the
+boundary's own type**: an id that a saved shortcut names, so never renamed,
+and a `perform` that decodes its own arguments (`IntentArgs`) and encodes its
+own result. `IntentRegistry` looks an id up; `IntentChannel`
+(`data/local/`) is the wire. Neither subsystem knows the boundary exists —
+each is adapted to it:
+
+- **Chats** are `ChatIntents` (`domain/chat_intents.dart`), a typed service:
+  find, read back, make, open, ask. It runs with no screen, so an action
+  arriving on a background launch still finds it; only Open shows anything,
+  through `ChatPresenter`, which the selection implements. One
+  `ChatIntentAction` per operation adapts it.
+- **Commands** are the app's `AppCommand`s, every one of them, as
+  `command.<name>` — the enum's name being the id it already promises never
+  to change. `CommandIntent` runs one through `Commands`, which needs the chat
+  pane's context, so `AppShell` attaches a `CommandScope` while it is
+  mounted; a command that arrives during a launch waits a while for it. The
+  list Shortcuts offers is asked of Dart (`commands`), so a command added to
+  the enum is offered with nothing in the Swift changed.
+
+A shared base class over the two was weighed and refused: a command takes no
+input, acts on what is on screen and returns nothing, and a chat operation is
+the opposite on all three, so a base would hold an id and nothing else, its
+generics erased at the one place it is used. What they do share is
+`Availability` (`domain/availability.dart`) — whether a thing can be done
+now, and why not — which `Commands` answers for the menus (who read only
+whether) and a refusal carries to Shortcuts as the sentence it shows.
+
+What an action may not do is decided here, not by the shortcut. Only this
+device's chats are listed or driven — a mirror's are its home device's. A
+turn goes through the `TriggerTurnDriver` a trigger's does, the turn the user
+sees on opening the chat, under the chat's own settings: an action never
+loosens what the agent may do, since a shortcut's input can be anything it
+was handed. So a turn that stops for an approval holds a waiting shortcut
+until someone answers it in the app. A project still waiting on its setup
+step refuses rather than starting a turn that cannot run.
+
+The Dart half is covered by `chat_intents_test.dart`; the Swift, like the
+rest of it here, by hand. On iOS a background launch gets
+seconds, not the minutes a turn can take, so Ask with Wait for Reply is a
+foreground affair there; with it off the turn is left running, and the
+completion notification says when it ends.
+
 ## Waking for a trigger
 
 **The model the pieces below implement:** `reminders.json` is the only truth,

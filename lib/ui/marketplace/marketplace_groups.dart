@@ -1,4 +1,4 @@
-import "../sidebar/chat_groups.dart" show searchNeedle;
+import "../../domain/chat_search.dart" show searchNeedle;
 import "marketplace.dart";
 
 /// The marketplace's list, grouped and filtered — the pure half of what

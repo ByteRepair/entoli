@@ -618,3 +618,11 @@ What has not been settled is the keys: a `UIKeyCommand` is expected to take
 its key before the press reaches Flutter, so `AppShell`'s handler never hears
 it. Were both to hear one, the command would run twice. A hardware keyboard on
 a device or the simulator is how to see which.
+
+## Shortcuts
+
+The App Intents are `macos/Runner/EntoliIntents.swift`, compiled here too;
+`AppDelegate` registers the bridge with the implicit engine. See "Shortcuts"
+in `macos/AGENTS.md`. What differs here is time: an intent that launches the
+app in the background has seconds before iOS suspends it, so a long turn
+asked for with Wait for Reply is cut short unless the app is in front.

@@ -1,5 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/chat_search.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/ui/sidebar/chat_groups.dart";
 
