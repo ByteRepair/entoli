@@ -2,6 +2,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/chat_log.dart";
 import "../../domain/turn_sender.dart";
+import "../../providers.dart";
 import "chat_controller.dart";
 
 /// Sends a turn — a trigger's, a shortcut's — through [ChatController], the
@@ -38,5 +39,46 @@ class ChatControllerTurnSender implements TurnSender {
       null => TurnOutcome.aborted,
     };
     return (outcome: outcome, snippet: controller.replyText);
+  }
+}
+
+/// A chat's turn as its page would show it — waiting on an approval or an
+/// answer, running, or not — and its stop button, for Shortcuts. Asks the
+/// controller where one exists and the backend where none does: reading the
+/// notifier of a chat nobody has open would build one, and load a
+/// conversation nobody is looking at.
+class ChatControllerTurnControl implements TurnControl {
+  ChatControllerTurnControl(this._ref);
+
+  final Ref _ref;
+
+  @override
+  TurnStatus statusOf(String chatId) {
+    final controller = chatControllerProvider(chatId);
+    if (_ref.exists(controller)) {
+      final state = _ref.read(controller);
+      if (state.approvals.values.any((a) => a.isNotEmpty)) {
+        return TurnStatus.waitingForApproval;
+      }
+      if (state.questions.values.any((q) => q.isNotEmpty)) {
+        return TurnStatus.waitingForAnswer;
+      }
+      if (state.isRunning) return TurnStatus.running;
+    }
+    return _ref.read(agentBackendProvider).runningTurns.value.contains(chatId)
+        ? TurnStatus.running
+        : TurnStatus.idle;
+  }
+
+  @override
+  Future<bool> stop(String chatId) async {
+    if (statusOf(chatId) == TurnStatus.idle) return false;
+    final controller = chatControllerProvider(chatId);
+    if (_ref.exists(controller)) {
+      await _ref.read(controller.notifier).abort();
+    } else {
+      await _ref.read(chatRepositoryProvider).abort(chatId);
+    }
+    return true;
   }
 }

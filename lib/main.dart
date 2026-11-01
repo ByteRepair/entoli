@@ -40,6 +40,7 @@ import "ui/chat/remote_turns.dart";
 import "ui/app_licence.dart";
 import "ui/app_menu_bar.dart";
 import "ui/app_shell.dart";
+import "ui/chat_actions.dart" show chatEditsProvider;
 import "ui/command_intents.dart";
 import "ui/initial_setup_gate.dart";
 import "ui/routes.dart";
@@ -308,6 +309,8 @@ class AppSession {
         triggersProvider.overrideWith(() => Triggers(triggers)),
         turnSenderProvider.overrideWith((ref) => ChatControllerTurnSender(ref)),
         chatPresenterProvider.overrideWith(SelectionChatPresenter.new),
+        turnControlProvider.overrideWith(ChatControllerTurnControl.new),
+        chatEditorProvider.overrideWith((ref) => ref.read(chatEditsProvider)),
         backupHandoffProvider.overrideWithValue(
           platform.createBackupHandoff(handoff),
         ),

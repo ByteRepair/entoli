@@ -50,6 +50,15 @@ final class IntentArgs {
     return value.cast<String>();
   }
 
+  /// A list of string-keyed maps, each read as arguments of its own.
+  List<IntentArgs> records(String name) {
+    final value = _typed<List<Object?>>(name) ?? const [];
+    if (value.any((item) => item is! Map)) {
+      throw IntentRefused("$name is not a list of records.");
+    }
+    return [for (final item in value) IntentArgs(item! as Map)];
+  }
+
   bool flag(String name, {required bool orElse}) =>
       _typed<bool>(name) ?? orElse;
 

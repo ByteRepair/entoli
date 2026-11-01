@@ -49,6 +49,7 @@ enum AppCommand {
   deleteChat("Delete Chat…"),
   chatSettings("Chat Settings…"),
   showPlan("Show Plan"),
+  voiceMode("Voice Mode"),
   stopTurn("Stop Turn", key: LogicalKeyboardKey.period),
 
   projectWorkspace("Workspace"),

@@ -16,3 +16,18 @@ abstract interface class TurnSender {
     String prompt,
   );
 }
+
+/// Where a chat's turn stands, for a caller outside its page.
+enum TurnStatus { idle, running, waitingForApproval, waitingForAnswer }
+
+/// A chat's turn seen and stopped from outside its page — Shortcuts' — the
+/// [TurnSender]'s other half. Implemented over the same controllers, and
+/// never by building one: a chat nobody has open has no controller, and its
+/// turn, if it has one, is the backend's alone.
+abstract interface class TurnControl {
+  TurnStatus statusOf(String chatId);
+
+  /// Stops the turn running in [chatId], as the stop button does. False
+  /// where none was running.
+  Future<bool> stop(String chatId);
+}

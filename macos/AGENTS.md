@@ -79,9 +79,12 @@ otherwise add Show Tab Bar and Show All Tabs to the View menu.
 Entoli's actions in the Shortcuts app, and through it Siri and Spotlight, on
 macOS and iOS alike. **The actions are Dart's; Swift is only their face.**
 `Runner/EntoliIntents.swift`, which both Runners compile (the iOS project
-references it here), holds the App Intents — New Chat, Open Chat, Find
-Chats, Ask Entoli, Run Entoli Command — the entities they pass (a chat, a
-project, a command, a reply), and `IntentBridge`, the one way any of them
+references it here), holds the App Intents — making, finding, opening and
+asking a chat; reading its reply, its turn's status and its artifacts back;
+stopping its turn; adding files to a workspace; renaming, pinning, moving and
+deleting a chat; creating and listing projects; voice mode; and running any
+of the app's commands — the entities they pass (a chat, a project, a
+command, a reply, a turn status), and `IntentBridge`, the one way any of them
 reaches Dart: `perform` on `agent_chat/intents` with an action's id and its
 arguments. Nothing in the Swift decides anything, so the rules have one home
 and the tests reach them.
@@ -100,11 +103,16 @@ own result. `IntentRegistry` looks an id up; `IntentChannel`
 (`data/local/`) is the wire. Neither subsystem knows the boundary exists —
 each is adapted to it:
 
-- **Chats** are `ChatIntents` (`domain/chat_intents.dart`), a typed service:
-  find, read back, make, open, ask. It runs with no screen, so an action
-  arriving on a background launch still finds it; only Open shows anything,
-  through `ChatPresenter`, which the selection implements. One
-  `ChatIntentAction` per operation adapts it.
+- **Chats** are `ChatIntents` (`domain/chat_intents.dart`), a typed service
+  with one `ChatIntentAction` per operation adapting it. It runs with no
+  screen, so an action arriving on a background launch still finds it, and
+  reaches the UI only through three ports the UI implements: `ChatPresenter`
+  to show a chat (the selection's `reveal`), `ChatEditor` for the writes
+  behind a chat's row menu (`ChatEdits`, which that menu's dialogs call too,
+  so a rename from Shortcuts updates an open chat's title bar the way one
+  from the sidebar does), and `TurnControl` for a turn's status and stop,
+  answered by the chat's controller where one exists and by the backend
+  where none does — never by building one.
 - **Commands** are the app's `AppCommand`s, every one of them, as
   `command.<name>` — the enum's name being the id it already promises never
   to change. `CommandIntent` runs one through `Commands`, which needs the chat
@@ -128,7 +136,18 @@ sees on opening the chat, under the chat's own settings: an action never
 loosens what the agent may do, since a shortcut's input can be anything it
 was handed. So a turn that stops for an approval holds a waiting shortcut
 until someone answers it in the app. A project still waiting on its setup
-step refuses rather than starting a turn that cannot run.
+step refuses rather than starting a turn that cannot run. Delete asks
+before it does anything, in Shortcuts' own confirmation.
+
+Files cross as paths, not bytes. Add Files writes each one to a folder of
+its own under the temporary directory and hands Dart the path, which
+`IncomingStaged` moves into the workspace through `writeIncoming` — the
+share target's route, `safeRelativePath` included, since the name came
+from another app. Get Artifacts goes the other way: each artifact is packed
+whole by `readArtifactZip` into a temporary zip, its page and the files
+beside it together, and Swift hands Shortcuts the file. Voice mode is not an
+intent of its own underneath: it is `AppCommand.voiceMode`, which the Chat
+menu has too, and Start Voice Mode runs it.
 
 The Dart half is covered by `chat_intents_test.dart`; the Swift, like the
 rest of it here, by hand. On iOS a background launch gets
