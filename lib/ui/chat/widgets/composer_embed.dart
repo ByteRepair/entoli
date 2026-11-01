@@ -16,9 +16,9 @@ import "../../widgets/action_icon.dart";
 abstract class ComposerEmbed {
   const ComposerEmbed();
 
-  /// A block sits on a line of its own and sends as a paragraph of its own,
-  /// with a blank line either side whatever was typed around it. An inline one
-  /// sends exactly where it is.
+  /// A block is drawn as wide as its line and sends as a paragraph of its
+  /// own, with a blank line either side whatever was typed around it. An
+  /// inline one sends exactly where it is.
   bool get block => true;
 
   /// What this is in the message sent.
