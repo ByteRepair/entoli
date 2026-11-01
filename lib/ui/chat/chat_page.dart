@@ -35,6 +35,8 @@ import "activity/card.dart" show ActivitySource, liveMessageOf;
 import "activity/format.dart" show formatRemaining;
 import "widgets/chapter_rail.dart";
 import "widgets/composer.dart";
+import "widgets/composer_controller.dart";
+import "widgets/composer_embed.dart";
 import "widgets/paired_project_badges.dart";
 import "widgets/message_bubble.dart";
 import "widgets/message_text.dart";
@@ -142,7 +144,7 @@ class _NewChat extends ConsumerStatefulWidget {
 }
 
 class _NewChatState extends ConsumerState<_NewChat> {
-  final TextEditingController _controller = TextEditingController();
+  final ComposerController _controller = ComposerController();
 
   /// What the chat this screen makes will run its first turn under. Held here
   /// rather than in a provider so that it dies with the screen: armed
@@ -186,7 +188,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
     if (!mounted) return;
     setState(() => _starting = false);
     if (!made) {
-      _controller.text = text;
+      _controller.message = text;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text("Could not start a chat.")));
@@ -710,7 +712,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   /// keeps the view pinned, outside it the jump button appears.
   static const _slack = 200.0;
 
-  final TextEditingController _controller = TextEditingController();
+  final ComposerController _controller = ComposerController();
 
   /// What a steer taken back is put back into, attachments and all.
   final GlobalKey<ComposerState> _composer = GlobalKey();
@@ -1334,6 +1336,13 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     );
   }
 
+  /// A passage being answered, into the composer — or, while a question
+  /// stands in its place, into what the composer will hold when it is back.
+  void _reply(ComposerEmbed quote) {
+    final composer = _composer.currentState;
+    composer == null ? _controller.append(quote) : composer.embed(quote);
+  }
+
   /// The one link-opening rule, both renderers of model-written markdown — a
   /// reply and a compaction summary — share it.
   void _openLink(BuildContext context, String href) {
@@ -1416,6 +1425,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                         waitingStatus: view.status,
                         shellOutput: view.shellOutput[message.id],
                         onTapLink: (href) => _openLink(context, href),
+                        onReply: (quote) => _reply(QuoteEmbed(quote)),
                         threads: editing == null
                             ? null
                             : chat.branches[message.id],

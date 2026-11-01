@@ -139,10 +139,12 @@ class CompletionField extends ConsumerStatefulWidget {
     this.device,
     this.decoration,
     this.style,
+    this.strutStyle,
     this.minLines,
     this.maxLines = 1,
     this.expands = false,
     this.autofocus = false,
+    this.focusNode,
     this.textAlignVertical,
     this.shortcuts = const <ShortcutActivator, Intent>{},
     this.actions = const <Type, Action<Intent>>{},
@@ -161,10 +163,16 @@ class CompletionField extends ConsumerStatefulWidget {
   final String? device;
   final InputDecoration? decoration;
   final TextStyle? style;
+
+  /// The field's, where the caller wants lines other than the text's own height.
+  final StrutStyle? strutStyle;
   final int? minLines;
   final int? maxLines;
   final bool expands;
   final bool autofocus;
+
+  /// The field's, where the caller has to put the caret in it.
+  final FocusNode? focusNode;
   final TextAlignVertical? textAlignVertical;
 
   /// The caller's own bindings, added to the menu's. The menu's win where both
@@ -321,8 +329,10 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
           maxLines: widget.maxLines,
           expands: widget.expands,
           autofocus: widget.autofocus,
+          focusNode: widget.focusNode,
           textAlignVertical: widget.textAlignVertical,
           style: widget.style,
+          strutStyle: widget.strutStyle,
           decoration: widget.decoration,
           contentInsertionConfiguration: widget.contentInsertionConfiguration,
         ),

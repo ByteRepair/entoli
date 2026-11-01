@@ -15,6 +15,8 @@ import "../../widgets/attachment_chip.dart";
 import "../../widgets/completion_field.dart";
 import "../../widgets/dialogs.dart";
 import "code_block.dart";
+import "composer_controller.dart";
+import "composer_embed.dart";
 
 class _SendIntent extends Intent {
   const _SendIntent();
@@ -49,8 +51,10 @@ typedef SendCallback = void Function(String text, List<Attachment> attachments);
 /// above the field — that is [CompletionField]'s — and the `+` button also
 /// attaches files.
 ///
-/// Nothing here asks for the field's focus. On Android that is the keyboard
-/// coming up, and it comes up when the field is tapped and at no other time.
+/// Nothing here asks for the field's focus but [ComposerState.embed]. On
+/// Android that is the keyboard coming up, and it comes up when the field is
+/// tapped, or when the user chose Reply on a passage — which is asking to
+/// write — and at no other time.
 /// Dropping it again when the keyboard goes is `FocusFollowsKeyboard`'s, at the
 /// root of the app.
 class Composer extends ConsumerStatefulWidget {
@@ -69,7 +73,9 @@ class Composer extends ConsumerStatefulWidget {
     this.workspaceHome,
   });
 
-  final TextEditingController controller;
+  /// The field, and the quotes and other embeds in it. What is sent is its
+  /// `message`, never its `text`.
+  final ComposerController controller;
 
   /// The main agent is speaking: Send becomes Stop and the voice button
   /// stands down.
@@ -112,6 +118,9 @@ class Composer extends ConsumerStatefulWidget {
 
 class ComposerState extends ConsumerState<Composer> {
   final GlobalKey<CompletionFieldState> _field = GlobalKey();
+
+  /// Held only so [embed] can put the caret in the field.
+  final FocusNode _focus = FocusNode();
   final List<Attachment> _attachments = [];
 
   /// This message is a command to run rather than something to say. Drawn
@@ -124,6 +133,11 @@ class ComposerState extends ConsumerState<Composer> {
   /// the same way it says so for a command — from the keystroke that decides
   /// it, not from the turn that follows.
   bool _wired = false;
+
+  /// How many embeds the field holds: each is taller than a line, so the
+  /// field is let grow by two lines for every one rather than scroll them
+  /// away under the line being typed.
+  int _embeds = 0;
 
   /// Whether Send would do anything. Kept here so only the button redraws when
   /// the answer flips, which is about twice a message.
@@ -157,6 +171,7 @@ class ComposerState extends ConsumerState<Composer> {
     widget.controller.removeListener(_sync);
     _canSend.dispose();
     _queues.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -165,12 +180,17 @@ class ComposerState extends ConsumerState<Composer> {
     // the field's decoration and the buttons either side of it, and that has no
     // business re-running because Send went live.
     _refresh();
-    final shell = shellBypassCommand(widget.controller.text) != null;
-    final wired = wiredSkillFromText(widget.controller.text) != null;
-    if (shell == _shell && wired == _wired) return;
+    // The field's text rather than the message: an embed is never `!` or a
+    // `/skill`, so the answer is the same without writing the message out.
+    final text = widget.controller.text;
+    final shell = shellBypassCommand(text) != null;
+    final wired = wiredSkillFromText(text) != null;
+    final embeds = widget.controller.embeds.length;
+    if (shell == _shell && wired == _wired && embeds == _embeds) return;
     setState(() {
       _shell = shell;
       _wired = wired;
+      _embeds = embeds;
     });
   }
 
@@ -183,7 +203,7 @@ class ComposerState extends ConsumerState<Composer> {
         canSend &&
         widget.agentSpeaking &&
         widget.onQueue != null &&
-        (widget.steers?.call(widget.controller.text) ?? false);
+        (widget.steers?.call(widget.controller.message) ?? false);
   }
 
   Future<void> _attach(AttachmentKind kind) async {
@@ -219,19 +239,26 @@ class ComposerState extends ConsumerState<Composer> {
     _refresh();
   }
 
+  /// Add [embed] to the message and put the caret on the line under it, so
+  /// what is typed next answers it. Focused, unlike everything else here:
+  /// choosing Reply is asking to write, and a caret left wherever the field
+  /// last had one lands what is typed beside the card.
+  void embed(ComposerEmbed embed) {
+    widget.controller.append(embed);
+    _focus.requestFocus();
+  }
+
   /// Put back a message that was sent and taken back, ahead of whatever has
   /// been typed or attached since.
   void restore(Draft said) {
     final (:text, :attachments) = said;
-    final typed = widget.controller.text;
-    widget.controller.text = typed.isEmpty || text.isEmpty
-        ? "$text$typed"
-        : "$text\n$typed";
+    widget.controller.prepend(text);
     setState(() => _attachments.insertAll(0, attachments));
     _refresh();
   }
 
-  /// A file on its own is worth sending, and whitespace on its own is not.
+  /// A file on its own is worth sending, and whitespace on its own is not. An
+  /// embed's character is not whitespace, so a quote alone is worth sending.
   bool get _worthSending =>
       widget.controller.text.trim().isNotEmpty || _attachments.isNotEmpty;
 
@@ -240,7 +267,7 @@ class ComposerState extends ConsumerState<Composer> {
     // without passing it.
     if (!_worthSending) return;
     final send = queue && _queues.value ? widget.onQueue! : widget.onSend;
-    send(widget.controller.text.trim(), List.of(_attachments));
+    send(widget.controller.message.trim(), List.of(_attachments));
     widget.controller.clear();
     setState(_attachments.clear);
     _refresh();
@@ -262,14 +289,21 @@ class ComposerState extends ConsumerState<Composer> {
         minimum: const EdgeInsets.all(8),
         child: CompletionField(
           key: _field,
+          focusNode: _focus,
           controller: widget.controller,
           project: widget.project,
           device: widget.device,
           minLines: 1,
-          maxLines: 6,
+          maxLines: 6 + 2 * _embeds.clamp(0, 4),
           // The command in the face a command is read in, so what is about to
           // run looks like what it is while it is still being typed.
           style: _shell ? codeBlockStyle(theme) : null,
+          // A field's lines are held to the text's height unless told
+          // otherwise, which would lay a card over the lines either side of
+          // it; the strut is then a floor rather than the height.
+          strutStyle: _embeds > 0
+              ? const StrutStyle(forceStrutHeight: false)
+              : null,
           decoration: _shell
               ? _shellField(theme)
               : _wired

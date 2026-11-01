@@ -256,7 +256,7 @@ Part of a formula is no TeX, and the glyphs are the maths library's own
 drawing, not text a selection could take a range of. It follows the same two
 rules as everything else: the plain half is the TeX as it was written,
 delimiters and all, and the formatted half is **the formula as drawn** — a
-PNG it draws of itself on copy (`formulaPicturesUnder`), from a repaint boundary of
+PNG it draws of itself on copy (`FormulaDrawing`), from a repaint boundary of
 its own so the highlight is not in it, at three times its size, and with the
 theme's text colour recoloured black, since the page it lands on is white
 whatever the app's theme. Only that colour: a `\textcolor` the TeX asked for
@@ -274,11 +274,8 @@ The copy **button** is apart from all this: it renders the whole message's
 markdown (`formattedHtmlOf`), escaping HTML the model wrote the way the
 screen shows it, beside the formatted words (`formattedTextOf`); raw copy is
 the markdown. Its formulas are the selection's pictures all the same
-(`replyContentOf`; both find them by their TeX with
-`formulaPicturesUnder`, the one walk that draws them), so a
-formula pastes alike whichever way it was copied. It writes from the markdown rather than from a
-`CopiedDocument` of everything because the markdown keeps what the document
-flattens — a list nested in a list, a paragraph inside an item.
+(`replyContentOf`, from every `SelectableFormula` the bubble drew), so a
+formula pastes alike whichever way it was copied.
 
 What can be done to a message is a row under it rather than a menu, uncovered by
 hovering the message or, where there is no pointer to hover with, by touching
@@ -309,6 +306,48 @@ does not shift under the pointer the moment the icons appear. The reveal is a
 gesture arena, so one touch both starts a selection in the bubble and shows the
 actions. It writes a `ValueNotifier` rather than calling `setState`, so
 uncovering the icons does not rebuild the message's labels behind them.
+
+### Replying to a passage
+
+The selection menu offers **Reply** beside Copy, wherever Copy is. It hands
+the composer the selection as a copy's plain half reads — markdown — and
+clears the selection, the passage having gone somewhere. The composer draws
+it as a card; the message sends it as a blockquote, a blank line either side
+of it, because markdown reads a line straight after a `>` line as more of the
+quote. In an Omada section a member's reply is quoted under their handle,
+`> @scout` and an empty `>` line above the passage: the handle is an ordinary
+mention, which is what routes the answer to them (see "The contract between
+direct and Omada chats" in `lib/domain/room/AGENTS.md`), and the main agent's
+reply carries none, since nobody is to be addressed. `Quote`
+(`domain/quote.dart`) is that blockquote both ways.
+
+**A card is one character of the field.** `ComposerController` hands each
+`ComposerEmbed` a private-use code point and draws it as a `WidgetSpan`, so
+the composer is still one `TextField` and everything it does — the `/` and
+`@` menus, the shortcuts, paste, undo, the keyboard and its IME — carries on
+across a card without being told about one: the caret steps over it,
+Backspace deletes it, undo brings it back. A column of fields and cards was
+the other design, and every one of those would have had to be taught to cross
+a seam. Its `text` holds the characters; its `message` is what is sent, each
+embed written out, and is what everything asking what the user is saying
+reads. `message =` is the inverse — a paragraph a reader claims comes back as
+its card — so a message taken back returns as it was composed. A new kind of
+thing in a message is a subclass of `ComposerEmbed` and, if it should come
+back, a reader.
+
+Quotes are added at the end with the caret put under them, so what is typed
+next answers the last; with nothing typed between, they stack a blank line
+apart, a line left to answer the one above later. **Reply focuses the field**
+— the one thing that asks the composer for its focus, since choosing it is
+asking to write — because a caret left wherever it last was, or put down by a
+click, lands beside the card: a card is most of the field. **A card keeps its
+line whatever the edit**: the controller's `value` setter puts a line break
+between a card and anything typed or pasted beside it, and a Backspace or
+Delete that would join the two takes the card instead, as it would a letter.
+A field's lines are held to
+the text's height unless it is given a strut that is not forced, so the
+composer gives one while it holds a card — and two more lines of height for
+each, rather than scrolling the cards away under the line being typed.
 
 ### How a reply is set
 
