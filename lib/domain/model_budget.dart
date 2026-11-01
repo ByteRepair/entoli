@@ -22,8 +22,11 @@ import "local_model.dart";
 ///   the whole phone feel sluggish. On an 8 GB phone that is the 2B and no
 ///   larger.
 /// - **llama.cpp on Android and Linux is bounded by memory.** It reads the
-///   weights into RAM whichever device runs them, and a phone shares that RAM
-///   with everything else it is doing, so three fifths of it.
+///   weights into RAM whichever device runs them. A Linux machine gets three
+///   fifths of it. An Android phone gets half: it shares that RAM with every
+///   app it keeps alive, and its low-memory killer starts on them well short
+///   of three fifths, so a model that size slows the whole phone. On a 12 GB
+///   phone that is the 4B and no larger.
 class ModelBudget {
   const ModelBudget(this.bytes);
 
@@ -43,8 +46,11 @@ class ModelBudget {
     required int available,
   }) => ModelBudget(min(workingSet, available) * 3 ~/ 5);
 
-  /// Out of [total] bytes of RAM.
-  factory ModelBudget.memory(int total) => ModelBudget(total * 3 ~/ 5);
+  /// An Android phone: half of its [total] bytes of RAM.
+  factory ModelBudget.android(int total) => ModelBudget(total ~/ 2);
+
+  /// A Linux machine: three fifths of its [total] bytes of RAM.
+  factory ModelBudget.linux(int total) => ModelBudget(total * 3 ~/ 5);
 
   /// Null where nothing was measured.
   final int? bytes;

@@ -353,12 +353,14 @@ String _kvCacheDir(String cacheDir) => p.join(cacheDir, "kv-cache");
 /// off `/proc/meminfo` on Linux. Unknown where neither answers, which offers
 /// every model.
 Future<ModelBudget> _memoryBudget() async {
-  final total = Platform.isAndroid
-      ? await BundledTools.totalMemory()
-      : linuxTotalMemory(_readMeminfo());
-  return total == null
-      ? const ModelBudget.unknown()
-      : ModelBudget.memory(total);
+  if (Platform.isAndroid) {
+    final total = await BundledTools.totalMemory();
+    return total == null
+        ? const ModelBudget.unknown()
+        : ModelBudget.android(total);
+  }
+  final total = linuxTotalMemory(_readMeminfo());
+  return total == null ? const ModelBudget.unknown() : ModelBudget.linux(total);
 }
 
 String? _readMeminfo() {
