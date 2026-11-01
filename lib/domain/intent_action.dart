@@ -1,5 +1,3 @@
-import "availability.dart";
-
 /// Something Shortcuts can ask the app to do, by name. The boundary's own
 /// type: what it adapts — `AppCommand`s, [ChatIntents] — does not know it
 /// exists, and each adapter owns turning its arguments in and its result
@@ -19,9 +17,6 @@ abstract interface class IntentAction {
 final class IntentRefused implements Exception {
   const IntentRefused(this.reason);
 
-  /// What an [Unavailable] said, as a refusal.
-  IntentRefused.of(Unavailable unavailable) : this(unavailable.reason);
-
   final String reason;
 
   @override
@@ -33,8 +28,6 @@ final class IntentRefused implements Exception {
 /// as a cast error nobody can read.
 final class IntentArgs {
   const IntentArgs(this._values);
-
-  static const empty = IntentArgs({});
 
   final Map<Object?, Object?> _values;
 
@@ -75,8 +68,6 @@ final class IntentRegistry {
     : _actions = {for (final action in actions) action.id: action};
 
   final Map<String, IntentAction> _actions;
-
-  Iterable<String> get ids => _actions.keys;
 
   Future<Object?> perform(String id, IntentArgs args) async {
     final action = _actions[id];

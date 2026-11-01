@@ -166,6 +166,14 @@ class ChatRepository {
 
   Future<List<String>> listProjects() => _store.listProjects();
 
+  /// Whether [project] — null the default — is one there is, for a caller
+  /// naming one from outside: the default and the built-ins always are, a
+  /// user's while its directory is.
+  Future<bool> isProject(String? project) async =>
+      project == null ||
+      isBuiltinProject(project) ||
+      (await listProjects()).contains(project);
+
   /// A name the user may create: [isProjectName] is the gate, and the app's
   /// own projects — the default's and the built-ins' — are not among them.
   Future<void> createProject(String name) async {

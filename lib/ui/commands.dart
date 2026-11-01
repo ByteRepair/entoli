@@ -94,28 +94,31 @@ class Commands {
     if (!command.anywhere && !front) {
       return const Unavailable("A page is open over the chat.");
     }
-    final ok = switch (command) {
+    Availability needs(bool ok, String why) =>
+        ok ? const Available() : Unavailable(why);
+    return switch (command) {
       AppCommand.pinChat ||
       AppCommand.renameChat ||
       AppCommand.moveChat ||
       AppCommand.deleteChat ||
       AppCommand.chatSettings ||
       // The page says where a chat has none.
-      AppCommand.showPlan => chatId != null,
-      AppCommand.stopTurn => running,
-      AppCommand.projectWorkspace => projectHasWorkspace(project),
-      AppCommand.projectMemories => projectHasMemories(project),
-      AppCommand.projectSettings => projectHasSettings(project),
-      _ => true,
+      AppCommand.showPlan => needs(chatId != null, "No chat is open."),
+      AppCommand.stopTurn => needs(running, "No turn is running."),
+      AppCommand.projectWorkspace => needs(
+        projectHasWorkspace(project),
+        "This project has no workspace.",
+      ),
+      AppCommand.projectMemories => needs(
+        projectHasMemories(project),
+        "This project keeps no memories.",
+      ),
+      AppCommand.projectSettings => needs(
+        projectHasSettings(project),
+        "This project has no settings.",
+      ),
+      _ => const Available(),
     };
-    if (ok) return const Available();
-    return Unavailable(switch (command) {
-      AppCommand.stopTurn => "No turn is running.",
-      AppCommand.projectWorkspace => "This project has no workspace.",
-      AppCommand.projectMemories => "This project keeps no memories.",
-      AppCommand.projectSettings => "This project has no settings.",
-      _ => "No chat is open.",
-    });
   }
 
   /// [command]'s label, saying which way a toggle goes.

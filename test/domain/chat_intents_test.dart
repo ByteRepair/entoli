@@ -5,7 +5,6 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/availability.dart";
 import "package:agent_chat/domain/chat_intents.dart";
 import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/intent_action.dart";
@@ -200,13 +199,6 @@ void main() {
       expect(
         await refusal("findChats", {"limit": "ten"}),
         contains("wrong kind"),
-      );
-    });
-
-    test("an Unavailable becomes a refusal with its words", () {
-      expect(
-        IntentRefused.of(const Unavailable("No chat is open.")).reason,
-        "No chat is open.",
       );
     });
   });

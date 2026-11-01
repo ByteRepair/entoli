@@ -25,6 +25,16 @@ class SelectedChatId extends Notifier<String?> {
 
   void select(String? id) => state = id;
 
+  /// [chat] in the pane, into its project first: the sidebar lists one
+  /// project, and a chat it does not list would be open with nothing saying
+  /// so.
+  void reveal(ChatState chat) {
+    ref
+        .read(selectedProjectProvider.notifier)
+        .select(localProject(chat.project));
+    state = chat.id;
+  }
+
   /// Make a chat in the project being shown and select it. **The one place a
   /// chat is created from the UI** — a method here rather than a function
   /// beside the widgets because not every caller has a `WidgetRef`.
@@ -94,12 +104,8 @@ class SelectionChatPresenter implements ChatPresenter {
   final Ref _ref;
 
   @override
-  void show(ChatState chat) {
-    _ref
-        .read(selectedProjectProvider.notifier)
-        .select(localProject(chat.project));
-    _ref.read(selectedChatIdProvider.notifier).select(chat.id);
-  }
+  void show(ChatState chat) =>
+      _ref.read(selectedChatIdProvider.notifier).reveal(chat);
 }
 
 void openChat(BuildContext context, WidgetRef ref, String chatId) {

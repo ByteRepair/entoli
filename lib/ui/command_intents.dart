@@ -22,8 +22,10 @@ class CommandScope {
     _attached = null;
   }
 
+  /// Equality rather than identity: a method torn off twice is two equal
+  /// closures, never one identical one.
   void detach(Commands Function() read) {
-    if (identical(_read, read)) _read = null;
+    if (_read == read) _read = null;
   }
 
   /// The pane's commands as they are now, waiting a while for a pane that
@@ -63,7 +65,7 @@ final class CommandIntent implements IntentAction {
   @override
   Future<Object?> perform(IntentArgs args) async {
     if ((await scope.current()).run(command) case final Unavailable why) {
-      throw IntentRefused.of(why);
+      throw IntentRefused(why.reason);
     }
     return null;
   }
