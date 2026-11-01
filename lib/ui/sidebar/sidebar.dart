@@ -3,23 +3,20 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../domain/builtin_project.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
 import "../../providers.dart";
-import "../chat/chat_controller.dart";
-import "../memory/memory_page.dart";
+import "../app_command.dart";
+import "../chat_actions.dart";
 import "../marketplace/marketplace_page.dart";
 import "../profile/profile_page.dart";
+import "../project_actions.dart";
 import "../settings/settings_category.dart";
 import "../selection.dart";
-import "../widgets/dialogs.dart";
 import "../widgets/nothing.dart";
-import "../workspace/workspace_page.dart";
 import "chat_groups.dart";
 import "project_palette.dart";
 import "remote_projects.dart";
-import "project_settings_page.dart";
 
 /// The sidebar's width where it is docked beside the chat pane.
 const sidebarWidth = 300.0;
@@ -58,70 +55,37 @@ class _SidebarState extends ConsumerState<Sidebar> {
     super.dispose();
   }
 
-  /// What the slot beside the switcher holds for [project]. The default
-  /// project has no settings page, so its workspace and its memories; a
-  /// built-in the halves its spec says it has, plus a settings gear where its
-  /// spec says it has a page worth opening; a user's project its settings
-  /// page. The gear visibility is one predicate across every kind — see
-  /// `projectHasSettingsPage`. A paired device's has no workspace here.
+  /// The buttons beside the switcher: the pages the project has beside its
+  /// chats, which `project_actions.dart` says.
   List<Widget> _projectButtons(
     BuildContext context,
     WidgetRef ref,
     ProjectRef at,
-  ) {
-    final project = at.project;
-    final local = at.device == null;
-    final spec = builtinProjectOf(project);
-    Widget workspace() => IconButton(
-      icon: const Icon(Icons.folder_outlined),
-      tooltip: "${projectLabel(project)} workspace",
-      onPressed: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => WorkspacePage(
-            root: ref
-                .read(appConfigProvider)
-                .projectWorkspaceDir(project: project),
-            title: "${projectLabel(project)} workspace",
-          ),
-        ),
+  ) => [
+    if (projectHasWorkspace(at))
+      IconButton(
+        icon: const Icon(Icons.folder_outlined),
+        tooltip: "${projectLabel(at.project)} workspace",
+        onPressed: () => openProjectWorkspace(context, ref, at),
       ),
-    );
-    // The app's own store: what the default project shows beside its workspace
-    // in place of a settings page, and what a built-in with [MemoryPolicy.app]
-    // shows for the same reason.
-    Widget memories() => IconButton(
-      icon: const Icon(Icons.psychology_outlined),
-      tooltip: "Memories",
-      onPressed: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => MemoryPage(
-            project: (device: at.device, project: null),
-            title: "Memories",
-          ),
-        ),
+    if (projectHasMemories(at))
+      IconButton(
+        icon: const Icon(Icons.psychology_outlined),
+        tooltip: "Memories",
+        onPressed: () => openProjectMemories(context, at),
       ),
-    );
-    Widget settingsGear() => IconButton(
-      icon: const Icon(Icons.settings),
-      tooltip: "Project settings",
-      onPressed: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) =>
-              ProjectSettingsPage(project: project!, device: at.device),
-        ),
+    if (projectHasSettings(at))
+      IconButton(
+        icon: const Icon(Icons.settings),
+        tooltip: "Project settings",
+        onPressed: () => openProjectSettings(context, at),
       ),
-    );
-    if (project == null) return [if (local) workspace(), memories()];
-    return [
-      if (local && (spec?.sharedWorkspace ?? true)) workspace(),
-      if (spec == null || spec.memory != MemoryPolicy.off) memories(),
-      if (projectHasSettingsPage(project)) settingsGear(),
-    ];
-  }
+  ];
 
   @override
   Widget build(BuildContext context) {
     final selected = ref.watch(selectedProjectProvider);
+    final scheme = Theme.of(context).colorScheme;
     // The list the query was written against has just been replaced, the same
     // reason switching clears the selected chat. Kept, it would answer a
     // project the user has left with "nothing matches".
@@ -154,49 +118,54 @@ class _SidebarState extends ConsumerState<Sidebar> {
                       search: _search,
                     ),
             ),
-            const Divider(height: 1),
-            Stack(
-              alignment: Alignment.centerRight,
-              children: [
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.person_outline),
-                      title: const Text("Profile"),
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const ProfilePage(project: null),
-                        ),
+            // The menu bar holds the app's pages where it is always on screen,
+            // which leaves the new chat alone at the bottom.
+            if (menuBarAlwaysShown)
+              ListTile(
+                leading: const Icon(Icons.add),
+                title: const Text("New chat"),
+                tileColor: scheme.primary,
+                iconColor: scheme.onPrimary,
+                textColor: scheme.onPrimary,
+                onTap: () => openNewChat(context, ref),
+              )
+            else ...[
+              const Divider(height: 1),
+              Stack(
+                alignment: Alignment.centerRight,
+                children: [
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.person_outline),
+                        title: const Text("Profile"),
+                        onTap: () => openProfile(context),
                       ),
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.storefront_outlined),
-                      title: const Text("Marketplace"),
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const MarketplacePage(),
-                        ),
+                      ListTile(
+                        leading: const Icon(Icons.storefront_outlined),
+                        title: const Text("Marketplace"),
+                        onTap: () => openMarketplace(context),
                       ),
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.settings),
-                      title: const Text("Settings"),
-                      onTap: () => openSettings(context),
-                    ),
-                  ],
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(right: 16),
-                  child: FloatingActionButton(
-                    heroTag: null,
-                    tooltip: "New chat",
-                    onPressed: () => openNewChat(context, ref),
-                    child: const Icon(Icons.add),
+                      ListTile(
+                        leading: const Icon(Icons.settings),
+                        title: const Text("Settings"),
+                        onTap: () => openSettings(context),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 16),
+                    child: FloatingActionButton(
+                      heroTag: null,
+                      tooltip: "New chat",
+                      onPressed: () => openNewChat(context, ref),
+                      child: const Icon(Icons.add),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -480,140 +449,89 @@ class _ChatTile extends ConsumerWidget {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: ListTile(
-        selected: selected,
-        selectedColor: theme.colorScheme.onSecondaryContainer,
-        selectedTileColor: theme.colorScheme.secondaryContainer,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(20)),
-        ),
-        contentPadding: const EdgeInsets.only(left: 12, right: 4),
-        minLeadingWidth: 16,
-        horizontalTitleGap: 8,
-        // The slot is there whether or not a turn is, so the title does not
-        // move each time one starts or ends.
-        leading: SizedBox.square(
-          dimension: 16,
-          child: ValueListenableBuilder<Set<String>>(
-            valueListenable: ref.watch(busyChatsProvider),
-            builder: (context, running, _) => running.contains(chat.id)
-                ? const CircularProgressIndicator(strokeWidth: 2)
-                : const SizedBox.shrink(),
-          ),
-        ),
-        // The heading above says when, so the row is the title and nothing else.
-        title: Text(chat.title.orUntitled, overflow: TextOverflow.ellipsis),
-        subtitle: subtitle,
-        onTap: () => openChat(context, ref, chat.id),
-        trailing: !mutable
+      child: GestureDetector(
+        onSecondaryTapUp: !mutable
             ? null
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (chat.tempTtlExpiresAt != null)
-                    Icon(
-                      Icons.hourglass_empty,
-                      size: 14,
-                      color: theme.colorScheme.onSurfaceVariant,
+            : (details) => _contextMenu(context, ref, details.globalPosition),
+        child: ListTile(
+          selected: selected,
+          selectedColor: theme.colorScheme.onSecondaryContainer,
+          selectedTileColor: theme.colorScheme.secondaryContainer,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(20)),
+          ),
+          contentPadding: const EdgeInsets.only(left: 12, right: 4),
+          minLeadingWidth: 16,
+          horizontalTitleGap: 8,
+          // The slot is there whether or not a turn is, so the title does not
+          // move each time one starts or ends.
+          leading: SizedBox.square(
+            dimension: 16,
+            child: ValueListenableBuilder<Set<String>>(
+              valueListenable: ref.watch(busyChatsProvider),
+              builder: (context, running, _) => running.contains(chat.id)
+                  ? const CircularProgressIndicator(strokeWidth: 2)
+                  : const SizedBox.shrink(),
+            ),
+          ),
+          // The heading above says when, so the row is the title and nothing else.
+          title: Text(chat.title.orUntitled, overflow: TextOverflow.ellipsis),
+          subtitle: subtitle,
+          onTap: () => openChat(context, ref, chat.id),
+          trailing: !mutable
+              ? null
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (chat.tempTtlExpiresAt != null)
+                      Icon(
+                        Icons.hourglass_empty,
+                        size: 14,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    PopupMenuButton<AppCommand>(
+                      icon: const Icon(Icons.more_vert),
+                      onSelected: (command) =>
+                          runOnChat(context, ref, chat, command),
+                      itemBuilder: (_) => _items,
                     ),
-                  PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert),
-                    onSelected: (value) async {
-                      switch (value) {
-                        case "pin":
-                          await _setPinned(ref, true);
-                        case "unpin":
-                          await _setPinned(ref, false);
-                        case "rename":
-                          await _rename(context, ref);
-                        case "move":
-                          await _move(context, ref);
-                        case "delete":
-                          await _delete(context, ref);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      if (chat.pinned)
-                        const PopupMenuItem(
-                          value: "unpin",
-                          child: Text("Unpin"),
-                        )
-                      else
-                        const PopupMenuItem(value: "pin", child: Text("Pin")),
-                      const PopupMenuItem(
-                        value: "rename",
-                        child: Text("Rename"),
-                      ),
-                      if (!remote)
-                        const PopupMenuItem(
-                          value: "move",
-                          child: Text("Move to project…"),
-                        ),
-                      const PopupMenuItem(
-                        value: "delete",
-                        child: Text("Delete"),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                  ],
+                ),
+        ),
       ),
     );
   }
 
-  Future<void> _rename(BuildContext context, WidgetRef ref) async {
-    final title = await promptForText(
-      context,
-      title: "Rename chat",
-      initial: chat.title,
-      hint: "Chat title",
-      confirmLabel: "Rename",
+  /// The row's menu, the same from the button and from a right-click: the
+  /// chat commands, in the row's own shorter words, less Move for a mirror,
+  /// whose projects are its home device's.
+  List<PopupMenuEntry<AppCommand>> get _items => [
+    for (final command in chatCommands)
+      if (!(remote && command == AppCommand.moveChat))
+        PopupMenuItem(
+          value: command,
+          child: Text(switch (command) {
+            AppCommand.pinChat => chat.pinned ? "Unpin" : "Pin",
+            AppCommand.renameChat => "Rename",
+            AppCommand.moveChat => "Move to project…",
+            _ => "Delete",
+          }),
+        ),
+  ];
+
+  Future<void> _contextMenu(
+    BuildContext context,
+    WidgetRef ref,
+    Offset at,
+  ) async {
+    final command = await showMenu<AppCommand>(
+      context: context,
+      position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
+      items: _items,
     );
-    if (title == null) return;
-    await ref.read(chatRepositoryProvider).retitle(chat.id, title);
-    if (selected && !remote) {
-      ref.read(chatControllerProvider(chat.id).notifier).applyTitle(title);
+    if (command != null && context.mounted) {
+      await runOnChat(context, ref, chat, command);
     }
-    ref.invalidate(chatListProvider);
-  }
-
-  Future<void> _setPinned(WidgetRef ref, bool pinned) =>
-      setChatPinned(ref, chat, pinned, open: selected && !remote);
-
-  /// File a chat elsewhere and follow it: it has just left the list being
-  /// shown, and a chat that vanished on being moved reads as a deletion.
-  Future<void> _move(BuildContext context, WidgetRef ref) async {
-    final repo = ref.read(chatRepositoryProvider);
-    final projects = await repo.listProjects();
-    if (!context.mounted) return;
-    final picked = await pickProject(
-      context,
-      projects: everyProject(projects),
-      current: chat.project,
-    );
-    if (picked == null || picked.project == chat.project) return;
-    await repo.moveChat(chat.id, picked.project);
-    // The open controller holds the chat it read when it was built — project
-    // included — so it is disposed and re-read from where the chat now is.
-    ref.invalidate(chatControllerProvider(chat.id));
-    ref
-        .read(selectedProjectProvider.notifier)
-        .select(localProject(picked.project));
-    ref.invalidate(chatListProvider);
-  }
-
-  Future<void> _delete(BuildContext context, WidgetRef ref) async {
-    final confirmed = await confirm(
-      context,
-      title: "Delete chat?",
-      message: "Delete \"${chat.title.orUntitled}\"? This cannot be undone.",
-      confirmLabel: "Delete",
-      destructive: true,
-    );
-    if (!confirmed) return;
-    if (selected) ref.read(selectedChatIdProvider.notifier).select(null);
-    await ref.read(chatRepositoryProvider).deleteChat(chat.id);
-    ref.invalidate(chatListProvider);
   }
 }
 

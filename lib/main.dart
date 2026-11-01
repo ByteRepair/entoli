@@ -36,6 +36,7 @@ import "ui/chat/activity/activities.dart" show ChatActivities;
 import "ui/chat/activity/activity.dart" show activityCatalogProvider;
 import "ui/chat/remote_turns.dart";
 import "ui/app_licence.dart";
+import "ui/app_menu_bar.dart";
 import "ui/app_shell.dart";
 import "ui/initial_setup_gate.dart";
 import "ui/routes.dart";
@@ -65,6 +66,7 @@ void modelHostMain(List<String> arguments) => ModelHostServer.run(
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  installMenuChannel();
   registerBundledFontLicences();
   registerBundledSkillLicences();
   registerAppLicence();

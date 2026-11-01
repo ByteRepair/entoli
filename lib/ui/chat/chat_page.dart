@@ -19,14 +19,13 @@ import "../../domain/prompt_library.dart" show nameOf;
 import "../../providers.dart";
 import "../fonts.dart";
 import "../theme.dart";
-import "../sidebar/sidebar.dart";
 import "../selection.dart";
 import "../voice/read_aloud.dart";
 import "../voice/voice_page.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/chip_row.dart";
 import "../widgets/completion_field.dart";
-import "../widgets/nav_drawer.dart";
+import "../widgets/side_panel_frame.dart";
 import "../widgets/scrolling.dart";
 import "chat_settings_page.dart";
 import "chat_controller.dart";
@@ -45,19 +44,15 @@ import "widgets/turn_surface.dart";
 import "widgets/view_only_bar.dart";
 
 class ChatPage extends ConsumerWidget {
-  const ChatPage({super.key, this.withDrawer = false});
-
-  /// Narrow layouts have no room for the sidebar beside the chat, so it becomes
-  /// this page's drawer.
-  final bool withDrawer;
+  const ChatPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final chatId = ref.watch(selectedChatIdProvider);
     if (chatId != null) {
-      return _ChatBody(chatId: chatId, withDrawer: withDrawer);
+      return _ChatBody(chatId: chatId);
     }
-    return _NewChat(withDrawer: withDrawer);
+    return const _NewChat();
   }
 }
 
@@ -140,9 +135,7 @@ class _ReadableColumn extends StatelessWidget {
 /// and the settings are this screen's own, until the first message makes one
 /// out of both. See "Nothing selected is a new chat".
 class _NewChat extends ConsumerStatefulWidget {
-  const _NewChat({required this.withDrawer});
-
-  final bool withDrawer;
+  const _NewChat();
 
   @override
   ConsumerState<_NewChat> createState() => _NewChatState();
@@ -238,8 +231,8 @@ class _NewChatState extends ConsumerState<_NewChat> {
   Widget build(BuildContext context) {
     final at = ref.watch(selectedProjectProvider);
     return Scaffold(
-      drawer: widget.withDrawer ? const NavDrawer(child: Sidebar()) : null,
       appBar: AppBar(
+        leading: SidePanelButton.leadingOf(context),
         title: const _AppBrand(),
         actions: [
           // A paired device's chat takes its settings once it is there:
@@ -570,25 +563,26 @@ class _AppBrand extends StatelessWidget {
 }
 
 /// The page with no conversation on it yet — one still being read off disk,
-/// or still on its way from a paired device. Carries the drawer and bar the
-/// real page would.
+/// or still on its way from a paired device. Carries the way back to the
+/// sidebar the real page would, where there is one.
 class _Waiting extends StatelessWidget {
-  const _Waiting({required this.withDrawer});
-
-  final bool withDrawer;
+  const _Waiting();
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    drawer: withDrawer ? const NavDrawer(child: Sidebar()) : null,
-    appBar: withDrawer ? AppBar(title: const _AppBrand()) : null,
-    body: const Center(child: CircularProgressIndicator()),
-  );
+  Widget build(BuildContext context) {
+    final leading = SidePanelButton.leadingOf(context);
+    return Scaffold(
+      appBar: leading == null
+          ? null
+          : AppBar(leading: leading, title: const _AppBrand()),
+      body: const Center(child: CircularProgressIndicator()),
+    );
+  }
 }
 
 class _ChatBody extends ConsumerStatefulWidget {
-  const _ChatBody({required this.chatId, required this.withDrawer});
+  const _ChatBody({required this.chatId});
   final String chatId;
-  final bool withDrawer;
 
   @override
   ConsumerState<_ChatBody> createState() => _ChatBodyState();
@@ -1174,7 +1168,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     );
   }
 
-  Widget _waiting() => _Waiting(withDrawer: widget.withDrawer);
+  Widget _waiting() => const _Waiting();
 
   /// Land at the end of the conversation the first time this chat is drawn.
   void _opening(Chat chat) {
@@ -1219,16 +1213,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       ),
     );
     return Scaffold(
-      drawer: widget.withDrawer ? const NavDrawer(child: Sidebar()) : null,
       appBar: AppBar(
+        leading: SidePanelButton.leadingOf(context),
         titleSpacing: 0,
         toolbarHeight: barHeight,
         title: InkWell(
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => ChatSettingsPage(chatId: widget.chatId),
-            ),
-          ),
+          onTap: () => openChatSettings(context, widget.chatId),
           // Fills the bar between leading and actions so the whole strip
           // opens the chat's settings, not just the text.
           child: SizedBox(

@@ -24,7 +24,8 @@ named in a cross-reference is findable from this list.
 - `lib/domain/AGENTS.md` — The conversation log, Threads, The projection,
   Carrying on an interrupted turn, Starting a chat, and naming it, Skills and
   agents, Tools per agent, Resending a message, Attachments, Reminders
-- `lib/ui/sidebar/AGENTS.md` — The sidebar's list, Pinned chats
+- `lib/ui/sidebar/AGENTS.md` — The sidebar's list, Pinned chats, A chat's row
+  menu
 - `lib/ui/marketplace/AGENTS.md` — The marketplace page
 - `lib/data/builtin/AGENTS.md` — The agent loop, Tools, Running the commands, Background
   jobs, Running a command yourself, Approvals, Questions, Sub-agents, Their own transcripts,
@@ -40,9 +41,10 @@ named in a cross-reference is findable from this list.
 - `android/AGENTS.md` — Staying alive off screen, The workspaces in the Files
   app, Being the assistant, Waking for a trigger, The app icon, The debug
   build's own
-- `ios/AGENTS.md` — The icon, Export compliance, Privacy declarations, Why no host shell, The iSH driver, The rootfs,
+- `ios/AGENTS.md` — The icon, Export compliance, Privacy declarations, Why no host shell, The iSH driver, The rootfs, The menu bar,
   The workspace inside the guest
 - `macos/AGENTS.md` — Why no sandbox, The entitlements, What a command runs on,
+  The menu bar,
   What is absent, and honestly so, Voice mode, The icon, The DMG, Tests on
   this host
 - `macos/Runner/entoli.icon/AGENTS.md` — the app icon's Icon Composer package:
@@ -66,7 +68,8 @@ named in a cross-reference is findable from this list.
 - `lib/ui/workspace/AGENTS.md` — The workspace explorer
 - `lib/ui/share/AGENTS.md` — Sharing to Entoli
 - `lib/ui/AGENTS.md` — Opening a link, The theme, What the settings page can
-  change about it, The keyboard and the caret
+  change about it, The keyboard and the caret, The app's commands, The menu
+  bar
 - `lib/ui/settings/AGENTS.md` — Setting overrides, What the app is, Backing it
   all up
 - `lib/ui/widgets/AGENTS.md` — Shared UI, A catalog of things to download, The

@@ -16,6 +16,11 @@ import "../widgets/section_header.dart" show mutedParagraph;
 import "../widgets/text_file_page.dart";
 import "linked_instructions.dart";
 
+/// Open the app-level profile: the sidebar's tile and the app menu.
+void openProfile(BuildContext context) => Navigator.of(
+  context,
+).push(MaterialPageRoute(builder: (_) => const ProfilePage(project: null)));
+
 /// Edits what a turn knows about the user. With no [project] this is the
 /// app-level page, shown from the sidebar: the identity fields, which the
 /// prompt renders as "About the user", and the user's global instructions —

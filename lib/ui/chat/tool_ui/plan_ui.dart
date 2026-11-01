@@ -81,11 +81,7 @@ class _PlanLabel extends ConsumerWidget {
                 : IconButton(
                     tooltip: "Open the plan",
                     icon: const Icon(Icons.open_in_full),
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => PlanPage(chatId: chatId),
-                      ),
-                    ),
+                    onPressed: () => openPlan(context, chatId),
                   ),
           ),
           if (sections != null) PlanTaskList(sections: sections),

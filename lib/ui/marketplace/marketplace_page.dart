@@ -34,6 +34,11 @@ final marketplaceEntriesProvider = FutureProvider.autoDispose
       }
     }, retry: (_, _) => null);
 
+/// Open the marketplace: the sidebar's tile and the app menu.
+void openMarketplace(BuildContext context) => Navigator.of(
+  context,
+).push(MaterialPageRoute(builder: (_) => const MarketplacePage()));
+
 /// The marketplace: what the site ships, per section, over its tabs. The
 /// toolbar's box searches — the name and the description alike, over the
 /// entries the fetch already holds — and the filter icon opens the tab's tag

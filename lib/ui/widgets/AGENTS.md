@@ -9,10 +9,24 @@ the `Default`-plus-reset pairing,
 `InheritableDropdown` over both (whose first entry stores null and names what
 null resolves to), the `promptForText` / `promptForPair` / `confirm` /
 `pickProject` dialogs and `copyToClipboard` beside them, `showAnchoredMenu`,
-`NavDrawer` and `navBreakpoint`, `ActionIcon`, `AttachmentChip` /
+`NavDrawer` and `navBreakpoint`, `SidePanelFrame` (below), `ActionIcon`, `AttachmentChip` /
 `AttachmentStrip`, `EmptyPane`, `Nothing`, `TempChatTtlField`, `TristateToggle`,
 `CompletionField`,
 `text_input.dart` — the sections below — and `catalog.dart`.
+
+`SidePanelFrame` is a navigation panel beside a page where the window is wide
+enough and the panel shown, and the page's drawer where it is narrow — the
+shell's sidebar is one. The page is at the same place in the tree in every
+mode, so a toggle or a resize keeps whatever it holds; that is the frame's
+whole reason over a `Row` here and a drawer there, which rebuilt the page
+each time the window crossed the breakpoint. Whether the panel is shown is
+the host's to keep — `shown`, and `onShow` for the frame's own button — so a
+menu command and the button drive the same state. A page below reads where
+the panel is with `SidePanelFrame.of` and puts `SidePanelButton.leadingOf`
+in its bar: the menu button, opening the drawer narrow and docking the panel
+again where it is hidden, and nothing where it is docked. The panel slides in
+and out, pushing the page over. One Scaffold holds the drawer — the
+frame's — so a page under it carries none of its own.
 
 `scrolling.dart` is the shared scroll rule, and it is two things. `nearBottom`
 asks whether the view is close enough to the end to count as reading the

@@ -551,9 +551,7 @@ class _ExtrasPage extends StatelessWidget {
         icon: Icons.storefront_outlined,
         title: "Marketplace",
         detail: "Install skills and agents others have shared.",
-        open: (context) => Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const MarketplacePage())),
+        open: openMarketplace,
       ),
       _SetupRow.category(
         title: "Byte Repair",

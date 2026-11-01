@@ -74,6 +74,20 @@ and has room to its right (see "Shared UI"). The tiles are plain `ListTile`s
 that push their pages; see `lib/ui/marketplace/AGENTS.md` for what
 Marketplace's opens onto.
 
+Where the menu bar is always on screen — macOS, `menuBarAlwaysShown` — the
+app menu holds all three and the tiles are not drawn; the new chat is a tile
+of their own shape in their place, filled with the primary colour, with no
+rule above it to divide it from nothing. iPadOS keeps them: its menu bar hides until asked for and
+is not there at all without a pointer. See "The app's commands" in
+`lib/ui/AGENTS.md`.
+
+## A chat's row menu
+
+The ⋮ button and a right-click open the same menu — Pin, Rename, Move, Delete,
+`_ChatTile._items` — and run the same `chat_actions.dart` functions the Chat
+menu runs on the open chat. Right-click is on every platform rather than a
+desktop's alone: it costs nothing where there is no mouse.
+
 ## A chat that is running
 
 A chat with a turn in flight has a spinner in its row's leading slot, off the
@@ -99,10 +113,8 @@ A pick is returned to the opener rather than run in the palette: the palette's
 ref is disposed by then, and the drawer a picked chat closes is the opener's.
 The shortcut is a `HardwareKeyboard` handler in `AppShell` rather than a
 `Shortcuts` widget, which hears nothing once focus has fallen back to the
-route's scope above it. It is one of `AppShortcut`'s (`lib/ui/shortcuts.dart`),
-the table that handler answers and Settings > Shortcuts lists, so a shortcut
-added there is on the page without anyone remembering to put it there. The
-page is on every platform, phones too, for the keyboard a tablet can have. Deleting a project is on its settings page alone.
+route's scope above it. It is `AppCommand.switchProject` — see "The app's
+commands" in `lib/ui/AGENTS.md`. Deleting a project is on its settings page alone.
 
 New Project makes the project on the device the sidebar is showing, a paired
 one included, and swaps the list for a page in the same panel — name, description,

@@ -1004,10 +1004,7 @@ void main() {
         return chat;
       });
       await io(tester, () => app.repo.createProject("work"));
-      await pumpBeside(
-        tester,
-        beside: SizedBox(width: 300, child: ChatPage(withDrawer: false)),
-      );
+      await pumpBeside(tester, beside: SizedBox(width: 300, child: ChatPage()));
       await settleIo(tester);
       expect(find.text("Default"), findsOneWidget);
 
