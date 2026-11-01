@@ -21,6 +21,14 @@ rm -rf "$helper"
 mkdir -p "$helper/Contents/MacOS"
 
 cp "$app/Contents/MacOS/$EXECUTABLE_NAME" "$helper/Contents/MacOS/$executable"
+# A debug build's binary carries the build directory as an absolute rpath,
+# which the helper has no use for and which takes the header room the rpath
+# below needs: a checkout a few dozen characters deeper and there is none left.
+otool -l "$helper/Contents/MacOS/$executable" |
+  awk '/cmd LC_RPATH/ { getline; getline; sub(/^ *path /, ""); sub(/ \(offset [0-9]+\)$/, ""); if (/^\//) print }' |
+  while read -r path; do
+    install_name_tool -delete_rpath "$path" "$helper/Contents/MacOS/$executable"
+  done
 # @executable_path is the helper's own MacOS directory, four levels inside the
 # app's Contents.
 install_name_tool -add_rpath "@executable_path/../../../../Frameworks" \

@@ -44,12 +44,25 @@ void main() {
     expect(offered(limited, mlxCatalog), [mlxCatalog.first.id]);
   });
 
-  test("llama.cpp is held to three fifths of the RAM", () {
-    // What Android reports for 8 and 12 GB phones, a little under the box.
-    final eight = ModelBudget.memory(7 * gib + gib ~/ 2);
-    final twelve = ModelBudget.memory(11 * gib + gib ~/ 2);
+  test("an Android phone is held to half its RAM", () {
+    // What Android reports for 6, 8, 12 and 16 GB phones, a little under the
+    // box. A Pixel 8 Pro is the 12: the 4B, and not the 9B.
+    final six = ModelBudget.android(5 * gib + gib ~/ 2);
+    final eight = ModelBudget.android(7 * gib + gib ~/ 2);
+    final twelve = ModelBudget.android(11 * gib + gib ~/ 2);
+    final sixteen = ModelBudget.android(15 * gib);
 
+    expect(offered(six, ggufCatalog), [ggufCatalog[0].id]);
     expect(offered(eight, ggufCatalog), [ggufCatalog[0].id, ggufCatalog[1].id]);
+    expect(offered(twelve, ggufCatalog), [
+      ggufCatalog[0].id,
+      ggufCatalog[1].id,
+    ]);
+    expect(offered(sixteen, ggufCatalog), ggufCatalog.map((m) => m.id));
+  });
+
+  test("a Linux machine is held to three fifths of its RAM", () {
+    final twelve = ModelBudget.linux(11 * gib + gib ~/ 2);
     expect(offered(twelve, ggufCatalog), ggufCatalog.map((m) => m.id));
   });
 }

@@ -83,6 +83,11 @@ class _NewChatSettingsPageState extends State<NewChatSettingsPage> {
   );
 }
 
+/// Open [chatId]'s settings: its title bar and the app's Chat menu.
+void openChatSettings(BuildContext context, String chatId) => Navigator.of(
+  context,
+).push(MaterialPageRoute(builder: (_) => ChatSettingsPage(chatId: chatId)));
+
 class ChatSettingsPage extends ConsumerStatefulWidget {
   const ChatSettingsPage({super.key, required this.chatId});
 

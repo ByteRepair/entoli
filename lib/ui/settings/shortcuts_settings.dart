@@ -1,6 +1,6 @@
 import "package:flutter/material.dart";
 
-import "../shortcuts.dart";
+import "../app_command.dart";
 import "../widgets/section_header.dart";
 
 /// The keyboard shortcuts, on every platform: a phone or tablet can have a
@@ -13,11 +13,8 @@ class ShortcutsSection extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       const SectionHeader("Keyboard shortcuts"),
-      for (final shortcut in AppShortcut.values)
-        ListTile(
-          title: Text(shortcut.label),
-          trailing: _Keys(shortcut.keyCaps),
-        ),
+      for (final command in AppCommand.values.where((c) => c.key != null))
+        ListTile(title: Text(command.label), trailing: _Keys(command.keyCaps)),
     ],
   );
 }

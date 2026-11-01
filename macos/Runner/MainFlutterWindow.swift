@@ -21,6 +21,10 @@ class MainFlutterWindow: NSWindow {
       }
     }
 
+    // One window, so no tabs: AppKit would otherwise put Show Tab Bar and Show
+    // All Tabs in the app's View menu.
+    NSWindow.allowsAutomaticWindowTabbing = false
+
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
     self.contentViewController = flutterViewController

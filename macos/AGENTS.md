@@ -59,6 +59,21 @@ starts here. Homebrew itself is the user's to install, its installer wanting
 sudo; see "Byte Repair's environment, in four variables" in
 `lib/data/local/AGENTS.md`.
 
+## The menu bar
+
+The app's menus — `appMenus`, see "The menu bar" in `lib/ui/AGENTS.md` — are
+Flutter's `PlatformMenuBar`, which replaces `MainMenu.xib`'s at the first
+frame; the xib's stays as what shows before it. The first menu is the app's,
+titled by macOS with the app's name. About opens Settings > About rather than
+the standard panel, so it is the page iPadOS's About opens as well.
+
+Because the bar is always there, the sidebar does not draw Profile,
+Marketplace and Settings — `menuBarAlwaysShown` is true here alone.
+
+Window tabbing is off (`NSWindow.allowsAutomaticWindowTabbing`, in
+`MainFlutterWindow.awakeFromNib`): the app has one window, and AppKit would
+otherwise add Show Tab Bar and Show All Tabs to the View menu.
+
 ## Waking for a trigger
 
 **The model the pieces below implement:** `reminders.json` is the only truth,

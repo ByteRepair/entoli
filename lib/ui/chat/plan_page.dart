@@ -4,6 +4,12 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/plan.dart";
 import "widgets/plan_view.dart";
 
+/// Open [chatId]'s plan: the app bar's button, the plan card's and the app's
+/// Chat menu.
+void openPlan(BuildContext context, String chatId) => Navigator.of(
+  context,
+).push(MaterialPageRoute(builder: (_) => PlanPage(chatId: chatId)));
+
 /// The chat's plan on a page of its own: every task with whether it is done,
 /// each opening to the plan written for it. It follows the turn, since the
 /// provider re-reads the file as the conversation grows.
@@ -65,9 +71,7 @@ class PlanButton extends ConsumerWidget {
     return IconButton(
       tooltip: "Plan, $done of $total done",
       icon: const Icon(Icons.checklist),
-      onPressed: () => Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => PlanPage(chatId: chatId))),
+      onPressed: () => openPlan(context, chatId),
     );
   }
 }
