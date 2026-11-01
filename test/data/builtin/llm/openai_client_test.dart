@@ -146,6 +146,33 @@ void main() {
       ]);
     });
 
+    test("calls that share an index but not an id stay apart", () async {
+      // Gemini's parallel calls: each whole, each at index 0.
+      final chunks = await clientStreaming([
+        for (final (id, prompt) in [("a", "one"), ("b", "two")])
+          delta({
+            "tool_calls": [
+              {
+                "index": 0,
+                "id": id,
+                "function": {
+                  "name": "task",
+                  "arguments": jsonEncode({"prompt": prompt}),
+                },
+              },
+            ],
+          }),
+        "[DONE]",
+      ]).stream(const [], model: "gemini-test").toList();
+
+      final calls = chunks.whereType<LlmCompletion>().single.message.toolCalls;
+      expect(calls.map((c) => c.id), ["a", "b"]);
+      expect(calls.map((c) => jsonDecode(c.argumentsJson)["prompt"]), [
+        "one",
+        "two",
+      ]);
+    });
+
     test("a frame that is not JSON is skipped rather than fatal", () async {
       final chunks = await clientStreaming([
         "not json at all",
@@ -305,6 +332,27 @@ void main() {
         "tool_call_id": "c1",
         "content": "output",
       });
+    });
+
+    test("a past call whose arguments do not parse goes back empty", () async {
+      await clientStreaming(["[DONE]"]).stream(const [
+        LlmMessage(
+          role: LlmRole.assistant,
+          toolCalls: [
+            LlmToolCall(
+              id: "c1",
+              name: "task",
+              argumentsJson: '{"prompt":"one"}{"prompt":"two"}',
+            ),
+            LlmToolCall(id: "c2", name: "bash", argumentsJson: '{"a":1}'),
+          ],
+        ),
+      ], model: "gpt-test").toList();
+
+      final calls =
+          (sentBody()["messages"] as List).single["tool_calls"] as List;
+      expect(calls[0]["function"]["arguments"], "{}");
+      expect(calls[1]["function"]["arguments"], '{"a":1}');
     });
   });
 

@@ -95,7 +95,9 @@ class OpenAiClient implements LlmClient {
 
     final text = StringBuffer();
     final reasoning = StringBuffer();
-    final calls = <int, _PartialCall>{};
+    final calls = <_PartialCall>[];
+    // The call each stream index is currently adding to.
+    final open = <int, _PartialCall>{};
     final images = <LlmAttachment>[];
     String? finishReason;
     LlmUsage? usage;
@@ -175,8 +177,17 @@ class OpenAiClient implements LlmClient {
         for (final raw in toolCalls) {
           if (raw is! Map<String, dynamic>) continue;
           final index = (raw["index"] as num?)?.toInt() ?? 0;
-          final call = calls.putIfAbsent(index, _PartialCall.new);
-          if (raw["id"] is String) call.id = raw["id"] as String;
+          final id = raw["id"] is String ? raw["id"] as String : null;
+          // Gemini sends parallel calls whole, one per frame, each at index 0
+          // with its own id: a new id at a taken index is a new call, or
+          // their arguments run together into something no tool parses.
+          var call = open[index];
+          if (call == null ||
+              (id != null && call.id != null && call.id != id)) {
+            call = open[index] = _PartialCall();
+            calls.add(call);
+          }
+          if (id != null) call.id = id;
           call.signature ??= _thoughtSignature(raw);
           final function = raw["function"] as Map<String, dynamic>?;
           if (function == null) continue;
@@ -200,12 +211,12 @@ class OpenAiClient implements LlmClient {
         reasoning: reasoning.isEmpty ? null : reasoning.toString(),
         attachments: images,
         toolCalls: [
-          for (final index in calls.keys.toList()..sort())
+          for (final (i, call) in calls.indexed)
             LlmToolCall(
-              id: calls[index]!.id ?? "call_$index",
-              name: calls[index]!.name ?? "",
-              argumentsJson: calls[index]!.arguments.toString(),
-              signature: calls[index]!.signature,
+              id: call.id ?? "call_$i",
+              name: call.name ?? "",
+              argumentsJson: call.arguments.toString(),
+              signature: call.signature,
             ),
         ],
       ),
@@ -381,7 +392,7 @@ class OpenAiClient implements LlmClient {
                   "type": "function",
                   "function": {
                     "name": call.name,
-                    "arguments": call.argumentsJson,
+                    "arguments": _replayable(call.argumentsJson),
                   },
                   if ((call.signature ?? (i == 0 ? placeholder : null))
                       case final signature?)
@@ -446,6 +457,20 @@ String? _thoughtSignature(Map<String, dynamic> call) {
   final google = extra is Map ? extra["google"] : null;
   final signature = google is Map ? google["thought_signature"] : null;
   return signature is String && signature.isNotEmpty ? signature : null;
+}
+
+/// [arguments] as they can go back in a request. Gemini refuses a whole
+/// request, as an invalid argument, over one past call whose arguments are not
+/// a JSON object — and since the log keeps that call, it refused every turn
+/// after it. The tool already answered that it could not read them, so the
+/// model loses nothing it was not told.
+String _replayable(String arguments) {
+  try {
+    if (jsonDecode(arguments) is Map) return arguments;
+  } on FormatException {
+    // Below.
+  }
+  return "{}";
 }
 
 class _PartialCall {
