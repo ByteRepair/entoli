@@ -2,16 +2,17 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../domain/builtin_project.dart";
 import "chat/chat_page.dart";
-import "shortcuts.dart";
-import "sidebar/project_palette.dart";
+import "app_command.dart";
+import "app_menu_bar.dart";
+import "commands.dart";
 import "sidebar/sidebar.dart";
 import "selection.dart";
-import "widgets/nav_drawer.dart";
+import "widgets/side_panel_frame.dart";
 
-/// Responsive shell: sidebar + chat pane. On narrow screens the sidebar
-/// collapses into a drawer the chat page carries.
+/// The sidebar and the chat pane, in a [SidePanelFrame]: beside each other
+/// where the window is wide and the sidebar is shown, the sidebar a drawer
+/// where it is narrow.
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 
@@ -32,46 +33,26 @@ class _AppShellState extends ConsumerState<AppShell> {
     super.dispose();
   }
 
-  /// The [AppShortcut]s. A handler rather than a `Shortcuts` widget: those
-  /// hear a key only while focus is below them, and with nothing in the shell
-  /// focused it is the route's scope, which is above.
+  /// The [AppCommand]s' keys. A handler rather than a `Shortcuts` widget:
+  /// those hear a key only while focus is below them, and with nothing in the
+  /// shell focused it is the route's scope, which is above. Where a menu bar
+  /// holds the same keys, whichever hears one first runs it and the other
+  /// never does.
   bool _key(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
-    final shortcut = AppShortcut.of(event);
-    if (shortcut == null) return false;
-    // Not over a page pushed on top, the palette itself included.
-    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return false;
-    switch (shortcut) {
-      case AppShortcut.projectPalette:
-        showProjectPalette(context, ref);
-      case AppShortcut.newChat:
-        openNewChatIn(context, ref, null);
-      case AppShortcut.newAnonymousChat:
-        openNewChatIn(context, ref, const AnonymousProject().dir);
-      case AppShortcut.newOmadaChat:
-        openNewChatIn(context, ref, omadaBaseProject);
-      case AppShortcut.togglePin:
-        toggleOpenChatPin(ref);
-    }
-    return true;
+    final command = AppCommand.of(event);
+    if (command == null) return false;
+    return Commands.read(context, ref).run(command);
   }
 
   @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final wide = constraints.maxWidth >= navBreakpoint;
-        if (wide) {
-          return Row(
-            children: const [
-              SizedBox(width: sidebarWidth, child: Sidebar()),
-              VerticalDivider(width: 1),
-              Expanded(child: ChatPage()),
-            ],
-          );
-        }
-        return const ChatPage(withDrawer: true);
-      },
-    );
-  }
+  Widget build(BuildContext context) => AppMenuBar(
+    child: SidePanelFrame(
+      panel: const Sidebar(),
+      panelWidth: sidebarWidth,
+      shown: ref.watch(sidebarShownProvider),
+      onShownChanged: ref.read(sidebarShownProvider.notifier).set,
+      child: const ChatPage(),
+    ),
+  );
 }

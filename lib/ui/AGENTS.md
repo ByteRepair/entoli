@@ -194,3 +194,61 @@ the node the keyboard was up for is the whole of the test. The gap it leaves is
 focus moving straight from one field to another, where the insets never fall and
 the second field keeps its caret; closing that means watching every focus change,
 which is how a reply's selection would get dropped.
+
+## The app's commands
+
+Everything the app can be told to do by name — a new chat, Settings, pin the
+open chat, hide the sidebar — is an `AppCommand` (`app_command.dart`): its
+label and its keys, nothing else. The enum's name is the command's id, which
+is why one is never renamed: a key, a menu item and whatever names one next (a
+Windows jump list, a Linux `.desktop` action, an argument the app is launched
+with) all say which command by it. Settings > Shortcuts lists the ones with
+keys, so the page cannot disagree with what answers them.
+
+What a command does is `Commands` (`commands.dart`), and it is one switch.
+`Commands.watch` is a snapshot of what the app has open taken in a build — so a
+menu greys and labels its items afresh as the app changes — and
+`Commands.read` the same taken at a key or a click, which `run` acts on.
+`canRun` is the one answer to whether a command can run now, and both the keys
+and the menus ask it. A command is not `anywhere` unless it opens one of the
+app's own pages, and the rest only run with the chat pane in front: they act
+on what it shows, and a page pushed over it is hiding that. Settings over
+Settings replaces it rather than stacking a second.
+
+The commands that act on one chat — pin, rename, move, delete — are functions
+in `chat_actions.dart` taking that chat, so the sidebar row runs them on its
+own and `Commands` on the open one; the project's pages beside its chats are
+`project_actions.dart`, which says which of them a project has for the
+switcher's buttons and the Project menu alike. A mirrored chat runs none of
+them from the menu: its state is its home device's.
+
+Two things are deliberately not commands. Next and previous chapter and jump
+to latest are the chat page's private scroll state, and offering them would
+have the page register itself with the menu while mounted — a second way for
+a command to exist, with a lifetime. The new-chat screen's own settings are
+held by that screen until there is a chat, for the same reason.
+
+### The menu bar
+
+`appMenus` (`app_menu_bar.dart`) is the menu bar as data: menus of groups of
+commands, and the platform's own items after them (Hide, Quit, Full Screen —
+macOS's alone, dropped where `PlatformProvidedMenuItem.hasMenu` says no).
+`AppMenuBar` draws it as Flutter's `PlatformMenuBar` inside `AppShell`, below
+the Navigator the commands open their pages on. A command's keys and its menu
+item both run it, and whichever hears the keys first does: Flutter's key
+handler where it gets them, the platform's menu where it does.
+
+Flutter's engine has a menu bar on macOS alone. iPadOS gets the same menus
+over `agent_chat/menu`, which `installMenuChannel` points Flutter's own
+`DefaultPlatformMenuDelegate` at — the engine's protocol, so the Dart is the
+same on both and only the Swift answering it differs; see "The menu bar" in
+`ios/AGENTS.md`. Every other platform draws none. `platformHasMenus` says
+where there are menus, `menuBarAlwaysShown` where they are always on screen,
+which is what takes the sidebar's Profile, Marketplace and Settings off it.
+
+The sidebar can be hidden (`sidebarShownProvider`, the View menu, Ctrl+Alt+S).
+`AppShell` lays it out in a `SidePanelFrame` (see `lib/ui/widgets/AGENTS.md`),
+which the setting is the `shown` of: hidden, the chat pane takes the window and
+its bar has a button that brings the sidebar back, so it is in reach on a
+platform with no menus too. A narrow window has the sidebar as a drawer
+whatever the setting says.

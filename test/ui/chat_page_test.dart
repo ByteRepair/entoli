@@ -24,6 +24,8 @@ import "package:agent_chat/ui/chat/widgets/omada_separator.dart";
 import "package:agent_chat/ui/widgets/agent_picture.dart"
     show AgentPictureImage;
 import "package:agent_chat/ui/chat/chat_controller.dart";
+import "package:agent_chat/ui/sidebar/sidebar.dart";
+import "package:agent_chat/ui/widgets/side_panel_frame.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/chat/plan_page.dart";
 import "package:agent_chat/ui/chat/widgets/chapter_rail.dart";
@@ -100,7 +102,7 @@ void main() {
     // Nothing selected is the new-chat screen, and it is only a screen: no
     // chat is made until something is said.
     Future<void> openEmpty(WidgetTester tester) async {
-      await app.pump(tester, const ChatPage(withDrawer: true), settle: false);
+      await app.pump(tester, const ChatPage(), settle: false);
       await pumpUntil(tester, find.byType(Composer));
       await settleIo(tester);
     }
@@ -182,7 +184,7 @@ void main() {
         project: null,
       ));
 
-      await app.pump(tester, const ChatPage(withDrawer: true));
+      await app.pump(tester, const ChatPage());
 
       expect(find.byType(Composer), findsOneWidget);
       expect(find.byTooltip("Chat settings"), findsNothing);
@@ -206,7 +208,7 @@ void main() {
         project: null,
       ));
 
-      await app.pump(tester, const ChatPage(withDrawer: true));
+      await app.pump(tester, const ChatPage());
 
       expect(find.byType(Composer), findsNothing);
       expect(find.byType(ViewOnlyBar), findsOneWidget);
@@ -574,7 +576,14 @@ void main() {
       await io(tester, () => app.repo.createProject("work"));
       await io(tester, () => app.seedChat(title: "at work", project: "work"));
       await io(tester, () => app.seedChat(title: "at home"));
-      await openEmpty(tester);
+      // The drawer is the frame's, as the shell has it.
+      await app.pump(
+        tester,
+        const SidePanelFrame(panel: Sidebar(), child: ChatPage()),
+        settle: false,
+      );
+      await pumpUntil(tester, find.byType(Composer));
+      await settleIo(tester);
 
       await pick(tester, "work");
       await tester.tap(find.byIcon(Icons.menu));
@@ -1346,7 +1355,7 @@ void main() {
     );
 
     Future<void> openNew(WidgetTester tester) async {
-      await app.pump(tester, const ChatPage(withDrawer: true), settle: false);
+      await app.pump(tester, const ChatPage(), settle: false);
       await pumpUntil(tester, find.byType(Composer));
       await settleIo(tester);
     }

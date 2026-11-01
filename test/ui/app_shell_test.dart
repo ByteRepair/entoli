@@ -1,3 +1,4 @@
+import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -174,7 +175,7 @@ void main() {
       );
     });
 
-    testWidgets("Ctrl+P pins the open chat, and again unpins it", (
+    testWidgets("Ctrl+Shift+P pins the open chat, and again unpins it", (
       tester,
     ) async {
       await pumpAt(tester, const Size(1200, 800));
@@ -186,11 +187,11 @@ void main() {
         () => app.repo.openChat(chat.state.id),
       )).state.pinned;
 
-      await chord(tester, LogicalKeyboardKey.keyP);
+      await chord(tester, LogicalKeyboardKey.keyP, shift: true);
       await pumpUntil(tester, find.text(pinnedHeading));
       expect(await pinned(), isTrue);
 
-      await chord(tester, LogicalKeyboardKey.keyP);
+      await chord(tester, LogicalKeyboardKey.keyP, shift: true);
       for (
         var i = 0;
         i < 50 && find.text(pinnedHeading).evaluate().isNotEmpty;
@@ -203,5 +204,130 @@ void main() {
       }
       expect(await pinned(), isFalse);
     });
+
+    testWidgets("Ctrl+Alt+S hides the docked sidebar, and again shows it", (
+      tester,
+    ) async {
+      await pumpAt(tester, const Size(1200, 800));
+
+      await chord(tester, LogicalKeyboardKey.keyS, alt: true);
+      expect(find.byType(Sidebar), findsNothing);
+      expect(find.byTooltip("Show sidebar"), findsOneWidget);
+
+      await chord(tester, LogicalKeyboardKey.keyS, alt: true);
+      expect(find.byType(Sidebar), findsOneWidget);
+    });
   });
+
+  group("the sidebar frame", () {
+    testWidgets("hidden, the chat's bar has the way to show it again", (
+      tester,
+    ) async {
+      await pumpAt(tester, const Size(1200, 800));
+      expect(find.byTooltip("Show sidebar"), findsNothing);
+
+      app.container.read(sidebarShownProvider.notifier).set(false);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip("Show sidebar"));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Sidebar), findsOneWidget);
+      expect(app.container.read(sidebarShownProvider), isTrue);
+    });
+
+    // The chat pane is the same widget docked, hidden and as a drawer's page,
+    // so what is typed into it survives all three.
+    testWidgets("the chat pane keeps its state through a toggle and a resize", (
+      tester,
+    ) async {
+      await pumpAt(tester, const Size(1200, 800));
+      await tester.enterText(find.byType(TextField).last, "half a thought");
+
+      app.container.read(sidebarShownProvider.notifier).set(false);
+      await tester.pumpAndSettle();
+      useWindow(tester, const Size(500, 900));
+      await tester.pumpAndSettle();
+
+      expect(find.text("half a thought"), findsOneWidget);
+    });
+  });
+
+  // macOS, over a delegate that keeps what the platform would have been sent.
+  group("the menu bar", () {
+    late _Menus menus;
+
+    Future<void> pumpMac(WidgetTester tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      final previous = WidgetsBinding.instance.platformMenuDelegate;
+      menus = _Menus();
+      WidgetsBinding.instance.platformMenuDelegate = menus;
+      addTearDown(
+        () => WidgetsBinding.instance.platformMenuDelegate = previous,
+      );
+      await pumpAt(tester, const Size(1200, 800));
+    }
+
+    testWidgets("holds the sidebar's app pages, which leave the sidebar", (
+      tester,
+    ) async {
+      await pumpMac(tester);
+
+      expect(menus.item("Settings…"), isNotNull);
+      expect(menus.item("Profile…"), isNotNull);
+      expect(menus.item("Marketplace…"), isNotNull);
+      expect(find.text("Marketplace"), findsNothing);
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    testWidgets("greys the chat's commands until there is a chat open", (
+      tester,
+    ) async {
+      await pumpMac(tester);
+      expect(menus.item("Pin Chat")!.onSelected, isNull);
+
+      await io(tester, () => app.openSomeChat());
+      await settleIo(tester);
+
+      expect(menus.item("Pin Chat")!.onSelected, isNotNull);
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    testWidgets("an item runs its command", (tester) async {
+      await pumpMac(tester);
+
+      menus.item("Hide Sidebar")!.onSelected!();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Sidebar), findsNothing);
+      expect(menus.item("Show Sidebar"), isNotNull);
+      debugDefaultTargetPlatformOverride = null;
+    });
+  });
+}
+
+class _Menus extends PlatformMenuDelegate {
+  List<PlatformMenuItem> _menus = const [];
+
+  /// The item labelled [label], in any menu.
+  PlatformMenuItem? item(String label) {
+    // A group's members are not its descendants, so the walk is by hand.
+    Iterable<PlatformMenuItem> all(PlatformMenuItem item) => [
+      item,
+      if (item is PlatformMenu) ...item.menus.expand(all),
+      if (item is PlatformMenuItemGroup) ...item.members.expand(all),
+    ];
+    return _menus.expand(all).where((item) => item.label == label).firstOrNull;
+  }
+
+  @override
+  void setMenus(List<PlatformMenuItem> topLevelMenus) => _menus = topLevelMenus;
+
+  @override
+  void clearMenus() => _menus = const [];
+
+  @override
+  bool debugLockDelegate(BuildContext context) => true;
+
+  @override
+  bool debugUnlockDelegate(BuildContext context) => true;
 }

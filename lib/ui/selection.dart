@@ -69,6 +69,22 @@ final selectedProjectProvider = NotifierProvider<SelectedProject, ProjectRef>(
   SelectedProject.new,
 );
 
+/// Whether the sidebar is docked beside the chat pane where the window is wide
+/// enough for it — the user's choice, which a narrow window does not change:
+/// there the sidebar is a drawer whichever this says. See `SidebarFrame`.
+class SidebarShown extends Notifier<bool> {
+  @override
+  bool build() => true;
+
+  void set(bool shown) => state = shown;
+
+  void toggle() => state = !state;
+}
+
+final sidebarShownProvider = NotifierProvider<SidebarShown, bool>(
+  SidebarShown.new,
+);
+
 void openChat(BuildContext context, WidgetRef ref, String chatId) {
   ref.read(selectedChatIdProvider.notifier).select(chatId);
   closeNavDrawer(context);
