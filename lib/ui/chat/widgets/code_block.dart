@@ -38,6 +38,7 @@ import "package:re_highlight/languages/xml.dart";
 import "package:re_highlight/languages/yaml.dart";
 
 import "../../fonts.dart";
+import "../../selection/copied_block_scope.dart";
 import "../../widgets/action_icon.dart";
 import "../../widgets/dialogs.dart";
 
@@ -265,9 +266,20 @@ TextStyle _codeFont(ThemeData theme) => TextStyle(
 /// which is what a block gets — but a block is one thing on a line of its own,
 /// while inline code has to wrap with the sentence, and a `WidgetSpan` cannot
 /// break across lines.
-TextStyle inlineCodeStyle(ThemeData theme) => _codeFont(
-  theme,
-).copyWith(backgroundColor: theme.colorScheme.surfaceContainerHighest);
+///
+/// **Translucent, not a surface colour.** A paragraph paints its selection
+/// highlight first and its text after, span backgrounds included, so an
+/// opaque background hid the highlight wherever it fell on inline code.
+/// [_inlineCodeTint] of the text colour over the page reads as the same
+/// raised surface and lets the highlight show through.
+TextStyle inlineCodeStyle(ThemeData theme) => _codeFont(theme).copyWith(
+  backgroundColor: theme.colorScheme.onSurface.withValues(
+    alpha: _inlineCodeTint,
+  ),
+);
+
+/// How much of the text colour inline code's background carries.
+const _inlineCodeTint = 0.08;
 
 /// What a block adds: room between the lines, because a block is read as lines
 /// where an inline span is read as part of a sentence. Public because the
@@ -315,9 +327,18 @@ class CodeBlock extends StatelessWidget {
       SelectionContainer.disabled(child: _bar(context)),
       SidewaysScroll(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-        child: Text.rich(
-          span ??
-              CodeBlockBuilder.cachedSpanOf(code, language, Theme.of(context)),
+        // Says it is code, and which, to a selection copying it: what was
+        // fenced is not in the words.
+        child: CopiedBlockScope.code(
+          language: language,
+          child: Text.rich(
+            span ??
+                CodeBlockBuilder.cachedSpanOf(
+                  code,
+                  language,
+                  Theme.of(context),
+                ),
+          ),
         ),
       ),
     ],
@@ -358,6 +379,13 @@ class CodeBlock extends StatelessWidget {
 /// the code that was written — nor the formula, which is the other thing set
 /// in it. Stateful for the controller alone: a `Scrollbar` and the view it
 /// reports on have to be given the same one.
+///
+/// **What it holds is selected as part of the page around it.** A scroll view
+/// is a selection container of its own, which made a code block a block apart
+/// to whatever selection crossed it: its highlight and handles were the
+/// scroll's to draw, and what it copied was the scroll's text alone. The
+/// registrar above is handed straight through, so the lines inside register
+/// with the same container as the paragraphs either side of them.
 class SidewaysScroll extends StatefulWidget {
   const SidewaysScroll({
     super.key,
@@ -382,13 +410,21 @@ class _SidewaysScrollState extends State<SidewaysScroll> {
   }
 
   @override
-  Widget build(BuildContext context) => Scrollbar(
-    controller: _controller,
-    child: SingleChildScrollView(
+  Widget build(BuildContext context) {
+    final registrar = SelectionContainer.maybeOf(context);
+    return Scrollbar(
       controller: _controller,
-      scrollDirection: Axis.horizontal,
-      padding: widget.padding,
-      child: widget.child,
-    ),
-  );
+      child: SingleChildScrollView(
+        controller: _controller,
+        scrollDirection: Axis.horizontal,
+        padding: widget.padding,
+        child: registrar == null
+            ? widget.child
+            : SelectionRegistrarScope(
+                registrar: registrar,
+                child: widget.child,
+              ),
+      ),
+    );
+  }
 }

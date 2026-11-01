@@ -72,9 +72,17 @@ class _FormattedTextVisitor implements md.NodeVisitor {
 /// where the renderer shows it as the characters it is. Every text node is
 /// escaped here, so `<div>` in prose pastes as `<div>`. Styles are inline,
 /// since a word processor reads no stylesheet.
-String formattedHtmlOf(String markdown) {
+///
+/// A formula is what [formula] makes of its TeX as written — a picture of
+/// it, where the screen has one to give — or that TeX, escaped: a word
+/// processor has no element that draws it, and an unknown one would be
+/// dropped with its text.
+String formattedHtmlOf(
+  String markdown, {
+  String Function(String written)? formula,
+}) {
   final buffer = StringBuffer();
-  final visitor = _HtmlVisitor(buffer);
+  final visitor = _HtmlVisitor(buffer, formula ?? escapeHtml);
   for (final node in parseReply(markdown)) {
     node.accept(visitor);
   }
@@ -129,16 +137,15 @@ List<md.Node> parseReply(String markdown) => md.Document(
 ).parseLines(markdown.split("\n"));
 
 class _HtmlVisitor implements md.NodeVisitor {
-  _HtmlVisitor(this.buffer);
+  _HtmlVisitor(this.buffer, this.formula);
 
   final StringBuffer buffer;
+  final String Function(String written) formula;
 
   @override
   bool visitElementBefore(md.Element element) {
-    // A formula pastes as the TeX it was written as: a word processor has no
-    // element that draws it, and an unknown one would be dropped with its text.
     if (mathTags.contains(element.tag)) {
-      buffer.write(escapeHtml(element.textContent));
+      buffer.write(formula(element.textContent));
       return false;
     }
     buffer.write("<${element.tag}");
@@ -210,6 +217,15 @@ class RenderedOutline {
 
   RenderedBlock? blockOf(String text) => _blocks[_key(text)];
 
+  /// What [node] reads as once drawn: its words, a formula being none — what
+  /// stands in for one on screen is the renderer's to leave out.
+  static String _drawn(md.Node node) => switch (node) {
+    md.Element(:final tag) when mathTags.contains(tag) => "",
+    md.Element(:final children) =>
+      (children ?? const <md.Node>[]).map(_drawn).join(),
+    _ => node.textContent,
+  };
+
   /// The target of the link whose words include [text]: a link with bold
   /// inside it renders as more than one span.
   String? hrefOf(String text) {
@@ -226,7 +242,7 @@ class RenderedOutline {
       text.replaceAll(RegExp(r"\s+"), " ").trim();
 
   void _add(md.Node node, RenderedBlock block) =>
-      _blocks.putIfAbsent(_key(node.textContent), () => block);
+      _blocks.putIfAbsent(_key(_drawn(node)), () => block);
 
   void _walk(md.Node node, {required bool quoted, RenderedBlock? item}) {
     if (node is! md.Element) return;
@@ -251,7 +267,7 @@ class RenderedOutline {
         _add(node, RenderedBlock(BlockKind.cell, quoted: quoted));
       case "a":
         if (node.attributes["href"] case final href?) {
-          _links.putIfAbsent(_key(node.textContent), () => href);
+          _links.putIfAbsent(_key(_drawn(node)), () => href);
         }
       case "blockquote":
         for (final child in node.children ?? const <md.Node>[]) {
@@ -278,10 +294,7 @@ class RenderedOutline {
                 child,
           ];
           if (inline.isNotEmpty) {
-            _blocks.putIfAbsent(
-              _key(inline.map((child) => child.textContent).join()),
-              () => block,
-            );
+            _blocks.putIfAbsent(_key(inline.map(_drawn).join()), () => block);
           }
           for (final child in li.children ?? const <md.Node>[]) {
             _walk(child, quoted: quoted, item: block);
