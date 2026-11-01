@@ -885,15 +885,21 @@ The part carries an `excerpt` of the message too, for the reason
 `ShellRunPart` carries its command — the projection words one message at a
 time. `reactionTurnText` is the wording, the handle first where there is one:
 `@build The user has responded with 👍 (thumbs up) to the message:` and the
-excerpt quoted under it. Reacting again with an emoji already chosen is not
-offered: the picker marks the chosen ones, and picking one takes it back.
-After that, reacting with it again is a new message and a new turn.
+excerpt quoted under it.
+
+**`ChatRoom.react` is one verb that toggles**, and so is everything that
+carries it — the drivers, `SyncMessage.react`, the picker's one callback. The
+room decides: a message that already has that emoji live (`liveReactions`,
+the one statement of what a live reaction is) has it taken back; anything
+else is reacted to. The picker marks the chosen ones so the user can tell
+which it will be. Reacting again after taking one back is a new message and
+a new turn.
 
 **Taking one back is a record, not a deletion.** It appends
-`retract {messageId, cancelled}`, naming the reaction's own message; replay
-sets `Message.retraction` on it, and it comes off the message it answered.
+`retract {messageId, retraction}`, naming the reaction's own message; replay
+sets `Message.retraction` from it, and it comes off the message it answered.
 The message stays on the log, because it was said. What happens to its turn is
-the one decision, and `cancelled` records it:
+the one decision, and the record carries it:
 
 - **Its turn had started, or finished** (`afterItsTurn`): the turn carries on
   and its reply stays — deleting the thread is how to take that back, as for
@@ -902,9 +908,13 @@ the one decision, and `cancelled` records it:
   schedule (`Schedule.dropPrompt`), so no turn ever opens for it, and the
   projection leaves it out — as far as any model is told, it was never said.
 
-**On screen it is not a row.** `entriesOf` and the chapter rail skip the
-reaction's own message, and `reactionsOn` gives each message the emoji it was
-reacted with, each once, drawn at the end of its action row after a divider.
+**On screen it is not a row.** `drawnAsRow` (beside `endedSilently`, the
+other message on the log alone) is what `entriesOf` and the chapter rail both
+skip by, and the row a running turn appends to is the newest message that is
+not a reaction — a reaction queued behind the turn does not take the spinner
+from it. `reactionsOn` gives each message its live emoji, each once, drawn
+at the outer end of its action row — the left under a reply, the right under
+the user's own — with a divider between them and the actions.
 They stay up while the actions fade, being what was said about the message
 rather than something to do to it. The picker is a pill of the six over the
 smiley, centred on it (`showAnchoredPopup`, a route like `showAnchoredMenu`,

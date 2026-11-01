@@ -15,23 +15,26 @@ Future<T?> showAnchoredMenu<T>(
   BuildContext context,
   List<PopupMenuEntry<T>> items,
 ) {
-  final button = context.findRenderObject()! as RenderBox;
-  final overlay =
-      Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
-  final under = Offset(0, button.size.height);
+  final (button, overlay) = _anchorOf(context);
   return showMenu<T>(
     context: context,
     position: RelativeRect.fromRect(
-      Rect.fromPoints(
-        button.localToGlobal(under, ancestor: overlay),
-        button.localToGlobal(
-          button.size.bottomRight(Offset.zero) + under,
-          ancestor: overlay,
-        ),
-      ),
-      Offset.zero & overlay.size,
+      button.shift(Offset(0, button.height)),
+      Offset.zero & overlay,
     ),
     items: items,
+  );
+}
+
+/// Where the widget [context] belongs to is, in the navigator's overlay, and
+/// how big that overlay is: what both anchored popups place themselves by.
+(Rect, Size) _anchorOf(BuildContext context) {
+  final button = context.findRenderObject()! as RenderBox;
+  final overlay =
+      Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+  return (
+    button.localToGlobal(Offset.zero, ancestor: overlay) & button.size,
+    overlay.size,
   );
 }
 
@@ -41,13 +44,10 @@ Future<T?> showAnchoredMenu<T>(
 /// [showAnchoredMenu] is one, so back, Escape and a tap outside close it. The
 /// popup pops itself with its answer.
 Future<T?> showAnchoredPopup<T>(BuildContext context, WidgetBuilder builder) {
-  final button = context.findRenderObject()! as RenderBox;
-  final navigator = Navigator.of(context);
-  final overlay = navigator.overlay!.context.findRenderObject()! as RenderBox;
-  return navigator.push(
+  final (button, _) = _anchorOf(context);
+  return Navigator.of(context).push(
     _AnchoredPopupRoute<T>(
-      anchor:
-          button.localToGlobal(Offset.zero, ancestor: overlay) & button.size,
+      anchor: button,
       builder: builder,
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
     ),

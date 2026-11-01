@@ -112,7 +112,8 @@ void main() {
     final own = room.state.chat!.messages.first;
     await room.react(own.id, Reaction.fire);
     await waitFor(() => room.state.isRunning, what: "the reaction's turn");
-    await room.retract(own.id, Reaction.fire);
+    // Reacting with what it already has takes it back.
+    await room.react(own.id, Reaction.fire);
     expect(room.state.isRunning, isTrue);
     hold.complete();
     await waitFor(() => host.settled == 2, what: "the reaction's settle");
@@ -133,7 +134,7 @@ void main() {
     final own = room.state.chat!.messages.first;
     // The room is busy, so the reaction waits its turn.
     await room.react(own.id, Reaction.thumbsUp);
-    await room.retract(own.id, Reaction.thumbsUp);
+    await room.react(own.id, Reaction.thumbsUp);
     app.backend.hold = null;
     hold.complete();
     await waitFor(() => host.settled == 1, what: "the settle");

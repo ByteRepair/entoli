@@ -12,9 +12,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: Center(
-            child: ReactionButton(onReact: picked.add, onRetract: (_) {}),
-          ),
+          body: Center(child: ReactionButton(onReact: picked.add)),
         ),
       ),
     );
@@ -38,9 +36,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: Center(
-            child: ReactionButton(onReact: picked.add, onRetract: (_) {}),
-          ),
+          body: Center(child: ReactionButton(onReact: picked.add)),
         ),
       ),
     );
@@ -58,9 +54,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: Center(
-            child: ReactionButton(onReact: (_) {}, onRetract: (_) {}),
-          ),
+          body: Center(child: ReactionButton(onReact: (_) {})),
         ),
       ),
     );
@@ -76,20 +70,15 @@ void main() {
     expect(popup.bottom, greaterThan(button.top - 16));
   });
 
-  testWidgets("a chosen emoji is shown chosen, and picking it retracts", (
+  testWidgets("a chosen emoji is shown chosen, and can be picked again", (
     tester,
   ) async {
-    final reacted = <Reaction>[];
-    final retracted = <Reaction>[];
+    final picked = <Reaction>[];
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: Center(
-            child: ReactionButton(
-              onReact: reacted.add,
-              onRetract: retracted.add,
-              chosen: const ["🔥"],
-            ),
+            child: ReactionButton(onReact: picked.add, chosen: const ["🔥"]),
           ),
         ),
       ),
@@ -106,7 +95,7 @@ void main() {
 
     await tester.tap(find.text("🔥"));
     await tester.pumpAndSettle();
-    expect(retracted, [Reaction.fire]);
-    expect(reacted, isEmpty);
+    // The room is what decides a chosen one is taken back.
+    expect(picked, [Reaction.fire]);
   });
 }

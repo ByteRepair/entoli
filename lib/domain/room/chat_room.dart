@@ -218,12 +218,14 @@ class ChatRoom {
   /// only turn, and a second reply growing beside it is not patched by
   /// coincidence.
   void _writeReply(_RunningTurn turn, List<MessagePart> parts) =>
-      _updateReply(turn, (m) => m.copyWith(parts: parts));
+      _updateMessage(turn.replyId, (m) => m.copyWith(parts: parts));
 
-  void _updateReply(_RunningTurn turn, Message Function(Message) change) {
+  /// Change the message [id] in the chat as it is now — read after whatever
+  /// was awaited, so what changed in flight is not reverted.
+  void _updateMessage(String id, Message Function(Message) change) {
     final chat = state.chat;
     if (chat == null) return;
-    final at = chat.messages.indexWhere((m) => m.id == turn.replyId);
+    final at = chat.messages.indexWhere((m) => m.id == id);
     if (at < 0) return;
     final messages = List<Message>.from(chat.messages);
     messages[at] = change(messages[at]);
@@ -301,20 +303,27 @@ class ChatRoom {
     await _prompt(text, files: files);
   }
 
-  /// React to [messageId] with [reaction]. Said like anything else, to whoever
-  /// wrote the message — the main agent where nobody in particular did — and
-  /// never steering: a reaction answers something finished, so while the
-  /// room runs it waits its turn.
+  /// React to [messageId] with [reaction], or take it back where it is
+  /// already there — the picker's one verb.
+  ///
+  /// Reacting is said like anything else, to whoever wrote the message — the
+  /// main agent where nobody in particular did — and never steers: it
+  /// answers something finished, so while the room runs it waits its turn.
+  ///
+  /// Taking back is a record, not a deletion. A turn the reaction started
+  /// carries on — the reply stays, to delete as any other — while one still
+  /// queued is taken off the queue and never runs, which the record says.
   Future<void> react(String messageId, Reaction reaction) async {
     await _ready;
     final chat = state.chat;
     final target = chat?.messages.firstWhereOrNull((m) => m.id == messageId);
     if (chat == null || target == null) return;
-    // Already said and not taken back: the picker offers it only to retract.
-    if (reactionsOn(chat.messages)[messageId]?.contains(reaction.emoji) ??
-        false) {
-      return;
-    }
+    final live = liveReactions(
+      chat.messages,
+      to: messageId,
+      emoji: reaction.emoji,
+    ).toList();
+    if (live.isNotEmpty) return _retract(live);
     final say = reactionTo(
       target,
       reaction,
@@ -325,42 +334,20 @@ class ChatRoom {
     await _schedulePrompt(chat, say);
   }
 
-  /// Take back the [reaction] to [messageId]. A turn it started carries on —
-  /// the reply stays, to delete as any other — while one still queued is
-  /// taken off the queue and never runs, which the record says.
-  Future<void> retract(String messageId, Reaction reaction) async {
-    await _ready;
-    final chat = state.chat;
-    if (chat == null) return;
+  Future<void> _retract(List<Message> reactions) async {
     final records = [
-      for (final m in chat.messages)
-        if (m.reaction case ReactionPart(messageId: final on, :final emoji)
-            when on == messageId &&
-                emoji == reaction.emoji &&
-                m.retraction == null)
-          ChatRecord.retract(
-            messageId: m.id,
-            cancelled: _schedule.dropPrompt(m.id),
-          ),
+      for (final m in reactions)
+        RetractRecord(
+          messageId: m.id,
+          retraction: _schedule.dropPrompt(m.id)
+              ? Retraction.beforeItsTurn
+              : Retraction.afterItsTurn,
+        ),
     ];
-    if (records.isEmpty) return;
     await _append(records);
-    final now = state.chat;
-    if (now == null) return;
-    final retracted = {
-      for (final r in records.cast<RetractRecord>())
-        r.messageId: retractionOf(r.cancelled),
-    };
-    _view = state.copyWith(
-      chat: now.copyWith(
-        messages: [
-          for (final m in now.messages)
-            retracted.containsKey(m.id)
-                ? m.copyWith(retraction: retracted[m.id])
-                : m,
-        ],
-      ),
-    );
+    for (final r in records) {
+      _updateMessage(r.messageId, (m) => m.copyWith(retraction: r.retraction));
+    }
   }
 
   /// What was said while a turn ran and is still unsaid. The messages are on
@@ -980,7 +967,7 @@ class ChatRoom {
         break;
       case ContextEvent(:final usage):
         // What the close will write, on screen before it does.
-        _updateReply(turn, (m) => m.copyWith(context: usage));
+        _updateMessage(turn.replyId, (m) => m.copyWith(context: usage));
       case ApprovalRequestEvent(:final approval):
         _view = state.copyWith(
           approvals: {
@@ -1078,7 +1065,11 @@ class ChatRoom {
           ? _routeOf(turn)
           : const <String>[];
       reason = await turn.recorder.close(addressees: to);
-      if (to.isNotEmpty) _stampAddressees(turn.replyId, to);
+      // The routing the close wrote, on the reply in memory too, so the next
+      // dispatch's history words it the way a reload would.
+      if (to.isNotEmpty) {
+        _updateMessage(turn.replyId, (m) => m.copyWith(addressees: to));
+      }
     }
     // A retryable failure is a blip the turn is carried on from, not an
     // outcome to report: the round waits out its backoff and re-enters the
@@ -1252,21 +1243,6 @@ class ChatRoom {
     final reply = chat?.messages.firstWhereOrNull((m) => m.id == turn.replyId);
     if (chat == null || reply == null) return const [];
     return _roster(chat).addressees(reply.copyWith(parts: turn.recorder.parts));
-  }
-
-  /// Puts the routing the close wrote on the reply in memory too, so the next
-  /// dispatch's history words it the way a reload would.
-  void _stampAddressees(String replyId, List<String> to) {
-    final chat = state.chat;
-    if (chat == null) return;
-    _view = state.copyWith(
-      chat: chat.copyWith(
-        messages: [
-          for (final m in chat.messages)
-            m.id == replyId ? m.copyWith(addressees: to) : m,
-        ],
-      ),
-    );
   }
 
   /// Run what the schedule may run now, through the room's ordering.

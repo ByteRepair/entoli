@@ -155,10 +155,6 @@ class MirrorChatController extends Notifier<ChatViewState>
       _hub.reactRemote(chatId, messageId, reaction.emoji);
 
   @override
-  Future<void> retract(String messageId, Reaction reaction) =>
-      _hub.retractRemote(chatId, messageId, reaction.emoji);
-
-  @override
   Future<void> stepThread(String messageId, int step) =>
       _hub.stepThreadRemote(chatId, messageId, step);
 

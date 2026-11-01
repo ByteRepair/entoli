@@ -3,6 +3,7 @@ import "dart:math" as math;
 import "dart:typed_data";
 
 import "package:flutter/foundation.dart" show listEquals;
+import "package:collection/collection.dart" show IterableExtension;
 import "package:flutter/material.dart";
 import "package:flutter/rendering.dart" show RenderAbstractViewport;
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -650,18 +651,21 @@ List<ConversationEntry> entriesOf(Chat chat) {
   var on = false;
   final byBoundary = {for (final c in chat.compactions) c.upToMessageId: c};
   final reactions = reactionsOn(chat.messages);
-  for (final (index, m) in chat.messages.indexed) {
+  // What a running turn appends to: the newest message that is not a
+  // reaction, which a reaction queued behind the turn must not displace.
+  final newest = chat.messages.lastWhereOrNull((m) => m.reaction == null);
+  for (final m in chat.messages) {
     final opener = m.omadaOn;
     if (opener != null && opener != on) {
       on = opener;
       entries.add(SectionEntry(on));
     }
-    if (!endedSilently(m) && m.reaction == null) {
+    if (drawnAsRow(m)) {
       entries.add(
         MessageEntry(
           m,
           inOmadaSection: on,
-          last: index == chat.messages.length - 1,
+          last: identical(m, newest),
           reactions: reactions[m.id] ?? const [],
         ),
       );
@@ -1441,10 +1445,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                         onReact: editing != null && !(view.isRunning && last)
                             ? (reaction) => editing.react(message.id, reaction)
                             : null,
-                        onRetract: editing == null
-                            ? null
-                            : (reaction) =>
-                                  editing.retract(message.id, reaction),
                         threads: editing == null
                             ? null
                             : chat.branches[message.id],
@@ -1454,10 +1454,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                         onDelete: mutable
                             ? () => editing.deleteThread(message.id)
                             : null,
-                        onEdit:
-                            mutable &&
-                                message.role == MessageRole.user &&
-                                message.reaction == null
+                        onEdit: mutable && message.role == MessageRole.user
                             ? (text) => editing.editAndResend(message.id, text)
                             : null,
                         onRegenerate: mutable

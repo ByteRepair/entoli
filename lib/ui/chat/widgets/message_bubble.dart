@@ -46,7 +46,6 @@ class MessageBubble extends ConsumerStatefulWidget {
     this.onTapLink,
     this.onReply,
     this.onReact,
-    this.onRetract,
     this.reactions = const [],
     this.steerKey,
   });
@@ -122,11 +121,9 @@ class MessageBubble extends ConsumerStatefulWidget {
   /// is Omada's and a member wrote it, so the answer is addressed to them.
   final ValueChanged<Quote>? onReply;
 
-  /// React to this message with an emoji: said to whoever wrote it.
+  /// React to this message with an emoji — said to whoever wrote it — or
+  /// take back one of [reactions].
   final ValueChanged<Reaction>? onReact;
-
-  /// Take back a reaction to this message: one of [reactions], picked again.
-  final ValueChanged<Reaction>? onRetract;
 
   /// The emoji this message has been reacted with, drawn at the end of its
   /// action row whether or not the actions are showing.
@@ -392,11 +389,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           ),
         ],
         if (widget.onReact != null)
-          ReactionButton(
-            onReact: widget.onReact!,
-            onRetract: widget.onRetract ?? (_) {},
-            chosen: widget.reactions,
-          ),
+          ReactionButton(onReact: widget.onReact!, chosen: widget.reactions),
         if (widget.onSpeak != null)
           ActionIcon(
             icon: widget.isSpeaking
@@ -428,42 +421,46 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     // Kept whether or not there is anything to show, so a message does not
     // shift under the pointer the moment the actions appear.
     // The reactions stay put whether the actions show or not: they are what
-    // was said about the message, not something to do to it. They take the
-    // row's outer end — the left under a reply, the right under the user's
-    // own — so the actions fading beside them never move them. The divider
-    // goes with the actions, so it never stands alone.
+    // was said about the message, not something to do to it. They lead the
+    // row from its outer end — the left under a reply, the right under the
+    // user's own, the row read backwards there — so the actions fading beside
+    // them never move them. The divider goes with the actions, so it never
+    // stands alone.
     builder: (context, shown, child) {
       final up = shown || widget.isSpeaking;
       final reactions = widget.reactions;
-      final outerEnd = widget.message.role == MessageRole.user;
-      const divider = VerticalDivider(width: 13, indent: 6, endIndent: 6);
-      final emojis = [
-        for (final emoji in reactions)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: Text(emoji, style: const TextStyle(fontSize: 16)),
-          ),
-      ];
-      final actions = AnimatedOpacity(
-        opacity: up ? 1 : 0,
-        duration: const Duration(milliseconds: 120),
-        child: IgnorePointer(
-          ignoring: !up,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (reactions.isNotEmpty && !outerEnd) divider,
-              child!,
-              if (reactions.isNotEmpty && outerEnd) divider,
-            ],
-          ),
-        ),
-      );
+      // Only this row's order: the icons inside keep the page's direction.
+      final from = widget.message.role == MessageRole.user
+          ? TextDirection.rtl
+          : TextDirection.ltr;
       return SizedBox(
         height: ActionIcon.height,
         child: Row(
           mainAxisSize: MainAxisSize.min,
-          children: outerEnd ? [actions, ...emojis] : [...emojis, actions],
+          textDirection: from,
+          children: [
+            for (final emoji in reactions)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Text(emoji, style: const TextStyle(fontSize: 16)),
+              ),
+            AnimatedOpacity(
+              opacity: up ? 1 : 0,
+              duration: const Duration(milliseconds: 120),
+              child: IgnorePointer(
+                ignoring: !up,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  textDirection: from,
+                  children: [
+                    if (reactions.isNotEmpty)
+                      const VerticalDivider(width: 13, indent: 6, endIndent: 6),
+                    child!,
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       );
     },

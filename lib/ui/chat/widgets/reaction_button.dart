@@ -11,12 +11,11 @@ class ReactionButton extends StatelessWidget {
   const ReactionButton({
     super.key,
     required this.onReact,
-    required this.onRetract,
     this.chosen = const [],
   });
 
+  /// A reaction picked: a new one, or one of [chosen] to take back.
   final ValueChanged<Reaction> onReact;
-  final ValueChanged<Reaction> onRetract;
 
   /// The emoji already reacted with.
   final List<String> chosen;
@@ -26,8 +25,7 @@ class ReactionButton extends StatelessWidget {
       context,
       (_) => _Strip(chosen: chosen),
     );
-    if (picked == null || !context.mounted) return;
-    chosen.contains(picked.emoji) ? onRetract(picked) : onReact(picked);
+    if (picked != null && context.mounted) onReact(picked);
   }
 
   @override

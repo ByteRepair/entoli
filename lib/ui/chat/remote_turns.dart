@@ -174,12 +174,6 @@ class RemoteTurnDriver implements RemoteTurns {
   }
 
   @override
-  void retract(String chatId, String messageId, String emoji) {
-    final reaction = Reaction.of(emoji);
-    if (reaction != null) _of(chatId).retract(messageId, reaction);
-  }
-
-  @override
   void stepThread(String chatId, String messageId, int step) =>
       _of(chatId).stepThread(messageId, step);
 

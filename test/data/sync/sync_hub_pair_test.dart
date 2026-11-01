@@ -1468,10 +1468,6 @@ class _Turns implements RemoteTurns {
       edits.add(("react", chatId, messageId, emoji));
 
   @override
-  void retract(String chatId, String messageId, String emoji) =>
-      edits.add(("retract", chatId, messageId, emoji));
-
-  @override
   void stepThread(String chatId, String messageId, int step) =>
       edits.add(("step", chatId, messageId, step));
 

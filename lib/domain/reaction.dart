@@ -56,18 +56,35 @@ Message reactionTo(
 
 extension Reactions on Message {
   /// The reaction this message is, or null where it is anything else.
-  ReactionPart? get reaction => parts.whereType<ReactionPart>().firstOrNull;
+  /// Only a user message can be one, so a reply's many parts are not walked.
+  ReactionPart? get reaction => role == MessageRole.user
+      ? parts.whereType<ReactionPart>().firstOrNull
+      : null;
 }
 
-/// The reactions each message on [messages] has had, by its id, each emoji
-/// once in the order first made — what its action row shows, and what its
-/// picker shows chosen. A retracted one is off it. The reactions
-/// themselves are not drawn: each is said, and shown on what it answers.
+/// The reactions on [messages] not taken back, oldest first — to the message
+/// [to] and with [emoji] where they are given. The one statement of what a
+/// live reaction is: what the action row shows, what the picker shows
+/// chosen, and what a retraction takes back.
+Iterable<Message> liveReactions(
+  List<Message> messages, {
+  String? to,
+  String? emoji,
+}) => messages.where((m) {
+  final reaction = m.reaction;
+  return reaction != null &&
+      m.retraction == null &&
+      (to == null || reaction.messageId == to) &&
+      (emoji == null || reaction.emoji == emoji);
+});
+
+/// The emoji each message on [messages] has live, by its id, each once in
+/// the order first made. The reactions themselves are not drawn: each is
+/// said, and shown on what it answers.
 Map<String, List<String>> reactionsOn(List<Message> messages) {
   final on = <String, List<String>>{};
-  for (final message in messages) {
-    final reaction = message.reaction;
-    if (reaction == null || message.retraction != null) continue;
+  for (final message in liveReactions(messages)) {
+    final reaction = message.reaction!;
     final emojis = on.putIfAbsent(reaction.messageId, () => []);
     if (!emojis.contains(reaction.emoji)) emojis.add(reaction.emoji);
   }

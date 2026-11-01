@@ -45,12 +45,10 @@ abstract interface class TurnDriver {
   Future<void> editAndResend(String messageId, String text);
   Future<void> regenerate(String messageId);
 
-  /// React to any message, the user's own included: said to whoever wrote it.
+  /// React to any message, the user's own included — said to whoever wrote
+  /// it — or take back a reaction it already has.
   Future<void> react(String messageId, Reaction reaction);
 
-  /// Take a reaction back. A turn it started carries on; one still queued
-  /// never runs.
-  Future<void> retract(String messageId, Reaction reaction);
   Future<void> stepThread(String messageId, int step);
   Future<void> deleteThread(String messageId);
 
@@ -179,10 +177,6 @@ class ChatController extends Notifier<ChatViewState>
   @override
   Future<void> react(String messageId, Reaction reaction) =>
       _room.react(messageId, reaction);
-
-  @override
-  Future<void> retract(String messageId, Reaction reaction) =>
-      _room.retract(messageId, reaction);
 
   @override
   Future<void> stepThread(String messageId, int step) =>
