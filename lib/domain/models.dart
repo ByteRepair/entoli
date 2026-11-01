@@ -574,9 +574,10 @@ sealed class MessagePart with _$MessagePart {
   /// a user message, and something said like any other, routed to whoever
   /// wrote [messageId]. [author] is its handle where a member wrote it, null
   /// for anything else — the main agent's, the user's own — which the main
-  /// agent answers; [excerpt] is the start of what it
-  /// said. Both are here as well as on the reply for the reason
-  /// [ShellRunPart.command] is: the projection words one message at a time.
+  /// agent answers, kept here since routing reads the reaction alone.
+  /// [excerpt] is the start of what it said: the model is never shown
+  /// [messageId], so the excerpt is how it knows which message was reacted
+  /// to — any of the thread's, and one a compaction summarized away too.
   /// See "Reactions" in `lib/domain/AGENTS.md`.
   const factory MessagePart.reaction({
     required String messageId,

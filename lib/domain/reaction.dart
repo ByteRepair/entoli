@@ -47,8 +47,8 @@ Message reactionTo(
       messageId: message.id,
       emoji: reaction.emoji,
       author: message.author,
-      // Enough for the model to know which message it was: the message is
-      // on the thread above, but a projection may be handed this alone.
+      // What tells the model which message it was: the id is never shown to
+      // it, and the message may be any of the thread's, or compacted away.
       excerpt: firstLine(message.plainText, max: 200),
     ),
   ],

@@ -881,9 +881,11 @@ else — the main agent's reply, the user's own message, any message once
 Omada is off — by the main agent. It never steers: it answers something
 finished, so while the room runs it waits its turn.
 
-The part carries an `excerpt` of the message too, for the reason
-`ShellRunPart` carries its command — the projection words one message at a
-time. `reactionTurnText` is the wording, the handle first where there is one:
+The part carries an `excerpt` of the message too, because the model is never
+shown a message's id: a reaction can answer any message on the thread, not
+just the last reply, and the excerpt is the one thing in what the model reads
+that says which — the only copy of it, where a compaction summarized the
+message away. `reactionTurnText` is the wording, the handle first where there is one:
 `@build The user has responded with 👍 (thumbs up) to the message:` and the
 excerpt quoted under it.
 
