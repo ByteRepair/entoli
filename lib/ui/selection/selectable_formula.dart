@@ -6,8 +6,8 @@ import "dart:ui" as ui;
 import "package:flutter/rendering.dart";
 import "package:flutter/widgets.dart";
 
-import "copied_document.dart";
 import "png_density.dart";
+import "render_tree.dart";
 
 /// A drawn formula as one thing to select: a drag that passes over it picks
 /// it up whole and highlights it, and what it copies is the TeX it was
@@ -17,8 +17,8 @@ import "png_density.dart";
 /// It registers with the selection container above it like any paragraph's
 /// fragment, so it takes its place in a drag's order and in Select All, and
 /// the reader of a copy finds it by type (`RenderSelectableFormula`). It can
-/// also draw itself again ([FormulaDrawing]), which is what a target that
-/// keeps formatting pastes: the drawing is in a repaint boundary of its own,
+/// also draw itself again ([RenderSelectableFormula.picture]), which is what
+/// a target that keeps formatting pastes: the drawing is in a repaint boundary of its own,
 /// so the picture is the formula without the highlight washed over it.
 class SelectableFormula extends SingleChildRenderObjectWidget {
   SelectableFormula({
@@ -59,8 +59,7 @@ class SelectableFormula extends SingleChildRenderObjectWidget {
 }
 
 class RenderSelectableFormula extends RenderProxyBox
-    with Selectable, SelectionRegistrant
-    implements FormulaDrawing {
+    with Selectable, SelectionRegistrant {
   RenderSelectableFormula({
     required this.written,
     required this.ink,
@@ -248,8 +247,8 @@ class RenderSelectableFormula extends RenderProxyBox
   /// Drawn at three times its size so it stays sharp in a document zoomed
   /// in, and in black where the theme drew it in [ink], since what it pastes
   /// into is a page. A colour the TeX asked for — `\color{red}` — is what
-  /// was meant, and stays.
-  @override
+  /// was meant, and stays. Null where it cannot be drawn — gone from the
+  /// screen since the copy.
   Future<FormulaPicture?> picture() async {
     final drawn = child;
     if (!attached || drawn is! RenderRepaintBoundary || !drawn.hasSize) {
@@ -320,21 +319,30 @@ class RenderSelectableFormula extends RenderProxyBox
   }
 }
 
-/// Every formula drawn under [root], each drawn again for a copy, by the TeX
-/// it was written as; one that could not be drawn is left out.
+/// A formula drawn in black on nothing, at [width] by [height] logical
+/// pixels — the size it was on screen, which is the size it pastes at.
+class FormulaPicture {
+  const FormulaPicture(this.png, {required this.width, required this.height});
+
+  final Uint8List png;
+  final double width;
+  final double height;
+}
+
+/// Every formula drawn under [root] that [wanted] asks for by the TeX it was
+/// written as, drawn again for a copy — at once, rather than one after
+/// another. A formula written twice is drawn once; one that could not be
+/// drawn is left out.
 Future<Map<String, FormulaPicture>> formulaPicturesUnder(
   RenderObject? root,
+  bool Function(String written) wanted,
 ) async {
   final formulas = <String, RenderSelectableFormula>{};
-  void visit(RenderObject node) {
-    if (node is RenderSelectableFormula) {
-      formulas.putIfAbsent(node.written, () => node);
-    } else {
-      node.visitChildren(visit);
+  for (final formula in descendantsOf<RenderSelectableFormula>(root)) {
+    if (wanted(formula.written)) {
+      formulas.putIfAbsent(formula.written, () => formula);
     }
   }
-
-  if (root != null) visit(root);
   final pictures = await Future.wait([
     for (final formula in formulas.values) formula.picture(),
   ]);

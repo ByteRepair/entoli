@@ -20,6 +20,7 @@ import "../../domain/formatted_text.dart"
         htmlClipboardDocument,
         htmlTagStyles;
 import "copied_document.dart";
+import "../../domain/math_syntax.dart" show displayMathStyle;
 import "selectable_formula.dart" show formulaPicturesUnder;
 
 /// One way of writing a selection.
@@ -28,14 +29,25 @@ abstract interface class CopyFormat {
 }
 
 /// What a copy puts on the clipboard: both formats of one [document], its
-/// formulas drawn for the formatted half.
-Future<ClipboardContent> clipboardContentOf(CopiedDocument document) async =>
-    ClipboardContent(
-      plain: const MarkdownCopyFormat().write(document),
-      html: htmlClipboardDocument(
-        const HtmlCopyFormat().write(await document.drawn()),
-      ),
-    );
+/// formulas drawn from where they are under [drawn] for the formatted half.
+Future<ClipboardContent> clipboardContentOf(
+  CopiedDocument document,
+  RenderObject? drawn,
+) async {
+  final written = {
+    for (final block in document.blocks)
+      for (final inline in block.inlines)
+        if (inline is CopiedFormula) inline.written,
+  };
+  return ClipboardContent(
+    plain: const MarkdownCopyFormat().write(document),
+    html: htmlClipboardDocument(
+      HtmlCopyFormat(
+        await _formulaImages(drawn, written.contains),
+      ).write(document),
+    ),
+  );
+}
 
 /// What the copy button puts on the clipboard: the whole of [markdown],
 /// formatted, each formula pasting as the picture [drawn] has of it — the
@@ -45,26 +57,34 @@ Future<ClipboardContent> replyContentOf(
   String markdown,
   RenderObject? drawn,
 ) async {
-  final pictures = await formulaPicturesUnder(drawn);
+  // What is drawn there besides the reply — an activity's own words — is
+  // not copied, so not drawn either.
+  final images = await _formulaImages(drawn, markdown.contains);
   return ClipboardContent(
     plain: formattedTextOf(markdown),
     html: htmlClipboardDocument(
       formattedHtmlOf(
         markdown,
-        formula: (written) => formulaHtml(written, pictures[written]),
+        formula: (written) => images[written] ?? escapeHtml(written),
       ),
     ),
   );
 }
 
-/// A formula as HTML: its [picture], at the size it was on screen, or its
-/// TeX where it could not be drawn.
-String formulaHtml(String written, FormulaPicture? picture) => picture == null
-    ? escapeHtml(written)
-    : '<img src="data:image/png;base64,${base64Encode(picture.png)}" '
-          'alt="${escapeHtmlAttribute(written)}" '
-          'width="${picture.width.round()}" height="${picture.height.round()}" '
-          'style="vertical-align: middle">';
+/// The formulas under [drawn] that [wanted] asks for, each as the picture it
+/// pastes as, by its TeX: encoded once however often it was written.
+Future<Map<String, String>> _formulaImages(
+  RenderObject? drawn,
+  bool Function(String written) wanted,
+) async => {
+  for (final MapEntry(key: written, value: picture)
+      in (await formulaPicturesUnder(drawn, wanted)).entries)
+    written:
+        '<img src="data:image/png;base64,${base64Encode(picture.png)}" '
+        'alt="${escapeHtmlAttribute(written)}" '
+        'width="${picture.width.round()}" height="${picture.height.round()}" '
+        'style="vertical-align: middle">',
+};
 
 /// An HTML fragment, blocks grouped back into the lists, tables and quotes
 /// they were drawn in. Styles are inline, since a word processor reads no
@@ -72,7 +92,10 @@ String formulaHtml(String written, FormulaPicture? picture) => picture == null
 /// word processor can typeset TeX, and an unknown element would be dropped
 /// with its text — or its TeX where it could not be drawn.
 class HtmlCopyFormat implements CopyFormat {
-  const HtmlCopyFormat();
+  const HtmlCopyFormat([this.formulas = const {}]);
+
+  /// Each formula's picture as HTML, by its TeX; one not here is its TeX.
+  final Map<String, String> formulas;
 
   @override
   String write(CopiedDocument document) {
@@ -136,7 +159,7 @@ class HtmlCopyFormat implements CopyFormat {
           );
           out.write(
             display
-                ? '<p style="text-align: center">$inline</p>'
+                ? '<p style="$displayMathStyle">$inline</p>'
                 : "<p>$inline</p>",
           );
       }
@@ -150,13 +173,13 @@ class HtmlCopyFormat implements CopyFormat {
   static String _open(String tag) =>
       '<$tag style="${escapeHtmlAttribute(htmlTagStyles[tag]!)}">';
 
-  static String _inlines(CopiedBlock block) {
+  String _inlines(CopiedBlock block) {
     final code = block.kind == BlockKind.code;
     final out = StringBuffer();
     for (final inline in block.inlines) {
       switch (inline) {
-        case CopiedFormula(:final written, :final picture):
-          out.write(formulaHtml(written, picture));
+        case CopiedFormula(:final written):
+          out.write(formulas[written] ?? escapeHtml(written));
         case CopiedText(:final text, :final marks, :final href):
           final tags = [
             if (marks.contains(TextMark.code)) "code",

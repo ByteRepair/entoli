@@ -76,7 +76,7 @@ class _FormattedTextVisitor implements md.NodeVisitor {
 /// A formula is what [formula] makes of its TeX as written — a picture of
 /// it, where the screen has one to give — or that TeX, escaped: a word
 /// processor has no element that draws it, and an unknown one would be
-/// dropped with its text. One on a line of its own is centred, as drawn.
+/// dropped with its text.
 String formattedHtmlOf(
   String markdown, {
   String Function(String written)? formula,
@@ -152,7 +152,6 @@ class _HtmlVisitor implements md.NodeVisitor {
     final style = [
       ?htmlTagStyles[element.tag],
       ?element.attributes["style"],
-      if (_standsAlone(element)) "text-align: center",
     ].join("; ");
     for (final MapEntry(:key, :value) in element.attributes.entries) {
       if (key == "style") continue;
@@ -165,14 +164,6 @@ class _HtmlVisitor implements md.NodeVisitor {
     // A void element — `br`, `hr`, `img` — has no children and no end tag.
     return element.children != null;
   }
-
-  /// A paragraph that is one formula on a line of its own, which is drawn
-  /// centred.
-  static bool _standsAlone(md.Element element) =>
-      switch (element.children?.singleOrNull) {
-        md.Element(:final attributes) => attributes[mathBlockAttribute] != null,
-        _ => false,
-      };
 
   @override
   void visitText(md.Text text) => buffer.write(escapeHtml(text.text));

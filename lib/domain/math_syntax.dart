@@ -24,6 +24,11 @@ const mathTags = {mathInlineTag, mathDisplayTag};
 /// across the column; one written mid-sentence stays in the sentence.
 const mathBlockAttribute = "block";
 
+/// How a formula on a line of its own is set: centred in the column. The
+/// paragraph the block syntax builds for one carries it, so a copy pastes it
+/// as drawn.
+const displayMathStyle = "text-align: center";
+
 /// What a document is parsed with, ahead of GitHub's extensions, wherever the
 /// markdown of a reply is read — `replyExtensionSet` is the one place that
 /// puts the two together.
@@ -125,6 +130,6 @@ class _DisplayMathBlockSyntax extends md.BlockSyntax {
     return md.Element("p", [
       _element(source.trim(), tex, display: true)
         ..attributes[mathBlockAttribute] = "true",
-    ]);
+    ])..attributes["style"] = displayMathStyle;
   }
 }

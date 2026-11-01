@@ -18,6 +18,7 @@ import "../../domain/formatted_text.dart" show RenderedBlock, RenderedOutline;
 import "../fonts.dart" show monoFamily;
 import "copied_block_scope.dart";
 import "copied_document.dart";
+import "render_tree.dart";
 import "selectable_formula.dart";
 
 /// One selectable with something selected, as the container sees it.
@@ -31,7 +32,7 @@ class SelectionReader {
   SelectionReader({required RenderObject? root, required String markdown})
     : _root = root,
       _outline = RenderedOutline.of(markdown),
-      _paragraphs = _paragraphsUnder(root);
+      _paragraphs = descendantsOf<RenderParagraph>(root).toList();
 
   final RenderObject? _root;
   final RenderedOutline _outline;
@@ -55,11 +56,7 @@ class SelectionReader {
         } else {
           entries.add(
             _Entry.loose(
-              CopiedFormula(
-                selectable.written,
-                display: true,
-                drawing: selectable,
-              ),
+              CopiedFormula(selectable.written, display: true),
               sameLine: sameLine,
             ),
           );
@@ -131,10 +128,12 @@ class SelectionReader {
       final style = inherited?.merge(span.style) ?? span.style;
       if (span is! TextSpan) {
         final formula = placeholder < placeholders.length
-            ? _formulaIn(placeholders[placeholder])
+            ? descendantsOf<RenderSelectableFormula>(
+                placeholders[placeholder],
+              ).firstOrNull
             : null;
         if (formula != null && formula.isSelected) {
-          out.add(CopiedFormula(formula.written, drawing: formula));
+          out.add(CopiedFormula(formula.written));
         }
         placeholder++;
         offset++;
@@ -194,17 +193,6 @@ class SelectionReader {
   static String _wordsOf(RenderParagraph paragraph) =>
       _textOf(paragraph).replaceAll("\uFFFC", "");
 
-  static List<RenderParagraph> _paragraphsUnder(RenderObject? root) {
-    final found = <RenderParagraph>[];
-    void visit(RenderObject child) {
-      if (child is RenderParagraph) found.add(child);
-      child.visitChildren(visit);
-    }
-
-    if (root != null) visit(root);
-    return found;
-  }
-
   /// The paragraph [selectable] stands for. Every `Text` registers through a
   /// selection container of its own around its paragraph, and that container
   /// reports the paragraph's transform as its own and indexes the paragraph's
@@ -235,13 +223,6 @@ class SelectionReader {
       if (identical(node, _root)) return null;
     }
     return null;
-  }
-
-  static RenderSelectableFormula? _formulaIn(RenderObject root) {
-    if (root is RenderSelectableFormula) return root;
-    RenderSelectableFormula? found;
-    root.visitChildren((child) => found ??= _formulaIn(child));
-    return found;
   }
 }
 

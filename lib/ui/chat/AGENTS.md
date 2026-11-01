@@ -256,7 +256,7 @@ Part of a formula is no TeX, and the glyphs are the maths library's own
 drawing, not text a selection could take a range of. It follows the same two
 rules as everything else: the plain half is the TeX as it was written,
 delimiters and all, and the formatted half is **the formula as drawn** — a
-PNG it draws of itself on copy (`FormulaDrawing`), from a repaint boundary of
+PNG it draws of itself on copy (`formulaPicturesUnder`), from a repaint boundary of
 its own so the highlight is not in it, at three times its size, and with the
 theme's text colour recoloured black, since the page it lands on is white
 whatever the app's theme. Only that colour: a `\textcolor` the TeX asked for
@@ -274,8 +274,11 @@ The copy **button** is apart from all this: it renders the whole message's
 markdown (`formattedHtmlOf`), escaping HTML the model wrote the way the
 screen shows it, beside the formatted words (`formattedTextOf`); raw copy is
 the markdown. Its formulas are the selection's pictures all the same
-(`replyContentOf`, from every `SelectableFormula` the bubble drew), so a
-formula pastes alike whichever way it was copied.
+(`replyContentOf`; both find them by their TeX with
+`formulaPicturesUnder`, the one walk that draws them), so a
+formula pastes alike whichever way it was copied. It writes from the markdown rather than from a
+`CopiedDocument` of everything because the markdown keeps what the document
+flattens — a list nested in a list, a paragraph inside an item.
 
 What can be done to a message is a row under it rather than a menu, uncovered by
 hovering the message or, where there is no pointer to hover with, by touching
