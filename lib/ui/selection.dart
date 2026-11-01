@@ -8,6 +8,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../core/log.dart";
+import "../domain/chat_intents.dart" show ChatPresenter;
 import "../domain/chat_meta.dart";
 import "../domain/models.dart";
 import "../domain/project.dart";
@@ -23,6 +24,16 @@ class SelectedChatId extends Notifier<String?> {
   String? build() => null;
 
   void select(String? id) => state = id;
+
+  /// [chat] in the pane, into its project first: the sidebar lists one
+  /// project, and a chat it does not list would be open with nothing saying
+  /// so.
+  void reveal(ChatState chat) {
+    ref
+        .read(selectedProjectProvider.notifier)
+        .select(localProject(chat.project));
+    state = chat.id;
+  }
 
   /// Make a chat in the project being shown and select it. **The one place a
   /// chat is created from the UI** — a method here rather than a function
@@ -84,6 +95,18 @@ class SidebarShown extends Notifier<bool> {
 final sidebarShownProvider = NotifierProvider<SidebarShown, bool>(
   SidebarShown.new,
 );
+
+/// A chat put on screen from outside the window — Shortcuts — where there
+/// is no drawer to close: its project in the sidebar, and it in the pane.
+class SelectionChatPresenter implements ChatPresenter {
+  SelectionChatPresenter(this._ref);
+
+  final Ref _ref;
+
+  @override
+  void show(ChatState chat) =>
+      _ref.read(selectedChatIdProvider.notifier).reveal(chat);
+}
 
 void openChat(BuildContext context, WidgetRef ref, String chatId) {
   ref.read(selectedChatIdProvider.notifier).select(chatId);

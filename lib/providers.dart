@@ -8,6 +8,7 @@ import "package:http/http.dart" as http;
 import "package:uuid/uuid.dart";
 
 import "../core/config.dart";
+import "domain/chat_intents.dart";
 import "domain/file_tools.dart" show resolveWorkspacePath;
 import "../core/platform/platform.dart"
     show createFileWatches, createPromptSources, processEnv, setupComplete;
@@ -61,6 +62,7 @@ import "domain/reminder_alarms.dart";
 import "domain/trigger.dart";
 import "domain/trigger_kinds.dart";
 import "domain/trigger_runner.dart";
+import "domain/turn_sender.dart";
 import "domain/trigger_manager.dart";
 import "domain/rootfs_store.dart";
 import "domain/shell.dart";
@@ -1421,8 +1423,40 @@ String _resolveTriggerPath(
   );
 }
 
-final triggerTurnDriverProvider = Provider<TriggerTurnDriver>(
+final turnSenderProvider = Provider<TurnSender>(
   (ref) => throw UnimplementedError(),
+);
+
+/// Puts a chat on screen for [chatIntentsProvider]. Overridden in `main`,
+/// which binds the UI's.
+final chatPresenterProvider = Provider<ChatPresenter>(
+  (ref) => throw UnimplementedError(),
+);
+
+/// A turn's state, and its stop, from outside its page. Overridden in `main`,
+/// which binds the controllers'.
+final turnControlProvider = Provider<TurnControl>(
+  (ref) => throw UnimplementedError(),
+);
+
+/// The writes behind a chat's row menu. Overridden in `main`, which binds
+/// the UI's.
+final chatEditorProvider = Provider<ChatEditor>(
+  (ref) => throw UnimplementedError(),
+);
+
+/// What Shortcuts can do with chats. See "Shortcuts" in macos/AGENTS.md.
+final chatIntentsProvider = Provider<ChatIntents>(
+  (ref) => ChatIntents(
+    repo: ref.watch(chatRepositoryProvider),
+    config: ref.watch(appConfigProvider),
+    sender: ref.watch(turnSenderProvider),
+    turns: ref.watch(turnControlProvider),
+    presenter: ref.watch(chatPresenterProvider),
+    editor: ref.watch(chatEditorProvider),
+    isSetUp: (project) => ref.read(setupCompleteProvider(project)),
+    onListChanged: () => ref.invalidate(chatListProvider),
+  ),
 );
 
 /// Started once beside the sweep timer. It listens to the list from here, so
@@ -1450,7 +1484,7 @@ final triggerManagerProvider = Provider<TriggerManager>((ref) {
     alarmPort: alarms,
     runner: TriggerRunner(
       repo: ref.watch(chatRepositoryProvider),
-      driver: ref.watch(triggerTurnDriverProvider),
+      sender: ref.watch(turnSenderProvider),
       alarms: alarms,
       onListChanged: (_) => ref.invalidate(chatListProvider),
       onTriggerFired: (trigger) =>

@@ -42,7 +42,12 @@ const List<AppMenu> appMenus = [
   ]),
   AppMenu("Chat", [
     [AppCommand.pinChat, AppCommand.renameChat, AppCommand.moveChat],
-    [AppCommand.chatSettings, AppCommand.showPlan, AppCommand.stopTurn],
+    [
+      AppCommand.chatSettings,
+      AppCommand.showPlan,
+      AppCommand.voiceMode,
+      AppCommand.stopTurn,
+    ],
     [AppCommand.deleteChat],
   ]),
   AppMenu("Project", [
@@ -99,7 +104,7 @@ class AppMenuBar extends ConsumerWidget {
     PlatformMenuItem item(AppCommand command) => PlatformMenuItem(
       label: commands.label(command),
       shortcut: command.activator,
-      onSelected: commands.canRun(command)
+      onSelected: commands.availability(command).isAvailable
           ? () => Commands.read(context, ref).run(command)
           : null,
     );

@@ -212,8 +212,9 @@ facts a menu draws — the open chat's id, whether it is pinned and whether a
 turn runs — since every rebuild sends the whole menu to the platform, and a
 chat's state changes with each message that lands. `Commands.read` is
 the same taken at a key or a click, which `run` acts on.
-`canRun` is the one answer to whether a command can run now, and both the keys
-and the menus ask it. A command is not `anywhere` unless it opens one of the
+`availability` is the one answer to whether a command can run now, and why
+not — the keys, the menus and Shortcuts all ask it, the menus reading only
+whether. A command is not `anywhere` unless it opens one of the
 app's own pages, and the rest only run with the chat pane in front: they act
 on what it shows, and a page pushed over it is hiding that. Settings over
 Settings replaces it rather than stacking a second.
@@ -221,8 +222,11 @@ Settings replaces it rather than stacking a second.
 The commands that act on one chat — pin, rename, move, delete — are
 `chatCommands`, run on a given chat by `runOnChat` (`chat_actions.dart`): the
 sidebar row's menu runs them on its own chat and `Commands` on the open one.
-Each works out for itself whether its chat is the one on screen and whether it
-is a mirror, so no caller passes either. The project's pages beside its chats are
+Each is a dialog over a write in `ChatEdits`, and the write works out for
+itself whether its chat is the one on screen and whether it is a mirror, so no
+caller passes either. The writes are apart from the dialogs because Shortcuts
+makes the same edits with no dialog to show — see "Shortcuts" in
+`macos/AGENTS.md`. The project's pages beside its chats are
 `project_actions.dart`, which says which of them a project has for the
 switcher's buttons and the Project menu alike. A mirrored chat runs none of
 them from the menu: its state is its home device's.

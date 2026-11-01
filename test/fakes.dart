@@ -44,6 +44,7 @@ import "package:agent_chat/domain/file_watches.dart";
 import "package:agent_chat/domain/reminder_alarms.dart";
 import "package:agent_chat/domain/trigger.dart";
 import "package:agent_chat/domain/trigger_runner.dart";
+import "package:agent_chat/domain/turn_sender.dart";
 import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/domain/voice_model.dart";
 import "package:agent_chat/domain/download.dart";
@@ -1726,17 +1727,17 @@ class LoopbackChannel implements ByteChannel {
   }
 }
 
-/// A [TriggerTurnDriver] that records what it was asked and returns a canned
+/// A [TurnSender] that records what it was asked and returns a canned
 /// result. The runner's unit tests care about the orchestration — chat
 /// creation, stamping, the sidebar — not the turn itself, which is
 /// [ChatController]'s job and tested through it.
-class FakeTriggerTurnDriver implements TriggerTurnDriver {
+class FakeTurnSender implements TurnSender {
   final List<({String chatId, String prompt})> calls = [];
-  TriggerOutcome outcome = TriggerOutcome.done;
+  TurnOutcome outcome = TurnOutcome.done;
   String snippet = "";
 
   @override
-  Future<({TriggerOutcome outcome, String snippet})> send(
+  Future<({TurnOutcome outcome, String snippet})> send(
     String chatId,
     String prompt,
   ) async {
@@ -1765,7 +1766,7 @@ class FakeFileWatches implements FileWatches {
 }
 
 /// A [TriggerRuns] that records what it was asked and hangs on demand —
-/// the manager tests' stand-in, beside [FakeTriggerTurnDriver]. Stamps
+/// the manager tests' stand-in, beside [FakeTurnSender]. Stamps
 /// [Trigger.lastFiredAt] like the real runner does (before the run), since
 /// "one stamp owner" is the design: the manager's replacement carries this
 /// rather than writing its own.
@@ -1798,7 +1799,7 @@ class StubRuns implements TriggerRuns {
     if (gate != null) await gate!.future;
     return (
       chatId: "chat-${trigger.id}",
-      outcome: TriggerOutcome.done,
+      outcome: TurnOutcome.done,
       snippet: "done",
       targetGone: false,
     );

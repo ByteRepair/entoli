@@ -10,6 +10,7 @@ import "models.dart" show CompletionKind;
 import "trigger.dart";
 import "trigger_kinds.dart";
 import "trigger_runner.dart";
+import "turn_sender.dart";
 
 /// The seam the trigger tools reach, one per chat: the backend builds it
 /// with the chat's own id, so the tools carry no chat id of their own — a
@@ -302,12 +303,12 @@ class TriggerManager {
       await alarmPort.notify(
         title: nameOf(trigger),
         body: switch (result.outcome) {
-          TriggerOutcome.done when result.snippet.isNotEmpty =>
+          TurnOutcome.done when result.snippet.isNotEmpty =>
             late ? "Ran late.\n\n${result.snippet}" : result.snippet,
-          TriggerOutcome.done => late ? "Ran late. Finished." : "Finished.",
-          TriggerOutcome.error =>
+          TurnOutcome.done => late ? "Ran late. Finished." : "Finished.",
+          TurnOutcome.error =>
             late ? "Ran late. The task failed." : "The task failed.",
-          TriggerOutcome.aborted => "The task was stopped.",
+          TurnOutcome.aborted => "The task was stopped.",
         },
         chatId: result.chatId,
       );

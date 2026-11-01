@@ -9,6 +9,7 @@ import "package:agent_chat/domain/trigger.dart";
 import "package:agent_chat/domain/trigger_kinds.dart";
 import "package:agent_chat/domain/trigger_manager.dart";
 import "package:agent_chat/domain/trigger_runner.dart";
+import "package:agent_chat/domain/turn_sender.dart";
 
 import "../fakes.dart";
 
@@ -571,7 +572,7 @@ class _GoneTargetRuns implements TriggerRuns {
     ));
     return (
       chatId: trigger.chatId ?? "",
-      outcome: TriggerOutcome.error,
+      outcome: TurnOutcome.error,
       snippet: "",
       targetGone: true,
     );

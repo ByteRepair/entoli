@@ -23,7 +23,7 @@ import "package:agent_chat/providers.dart"
     show appSettingsProvider, projectSettingsProvider, promptLibraryProvider;
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
-import "package:agent_chat/ui/chat/trigger_turn_driver.dart";
+import "package:agent_chat/ui/chat/controller_turn_sender.dart";
 import "package:agent_chat/ui/chat/chat_page.dart"
     show CompactionEntry, entriesOf, MessageEntry, SectionEntry;
 
@@ -2356,8 +2356,8 @@ void main() {
         project: project,
       );
       final driver = app.container.read(
-        Provider<ChatControllerTriggerTurnDriver>(
-          (ref) => ChatControllerTriggerTurnDriver(ref),
+        Provider<ChatControllerTurnSender>(
+          (ref) => ChatControllerTurnSender(ref),
         ),
       );
       await driver.send(id, text);

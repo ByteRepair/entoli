@@ -31,6 +31,9 @@ import UserNotifications
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ClipboardChannel") {
       ClipboardChannel.register(with: registrar.messenger())
     }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "IntentBridge") {
+      IntentBridge.shared.register(with: registrar.messenger())
+    }
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "BrowserChannel") {
       BrowserChannel.register(with: registrar.messenger())
     }

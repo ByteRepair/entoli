@@ -4,6 +4,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
+import "../domain/availability.dart";
 import "../domain/builtin_project.dart";
 import "../domain/project.dart";
 import "../providers.dart";
@@ -17,6 +18,7 @@ import "profile/profile_page.dart";
 import "project_actions.dart";
 import "selection.dart";
 import "settings/settings_category.dart";
+import "voice/voice_page.dart";
 import "sidebar/project_palette.dart";
 
 /// What each [AppCommand] does, and whether it can now: one snapshot of the
@@ -87,8 +89,14 @@ class Commands {
   final bool running;
   final bool sidebarShown;
 
-  bool canRun(AppCommand command) {
-    if (!command.anywhere && !front) return false;
+  /// Whether [command] can run now, and why not where it cannot: the one
+  /// answer the keys, the menus and Shortcuts all ask.
+  Availability availability(AppCommand command) {
+    if (!command.anywhere && !front) {
+      return const Unavailable("A page is open over the chat.");
+    }
+    Availability needs(bool ok, String why) =>
+        ok ? const Available() : Unavailable(why);
     return switch (command) {
       AppCommand.pinChat ||
       AppCommand.renameChat ||
@@ -96,12 +104,21 @@ class Commands {
       AppCommand.deleteChat ||
       AppCommand.chatSettings ||
       // The page says where a chat has none.
-      AppCommand.showPlan => chatId != null,
-      AppCommand.stopTurn => running,
-      AppCommand.projectWorkspace => projectHasWorkspace(project),
-      AppCommand.projectMemories => projectHasMemories(project),
-      AppCommand.projectSettings => projectHasSettings(project),
-      _ => true,
+      AppCommand.showPlan => needs(chatId != null, "No chat is open."),
+      AppCommand.stopTurn => needs(running, "No turn is running."),
+      AppCommand.projectWorkspace => needs(
+        projectHasWorkspace(project),
+        "This project has no workspace.",
+      ),
+      AppCommand.projectMemories => needs(
+        projectHasMemories(project),
+        "This project keeps no memories.",
+      ),
+      AppCommand.projectSettings => needs(
+        projectHasSettings(project),
+        "This project has no settings.",
+      ),
+      _ => const Available(),
     };
   }
 
@@ -112,11 +129,11 @@ class Commands {
     _ => command.label,
   };
 
-  /// Run [command] if it can be, false where it cannot.
-  bool run(AppCommand command) {
-    if (!canRun(command)) return false;
-    unawaited(_run(command));
-    return true;
+  /// Run [command] if it can be; what stopped it where it cannot.
+  Availability run(AppCommand command) {
+    final availability = this.availability(command);
+    if (availability.isAvailable) unawaited(_run(command));
+    return availability;
   }
 
   Future<void> _run(AppCommand command) async {
@@ -157,6 +174,12 @@ class Commands {
         openChatSettings(context, chatId!);
       case AppCommand.showPlan:
         openPlan(context, chatId!);
+      // Into the open chat, or a new one where none is open — the new-chat
+      // screen's circle.
+      case AppCommand.voiceMode:
+        await (chatId == null
+            ? startVoiceChat(context, ref)
+            : openVoice(context, ref, chatId));
       case AppCommand.stopTurn:
         await ref.read(chatControllerProvider(chatId!).notifier).abort();
       case AppCommand.projectWorkspace:
