@@ -5,7 +5,8 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/models.dart"
-    show CallEvents, JobEnd, jobEndedEvent;
+    show CallEvents, JobEnd, MessageRole, Retraction, jobEndedEvent;
+import "package:agent_chat/domain/reaction.dart";
 import "package:agent_chat/domain/shell_job.dart";
 import "package:agent_chat/domain/project_settings.dart" show OmadaOrdering;
 import "package:agent_chat/domain/room/chat_room.dart";
@@ -76,6 +77,72 @@ void main() {
     expect(host.states.last, same(room.state));
     expect(room.state.isRunning, isFalse);
     expect(room.replyText, "hi");
+  });
+
+  test("a reaction to any message is said, and answered", () async {
+    app.backend.scriptedEvents = const [TextDelta("hi"), DoneEvent()];
+    final (room, host) = await openRoom();
+    await room.send("hello");
+    await waitFor(() => host.settled == 1, what: "the first settle");
+
+    // The user's own message, which the main agent answers.
+    final own = room.state.chat!.messages.first;
+    await room.react(own.id, Reaction.thinking);
+    await waitFor(() => host.settled == 2, what: "the reaction's settle");
+
+    final messages = room.state.chat!.messages;
+    expect(messages, hasLength(4));
+    expect(messages[2].role, MessageRole.user);
+    expect(messages[2].reaction?.messageId, own.id);
+    expect(messages[2].reaction?.emoji, "🤔");
+    expect(messages[3].role, MessageRole.assistant);
+    // The log reads back the same.
+    final reloaded = await app.repo.openChat(room.chatId);
+    expect(reloaded.messages[2].reaction?.excerpt, "hello");
+  });
+
+  test("taking back a reaction whose turn runs lets that turn finish, and "
+      "the log keeps the reaction, retracted", () async {
+    app.backend.scriptedEvents = const [TextDelta("hi"), DoneEvent()];
+    final (room, host) = await openRoom();
+    await room.send("hello");
+    await waitFor(() => host.settled == 1, what: "the first settle");
+
+    final hold = app.backend.hold = Completer<void>();
+    final own = room.state.chat!.messages.first;
+    await room.react(own.id, Reaction.fire);
+    await waitFor(() => room.state.isRunning, what: "the reaction's turn");
+    await room.retract(own.id, Reaction.fire);
+    expect(room.state.isRunning, isTrue);
+    hold.complete();
+    await waitFor(() => host.settled == 2, what: "the reaction's settle");
+
+    expect(host.ended.last, TurnEnd.done);
+    expect(room.state.chat!.messages, hasLength(4));
+    expect(room.state.chat!.messages[2].retraction, Retraction.afterItsTurn);
+    final reloaded = await app.repo.openChat(room.chatId);
+    expect(reloaded.messages[2].retraction, Retraction.afterItsTurn);
+    expect(reactionsOn(reloaded.messages), isEmpty);
+  });
+
+  test("a reaction taken back before its turn runs never runs", () async {
+    app.backend.scriptedEvents = const [TextDelta("hi"), DoneEvent()];
+    final hold = app.backend.hold = Completer<void>();
+    final (room, host) = await openRoom();
+    await room.send("hello");
+    final own = room.state.chat!.messages.first;
+    // The room is busy, so the reaction waits its turn.
+    await room.react(own.id, Reaction.thumbsUp);
+    await room.retract(own.id, Reaction.thumbsUp);
+    app.backend.hold = null;
+    hold.complete();
+    await waitFor(() => host.settled == 1, what: "the settle");
+    await Future<void>.delayed(Duration.zero);
+
+    expect(app.backend.prompts, hasLength(1));
+    expect(room.state.isRunning, isFalse);
+    final reloaded = await app.repo.openChat(room.chatId);
+    expect(reloaded.messages.last.retraction, Retraction.beforeItsTurn);
   });
 
   test("a disposed room tells the host nothing more", () async {

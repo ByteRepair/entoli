@@ -175,6 +175,15 @@ sealed class ChatRecord with _$ChatRecord {
     @Default({}) Map<String, dynamic> data,
   }) = CallEventRecord;
 
+  /// The reaction [messageId] is taken back. The message stays on the log —
+  /// it was said — and is off the message it answered. [cancelled] is that
+  /// its turn had not started, and never will: it was taken off the queue,
+  /// so nobody was told it. Sets [Message.retraction].
+  const factory ChatRecord.retract({
+    required String messageId,
+    @Default(false) bool cancelled,
+  }) = RetractRecord;
+
   factory ChatRecord.fromJson(Map<String, dynamic> json) =>
       _$ChatRecordFromJson(json);
 }
@@ -326,6 +335,11 @@ Replayed replayTree(Iterable<ChatRecord> records) {
 
       case RewindRecord(:final messageId):
         if (nodes.containsKey(messageId)) forget(messageId);
+
+      case RetractRecord(:final messageId, :final cancelled):
+        final into = nodes[messageId];
+        if (into == null) continue;
+        nodes[messageId] = into.copyWith(retraction: retractionOf(cancelled));
 
       case CompactionRecord(
         :final upToMessageId,
@@ -518,3 +532,8 @@ List<ChatRecord> decodeLog(String text) {
   }
   return records;
 }
+
+/// What a [RetractRecord] makes of its reaction: the one rule replay and a
+/// room writing live both read.
+Retraction retractionOf(bool cancelled) =>
+    cancelled ? Retraction.beforeItsTurn : Retraction.afterItsTurn;

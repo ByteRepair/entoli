@@ -106,7 +106,7 @@ String jobTail(String log, {int lines = 10, int maxBytes = 1024}) {
   return "…${utf8.decode(bytes.sublist(start))}";
 }
 
-/// A command's first line, cut to [max].
+/// A text's first line, cut to [max] — a command's, a message's.
 String firstLine(String command, {int max = 80}) {
   final line = command.trim().split("\n").first;
   return line.length <= max ? line : "${line.substring(0, max - 1)}…";

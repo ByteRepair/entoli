@@ -7,6 +7,7 @@ import "../../domain/chat_log.dart";
 import "../../domain/chat_repository.dart";
 import "../../domain/reminder_alarms.dart";
 import "../../domain/models.dart";
+import "../../domain/reaction.dart";
 import "../../domain/project_settings.dart"
     show OmadaOrdering, defaultOmadaOrdering;
 import "../../domain/room/chat_room.dart";
@@ -43,6 +44,13 @@ abstract interface class TurnDriver {
   Future<void> answerQuestions(String requestId, List<String?> answers);
   Future<void> editAndResend(String messageId, String text);
   Future<void> regenerate(String messageId);
+
+  /// React to any message, the user's own included: said to whoever wrote it.
+  Future<void> react(String messageId, Reaction reaction);
+
+  /// Take a reaction back. A turn it started carries on; one still queued
+  /// never runs.
+  Future<void> retract(String messageId, Reaction reaction);
   Future<void> stepThread(String messageId, int step);
   Future<void> deleteThread(String messageId);
 
@@ -167,6 +175,14 @@ class ChatController extends Notifier<ChatViewState>
 
   @override
   Future<void> regenerate(String messageId) => _room.regenerate(messageId);
+
+  @override
+  Future<void> react(String messageId, Reaction reaction) =>
+      _room.react(messageId, reaction);
+
+  @override
+  Future<void> retract(String messageId, Reaction reaction) =>
+      _room.retract(messageId, reaction);
 
   @override
   Future<void> stepThread(String messageId, int step) =>

@@ -11,6 +11,7 @@ import "../models.dart";
 import "../shell_job.dart" show ChatShellJobs;
 import "../project_settings.dart" show OmadaOrdering;
 import "../prompt_library.dart" show nameOf;
+import "../reaction.dart";
 import "../turn_recorder.dart";
 import "../wired_skill.dart";
 import "agent.dart";
@@ -300,6 +301,68 @@ class ChatRoom {
     await _prompt(text, files: files);
   }
 
+  /// React to [messageId] with [reaction]. Said like anything else, to whoever
+  /// wrote the message — the main agent where nobody in particular did — and
+  /// never steering: a reaction answers something finished, so while the
+  /// room runs it waits its turn.
+  Future<void> react(String messageId, Reaction reaction) async {
+    await _ready;
+    final chat = state.chat;
+    final target = chat?.messages.firstWhereOrNull((m) => m.id == messageId);
+    if (chat == null || target == null) return;
+    // Already said and not taken back: the picker offers it only to retract.
+    if (reactionsOn(chat.messages)[messageId]?.contains(reaction.emoji) ??
+        false) {
+      return;
+    }
+    final say = reactionTo(
+      target,
+      reaction,
+      id: _uuid.v4(),
+      at: DateTime.now(),
+    );
+    if (state.isRunning) return _sayLater(_stamped(say));
+    await _schedulePrompt(chat, say);
+  }
+
+  /// Take back the [reaction] to [messageId]. A turn it started carries on —
+  /// the reply stays, to delete as any other — while one still queued is
+  /// taken off the queue and never runs, which the record says.
+  Future<void> retract(String messageId, Reaction reaction) async {
+    await _ready;
+    final chat = state.chat;
+    if (chat == null) return;
+    final records = [
+      for (final m in chat.messages)
+        if (m.reaction case ReactionPart(messageId: final on, :final emoji)
+            when on == messageId &&
+                emoji == reaction.emoji &&
+                m.retraction == null)
+          ChatRecord.retract(
+            messageId: m.id,
+            cancelled: _schedule.dropPrompt(m.id),
+          ),
+    ];
+    if (records.isEmpty) return;
+    await _append(records);
+    final now = state.chat;
+    if (now == null) return;
+    final retracted = {
+      for (final r in records.cast<RetractRecord>())
+        r.messageId: retractionOf(r.cancelled),
+    };
+    _view = state.copyWith(
+      chat: now.copyWith(
+        messages: [
+          for (final m in now.messages)
+            retracted.containsKey(m.id)
+                ? m.copyWith(retraction: retracted[m.id])
+                : m,
+        ],
+      ),
+    );
+  }
+
   /// What was said while a turn ran and is still unsaid. The messages are on
   /// the log already — written as they were said — and this is what is left
   /// to say. The composed message itself, so the drain dispatches what the
@@ -309,16 +372,26 @@ class ChatRoom {
   /// A say made while the room runs. The routing record rides it the moment
   /// it lands — the same stamp a fresh send writes where the prompt is not on
   /// the log yet.
-  Message _composeSay(String text, List<MessagePart> files) {
-    final say = _repo.composeUserPrompt(
+  Message _composeSay(String text, List<MessagePart> files) => _stamped(
+    _repo.composeUserPrompt(
       text,
       project: state.chat?.state.project,
       files: files,
-    );
+    ),
+  );
+
+  /// [say] with the routing record it lands on the log with.
+  Message _stamped(Message say) {
     final chat = state.chat;
     return chat == null
         ? say
         : say.copyWith(addressees: _roster(chat).addressees(say));
+  }
+
+  /// Schedule a say made while nothing runs, and run what it addresses.
+  Future<void> _schedulePrompt(Chat chat, Message say) async {
+    _schedule.addPrompt(_roster(chat).mentioned(say), say);
+    await _dispatch();
   }
 
   /// Hand [say] to the running turn it addresses, to be read at that turn's
@@ -462,8 +535,7 @@ class ChatRoom {
       await _say(userMsg, replacing: replacing);
       return;
     }
-    _schedule.addPrompt(_roster(chat).mentioned(userMsg), userMsg);
-    await _dispatch();
+    await _schedulePrompt(chat, userMsg);
   }
 
   /// The `/compact` callback's own turn: the ask goes on the log like anything
@@ -805,7 +877,8 @@ class ChatRoom {
     final chat = state.chat;
     if (chat == null || state.isRunning) return;
     final prompt = _promptFor(chat, messageId);
-    if (prompt == null) return;
+    // A reaction is not text to edit: rebuilt from text it would be lost.
+    if (prompt == null || prompt.reaction != null) return;
     await _prompt(text, files: prompt.files.toList(), replacing: prompt);
   }
 

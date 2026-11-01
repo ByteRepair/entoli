@@ -7,6 +7,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../domain/models.dart";
 import "../../../domain/quote.dart";
+import "../../../domain/reaction.dart" show Reaction;
 import "../../../domain/shell.dart";
 import "../../../domain/wired_skill.dart";
 import "../../widgets/action_icon.dart";
@@ -19,6 +20,7 @@ import "../activity/label.dart" show ActivityGroup;
 import "../../selection/copy_format.dart" show replyContentOf;
 import "../../selection/rich_selection_area.dart";
 import "message_text.dart";
+import "reaction_button.dart";
 import "shell_run.dart";
 
 /// Renders a single message. The bubble holds what the model said; thinking
@@ -43,6 +45,9 @@ class MessageBubble extends ConsumerStatefulWidget {
     this.isSpeaking = false,
     this.onTapLink,
     this.onReply,
+    this.onReact,
+    this.onRetract,
+    this.reactions = const [],
     this.steerKey,
   });
 
@@ -116,6 +121,16 @@ class MessageBubble extends ConsumerStatefulWidget {
   /// The quote carries the author's handle where [entoli] says this section
   /// is Omada's and a member wrote it, so the answer is addressed to them.
   final ValueChanged<Quote>? onReply;
+
+  /// React to this message with an emoji: said to whoever wrote it.
+  final ValueChanged<Reaction>? onReact;
+
+  /// Take back a reaction to this message: one of [reactions], picked again.
+  final ValueChanged<Reaction>? onRetract;
+
+  /// The emoji this message has been reacted with, drawn at the end of its
+  /// action row whether or not the actions are showing.
+  final List<String> reactions;
 
   /// The key for the bubble of a steer read into this reply, by the steer's
   /// id: what the chapter rail finds it by.
@@ -376,6 +391,12 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             onPressed: _copyRaw,
           ),
         ],
+        if (widget.onReact != null)
+          ReactionButton(
+            onReact: widget.onReact!,
+            onRetract: widget.onRetract ?? (_) {},
+            chosen: widget.reactions,
+          ),
         if (widget.onSpeak != null)
           ActionIcon(
             icon: widget.isSpeaking
@@ -406,14 +427,43 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     ),
     // Kept whether or not there is anything to show, so a message does not
     // shift under the pointer the moment the actions appear.
+    // The reactions stay put whether the actions show or not: they are what
+    // was said about the message, not something to do to it. They take the
+    // row's outer end — the left under a reply, the right under the user's
+    // own — so the actions fading beside them never move them. The divider
+    // goes with the actions, so it never stands alone.
     builder: (context, shown, child) {
       final up = shown || widget.isSpeaking;
+      final reactions = widget.reactions;
+      final outerEnd = widget.message.role == MessageRole.user;
+      const divider = VerticalDivider(width: 13, indent: 6, endIndent: 6);
+      final emojis = [
+        for (final emoji in reactions)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: Text(emoji, style: const TextStyle(fontSize: 16)),
+          ),
+      ];
+      final actions = AnimatedOpacity(
+        opacity: up ? 1 : 0,
+        duration: const Duration(milliseconds: 120),
+        child: IgnorePointer(
+          ignoring: !up,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (reactions.isNotEmpty && !outerEnd) divider,
+              child!,
+              if (reactions.isNotEmpty && outerEnd) divider,
+            ],
+          ),
+        ),
+      );
       return SizedBox(
         height: ActionIcon.height,
-        child: AnimatedOpacity(
-          opacity: up ? 1 : 0,
-          duration: const Duration(milliseconds: 120),
-          child: IgnorePointer(ignoring: !up, child: child),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: outerEnd ? [actions, ...emojis] : [...emojis, actions],
         ),
       );
     },
@@ -591,6 +641,9 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
               ],
             ),
           );
+        // Never drawn: a reaction shows on the message it answers.
+        case ReactionPart():
+          continue;
         case ShellRunPart():
           // Not a label: a command the user ran is the answer to their message
           // rather than something the turn did on its way to one.

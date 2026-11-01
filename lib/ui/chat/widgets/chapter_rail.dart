@@ -5,6 +5,7 @@ import "package:flutter/gestures.dart" show kPrimaryButton;
 import "package:flutter/material.dart";
 
 import "../../../domain/models.dart";
+import "../../../domain/reaction.dart" show Reactions;
 
 /// One thing the user said, as a place in the conversation to go back to.
 typedef Chapter = ({
@@ -33,6 +34,8 @@ List<Chapter> chaptersOf(Chat chat) {
   final chapters = <Chapter>[];
   int? prompt;
   for (final message in chat.messages) {
+    // Shown on the message it answers, not as a row of its own.
+    if (message.reaction != null) continue;
     final threads = chat.threadsAt(message.id).length;
     if (message.role == MessageRole.user) {
       prompt = chapters.length;

@@ -109,6 +109,7 @@ List<VoiceLine> linesOf(
     case SkillInstallPart():
     case ApprovalPart():
     case InstructionsPart():
+    case ReactionPart():
       return const [];
   }
 }

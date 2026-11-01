@@ -10,7 +10,7 @@ written, so the only thing a kill can now cost is whatever had not been appended
 yet. That is what makes an interrupted turn something to offer to continue
 rather than something to apologise for.
 
-Nine records. `message` opens one — before it holds anything, which is what the
+Ten records. `message` opens one — before it holds anything, which is what the
 empty assistant message at the head of a turn is — and its `siblingOf` names
 what it is an alternative to, or nothing at all, which puts it on the end of the
 thread being read; `replacesSibling` takes that one away rather than joining it,
@@ -23,7 +23,8 @@ to read. `rewind` forgets a message and everything below it. `compaction` says
 the conversation up to a message is summarized for the model, and still there
 for the user to read — see "Compaction" below.
 `callEvent` says something happened to a call after its turn — today, that
-the background job it started ended (`jobEnded`).
+the background job it started ended (`jobEnded`). `retract` takes back a
+reaction — see "Reactions".
 
 Nothing is mutable, so a part that changed is **superseded**: the same index
 written again wins, and `replay` applies records in order, so the last one
@@ -860,6 +861,55 @@ the counter on the wrong message.
 Continuing an interrupted turn is deliberately neither of these. It adds to a
 reply that is already there, so there is nothing to branch — see "Carrying on an
 interrupted turn".
+
+## Reactions
+
+Any message can be reacted to — a reply, a member's, the user's own — with
+one of six emoji (`Reaction`, `lib/domain/reaction.dart`), from the smiley on
+its action row. **A reaction is something said, not a mark on the message.**
+It goes on the log as a user message whose one part is a `ReactionPart`, and
+from there it is a say like any other: the room schedules it, the turn it
+starts answers it, a mirror sends it home (`SyncMessage.react`), and the
+projection words it. No record type was added: a message is already what the
+room routes, and a record beside the thread would need its own walk to say
+where in the conversation it was made.
+
+It is addressed to whoever wrote the message: the part carries that
+message's `author`, and `Roster` reads it where it would read a mention, so
+a member's reply is answered by that member in an Omada room and anything
+else — the main agent's reply, the user's own message, any message once
+Omada is off — by the main agent. It never steers: it answers something
+finished, so while the room runs it waits its turn.
+
+The part carries an `excerpt` of the message too, for the reason
+`ShellRunPart` carries its command — the projection words one message at a
+time. `reactionTurnText` is the wording, the handle first where there is one:
+`@build The user has responded with 👍 (thumbs up) to the message:` and the
+excerpt quoted under it. Reacting again with an emoji already chosen is not
+offered: the picker marks the chosen ones, and picking one takes it back.
+After that, reacting with it again is a new message and a new turn.
+
+**Taking one back is a record, not a deletion.** It appends
+`retract {messageId, cancelled}`, naming the reaction's own message; replay
+sets `Message.retraction` on it, and it comes off the message it answered.
+The message stays on the log, because it was said. What happens to its turn is
+the one decision, and `cancelled` records it:
+
+- **Its turn had started, or finished** (`afterItsTurn`): the turn carries on
+  and its reply stays — deleting the thread is how to take that back, as for
+  any reply. The model still reads the reaction, since the reply answers it.
+- **It was still queued** (`beforeItsTurn`): the room takes it off the
+  schedule (`Schedule.dropPrompt`), so no turn ever opens for it, and the
+  projection leaves it out — as far as any model is told, it was never said.
+
+**On screen it is not a row.** `entriesOf` and the chapter rail skip the
+reaction's own message, and `reactionsOn` gives each message the emoji it was
+reacted with, each once, drawn at the end of its action row after a divider.
+They stay up while the actions fade, being what was said about the message
+rather than something to do to it. The picker is a pill of the six over the
+smiley, centred on it (`showAnchoredPopup`, a route like `showAnchoredMenu`,
+so back, Escape and a tap outside close it). An edit is refused for a
+reaction in the room itself: rebuilt from text, it would be lost.
 
 ## Attachments
 

@@ -2,6 +2,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
+import "package:agent_chat/domain/reaction.dart";
 import "package:agent_chat/domain/room/roster.dart";
 
 void main() {
@@ -75,5 +76,20 @@ void main() {
       "build",
       reason: "a member's reply is carried on by them after the toggle",
     );
+  });
+
+  test("a reaction addresses whoever wrote what it reacts to", () {
+    Message to(Message m) =>
+        reactionTo(m, Reaction.thumbsUp, id: "x", at: DateTime(2026));
+    final member = to(reply("A plan.", author: "@build"));
+    expect(roster().mentioned(member), ["build"]);
+    expect(roster().authorFor(member), "@build");
+    expect(roster().answering(member), "build");
+    expect(roster(omada: false).answering(member), isNull);
+    // The main agent's reply, and the user's own message, are the house's.
+    for (final m in [to(reply("Done.")), to(said("@build, go"))]) {
+      expect(roster().mentioned(m), isEmpty);
+      expect(roster().answering(m), isNull);
+    }
   });
 }

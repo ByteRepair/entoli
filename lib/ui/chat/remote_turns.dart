@@ -6,6 +6,7 @@ import "../../domain/app_settings.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/chat_repository.dart";
 import "../../domain/models.dart";
+import "../../domain/reaction.dart";
 import "../../domain/room/room_state.dart";
 import "../../domain/project.dart" show localProject;
 import "../../domain/project_settings.dart";
@@ -164,6 +165,19 @@ class RemoteTurnDriver implements RemoteTurns {
   @override
   void regenerate(String chatId, String messageId) =>
       _of(chatId).regenerate(messageId);
+
+  /// An emoji this build does not offer is a newer peer's: not one to send.
+  @override
+  void react(String chatId, String messageId, String emoji) {
+    final reaction = Reaction.of(emoji);
+    if (reaction != null) _of(chatId).react(messageId, reaction);
+  }
+
+  @override
+  void retract(String chatId, String messageId, String emoji) {
+    final reaction = Reaction.of(emoji);
+    if (reaction != null) _of(chatId).retract(messageId, reaction);
+  }
 
   @override
   void stepThread(String chatId, String messageId, int step) =>

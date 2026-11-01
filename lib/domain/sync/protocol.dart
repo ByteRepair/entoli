@@ -189,6 +189,20 @@ sealed class SyncMessage with _$SyncMessage {
     required String messageId,
   }) = SyncRegenerate;
 
+  /// A reaction to [messageId], by its emoji: see `Reaction`.
+  const factory SyncMessage.react({
+    required String chatId,
+    required String messageId,
+    required String emoji,
+  }) = SyncReact;
+
+  /// Take back the reaction to [messageId] with [emoji].
+  const factory SyncMessage.retract({
+    required String chatId,
+    required String messageId,
+    required String emoji,
+  }) = SyncRetract;
+
   const factory SyncMessage.threadStep({
     required String chatId,
     required String messageId,

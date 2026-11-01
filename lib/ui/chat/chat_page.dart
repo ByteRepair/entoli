@@ -13,6 +13,7 @@ import "../../domain/agent_backend.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/end_turn.dart";
 import "../../domain/models.dart";
+import "../../domain/reaction.dart" show Reactions, reactionsOn;
 import "../../domain/room/room_state.dart";
 import "../../domain/project.dart";
 import "../../domain/prompt_library.dart" show nameOf;
@@ -603,9 +604,13 @@ class MessageEntry extends ConversationEntry {
     this.message, {
     required this.inOmadaSection,
     required this.last,
+    this.reactions = const [],
   });
 
   final Message message;
+
+  /// The emoji it has been reacted with, shown in its action row.
+  final List<String> reactions;
 
   /// The reply sits in a section of the conversation where Omada is on: an
   /// unnamed reply is the main agent's, and names itself "Entoli".
@@ -639,22 +644,25 @@ class CompactionEntry extends ConversationEntry {
 /// names the main agent "Entoli" there. A compaction boundary is said after
 /// the message it covers: the divider is where the summary took over. A reply
 /// that ended with `end_turn` is not a row: it is on the log, not the page.
+/// Nor is a reaction: it shows on the message it answers.
 List<ConversationEntry> entriesOf(Chat chat) {
   final entries = <ConversationEntry>[];
   var on = false;
   final byBoundary = {for (final c in chat.compactions) c.upToMessageId: c};
+  final reactions = reactionsOn(chat.messages);
   for (final (index, m) in chat.messages.indexed) {
     final opener = m.omadaOn;
     if (opener != null && opener != on) {
       on = opener;
       entries.add(SectionEntry(on));
     }
-    if (!endedSilently(m)) {
+    if (!endedSilently(m) && m.reaction == null) {
       entries.add(
         MessageEntry(
           m,
           inOmadaSection: on,
           last: index == chat.messages.length - 1,
+          reactions: reactions[m.id] ?? const [],
         ),
       );
     }
@@ -1408,6 +1416,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                   :final message,
                   :final inOmadaSection,
                   :final last,
+                  :final reactions,
                 ) =>
                   KeyedSubtree(
                     key: message.role == MessageRole.user
@@ -1426,6 +1435,16 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                         shellOutput: view.shellOutput[message.id],
                         onTapLink: (href) => _openLink(context, href),
                         onReply: (quote) => _reply(QuoteEmbed(quote)),
+                        reactions: reactions,
+                        // Any message, the user's own included; not the reply
+                        // still being written. While a turn runs it waits.
+                        onReact: editing != null && !(view.isRunning && last)
+                            ? (reaction) => editing.react(message.id, reaction)
+                            : null,
+                        onRetract: editing == null
+                            ? null
+                            : (reaction) =>
+                                  editing.retract(message.id, reaction),
                         threads: editing == null
                             ? null
                             : chat.branches[message.id],
@@ -1435,7 +1454,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                         onDelete: mutable
                             ? () => editing.deleteThread(message.id)
                             : null,
-                        onEdit: mutable && message.role == MessageRole.user
+                        onEdit:
+                            mutable &&
+                                message.role == MessageRole.user &&
+                                message.reaction == null
                             ? (text) => editing.editAndResend(message.id, text)
                             : null,
                         onRegenerate: mutable

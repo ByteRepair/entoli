@@ -8,6 +8,7 @@ import "package:agent_chat/data/builtin/templates.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/end_turn.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/reaction.dart";
 
 void main() {
   final at = DateTime.utc(2026, 1, 1);
@@ -50,6 +51,44 @@ void main() {
   );
 
   setUp(() => next = 0);
+
+  test("a reaction is worded as the user responding, with what to", () async {
+    final answer = said(MessageRole.assistant, const [
+      MessagePart.text(text: "Here is the plan.\n\n1. Do it."),
+    ]);
+    final reacted = reactionTo(answer, Reaction.fire, id: "x", at: at);
+    final projected = await project([asked("plan it"), answer, reacted]);
+    expect(
+      projected.last.text,
+      userTurnText(
+        "The user has responded with 🔥 (fire) to the message:\n\n"
+        "> Here is the plan.",
+        at: at,
+        first: false,
+      ),
+    );
+    expect(
+      reactionTurnText(
+        const ReactionPart(messageId: "r", emoji: "👍", author: "@build"),
+      ),
+      "@build The user has responded with 👍 (thumbs up) to the message",
+    );
+  });
+
+  test("a reaction taken back before its turn was never said; one after it "
+      "stays", () async {
+    final answer = said(MessageRole.assistant, const [
+      MessagePart.text(text: "Done."),
+    ]);
+    final reacted = reactionTo(answer, Reaction.thumbsUp, id: "x", at: at);
+    Future<int> count(Retraction r) async => (await project([
+      asked("do it"),
+      answer,
+      reacted.copyWith(retraction: r),
+    ])).length;
+    expect(await count(Retraction.beforeItsTurn), 2);
+    expect(await count(Retraction.afterItsTurn), 3);
+  });
 
   test("a plain exchange goes back as one message each way", () async {
     final projected = await project([

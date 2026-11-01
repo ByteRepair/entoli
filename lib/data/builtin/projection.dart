@@ -7,6 +7,7 @@ import "../../domain/ask.dart";
 import "../../domain/end_turn.dart";
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
+import "../../domain/reaction.dart";
 import "../../domain/shell_command_analysis.dart" show isFileToolWork;
 import "../../domain/tool_arg.dart";
 import "../../domain/shell.dart" show bashToolName;
@@ -122,6 +123,8 @@ Future<List<LlmMessage>> projectionOf(
     if (index < from) continue;
     switch (message.role) {
       case MessageRole.user:
+        // Taken back before its turn ran: nobody was ever told it.
+        if (message.retraction == Retraction.beforeItsTurn) break;
         final text = _userText(message, resourcesDir);
         if (text.isEmpty) break;
         // The dress is the viewer's first mail: in [first], once. A call
@@ -226,6 +229,8 @@ Message unloggedMessage(
 /// is known each also says where it is, for a command, and that it is not to
 /// be written: `attachment_save` makes the copy that can be.
 String _userText(Message message, String? resourcesDir) {
+  final reaction = message.reaction;
+  if (reaction != null) return reactionTurnText(reaction);
   final text = expandedPrompt(message.plainText, message.documents).trim();
   if (message.files.isEmpty) return text;
   final files = message.files
@@ -396,6 +401,8 @@ Iterable<LlmMessage> _assistant(
           lastCall = null;
         case SteerPart(:final message):
           steers.add(message);
+        // A reaction is a user message of its own, never part of a reply.
+        case ReactionPart():
         case ArtifactPart():
         case SkillInstallPart():
         case ApprovalPart():
@@ -492,6 +499,7 @@ String? _responseIdOf(MessagePart part) => switch (part) {
   ApprovalPart() ||
   InstructionsPart() ||
   SteerPart() ||
+  ReactionPart() ||
   ErrorPart() => null,
 };
 
