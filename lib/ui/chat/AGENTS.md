@@ -340,10 +340,14 @@ next answers the last; with nothing typed between, they stack a blank line
 apart, a line left to answer the one above later. **Reply focuses the field**
 — the one thing that asks the composer for its focus, since choosing it is
 asking to write — because a caret left wherever it last was, or put down by a
-click, lands beside the card: a card is most of the field. **A card keeps its
-line whatever the edit**: the controller's `value` setter puts a line break
-between a card and anything typed or pasted beside it, and a Backspace or
-Delete that would join the two takes the card instead, as it would a letter.
+click, lands beside the card: a card is most of the field. A card is laid out
+as wide as its line, so what is typed beside one wraps under it, and `message`
+sets a block apart with a blank line however the field had it.
+
+**Reply types a real line break under the card**, and while nothing is typed
+on that last line the field draws the break as an invisible word joiner
+instead: an empty last line is laid out as tall as the line above it, the
+card's. Why a joiner and not a spacer is on `ComposerController._lineUnder`.
 A field's lines are held to
 the text's height unless it is given a strut that is not forced, so the
 composer gives one while it holds a card — and two more lines of height for

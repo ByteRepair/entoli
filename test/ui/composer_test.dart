@@ -344,6 +344,7 @@ void main() {
 
       // Drawn there too: a card as wide as the line overflowed it, the line
       // under it was never laid out, and the caret sat at the card's edge.
+      // It stands after the joiner the line is drawn as, a few pixels in.
       final editable = tester
           .state<EditableTextState>(find.byType(EditableText))
           .renderEditable;
@@ -351,61 +352,63 @@ void main() {
         TextPosition(offset: controller.text.length),
       );
       final card = tester.getRect(find.byType(QuoteCard));
-      expect(caret.left, closeTo(0, 1));
+      expect(caret.left, lessThan(4));
       expect(
         editable.localToGlobal(caret.topLeft).dy,
         greaterThan(card.bottom),
       );
     });
 
-    // A card is most of the field, so a click lands the caret beside one:
-    // what is typed there goes on the line under it, not into the quote.
-    testWidgets("what is typed beside a card goes on a line of its own", (
+    // An empty last line is laid out as tall as the line above it, which
+    // under a card is the card's: the line under one is drawn as a line of
+    // text, not left empty, so the field is no taller than with text on it.
+    testWidgets("the line under a card is a line of text tall", (tester) async {
+      await pump(tester);
+      await quote(tester, "one");
+      final empty = tester.getSize(find.byType(EditableText)).height;
+
+      await type(tester, "${controller.text}a");
+
+      expect(tester.getSize(find.byType(EditableText)).height, empty);
+    });
+
+    // What draws that line is not in the text: a copy of the field is what
+    // it holds and nothing else.
+    testWidgets("copying the field copies nothing drawn for a card's line", (
+      tester,
+    ) async {
+      final key = GlobalKey<ComposerState>();
+      await pump(tester, key: key);
+      key.currentState!.embed(const QuoteEmbed(Quote("one")));
+      await settleIo(tester);
+      final copied = clipboard(tester);
+
+      controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: controller.text.length,
+      );
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+      await settleIo(tester);
+
+      expect(copied, [controller.text]);
+      expect(copied.single, isNot(contains("\u2060")));
+    });
+
+    // A click can land the caret beside a card, a card being most of the
+    // field: what is typed there is still sent apart from the quote.
+    testWidgets("what is typed beside a card is sent apart from it", (
       tester,
     ) async {
       await pump(tester);
       await quote(tester, "one");
       final card = controller.text.substring(0, 1);
 
-      controller.value = TextEditingValue(
-        text: "${card}answer\n",
-        selection: const TextSelection.collapsed(offset: 7),
-      );
-      expect(controller.text, "$card\nanswer\n");
-      expect(controller.selection.baseOffset, 8);
-
-      controller.value = TextEditingValue(
-        text: "before$card\nanswer\n",
-        selection: const TextSelection.collapsed(offset: 6),
-      );
-      expect(controller.text, "before\n$card\nanswer\n");
-      expect(controller.selection.baseOffset, 6);
-
-      await settleIo(tester);
+      await type(tester, "before${card}answer");
       await send(tester);
+
       expect(sent, ["before\n\n> one\n\nanswer"]);
-    });
-
-    // Backspace at the start of the line under a card would join the two;
-    // it takes the card instead, the way it would a letter.
-    testWidgets("Backspace under a card takes the card", (tester) async {
-      await pump(tester);
-      await quote(tester, "one");
-      final card = controller.text.substring(0, 1);
-      controller.value = TextEditingValue(
-        text: "$card\nanswer",
-        selection: const TextSelection.collapsed(offset: 2),
-      );
-
-      controller.value = TextEditingValue(
-        text: "${card}answer",
-        selection: const TextSelection.collapsed(offset: 1),
-      );
-
-      expect(controller.text, "answer");
-      expect(controller.selection.baseOffset, 0);
-      await settleIo(tester);
-      expect(find.byType(QuoteCard), findsNothing);
     });
 
     testWidgets("a message put back comes back with its cards", (tester) async {

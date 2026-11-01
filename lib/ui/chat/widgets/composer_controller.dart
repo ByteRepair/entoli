@@ -60,10 +60,7 @@ class ComposerController extends TextEditingController {
   String get message {
     final parts = _parts();
     if (parts.every((part) => part is String)) return text;
-    bool isBlock(int i) =>
-        i >= 0 && i < parts.length && parts[i] is ComposerEmbed
-        ? (parts[i] as ComposerEmbed).block
-        : false;
+    bool isBlock(int i) => _isBlock(parts, i);
     final out = StringBuffer();
     var lastBlock = false;
     for (final (i, part) in parts.indexed) {
@@ -87,6 +84,13 @@ class ComposerController extends TextEditingController {
     }
     return out.toString();
   }
+
+  /// Whether the part at [i] of [parts] is a block embed; false off either
+  /// end.
+  static bool _isBlock(List<Object> parts, int i) =>
+      i >= 0 && i < parts.length && parts[i] is ComposerEmbed
+      ? (parts[i] as ComposerEmbed).block
+      : false;
 
   static final _leadingLines = RegExp(r"^\s*\n");
   static final _trailingLines = RegExp(r"\n\s*$");
@@ -189,76 +193,16 @@ class ComposerController extends TextEditingController {
     if (end < text.length && text[end] == "\n") end++;
     final lineStart = at == 0 || text[at - 1] == "\n";
     if (lineStart && end < text.length && text[end] == "\n") end++;
-    value = _replaced(value, at, end);
-  }
-
-  /// Every edit, the field's own included, keeps each block on a line of its
-  /// own. A card is most of the field, so a click usually lands the caret
-  /// beside one, and what was typed then joined the card's line — sent as
-  /// more of the quote. Typed or pasted beside a block, a line break is put
-  /// between them; a Backspace or Delete that would join a block to the line
-  /// beside it takes the block instead, the way one deletes a letter.
-  @override
-  set value(TextEditingValue next) => super.value = _blocksApart(value, next);
-
-  TextEditingValue _blocksApart(TextEditingValue was, TextEditingValue next) {
-    if (_embeds.isEmpty) return next;
-    var edited = next;
-    final deleted = was.text.length - next.text.length == 1;
-    for (var i = 0; i < edited.text.length; i++) {
-      final embed = _embeds[edited.text.codeUnitAt(i)];
-      if (embed == null || !embed.block) continue;
-      final text = edited.text;
-      final joinedBefore = i > 0 && text[i - 1] != "\n";
-      final joinedAfter = i + 1 < text.length && text[i + 1] != "\n";
-      if (!joinedBefore && !joinedAfter) continue;
-      if (deleted) {
-        edited = _replaced(edited, i, i + 1);
-        i--;
-        continue;
-      }
-      // The caret stays where it was typed: after the text before a block,
-      // and after the text after one.
-      if (joinedAfter) edited = _replaced(edited, i + 1, i + 1, insert: "\n");
-      if (joinedBefore) {
-        edited = _replaced(edited, i, i, insert: "\n", caretAfter: false);
-        i++;
-      }
-    }
-    return edited;
-  }
-
-  /// [value] with [start] to [end] replaced by [insert]. A position inside
-  /// the range lands at its end, or at its start where not [caretAfter]; a
-  /// position past it moves with the text.
-  static TextEditingValue _replaced(
-    TextEditingValue value,
-    int start,
-    int end, {
-    String insert = "",
-    bool caretAfter = true,
-  }) {
-    final delta = insert.length - (end - start);
-    int shift(int offset) => offset < start
-        ? offset
-        : offset > end || (offset == end && end > start)
-        ? offset + delta
-        : caretAfter
-        ? start + insert.length
-        : start;
-    final selection = value.selection;
-    final composing = value.composing;
-    return TextEditingValue(
-      text: value.text.replaceRange(start, end, insert),
+    int shift(int offset) =>
+        offset <= at ? offset : max(at, offset - (end - at));
+    value = TextEditingValue(
+      text: text.replaceRange(at, end, ""),
       selection: selection.isValid
           ? selection.copyWith(
               baseOffset: shift(selection.baseOffset),
               extentOffset: shift(selection.extentOffset),
             )
           : selection,
-      composing: composing.isValid
-          ? TextRange(start: shift(composing.start), end: shift(composing.end))
-          : composing,
     );
   }
 
@@ -299,18 +243,36 @@ class ComposerController extends TextEditingController {
         : TextRange.empty;
     final children = <InlineSpan>[];
     var start = 0;
-    for (final part in parts) {
+    for (final (i, part) in parts.indexed) {
       if (part is ComposerEmbed) {
         children.add(_span(context, part));
         start++;
         continue;
       }
       final end = start + (part as String).length;
-      children.addAll(_typed(start, end, composing));
+      if (end == text.length && part == "\n" && _isBlock(parts, i - 1)) {
+        children.add(_lineUnder);
+      } else {
+        children.addAll(_typed(start, end, composing));
+      }
       start = end;
     }
     return TextSpan(style: style, children: children);
   }
+
+  /// The line break under the last card, drawn as an invisible word joiner
+  /// on the line under it. Drawn as a line break, it left the field's last
+  /// line empty, and an empty last line is as tall as the line above it — the
+  /// card's — so the caret stood a card's height tall under it. A placeholder
+  /// would not do either: under a strut, a line of nothing but one is taller
+  /// than a line of text. One character for one, so every offset the field
+  /// reads off what is drawn is still one of [text]'s, and nothing of it is in
+  /// what is copied or sent. Spaced half a pixel wider than what [_LineWide]
+  /// leaves beside a card, it wraps under it.
+  static const _lineUnder = TextSpan(
+    text: "\u2060",
+    style: TextStyle(letterSpacing: _LineWide.slack + 0.5),
+  );
 
   /// [start] to [end] of [text], the part inside [composing] underlined the
   /// way the field's own span marks what an IME is still composing.
@@ -351,9 +313,15 @@ class ComposerController extends TextEditingController {
 class _LineWide extends SingleChildRenderObjectWidget {
   const _LineWide({required Widget super.child});
 
-  /// More than the field's caret margin: the caret's width and the gap
-  /// before it.
-  static const inset = 6.0;
+  /// What a field lays its text out narrower than itself by: the gap before
+  /// the caret and the caret's width, `RenderEditable`'s private
+  /// `_kCaretGap + cursorWidth` at the composer's default cursor.
+  static const _caretMargin = 1.0 + 2.0;
+
+  /// What a line holding a card has left beside it.
+  static const slack = 1.0;
+
+  static const inset = _caretMargin + slack;
 
   @override
   RenderObject createRenderObject(BuildContext context) => _RenderLineWide();
