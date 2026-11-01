@@ -16,6 +16,7 @@ import "../../widgets/completion_field.dart";
 import "../../widgets/dialogs.dart";
 import "code_block.dart";
 import "composer_controller.dart";
+import "composer_embed.dart";
 
 class _SendIntent extends Intent {
   const _SendIntent();
@@ -50,8 +51,10 @@ typedef SendCallback = void Function(String text, List<Attachment> attachments);
 /// above the field — that is [CompletionField]'s — and the `+` button also
 /// attaches files.
 ///
-/// Nothing here asks for the field's focus. On Android that is the keyboard
-/// coming up, and it comes up when the field is tapped and at no other time.
+/// Nothing here asks for the field's focus but [ComposerState.embed]. On
+/// Android that is the keyboard coming up, and it comes up when the field is
+/// tapped, or when the user chose Reply on a passage — which is asking to
+/// write — and at no other time.
 /// Dropping it again when the keyboard goes is `FocusFollowsKeyboard`'s, at the
 /// root of the app.
 class Composer extends ConsumerStatefulWidget {
@@ -115,6 +118,9 @@ class Composer extends ConsumerStatefulWidget {
 
 class ComposerState extends ConsumerState<Composer> {
   final GlobalKey<CompletionFieldState> _field = GlobalKey();
+
+  /// Held only so [embed] can put the caret in the field.
+  final FocusNode _focus = FocusNode();
   final List<Attachment> _attachments = [];
 
   /// This message is a command to run rather than something to say. Drawn
@@ -165,6 +171,7 @@ class ComposerState extends ConsumerState<Composer> {
     widget.controller.removeListener(_sync);
     _canSend.dispose();
     _queues.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -230,6 +237,15 @@ class ComposerState extends ConsumerState<Composer> {
     _refresh();
   }
 
+  /// Add [embed] to the message and put the caret on the line under it, so
+  /// what is typed next answers it. Focused, unlike everything else here:
+  /// choosing Reply is asking to write, and a caret left wherever the field
+  /// last had one lands what is typed beside the card.
+  void embed(ComposerEmbed embed) {
+    widget.controller.append(embed);
+    _focus.requestFocus();
+  }
+
   /// Put back a message that was sent and taken back, ahead of whatever has
   /// been typed or attached since.
   ///
@@ -281,6 +297,7 @@ class ComposerState extends ConsumerState<Composer> {
         minimum: const EdgeInsets.all(8),
         child: CompletionField(
           key: _field,
+          focusNode: _focus,
           controller: widget.controller,
           project: widget.project,
           device: widget.device,

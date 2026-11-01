@@ -1346,6 +1346,13 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     );
   }
 
+  /// A passage being answered, into the composer — or, while a question
+  /// stands in its place, into what the composer will hold when it is back.
+  void _reply(ComposerEmbed quote) {
+    final composer = _composer.currentState;
+    composer == null ? _controller.append(quote) : composer.embed(quote);
+  }
+
   /// The one link-opening rule, both renderers of model-written markdown — a
   /// reply and a compaction summary — share it.
   void _openLink(BuildContext context, String href) {
@@ -1428,8 +1435,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                         waitingStatus: view.status,
                         shellOutput: view.shellOutput[message.id],
                         onTapLink: (href) => _openLink(context, href),
-                        onReply: (quote) =>
-                            _controller.append(QuoteEmbed(quote)),
+                        onReply: (quote) => _reply(QuoteEmbed(quote)),
                         threads: editing == null
                             ? null
                             : chat.branches[message.id],

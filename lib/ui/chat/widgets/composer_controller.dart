@@ -170,20 +170,84 @@ class ComposerController extends TextEditingController {
     if (end < text.length && text[end] == "\n") end++;
     final lineStart = at == 0 || text[at - 1] == "\n";
     if (lineStart && end < text.length && text[end] == "\n") end++;
-    final removed = end - at;
-    int shift(int offset) => offset <= at
+    value = _removed(value, at, end);
+  }
+
+  /// Every edit, the field's own included, keeps each block on a line of its
+  /// own. A card is most of the field, so a click usually lands the caret
+  /// beside one, and what was typed then joined the card's line — sent as
+  /// more of the quote. Typed or pasted beside a block, a line break is put
+  /// between them; a Backspace or Delete that would join a block to the line
+  /// beside it takes the block instead, the way one deletes a letter.
+  @override
+  set value(TextEditingValue next) => super.value = _blocksApart(value, next);
+
+  TextEditingValue _blocksApart(TextEditingValue was, TextEditingValue next) {
+    var edited = next;
+    final deleted = was.text.length - next.text.length == 1;
+    for (var i = 0; i < edited.text.length; i++) {
+      final embed = _embeds[edited.text.codeUnitAt(i)];
+      if (embed == null || !embed.block) continue;
+      final text = edited.text;
+      final joinedBefore = i > 0 && text[i - 1] != "\n";
+      final joinedAfter = i + 1 < text.length && text[i + 1] != "\n";
+      if (!joinedBefore && !joinedAfter) continue;
+      if (deleted) {
+        edited = _removed(edited, i, i + 1);
+        i--;
+        continue;
+      }
+      // The caret stays where it was typed: after the text before a block,
+      // and after the text after one.
+      if (joinedAfter) edited = _broken(edited, i + 1, caretAfter: true);
+      if (joinedBefore) {
+        edited = _broken(edited, i, caretAfter: false);
+        i++;
+      }
+    }
+    return edited;
+  }
+
+  /// [value] with a line break at [at]. A position at [at] moves past it
+  /// where [caretAfter], and stays before it otherwise.
+  static TextEditingValue _broken(
+    TextEditingValue value,
+    int at, {
+    required bool caretAfter,
+  }) {
+    int shift(int offset) =>
+        offset > at || (caretAfter && offset == at) ? offset + 1 : offset;
+    return _edited(value, value.text.replaceRange(at, at, "\n"), shift);
+  }
+
+  /// [value] without [start] to [end], a position inside it put at [start].
+  static TextEditingValue _removed(TextEditingValue value, int start, int end) {
+    int shift(int offset) => offset <= start
         ? offset
         : offset >= end
-        ? offset - removed
-        : at;
-    value = TextEditingValue(
-      text: text.replaceRange(at, end, ""),
+        ? offset - (end - start)
+        : start;
+    return _edited(value, value.text.replaceRange(start, end, ""), shift);
+  }
+
+  static TextEditingValue _edited(
+    TextEditingValue value,
+    String text,
+    int Function(int) shift,
+  ) {
+    final selection = value.selection;
+    final composing = value.composing;
+    return TextEditingValue(
+      text: text,
       selection: selection.isValid
           ? selection.copyWith(
               baseOffset: shift(selection.baseOffset),
               extentOffset: shift(selection.extentOffset),
             )
-          : const TextSelection.collapsed(offset: -1),
+          : selection,
+      composing: composing.isValid
+          ? TextRange(start: shift(composing.start), end: shift(composing.end))
+          : composing,
     );
   }
 

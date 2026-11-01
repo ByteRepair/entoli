@@ -337,6 +337,85 @@ void main() {
       expect(sent, ["> two"]);
     });
 
+    // Reply is asking to write: the field takes the caret, on the line under
+    // the card, rather than leaving it wherever it last was.
+    testWidgets("a reply puts the caret on the line under its card", (
+      tester,
+    ) async {
+      final key = GlobalKey<ComposerState>();
+      await app.pump(
+        tester,
+        Scaffold(
+          body: Composer(
+            key: key,
+            controller: controller,
+            agentSpeaking: false,
+            onSend: (text, _) => sent.add(text),
+            onAbort: () {},
+          ),
+        ),
+      );
+      expect(holdsCaret(tester, find.byType(TextField)), isFalse);
+
+      key.currentState!.embed(const QuoteEmbed(Quote("one")));
+      await settleIo(tester);
+
+      expect(holdsCaret(tester, find.byType(TextField)), isTrue);
+      final lines = controller.text.split("\n");
+      expect(lines, hasLength(2));
+      expect(controller.selection.baseOffset, controller.text.length);
+    });
+
+    // A card is most of the field, so a click lands the caret beside one:
+    // what is typed there goes on the line under it, not into the quote.
+    testWidgets("what is typed beside a card goes on a line of its own", (
+      tester,
+    ) async {
+      await pump(tester);
+      await quote(tester, "one");
+      final card = controller.text.substring(0, 1);
+
+      controller.value = TextEditingValue(
+        text: "${card}answer\n",
+        selection: const TextSelection.collapsed(offset: 7),
+      );
+      expect(controller.text, "$card\nanswer\n");
+      expect(controller.selection.baseOffset, 8);
+
+      controller.value = TextEditingValue(
+        text: "before$card\nanswer\n",
+        selection: const TextSelection.collapsed(offset: 6),
+      );
+      expect(controller.text, "before\n$card\nanswer\n");
+      expect(controller.selection.baseOffset, 6);
+
+      await settleIo(tester);
+      await send(tester);
+      expect(sent, ["before\n\n> one\n\nanswer"]);
+    });
+
+    // Backspace at the start of the line under a card would join the two;
+    // it takes the card instead, the way it would a letter.
+    testWidgets("Backspace under a card takes the card", (tester) async {
+      await pump(tester);
+      await quote(tester, "one");
+      final card = controller.text.substring(0, 1);
+      controller.value = TextEditingValue(
+        text: "$card\nanswer",
+        selection: const TextSelection.collapsed(offset: 2),
+      );
+
+      controller.value = TextEditingValue(
+        text: "${card}answer",
+        selection: const TextSelection.collapsed(offset: 1),
+      );
+
+      expect(controller.text, "answer");
+      expect(controller.selection.baseOffset, 0);
+      await settleIo(tester);
+      expect(find.byType(QuoteCard), findsNothing);
+    });
+
     testWidgets("a message put back comes back with its cards", (tester) async {
       final key = GlobalKey<ComposerState>();
       await app.pump(
