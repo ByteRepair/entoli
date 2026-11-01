@@ -42,7 +42,12 @@ const List<AppMenu> appMenus = [
   ]),
   AppMenu("Chat", [
     [AppCommand.pinChat, AppCommand.renameChat, AppCommand.moveChat],
-    [AppCommand.chatSettings, AppCommand.showPlan, AppCommand.stopTurn],
+    [
+      AppCommand.chatSettings,
+      AppCommand.showPlan,
+      AppCommand.voiceMode,
+      AppCommand.stopTurn,
+    ],
     [AppCommand.deleteChat],
   ]),
   AppMenu("Project", [

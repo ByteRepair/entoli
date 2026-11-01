@@ -222,8 +222,11 @@ Settings replaces it rather than stacking a second.
 The commands that act on one chat — pin, rename, move, delete — are
 `chatCommands`, run on a given chat by `runOnChat` (`chat_actions.dart`): the
 sidebar row's menu runs them on its own chat and `Commands` on the open one.
-Each works out for itself whether its chat is the one on screen and whether it
-is a mirror, so no caller passes either. The project's pages beside its chats are
+Each is a dialog over a write in `ChatEdits`, and the write works out for
+itself whether its chat is the one on screen and whether it is a mirror, so no
+caller passes either. The writes are apart from the dialogs because Shortcuts
+makes the same edits with no dialog to show — see "Shortcuts" in
+`macos/AGENTS.md`. The project's pages beside its chats are
 `project_actions.dart`, which says which of them a project has for the
 switcher's buttons and the Project menu alike. A mirrored chat runs none of
 them from the menu: its state is its home device's.

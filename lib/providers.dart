@@ -1433,12 +1433,27 @@ final chatPresenterProvider = Provider<ChatPresenter>(
   (ref) => throw UnimplementedError(),
 );
 
+/// A turn's state, and its stop, from outside its page. Overridden in `main`,
+/// which binds the controllers'.
+final turnControlProvider = Provider<TurnControl>(
+  (ref) => throw UnimplementedError(),
+);
+
+/// The writes behind a chat's row menu. Overridden in `main`, which binds
+/// the UI's.
+final chatEditorProvider = Provider<ChatEditor>(
+  (ref) => throw UnimplementedError(),
+);
+
 /// What Shortcuts can do with chats. See "Shortcuts" in macos/AGENTS.md.
 final chatIntentsProvider = Provider<ChatIntents>(
   (ref) => ChatIntents(
     repo: ref.watch(chatRepositoryProvider),
+    config: ref.watch(appConfigProvider),
     sender: ref.watch(turnSenderProvider),
+    turns: ref.watch(turnControlProvider),
     presenter: ref.watch(chatPresenterProvider),
+    editor: ref.watch(chatEditorProvider),
     isSetUp: (project) => ref.read(setupCompleteProvider(project)),
     onListChanged: () => ref.invalidate(chatListProvider),
   ),

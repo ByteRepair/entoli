@@ -384,6 +384,254 @@ struct RunCommandIntent: AppIntent {
   }
 }
 
+struct StartVoiceModeIntent: AppIntent {
+  static let title: LocalizedStringResource = "Start Voice Mode"
+  static let description = IntentDescription(
+    "Opens voice mode on the chat Entoli has open, or on a new one.")
+  static let openAppWhenRun = true
+
+  func perform() async throws -> some IntentResult {
+    _ = try await IntentBridge.shared.perform("command.voiceMode")
+    return .result()
+  }
+}
+
+// MARK: - A chat's contents
+
+struct GetReplyIntent: AppIntent {
+  static let title: LocalizedStringResource = "Get Reply"
+  static let description = IntentDescription(
+    "The last reply in a chat, or the whole conversation as text.")
+
+  @Parameter(title: "Chat")
+  var chat: ChatEntity
+
+  @Parameter(title: "Whole Conversation", default: false)
+  var whole: Bool
+
+  static var parameterSummary: some ParameterSummary {
+    Summary("Get the reply in \(\.$chat)") { \.$whole }
+  }
+
+  func perform() async throws -> some IntentResult & ReturnsValue<String> {
+    let reply = try await IntentBridge.shared.perform(
+      "reply", ["chat": chat.id, "whole": whole])
+    guard let text = reply as? String else { throw IntentFailure.badReply }
+    return .result(value: text)
+  }
+}
+
+/// Where a chat's turn stands. The cases are Dart's `TurnStatus` names.
+enum TurnStatus: String, AppEnum {
+  case idle, running, waitingForApproval, waitingForAnswer
+
+  static let typeDisplayRepresentation: TypeDisplayRepresentation = "Turn Status"
+  static let caseDisplayRepresentations: [TurnStatus: DisplayRepresentation] = [
+    .idle: "Idle",
+    .running: "Running",
+    .waitingForApproval: "Waiting for Approval",
+    .waitingForAnswer: "Waiting for an Answer",
+  ]
+}
+
+struct GetTurnStatusIntent: AppIntent {
+  static let title: LocalizedStringResource = "Get Turn Status"
+  static let description = IntentDescription(
+    "Whether a chat's turn is running, waiting on you, or done.")
+
+  @Parameter(title: "Chat")
+  var chat: ChatEntity
+
+  static var parameterSummary: some ParameterSummary { Summary("Get the turn status of \(\.$chat)") }
+
+  func perform() async throws -> some IntentResult & ReturnsValue<TurnStatus> {
+    let reply = try await IntentBridge.shared.perform("turnStatus", ["chat": chat.id])
+    guard let name = reply as? String, let status = TurnStatus(rawValue: name) else {
+      throw IntentFailure.badReply
+    }
+    return .result(value: status)
+  }
+}
+
+struct StopTurnIntent: AppIntent {
+  static let title: LocalizedStringResource = "Stop Turn"
+  static let description = IntentDescription("Stops the turn running in a chat.")
+
+  @Parameter(title: "Chat")
+  var chat: ChatEntity
+
+  static var parameterSummary: some ParameterSummary { Summary("Stop the turn in \(\.$chat)") }
+
+  func perform() async throws -> some IntentResult {
+    _ = try await IntentBridge.shared.perform("stopTurn", ["chat": chat.id])
+    return .result()
+  }
+}
+
+struct AddFilesIntent: AppIntent {
+  static let title: LocalizedStringResource = "Add Files to Workspace"
+  static let description = IntentDescription(
+    "Puts files in a chat's own workspace, or in the one a project's chats share.")
+
+  @Parameter(title: "Files")
+  var files: [IntentFile]
+
+  @Parameter(title: "Chat", description: "Its own workspace. Leave empty for a project's.")
+  var chat: ChatEntity?
+
+  @Parameter(title: "Project", description: "The default project if empty.")
+  var project: ProjectEntity?
+
+  static var parameterSummary: some ParameterSummary {
+    Summary("Add \(\.$files) to the workspace of \(\.$chat)") { \.$project }
+  }
+
+  func perform() async throws -> some IntentResult {
+    let staged = try files.map(Self.stage)
+    _ = try await IntentBridge.shared.perform(
+      "addFiles", ["files": staged, "chat": chat?.id, "project": project?.id])
+    return .result()
+  }
+
+  /// Written to a folder of its own under the temporary directory, which
+  /// Dart moves into the workspace: the bytes cross no channel.
+  private static func stage(_ file: IntentFile) throws -> [String: String] {
+    let folder = FileManager.default.temporaryDirectory
+      .appendingPathComponent("entoli-intents", isDirectory: true)
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    let target = folder.appendingPathComponent("file")
+    try file.data.write(to: target)
+    return ["name": file.filename, "staged": target.path]
+  }
+}
+
+struct GetArtifactsIntent: AppIntent {
+  static let title: LocalizedStringResource = "Get Artifacts"
+  static let description = IntentDescription(
+    "What a chat has published, each packed as a zip of its page and files.")
+
+  @Parameter(title: "Chat")
+  var chat: ChatEntity
+
+  static var parameterSummary: some ParameterSummary { Summary("Get the artifacts of \(\.$chat)") }
+
+  func perform() async throws -> some IntentResult & ReturnsValue<[IntentFile]> {
+    let reply = try await IntentBridge.shared.perform("artifacts", ["chat": chat.id])
+    let files = try Wire.list(reply).map { artifact in
+      let url = URL(fileURLWithPath: try artifact.string("path"))
+      return IntentFile(fileURL: url, filename: url.lastPathComponent, type: .zip)
+    }
+    return .result(value: files)
+  }
+}
+
+// MARK: - Managing chats and projects
+
+struct RenameChatIntent: AppIntent {
+  static let title: LocalizedStringResource = "Rename Chat"
+
+  @Parameter(title: "Chat")
+  var chat: ChatEntity
+
+  @Parameter(title: "Title")
+  var newTitle: String
+
+  static var parameterSummary: some ParameterSummary {
+    Summary("Rename \(\.$chat) to \(\.$newTitle)")
+  }
+
+  func perform() async throws -> some IntentResult {
+    _ = try await IntentBridge.shared.perform("renameChat", ["chat": chat.id, "title": newTitle])
+    return .result()
+  }
+}
+
+struct PinChatIntent: AppIntent {
+  static let title: LocalizedStringResource = "Pin Chat"
+  static let description = IntentDescription(
+    "Pins a chat, or unpins it. A pinned chat is never temporary.")
+
+  @Parameter(title: "Chat")
+  var chat: ChatEntity
+
+  @Parameter(title: "Pinned", default: true)
+  var pinned: Bool
+
+  static var parameterSummary: some ParameterSummary {
+    Summary("Set \(\.$chat) pinned to \(\.$pinned)")
+  }
+
+  func perform() async throws -> some IntentResult {
+    _ = try await IntentBridge.shared.perform("pinChat", ["chat": chat.id, "pinned": pinned])
+    return .result()
+  }
+}
+
+struct MoveChatIntent: AppIntent {
+  static let title: LocalizedStringResource = "Move Chat to Project"
+
+  @Parameter(title: "Chat")
+  var chat: ChatEntity
+
+  @Parameter(title: "Project")
+  var project: ProjectEntity
+
+  static var parameterSummary: some ParameterSummary { Summary("Move \(\.$chat) to \(\.$project)") }
+
+  func perform() async throws -> some IntentResult {
+    _ = try await IntentBridge.shared.perform(
+      "moveChat", ["chat": chat.id, "project": project.id])
+    return .result()
+  }
+}
+
+struct DeleteChatIntent: AppIntent {
+  static let title: LocalizedStringResource = "Delete Chat"
+  static let description = IntentDescription(
+    "Deletes a chat, its conversation and its own workspace. Asks first.")
+
+  @Parameter(title: "Chat")
+  var chat: ChatEntity
+
+  static var parameterSummary: some ParameterSummary { Summary("Delete \(\.$chat)") }
+
+  func perform() async throws -> some IntentResult {
+    let dialog: IntentDialog = "Delete “\(chat.title)”? This cannot be undone."
+    if #available(iOS 18, macOS 15, *) {
+      try await requestConfirmation(actionName: .go, dialog: dialog)
+    } else {
+      try await requestConfirmation(result: .result(dialog: dialog))
+    }
+    _ = try await IntentBridge.shared.perform("deleteChat", ["chat": chat.id])
+    return .result()
+  }
+}
+
+struct CreateProjectIntent: AppIntent {
+  static let title: LocalizedStringResource = "Create Project"
+
+  @Parameter(title: "Name")
+  var name: String
+
+  static var parameterSummary: some ParameterSummary { Summary("Create a project called \(\.$name)") }
+
+  func perform() async throws -> some IntentResult & ReturnsValue<ProjectEntity> {
+    let reply = try await IntentBridge.shared.perform("createProject", ["name": name])
+    guard let wire = reply as? [String: Any] else { throw IntentFailure.badReply }
+    return .result(value: try ProjectEntity(wire: wire))
+  }
+}
+
+struct GetProjectsIntent: AppIntent {
+  static let title: LocalizedStringResource = "Get Projects"
+  static let description = IntentDescription("Every project, the default one first.")
+
+  func perform() async throws -> some IntentResult & ReturnsValue<[ProjectEntity]> {
+    .result(value: try await ProjectQuery().suggestedEntities())
+  }
+}
+
 /// What Siri and Spotlight offer with no shortcut made.
 struct EntoliShortcuts: AppShortcutsProvider {
   static var appShortcuts: [AppShortcut] {
@@ -397,5 +645,10 @@ struct EntoliShortcuts: AppShortcutsProvider {
       phrases: ["New chat in \(.applicationName)", "Start a \(.applicationName) chat"],
       shortTitle: "New Chat",
       systemImageName: "plus.bubble")
+    AppShortcut(
+      intent: StartVoiceModeIntent(),
+      phrases: ["Talk to \(.applicationName)", "Start \(.applicationName) voice mode"],
+      shortTitle: "Voice Mode",
+      systemImageName: "waveform")
   }
 }

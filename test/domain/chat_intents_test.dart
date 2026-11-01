@@ -5,13 +5,49 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/domain/app_settings.dart";
+import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_intents.dart";
+import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/intent_action.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/turn_sender.dart";
 
 import "../fakes.dart";
+
+class _Turns implements TurnControl {
+  TurnStatus status = TurnStatus.idle;
+  final stopped = <String>[];
+
+  @override
+  TurnStatus statusOf(String chatId) => status;
+
+  @override
+  Future<bool> stop(String chatId) async {
+    if (status == TurnStatus.idle) return false;
+    stopped.add(chatId);
+    return true;
+  }
+}
+
+class _Editor implements ChatEditor {
+  final calls = <String>[];
+
+  @override
+  Future<void> setPinned(ChatState chat, bool pinned) async =>
+      calls.add("pin ${chat.id} $pinned");
+
+  @override
+  Future<void> retitle(ChatState chat, String title) async =>
+      calls.add("retitle ${chat.id} $title");
+
+  @override
+  Future<void> move(ChatState chat, String? project) async =>
+      calls.add("move ${chat.id} $project");
+
+  @override
+  Future<void> delete(ChatState chat) async => calls.add("delete ${chat.id}");
+}
 
 class _Presenter implements ChatPresenter {
   final shown = <ChatState>[];
@@ -26,6 +62,8 @@ void main() {
   late ChatRepository repo;
   late FakeTurnSender driver;
   late _Presenter presenter;
+  late _Turns turns;
+  late _Editor editor;
   late Set<String?> notSetUp;
   late int listChanges;
   late IntentRegistry registry;
@@ -41,14 +79,19 @@ void main() {
     );
     driver = FakeTurnSender();
     presenter = _Presenter();
+    turns = _Turns();
+    editor = _Editor();
     notSetUp = {};
     listChanges = 0;
     registry = IntentRegistry(
       ChatIntentAction.over(
         ChatIntents(
           repo: repo,
+          config: config,
           sender: driver,
+          turns: turns,
           presenter: presenter,
+          editor: editor,
           isSetUp: (project) => !notSetUp.contains(project),
           onListChanged: () => listChanges++,
         ),
@@ -187,6 +230,159 @@ void main() {
       notSetUp.add(null);
       expect(await refusal("ask", {"prompt": "p"}), contains("setting up"));
       expect(driver.calls, isEmpty);
+    });
+  });
+
+  group("reply", () {
+    Future<String> said() async {
+      final id = await chatTitled("talk");
+      await repo.append(
+        id,
+        recordsOf([
+          userMessage("What is two and two?"),
+          Message(
+            id: "a1",
+            role: MessageRole.assistant,
+            createdAt: DateTime(2026),
+            parts: const [MessagePart.text(text: "Four.")],
+          ),
+        ]),
+      );
+      return id;
+    }
+
+    test("is the last thing the agent said", () async {
+      expect(await perform("reply", {"chat": await said()}), "Four.");
+    });
+
+    test("whole, is the conversation in order, each side named", () async {
+      expect(
+        await perform("reply", {"chat": await said(), "whole": true}),
+        "You:\nWhat is two and two?\n\nEntoli:\nFour.",
+      );
+    });
+  });
+
+  group("a turn from outside", () {
+    test("its status is the turn control's", () async {
+      final id = await chatTitled("busy");
+      turns.status = TurnStatus.waitingForApproval;
+
+      expect(await perform("turnStatus", {"chat": id}), "waitingForApproval");
+    });
+
+    test("stopping one that is not running is refused", () async {
+      final id = await chatTitled("quiet");
+
+      expect(await refusal("stopTurn", {"chat": id}), contains("No turn"));
+
+      turns.status = TurnStatus.running;
+      await perform("stopTurn", {"chat": id});
+      expect(turns.stopped, [id]);
+    });
+  });
+
+  group("addFiles", () {
+    String staged(String text) {
+      final file = File("${tmp.path}/staged-${text.hashCode}")
+        ..writeAsStringSync(text);
+      return file.path;
+    }
+
+    test("moves a staged file into the chat's own workspace", () async {
+      final id = await chatTitled("files");
+
+      await perform("addFiles", {
+        "chat": id,
+        "files": [
+          {"name": "notes/today.md", "staged": staged("hello")},
+        ],
+      });
+
+      final landed = File("${config.workspaceDir(id)}/notes/today.md");
+      expect(landed.readAsStringSync(), "hello");
+    });
+
+    test("with no chat, into the project's shared workspace", () async {
+      await perform("addFiles", {
+        "files": [
+          {"name": "../escape.txt", "staged": staged("x")},
+        ],
+      });
+
+      // The name came from outside, so it cannot climb out.
+      expect(
+        File("${config.projectWorkspaceDir()}/escape.txt").existsSync(),
+        isTrue,
+      );
+    });
+
+    test("refuses a project whose chats share no workspace", () async {
+      expect(
+        await refusal("addFiles", {
+          "project": const AnonymousProject().dir,
+          "files": [
+            {"name": "a", "staged": staged("a")},
+          ],
+        }),
+        contains("no workspace"),
+      );
+    });
+  });
+
+  test("artifacts is empty for a chat that published none", () async {
+    expect(await perform("artifacts", {"chat": await chatTitled("x")}), []);
+  });
+
+  group("managing a chat", () {
+    test("each edit goes to the editor with the chat", () async {
+      final id = await chatTitled("old");
+      await repo.createProject("work");
+
+      await perform("renameChat", {"chat": id, "title": " new "});
+      await perform("pinChat", {"chat": id, "pinned": false});
+      await perform("moveChat", {"chat": id, "project": "work"});
+      await perform("deleteChat", {"chat": id});
+
+      expect(editor.calls, [
+        "retitle $id new",
+        "pin $id false",
+        "move $id work",
+        "delete $id",
+      ]);
+    });
+
+    test("a move to a project that is not there is refused", () async {
+      final id = await chatTitled("x");
+      expect(
+        await refusal("moveChat", {"chat": id, "project": "nowhere"}),
+        contains("nowhere"),
+      );
+      expect(editor.calls, isEmpty);
+    });
+
+    test("an id that climbs out of chats/ is no chat", () async {
+      expect(
+        await refusal("renameChat", {"chat": "../x", "title": "t"}),
+        contains("no longer exists"),
+      );
+    });
+  });
+
+  group("createProject", () {
+    test("makes what was typed safe, and returns it", () async {
+      final made = await perform("createProject", {"name": "My work!"}) as Map;
+
+      expect(made["id"], "My-work");
+      expect(await repo.listProjects(), contains("My-work"));
+    });
+
+    test("refuses a name already taken", () async {
+      await repo.createProject("work");
+      expect(
+        await refusal("createProject", {"name": "work"}),
+        contains("already"),
+      );
     });
   });
 

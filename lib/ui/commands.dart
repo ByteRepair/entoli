@@ -18,6 +18,7 @@ import "profile/profile_page.dart";
 import "project_actions.dart";
 import "selection.dart";
 import "settings/settings_category.dart";
+import "voice/voice_page.dart";
 import "sidebar/project_palette.dart";
 
 /// What each [AppCommand] does, and whether it can now: one snapshot of the
@@ -173,6 +174,12 @@ class Commands {
         openChatSettings(context, chatId!);
       case AppCommand.showPlan:
         openPlan(context, chatId!);
+      // Into the open chat, or a new one where none is open — the new-chat
+      // screen's circle.
+      case AppCommand.voiceMode:
+        await (chatId == null
+            ? startVoiceChat(context, ref)
+            : openVoice(context, ref, chatId));
       case AppCommand.stopTurn:
         await ref.read(chatControllerProvider(chatId!).notifier).abort();
       case AppCommand.projectWorkspace:
