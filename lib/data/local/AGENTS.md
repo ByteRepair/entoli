@@ -590,9 +590,11 @@ and the `kvBudgetBytes` every loaded model may have — against what the device
 says it can give, and the page offers only the entries that fit
 (`LocalEngine.offers`). A list of devices and what each can run would be a list
 to keep; the device can answer for itself. Android's RAM comes from the tools
-channel (`ActivityManager`'s `totalMem`), Linux's from `/proc/meminfo`, and
-llama.cpp gets three fifths of it, since a phone shares that RAM with
-everything else. Apple's comes from the handshake: Metal's
+channel (`ActivityManager`'s `totalMem`), Linux's from `/proc/meminfo`.
+llama.cpp gets three fifths of a Linux machine's and half a phone's, since a
+phone shares that RAM with every app it keeps alive and its low-memory killer
+starts on them well short of three fifths — on a 12 GB phone the 4B and not
+the 9B. Apple's comes from the handshake: Metal's
 `recommendedMaxWorkingSetSize`, the GPU the window draws on too, of which a Mac
 gets three quarters; on iOS also what the OS still lets the app grow by, which
 is what ends an app there, and a phone gets three fifths of the smaller — on an
