@@ -124,9 +124,9 @@ class _SidebarState extends ConsumerState<Sidebar> {
               ListTile(
                 leading: const Icon(Icons.add),
                 title: const Text("New chat"),
-                tileColor: scheme.primary,
-                iconColor: scheme.onPrimary,
-                textColor: scheme.onPrimary,
+                tileColor: scheme.secondary,
+                iconColor: scheme.onSecondary,
+                textColor: scheme.onSecondary,
                 onTap: () => openNewChat(context, ref),
               )
             else ...[
