@@ -821,7 +821,9 @@ List<String> clipboard(WidgetTester tester, {List<String>? html}) {
 /// A mouse drag from [from] to [to] — [to] null collapses the selection at
 /// [from] — and Ctrl+C over it. The whole of what a selection-copy test
 /// varies in is the two positions; the gesture, the pump between them and
-/// the key sequence are the same every time.
+/// the key sequence are the same every time. The copy is settled in real
+/// rounds, since a formula in it is drawn to a picture first, and drawing
+/// only advances on the real clock.
 Future<void> dragCopy(WidgetTester tester, Offset from, {Offset? to}) async {
   final gesture = await tester.startGesture(
     from,
@@ -835,7 +837,7 @@ Future<void> dragCopy(WidgetTester tester, Offset from, {Offset? to}) async {
   await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
   await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
   await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-  await tester.pumpAndSettle();
+  await settleIo(tester);
 }
 
 /// The soft keyboard, the way the platform reports one: insets over the bottom

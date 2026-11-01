@@ -5,8 +5,11 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
+import "package:agent_chat/domain/quote.dart";
 import "package:agent_chat/domain/room/roster.dart" show isCommand;
 import "package:agent_chat/ui/chat/widgets/composer.dart";
+import "package:agent_chat/ui/chat/widgets/composer_controller.dart";
+import "package:agent_chat/ui/chat/widgets/composer_embed.dart";
 import "package:agent_chat/ui/widgets/attachment_chip.dart";
 
 import "../data/builtin/builtin_fakes.dart";
@@ -15,7 +18,7 @@ import "../harness.dart";
 
 void main() {
   late TestApp app;
-  final controller = TextEditingController();
+  final controller = ComposerController();
   final sent = <String>[];
   final sentAttachments = <List<Attachment>>[];
   final queued = <String>[];
@@ -32,6 +35,7 @@ void main() {
 
   Future<void> pump(
     WidgetTester tester, {
+    Key? key,
     EdgeInsets bars = EdgeInsets.zero,
     String? workspace,
     String? workspaceHome,
@@ -43,6 +47,7 @@ void main() {
       bars,
       Scaffold(
         body: Composer(
+          key: key,
           controller: controller,
           agentSpeaking: agentSpeaking,
           onSend: (text, attachments) {
@@ -246,21 +251,7 @@ void main() {
     tester,
   ) async {
     final key = GlobalKey<ComposerState>();
-    await app.pump(
-      tester,
-      Scaffold(
-        body: Composer(
-          key: key,
-          controller: controller,
-          agentSpeaking: false,
-          onSend: (text, attachments) {
-            sent.add(text);
-            sentAttachments.add(attachments);
-          },
-          onAbort: () {},
-        ),
-      ),
-    );
+    await pump(tester, key: key);
     await type(tester, "typed since");
 
     key.currentState!.restore((
@@ -281,6 +272,157 @@ void main() {
 
     expect(sent, ["taken back\ntyped since"]);
     expect(sentAttachments.single.single.filename, "shot.png");
+  });
+
+  group("quotes", () {
+    Future<void> send(WidgetTester tester) async {
+      await tester.tap(find.byTooltip("Send"));
+      await settleIo(tester);
+    }
+
+    Future<void> quote(WidgetTester tester, String text, {String? handle}) {
+      controller.append(QuoteEmbed(Quote(text, handle: handle)));
+      return settleIo(tester);
+    }
+
+    // Quoted with nothing typed between, each is left a line to be answered
+    // on later; sent, each is a blockquote a paragraph apart.
+    testWidgets("stack a line apart and send as blockquotes", (tester) async {
+      await pump(tester);
+      await quote(tester, "one");
+      await quote(tester, "two");
+
+      expect(find.byType(QuoteCard), findsNWidgets(2));
+      expect(controller.text.split("\n"), hasLength(4));
+      await send(tester);
+      expect(sent, ["> one\n\n> two"]);
+    });
+
+    // A line straight after a `>` line is more of the quote to markdown, so
+    // the answer typed under the card is sent a blank line apart from it.
+    testWidgets("send what is typed under one as a paragraph of its own", (
+      tester,
+    ) async {
+      await pump(tester);
+      await quote(tester, "one", handle: "@scout");
+      await type(tester, "${controller.text}answer");
+
+      expect(find.text("@scout"), findsOneWidget);
+      await send(tester);
+      expect(sent, ["> @scout\n>\n> one\n\nanswer"]);
+    });
+
+    testWidgets("the card's close button takes its quote out", (tester) async {
+      await pump(tester);
+      await quote(tester, "one");
+      await quote(tester, "two");
+
+      await tester.tap(find.byTooltip("Remove quote").first);
+      await settleIo(tester);
+
+      expect(find.byType(QuoteCard), findsOneWidget);
+      await send(tester);
+      expect(sent, ["> two"]);
+    });
+
+    // Reply is asking to write: the field takes the caret, on the line under
+    // the card, rather than leaving it wherever it last was.
+    testWidgets("a reply puts the caret on the line under its card", (
+      tester,
+    ) async {
+      final key = GlobalKey<ComposerState>();
+      await pump(tester, key: key);
+      expect(holdsCaret(tester, find.byType(TextField)), isFalse);
+
+      key.currentState!.embed(const QuoteEmbed(Quote("one")));
+      await settleIo(tester);
+
+      expect(holdsCaret(tester, find.byType(TextField)), isTrue);
+      final lines = controller.text.split("\n");
+      expect(lines, hasLength(2));
+      expect(controller.selection.baseOffset, controller.text.length);
+
+      // Drawn there too: a card as wide as the line overflowed it, the line
+      // under it was never laid out, and the caret sat at the card's edge.
+      final editable = tester
+          .state<EditableTextState>(find.byType(EditableText))
+          .renderEditable;
+      final caret = editable.getLocalRectForCaret(
+        TextPosition(offset: controller.text.length),
+      );
+      final card = tester.getRect(find.byType(QuoteCard));
+      expect(caret.left, closeTo(0, 1));
+      expect(
+        editable.localToGlobal(caret.topLeft).dy,
+        greaterThan(card.bottom),
+      );
+    });
+
+    // A card is most of the field, so a click lands the caret beside one:
+    // what is typed there goes on the line under it, not into the quote.
+    testWidgets("what is typed beside a card goes on a line of its own", (
+      tester,
+    ) async {
+      await pump(tester);
+      await quote(tester, "one");
+      final card = controller.text.substring(0, 1);
+
+      controller.value = TextEditingValue(
+        text: "${card}answer\n",
+        selection: const TextSelection.collapsed(offset: 7),
+      );
+      expect(controller.text, "$card\nanswer\n");
+      expect(controller.selection.baseOffset, 8);
+
+      controller.value = TextEditingValue(
+        text: "before$card\nanswer\n",
+        selection: const TextSelection.collapsed(offset: 6),
+      );
+      expect(controller.text, "before\n$card\nanswer\n");
+      expect(controller.selection.baseOffset, 6);
+
+      await settleIo(tester);
+      await send(tester);
+      expect(sent, ["before\n\n> one\n\nanswer"]);
+    });
+
+    // Backspace at the start of the line under a card would join the two;
+    // it takes the card instead, the way it would a letter.
+    testWidgets("Backspace under a card takes the card", (tester) async {
+      await pump(tester);
+      await quote(tester, "one");
+      final card = controller.text.substring(0, 1);
+      controller.value = TextEditingValue(
+        text: "$card\nanswer",
+        selection: const TextSelection.collapsed(offset: 2),
+      );
+
+      controller.value = TextEditingValue(
+        text: "${card}answer",
+        selection: const TextSelection.collapsed(offset: 1),
+      );
+
+      expect(controller.text, "answer");
+      expect(controller.selection.baseOffset, 0);
+      await settleIo(tester);
+      expect(find.byType(QuoteCard), findsNothing);
+    });
+
+    testWidgets("a message put back comes back with its cards", (tester) async {
+      final key = GlobalKey<ComposerState>();
+      await pump(tester, key: key);
+      await type(tester, "typed since");
+
+      key.currentState!.restore((
+        text: "> @scout\n>\n> one\n\nanswer",
+        attachments: const [],
+      ));
+      await settleIo(tester);
+
+      expect(find.byType(QuoteCard), findsOneWidget);
+      await send(tester);
+      expect(sent, ["> @scout\n>\n> one\n\nanswer\ntyped since"]);
+    });
   });
 
   Future<void> insertVia(WidgetTester tester, String label) async {

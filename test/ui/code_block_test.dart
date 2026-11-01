@@ -203,9 +203,8 @@ void main() {
       expect(copied, ["second"]);
     });
 
-    // The bar is the block's chrome, not what the model said. Dragging the
-    // whole reply copies the rendered text, the language name included in
-    // neither direction.
+    // The bar is the block's chrome, not what the model said: the language
+    // name comes back as the fence it was written in, not as a line of text.
     testWidgets("a drag across the reply does not pick up the bar", (
       tester,
     ) async {
@@ -219,7 +218,27 @@ void main() {
         to: tester.getBottomRight(reply) - const Offset(2, 4),
       );
 
-      expect(copied, ["read this:\nprint(1)"]);
+      expect(copied, ["read this:\n\n```python\nprint(1)\n```"]);
+    });
+
+    // The block's scroll used to be a selection container of its own, so a
+    // drag from inside it was the scroll's to highlight and to copy, and
+    // stopped there. Its lines are the reply's now, like any paragraph's.
+    testWidgets("a drag from inside the code runs on into the reply", (
+      tester,
+    ) async {
+      final copied = clipboard(tester);
+      await app.pumpReply(tester, "```python\nprint(1)\n```\n\nthen this");
+
+      final code = find.textContaining("print(1)", findRichText: true);
+      final after = find.textContaining("then this", findRichText: true);
+      await dragCopy(
+        tester,
+        tester.getTopLeft(code) + const Offset(1, 4),
+        to: tester.getBottomRight(after) - const Offset(1, 4),
+      );
+
+      expect(copied, ["```python\nprint(1)\n```\n\nthen this"]);
     });
   });
 

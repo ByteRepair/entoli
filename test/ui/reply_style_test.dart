@@ -34,10 +34,10 @@ void main() {
     tester,
   ) async {
     final sheet = await sheetOf(tester);
-    final scheme = Theme.of(tester.element(find.byType(SizedBox))).colorScheme;
 
     expect(sheet.code?.fontFamily, monoFamily);
-    expect(sheet.code?.backgroundColor, scheme.surfaceContainerHighest);
+    // Translucent, so the selection highlight painted under it shows.
+    expect(sheet.code!.backgroundColor!.a, lessThan(1));
     expect(sheet.code!.fontSize, lessThan(sheet.p!.fontSize!));
   });
 

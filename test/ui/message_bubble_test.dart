@@ -12,6 +12,7 @@ import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/quote.dart";
 import "package:agent_chat/domain/theme_colour.dart";
 import "package:agent_chat/ui/theme.dart";
 import "package:agent_chat/ui/chat/activity/card.dart"
@@ -54,6 +55,8 @@ void main() {
     VoidCallback? onSpeak,
     bool isSpeaking = false,
     ValueChanged<String>? onTapLink,
+    ValueChanged<Quote>? onReply,
+    bool entoli = false,
     Uint8List? avatar,
   }) => app.pump(
     tester,
@@ -74,6 +77,8 @@ void main() {
         onSpeak: onSpeak,
         isSpeaking: isSpeaking,
         onTapLink: onTapLink,
+        onReply: onReply,
+        entoli: entoli,
       ),
     ),
     settle: !isWaiting,
@@ -1378,7 +1383,10 @@ void main() {
 
     // A selection used to stop at the element it started in, and copied whole
     // parts as markdown rather than what was highlighted.
-    testWidgets("selecting a rendered reply copies the words on screen", (
+    // Plain text is what an editor, a terminal or another markdown field
+    // takes, so it gets the reply as written; the HTML beside it is what a
+    // word processor takes.
+    testWidgets("selecting a rendered reply copies it as markdown", (
       tester,
     ) async {
       final copied = clipboard(tester);
@@ -1396,7 +1404,7 @@ void main() {
         to: tester.getBottomRight(rendered) - const Offset(2, 4),
       );
 
-      expect(copied, ["Heading\nhere is bold code"]);
+      expect(copied, ["# Heading\n\nhere is **bold** code"]);
     });
 
     // The bubble closes at every tool call, so a region per bubble would stop
@@ -1423,14 +1431,14 @@ void main() {
         to: tester.getBottomRight(said.last) - const Offset(2, 4),
       );
 
-      expect(copied.single, contains("before the call"));
-      expect(copied.single, contains("after it"));
+      expect(copied.single, contains("before **the** call"));
+      expect(copied.single, contains("after *it*"));
       expect(copied.single, isNot(contains("bash")));
     });
 
-    // The bullets are chrome like a code block's bar: what a selection reads
-    // is what the copy button reads, the list's items and not `•Item`.
-    testWidgets("a drag over a list copies its items without the bullets", (
+    // The bullets are chrome like a code block's bar: what is copied is the
+    // list as it was written, not the `•` that was drawn.
+    testWidgets("a drag over a list copies it as a markdown list", (
       tester,
     ) async {
       final copied = clipboard(tester);
@@ -1446,7 +1454,7 @@ void main() {
         to: tester.getBottomRight(rendered) - const Offset(2, 4),
       );
 
-      expect(copied.single, "one\ntwo");
+      expect(copied.single, "- one\n- two");
     });
 
     // Whole-part copy answered a three-word drag with the whole paragraph's
@@ -1672,6 +1680,54 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(html.single, contains("<p>here is <b>bold</b></p>"));
+    });
+
+    Future<void> openMenu(WidgetTester tester) async {
+      await dragOver(tester, copy: false);
+      await tester.tapAt(
+        tester.getCenter(find.byType(MarkdownBody)),
+        buttons: kSecondaryMouseButton,
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pumpAndSettle();
+    }
+
+    // Reply hands the selection over as the markdown a copy's plain half is,
+    // with the author's handle where a member of an Omada section wrote it.
+    for (final (entoli, handle) in [(false, null), (true, "@scout")]) {
+      testWidgets("the selection menu's Reply quotes it, "
+          "${entoli ? "addressed in Omada" : "unaddressed outside it"}", (
+        tester,
+      ) async {
+        final quoted = <Quote>[];
+        await pump(
+          tester,
+          _message(MessageRole.assistant, [
+            const TextPart(text: "here is **bold**"),
+          ], author: "@scout"),
+          entoli: entoli,
+          onReply: quoted.add,
+        );
+
+        await openMenu(tester);
+        await tester.tap(find.text("Reply"));
+        await tester.pumpAndSettle();
+
+        expect(quoted, [Quote("here is **bold**", handle: handle)]);
+        expect(find.text("Reply"), findsNothing);
+      });
+    }
+
+    testWidgets("no Reply is offered without somewhere to put it", (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [const TextPart(text: "hello")]),
+      );
+      await openMenu(tester);
+      expect(find.text("Copy"), findsOneWidget);
+      expect(find.text("Reply"), findsNothing);
     });
   });
 
