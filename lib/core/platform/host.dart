@@ -40,6 +40,7 @@ import "../../data/local/tree_ops.dart";
 import "../../data/local/desktop_file_handoff.dart";
 import "../../data/model_host/helper_process.dart";
 import "../../data/model_host/model_process.dart";
+import "../../data/local/intent_channel.dart";
 import "../../data/local/io_file_watches.dart";
 import "../../data/local/linux_reminder_alarms.dart";
 import "../../data/local/macos_reminder_alarms.dart";
@@ -59,6 +60,7 @@ import "../../domain/app_update.dart";
 import "../log.dart";
 import "../../domain/assistant_launch.dart";
 import "../../domain/confinement.dart";
+import "../../domain/intent_action.dart";
 import "../../domain/backup_handoff.dart";
 import "../../domain/builtin_project.dart";
 import "../../domain/file_handoff.dart";
@@ -436,6 +438,14 @@ FileHandoff createFileHandoff() =>
 /// Android has no save dialog; a backup leaves through the share sheet.
 BackupHandoff createBackupHandoff(FileHandoff handoff) =>
     Platform.isAndroid ? SharedBackup(handoff) : const FileSelectorBackup();
+
+/// Shortcuts' App Intents, on the two platforms that have them: the Apple
+/// Runners answer `agent_chat/intents`, and nothing else does.
+void listenForIntents(IntentRegistry registry) {
+  if (Platform.isIOS || Platform.isMacOS) {
+    unawaited(IntentChannel(registry).listen());
+  }
+}
 
 AssistantLaunch createAssistantLaunch() => Platform.isAndroid
     ? AndroidAssistantLaunch()

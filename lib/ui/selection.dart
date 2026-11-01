@@ -8,6 +8,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../core/log.dart";
+import "../domain/chat_intents.dart" show ChatPresenter;
 import "../domain/chat_meta.dart";
 import "../domain/models.dart";
 import "../domain/project.dart";
@@ -84,6 +85,22 @@ class SidebarShown extends Notifier<bool> {
 final sidebarShownProvider = NotifierProvider<SidebarShown, bool>(
   SidebarShown.new,
 );
+
+/// A chat put on screen from outside the window — Shortcuts — where there
+/// is no drawer to close: its project in the sidebar, and it in the pane.
+class SelectionChatPresenter implements ChatPresenter {
+  SelectionChatPresenter(this._ref);
+
+  final Ref _ref;
+
+  @override
+  void show(ChatState chat) {
+    _ref
+        .read(selectedProjectProvider.notifier)
+        .select(localProject(chat.project));
+    _ref.read(selectedChatIdProvider.notifier).select(chat.id);
+  }
+}
 
 void openChat(BuildContext context, WidgetRef ref, String chatId) {
   ref.read(selectedChatIdProvider.notifier).select(chatId);

@@ -42,9 +42,9 @@ named in a cross-reference is findable from this list.
   app, Being the assistant, Waking for a trigger, The app icon, The debug
   build's own
 - `ios/AGENTS.md` — The icon, Export compliance, Privacy declarations, Why no host shell, The iSH driver, The rootfs, The menu bar,
-  The workspace inside the guest
+  The workspace inside the guest, Shortcuts
 - `macos/AGENTS.md` — Why no sandbox, The entitlements, What a command runs on,
-  The menu bar,
+  The menu bar, Shortcuts,
   What is absent, and honestly so, Voice mode, The icon, The DMG, Tests on
   this host
 - `macos/Runner/entoli.icon/AGENTS.md` — the app icon's Icon Composer package:

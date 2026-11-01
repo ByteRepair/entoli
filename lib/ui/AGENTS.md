@@ -212,8 +212,9 @@ facts a menu draws — the open chat's id, whether it is pinned and whether a
 turn runs — since every rebuild sends the whole menu to the platform, and a
 chat's state changes with each message that lands. `Commands.read` is
 the same taken at a key or a click, which `run` acts on.
-`canRun` is the one answer to whether a command can run now, and both the keys
-and the menus ask it. A command is not `anywhere` unless it opens one of the
+`availability` is the one answer to whether a command can run now, and why
+not — the keys, the menus and Shortcuts all ask it, the menus reading only
+whether. A command is not `anywhere` unless it opens one of the
 app's own pages, and the rest only run with the chat pane in front: they act
 on what it shows, and a page pushed over it is hiding that. Settings over
 Settings replaces it rather than stacking a second.
