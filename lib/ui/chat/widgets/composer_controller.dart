@@ -28,18 +28,18 @@ class ComposerController extends TextEditingController {
   /// changes: undo brings a deleted character back, and the embed has to
   /// still be here when it does. [clear] lets them go.
   final Map<int, ComposerEmbed> _embeds = {};
-  int _next = _firstCode;
 
   static const _firstCode = 0xE000;
-  static const _lastCode = 0xF8FF;
 
   /// The embeds in the field, in order.
-  List<ComposerEmbed> get embeds => [
-    for (final unit in text.codeUnits) ?_embeds[unit],
-  ];
+  List<ComposerEmbed> get embeds => _embeds.isEmpty
+      ? const []
+      : [for (final unit in text.codeUnits) ?_embeds[unit]];
 
-  /// The field as runs of typed text and embeds, in order.
+  /// The field as runs of typed text and embeds, in order. Read on every
+  /// keystroke, so a field that has never held an embed is one run.
   List<Object> _parts() {
+    if (_embeds.isEmpty) return [if (text.isNotEmpty) text];
     final parts = <Object>[];
     var start = 0;
     for (var i = 0; i < text.length; i++) {
@@ -97,40 +97,56 @@ class ComposerController extends TextEditingController {
   /// would have.
   set message(String message) {
     _embeds.clear();
-    _next = _firstCode;
     final lines = message.split("\n");
-    // Each a line of the field: a typed line or an embed.
-    final items = <Object>[];
-    var i = 0;
-    while (i < lines.length) {
-      final embed = _embedAt(lines, i);
-      if (embed != null) {
-        items.add(embed.$1);
-        i = embed.$2;
-      } else {
-        items.add(lines[i++]);
-      }
-    }
     final field = <String>[];
-    for (final (i, item) in items.indexed) {
-      if (item is ComposerEmbed) {
-        field.add(_allocate(item));
-        if (i == items.length - 1) field.add("");
+    var underEmbed = false;
+    for (var i = 0; i < lines.length;) {
+      if (_embedAt(lines, i) case (final embed, final end)) {
+        field.add(_allocate(embed));
+        i = end;
+        underEmbed = true;
         continue;
       }
+      final line = lines[i++];
       // The blank line that set a block apart from the text under it is the
       // message's; in the field the text sits on the line under the card.
-      final underBlock = i > 0 && items[i - 1] is ComposerEmbed;
-      final next = i + 1 < items.length ? items[i + 1] : null;
-      if (underBlock && item == "" && next is String) continue;
-      field.add(item as String);
+      final separator =
+          underEmbed &&
+          line.isEmpty &&
+          i < lines.length &&
+          _embedAt(lines, i) == null;
+      if (!separator) field.add(line);
+      underEmbed = false;
     }
+    // The line under the last card, for the caret.
+    if (underEmbed) field.add("");
     final text = field.join("\n");
     value = TextEditingValue(
       text: text,
       selection: TextSelection.collapsed(offset: text.length),
     );
   }
+
+  /// Put [said] ahead of what the field holds: a message taken back, above
+  /// what was typed since. An embed either side of the join is kept a
+  /// paragraph of its own, or the line beside a quote would read as more of
+  /// it and its card would not come back.
+  void prepend(String said) {
+    final typed = message;
+    if (said.isEmpty || typed.isEmpty) {
+      message = "$said$typed";
+      return;
+    }
+    final apart =
+        _isEmbed(said.split(_blankLine).last) ||
+        _isEmbed(typed.split(_blankLine).first);
+    message = "$said${apart ? "\n\n" : "\n"}$typed";
+  }
+
+  static final _blankLine = RegExp(r"\n\s*\n");
+
+  bool _isEmbed(String paragraph) =>
+      readers.any((read) => read(paragraph.trim()) != null);
 
   /// The embed a run of lines from [start] spells and where the run ends, or
   /// null. A paragraph of its own only: a `>` line inside a run of text is
@@ -173,7 +189,7 @@ class ComposerController extends TextEditingController {
     if (end < text.length && text[end] == "\n") end++;
     final lineStart = at == 0 || text[at - 1] == "\n";
     if (lineStart && end < text.length && text[end] == "\n") end++;
-    value = _removed(value, at, end);
+    value = _replaced(value, at, end);
   }
 
   /// Every edit, the field's own included, keeps each block on a line of its
@@ -186,6 +202,7 @@ class ComposerController extends TextEditingController {
   set value(TextEditingValue next) => super.value = _blocksApart(value, next);
 
   TextEditingValue _blocksApart(TextEditingValue was, TextEditingValue next) {
+    if (_embeds.isEmpty) return next;
     var edited = next;
     final deleted = was.text.length - next.text.length == 1;
     for (var i = 0; i < edited.text.length; i++) {
@@ -196,52 +213,43 @@ class ComposerController extends TextEditingController {
       final joinedAfter = i + 1 < text.length && text[i + 1] != "\n";
       if (!joinedBefore && !joinedAfter) continue;
       if (deleted) {
-        edited = _removed(edited, i, i + 1);
+        edited = _replaced(edited, i, i + 1);
         i--;
         continue;
       }
       // The caret stays where it was typed: after the text before a block,
       // and after the text after one.
-      if (joinedAfter) edited = _broken(edited, i + 1, caretAfter: true);
+      if (joinedAfter) edited = _replaced(edited, i + 1, i + 1, insert: "\n");
       if (joinedBefore) {
-        edited = _broken(edited, i, caretAfter: false);
+        edited = _replaced(edited, i, i, insert: "\n", caretAfter: false);
         i++;
       }
     }
     return edited;
   }
 
-  /// [value] with a line break at [at]. A position at [at] moves past it
-  /// where [caretAfter], and stays before it otherwise.
-  static TextEditingValue _broken(
+  /// [value] with [start] to [end] replaced by [insert]. A position inside
+  /// the range lands at its end, or at its start where not [caretAfter]; a
+  /// position past it moves with the text.
+  static TextEditingValue _replaced(
     TextEditingValue value,
-    int at, {
-    required bool caretAfter,
+    int start,
+    int end, {
+    String insert = "",
+    bool caretAfter = true,
   }) {
-    int shift(int offset) =>
-        offset > at || (caretAfter && offset == at) ? offset + 1 : offset;
-    return _edited(value, value.text.replaceRange(at, at, "\n"), shift);
-  }
-
-  /// [value] without [start] to [end], a position inside it put at [start].
-  static TextEditingValue _removed(TextEditingValue value, int start, int end) {
-    int shift(int offset) => offset <= start
+    final delta = insert.length - (end - start);
+    int shift(int offset) => offset < start
         ? offset
-        : offset >= end
-        ? offset - (end - start)
+        : offset > end || (offset == end && end > start)
+        ? offset + delta
+        : caretAfter
+        ? start + insert.length
         : start;
-    return _edited(value, value.text.replaceRange(start, end, ""), shift);
-  }
-
-  static TextEditingValue _edited(
-    TextEditingValue value,
-    String text,
-    int Function(int) shift,
-  ) {
     final selection = value.selection;
     final composing = value.composing;
     return TextEditingValue(
-      text: text,
+      text: value.text.replaceRange(start, end, insert),
       selection: selection.isValid
           ? selection.copyWith(
               baseOffset: shift(selection.baseOffset),
@@ -257,11 +265,11 @@ class ComposerController extends TextEditingController {
   /// A character for [embed] that nothing in the field is already: the user
   /// may have pasted one from the same range.
   String _allocate(ComposerEmbed embed) {
-    while (_next < _lastCode &&
-        (_embeds.containsKey(_next) || text.codeUnits.contains(_next))) {
-      _next++;
+    final taken = {..._embeds.keys, ...text.codeUnits};
+    var code = _firstCode;
+    while (taken.contains(code)) {
+      code++;
     }
-    final code = _next++;
     _embeds[code] = embed;
     return String.fromCharCode(code);
   }
@@ -270,7 +278,6 @@ class ComposerController extends TextEditingController {
   void clear() {
     super.clear();
     _embeds.clear();
-    _next = _firstCode;
   }
 
   @override
@@ -279,7 +286,8 @@ class ComposerController extends TextEditingController {
     TextStyle? style,
     required bool withComposing,
   }) {
-    if (!text.codeUnits.any(_embeds.containsKey)) {
+    final parts = _parts();
+    if (parts.every((part) => part is String)) {
       return super.buildTextSpan(
         context: context,
         style: style,
@@ -290,36 +298,38 @@ class ComposerController extends TextEditingController {
         ? value.composing
         : TextRange.empty;
     final children = <InlineSpan>[];
-    void typed(int start, int end) {
-      if (start >= end) return;
-      if (composing.isCollapsed ||
-          composing.end <= start ||
-          composing.start >= end) {
-        children.add(TextSpan(text: text.substring(start, end)));
-        return;
-      }
-      final from = composing.start.clamp(start, end);
-      final to = composing.end.clamp(start, end);
-      children.addAll([
-        if (from > start) TextSpan(text: text.substring(start, from)),
-        TextSpan(
-          text: text.substring(from, to),
-          style: const TextStyle(decoration: TextDecoration.underline),
-        ),
-        if (end > to) TextSpan(text: text.substring(to, end)),
-      ]);
-    }
-
     var start = 0;
-    for (var i = 0; i < text.length; i++) {
-      final embed = _embeds[text.codeUnitAt(i)];
-      if (embed == null) continue;
-      typed(start, i);
-      children.add(_span(context, embed));
-      start = i + 1;
+    for (final part in parts) {
+      if (part is ComposerEmbed) {
+        children.add(_span(context, part));
+        start++;
+        continue;
+      }
+      final end = start + (part as String).length;
+      children.addAll(_typed(start, end, composing));
+      start = end;
     }
-    typed(start, text.length);
     return TextSpan(style: style, children: children);
+  }
+
+  /// [start] to [end] of [text], the part inside [composing] underlined the
+  /// way the field's own span marks what an IME is still composing.
+  List<TextSpan> _typed(int start, int end, TextRange composing) {
+    if (composing.isCollapsed ||
+        composing.end <= start ||
+        composing.start >= end) {
+      return [TextSpan(text: text.substring(start, end))];
+    }
+    final from = composing.start.clamp(start, end);
+    final to = composing.end.clamp(start, end);
+    return [
+      if (from > start) TextSpan(text: text.substring(start, from)),
+      TextSpan(
+        text: text.substring(from, to),
+        style: const TextStyle(decoration: TextDecoration.underline),
+      ),
+      if (end > to) TextSpan(text: text.substring(to, end)),
+    ];
   }
 
   /// A block takes the line's width less the field's caret margin. Laid out

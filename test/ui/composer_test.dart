@@ -1,6 +1,5 @@
 import "package:flutter/foundation.dart" show ValueListenable;
 import "package:flutter/material.dart";
-import "package:flutter/rendering.dart" show RenderEditable;
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 
@@ -36,6 +35,7 @@ void main() {
 
   Future<void> pump(
     WidgetTester tester, {
+    Key? key,
     EdgeInsets bars = EdgeInsets.zero,
     String? workspace,
     String? workspaceHome,
@@ -47,6 +47,7 @@ void main() {
       bars,
       Scaffold(
         body: Composer(
+          key: key,
           controller: controller,
           agentSpeaking: agentSpeaking,
           onSend: (text, attachments) {
@@ -250,21 +251,7 @@ void main() {
     tester,
   ) async {
     final key = GlobalKey<ComposerState>();
-    await app.pump(
-      tester,
-      Scaffold(
-        body: Composer(
-          key: key,
-          controller: controller,
-          agentSpeaking: false,
-          onSend: (text, attachments) {
-            sent.add(text);
-            sentAttachments.add(attachments);
-          },
-          onAbort: () {},
-        ),
-      ),
-    );
+    await pump(tester, key: key);
     await type(tester, "typed since");
 
     key.currentState!.restore((
@@ -344,18 +331,7 @@ void main() {
       tester,
     ) async {
       final key = GlobalKey<ComposerState>();
-      await app.pump(
-        tester,
-        Scaffold(
-          body: Composer(
-            key: key,
-            controller: controller,
-            agentSpeaking: false,
-            onSend: (text, _) => sent.add(text),
-            onAbort: () {},
-          ),
-        ),
-      );
+      await pump(tester, key: key);
       expect(holdsCaret(tester, find.byType(TextField)), isFalse);
 
       key.currentState!.embed(const QuoteEmbed(Quote("one")));
@@ -368,14 +344,9 @@ void main() {
 
       // Drawn there too: a card as wide as the line overflowed it, the line
       // under it was never laid out, and the caret sat at the card's edge.
-      final editable = tester.renderObject<RenderEditable>(
-        find.descendant(
-          of: find.byType(EditableText),
-          matching: find.byWidgetPredicate(
-            (w) => w.runtimeType.toString() == "_Editable",
-          ),
-        ),
-      );
+      final editable = tester
+          .state<EditableTextState>(find.byType(EditableText))
+          .renderEditable;
       final caret = editable.getLocalRectForCaret(
         TextPosition(offset: controller.text.length),
       );
@@ -439,18 +410,7 @@ void main() {
 
     testWidgets("a message put back comes back with its cards", (tester) async {
       final key = GlobalKey<ComposerState>();
-      await app.pump(
-        tester,
-        Scaffold(
-          body: Composer(
-            key: key,
-            controller: controller,
-            agentSpeaking: false,
-            onSend: (text, _) => sent.add(text),
-            onAbort: () {},
-          ),
-        ),
-      );
+      await pump(tester, key: key);
       await type(tester, "typed since");
 
       key.currentState!.restore((

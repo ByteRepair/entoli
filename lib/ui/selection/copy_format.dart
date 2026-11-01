@@ -11,6 +11,7 @@ import "dart:math" as math;
 import "../../core/platform/rich_clipboard.dart";
 import "package:flutter/rendering.dart" show RenderObject;
 
+import "../../domain/quote.dart" show blockquoted;
 import "../../domain/formatted_text.dart"
     show
         escapeHtml,
@@ -249,9 +250,7 @@ class MarkdownCopyFormat implements CopyFormat {
 
   static void _append(StringBuffer out, String text, {required bool quoted}) {
     if (!quoted) return out.write(text);
-    out.write(
-      text.split("\n").map((line) => line.isEmpty ? ">" : "> $line").join("\n"),
-    );
+    out.write(blockquoted(text));
   }
 
   static String _block(CopiedBlock block) => switch (block.kind) {

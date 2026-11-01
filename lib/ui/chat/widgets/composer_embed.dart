@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 
 import "../../../domain/formatted_text.dart";
 import "../../../domain/quote.dart";
+import "../../widgets/action_icon.dart";
 
 /// Something in the composer that is not typed text: drawn in the field as a
 /// widget, sent as the markdown it stands for. The field holds one character
@@ -62,12 +63,13 @@ class QuoteCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final muted = theme.colorScheme.onSurfaceVariant;
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 2),
       padding: const EdgeInsets.fromLTRB(10, 6, 2, 6),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
+        // The tone a reply's own quotes are set on (`replyStyleSheet`), so the
+        // card reads as the passage it came from.
+        color: theme.colorScheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(8),
         border: Border(
           left: BorderSide(color: theme.colorScheme.primary, width: 3),
@@ -92,25 +94,17 @@ class QuoteCard extends StatelessWidget {
                   formattedTextOf(quote.text).trim(),
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(color: muted),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
           ),
-          IconButton(
-            onPressed: onRemove,
-            icon: const Icon(Icons.close),
-            iconSize: 16,
-            color: muted,
-            // Its own size rather than a 48dp touch target, which would make
-            // every one-line card twice the height of its line.
-            style: IconButton.styleFrom(
-              padding: EdgeInsets.zero,
-              minimumSize: const Size.square(28),
-              fixedSize: const Size.square(28),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
+          ActionIcon(
+            icon: Icons.close,
             tooltip: "Remove quote",
+            onPressed: onRemove,
           ),
         ],
       ),

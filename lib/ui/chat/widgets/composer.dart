@@ -180,9 +180,11 @@ class ComposerState extends ConsumerState<Composer> {
     // the field's decoration and the buttons either side of it, and that has no
     // business re-running because Send went live.
     _refresh();
-    final message = widget.controller.message;
-    final shell = shellBypassCommand(message) != null;
-    final wired = wiredSkillFromText(message) != null;
+    // The field's text rather than the message: an embed is never `!` or a
+    // `/skill`, so the answer is the same without writing the message out.
+    final text = widget.controller.text;
+    final shell = shellBypassCommand(text) != null;
+    final wired = wiredSkillFromText(text) != null;
     final embeds = widget.controller.embeds.length;
     if (shell == _shell && wired == _wired && embeds == _embeds) return;
     setState(() {
@@ -248,27 +250,17 @@ class ComposerState extends ConsumerState<Composer> {
 
   /// Put back a message that was sent and taken back, ahead of whatever has
   /// been typed or attached since.
-  ///
-  /// A quote either side of the join is kept a paragraph of its own, or the
-  /// line beside it would read as more of the quote and the card would not
-  /// come back.
   void restore(Draft said) {
     final (:text, :attachments) = said;
-    final typed = widget.controller.message;
-    final quoted =
-        text.split("\n").last.startsWith(">") || typed.startsWith(">");
-    widget.controller.message = typed.isEmpty || text.isEmpty
-        ? "$text$typed"
-        : quoted
-        ? "$text\n\n$typed"
-        : "$text\n$typed";
+    widget.controller.prepend(text);
     setState(() => _attachments.insertAll(0, attachments));
     _refresh();
   }
 
-  /// A file on its own is worth sending, and whitespace on its own is not.
+  /// A file on its own is worth sending, and whitespace on its own is not. An
+  /// embed's character is not whitespace, so a quote alone is worth sending.
   bool get _worthSending =>
-      widget.controller.message.trim().isNotEmpty || _attachments.isNotEmpty;
+      widget.controller.text.trim().isNotEmpty || _attachments.isNotEmpty;
 
   void _submit({bool queue = false}) {
     // The button is dead when this is false, but Ctrl/Cmd+Enter reaches here

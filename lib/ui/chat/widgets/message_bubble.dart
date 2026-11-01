@@ -324,14 +324,10 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                     onReply: widget.onReply == null
                         ? null
                         : (text) => widget.onReply!(
-                            Quote(
+                            Quote.from(
+                              widget.message,
                               text,
-                              handle:
-                                  widget.entoli &&
-                                      widget.message.role ==
-                                          MessageRole.assistant
-                                  ? widget.message.author
-                                  : null,
+                              omada: widget.entoli,
                             ),
                           ),
                     child: Column(
