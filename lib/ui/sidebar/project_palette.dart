@@ -321,11 +321,9 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
                   label: chat.title.orUntitled,
                   trailing: _ProjectTag(projectLabel(chat.project)),
                 ),
-                // Into its project first: the sidebar lists one project, and
-                // a chat it does not list would be open with nothing saying so.
                 action: (context, ref) {
-                  selectProject(ref, localProject(chat.project));
-                  openChat(context, ref, chat.id);
+                  ref.read(selectedChatIdProvider.notifier).reveal(chat);
+                  closeNavDrawer(context);
                 },
               ),
             );

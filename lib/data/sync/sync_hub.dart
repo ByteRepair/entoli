@@ -521,8 +521,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
 
   Future<bool> _isProject(String? project) async {
     final repo = _repo;
-    return repo != null &&
-        everyProject(await repo.listProjects()).contains(project);
+    return repo != null && await repo.isProject(project);
   }
 
   int _resourceSeq = 0;

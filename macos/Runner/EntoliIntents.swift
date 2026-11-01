@@ -40,11 +40,13 @@ final class IntentBridge {
 
   /// Runs the Dart action [id] and returns its result as the codec decoded
   /// it, or throws the sentence Dart refused it with.
-  func perform(_ id: String, _ args: IntentArguments = IntentArguments()) async throws -> Any? {
+  /// A nil argument is left out, which Dart reads as none given.
+  func perform(_ id: String, _ args: [String: Any?] = [:]) async throws -> Any? {
     try await untilReady()
     guard let channel else { throw IntentFailure.notRunning }
+    let values = args.compactMapValues { $0 }
     return try await withCheckedThrowingContinuation { continuation in
-      channel.invokeMethod("perform", arguments: ["id": id, "args": args.values]) { reply in
+      channel.invokeMethod("perform", arguments: ["id": id, "args": values]) { reply in
         if let error = reply as? FlutterError {
           continuation.resume(throwing: IntentFailure(error.message ?? "Entoli could not do that."))
         } else if (reply as AnyObject) === FlutterMethodNotImplemented {
@@ -64,18 +66,6 @@ final class IntentBridge {
       if Date() > deadline { throw IntentFailure.notRunning }
       try await Task.sleep(nanoseconds: 100_000_000)
     }
-  }
-}
-
-/// What an action is called with, built by name. A missing value is left
-/// out rather than sent as null, which Dart reads the same.
-struct IntentArguments {
-  private(set) var values: [String: Any] = [:]
-
-  func with(_ name: String, _ value: Any?) -> IntentArguments {
-    var copy = self
-    if let value { copy.values[name] = value }
-    return copy
   }
 }
 
@@ -121,7 +111,7 @@ private struct Wire {
 
 // MARK: - Entities
 
-struct ProjectEntity: AppEntity {
+struct ProjectEntity: WireEntity {
   static let typeDisplayRepresentation: TypeDisplayRepresentation = "Project"
   static let defaultQuery = ProjectQuery()
 
@@ -131,7 +121,8 @@ struct ProjectEntity: AppEntity {
   @Property(title: "Name")
   var label: String
 
-  fileprivate init(_ wire: Wire) throws {
+  init(wire: [String: Any]) throws {
+    let wire = try Wire(wire)
     id = try wire.string("id")
     label = try wire.string("label")
   }
@@ -139,16 +130,33 @@ struct ProjectEntity: AppEntity {
   var displayRepresentation: DisplayRepresentation { DisplayRepresentation(title: "\(label)") }
 }
 
-struct ProjectQuery: EntityQuery {
-  func entities(for identifiers: [String]) async throws -> [ProjectEntity] {
+/// A query over a short list Dart hands out whole — the projects, the
+/// commands — so a lookup by id is a filter of it.
+protocol ListedQuery: EntityQuery where Entity: WireEntity, Entity.ID == String {
+  /// The action that lists them.
+  static var action: String { get }
+}
+
+/// An entity read from one of Dart's maps.
+protocol WireEntity: AppEntity {
+  init(wire: [String: Any]) throws
+}
+
+extension ListedQuery {
+  func entities(for identifiers: [String]) async throws -> [Entity] {
     try await all().filter { identifiers.contains($0.id) }
   }
 
-  func suggestedEntities() async throws -> [ProjectEntity] { try await all() }
+  func suggestedEntities() async throws -> [Entity] { try await all() }
 
-  private func all() async throws -> [ProjectEntity] {
-    try Wire.list(await IntentBridge.shared.perform("projects")).map(ProjectEntity.init)
+  private func all() async throws -> [Entity] {
+    try Wire.list(await IntentBridge.shared.perform(Self.action)).map { try Entity(wire: $0.map) }
   }
+}
+
+struct ProjectQuery: ListedQuery {
+  typealias Entity = ProjectEntity
+  static let action = "projects"
 }
 
 struct ChatEntity: AppEntity {
@@ -172,12 +180,10 @@ struct ChatEntity: AppEntity {
   fileprivate init(_ wire: Wire) throws {
     id = try wire.string("id")
     title = try wire.string("title")
-    project = try ProjectEntity(wire.wire("project"))
+    project = try ProjectEntity(wire: wire.wire("project").map)
     updatedAt = wire.date("updatedAt")
     pinned = wire.bool("pinned")
   }
-
-  fileprivate static func one(_ reply: Any?) throws -> ChatEntity { try ChatEntity(Wire(reply)) }
 
   fileprivate static func many(_ reply: Any?) throws -> [ChatEntity] {
     try Wire.list(reply).map(ChatEntity.init)
@@ -193,7 +199,7 @@ struct ChatEntity: AppEntity {
 struct ChatQuery: EntityStringQuery {
   func entities(for identifiers: [String]) async throws -> [ChatEntity] {
     try ChatEntity.many(
-      await IntentBridge.shared.perform("chats", IntentArguments().with("ids", identifiers)))
+      await IntentBridge.shared.perform("chats", ["ids": identifiers]))
   }
 
   func entities(matching string: String) async throws -> [ChatEntity] {
@@ -205,20 +211,21 @@ struct ChatQuery: EntityStringQuery {
   private func find(_ query: String) async throws -> [ChatEntity] {
     try ChatEntity.many(
       await IntentBridge.shared.perform(
-        "findChats", IntentArguments().with("query", query).with("limit", 30)))
+        "findChats", ["query": query, "limit": 30]))
   }
 }
 
 /// One of the app's commands — what its menus and keys run — named by the
 /// id it is never renamed from.
-struct CommandEntity: AppEntity {
+struct CommandEntity: WireEntity {
   static let typeDisplayRepresentation: TypeDisplayRepresentation = "Command"
   static let defaultQuery = CommandQuery()
 
   let id: String
   let label: String
 
-  fileprivate init(_ wire: Wire) throws {
+  init(wire: [String: Any]) throws {
+    let wire = try Wire(wire)
     id = try wire.string("id")
     label = try wire.string("label")
   }
@@ -228,16 +235,9 @@ struct CommandEntity: AppEntity {
 
 /// Asked of Dart rather than listed here, so a command the app adds is
 /// offered with nothing in this file changed.
-struct CommandQuery: EntityQuery {
-  func entities(for identifiers: [String]) async throws -> [CommandEntity] {
-    try await all().filter { identifiers.contains($0.id) }
-  }
-
-  func suggestedEntities() async throws -> [CommandEntity] { try await all() }
-
-  private func all() async throws -> [CommandEntity] {
-    try Wire.list(await IntentBridge.shared.perform("commands")).map(CommandEntity.init)
-  }
+struct CommandQuery: ListedQuery {
+  typealias Entity = CommandEntity
+  static let action = "commands"
 }
 
 /// What asking came to: the reply, and the chat it is in. Transient — it is
@@ -285,8 +285,8 @@ struct NewChatIntent: AppIntent {
 
   func perform() async throws -> some IntentResult & ReturnsValue<ChatEntity> {
     let reply = try await IntentBridge.shared.perform(
-      "newChat", IntentArguments().with("project", project?.id))
-    return .result(value: try ChatEntity.one(reply))
+      "newChat", ["project": project?.id])
+    return .result(value: try ChatEntity(Wire(reply)))
   }
 }
 
@@ -301,7 +301,7 @@ struct OpenChatIntent: OpenIntent {
   static var parameterSummary: some ParameterSummary { Summary("Open \(\.$target)") }
 
   func perform() async throws -> some IntentResult {
-    _ = try await IntentBridge.shared.perform("openChat", IntentArguments().with("chat", target.id))
+    _ = try await IntentBridge.shared.perform("openChat", ["chat": target.id])
     return .result()
   }
 }
@@ -327,7 +327,7 @@ struct FindChatsIntent: AppIntent {
   func perform() async throws -> some IntentResult & ReturnsValue<[ChatEntity]> {
     let reply = try await IntentBridge.shared.perform(
       "findChats",
-      IntentArguments().with("query", query).with("project", project?.id).with("limit", limit))
+      ["query": query, "project": project?.id, "limit": limit])
     return .result(value: try ChatEntity.many(reply))
   }
 }
@@ -362,11 +362,7 @@ struct AskEntoliIntent: AppIntent {
   func perform() async throws -> some IntentResult & ReturnsValue<AskReply> {
     let reply = try await IntentBridge.shared.perform(
       "ask",
-      IntentArguments()
-        .with("prompt", prompt)
-        .with("chat", chat?.id)
-        .with("project", project?.id)
-        .with("wait", wait))
+      ["prompt": prompt, "chat": chat?.id, "project": project?.id, "wait": wait])
     return .result(value: try AskReply(Wire(reply)))
   }
 }

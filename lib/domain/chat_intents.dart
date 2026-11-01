@@ -11,36 +11,28 @@ import "trigger_runner.dart";
 /// A chat as an intent hands it out: what Shortcuts shows of one and what a
 /// later action names it by.
 final class IntentChat {
-  IntentChat.of(ChatState state)
-    : id = state.id,
-      title = state.title.orUntitled,
-      project = state.project,
-      updatedAt = state.updatedAt,
-      pinned = state.pinned;
+  const IntentChat(this._state);
 
-  final String id;
-  final String title;
-  final String? project;
-  final DateTime updatedAt;
-  final bool pinned;
+  final ChatState _state;
 
   Map<String, Object?> toArgs() => {
-    "id": id,
-    "title": title,
-    "project": IntentProject(project).toArgs(),
-    "updatedAt": updatedAt.millisecondsSinceEpoch,
-    "pinned": pinned,
+    "id": _state.id,
+    "title": _state.title.orUntitled,
+    "project": IntentProject(_state.project).toArgs(),
+    "updatedAt": _state.updatedAt.millisecondsSinceEpoch,
+    "pinned": _state.pinned,
   };
 }
 
 /// A project as an intent hands it out. [dir] null is the default project,
 /// which the wire names by its directory: Shortcuts wants an id that is a
-/// string.
+/// string. Where an action takes one, a null [IntentProject] is none named,
+/// which is not the default project named.
 final class IntentProject {
   const IntentProject(this.dir);
 
-  /// The project a wire id names, or null for the default one.
-  static String? dirOf(String id) => id == defaultProjectDir ? null : id;
+  /// The project a wire id names.
+  IntentProject.of(String id) : dir = id == defaultProjectDir ? null : id;
 
   final String? dir;
 
@@ -73,7 +65,7 @@ abstract interface class ChatPresenter {
 }
 
 /// What Shortcuts can do with chats, typed. Nothing here knows about the
-/// wire or Shortcuts: [ChatIntentActions] adapts it. It runs with no screen
+/// wire or Shortcuts: [ChatIntentAction] adapts it. It runs with no screen
 /// — only [open] shows anything — so an action that arrives while the app
 /// launches in the background still finds it.
 ///
@@ -111,38 +103,33 @@ final class ChatIntents {
     final byId = {for (final chat in await _live()) chat.id: chat};
     return [
       for (final id in ids)
-        if (byId[id] case final chat?) IntentChat.of(chat),
+        if (byId[id] case final chat?) IntentChat(chat),
     ];
   }
 
   /// The chats whose title holds [query] — the sidebar's search — newest
-  /// first, in [project] where one is named.
+  /// first, as the store lists them, in [project] where one is named.
   Future<List<IntentChat>> find({
     String query = "",
-    String? project,
-    bool inProject = false,
+    IntentProject? project,
     int? limit,
   }) async {
-    if (inProject) await _project(project);
-    final found =
-        chatsMatching(
-            await _live(),
-            query,
-          ).where((chat) => !inProject || chat.project == project).toList()
-          ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    if (project != null) await _project(project.dir);
+    final found = chatsMatching(
+      await _live(),
+      query,
+    ).where((chat) => project == null || chat.project == project.dir);
     return [
       for (final chat in limit == null ? found : found.take(limit))
-        IntentChat.of(chat),
+        IntentChat(chat),
     ];
   }
 
-  Future<IntentChat> newChat({String? project}) async {
-    await _project(project);
-    return IntentChat.of(await _create(project));
-  }
+  /// A new chat in [project], the default one where none is named.
+  Future<IntentChat> newChat({IntentProject? project}) async =>
+      IntentChat(await _create(project?.dir));
 
-  Future<void> open(String chatId) async =>
-      presenter.show((await _chat(chatId)).state);
+  Future<void> open(String chatId) async => presenter.show(await _chat(chatId));
 
   /// [prompt] said in [chatId], or in a new chat in [project] where there is
   /// none. Where [wait], the result is the turn's reply; otherwise the turn
@@ -150,21 +137,18 @@ final class ChatIntents {
   Future<AskResult> ask(
     String prompt, {
     String? chatId,
-    String? project,
-    bool inProject = false,
+    IntentProject? project,
     bool wait = true,
   }) async {
-    if (chatId != null && inProject) {
+    if (chatId != null && project != null) {
       throw const IntentRefused("Name a chat or a project, not both.");
     }
-    if (prompt.trim().isEmpty) throw const IntentRefused("Say something.");
     final ChatState chat;
     if (chatId != null) {
-      chat = (await _chat(chatId)).state;
+      chat = await _chat(chatId);
       _setUp(chat.project);
     } else {
-      await _project(project);
-      chat = await _create(project);
+      chat = await _create(project?.dir);
     }
     final turn = driver.send(chat.id, prompt);
     if (!wait) {
@@ -175,11 +159,11 @@ final class ChatIntents {
               logFailure("intents", "a turn asked for failed", e),
         ),
       );
-      return AskResult(IntentChat.of(chat));
+      return AskResult(IntentChat(chat));
     }
     final ended = await turn;
     return AskResult(
-      IntentChat.of(chat),
+      IntentChat(chat),
       reply: ended.snippet,
       outcome: ended.outcome,
     );
@@ -192,14 +176,19 @@ final class ChatIntents {
       if (!chat.isExpired()) chat,
   ];
 
-  Future<Chat> _chat(String chatId) async {
-    if (!(await _live()).any((chat) => chat.id == chatId)) {
+  /// One of this device's chats, by id: the store's, so not a mirror. The
+  /// id came from outside and names a directory, so it is one segment or
+  /// nothing.
+  Future<ChatState> _chat(String chatId) async {
+    final chat = isProjectDirName(chatId) ? await repo.loadState(chatId) : null;
+    if (chat == null || chat.isExpired()) {
       throw const IntentRefused("That chat no longer exists.");
     }
-    return repo.openChat(chatId);
+    return chat;
   }
 
   Future<ChatState> _create(String? project) async {
+    await _project(project);
     _setUp(project);
     final chat = await repo.createChat(project: project);
     onListChanged();
@@ -208,7 +197,7 @@ final class ChatIntents {
 
   /// [project] checked against the projects there are.
   Future<void> _project(String? project) async {
-    if (!everyProject(await repo.listProjects()).contains(project)) {
+    if (!await repo.isProject(project)) {
       throw IntentRefused("There is no project called “$project”.");
     }
   }
@@ -239,15 +228,10 @@ abstract base class ChatIntentAction implements IntentAction {
     AskAction(chats),
   ];
 
-  /// The project an action names in `project`, and whether it names one at
-  /// all: the default project's id is a name too, so the value alone cannot
-  /// say that none was given.
-  static ({String? dir, bool named}) projectOf(IntentArgs args) {
+  /// The project an action names in `project`, or null where it names none.
+  static IntentProject? projectOf(IntentArgs args) {
     final id = args.optionalString("project");
-    return (
-      dir: id == null ? null : IntentProject.dirOf(id),
-      named: id != null,
-    );
+    return id == null ? null : IntentProject.of(id);
   }
 }
 
@@ -285,11 +269,9 @@ final class FindChatsAction extends ChatIntentAction {
 
   @override
   Future<Object?> perform(IntentArgs args) async {
-    final project = ChatIntentAction.projectOf(args);
     final found = await chats.find(
       query: args.optionalString("query") ?? "",
-      project: project.dir,
-      inProject: project.named,
+      project: ChatIntentAction.projectOf(args),
       limit: args.optionalInt("limit"),
     );
     return [for (final chat in found) chat.toArgs()];
@@ -303,9 +285,8 @@ final class NewChatAction extends ChatIntentAction {
   String get id => "newChat";
 
   @override
-  Future<Object?> perform(IntentArgs args) async => (await chats.newChat(
-    project: ChatIntentAction.projectOf(args).dir,
-  )).toArgs();
+  Future<Object?> perform(IntentArgs args) async =>
+      (await chats.newChat(project: ChatIntentAction.projectOf(args))).toArgs();
 }
 
 final class OpenChatAction extends ChatIntentAction {
@@ -329,12 +310,10 @@ final class AskAction extends ChatIntentAction {
 
   @override
   Future<Object?> perform(IntentArgs args) async {
-    final project = ChatIntentAction.projectOf(args);
     final result = await chats.ask(
       args.string("prompt"),
       chatId: args.optionalString("chat"),
-      project: project.dir,
-      inProject: project.named,
+      project: ChatIntentAction.projectOf(args),
       wait: args.flag("wait", orElse: true),
     );
     return result.toArgs();
