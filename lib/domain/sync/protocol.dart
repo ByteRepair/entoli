@@ -189,6 +189,14 @@ sealed class SyncMessage with _$SyncMessage {
     required String messageId,
   }) = SyncRegenerate;
 
+  /// A reaction to [messageId], by its emoji — or taking it back, where the
+  /// message already has it: see `ChatRoom.react`.
+  const factory SyncMessage.react({
+    required String chatId,
+    required String messageId,
+    required String emoji,
+  }) = SyncReact;
+
   const factory SyncMessage.threadStep({
     required String chatId,
     required String messageId,

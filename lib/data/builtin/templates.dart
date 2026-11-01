@@ -4,7 +4,9 @@ import "../../domain/agent_backend.dart" show taskToolName;
 import "../../domain/bundled_prompt_file.dart";
 import "../../domain/bundled_project_prompts.dart" show bundledSystemPrompts;
 import "../../domain/file_tools.dart";
-import "../../domain/models.dart" show CompletionKind;
+import "../../domain/models.dart" show CompletionKind, ReactionPart;
+import "../../domain/quote.dart" show blockquoted;
+import "../../domain/reaction.dart" show Reaction;
 import "../../domain/profile.dart";
 import "../../domain/shell.dart" show CommandSandbox;
 import "../../domain/tone.dart";
@@ -238,6 +240,20 @@ String summarizedTurnText(String summary) =>
 String memberInstructions(String member, String instructions) =>
     "You are ${CompletionKind.agent.trigger}$member, a member of this "
     "team.\n\n$instructions";
+
+/// A reaction, as its text: the handle of who wrote what it reacts to first,
+/// the way a mention typed to them would be, then what was reacted to. The
+/// same words for every reader; how another participant is told whose mail
+/// it is stays the projection's, as for any say.
+String reactionTurnText(ReactionPart reaction) {
+  final name = Reaction.of(reaction.emoji)?.name;
+  final emoji = name == null ? reaction.emoji : "${reaction.emoji} ($name)";
+  final to = reaction.author == null ? "" : "${reaction.author} ";
+  final quoted = reaction.excerpt.isEmpty
+      ? ""
+      : ":\n\n${blockquoted(reaction.excerpt)}";
+  return "${to}The user has responded with $emoji to the message$quoted";
+}
 
 /// What the conversation calls the main agent wherever a viewer is named and
 /// the reply carries no author — the label, not a member handle.

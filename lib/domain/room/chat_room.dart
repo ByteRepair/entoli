@@ -11,6 +11,7 @@ import "../models.dart";
 import "../shell_job.dart" show ChatShellJobs;
 import "../project_settings.dart" show OmadaOrdering;
 import "../prompt_library.dart" show nameOf;
+import "../reaction.dart";
 import "../turn_recorder.dart";
 import "../wired_skill.dart";
 import "agent.dart";
@@ -217,12 +218,14 @@ class ChatRoom {
   /// only turn, and a second reply growing beside it is not patched by
   /// coincidence.
   void _writeReply(_RunningTurn turn, List<MessagePart> parts) =>
-      _updateReply(turn, (m) => m.copyWith(parts: parts));
+      _updateMessage(turn.replyId, (m) => m.copyWith(parts: parts));
 
-  void _updateReply(_RunningTurn turn, Message Function(Message) change) {
+  /// Change the message [id] in the chat as it is now — read after whatever
+  /// was awaited, so what changed in flight is not reverted.
+  void _updateMessage(String id, Message Function(Message) change) {
     final chat = state.chat;
     if (chat == null) return;
-    final at = chat.messages.indexWhere((m) => m.id == turn.replyId);
+    final at = chat.messages.indexWhere((m) => m.id == id);
     if (at < 0) return;
     final messages = List<Message>.from(chat.messages);
     messages[at] = change(messages[at]);
@@ -300,6 +303,53 @@ class ChatRoom {
     await _prompt(text, files: files);
   }
 
+  /// React to [messageId] with [reaction], or take it back where it is
+  /// already there — the picker's one verb.
+  ///
+  /// Reacting is said like anything else, to whoever wrote the message — the
+  /// main agent where nobody in particular did — and never steers: it
+  /// answers something finished, so while the room runs it waits its turn.
+  ///
+  /// Taking back is a record, not a deletion. A turn the reaction started
+  /// carries on — the reply stays, to delete as any other — while one still
+  /// queued is taken off the queue and never runs, which the record says.
+  Future<void> react(String messageId, Reaction reaction) async {
+    await _ready;
+    final chat = state.chat;
+    final target = chat?.messages.firstWhereOrNull((m) => m.id == messageId);
+    if (chat == null || target == null) return;
+    final live = liveReactions(
+      chat.messages,
+      to: messageId,
+      emoji: reaction.emoji,
+    ).toList();
+    if (live.isNotEmpty) return _retract(live);
+    final say = reactionTo(
+      target,
+      reaction,
+      id: _uuid.v4(),
+      at: DateTime.now(),
+    );
+    if (state.isRunning) return _sayLater(_stamped(say));
+    await _schedulePrompt(chat, say);
+  }
+
+  Future<void> _retract(List<Message> reactions) async {
+    final records = [
+      for (final m in reactions)
+        RetractRecord(
+          messageId: m.id,
+          retraction: _schedule.dropPrompt(m.id)
+              ? Retraction.beforeItsTurn
+              : Retraction.afterItsTurn,
+        ),
+    ];
+    await _append(records);
+    for (final r in records) {
+      _updateMessage(r.messageId, (m) => m.copyWith(retraction: r.retraction));
+    }
+  }
+
   /// What was said while a turn ran and is still unsaid. The messages are on
   /// the log already — written as they were said — and this is what is left
   /// to say. The composed message itself, so the drain dispatches what the
@@ -309,16 +359,26 @@ class ChatRoom {
   /// A say made while the room runs. The routing record rides it the moment
   /// it lands — the same stamp a fresh send writes where the prompt is not on
   /// the log yet.
-  Message _composeSay(String text, List<MessagePart> files) {
-    final say = _repo.composeUserPrompt(
+  Message _composeSay(String text, List<MessagePart> files) => _stamped(
+    _repo.composeUserPrompt(
       text,
       project: state.chat?.state.project,
       files: files,
-    );
+    ),
+  );
+
+  /// [say] with the routing record it lands on the log with.
+  Message _stamped(Message say) {
     final chat = state.chat;
     return chat == null
         ? say
         : say.copyWith(addressees: _roster(chat).addressees(say));
+  }
+
+  /// Schedule a say made while nothing runs, and run what it addresses.
+  Future<void> _schedulePrompt(Chat chat, Message say) async {
+    _schedule.addPrompt(_roster(chat).mentioned(say), say);
+    await _dispatch();
   }
 
   /// Hand [say] to the running turn it addresses, to be read at that turn's
@@ -462,8 +522,7 @@ class ChatRoom {
       await _say(userMsg, replacing: replacing);
       return;
     }
-    _schedule.addPrompt(_roster(chat).mentioned(userMsg), userMsg);
-    await _dispatch();
+    await _schedulePrompt(chat, userMsg);
   }
 
   /// The `/compact` callback's own turn: the ask goes on the log like anything
@@ -805,7 +864,8 @@ class ChatRoom {
     final chat = state.chat;
     if (chat == null || state.isRunning) return;
     final prompt = _promptFor(chat, messageId);
-    if (prompt == null) return;
+    // A reaction is not text to edit: rebuilt from text it would be lost.
+    if (prompt == null || prompt.reaction != null) return;
     await _prompt(text, files: prompt.files.toList(), replacing: prompt);
   }
 
@@ -907,7 +967,7 @@ class ChatRoom {
         break;
       case ContextEvent(:final usage):
         // What the close will write, on screen before it does.
-        _updateReply(turn, (m) => m.copyWith(context: usage));
+        _updateMessage(turn.replyId, (m) => m.copyWith(context: usage));
       case ApprovalRequestEvent(:final approval):
         _view = state.copyWith(
           approvals: {
@@ -1005,7 +1065,11 @@ class ChatRoom {
           ? _routeOf(turn)
           : const <String>[];
       reason = await turn.recorder.close(addressees: to);
-      if (to.isNotEmpty) _stampAddressees(turn.replyId, to);
+      // The routing the close wrote, on the reply in memory too, so the next
+      // dispatch's history words it the way a reload would.
+      if (to.isNotEmpty) {
+        _updateMessage(turn.replyId, (m) => m.copyWith(addressees: to));
+      }
     }
     // A retryable failure is a blip the turn is carried on from, not an
     // outcome to report: the round waits out its backoff and re-enters the
@@ -1179,21 +1243,6 @@ class ChatRoom {
     final reply = chat?.messages.firstWhereOrNull((m) => m.id == turn.replyId);
     if (chat == null || reply == null) return const [];
     return _roster(chat).addressees(reply.copyWith(parts: turn.recorder.parts));
-  }
-
-  /// Puts the routing the close wrote on the reply in memory too, so the next
-  /// dispatch's history words it the way a reload would.
-  void _stampAddressees(String replyId, List<String> to) {
-    final chat = state.chat;
-    if (chat == null) return;
-    _view = state.copyWith(
-      chat: chat.copyWith(
-        messages: [
-          for (final m in chat.messages)
-            m.id == replyId ? m.copyWith(addressees: to) : m,
-        ],
-      ),
-    );
   }
 
   /// Run what the schedule may run now, through the room's ordering.

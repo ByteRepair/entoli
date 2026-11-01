@@ -1,12 +1,7 @@
 import "../models.dart";
+import "../reaction.dart";
 import "../prompt_library.dart"
-    show
-        authorFrom,
-        authorKeys,
-        mentionsIn,
-        nameOf,
-        singleAgentMention,
-        PromptLibrary;
+    show authorKeys, mentionsIn, nameOf, singleAgentMention, PromptLibrary;
 import "../shell.dart" show shellBypassCommand;
 import "../wired_skill.dart";
 
@@ -38,10 +33,11 @@ class Roster {
   /// names (`!grep @researcher` runs a command) and neither is a callback
   /// (`/compact` is the house's own turn). A reply never addresses its own
   /// author: left in, every "hello @a, @b and @me" reschedules its writer.
+  /// A reaction addresses whoever wrote what it reacts to.
   List<String> mentioned(Message message) {
     if (!omada || _notSaid(message)) return const [];
     return message.role == MessageRole.user
-        ? authorKeys(message.documents)
+        ? _keysOf(message)
               .map(nameOf)
               .whereType<String>()
               .where((name) => known(name) != null)
@@ -63,7 +59,7 @@ class Roster {
   /// addresses. Never in a direct chat — a label on the house's voice would
   /// claim a member wrote it — and never for a command or a callback.
   String? authorFor(Message prompt) =>
-      !omada || _notSaid(prompt) ? null : authorFrom(prompt.documents);
+      !omada || _notSaid(prompt) ? null : _keysOf(prompt).firstOrNull;
 
   /// The member who answers [prompt]: the one a user prompt addresses, or the
   /// one a reply hands to by name. Null is the main agent. Not authorship —
@@ -73,6 +69,14 @@ class Roster {
     return prompt.role == MessageRole.assistant
         ? singleAgentMention(prompt.plainText, library)
         : known(nameOf(authorFor(prompt)));
+  }
+
+  /// The member keys a user's say addresses, sigils on: a reaction's author,
+  /// or what composing wrote into its documents.
+  static List<String> _keysOf(Message say) {
+    final reaction = say.reaction;
+    if (reaction == null) return authorKeys(say.documents);
+    return [?reaction.author];
   }
 
   static bool _notSaid(Message message) => isCommand(message.plainText);

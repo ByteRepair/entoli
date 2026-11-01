@@ -411,6 +411,7 @@ class TurnRecorder {
     ApprovalPart() ||
     InstructionsPart() ||
     SteerPart() ||
+    ReactionPart() ||
     ErrorPart() => part,
   };
 

@@ -13,6 +13,7 @@ import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/quote.dart";
+import "package:agent_chat/domain/reaction.dart";
 import "package:agent_chat/domain/theme_colour.dart";
 import "package:agent_chat/ui/theme.dart";
 import "package:agent_chat/ui/chat/activity/card.dart"
@@ -58,6 +59,8 @@ void main() {
     ValueChanged<Quote>? onReply,
     bool entoli = false,
     Uint8List? avatar,
+    ValueChanged<Reaction>? onReact,
+    List<String> reactions = const [],
   }) => app.pump(
     tester,
     Scaffold(
@@ -79,6 +82,8 @@ void main() {
         onTapLink: onTapLink,
         onReply: onReply,
         entoli: entoli,
+        onReact: onReact,
+        reactions: reactions,
       ),
     ),
     settle: !isWaiting,
@@ -102,6 +107,47 @@ void main() {
   }
 
   Finder findTextStarting(String prefix) => find.textContaining(prefix);
+
+  testWidgets("reactions stay in the action row while the actions hide, and "
+      "the smiley adds one", (tester) async {
+    final picked = <Reaction>[];
+    await pump(
+      tester,
+      _message(MessageRole.assistant, [const TextPart(text: "A plan.")]),
+      onReact: picked.add,
+      reactions: const ["👍", "🔥"],
+    );
+    expect(actionsOpacity(tester), 0);
+    expect(find.text("👍"), findsOneWidget);
+    expect(find.text("🔥"), findsOneWidget);
+    // Under a reply they lead the row, ahead of the actions.
+    expect(
+      tester.getCenter(find.text("🔥")).dx,
+      lessThan(tester.getCenter(find.byTooltip("React")).dx),
+    );
+
+    await reveal(tester, find.text("A plan."));
+    await tester.tap(find.byTooltip("React"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip("thinking"));
+    await tester.pumpAndSettle();
+    expect(picked, [Reaction.thinking]);
+  });
+
+  testWidgets("under the user's own message the reactions end the row", (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      _message(MessageRole.user, [const TextPart(text: "Go.")]),
+      onReact: (_) {},
+      reactions: const ["👍"],
+    );
+    expect(
+      tester.getCenter(find.text("👍")).dx,
+      greaterThan(tester.getCenter(find.byTooltip("React")).dx),
+    );
+  });
 
   testWidgets("an error part renders in the theme's error colour", (
     tester,

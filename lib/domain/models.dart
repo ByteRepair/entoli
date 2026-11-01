@@ -428,10 +428,26 @@ abstract class Message with _$Message {
     /// close (`TurnEndRecord.context`). Null on a turn that never closed, and
     /// on every reply written before the field existed.
     ContextUsage? context,
+
+    /// A reaction the user took back, and whether that was before its turn
+    /// started (`RetractRecord`). Null on everything else.
+    Retraction? retraction,
   }) = _Message;
 
   factory Message.fromJson(Map<String, dynamic> json) =>
       _$MessageFromJson(json);
+}
+
+/// How a reaction was taken back. Either way it is off the message it answered;
+/// what differs is whether it was ever said to anyone.
+enum Retraction {
+  /// Its turn had started, or finished: it stays in what the model reads,
+  /// since the reply after it answers it.
+  afterItsTurn,
+
+  /// It was still waiting for its turn, which never ran: as far as the model
+  /// is concerned it was never said.
+  beforeItsTurn,
 }
 
 /// Polymorphic part of a message: what the model said, thought, ran, or was
@@ -553,6 +569,22 @@ sealed class MessagePart with _$MessagePart {
   /// message after the results above it. See "Steering a turn" in
   /// `lib/domain/room/AGENTS.md`.
   const factory MessagePart.steer({required Message message}) = SteerPart;
+
+  /// The user reacting to the message [messageId] with [emoji]: the whole of
+  /// a user message, and something said like any other, routed to whoever
+  /// wrote [messageId]. [author] is its handle where a member wrote it, null
+  /// for anything else — the main agent's, the user's own — which the main
+  /// agent answers, kept here since routing reads the reaction alone.
+  /// [excerpt] is the start of what it said: the model is never shown
+  /// [messageId], so the excerpt is how it knows which message was reacted
+  /// to — any of the thread's, and one a compaction summarized away too.
+  /// See "Reactions" in `lib/domain/AGENTS.md`.
+  const factory MessagePart.reaction({
+    required String messageId,
+    required String emoji,
+    String? author,
+    @Default("") String excerpt,
+  }) = ReactionPart;
 
   factory MessagePart.fromJson(Map<String, dynamic> json) =>
       _$MessagePartFromJson(json);

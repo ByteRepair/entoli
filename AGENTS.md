@@ -23,7 +23,8 @@ named in a cross-reference is findable from this list.
 
 - `lib/domain/AGENTS.md` — The conversation log, Threads, The projection,
   Carrying on an interrupted turn, Starting a chat, and naming it, Skills and
-  agents, Tools per agent, Resending a message, Attachments, Reminders
+  agents, Tools per agent, Resending a message, Reactions, Attachments,
+  Reminders
 - `lib/ui/sidebar/AGENTS.md` — The sidebar's list, Pinned chats, A chat's row
   menu
 - `lib/ui/marketplace/AGENTS.md` — The marketplace page

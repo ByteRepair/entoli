@@ -5,6 +5,7 @@ import "package:flutter/gestures.dart" show kPrimaryButton;
 import "package:flutter/material.dart";
 
 import "../../../domain/models.dart";
+import "../../../domain/end_turn.dart" show drawnAsRow;
 
 /// One thing the user said, as a place in the conversation to go back to.
 typedef Chapter = ({
@@ -33,6 +34,8 @@ List<Chapter> chaptersOf(Chat chat) {
   final chapters = <Chapter>[];
   int? prompt;
   for (final message in chat.messages) {
+    // Only what is drawn has a place to go back to.
+    if (!drawnAsRow(message)) continue;
     final threads = chat.threadsAt(message.id).length;
     if (message.role == MessageRole.user) {
       prompt = chapters.length;

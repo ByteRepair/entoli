@@ -89,6 +89,7 @@ abstract interface class RemoteTurns {
   void answer(String chatId, String requestId, List<String?> answers);
   void editResend(String chatId, String messageId, String text);
   void regenerate(String chatId, String messageId);
+  void react(String chatId, String messageId, String emoji);
   void stepThread(String chatId, String messageId, int step);
   void deleteThread(String chatId, String messageId);
   Future<void> saveState(
@@ -758,6 +759,10 @@ class SyncHub implements ArtifactBytes, RemoteChats {
         }
       case SyncRegenerate(:final chatId, :final messageId):
         if (_follows(peer, chatId)) remoteTurns?.regenerate(chatId, messageId);
+      case SyncReact(:final chatId, :final messageId, :final emoji):
+        if (_follows(peer, chatId)) {
+          remoteTurns?.react(chatId, messageId, emoji);
+        }
       case SyncThreadStep(:final chatId, :final messageId, :final step):
         if (_follows(peer, chatId)) {
           remoteTurns?.stepThread(chatId, messageId, step);
@@ -1501,6 +1506,12 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     chatId,
     SyncMessage.regenerate(chatId: chatId, messageId: messageId),
   );
+
+  Future<void> reactRemote(String chatId, String messageId, String emoji) =>
+      _drive(
+        chatId,
+        SyncMessage.react(chatId: chatId, messageId: messageId, emoji: emoji),
+      );
 
   Future<void> stepThreadRemote(String chatId, String messageId, int step) =>
       _drive(

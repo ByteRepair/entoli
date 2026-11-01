@@ -10,7 +10,7 @@ written, so the only thing a kill can now cost is whatever had not been appended
 yet. That is what makes an interrupted turn something to offer to continue
 rather than something to apologise for.
 
-Nine records. `message` opens one — before it holds anything, which is what the
+Ten records. `message` opens one — before it holds anything, which is what the
 empty assistant message at the head of a turn is — and its `siblingOf` names
 what it is an alternative to, or nothing at all, which puts it on the end of the
 thread being read; `replacesSibling` takes that one away rather than joining it,
@@ -23,7 +23,8 @@ to read. `rewind` forgets a message and everything below it. `compaction` says
 the conversation up to a message is summarized for the model, and still there
 for the user to read — see "Compaction" below.
 `callEvent` says something happened to a call after its turn — today, that
-the background job it started ended (`jobEnded`).
+the background job it started ended (`jobEnded`). `retract` takes back a
+reaction — see "Reactions".
 
 Nothing is mutable, so a part that changed is **superseded**: the same index
 written again wins, and `replay` applies records in order, so the last one
@@ -860,6 +861,67 @@ the counter on the wrong message.
 Continuing an interrupted turn is deliberately neither of these. It adds to a
 reply that is already there, so there is nothing to branch — see "Carrying on an
 interrupted turn".
+
+## Reactions
+
+Any message can be reacted to — a reply, a member's, the user's own — with
+one of six emoji (`Reaction`, `lib/domain/reaction.dart`), from the smiley on
+its action row. **A reaction is something said, not a mark on the message.**
+It goes on the log as a user message whose one part is a `ReactionPart`, and
+from there it is a say like any other: the room schedules it, the turn it
+starts answers it, a mirror sends it home (`SyncMessage.react`), and the
+projection words it. No record type was added: a message is already what the
+room routes, and a record beside the thread would need its own walk to say
+where in the conversation it was made.
+
+It is addressed to whoever wrote the message: the part carries that
+message's `author`, and `Roster` reads it where it would read a mention, so
+a member's reply is answered by that member in an Omada room and anything
+else — the main agent's reply, the user's own message, any message once
+Omada is off — by the main agent. It never steers: it answers something
+finished, so while the room runs it waits its turn.
+
+The part carries an `excerpt` of the message too, because the model is never
+shown a message's id: a reaction can answer any message on the thread, not
+just the last reply, and the excerpt is the one thing in what the model reads
+that says which — the only copy of it, where a compaction summarized the
+message away. `reactionTurnText` is the wording, the handle first where there is one:
+`@build The user has responded with 👍 (thumbs up) to the message:` and the
+excerpt quoted under it.
+
+**`ChatRoom.react` is one verb that toggles**, and so is everything that
+carries it — the drivers, `SyncMessage.react`, the picker's one callback. The
+room decides: a message that already has that emoji live (`liveReactions`,
+the one statement of what a live reaction is) has it taken back; anything
+else is reacted to. The picker marks the chosen ones so the user can tell
+which it will be. Reacting again after taking one back is a new message and
+a new turn.
+
+**Taking one back is a record, not a deletion.** It appends
+`retract {messageId, retraction}`, naming the reaction's own message; replay
+sets `Message.retraction` from it, and it comes off the message it answered.
+The message stays on the log, because it was said. What happens to its turn is
+the one decision, and the record carries it:
+
+- **Its turn had started, or finished** (`afterItsTurn`): the turn carries on
+  and its reply stays — deleting the thread is how to take that back, as for
+  any reply. The model still reads the reaction, since the reply answers it.
+- **It was still queued** (`beforeItsTurn`): the room takes it off the
+  schedule (`Schedule.dropPrompt`), so no turn ever opens for it, and the
+  projection leaves it out — as far as any model is told, it was never said.
+
+**On screen it is not a row.** `drawnAsRow` (beside `endedSilently`, the
+other message on the log alone) is what `entriesOf` and the chapter rail both
+skip by, and the row a running turn appends to is the newest message that is
+not a reaction — a reaction queued behind the turn does not take the spinner
+from it. `reactionsOn` gives each message its live emoji, each once, drawn
+at the outer end of its action row — the left under a reply, the right under
+the user's own — with a divider between them and the actions.
+They stay up while the actions fade, being what was said about the message
+rather than something to do to it. The picker is a pill of the six over the
+smiley, centred on it (`showAnchoredPopup`, a route like `showAnchoredMenu`,
+so back, Escape and a tap outside close it). An edit is refused for a
+reaction in the room itself: rebuilt from text, it would be lost.
 
 ## Attachments
 

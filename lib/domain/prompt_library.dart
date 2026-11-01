@@ -1,5 +1,3 @@
-import "package:collection/collection.dart";
-
 import "frontmatter.dart";
 import "models.dart";
 
@@ -225,19 +223,6 @@ List<String> mentionedAgents(Map<String, String> documents) => [
   for (final key in agentEntriesFrom(documents).keys)
     key.substring(CompletionKind.agent.trigger.length),
 ];
-
-/// The member [documents] shows addressed, as typed — the first agent key in
-/// write order. Null where the message names no member at all. A message that
-/// addresses one member and names another as a handoff target ("check X, then
-/// hand it to @reviewer") is still addressed to one: the first mention is the
-/// addressee, the later one the routing the reply will carry out.
-/// The member [documents] shows addressed, as typed — the first agent key in
-/// write order. Null where the message names no member at all. A message that
-/// addresses one member and names another as a handoff target ("check X, then
-/// hand it to @reviewer") is still addressed to one: the first mention is the
-/// addressee, the later one the routing the reply will carry out.
-String? authorFrom(Map<String, String> documents) =>
-    authorKeys(documents).firstOrNull;
 
 /// The members [documents] address, in the order they were written — the
 /// agent keys as typed, sigil on. Empty where the message names no member.

@@ -191,6 +191,18 @@ class Schedule {
   /// How deep the round ran when [replyId] finished; zero where unknown.
   int generationOf(String replyId) => _finished[replyId] ?? 0;
 
+  /// Take back the user prompt [id] from every queue it waits in: a say
+  /// withdrawn before its turn ran. Whether any queue held it.
+  bool dropPrompt(String id) {
+    var dropped = false;
+    for (final queue in _queues.values) {
+      final before = queue.length;
+      queue.removeWhere((item) => item.userPrompt?.id == id);
+      dropped |= queue.length < before;
+    }
+    return dropped;
+  }
+
   /// An interruption drops what is queued and keeps the wave's bookkeeping:
   /// the turns are carried on, not the round restarted.
   void clearQueues() => _queues.clear();

@@ -175,6 +175,15 @@ sealed class ChatRecord with _$ChatRecord {
     @Default({}) Map<String, dynamic> data,
   }) = CallEventRecord;
 
+  /// The reaction [messageId] is taken back. The message stays on the log —
+  /// it was said — and is off the message it answered. [retraction] says
+  /// whether its turn had started; see [Retraction]. Sets
+  /// [Message.retraction].
+  const factory ChatRecord.retract({
+    required String messageId,
+    required Retraction retraction,
+  }) = RetractRecord;
+
   factory ChatRecord.fromJson(Map<String, dynamic> json) =>
       _$ChatRecordFromJson(json);
 }
@@ -326,6 +335,11 @@ Replayed replayTree(Iterable<ChatRecord> records) {
 
       case RewindRecord(:final messageId):
         if (nodes.containsKey(messageId)) forget(messageId);
+
+      case RetractRecord(:final messageId, :final retraction):
+        final into = nodes[messageId];
+        if (into == null) continue;
+        nodes[messageId] = into.copyWith(retraction: retraction);
 
       case CompactionRecord(
         :final upToMessageId,

@@ -1,4 +1,5 @@
 import "models.dart";
+import "reaction.dart" show Reactions;
 
 /// The tool a room member calls to say nothing. Named in the domain because
 /// the controller, the projection and the page all read a reply by it.
@@ -14,3 +15,8 @@ bool endedSilently(Message message) =>
     message.parts.any(
       (p) => p is ToolCallPart && p.toolCall.name == endTurnToolName,
     );
+
+/// Whether [message] is a row on the page. A silent reply is on the log
+/// alone, and a reaction shows on the message it answers.
+bool drawnAsRow(Message message) =>
+    !endedSilently(message) && message.reaction == null;

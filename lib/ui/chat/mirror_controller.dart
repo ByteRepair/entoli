@@ -6,6 +6,7 @@ import "../../data/sync/sync_hub.dart";
 import "../../domain/ask.dart";
 import "../../domain/chat_log.dart";
 import "../../domain/models.dart";
+import "../../domain/reaction.dart";
 import "../../domain/room/roster.dart" show isCommand;
 import "../../domain/room/room_state.dart";
 import "../../providers.dart";
@@ -148,6 +149,10 @@ class MirrorChatController extends Notifier<ChatViewState>
   @override
   Future<void> regenerate(String messageId) =>
       _hub.regenerateRemote(chatId, messageId);
+
+  @override
+  Future<void> react(String messageId, Reaction reaction) =>
+      _hub.reactRemote(chatId, messageId, reaction.emoji);
 
   @override
   Future<void> stepThread(String messageId, int step) =>
