@@ -51,7 +51,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       panel: const Sidebar(),
       panelWidth: sidebarWidth,
       shown: ref.watch(sidebarShownProvider),
-      onShownChanged: ref.read(sidebarShownProvider.notifier).set,
+      onShow: () => ref.read(sidebarShownProvider.notifier).set(true),
       child: const ChatPage(),
     ),
   );

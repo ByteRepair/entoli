@@ -23,18 +23,16 @@ bool projectHasWorkspace(ProjectRef at) =>
 bool projectHasMemories(ProjectRef at) =>
     builtinProjectOf(at.project)?.memory != MemoryPolicy.off;
 
-bool projectHasSettings(ProjectRef at) =>
-    at.project != null && projectHasSettingsPage(at.project);
+bool projectHasSettings(ProjectRef at) => projectHasSettingsPage(at.project);
 
 void openProjectWorkspace(BuildContext context, WidgetRef ref, ProjectRef at) {
-  final title = "${projectLabel(at.project)} workspace";
   Navigator.of(context).push(
     MaterialPageRoute(
       builder: (_) => WorkspacePage(
         root: ref
             .read(appConfigProvider)
             .projectWorkspaceDir(project: at.project),
-        title: title,
+        title: "${projectLabel(at.project)} workspace",
       ),
     ),
   );

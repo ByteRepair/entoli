@@ -5,14 +5,12 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
 import "../domain/builtin_project.dart";
-import "../domain/models.dart";
 import "../domain/project.dart";
 import "../providers.dart";
 import "app_command.dart";
 import "chat/chat_controller.dart";
 import "chat/chat_settings_page.dart";
 import "chat/plan_page.dart";
-import "chat/widgets/plan_view.dart";
 import "chat_actions.dart";
 import "marketplace/marketplace_page.dart";
 import "profile/profile_page.dart";
@@ -34,9 +32,9 @@ class Commands {
     this.ref, {
     required this.front,
     required this.project,
-    required this.chat,
+    required this.chatId,
+    required this.pinned,
     required this.running,
-    required this.hasPlan,
     required this.sidebarShown,
   });
 
@@ -53,19 +51,25 @@ class Commands {
   ) {
     final id = get(selectedChatIdProvider);
     // A mirror's state is its home device's, and so is everything done to it.
-    final local = id != null && !get(isMirroredChatProvider(id));
+    // The two facts a menu draws, not the whole state, which changes with
+    // every message that lands.
+    final open = id == null || get(isMirroredChatProvider(id))
+        ? null
+        : get(
+            chatControllerProvider(id).select(
+              (s) => s.chat == null
+                  ? null
+                  : (pinned: s.chat!.state.pinned, running: s.isRunning),
+            ),
+          );
     return Commands._(
       context,
       ref,
       front: ModalRoute.isCurrentOf(context) ?? true,
       project: get(selectedProjectProvider),
-      chat: local
-          ? get(chatControllerProvider(id).select((s) => s.chat?.state))
-          : null,
-      running:
-          local && get(chatControllerProvider(id).select((s) => s.isRunning)),
-      hasPlan:
-          local && get(planProvider(id).select((plan) => plan.value != null)),
+      chatId: open == null ? null : id,
+      pinned: open?.pinned ?? false,
+      running: open?.running ?? false,
       sidebarShown: get(sidebarShownProvider),
     );
   }
@@ -77,10 +81,10 @@ class Commands {
   final bool front;
   final ProjectRef project;
 
-  /// The open chat, where it is one of this device's.
-  final ChatState? chat;
+  /// The open chat, where it is one of this device's and has been read.
+  final String? chatId;
+  final bool pinned;
   final bool running;
-  final bool hasPlan;
   final bool sidebarShown;
 
   bool canRun(AppCommand command) {
@@ -90,8 +94,9 @@ class Commands {
       AppCommand.renameChat ||
       AppCommand.moveChat ||
       AppCommand.deleteChat ||
-      AppCommand.chatSettings => chat != null,
-      AppCommand.showPlan => hasPlan,
+      AppCommand.chatSettings ||
+      // The page says where a chat has none.
+      AppCommand.showPlan => chatId != null,
       AppCommand.stopTurn => running,
       AppCommand.projectWorkspace => projectHasWorkspace(project),
       AppCommand.projectMemories => projectHasMemories(project),
@@ -102,7 +107,7 @@ class Commands {
 
   /// [command]'s label, saying which way a toggle goes.
   String label(AppCommand command) => switch (command) {
-    AppCommand.pinChat when chat?.pinned ?? false => "Unpin Chat",
+    AppCommand.pinChat when pinned => "Unpin Chat",
     AppCommand.toggleSidebar => sidebarShown ? "Hide Sidebar" : "Show Sidebar",
     _ => command.label,
   };
@@ -115,7 +120,7 @@ class Commands {
   }
 
   Future<void> _run(AppCommand command) async {
-    final chat = this.chat;
+    final chatId = this.chatId;
     switch (command) {
       case AppCommand.about:
         _settings(SettingsCategory.about);
@@ -141,20 +146,19 @@ class Commands {
         await showProjectPalette(context, ref);
       case AppCommand.toggleSidebar:
         ref.read(sidebarShownProvider.notifier).toggle();
-      case AppCommand.pinChat:
-        await setChatPinned(ref, chat!, !chat.pinned, open: true);
-      case AppCommand.renameChat:
-        await renameChat(context, ref, chat!, open: true);
-      case AppCommand.moveChat:
-        await moveChat(context, ref, chat!);
-      case AppCommand.deleteChat:
-        await deleteChat(context, ref, chat!, open: true);
+      case AppCommand.pinChat ||
+          AppCommand.renameChat ||
+          AppCommand.moveChat ||
+          AppCommand.deleteChat:
+        // Read as it is now: what the menu was drawn from is two facts of it.
+        final chat = ref.read(chatControllerProvider(chatId!)).chat!.state;
+        await runOnChat(context, ref, chat, command);
       case AppCommand.chatSettings:
-        _push(ChatSettingsPage(chatId: chat!.id));
+        openChatSettings(context, chatId!);
       case AppCommand.showPlan:
-        _push(PlanPage(chatId: chat!.id));
+        openPlan(context, chatId!);
       case AppCommand.stopTurn:
-        await ref.read(chatControllerProvider(chat!.id).notifier).abort();
+        await ref.read(chatControllerProvider(chatId!).notifier).abort();
       case AppCommand.projectWorkspace:
         openProjectWorkspace(context, ref, project);
       case AppCommand.projectMemories:
@@ -172,7 +176,4 @@ class Commands {
     ).popUntil((route) => route.settings.name != settingsRoute);
     unawaited(openSettings(context, category: category));
   }
-
-  void _push(Widget page) =>
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
 }

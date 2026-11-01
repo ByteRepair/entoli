@@ -1,4 +1,3 @@
-import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -253,11 +252,13 @@ void main() {
   });
 
   // macOS, over a delegate that keeps what the platform would have been sent.
+  // The variant sets the platform and puts it back, which flutter_test checks
+  // before a tear-down would run.
   group("the menu bar", () {
+    final mac = TargetPlatformVariant.only(TargetPlatform.macOS);
     late _Menus menus;
 
     Future<void> pumpMac(WidgetTester tester) async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
       final previous = WidgetsBinding.instance.platformMenuDelegate;
       menus = _Menus();
       WidgetsBinding.instance.platformMenuDelegate = menus;
@@ -276,8 +277,7 @@ void main() {
       expect(menus.item("Profile…"), isNotNull);
       expect(menus.item("Marketplace…"), isNotNull);
       expect(find.text("Marketplace"), findsNothing);
-      debugDefaultTargetPlatformOverride = null;
-    });
+    }, variant: mac);
 
     testWidgets("greys the chat's commands until there is a chat open", (
       tester,
@@ -289,8 +289,7 @@ void main() {
       await settleIo(tester);
 
       expect(menus.item("Pin Chat")!.onSelected, isNotNull);
-      debugDefaultTargetPlatformOverride = null;
-    });
+    }, variant: mac);
 
     testWidgets("an item runs its command", (tester) async {
       await pumpMac(tester);
@@ -300,8 +299,7 @@ void main() {
 
       expect(find.byType(Sidebar), findsNothing);
       expect(menus.item("Show Sidebar"), isNotNull);
-      debugDefaultTargetPlatformOverride = null;
-    });
+    }, variant: mac);
   });
 }
 

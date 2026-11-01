@@ -101,8 +101,11 @@ void main() {
   group("with nothing selected", () {
     // Nothing selected is the new-chat screen, and it is only a screen: no
     // chat is made until something is said.
-    Future<void> openEmpty(WidgetTester tester) async {
-      await app.pump(tester, const ChatPage(), settle: false);
+    Future<void> openEmpty(
+      WidgetTester tester, {
+      Widget page = const ChatPage(),
+    }) async {
+      await app.pump(tester, page, settle: false);
       await pumpUntil(tester, find.byType(Composer));
       await settleIo(tester);
     }
@@ -577,13 +580,10 @@ void main() {
       await io(tester, () => app.seedChat(title: "at work", project: "work"));
       await io(tester, () => app.seedChat(title: "at home"));
       // The drawer is the frame's, as the shell has it.
-      await app.pump(
+      await openEmpty(
         tester,
-        const SidePanelFrame(panel: Sidebar(), child: ChatPage()),
-        settle: false,
+        page: const SidePanelFrame(panel: Sidebar(), child: ChatPage()),
       );
-      await pumpUntil(tester, find.byType(Composer));
-      await settleIo(tester);
 
       await pick(tester, "work");
       await tester.tap(find.byIcon(Icons.menu));

@@ -1218,11 +1218,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
         titleSpacing: 0,
         toolbarHeight: barHeight,
         title: InkWell(
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => ChatSettingsPage(chatId: widget.chatId),
-            ),
-          ),
+          onTap: () => openChatSettings(context, widget.chatId),
           // Fills the bar between leading and actions so the whole strip
           // opens the chat's settings, not just the text.
           child: SizedBox(

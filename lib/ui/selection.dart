@@ -71,7 +71,7 @@ final selectedProjectProvider = NotifierProvider<SelectedProject, ProjectRef>(
 
 /// Whether the sidebar is docked beside the chat pane where the window is wide
 /// enough for it — the user's choice, which a narrow window does not change:
-/// there the sidebar is a drawer whichever this says. See `SidebarFrame`.
+/// there the sidebar is a drawer whichever this says. See `SidePanelFrame`.
 class SidebarShown extends Notifier<bool> {
   @override
   bool build() => true;
@@ -113,37 +113,6 @@ void openNewChat(BuildContext context, WidgetRef ref) {
 void openNewChatIn(BuildContext context, WidgetRef ref, String? project) {
   selectProject(ref, localProject(project));
   closeNavDrawer(context);
-}
-
-/// Pinning ends a temporary chat, which the title bar of the open one says —
-/// so where [open], the write is handed to its controller, or the bar keeps
-/// counting down to an expiry that is no longer there. Only there: reading the
-/// notifier for any other chat builds a controller, and loads a conversation
-/// nobody is looking at.
-Future<void> setChatPinned(
-  WidgetRef ref,
-  ChatState chat,
-  bool pinned, {
-  required bool open,
-}) async {
-  final repo = ref.read(chatRepositoryProvider);
-  final written = await (pinned
-      ? repo.pinChat(chat.id, chat)
-      : repo.unpinChat(chat.id, chat));
-  if (open) {
-    ref.read(chatControllerProvider(chat.id).notifier).applyState(written);
-  }
-  ref.invalidate(chatListProvider);
-}
-
-/// Pin the open chat, or unpin it if it is pinned. Nothing for the new-chat
-/// screen or a mirror, whose state is the home device's.
-Future<void> toggleOpenChatPin(WidgetRef ref) async {
-  final id = ref.read(selectedChatIdProvider);
-  if (id == null || ref.read(isMirroredChatProvider(id))) return;
-  final chat = ref.read(chatControllerProvider(id)).chat?.state;
-  if (chat == null) return;
-  await setChatPinned(ref, chat, !chat.pinned, open: true);
 }
 
 /// Start a chat and say the first thing in it. The new-chat screen's composer

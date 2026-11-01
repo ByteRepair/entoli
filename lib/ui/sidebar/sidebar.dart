@@ -85,6 +85,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
   @override
   Widget build(BuildContext context) {
     final selected = ref.watch(selectedProjectProvider);
+    final scheme = Theme.of(context).colorScheme;
     // The list the query was written against has just been replaced, the same
     // reason switching clears the selected chat. Kept, it would answer a
     // project the user has left with "nothing matches".
@@ -123,9 +124,9 @@ class _SidebarState extends ConsumerState<Sidebar> {
               ListTile(
                 leading: const Icon(Icons.add),
                 title: const Text("New chat"),
-                tileColor: Theme.of(context).colorScheme.primary,
-                iconColor: Theme.of(context).colorScheme.onPrimary,
-                textColor: Theme.of(context).colorScheme.onPrimary,
+                tileColor: scheme.primary,
+                iconColor: scheme.onPrimary,
+                textColor: scheme.onPrimary,
                 onTap: () => openNewChat(context, ref),
               )
             else ...[
@@ -488,9 +489,10 @@ class _ChatTile extends ConsumerWidget {
                         size: 14,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
-                    PopupMenuButton<_RowAction>(
+                    PopupMenuButton<AppCommand>(
                       icon: const Icon(Icons.more_vert),
-                      onSelected: (action) => _run(context, ref, action),
+                      onSelected: (command) =>
+                          runOnChat(context, ref, chat, command),
                       itemBuilder: (_) => _items,
                     ),
                   ],
@@ -500,19 +502,21 @@ class _ChatTile extends ConsumerWidget {
     );
   }
 
-  /// The row's menu, the same from the button and from a right-click.
-  List<PopupMenuEntry<_RowAction>> get _items => [
-    PopupMenuItem(
-      value: _RowAction.pin,
-      child: Text(chat.pinned ? "Unpin" : "Pin"),
-    ),
-    const PopupMenuItem(value: _RowAction.rename, child: Text("Rename")),
-    if (!remote)
-      const PopupMenuItem(
-        value: _RowAction.move,
-        child: Text("Move to project…"),
-      ),
-    const PopupMenuItem(value: _RowAction.delete, child: Text("Delete")),
+  /// The row's menu, the same from the button and from a right-click: the
+  /// chat commands, in the row's own shorter words, less Move for a mirror,
+  /// whose projects are its home device's.
+  List<PopupMenuEntry<AppCommand>> get _items => [
+    for (final command in chatCommands)
+      if (!(remote && command == AppCommand.moveChat))
+        PopupMenuItem(
+          value: command,
+          child: Text(switch (command) {
+            AppCommand.pinChat => chat.pinned ? "Unpin" : "Pin",
+            AppCommand.renameChat => "Rename",
+            AppCommand.moveChat => "Move to project…",
+            _ => "Delete",
+          }),
+        ),
   ];
 
   Future<void> _contextMenu(
@@ -520,35 +524,16 @@ class _ChatTile extends ConsumerWidget {
     WidgetRef ref,
     Offset at,
   ) async {
-    final action = await showMenu<_RowAction>(
+    final command = await showMenu<AppCommand>(
       context: context,
       position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
       items: _items,
     );
-    if (action != null && context.mounted) await _run(context, ref, action);
+    if (command != null && context.mounted) {
+      await runOnChat(context, ref, chat, command);
+    }
   }
-
-  Future<void> _run(BuildContext context, WidgetRef ref, _RowAction action) =>
-      switch (action) {
-        _RowAction.pin => setChatPinned(
-          ref,
-          chat,
-          !chat.pinned,
-          open: selected && !remote,
-        ),
-        _RowAction.rename => renameChat(
-          context,
-          ref,
-          chat,
-          open: selected,
-          remote: remote,
-        ),
-        _RowAction.move => moveChat(context, ref, chat),
-        _RowAction.delete => deleteChat(context, ref, chat, open: selected),
-      };
 }
-
-enum _RowAction { pin, rename, move, delete }
 
 /// The project being shown, and the way to the palette that changes it.
 class _ProjectMenu extends ConsumerWidget {

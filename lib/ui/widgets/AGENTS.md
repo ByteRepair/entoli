@@ -20,11 +20,12 @@ shell's sidebar is one. The page is at the same place in the tree in every
 mode, so a toggle or a resize keeps whatever it holds; that is the frame's
 whole reason over a `Row` here and a drawer there, which rebuilt the page
 each time the window crossed the breakpoint. Whether the panel is shown is
-the host's to keep, a value and a callback like a field's, so a menu command
-and the frame's own button drive the same state. A page below reads where
+the host's to keep — `shown`, and `onShow` for the frame's own button — so a
+menu command and the button drive the same state. A page below reads where
 the panel is with `SidePanelFrame.of` and puts `SidePanelButton.leadingOf`
-in its bar: the drawer's menu button narrow, a show button where the panel is
-hidden, nothing where it is docked. One Scaffold holds the drawer — the
+in its bar: the menu button, opening the drawer narrow and docking the panel
+again where it is hidden, and nothing where it is docked. The panel slides in
+and out, pushing the page over. One Scaffold holds the drawer — the
 frame's — so a page under it carries none of its own.
 
 `scrolling.dart` is the shared scroll rule, and it is two things. `nearBottom`

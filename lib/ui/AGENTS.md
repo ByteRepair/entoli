@@ -207,17 +207,22 @@ keys, so the page cannot disagree with what answers them.
 
 What a command does is `Commands` (`commands.dart`), and it is one switch.
 `Commands.watch` is a snapshot of what the app has open taken in a build — so a
-menu greys and labels its items afresh as the app changes — and
-`Commands.read` the same taken at a key or a click, which `run` acts on.
+menu greys and labels its items afresh as the app changes. It watches only the
+facts a menu draws — the open chat's id, whether it is pinned and whether a
+turn runs — since every rebuild sends the whole menu to the platform, and a
+chat's state changes with each message that lands. `Commands.read` is
+the same taken at a key or a click, which `run` acts on.
 `canRun` is the one answer to whether a command can run now, and both the keys
 and the menus ask it. A command is not `anywhere` unless it opens one of the
 app's own pages, and the rest only run with the chat pane in front: they act
 on what it shows, and a page pushed over it is hiding that. Settings over
 Settings replaces it rather than stacking a second.
 
-The commands that act on one chat — pin, rename, move, delete — are functions
-in `chat_actions.dart` taking that chat, so the sidebar row runs them on its
-own and `Commands` on the open one; the project's pages beside its chats are
+The commands that act on one chat — pin, rename, move, delete — are
+`chatCommands`, run on a given chat by `runOnChat` (`chat_actions.dart`): the
+sidebar row's menu runs them on its own chat and `Commands` on the open one.
+Each works out for itself whether its chat is the one on screen and whether it
+is a mirror, so no caller passes either. The project's pages beside its chats are
 `project_actions.dart`, which says which of them a project has for the
 switcher's buttons and the Project menu alike. A mirrored chat runs none of
 them from the menu: its state is its home device's.

@@ -6,21 +6,24 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "app_command.dart";
 import "commands.dart";
 
-typedef AppMenu = ({
-  String label,
-  List<List<AppCommand>> groups,
+/// One menu of the bar: its commands in groups, and the platform's own items
+/// after them.
+class AppMenu {
+  const AppMenu(this.label, this.groups, {this.system = const []});
 
-  /// The platform's own items, after the commands. Only macOS has any;
-  /// elsewhere they are dropped.
-  List<PlatformProvidedMenuItemType> system,
-});
+  final String label;
+  final List<List<AppCommand>> groups;
+
+  /// Only macOS has any; elsewhere they are dropped.
+  final List<PlatformProvidedMenuItemType> system;
+}
 
 /// The menu bar, as data. The first menu is the app's own, which macOS titles
 /// with the app's name whatever this one says.
 const List<AppMenu> appMenus = [
-  (
-    label: "Entoli",
-    groups: [
+  AppMenu(
+    "Entoli",
+    [
       [AppCommand.about],
       [AppCommand.settings, AppCommand.profile, AppCommand.marketplace],
     ],
@@ -32,62 +35,42 @@ const List<AppMenu> appMenus = [
       PlatformProvidedMenuItemType.quit,
     ],
   ),
-  (
-    label: "File",
-    groups: [
-      [
-        AppCommand.newChat,
-        AppCommand.newAnonymousChat,
-        AppCommand.newOmadaChat,
-      ],
-      [AppCommand.switchProject],
-      [AppCommand.backUp],
+  AppMenu("File", [
+    [AppCommand.newChat, AppCommand.newAnonymousChat, AppCommand.newOmadaChat],
+    [AppCommand.switchProject],
+    [AppCommand.backUp],
+  ]),
+  AppMenu("Chat", [
+    [AppCommand.pinChat, AppCommand.renameChat, AppCommand.moveChat],
+    [AppCommand.chatSettings, AppCommand.showPlan, AppCommand.stopTurn],
+    [AppCommand.deleteChat],
+  ]),
+  AppMenu("Project", [
+    [
+      AppCommand.projectWorkspace,
+      AppCommand.projectMemories,
+      AppCommand.projectSettings,
     ],
-    system: [],
-  ),
-  (
-    label: "Chat",
-    groups: [
-      [AppCommand.pinChat, AppCommand.renameChat, AppCommand.moveChat],
-      [AppCommand.chatSettings, AppCommand.showPlan, AppCommand.stopTurn],
-      [AppCommand.deleteChat],
-    ],
-    system: [],
-  ),
-  (
-    label: "Project",
-    groups: [
-      [
-        AppCommand.projectWorkspace,
-        AppCommand.projectMemories,
-        AppCommand.projectSettings,
-      ],
-    ],
-    system: [],
-  ),
-  (
-    label: "View",
-    groups: [
+  ]),
+  AppMenu(
+    "View",
+    [
       [AppCommand.toggleSidebar],
     ],
     system: [PlatformProvidedMenuItemType.toggleFullScreen],
   ),
-  (
-    label: "Window",
-    groups: [],
+  AppMenu(
+    "Window",
+    [],
     system: [
       PlatformProvidedMenuItemType.minimizeWindow,
       PlatformProvidedMenuItemType.zoomWindow,
       PlatformProvidedMenuItemType.arrangeWindowsInFront,
     ],
   ),
-  (
-    label: "Help",
-    groups: [
-      [AppCommand.welcome, AppCommand.keyboardShortcuts],
-    ],
-    system: [],
-  ),
+  AppMenu("Help", [
+    [AppCommand.welcome, AppCommand.keyboardShortcuts],
+  ]),
 ];
 
 /// iPadOS has no menu bar in Flutter's engine, so its menus go over a channel
@@ -120,29 +103,26 @@ class AppMenuBar extends ConsumerWidget {
           ? () => Commands.read(context, ref).run(command)
           : null,
     );
+    List<PlatformMenuItem> members(AppMenu menu) {
+      final system = [
+        for (final type in menu.system)
+          if (PlatformProvidedMenuItem.hasMenu(type))
+            PlatformProvidedMenuItem(type: type),
+      ];
+      return [
+        for (final group in menu.groups)
+          PlatformMenuItemGroup(members: [for (final c in group) item(c)]),
+        if (system.isNotEmpty) PlatformMenuItemGroup(members: system),
+      ];
+    }
+
     return PlatformMenuBar(
       menus: [
         for (final menu in appMenus)
-          if (_members(menu, item) case final members when members.isNotEmpty)
-            PlatformMenu(label: menu.label, menus: members),
+          if (members(menu) case final items when items.isNotEmpty)
+            PlatformMenu(label: menu.label, menus: items),
       ],
       child: child,
     );
-  }
-
-  static List<PlatformMenuItem> _members(
-    AppMenu menu,
-    PlatformMenuItem Function(AppCommand) item,
-  ) {
-    final system = [
-      for (final type in menu.system)
-        if (PlatformProvidedMenuItem.hasMenu(type))
-          PlatformProvidedMenuItem(type: type),
-    ];
-    return [
-      for (final group in menu.groups)
-        PlatformMenuItemGroup(members: [for (final c in group) item(c)]),
-      if (system.isNotEmpty) PlatformMenuItemGroup(members: system),
-    ];
   }
 }

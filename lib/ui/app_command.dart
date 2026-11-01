@@ -84,22 +84,12 @@ enum AppCommand {
         );
 
   /// The command the keys held down with [event] make, if any. Exact on every
-  /// modifier, so Ctrl+Shift+N is not also Ctrl+N.
-  static AppCommand? of(KeyEvent event) {
-    final keys = HardwareKeyboard.instance;
-    final chord = appleKeyboard
-        ? keys.isMetaPressed && !keys.isControlPressed
-        : keys.isControlPressed && !keys.isMetaPressed;
-    if (!chord) return null;
-    for (final command in values) {
-      if (command.key == event.logicalKey &&
-          command.shift == keys.isShiftPressed &&
-          command.alt == keys.isAltPressed) {
-        return command;
-      }
-    }
-    return null;
-  }
+  /// modifier, as [activator] is, so Ctrl+Shift+N is not also Ctrl+N.
+  static AppCommand? of(KeyEvent event) => values
+      .where(
+        (c) => c.activator?.accepts(event, HardwareKeyboard.instance) ?? false,
+      )
+      .firstOrNull;
 
   /// The keys as they are printed on this platform's keyboard, in the order
   /// it names them.

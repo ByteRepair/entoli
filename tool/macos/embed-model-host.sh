@@ -25,8 +25,7 @@ cp "$app/Contents/MacOS/$EXECUTABLE_NAME" "$helper/Contents/MacOS/$executable"
 # which the helper has no use for and which takes the header room the rpath
 # below needs: a checkout a few dozen characters deeper and there is none left.
 otool -l "$helper/Contents/MacOS/$executable" |
-  awk '/cmd LC_RPATH/ { getline; getline; sub(/^ *path /, ""); sub(/ \(offset [0-9]+\)$/, ""); print }' |
-  grep '^/' |
+  awk '/cmd LC_RPATH/ { getline; getline; sub(/^ *path /, ""); sub(/ \(offset [0-9]+\)$/, ""); if (/^\//) print }' |
   while read -r path; do
     install_name_tool -delete_rpath "$path" "$helper/Contents/MacOS/$executable"
   done
