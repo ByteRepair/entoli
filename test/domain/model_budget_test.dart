@@ -32,16 +32,19 @@ void main() {
     final small = ModelBudget.mac(5 * gib + gib ~/ 3);
 
     expect(offered(big, mlxCatalog), mlxCatalog.map((m) => m.id));
-    expect(offered(small, mlxCatalog), [mlxCatalog[0].id, mlxCatalog[1].id]);
+    expect(offered(small, mlxCatalog), [mlxCatalog.first.id]);
   });
 
   test("a phone is held to a share of what its app may still grow by", () {
-    // An 8 GB iPhone whose app may grow by about six: the 2B, and no larger.
+    // An 8 GB iPhone whose app may grow by about six: short of the 4B.
     final phone = ModelBudget.phone(workingSet: 5 * gib, available: 6 * gib);
-    expect(offered(phone, mlxCatalog), [mlxCatalog.first.id]);
+    expect(offered(phone, mlxCatalog), isEmpty);
+    // A 12 GB one has room for the 4B, and no larger.
+    final roomy = ModelBudget.phone(workingSet: 9 * gib, available: 8 * gib);
+    expect(offered(roomy, mlxCatalog), [mlxCatalog.first.id]);
     // However much Metal could keep resident, the app's own limit binds.
     final limited = ModelBudget.phone(workingSet: 12 * gib, available: 5 * gib);
-    expect(offered(limited, mlxCatalog), [mlxCatalog.first.id]);
+    expect(offered(limited, mlxCatalog), isEmpty);
   });
 
   test("an Android phone is held to half its RAM", () {

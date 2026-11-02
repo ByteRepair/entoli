@@ -598,8 +598,8 @@ the 9B. Apple's comes from the handshake: Metal's
 `recommendedMaxWorkingSetSize`, the GPU the window draws on too, of which a Mac
 gets three quarters; on iOS also what the OS still lets the app grow by, which
 is what ends an app there, and a phone gets three fifths of the smaller — on an
-8 GB iPhone the 2B and nothing larger, since a model that slows the UI slows
-the whole phone with it. A model already downloaded keeps its row whatever it
+8 GB iPhone nothing at all, being short of the 4B, since a model that slows
+the UI slows the whole phone with it. A model already downloaded keeps its row whatever it
 measures, and a device that answers nothing is offered everything.
 
 ### What the NPU actually is

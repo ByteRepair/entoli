@@ -281,11 +281,10 @@ the package missing, the engine is `NoLocalEngine` and the page has no text
 section. Requiring 27 is for the feature, not the app.
 
 The catalog is `mlxCatalog` (`lib/domain/local_model.dart`): the GGUF
-catalog's three sizes in MLX's 4-bit format, each pinned to a commit with
+catalog's two larger sizes in MLX's 4-bit format, each pinned to a commit with
 every file's size and SHA-256, downloaded and checked by the same
 `FileLocalModelStore` as a GGUF into `<cacheDir>/llm/<id>/`. Only the files
-loading needs are fetched. LFM3 has no architecture in mlx-swift-lm, so the
-smallest row is Qwen3.5 2B. `MlxFormat` describes a download from its
+loading needs are fetched. `MlxFormat` describes a download from its
 `config.json`.
 
 It is a `RuntimeEngine` like llama.cpp's — see "The engine" in
