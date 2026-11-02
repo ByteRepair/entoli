@@ -49,23 +49,27 @@ void main() {
   );
 
   /// A chat with something said in it, open.
-  Future<void> openChat(WidgetTester tester) => io(tester, () async {
-    final chat = await app.repo.createChat(title: "old chat");
-    await app.writeChat(
-      chat.copyWith(
-        messages: [
-          for (var i = 0; i < 4; i++)
-            Message(
-              id: "m$i",
-              role: i.isEven ? MessageRole.user : MessageRole.assistant,
-              createdAt: DateTime(2026, 1, 1, 0, i),
-              parts: [TextPart(text: "line $i")],
-            ),
-        ],
-      ),
-    );
-    app.container.read(selectedChatIdProvider.notifier).select(chat.state.id);
-  });
+  Future<void> openChat(WidgetTester tester, {bool finished = true}) => io(
+    tester,
+    () async {
+      final chat = await app.repo.createChat(title: "old chat");
+      await app.writeChat(
+        chat.copyWith(
+          messages: [
+            for (var i = 0; i < 4; i++)
+              Message(
+                id: "m$i",
+                role: i.isEven ? MessageRole.user : MessageRole.assistant,
+                createdAt: DateTime(2026, 1, 1, 0, i),
+                parts: [TextPart(text: "line $i")],
+              ),
+          ],
+        ),
+        finished: finished,
+      );
+      app.container.read(selectedChatIdProvider.notifier).select(chat.state.id);
+    },
+  );
 
   testWidgets("the new-chat screen fills the page", (tester) async {
     await pump(tester);
@@ -97,5 +101,22 @@ void main() {
     expect(tester.getRect(list).bottom, 600, reason: "under the composer");
     final padding = MediaQuery.paddingOf(tester.element(list)).bottom;
     expect(padding, greaterThanOrEqualTo(80), reason: "its end clears it");
+  });
+
+  testWidgets("an interrupted turn's offer to carry on goes to the shell", (
+    tester,
+  ) async {
+    await openChat(tester, finished: false);
+    await pump(tester);
+    await settleIo(tester);
+    expect(sent["turn"]?["resume"], startsWith("Unfinished turn"));
+  });
+
+  testWidgets("a finished chat sends an empty turn surface", (tester) async {
+    await openChat(tester);
+    await pump(tester);
+    await settleIo(tester);
+    expect(sent["turn"]?["resume"], isNull);
+    expect(sent["turn"]?["approvals"], isEmpty);
   });
 }

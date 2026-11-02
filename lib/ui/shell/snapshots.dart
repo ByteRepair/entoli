@@ -416,3 +416,115 @@ class ComposerValueSnapshot extends ShellSnapshot {
   @override
   Map<String, Object?> toMap() => {"text": text, "start": start, "end": end};
 }
+
+/// One thing the chat has running: a pill, standing alone or in its group.
+class RunningSnapshot {
+  const RunningSnapshot({
+    required this.id,
+    required this.label,
+    required this.tooltip,
+    this.group,
+    this.symbol,
+    this.mono = false,
+  });
+
+  /// What a `running` intent names it by.
+  final int id;
+  final String label;
+  final String tooltip;
+
+  /// The kind it is gathered under, as a singular noun; null standing alone.
+  final String? group;
+
+  /// An SF Symbol in place of the spinner.
+  final String? symbol;
+  final bool mono;
+
+  Map<String, Object?> toMap() => {
+    "id": id,
+    "label": label,
+    "tooltip": tooltip,
+    "group": group,
+    "symbol": symbol,
+    "mono": mono,
+  };
+}
+
+/// A call the turn stopped on, and which answers it offers.
+class ApprovalSnapshot {
+  const ApprovalSnapshot({
+    required this.id,
+    required this.title,
+    required this.symbol,
+    required this.tool,
+    this.detail,
+    this.allow = true,
+    this.chat = false,
+    this.project = false,
+  });
+
+  final String id;
+  final String title;
+  final String symbol;
+  final String tool;
+
+  /// The call as the agent worded it, verbatim.
+  final String? detail;
+
+  /// Allow, Always in chat and Always in project, where each is on offer;
+  /// Deny always is.
+  final bool allow;
+  final bool chat;
+  final bool project;
+
+  Map<String, Object?> toMap() => {
+    "id": id,
+    "title": title,
+    "symbol": symbol,
+    "tool": tool,
+    "detail": detail,
+    "allow": allow,
+    "chat": chat,
+    "project": project,
+  };
+}
+
+/// What a running turn puts above the composer: the offer to carry on an
+/// interrupted one, what is running, what was said to it unread, and the
+/// calls waiting on an answer. Empty where no chat page has one.
+class TurnSnapshot extends ShellSnapshot {
+  const TurnSnapshot({
+    this.resume,
+    this.running = const [],
+    this.steers = const [],
+    this.withdrawable = false,
+    this.approvals = const [],
+  });
+
+  static const none = TurnSnapshot();
+
+  /// The resume bar's line, null for none.
+  final String? resume;
+  final List<RunningSnapshot> running;
+
+  /// Each say's id and its one line.
+  final List<({String id, String line})> steers;
+
+  /// A say can be taken back into the composer.
+  final bool withdrawable;
+  final List<ApprovalSnapshot> approvals;
+
+  @override
+  String get concern => "turn";
+
+  @override
+  Map<String, Object?> toMap() => {
+    "resume": resume,
+    "running": [for (final r in running) r.toMap()],
+    "steers": [
+      for (final s in steers) {"id": s.id, "line": s.line},
+    ],
+    "withdrawable": withdrawable,
+    "approvals": [for (final a in approvals) a.toMap()],
+  };
+}

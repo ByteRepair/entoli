@@ -15,6 +15,7 @@ import "conversation_pane.dart";
 import "shell_composer.dart";
 import "shell_outbox.dart";
 import "shell_sidebar.dart";
+import "shell_turn.dart";
 import "snapshots.dart";
 
 /// Whether a page is pushed over the conversation. On the app's Navigator,
@@ -144,10 +145,19 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
           intent.string("name"),
           args.cast<String, Object?>(),
         );
+      // The turn surface's, the same way.
+      case "turn":
+        final args = (intent.args["args"] as Map<Object?, Object?>?) ?? {};
+        await ref
+            .read(shellTurnSlotProvider)
+            .current
+            ?.handle(intent.string("name"), args.cast<String, Object?>());
+        return null;
       case "toolbar":
         slots.bar?.press(intent.string("id"));
         return null;
     }
+    if (!mounted) return null;
     final sidebar = await runSidebarIntent(context, ref, intent);
     if (!sidebar.handled) logFailure("shell", "no intent ${intent.name}");
     return sidebar.answer;

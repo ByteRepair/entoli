@@ -16,6 +16,7 @@ final class ShellModel: ObservableObject {
   @Published var window = WindowState()
   @Published var sidebar = SidebarState()
   @Published var chatBar = ChatBarState()
+  @Published var turn = TurnState()
 
   /// The composer's own object, so a keystroke redraws it and nothing else.
   private(set) lazy var composer = ComposerModel(shell: self)
@@ -39,6 +40,8 @@ final class ShellModel: ObservableObject {
       if let state: SidebarState = decode(value), state != sidebar { sidebar = state }
     case "chatBar":
       if let state: ChatBarState = decode(value), state != chatBar { chatBar = state }
+    case "turn":
+      if let state: TurnState = decode(value), state != turn { turn = state }
     case "composer":
       if let look: ComposerLook = decode(value) { composer.apply(look) }
     case "composerValue":

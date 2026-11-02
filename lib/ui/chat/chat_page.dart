@@ -29,6 +29,7 @@ import "../voice/voice_page.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/chip_row.dart";
 import "../shell/shell_composer.dart";
+import "../shell/shell_turn.dart";
 import "../shell/snapshots.dart" show ToolbarItem;
 import "../widgets/completion_field.dart";
 import "../widgets/liquid_glass.dart";
@@ -50,6 +51,7 @@ import "widgets/message_text.dart";
 import "widgets/omada_separator.dart" show ConversationSeparator;
 import "widgets/needs_setup_bar.dart";
 import "widgets/plan_view.dart" show planProvider;
+import "widgets/browser_strip.dart" show BrowserPrompts;
 import "widgets/turn_surface.dart";
 import "widgets/view_only_bar.dart";
 
@@ -1527,11 +1529,21 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        TurnSurface(
-          view: view,
-          notifier: driver,
-          onWithdrawn: (said) => _handle?.restore(said),
-        ),
+        // Under the native shell the shell draws it, all but the browser's
+        // prompts, which are fields and a picker and stay Flutter's.
+        if (ref.watch(liquidGlassProvider).shell) ...[
+          ShellTurnSurface(
+            view: view,
+            notifier: driver,
+            onWithdrawn: (said) => _handle?.restore(said),
+          ),
+          if (view.chat case final chat?) BrowserPrompts(chatId: chat.state.id),
+        ] else
+          TurnSurface(
+            view: view,
+            notifier: driver,
+            onWithdrawn: (said) => _handle?.restore(said),
+          ),
         switch (view.roomPhase) {
           RoomPhase.waitingOnYou => TurnQuestions(view: view, notifier: driver),
           _ => _composerOf(
