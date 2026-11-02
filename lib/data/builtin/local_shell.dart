@@ -458,6 +458,15 @@ String _liveTail(String prior, String piece) {
 /// sentinel proper is consumed by the parse before the watch can report it.
 const _markerPrefix = "\n@@E";
 
+/// Where the longest end of [text] that is a proper start of [_markerPrefix]
+/// begins, or -1 where it ends in none of it.
+int _partialPrefixAt(String text) {
+  for (var n = _markerPrefix.length - 1; n > 0; n--) {
+    if (text.endsWith(_markerPrefix.substring(0, n))) return text.length - n;
+  }
+  return -1;
+}
+
 /// One persistent shell: the process, its queue, and the run waiting on it.
 /// Commands are written one at a time — a turn runs its commands in order and
 /// only one turn runs in a chat at a time — so there is at most one run to
@@ -853,7 +862,10 @@ class _RunState {
     if (!watched) return;
     final joined = _held + chunk;
     _held = "";
-    final cut = joined.lastIndexOf(_markerPrefix);
+    var cut = joined.lastIndexOf(_markerPrefix);
+    // The pipe may split the head itself — the newline in one chunk, `@@E`
+    // in the next — so an end that is the start of it is held too.
+    if (cut == -1) cut = _partialPrefixAt(joined);
     String remainder;
     if (cut == -1) {
       remainder = joined;
