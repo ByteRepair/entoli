@@ -5,7 +5,8 @@ import "dart:typed_data";
 import "package:flutter/foundation.dart" show listEquals;
 import "package:collection/collection.dart" show IterableExtension;
 import "package:flutter/material.dart";
-import "package:flutter/rendering.dart" show RenderAbstractViewport;
+import "package:flutter/rendering.dart"
+    show RenderAbstractViewport, RenderProxyBox;
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 import "package:super_sliver_list/super_sliver_list.dart";
@@ -141,8 +142,8 @@ class _ReadableColumn extends StatelessWidget {
   final Widget bottom;
 
   /// Inside the native shell, whose toolbar is over the top of the page and
-  /// whose composer is under the bottom of it: the conversation scrolls under
-  /// the toolbar, and what is at the bottom sits above the composer.
+  /// whose composer is over the bottom of it: the conversation scrolls under
+  /// both, and what is at the bottom floats over it, above the composer.
   final bool shell;
 
   /// What publishes the shell's toolbar for this page; nothing on screen.
@@ -165,15 +166,12 @@ class _ReadableColumn extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         ?bar,
+        // A banner is not scrolled under: it sits below the toolbar.
         MediaQuery.removePadding(
           context: context,
-          removeBottom: true,
           removeTop: banner != null,
           child: Padding(
-            padding: EdgeInsets.only(
-              top: banner != null ? insets.top : 0,
-              bottom: insets.bottom,
-            ),
+            padding: EdgeInsets.only(top: banner != null ? insets.top : 0),
             child: page,
           ),
         ),
@@ -190,12 +188,14 @@ class _ReadableColumn extends StatelessWidget {
             final column = Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: _readableWidth),
-                child: Column(
-                  children: [
-                    Expanded(child: child),
-                    bottom,
-                  ],
-                ),
+                child: shell
+                    ? _FloatingBottom(bottom: bottom, child: child)
+                    : Column(
+                        children: [
+                          Expanded(child: child),
+                          bottom,
+                        ],
+                      ),
               ),
             );
             final margin = (constraints.maxWidth - _readableWidth) / 2;
@@ -219,6 +219,96 @@ class _ReadableColumn extends StatelessWidget {
       ),
     ],
   );
+}
+
+/// The native shell's arrangement of the column: [child] the whole height,
+/// and [bottom] — the turn surface, a question, a bar saying why there is no
+/// composer — over its foot, just above the shell's composer. The
+/// conversation is told both as its bottom padding, so it scrolls under them
+/// and its last message still clears them.
+class _FloatingBottom extends StatefulWidget {
+  const _FloatingBottom({required this.bottom, required this.child});
+
+  final Widget bottom;
+  final Widget child;
+
+  @override
+  State<_FloatingBottom> createState() => _FloatingBottomState();
+}
+
+class _FloatingBottomState extends State<_FloatingBottom> {
+  /// [_FloatingBottom.bottom]'s height as last laid out.
+  double _height = 0;
+
+  void _measured(Size size) {
+    if (size.height == _height) return;
+    // After this layout: the padding it changes is the list's, laid out in
+    // the same pass.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _height = size.height);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final composer = media.padding.bottom;
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: MediaQuery(
+            data: media.copyWith(
+              padding: media.padding.copyWith(bottom: composer + _height),
+            ),
+            child: widget.child,
+          ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: composer,
+          child: MediaQuery.removePadding(
+            context: context,
+            removeBottom: true,
+            child: _SizeReporter(onSize: _measured, child: widget.bottom),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Tells [onSize] the size [child] was laid out at, each time it changes.
+class _SizeReporter extends SingleChildRenderObjectWidget {
+  const _SizeReporter({required this.onSize, required super.child});
+
+  final ValueChanged<Size> onSize;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderSizeReporter(onSize);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderSizeReporter renderObject,
+  ) => renderObject.onSize = onSize;
+}
+
+class _RenderSizeReporter extends RenderProxyBox {
+  _RenderSizeReporter(this.onSize);
+
+  ValueChanged<Size> onSize;
+  Size? _reported;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    if (size != _reported) {
+      _reported = size;
+      onSize(size);
+    }
+  }
 }
 
 /// Nothing selected: the chat that has not been made yet. Nothing here is keyed
@@ -1596,10 +1686,15 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
           ),
         ),
         // Only once the reader has left the end: up there a turn no longer
-        // follows itself, and this is the way back.
+        // follows itself, and this is the way back. Above the native shell's
+        // composer, which the list runs under.
         Positioned(
           right: 16,
-          bottom: 12,
+          bottom:
+              12 +
+              (ref.watch(liquidGlassProvider).shell
+                  ? MediaQuery.paddingOf(context).bottom
+                  : 0),
           child: ValueListenableBuilder<bool>(
             valueListenable: _atBottom,
             builder: (context, atBottom, child) =>
