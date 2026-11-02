@@ -96,6 +96,10 @@ struct SidebarView: View {
       }
     }
     .searchable(text: $query, placement: .sidebar, prompt: "Search chats")
+    #if os(iOS)
+      // The project header is the list's title; no large one above it.
+      .navigationBarTitleDisplayMode(.inline)
+    #endif
     .onChange(of: query) { _, query in
       if query != state.query { model.intent("search", ["query": query]) }
     }

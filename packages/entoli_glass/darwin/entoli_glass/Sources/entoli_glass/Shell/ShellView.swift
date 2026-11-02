@@ -40,6 +40,12 @@ struct ShellView: View {
           model.insets(EdgeInsets(top: insets.top, leading: 0, bottom: insets.bottom, trailing: 0))
         }
       }
+      #if os(iOS)
+        // The insets Dart is told are the bars', not the keyboard's: Flutter
+        // hears of the keyboard itself, and counted here too it would be
+        // twice, the conversation pushed up under the toolbar.
+        .ignoresSafeArea(.keyboard)
+      #endif
       // Over the Flutter view, which draws nothing there: the new-chat
       // screen, between the toolbar and the composer.
       .overlay {

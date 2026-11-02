@@ -11,7 +11,7 @@ import "../sidebar/project_palette.dart"
 import "../sidebar/remote_projects.dart";
 import "shell_outbox.dart";
 import "../app_routes.dart";
-import "shell_sidebar.dart" show projectSymbol;
+import "shell_sidebar.dart" show BusyListenable, projectSymbol;
 import "snapshots.dart";
 
 /// Whether the native palette is open, what is typed in it, and which opening
@@ -41,24 +41,40 @@ const _remoteSymbol = "laptopcomputer.and.iphone";
 /// list, read and narrowed the same way — the default project and the
 /// built-ins, the user's projects, other devices', then every chat, running
 /// ones first — or, with something typed, the projects and chats it matches.
-class PalettePublisher extends ConsumerWidget {
+class PalettePublisher extends ConsumerStatefulWidget {
   const PalettePublisher({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PalettePublisher> createState() => _PalettePublisherState();
+}
+
+/// Everything read in [build], the publisher's own, as `SidebarPublisher`
+/// reads it, and for the same reason.
+class _PalettePublisherState extends ConsumerState<PalettePublisher> {
+  late final BusyListenable _busy;
+
+  @override
+  void initState() {
+    super.initState();
+    _busy = BusyListenable(ref, this);
+  }
+
+  @override
+  void dispose() {
+    _busy.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final palette = ref.watch(shellPaletteProvider);
     final outbox = ref.read(shellOutboxProvider);
-    if (!palette.open) {
-      outbox.post(PaletteSnapshot(open: false, serial: palette.serial));
-      return const SizedBox.shrink();
-    }
-    return ValueListenableBuilder<Set<String>>(
-      valueListenable: ref.watch(busyChatsProvider),
-      builder: (context, running, _) {
-        outbox.post(_snapshot(ref, palette, running));
-        return const SizedBox.shrink();
-      },
+    outbox.post(
+      palette.open
+          ? _snapshot(ref, palette, _busy.value)
+          : PaletteSnapshot(open: false, serial: palette.serial),
     );
+    return const SizedBox.shrink();
   }
 
   PaletteSnapshot _snapshot(

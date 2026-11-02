@@ -1,3 +1,4 @@
+import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -44,23 +45,42 @@ String projectSymbol(String? project) {
 const _remoteSymbol = "laptopcomputer.and.iphone";
 
 /// Sends the [SidebarSnapshot]: what `Sidebar` draws, read the same way.
-class SidebarPublisher extends ConsumerWidget {
+class SidebarPublisher extends ConsumerStatefulWidget {
   const SidebarPublisher({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SidebarPublisher> createState() => _SidebarPublisherState();
+}
+
+/// Everything read in [build], the publisher's own, so each of it rebuilds
+/// it: a provider watched from a builder beneath can be missed, and the list
+/// with it — the chats arriving a frame after the first snapshot went out
+/// empty. The running chats are a listenable, so they are listened to here
+/// and rebuild it the same way.
+class _SidebarPublisherState extends ConsumerState<SidebarPublisher> {
+  late final BusyListenable _busy;
+
+  @override
+  void initState() {
+    super.initState();
+    _busy = BusyListenable(ref, this);
+  }
+
+  @override
+  void dispose() {
+    _busy.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     // The list the query was written against has just been replaced.
     ref.listen(
       selectedProjectProvider,
       (_, _) => ref.read(shellSearchProvider.notifier).set(""),
     );
-    return ValueListenableBuilder<Set<String>>(
-      valueListenable: ref.watch(busyChatsProvider),
-      builder: (context, busy, _) {
-        ref.read(shellOutboxProvider).post(_snapshot(ref, busy));
-        return const SizedBox.shrink();
-      },
-    );
+    ref.read(shellOutboxProvider).post(_snapshot(ref, _busy.value));
+    return const SizedBox.shrink();
   }
 
   SidebarSnapshot _snapshot(WidgetRef ref, Set<String> busy) {
@@ -290,4 +310,35 @@ Future<({bool handled, Object? answer})> runSidebarIntent(
       return (handled: false, answer: null);
   }
   return (handled: true, answer: null);
+}
+
+/// [busyChatsProvider]'s set, followed for a publisher's state: it rebuilds
+/// the state when the set changes, and when the provider gives another.
+class BusyListenable {
+  BusyListenable(this._ref, this._state) {
+    _follow(_ref.read(busyChatsProvider));
+    _ref.listenManual(busyChatsProvider, (_, next) => _follow(next));
+  }
+
+  final WidgetRef _ref;
+  final State _state;
+  ValueListenable<Set<String>>? _source;
+
+  Set<String> get value => _source?.value ?? const {};
+
+  void _follow(ValueListenable<Set<String>> next) {
+    if (identical(next, _source)) return;
+    final first = _source == null;
+    _source?.removeListener(_changed);
+    _source = next..addListener(_changed);
+    // The first is what the state builds with; a later one is a change.
+    if (!first) _changed();
+  }
+
+  void _changed() {
+    // ignore: invalid_use_of_protected_member
+    if (_state.mounted) _state.setState(() {});
+  }
+
+  void dispose() => _source?.removeListener(_changed);
 }
