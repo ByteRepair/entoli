@@ -1,4 +1,6 @@
 import "dart:math" as math;
+import "dart:typed_data";
+import "dart:ui" show PointMode;
 
 import "package:flutter/material.dart";
 import "package:flutter/scheduler.dart";
@@ -42,13 +44,12 @@ class _ThinkingSliderState<T> extends State<ThinkingSlider<T>>
   var _until = Duration.zero;
   var _hovered = false;
 
-  late var _keys = widget.stops.keys.toList();
+  List<T> get _keys => widget.stops.keys.toList();
   int get _index => math.max(0, _keys.indexOf(widget.value));
 
   @override
   void didUpdateWidget(ThinkingSlider<T> old) {
     super.didUpdateWidget(old);
-    _keys = widget.stops.keys.toList();
     if (old.value != widget.value) _think();
   }
 
@@ -81,7 +82,8 @@ class _ThinkingSliderState<T> extends State<ThinkingSlider<T>>
   }
 
   void _pick(int index) {
-    final key = _keys[index.clamp(0, _keys.length - 1)];
+    final keys = _keys;
+    final key = keys[index.clamp(0, keys.length - 1)];
     if (key != widget.value) widget.onChanged(key);
   }
 
@@ -198,18 +200,22 @@ class _ThoughtPainter extends CustomPainter {
   static final _noise = ValueNoise(7);
   static const _cell = 3.5;
 
-  /// A dot's colour by how much of a line it is, in 256 steps, lit and not:
-  /// built once per painter rather than twice per dot per frame.
-  late final _lit = _ramp(0.25, 0.75);
-  late final _dim = _ramp(0.1, 0.25);
+  /// A dot's colour by how much of a line it is, in [_steps] steps, lit and
+  /// not: built once per pair of colours rather than per dot, or per pick.
+  static const _steps = 256;
+  static final _ramps = <(Color, Color), (List<Color>, List<Color>)>{};
+  late final _shades = _ramps.putIfAbsent((
+    scheme.outlineVariant,
+    scheme.primary,
+  ), () => (_ramp(0.1, 0.25), _ramp(0.25, 0.75)));
 
   List<Color> _ramp(double alpha, double gain) => [
-    for (var i = 0; i < 256; i++)
+    for (var i = 0; i < _steps; i++)
       Color.lerp(
         scheme.outlineVariant,
         scheme.primary,
-        i / 255,
-      )!.withValues(alpha: alpha + gain * i / 255),
+        i / (_steps - 1),
+      )!.withValues(alpha: alpha + gain * i / (_steps - 1)),
   ];
 
   double _pointX(int i, double width) => (i + 0.5) / count * width;
@@ -227,14 +233,22 @@ class _ThoughtPainter extends CustomPainter {
 
     final t = phase.value;
     final litTo = _pointX(index, size.width) + _cell;
-    final dot = Paint();
+    // A dot's colour and size both follow its step, so the dots are sorted by
+    // step and each step drawn as one batch of points rather than a circle
+    // apiece. Lit steps come after the dim ones.
+    final columns = (size.width / _cell).ceil(),
+        rows = (size.height / _cell).ceil();
+    final xs = Float32List(columns * rows), ys = Float32List(columns * rows);
+    final steps = Uint16List(columns * rows);
+    final counts = List.filled(2 * _steps + 1, 0);
+    var dots = 0;
     for (var x = _cell / 2; x < size.width; x += _cell) {
       final u = x / size.width;
       // Less detailed on the left, more on the right: more layers of noise,
       // and more contour lines through it.
       final octaves = 1 + u * 4;
       final lines = 2 + u * 10;
-      final colours = x <= litTo ? _lit : _dim;
+      final lit = x <= litTo ? _steps : 0;
       for (var y = _cell / 2; y < size.height; y += _cell) {
         final (nx, ny) = (x / size.height * 0.45, y / size.height * 0.45);
         // The field warped by itself, so the lines curl like smoke.
@@ -251,9 +265,36 @@ class _ThoughtPainter extends CustomPainter {
         final wave = 0.5 + 0.5 * math.cos(2 * math.pi * n * lines);
         final squared = wave * wave;
         final line = squared * squared * squared;
-        dot.color = colours[(line * 255).round()];
-        canvas.drawCircle(Offset(x, y), _cell / 2 * (0.35 + 0.65 * line), dot);
+        final step = lit + (line * (_steps - 1)).round();
+        xs[dots] = x;
+        ys[dots] = y;
+        steps[dots++] = step;
+        counts[step + 1]++;
       }
+    }
+    for (var i = 1; i < counts.length; i++) {
+      counts[i] += counts[i - 1];
+    }
+    final points = Float32List(2 * dots);
+    final next = [...counts];
+    for (var i = 0; i < dots; i++) {
+      final at = 2 * next[steps[i]]++;
+      points[at] = xs[i];
+      points[at + 1] = ys[i];
+    }
+    final dot = Paint()..strokeCap = StrokeCap.round;
+    for (var step = 0; step < 2 * _steps; step++) {
+      final (from, to) = (counts[step], counts[step + 1]);
+      if (from == to) continue;
+      final shade = step % _steps;
+      dot
+        ..color = (step < _steps ? _shades.$1 : _shades.$2)[shade]
+        ..strokeWidth = _cell * (0.35 + 0.65 * shade / (_steps - 1));
+      canvas.drawRawPoints(
+        PointMode.points,
+        Float32List.sublistView(points, 2 * from, 2 * to),
+        dot,
+      );
     }
     canvas.restore();
 
