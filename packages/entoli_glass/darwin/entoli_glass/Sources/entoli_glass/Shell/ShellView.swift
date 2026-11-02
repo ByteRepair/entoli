@@ -81,22 +81,46 @@ extension View {
       #endif
       .toolbar {
         if !model.window.covered {
+          // The spinner on its own, with no glass behind it: in the buttons'
+          // group the system draws it as a control, a button that is not.
+          if let spinner = bar.items.first(where: \.spinner) {
+            Spinner(label: spinner.label)
+          }
           ToolbarItemGroup(placement: .primaryAction) {
-            ForEach(bar.items) { item in
-              if item.spinner {
-                ProgressView().controlSize(.small).help(item.label)
-              } else {
-                Button {
-                  model.intent("toolbar", ["id": item.id])
-                } label: {
-                  Label(item.label, systemImage: item.symbol ?? "circle")
-                }
-                .help(item.label)
+            ForEach(bar.items.filter { !$0.spinner }) { item in
+              Button {
+                model.intent("toolbar", ["id": item.id])
+              } label: {
+                Label(item.label, systemImage: item.symbol ?? "circle")
               }
+              .help(item.label)
             }
           }
         }
       }
+  }
+}
+
+/// A turn running, as the toolbar says it: a small spinner beside the
+/// buttons, bare.
+private struct Spinner: ToolbarContent {
+  let label: String
+
+  private var spinner: some View {
+    ProgressView()
+      .controlSize(.small)
+      .frame(width: 20, height: 20)
+      .help(label)
+      .accessibilityLabel(label)
+  }
+
+  var body: some ToolbarContent {
+    if #available(iOS 26.0, macOS 26.0, *) {
+      ToolbarItem(placement: .primaryAction) { spinner }
+        .sharedBackgroundVisibility(.hidden)
+    } else {
+      ToolbarItem(placement: .primaryAction) { spinner }
+    }
   }
 }
 
