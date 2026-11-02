@@ -8,6 +8,7 @@ import "package:agent_chat/domain/app_theme.dart";
 import "package:agent_chat/domain/corner_radius.dart";
 import "package:agent_chat/domain/theme_colour.dart";
 import "package:agent_chat/ui/theme.dart";
+import "package:agent_chat/ui/widgets/liquid_glass.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 // Named, since the library's own `main` would otherwise be in scope beside the
 // test's.
@@ -314,6 +315,57 @@ void main() {
         AppSettings.load(app.config).cornerRadius,
         CornerRadius.largeIncreased,
       );
+    });
+  });
+
+  group("Liquid Glass", () {
+    testWidgets("a platform without it is not offered it", (tester) async {
+      await pumpAppearance(tester, app);
+      expect(find.text("Liquid Glass"), findsNothing);
+    });
+
+    group("on iOS and macOS", () {
+      setUp(
+        () => app = TestApp.create(
+          liquidGlass: const LiquidGlass(available: true, on: true),
+        ),
+      );
+
+      testWidgets("on, the colours and corners are not the app's to pick", (
+        tester,
+      ) async {
+        await pumpAppearance(tester, app);
+        expect(find.text("Liquid Glass"), findsOneWidget);
+        expect(find.text("Theme colours"), findsNothing);
+        expect(find.text("Corners"), findsNothing);
+      });
+
+      testWidgets("off, they are back, and the switch says when it lands", (
+        tester,
+      ) async {
+        await pumpAppearance(tester, app);
+        await tester.tap(find.text("Liquid Glass"));
+        await settleIo(tester);
+
+        expect(AppSettings.load(app.config).liquidGlass, isFalse);
+        expect(find.textContaining("when Entoli restarts"), findsOneWidget);
+        expect(find.text("Corners"), findsOneWidget);
+      });
+
+      testWidgets("on, the app wears the system's look whatever was picked", (
+        tester,
+      ) async {
+        app.seedSettings(AppSettings(primaryColour: ThemeColour.red));
+        final materialApp = await pumpApp(tester);
+        final apple = ThemeColour.apple.seed;
+        expect(
+          materialApp.theme?.colorScheme.primary,
+          ColorScheme.fromSeed(
+            seedColor: apple.colour,
+            dynamicSchemeVariant: apple.variant,
+          ).primary,
+        );
+      });
     });
   });
 

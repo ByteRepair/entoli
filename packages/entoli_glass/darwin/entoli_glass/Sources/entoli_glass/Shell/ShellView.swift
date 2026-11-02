@@ -13,14 +13,18 @@ struct ShellView: View {
   /// padding either side.
   static let readableWidth: CGFloat = 760
 
-  private var columns: Binding<NavigationSplitViewVisibility> {
-    Binding(
-      get: { model.window.sidebarShown ? .all : .detailOnly },
-      set: { model.intent("sidebar", ["shown": $0 != .detailOnly]) })
+  /// The split view's own, so a change of it is animated whichever end made
+  /// it: the system's button animates on its own, and a change Dart made — the
+  /// View menu, its key — is put in an animation below. Dart is told of the
+  /// first and is the source of the second.
+  @State private var columns = NavigationSplitViewVisibility.all
+
+  private func visibility(_ shown: Bool) -> NavigationSplitViewVisibility {
+    shown ? .all : .detailOnly
   }
 
   var body: some View {
-    NavigationSplitView(columnVisibility: columns) {
+    NavigationSplitView(columnVisibility: $columns) {
       SidebarView(model: model)
         .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 400)
     } detail: {
@@ -63,7 +67,20 @@ struct ShellView: View {
       }
     }
     .animation(.smooth(duration: 0.3), value: model.voice.present)
+    // Voice mode is the whole window: nothing of the toolbar's — the title,
+    // the new chat and sidebar buttons — stands over it.
+    #if os(macOS)
+      .toolbar(model.voice.present ? .hidden : .automatic, for: .windowToolbar)
+    #endif
     .preferredColorScheme(model.window.colorScheme)
+    .onChange(of: model.window.sidebarShown, initial: true) { _, shown in
+      guard visibility(shown) != columns else { return }
+      withAnimation(.smooth(duration: 0.3)) { columns = visibility(shown) }
+    }
+    .onChange(of: columns) { _, columns in
+      let shown = columns != .detailOnly
+      if shown != model.window.sidebarShown { model.intent("sidebar", ["shown": shown]) }
+    }
   }
 }
 

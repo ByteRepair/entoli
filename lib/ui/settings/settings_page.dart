@@ -328,9 +328,29 @@ class _AppearanceSection extends ConsumerWidget {
             value: settings.systemPalette,
             onChanged: notifier.setSystemPalette,
           ),
+        // In Material 3 Expressive's place on Apple's platforms, and like it
+        // the switch takes the colours' place: the app wears Apple's look.
+        if (glass.available)
+          SwitchListTile(
+            title: const Text("Liquid Glass"),
+            // What this launch draws is settled at launch, so a switch that
+            // no longer matches it says so rather than appearing to do
+            // nothing.
+            subtitle: Text(
+              "Use the system's native controls and Liquid Glass for the "
+              "sidebar, toolbar, composer and voice mode. Colours and corners "
+              "follow the system."
+              "${settings.liquidGlass == glass.on ? "" : " Takes effect when Entoli restarts."}",
+            ),
+            value: settings.liquidGlass,
+            onChanged: notifier.setLiquidGlass,
+          ),
         // One accent is the seed of the whole palette, secondary included, so
-        // while the system is picking there is nothing here to pick.
-        if (ref.watch(paletteAccentProvider) == null) ...[
+        // while the system is picking there is nothing here to pick — and
+        // under Liquid Glass neither the colours nor the corners are the
+        // app's.
+        if (ref.watch(paletteAccentProvider) == null &&
+            !(glass.available && settings.liquidGlass)) ...[
           _ChoiceRow(
             label: "Theme colours",
             children: [
@@ -353,17 +373,18 @@ class _AppearanceSection extends ConsumerWidget {
             onSecondary: notifier.setSecondaryColour,
           ),
         ],
-        _ChoiceRow(
-          label: "Corners",
-          children: [
-            for (final corner in CornerRadius.values)
-              _CornerChoice(
-                corner: corner,
-                selected: corner == settings.cornerRadius,
-                onTap: () => notifier.setCornerRadius(corner),
-              ),
-          ],
-        ),
+        if (!(glass.available && settings.liquidGlass))
+          _ChoiceRow(
+            label: "Corners",
+            children: [
+              for (final corner in CornerRadius.values)
+                _CornerChoice(
+                  corner: corner,
+                  selected: corner == settings.cornerRadius,
+                  onTap: () => notifier.setCornerRadius(corner),
+                ),
+            ],
+          ),
         _ChoiceRow(
           label: "Icon",
           children: [
@@ -375,21 +396,6 @@ class _AppearanceSection extends ConsumerWidget {
               ),
           ],
         ),
-        if (glass.available)
-          SwitchListTile(
-            title: const Text("Liquid Glass"),
-            // What this launch draws is settled at launch, so a switch that
-            // no longer matches it says so rather than appearing to do
-            // nothing.
-            subtitle: Text(
-              "Draw the sidebar, the chat's bar and the composer with "
-              "Apple's own controls, in the glass this version of the OS "
-              "draws its own apps in."
-              "${settings.liquidGlass == glass.on ? "" : " Restart Entoli for this to take effect."}",
-            ),
-            value: settings.liquidGlass,
-            onChanged: notifier.setLiquidGlass,
-          ),
       ],
     );
   }

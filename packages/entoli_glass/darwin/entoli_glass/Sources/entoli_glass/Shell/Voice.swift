@@ -72,7 +72,14 @@ struct VoiceView: View {
     ZStack {
       Rectangle().fill(.background).ignoresSafeArea()
       VStack(spacing: 14) {
-        Text(voice.title).font(.headline).lineLimit(1).padding(.top, 8)
+        // In the window's title bar, the toolbar being hidden for this: centred
+        // between the window's buttons, as a title is.
+        Text(voice.title)
+          .font(.headline)
+          .lineLimit(1)
+          .frame(maxWidth: .infinity, alignment: .center)
+          .padding(.horizontal, 80)
+          .padding(.top, 8)
         Spacer(minLength: 0)
         ZStack {
           VoiceGlow(mode: voice.mode, heard: heard, spoken: spoken, level: model.voiceLevel)
@@ -103,11 +110,11 @@ struct VoiceView: View {
   }
 
   /// The last lines said, the newest at the bottom, the top fading into the
-  /// light above it.
+  /// light above it, centred under it.
   private var transcript: some View {
     ScrollViewReader { proxy in
       ScrollView {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .center, spacing: 6) {
           ForEach(Array(voice.lines.enumerated()), id: \.offset) { i, line in
             Text(line.text)
               .font(line.kind == "activity" ? .callout : .body)
@@ -117,7 +124,8 @@ struct VoiceView: View {
                   : line.kind == "said" ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary)
               )
               .italic(line.kind == "activity")
-              .frame(maxWidth: .infinity, alignment: .leading)
+              .multilineTextAlignment(.center)
+              .frame(maxWidth: .infinity, alignment: .center)
               .id(i)
           }
         }
