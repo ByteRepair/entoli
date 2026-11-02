@@ -159,21 +159,22 @@ class _ReadableColumn extends StatelessWidget {
     final insets = MediaQuery.paddingOf(context);
     final page = _column(context);
     if (!shell) return page;
+    // Expanded to the page: the bar draws nothing, and a stack sized by its
+    // children would size itself to that.
     return Stack(
+      fit: StackFit.expand,
       children: [
         ?bar,
-        Positioned.fill(
-          child: MediaQuery.removePadding(
-            context: context,
-            removeBottom: true,
-            removeTop: banner != null,
-            child: Padding(
-              padding: EdgeInsets.only(
-                top: banner != null ? insets.top : 0,
-                bottom: insets.bottom,
-              ),
-              child: page,
+        MediaQuery.removePadding(
+          context: context,
+          removeBottom: true,
+          removeTop: banner != null,
+          child: Padding(
+            padding: EdgeInsets.only(
+              top: banner != null ? insets.top : 0,
+              bottom: insets.bottom,
             ),
+            child: page,
           ),
         ),
       ],
