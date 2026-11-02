@@ -15,6 +15,7 @@ import "conversation_pane.dart";
 import "shell_composer.dart";
 import "shell_new_chat.dart";
 import "shell_outbox.dart";
+import "shell_palette.dart";
 import "shell_routes.dart";
 import "shell_sidebar.dart";
 import "shell_turn.dart";
@@ -128,6 +129,15 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
             .current
             ?.handle(intent.string("name"), args.cast<String, Object?>());
         return null;
+      // The palette's, the same way, answered with an error to show or null.
+      case "palette":
+        final args = (intent.args["args"] as Map<Object?, Object?>?) ?? {};
+        return runPaletteIntent(
+          context,
+          ref,
+          intent.string("name"),
+          args.cast<String, Object?>(),
+        );
       case "toolbar":
         slots.bar?.press(intent.string("id"));
         return null;
@@ -144,6 +154,7 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
       children: [
         _WindowPublisher(),
         SidebarPublisher(),
+        PalettePublisher(),
         Positioned.fill(child: ConversationPane()),
       ],
     ),

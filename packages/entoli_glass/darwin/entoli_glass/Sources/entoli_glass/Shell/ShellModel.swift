@@ -19,6 +19,7 @@ final class ShellModel: ObservableObject {
   @Published var turn = TurnState()
   @Published var newChat = NewChatState()
   @Published var voice = VoiceState()
+  @Published var palette = PaletteState()
 
   /// The microphone's level: not published, being many times a second and
   /// read by the glow on each of its frames.
@@ -46,6 +47,8 @@ final class ShellModel: ObservableObject {
       if let state: SidebarState = decode(value), state != sidebar { sidebar = state }
     case "chatBar":
       if let state: ChatBarState = decode(value), state != chatBar { chatBar = state }
+    case "palette":
+      if let state: PaletteState = decode(value), state != palette { palette = state }
     case "voice":
       if let state: VoiceState = decode(value), state != voice { voice = state }
     case "voiceLevel":

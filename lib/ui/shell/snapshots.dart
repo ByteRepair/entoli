@@ -697,3 +697,97 @@ class VoiceSnapshot extends ShellSnapshot {
     "spoken": spoken,
   };
 }
+
+/// One row of the palette: a project to switch to, or a chat to open.
+class PaletteItem {
+  const PaletteItem({
+    required this.id,
+    required this.label,
+    this.chat,
+    this.device,
+    this.project,
+    this.symbol = "",
+    this.omada = false,
+    this.trailing = "",
+    this.busy = false,
+    this.current = false,
+  });
+
+  /// What it is known by in this snapshot, which a pick names.
+  final String id;
+  final String label;
+
+  /// The chat a row opens; null for a project's row.
+  final String? chat;
+
+  /// A project's `ProjectRef`.
+  final String? device;
+  final String? project;
+  final String symbol;
+  final bool omada;
+
+  /// A project's chat count, or a chat's project.
+  final String trailing;
+
+  /// It, or one of its chats, is running.
+  final bool busy;
+
+  /// The project shown, or the chat open.
+  final bool current;
+
+  Map<String, Object?> toMap() => {
+    "id": id,
+    "label": label,
+    "chat": chat,
+    "device": device,
+    "project": project,
+    "symbol": symbol,
+    "omada": omada,
+    "trailing": trailing,
+    "busy": busy,
+    "current": current,
+  };
+}
+
+/// The project palette, Cmd+K's: whether it is open, what is typed in it, and
+/// its rows under their headings as the query leaves them — `ProjectPalette`'s
+/// rules, which are Dart's.
+class PaletteSnapshot extends ShellSnapshot {
+  const PaletteSnapshot({
+    required this.open,
+    this.query = "",
+    this.sections = const [],
+    this.serial = 0,
+    this.omadaByDefault = false,
+  });
+
+  final bool open;
+  final String query;
+
+  /// Each heading, empty for none, and its rows.
+  final List<({String heading, List<PaletteItem> items})> sections;
+
+  /// Which opening this is, so the Swift starts each one afresh.
+  final int serial;
+
+  /// What the new-project sheet's Omada switch starts at.
+  final bool omadaByDefault;
+
+  @override
+  String get concern => "palette";
+
+  @override
+  Map<String, Object?> toMap() => {
+    "open": open,
+    "query": query,
+    "sections": [
+      for (final s in sections)
+        {
+          "heading": s.heading,
+          "items": [for (final item in s.items) item.toMap()],
+        },
+    ],
+    "serial": serial,
+    "omadaByDefault": omadaByDefault,
+  };
+}

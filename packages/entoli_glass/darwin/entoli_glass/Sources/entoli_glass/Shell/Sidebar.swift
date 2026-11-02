@@ -262,9 +262,12 @@ private struct ProjectHeader: View {
 /// A project made on the device the sidebar shows: a name, a description, and
 /// whether it runs Omada. It stays open, spinning, until the project is made,
 /// and says so where it could not be.
-private struct NewProjectSheet: View {
+struct NewProjectSheet: View {
   @ObservedObject var model: ShellModel
   @Environment(\.dismiss) private var dismiss
+
+  /// Told once the project is made: the palette closes itself with it.
+  var made: () -> Void = {}
 
   @State private var name = ""
   @State private var description = ""
@@ -272,8 +275,9 @@ private struct NewProjectSheet: View {
   @State private var making = false
   @State private var failure: String?
 
-  init(model: ShellModel, omada: Bool) {
+  init(model: ShellModel, omada: Bool, made: @escaping () -> Void = {}) {
     self.model = model
+    self.made = made
     _omada = State(initialValue: omada)
   }
 
@@ -301,7 +305,12 @@ private struct NewProjectSheet: View {
             "createProject", ["name": name, "description": description, "omada": omada]
           ) { error in
             making = false
-            if let error { failure = error } else { dismiss() }
+            if let error {
+              failure = error
+            } else {
+              dismiss()
+              made()
+            }
           }
         } label: {
           if making { ProgressView().controlSize(.small) } else { Text("Create") }

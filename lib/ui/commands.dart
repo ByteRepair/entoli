@@ -19,7 +19,9 @@ import "project_actions.dart";
 import "selection.dart";
 import "settings/settings_category.dart";
 import "voice/voice_page.dart";
+import "shell/shell_palette.dart";
 import "sidebar/project_palette.dart";
+import "widgets/liquid_glass.dart";
 
 /// What each [AppCommand] does, and whether it can now: one snapshot of the
 /// app taken from [context], which is the chat pane's — below the Navigator,
@@ -159,8 +161,13 @@ class Commands {
         openNewChatIn(context, ref, const AnonymousProject().dir);
       case AppCommand.newOmadaChat:
         openNewChatIn(context, ref, omadaBaseProject);
+      // Under the native shell, the shell's own palette.
       case AppCommand.switchProject:
-        await showProjectPalette(context, ref);
+        if (ref.read(liquidGlassProvider).shell) {
+          ref.read(shellPaletteProvider.notifier).open();
+        } else {
+          await showProjectPalette(context, ref);
+        }
       case AppCommand.toggleSidebar:
         ref.read(sidebarShownProvider.notifier).toggle();
       case AppCommand.pinChat ||

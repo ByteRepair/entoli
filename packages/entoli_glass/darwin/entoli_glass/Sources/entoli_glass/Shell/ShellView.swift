@@ -67,6 +67,16 @@ struct ShellView: View {
       }
     }
     .animation(.smooth(duration: 0.3), value: model.voice.present)
+    // The palette over everything but voice mode, which has no palette to
+    // switch from. Keyed on its opening, so each starts afresh.
+    .overlay {
+      if model.palette.open && !model.voice.present {
+        PaletteView(model: model)
+          .id(model.palette.serial)
+          .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+      }
+    }
+    .animation(.snappy(duration: 0.2), value: model.palette.open)
     // Voice mode is the whole window: nothing of the toolbar's — the title,
     // the new chat and sidebar buttons — stands over it.
     #if os(macOS)
