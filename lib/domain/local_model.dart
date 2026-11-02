@@ -366,51 +366,10 @@ const ggufCatalog = <GgufModel>[
   ),
 ];
 
-/// What MLX is offered: the same three sizes as [ggufCatalog], in MLX's 4-bit
-/// format, each a model mlx-swift-lm has an architecture for. LFM3 has none
-/// there, so the smallest is Qwen3.5 2B, the nearest of its size that calls
-/// tools. The 9B is Ornith's own conversion.
+/// What MLX is offered: [ggufCatalog]'s two larger sizes in MLX's 4-bit
+/// format, each a model mlx-swift-lm has an architecture for. The 9B is
+/// Ornith's own conversion.
 const mlxCatalog = <MlxModel>[
-  MlxModel(
-    id: "qwen3.5-2b-mlx-4bit",
-    name: "Qwen3.5 2B",
-    parameters: "2B",
-    repo: "mlx-community/Qwen3.5-2B-4bit",
-    revision: "674aaa7240b91e8012fcad5d791b7dfe5ba90207",
-    licence: "Apache-2.0",
-    weights: [
-      (
-        "chat_template.jinja",
-        7755,
-        "273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80",
-      ),
-      (
-        "config.json",
-        3113,
-        "beb7fc5a6e0405fe332821cf1a8ef7b69bb390a8c8933171647de5579debf949",
-      ),
-      (
-        "model.safetensors",
-        1722271785,
-        "713fe7e5d3c3965f7106b0d0ee17615f7869c23c8d327996df8c1196fbcf07d5",
-      ),
-      (
-        "model.safetensors.index.json",
-        81722,
-        "8294c05cca7d53a6c33e3db2b379539bd296d054e0b689711b16b6ac93c7e49d",
-      ),
-      (
-        "tokenizer.json",
-        19989343,
-        "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4",
-      ),
-      (
-        "tokenizer_config.json",
-        1139,
-        "e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182",
-      ),
-    ],
-  ),
   MlxModel(
     id: "qwen3.5-4b-mlx-4bit",
     name: "Qwen3.5 4B",

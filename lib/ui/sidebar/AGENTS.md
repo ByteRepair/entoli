@@ -74,10 +74,14 @@ and has room to its right (see "Shared UI"). The tiles are plain `ListTile`s
 that push their pages; see `lib/ui/marketplace/AGENTS.md` for what
 Marketplace's opens onto.
 
-Where the menu bar is always on screen — macOS, `menuBarAlwaysShown` — the
-app menu holds all three and the tiles are not drawn; the new chat is a tile
-of their own shape in their place, filled with the primary colour, with no
-rule above it to divide it from nothing. iPadOS keeps them: its menu bar hides until asked for and
+On Apple's platforms (`isApple`) the new chat is not the FAB but a compose
+glyph — `CupertinoIcons.square_pencil` in the primary colour — at the end of
+the header row beside the project's buttons, where Notes, Mail and Messages
+put theirs: a filled tile or a floating button is Material's answer, and read
+as a foreign control in a Mac or iPad sidebar. Where the menu bar is always on
+screen — macOS, `menuBarAlwaysShown` — the app menu holds Profile,
+Marketplace and Settings and the tiles are not drawn either, so nothing is
+under the list. iPadOS keeps the tiles: its menu bar hides until asked for and
 is not there at all without a pointer. See "The app's commands" in
 `lib/ui/AGENTS.md`.
 

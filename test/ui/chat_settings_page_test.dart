@@ -1,11 +1,13 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_settings_page.dart";
+import "package:agent_chat/ui/widgets/model_picker.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
 import "../harness.dart";
@@ -72,6 +74,33 @@ void main() {
     await settleIo(tester);
   }
 
+  testWidgets(
+    "a chat's Thinking survives a save, and Default names the app's",
+    (tester) async {
+      await seedState(tester);
+      await openPage(tester);
+      await io(
+        tester,
+        () => app.container
+            .read(appSettingsProvider.notifier)
+            .setReasoningEffort(ReasoningEffort.low),
+      );
+      await settleIo(tester);
+      await scrollTo(tester, find.text("Thinking"));
+      expect(find.text("Follows Settings > LLMs."), findsOneWidget);
+      expect(find.byTooltip("Reset to Settings > LLMs (Low)"), findsOneWidget);
+
+      await tester.tap(find.text("High"));
+      await settleIo(tester);
+      await save(tester);
+
+      expect(
+        (await io(tester, () => app.savedMeta(_chatId))).reasoningEffort,
+        ReasoningEffort.high,
+      );
+    },
+  );
+
   testWidgets("preselects the model stored in meta.json", (tester) async {
     await seedMeta(
       tester,
@@ -124,7 +153,13 @@ void main() {
     await openPage(tester);
     // With no override the picker reads Default's entry, and names what it
     // inherits instead of the app's own pick.
-    expect(find.text(defaultOptionLabel), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(ModelPicker),
+        matching: find.text(defaultOptionLabel),
+      ),
+      findsOneWidget,
+    );
     expect(find.text("Using Qwen 2.5"), findsOneWidget);
 
     // Nothing is pinned on the chat, so retargeting the global retargets it.
@@ -259,7 +294,12 @@ void main() {
         findsOneWidget,
       );
 
-      await tester.tap(find.byTooltip("Reset to $defaultOptionLabel").at(1));
+      await tester.tap(
+        find.descendant(
+          of: find.byType(InheritableDropdown<ApproveMode>),
+          matching: find.byTooltip("Reset to $defaultOptionLabel"),
+        ),
+      );
       await settleIo(tester);
       await save(tester);
 

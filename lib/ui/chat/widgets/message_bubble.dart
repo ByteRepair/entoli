@@ -15,6 +15,8 @@ import "../../widgets/agent_picture.dart" show AgentPictureImage;
 import "../../widgets/attachment_chip.dart";
 import "../../theme.dart" show onFillTheme;
 import "../../widgets/dialogs.dart";
+import "../../widgets/prompt_field.dart";
+import "../../selection.dart" show selectedProjectProvider;
 import "../activity/activity.dart" show Run, activityCatalogProvider;
 import "../activity/label.dart" show ActivityGroup;
 import "../../selection/copy_format.dart" show replyContentOf;
@@ -171,15 +173,22 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     super.dispose();
   }
 
+  /// On a page of its own, the composer's field: a message is often long, and
+  /// the `/` and `@` it was written with complete here the way they did there.
   Future<void> _edit() async {
-    final edited = await promptForText(
+    final at = ref.read(selectedProjectProvider);
+    final edited = await PromptPage.open(
       context,
       title: "Edit message",
-      initial: widget.message.plainText,
+      text: widget.message.plainText,
+      hint: "Message",
+      project: at.project,
+      device: at.device,
       confirmLabel: "Send",
-      maxLines: 8,
     );
-    if (edited != null) widget.onEdit!(edited);
+    final text = edited?.trim() ?? "";
+    // A blank message says nothing, so sending one is not what was meant.
+    if (text.isNotEmpty) widget.onEdit!(text);
   }
 
   Future<void> _delete() async {

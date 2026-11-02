@@ -11,8 +11,33 @@ null resolves to), the `promptForText` / `promptForPair` / `confirm` /
 `pickProject` dialogs and `copyToClipboard` beside them, `showAnchoredMenu`,
 `NavDrawer` and `navBreakpoint`, `SidePanelFrame` (below), `ActionIcon`, `AttachmentChip` /
 `AttachmentStrip`, `EmptyPane`, `Nothing`, `TempChatTtlField`, `TristateToggle`,
-`CompletionField`,
+`CompletionField`, `PromptField` (below), `DiscardGuard`, `SearchField` and
+`ListHeading`,
 `text_input.dart` — the sections below — and `catalog.dart`.
+
+`PromptField` is prose the model reads — a trigger's prompt, an agent's system
+prompt, the profile's and a project's instructions — shown as markdown the way
+the chat sets it, over an Edit button that opens `PromptPage`: a box that is
+the whole page, Save and Discard, discarding asking first. It is one widget
+because the three pages had grown three answers to one question — a field a
+few lines tall that scrolled, for text that is written once, read many times,
+and often long. The page is `CompletionField` where `/skills` and `@agents`
+mean something (a prompt, which is dispatched through the library) and a plain
+field where they do not (instructions, where `@` pulls in a file). A message
+edited in the chat opens the same page, its Save called Send.
+
+`DiscardGuard` is every editor page's way out: a pop with something to lose
+asks, one with nothing leaves, and Save leaves by `Navigator.pop`, which the
+guard does not stop. It asks for `edited` when the pop comes rather than at
+build, since most of what a page edits sits in controllers that change with no
+rebuild. Four pages had written it out, two the same way, one differently, and
+two not at all — the trigger editor and the profile page, where back threw the
+edits away. `DiscardButton` is the close in the bar of a page whose way out is
+discarding.
+
+`SearchField` is the rounded search box over a list — the sidebar's, the
+marketplace's and the project palette's — and `ListHeading` the caption a list's
+groups sit under. Two were copies of the sidebar's, one had drifted.
 
 `SidePanelFrame` is a navigation panel beside a page where the window is wide
 enough and the panel shown, and the page's drawer where it is narrow — the
@@ -79,6 +104,19 @@ is what holds it. Merging the two into one shortcuts map is not the same thing
 and does not work: `SingleActivator` has no `==`, so a second Tab entry does
 not replace the first, it queues behind it. Shift+Tab is left unbound, so there
 is always a key that leaves the field.
+
+`ThinkingSlider` is a choice of how hard something thinks: a bar of points,
+the least thought on the left and the most on the right, the labels under them
+the caller's (`stops`, in order). The bar is a halftone of contour lines
+through a noise field warped by itself — `ValueNoise` in `core/noise.dart` —
+with more layers of noise and more lines the further right a dot is, so the
+left is a few slow curves and the right a dense web; it is lit up to the point
+picked. It moves only while hovered and for a moment after a pick, because a
+ticker that never stops would keep every page holding one from settling, in a
+test and on a battery alike, and not at all where the platform asks for no
+animation. A tap or a drag anywhere over the bar or the labels picks the
+nearest point, the arrow keys step through them, and it is a slider to
+assistive technology.
 
 `EmptyPane` is the middle of a page with nothing on it. The workspace has two —
 a folder with no files in it, and a file the viewer could not read — and a
@@ -200,9 +238,9 @@ at.
 Giving focus away is the composer's rule; taking it back when the keyboard goes
 is the app's, and is the next section.
 
-The sidebar's new-chat button is a `FloatingActionButton` over the profile and
-settings tiles, which is the one part of the sidebar that is not a list of
-chats and has room to its right. Not `Scaffold.floatingActionButton`: the
+The sidebar's new-chat button is, off Apple's platforms, a
+`FloatingActionButton` over the profile and settings tiles, which is the one
+part of the sidebar that is not a list of chats and has room to its right. Not `Scaffold.floatingActionButton`: the
 sidebar is deliberately a `Material`, since an inner `Scaffold` would shadow
 the one holding the drawer.
 
@@ -308,6 +346,14 @@ presets' default models built in (`lib/data/builtin_models.dart`, written by
 cached copy in `<dataDir>/models.json`, then a fetch when that is a day old,
 or when the first provider is added. So with no network and no cache the
 Defaults are still pickable. Run the generator when a preset's defaults change.
+
+A card's star puts its model in `AppSettings.favouriteModels`, one app-level
+list of (provider, model) pairs, and the Favourites section under Quick picks
+lists the starred ones the picker's role can use, in the order they were
+starred — so one list serves every picker, and an image model starred there
+does not turn up among the chat models. A starred model whose provider has gone
+is simply not listed; the pair stays until it is unstarred, should the provider
+come back.
 
 A model the catalog does not list is added on the "Add model" page, onto the
 provider it is reached through (`LlmProviderConfig.customModels`, in the same

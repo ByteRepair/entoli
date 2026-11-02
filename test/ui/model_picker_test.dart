@@ -172,6 +172,43 @@ void main() {
     ]);
   });
 
+  testWidgets("a starred model is listed under Favourites until unstarred", (
+    tester,
+  ) async {
+    useWindow(tester, const Size(800, 1400));
+    await pump(tester);
+    await openModelCatalog(tester);
+    expect(find.text("Favourites"), findsNothing);
+
+    Finder star(String tooltip) => find.descendant(
+      of: find.ancestor(
+        of: find.text("Test · llama-3"),
+        matching: find.byType(Card),
+      ),
+      matching: find.byTooltip(tooltip),
+    );
+    await tester.tap(star("Add to favourites").last);
+    await settleIo(tester);
+
+    expect(app.container.read(appSettingsProvider).favouriteModels, [
+      (providerId: testProviderId, modelId: "llama-3"),
+    ]);
+    final labels = catalogLabels(tester);
+    expect(labels.indexOf("Favourites"), lessThan(labels.indexOf("4 models")));
+    expect(cards(tester), [
+      "Test · llama-3",
+      "Test · claude-haiku-3",
+      "Test · claude-sonnet-4",
+      "Test · llama-3",
+      "Test · qwen-2.5",
+    ]);
+
+    await tester.tap(star("Remove from favourites").first);
+    await settleIo(tester);
+    expect(find.text("Favourites"), findsNothing);
+    expect(app.container.read(appSettingsProvider).favouriteModels, isEmpty);
+  });
+
   testWidgets("a light picker's Default entry names the light default", (
     tester,
   ) async {

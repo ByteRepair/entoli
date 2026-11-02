@@ -368,9 +368,7 @@ class _AgentBrowserSectionState extends ConsumerState<AgentBrowserSection> {
                             : "Downloading…",
                       ),
                       const SizedBox(height: 4),
-                      LinearProgressIndicator(
-                        value: progress.unpacking ? null : progress.fraction,
-                      ),
+                      LinearProgressIndicator(value: progress.bar),
                     ],
                   )
                 : Text(

@@ -50,6 +50,10 @@ IconData? projectIcon(String? project) => builtinProjectOf(project)?.icon;
 /// string.
 const defaultEmptyChatQuestion = "What would you like to discuss?";
 
+/// What a project's description is for, said under the field wherever one is
+/// written — the new-project palette and the project's settings.
+const projectDescriptionHelp = "What a new chat in this project asks.";
+
 /// The question the empty-chat screen asks for a project: a built-in's own,
 /// else the project's description where it set one — empty included, which
 /// asks nothing — else the default. The built-in-first step is what mirrors

@@ -78,13 +78,16 @@ Widget _indentable(
 ) => maxLines == 1 ? field : TabIndents(controller: controller, child: field);
 
 /// Ask for a line (or a few) of text. Returns null if dismissed or, unless
-/// [allowBlank], left blank — a blank answer names nothing.
+/// [allowBlank], left blank — a blank answer names nothing. [helper] says
+/// under the field what the text is for, where the title alone does not.
 Future<String?> promptForText(
   BuildContext context, {
   required String title,
   required String initial,
   required String confirmLabel,
   String? hint,
+  String? helper,
+  int minLines = 1,
   int maxLines = 1,
   bool allowBlank = false,
 }) {
@@ -104,9 +107,9 @@ Future<String?> promptForText(
         TextField(
           controller: controller,
           autofocus: true,
-          minLines: 1,
+          minLines: minLines,
           maxLines: maxLines,
-          decoration: InputDecoration(hintText: hint),
+          decoration: InputDecoration(hintText: hint, helperText: helper),
           onSubmitted: maxLines == 1
               ? (_) => Navigator.pop(context, submit())
               : null,

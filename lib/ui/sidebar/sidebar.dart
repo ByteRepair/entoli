@@ -1,8 +1,10 @@
 import "dart:async";
 
+import "package:flutter/cupertino.dart" show CupertinoIcons;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../core/platform/form_factor.dart";
 import "../../domain/chat_search.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
@@ -15,6 +17,7 @@ import "../project_actions.dart";
 import "../settings/settings_category.dart";
 import "../selection.dart";
 import "../widgets/nothing.dart";
+import "../widgets/search_field.dart";
 import "chat_groups.dart";
 import "project_palette.dart";
 import "remote_projects.dart";
@@ -91,6 +94,26 @@ class _SidebarState extends ConsumerState<Sidebar> {
     // reason switching clears the selected chat. Kept, it would answer a
     // project the user has left with "nothing matches".
     ref.listen(selectedProjectProvider, (_, _) => _search.clear());
+    final pages = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ListTile(
+          leading: const Icon(Icons.person_outline),
+          title: const Text("Profile"),
+          onTap: () => openProfile(context),
+        ),
+        ListTile(
+          leading: const Icon(Icons.storefront_outlined),
+          title: const Text("Marketplace"),
+          onTap: () => openMarketplace(context),
+        ),
+        ListTile(
+          leading: const Icon(Icons.settings),
+          title: const Text("Settings"),
+          onTap: () => openSettings(context),
+        ),
+      ],
+    );
     // Material, not Scaffold: the shell's Scaffold owns the drawer, and an
     // inner one would shadow it.
     return Material(
@@ -103,6 +126,16 @@ class _SidebarState extends ConsumerState<Sidebar> {
                 children: [
                   const Expanded(child: _ProjectMenu()),
                   ..._projectButtons(context, ref, selected),
+                  // Apple's apps put compose at the top of the list it adds
+                  // to, a plain glyph in the accent colour — Notes, Mail,
+                  // Messages — rather than anything filled or floating.
+                  if (isApple)
+                    IconButton(
+                      icon: const Icon(CupertinoIcons.square_pencil),
+                      color: scheme.primary,
+                      tooltip: "New chat",
+                      onPressed: () => openNewChat(context, ref),
+                    ),
                 ],
               ),
             ),
@@ -120,52 +153,28 @@ class _SidebarState extends ConsumerState<Sidebar> {
                     ),
             ),
             // The menu bar holds the app's pages where it is always on screen,
-            // which leaves the new chat alone at the bottom.
-            if (menuBarAlwaysShown)
-              ListTile(
-                leading: const Icon(Icons.add),
-                title: const Text("New chat"),
-                tileColor: scheme.secondary,
-                iconColor: scheme.onSecondary,
-                textColor: scheme.onSecondary,
-                onTap: () => openNewChat(context, ref),
-              )
-            else ...[
+            // and compose is in the header on Apple's platforms, which leaves
+            // nothing at the bottom.
+            if (!menuBarAlwaysShown) ...[
               const Divider(height: 1),
-              Stack(
-                alignment: Alignment.centerRight,
-                children: [
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ListTile(
-                        leading: const Icon(Icons.person_outline),
-                        title: const Text("Profile"),
-                        onTap: () => openProfile(context),
+              if (isApple)
+                pages
+              else
+                Stack(
+                  alignment: Alignment.centerRight,
+                  children: [
+                    pages,
+                    Padding(
+                      padding: const EdgeInsets.only(right: 16),
+                      child: FloatingActionButton(
+                        heroTag: null,
+                        tooltip: "New chat",
+                        onPressed: () => openNewChat(context, ref),
+                        child: const Icon(Icons.add),
                       ),
-                      ListTile(
-                        leading: const Icon(Icons.storefront_outlined),
-                        title: const Text("Marketplace"),
-                        onTap: () => openMarketplace(context),
-                      ),
-                      ListTile(
-                        leading: const Icon(Icons.settings),
-                        title: const Text("Settings"),
-                        onTap: () => openSettings(context),
-                      ),
-                    ],
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 16),
-                    child: FloatingActionButton(
-                      heroTag: null,
-                      tooltip: "New chat",
-                      onPressed: () => openNewChat(context, ref),
-                      child: const Icon(Icons.add),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
             ],
           ],
         ),
@@ -208,7 +217,7 @@ class _LocalChatList extends ConsumerWidget {
             }
             return Column(
               children: [
-                _SearchField(controller: search, query: query),
+                SearchField(controller: search, hint: "Search chats"),
                 Expanded(
                   child: _ChatList(chats: chats, query: query),
                 ),
@@ -258,7 +267,7 @@ class _RemoteChatList extends ConsumerWidget {
     }
     return Column(
       children: [
-        _SearchField(controller: search, query: query),
+        SearchField(controller: search, hint: "Search chats"),
         Expanded(
           child: ValueListenableBuilder<String>(
             valueListenable: query,
@@ -306,59 +315,6 @@ class _RemoteChatList extends ConsumerWidget {
   }
 }
 
-class _SearchField extends StatelessWidget {
-  const _SearchField({required this.controller, required this.query});
-
-  final TextEditingController controller;
-
-  /// The same text the controller holds, listened to so the clear button comes
-  /// and goes without the field itself being rebuilt from above.
-  final ValueNotifier<String> query;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      child: ValueListenableBuilder<String>(
-        valueListenable: query,
-        builder: (context, text, _) => TextField(
-          controller: controller,
-          textInputAction: TextInputAction.search,
-          style: theme.textTheme.bodyMedium,
-          decoration: InputDecoration(
-            isDense: true,
-            filled: true,
-            fillColor: theme.colorScheme.surfaceContainerHighest,
-            hintText: "Search chats",
-            prefixIcon: const Icon(Icons.search, size: 20),
-            prefixIconConstraints: const BoxConstraints(
-              minWidth: 40,
-              minHeight: 36,
-            ),
-            suffixIcon: text.isEmpty
-                ? null
-                : IconButton(
-                    icon: const Icon(Icons.close, size: 18),
-                    tooltip: "Clear search",
-                    onPressed: controller.clear,
-                  ),
-            suffixIconConstraints: const BoxConstraints(
-              minWidth: 36,
-              minHeight: 36,
-            ),
-            contentPadding: const EdgeInsets.symmetric(vertical: 10),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(24),
-              borderSide: BorderSide.none,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// The chats of the project being shown, filtered by what is in the search
 /// field and under a heading for the day, the week or the month they were last
 /// touched in.
@@ -386,7 +342,7 @@ class _ChatList extends ConsumerWidget {
               found,
               now: DateTime.now(),
             )) ...[
-              SliverToBoxAdapter(child: _Heading(group.heading)),
+              SliverToBoxAdapter(child: ListHeading(group.heading)),
               SliverList.builder(
                 itemCount: group.chats.length,
                 itemBuilder: (context, i) => _ChatTile(
@@ -398,27 +354,6 @@ class _ChatList extends ConsumerWidget {
           ],
         );
       },
-    );
-  }
-}
-
-class _Heading extends StatelessWidget {
-  const _Heading(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
-      child: Text(
-        text,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
     );
   }
 }

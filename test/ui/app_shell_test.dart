@@ -1,3 +1,4 @@
+import "package:flutter/cupertino.dart" show CupertinoIcons;
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -277,6 +278,21 @@ void main() {
       expect(menus.item("Profile…"), isNotNull);
       expect(menus.item("Marketplace…"), isNotNull);
       expect(find.text("Marketplace"), findsNothing);
+    }, variant: mac);
+
+    testWidgets("leaves the new chat to a compose button in the sidebar's "
+        "header", (tester) async {
+      await pumpMac(tester);
+
+      expect(find.byType(FloatingActionButton), findsNothing);
+      expect(find.text("New chat"), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(Sidebar),
+          matching: find.byIcon(CupertinoIcons.square_pencil),
+        ),
+        findsOneWidget,
+      );
     }, variant: mac);
 
     testWidgets("greys the chat's commands until there is a chat open", (

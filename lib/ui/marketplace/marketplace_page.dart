@@ -6,6 +6,7 @@ import "../../domain/models.dart";
 import "../../providers.dart";
 import "../widgets/dialogs.dart" show say;
 import "../widgets/nothing.dart";
+import "../widgets/search_field.dart";
 import "marketplace.dart";
 import "marketplace_entry_preview.dart";
 import "marketplace_groups.dart";
@@ -109,7 +110,11 @@ class _MarketplacePageState extends ConsumerState<MarketplacePage> {
         ),
         body: Column(
           children: [
-            _SearchField(controller: _search, query: _query),
+            SearchField(
+              controller: _search,
+              hint: "Search",
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            ),
             Expanded(
               child: TabBarView(
                 children: [
@@ -207,7 +212,7 @@ class _EntryListState extends ConsumerState<_EntryList>
                     if (groups.remote.isNotEmpty) ...[
                       if (groups.local.isNotEmpty)
                         const SliverToBoxAdapter(
-                          child: _Heading(externalHeading),
+                          child: ListHeading(externalHeading),
                         ),
                       SliverList.builder(
                         itemCount: groups.remote.length,
@@ -266,84 +271,6 @@ class _EntryTile extends StatelessWidget {
         ],
       ),
       isThreeLine: true,
-    );
-  }
-}
-
-/// The marketplace's search box — the sidebar's rounded one, its copy rather
-/// than its import, matching the look it set; extracting waits for a third
-/// caller.
-class _SearchField extends StatelessWidget {
-  const _SearchField({required this.controller, required this.query});
-
-  final TextEditingController controller;
-
-  /// The same text the controller holds, listened to so the clear button
-  /// comes and goes without the field itself being rebuilt from above.
-  final ValueNotifier<String> query;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-      child: ValueListenableBuilder<String>(
-        valueListenable: query,
-        builder: (context, text, _) => TextField(
-          controller: controller,
-          textInputAction: TextInputAction.search,
-          style: theme.textTheme.bodyMedium,
-          decoration: InputDecoration(
-            isDense: true,
-            filled: true,
-            fillColor: theme.colorScheme.surfaceContainerHighest,
-            hintText: "Search",
-            prefixIcon: const Icon(Icons.search, size: 20),
-            prefixIconConstraints: const BoxConstraints(
-              minWidth: 40,
-              minHeight: 36,
-            ),
-            suffixIcon: text.isEmpty
-                ? null
-                : IconButton(
-                    icon: const Icon(Icons.close, size: 18),
-                    tooltip: "Clear search",
-                    onPressed: controller.clear,
-                  ),
-            suffixIconConstraints: const BoxConstraints(
-              minWidth: 36,
-              minHeight: 36,
-            ),
-            contentPadding: const EdgeInsets.symmetric(vertical: 10),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(24),
-              borderSide: BorderSide.none,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The row the remote half sits under — the sidebar's heading row, its copy.
-class _Heading extends StatelessWidget {
-  const _Heading(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
-      child: Text(
-        text,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
     );
   }
 }

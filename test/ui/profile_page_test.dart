@@ -1,3 +1,4 @@
+import "dart:async";
 import "dart:convert";
 import "dart:io";
 
@@ -8,6 +9,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/ui/profile/linked_instructions.dart";
 import "package:agent_chat/ui/profile/profile_page.dart";
+import "package:agent_chat/ui/widgets/resettable_field.dart";
 
 import "../harness.dart";
 
@@ -163,11 +165,8 @@ void main() {
   testWidgets(
     "only the project's field shows an import, the one that follows it",
     (tester) async {
-      bool hintsImport() => tester
-          .widgetList<TextField>(find.byType(TextField))
-          .any(
-            (f) => f.decoration?.hintText?.contains("@docs/style.md") ?? false,
-          );
+      bool hintsImport() =>
+          find.textContaining("@docs/style.md").evaluate().isNotEmpty;
 
       await app.pump(tester, const ProfilePage(project: null));
       await settleIo(tester);
@@ -182,6 +181,23 @@ void main() {
       expect(hintsImport(), isTrue);
     },
   );
+
+  testWidgets("leaving with an edit asks first", (tester) async {
+    await app.pump(tester, const ProfilePage(project: null));
+    await settleIo(tester);
+
+    final page = tester.element(find.byType(ProfilePage));
+    await tester.enterText(
+      find.descendant(
+        of: find.widgetWithText(LabelledField, "Name"),
+        matching: find.byType(TextField),
+      ),
+      "Ada",
+    );
+    unawaited(Navigator.of(page).maybePop());
+    await tester.pumpAndSettle();
+    expect(find.text("Discard changes"), findsOneWidget);
+  });
 
   testWidgets("off a desktop there is nothing to link", (tester) async {
     await app.pump(tester, const ProfilePage(project: null));

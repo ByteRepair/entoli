@@ -53,12 +53,23 @@ the tour) shows `WelcomePage` instead of the shell while `licenceAccepted` in
 `settings.json` is still false, and the tour's Done writes the flag through the
 notifier, which swaps the shell in. The tour is the home content, not a route
 over it, so the back key cannot skip it and there is no back arrow; the tour
-also runs embedded here and has nothing of its own to leave. Ahead of it, where
-a Linux can run (proot on Android, the emulator on iOS), `InitialSetupGate`
-shows a setup screen that downloads Alpine through `rootfsDownloadsProvider`
-and picks it as the terminal, so a phone user never has to find the Terminal
-page; it shows only while the tour is unseen and no rootfs is picked, and a
-failure offers Retry or a Skip that lasts the launch. A tour page says
+also runs embedded here and has nothing of its own to leave. Ahead of it,
+`InitialSetupGate` shows `SetupPage` over the device's `SetupPlan` while the
+tour is unseen and a step of it is not done. A plan is what a platform hands
+the one setup screen: its `SetupStep`s in order and a `SetupProgress` — the
+bar's policy. `setupPlanProvider` is where each platform submits its plan: where a
+Linux can run (proot on Android, the emulator on iOS) Alpine as the terminal,
+so a phone user never has to find the Terminal page, its bar the download
+alone (`StepProgress`); where the agent's browser is one the app launches —
+the desktops — Helium as that browser, which makes the embedded browser the
+desktops' default where it used to be off, its bar the whole plan
+(`PlanProgress`, each step an equal share and unpacking its `unpackShare` of
+that, so it only moves forward). The page runs the steps one after another,
+each started when the one before is done or skipped; a step is done when its
+setting is picked, so the page has no Next. A failure offers Retry, or a Skip
+that lasts the launch. A step subclass says what it is called, the catalog it
+downloads through, when it is done, and how it is picked; the line under the
+bar is "Downloading" or "Unpacking" and that name. A tour page says
 one thing in a line or two; a page with two points is two pages. Two pages
 hold Next: the provider page until some model is reachable, the model page —
 which embeds `DefaultsSection` from `llm_settings.dart`, so a row added there is
@@ -86,10 +97,7 @@ place of the colours, on iOS and macOS a Liquid Glass switch in the same
 place says whether Apple's own controls draw the app's chrome from the next
 launch and, while it is on, takes the colours' and the corners' place too (see
 "Liquid Glass" in `lib/ui/AGENTS.md`), and what any of it reaches is "What the settings page can
-change about it" — the **Agent** — command approval mode and the classifier
-model, which travel together because auto mode is unusable without one — the
-standing permission rules the agent consults before any of it, the environment,
-and deleting every chat. **Update** is the app keeping itself current: one
+change about it" — the environment, and deleting every chat. **Update** is the app keeping itself current: one
 switch, shown exactly where the platform half exists — Linux, Windows, macOS —
 and absent everywhere else without a word, since a phone reaches its newest
 build by means the row would only stand in front of. What the
@@ -200,10 +208,18 @@ keeps it, and the explicit remove clears it — because an empty field alone
 cannot say keep from clear once the field no longer echoes what is stored.
 The TURN password is in the store the same way; the TURN username is not a
 secret and rides in `settings.json` beside the URL.
-**LLMs** is what a new chat is answered by and what names it, under a
-**Turns** section beside it — how a turn runs and is bounded: the retry
-rounds, the step limit, the Total Context window and the Auto-compact switch
-and share. **Memory** is
+**LLMs** is what a new chat is answered by and what names it, and how long
+that model thinks — `ReasoningEffort`, sent only to a model the catalog says
+reasons, since another may refuse the field; a chat's settings, and the
+new-chat screen's, can override it in `meta.json`, a reset beside it putting
+the chat back on the app's. Under it the **Agent** — command
+approval mode and the classifier model, which travel together because auto
+mode is unusable without one, and the standing permission rules the agent
+consults before any of it — and a **Turns** section — how a turn runs and is
+bounded: the retry rounds, the step limit, the Total Context window and the
+Auto-compact switch and share. The Agent was under General until it moved
+beside the model it runs. How long the model thinks and the image model's
+Quality are both a `ThinkingSlider` (see `lib/ui/widgets/AGENTS.md`). **Memory** is
 what one conversation leaves the others: the two `AGENTS.md` files every turn
 is read from — the user's own at the root of the data directory and the
 project's in its workspace — and the ways a turn may keep what they pull in
@@ -239,12 +255,13 @@ be a conversation rewrite from a settings page.
 
 **The prompt is not typed here.** The middle of the page is what the trigger
 will send, rendered the way the chat will render it, over the button that opens
-`TriggerPromptPage` — a box that is the whole page, Save and Discard, and
-nothing else. A trigger is written once and read many times afterwards, so the
-page it is read on shows the message; and a prompt long enough to need the room
-had a box a few lines tall to grow in before. Discarding asks, and so does the
-back key through a `PopScope`, since it is the one way out that loses what was
-typed.
+its page — `PromptField`, shared with an agent's system prompt and the
+instructions (see "Shared UI" in `lib/ui/widgets/AGENTS.md`). A trigger is
+written once and read many times afterwards, so the page it is read on shows
+the message; and a prompt long enough to need the room had a box a few lines
+tall to grow in before. Discarding asks, on the prompt page and on the editor
+under it alike — `DiscardGuard`, since leaving is the one way out that loses
+what was typed.
 
 What is typed in it is `CompletionField` — the composer's, so `/skills` and
 `@agents` complete there and the `+` offers them; a trigger's prompt is

@@ -9,32 +9,21 @@ import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/triggers/incoming_open.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/settings/triggers.dart";
+import "package:agent_chat/ui/widgets/prompt_field.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
 
-/// The field on the prompt page, and not the editor's Name behind it: a route
-/// under another is still in the tree, so every finder here is anchored to the
-/// page it means.
+/// The field on the prompt page, and not the editor's Name behind it.
 Finder get _promptField => find.descendant(
-  of: find.byType(TriggerPromptPage),
+  of: find.byType(PromptPage),
   matching: find.byType(TextField),
 );
 
 Finder _on(Type page, String label) =>
     find.descendant(of: find.byType(page), matching: find.text(label));
-
-/// Write [text] as the trigger's prompt, through the page that edits it.
-Future<void> writePrompt(WidgetTester tester, String text) async {
-  await scrollTo(tester, find.text("Edit prompt"));
-  await tester.tap(find.text("Edit prompt"));
-  await settleIo(tester);
-  await tester.enterText(_promptField, text);
-  await tester.tap(_on(TriggerPromptPage, "Save"));
-  await settleIo(tester);
-}
 
 void main() {
   testWidgets("a platform with no clock does not list the category", (
@@ -250,11 +239,36 @@ void main() {
       await openEditor(tester);
       await writePrompt(tester, "Summarise **everything**");
 
-      expect(find.byType(TriggerPromptPage), findsNothing);
+      expect(find.byType(PromptPage), findsNothing);
       expect(
         tester.widget<MarkdownBody>(find.byType(MarkdownBody)).data,
         "Summarise **everything**",
       );
+    });
+
+    testWidgets("leaving with an edit asks first, and leaving without one "
+        "does not", (tester) async {
+      await openEditor(tester, trigger: seeded());
+
+      // Untouched: back leaves at once.
+      await tester.pageBack();
+      await settleIo(tester);
+      expect(find.byType(TriggerEditorPage), findsNothing);
+
+      await tester.tap(find.text("Morning sweep"));
+      await settleIo(tester);
+      await tester.enterText(find.byType(TextFormField).first, "Evening");
+      await tester.pageBack();
+      await settleIo(tester);
+      expect(
+        find.text("Throw away the edits to this trigger?"),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text("Discard"));
+      await settleIo(tester);
+      expect(find.byType(TriggerEditorPage), findsNothing);
+      expect(app.container.read(triggersProvider).single.name, "Morning sweep");
     });
 
     testWidgets("discarding leaves the prompt as it was", (tester) async {
@@ -268,7 +282,7 @@ void main() {
       await tester.tap(find.text("Discard"));
       await settleIo(tester);
 
-      expect(find.byType(TriggerPromptPage), findsNothing);
+      expect(find.byType(PromptPage), findsNothing);
       expect(
         tester.widget<MarkdownBody>(find.byType(MarkdownBody)).data,
         "check builds",

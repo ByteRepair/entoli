@@ -153,7 +153,7 @@ void main() {
 
       await tester.enterText(find.byType(TextField).at(0), "tester");
       await tester.enterText(find.byType(TextField).at(1), "A test agent");
-      await tester.enterText(find.byType(TextField).at(2), "You test things.");
+      await writePrompt(tester, "You test things.", label: "System prompt");
       await tester.tap(find.text("Save"));
       await settleIo(tester, least: 15);
 

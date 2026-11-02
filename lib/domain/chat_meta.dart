@@ -1,5 +1,6 @@
 import "dart:convert";
 
+import "app_settings.dart" show ReasoningEffort;
 import "permission.dart";
 import "temp_chat_ttl.dart";
 
@@ -11,6 +12,7 @@ class ChatMeta {
     this.model,
     this.provider,
     this.approveMode,
+    this.reasoningEffort,
     this.tempChatTtl,
     this.permissions = const [],
     this.writableDirs = const [],
@@ -22,6 +24,9 @@ class ChatMeta {
   String? model;
   String? provider;
   ApproveMode? approveMode;
+
+  /// How long this chat's model thinks. Null means the app's answer.
+  ReasoningEffort? reasoningEffort;
 
   /// This chat's own standing rules, in front of the project's and the app's.
   /// What "Allow in Chat" on a banner writes.
@@ -57,6 +62,8 @@ class ChatMeta {
     model: json["model"] as String?,
     provider: json["provider"] as String?,
     approveMode: _approveMode(json),
+    reasoningEffort: ReasoningEffort.values
+        .asNameMap()[json["reasoningEffort"]],
     permissions: permissionRulesFromJson(json["permissions"] as List<dynamic>?),
     writableDirs: [
       for (final w in (json["writableDirs"] as List<dynamic>? ?? const []))
@@ -99,6 +106,7 @@ class ChatMeta {
     if (model != null) "model": model,
     if (provider != null) "provider": provider,
     if (approveMode != null) "approveMode": approveMode!.name,
+    if (reasoningEffort != null) "reasoningEffort": reasoningEffort!.name,
     if (permissions.isNotEmpty)
       "permissions": permissionRulesToJson(permissions),
     if (writableDirs.isNotEmpty) "writableDirs": writableDirs,

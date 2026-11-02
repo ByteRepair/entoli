@@ -96,6 +96,19 @@ void main() {
     expect(backend.prompts.single.settings.model, "qwen-2.5");
   });
 
+  test("a chat's own Thinking wins over the app's", () async {
+    final repo = repoWith(AppSettings(reasoningEffort: ReasoningEffort.low));
+    final chat = await savedChat(repo);
+    await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+    expect(backend.prompts.last.settings.reasoningEffort, ReasoningEffort.low);
+
+    File(config.metaFile(chat.state.id)).writeAsStringSync(
+      ChatMeta(reasoningEffort: ReasoningEffort.high).encode(),
+    );
+    await repo.sendPrompt(chat.state.id, userMessage("again")).toList();
+    expect(backend.prompts.last.settings.reasoningEffort, ReasoningEffort.high);
+  });
+
   test(
     "a chat's model is never paired with the app default's provider",
     () async {
