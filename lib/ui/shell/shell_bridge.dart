@@ -86,9 +86,10 @@ final shellRoutesProvider = Provider<ShellRoutes>((ref) => ShellRoutes());
 
 /// The app under the native shell, in `AppShell`'s place: the Flutter half of
 /// a window SwiftUI owns. It asks the Swift to take the window, sends it the
-/// snapshots it draws, runs what it sends back, and draws [ConversationPane]
-/// with the shell's bars as its padding. The commands and their keys attach
-/// here as they do to `AppShell`, and the menu bar is still `AppMenuBar`.
+/// snapshots it draws, runs what it sends back, and draws [ConversationPane].
+/// The shell's bars reach it, and every page over it, as padding: see
+/// [ShellInsets]. The commands and their keys attach here as they do to
+/// `AppShell`, and the menu bar is still `AppMenuBar`.
 class ShellBridge extends ConsumerStatefulWidget {
   const ShellBridge({super.key});
 
@@ -99,9 +100,7 @@ class ShellBridge extends ConsumerStatefulWidget {
 class _ShellBridgeState extends ConsumerState<ShellBridge> {
   late final CommandScope _scope = ref.read(commandScopeProvider);
 
-  /// How much of the Flutter view the shell's own bars cover: the toolbar
-  /// above, the composer below.
-  final ValueNotifier<EdgeInsets> _insets = ValueNotifier(EdgeInsets.zero);
+  late final ValueNotifier<EdgeInsets> _insets = ref.read(shellInsetsProvider);
 
   @override
   void initState() {
@@ -121,7 +120,6 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     HardwareKeyboard.instance.removeHandler(_key);
     _scope.detach(_commands);
     shellChannel.setMethodCallHandler(null);
-    _insets.dispose();
     super.dispose();
   }
 
@@ -164,26 +162,46 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
   }
 
   @override
-  Widget build(BuildContext context) => AppMenuBar(
+  Widget build(BuildContext context) => const AppMenuBar(
     child: Stack(
       children: [
-        const _WindowPublisher(),
-        Positioned.fill(
-          child: ValueListenableBuilder<EdgeInsets>(
-            valueListenable: _insets,
-            builder: (context, insets, child) {
-              final media = MediaQuery.of(context);
-              return MediaQuery(
-                data: media.copyWith(padding: insets, viewPadding: insets),
-                child: child!,
-              );
-            },
-            child: const ConversationPane(),
-          ),
-        ),
+        _WindowPublisher(),
+        Positioned.fill(child: ConversationPane()),
       ],
     ),
   );
+}
+
+/// How much of the Flutter view the shell's own bars cover: the toolbar above,
+/// the composer below. Zero with no shell.
+final shellInsetsProvider = Provider<ValueNotifier<EdgeInsets>>((ref) {
+  final insets = ValueNotifier(EdgeInsets.zero);
+  ref.onDispose(insets.dispose);
+  return insets;
+});
+
+/// [shellInsetsProvider] as the padding of everything under [child]. Above
+/// the Navigator, from `MaterialApp.builder`: a page pushed over the
+/// conversation is the Navigator's, not the bridge's, and its bar has to
+/// clear the toolbar as the conversation does.
+class ShellInsets extends ConsumerWidget {
+  const ShellInsets({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) =>
+      ValueListenableBuilder<EdgeInsets>(
+        valueListenable: ref.watch(shellInsetsProvider),
+        child: child,
+        builder: (context, insets, child) {
+          final media = MediaQuery.of(context);
+          return MediaQuery(
+            data: media.copyWith(padding: insets, viewPadding: insets),
+            child: child!,
+          );
+        },
+      );
 }
 
 /// Sends the [WindowSnapshot]. A widget of its own, like every publisher, so

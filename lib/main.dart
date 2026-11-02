@@ -614,6 +614,9 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       themeMode: mode,
       onGenerateRoute: appRoute,
       navigatorObservers: [ref.read(shellRoutesProvider)],
+      builder: ref.watch(liquidGlassProvider).shell
+          ? (context, child) => ShellInsets(child: child!)
+          : null,
       // All four wrapped rather than folded into the shell: what another app
       // shared has to be offered a workspace over whatever is on screen and the
       // assistant gesture has to open a chat over it, both of which want a
