@@ -232,17 +232,23 @@ private struct ProjectHeader: View {
     .padding(.vertical, 6)
   }
 
+  /// A project in the menu: its own icon beside its name, always, and the
+  /// system's checkmark on the one being shown — a toggle, which is how a
+  /// menu draws a choice that is on, rather than the icon given up for it.
   private func item(_ choice: ProjectChoice) -> some View {
-    Button {
-      model.intent("selectProject", choice.ref)
-    } label: {
-      let current = choice.device == state.project.device && choice.project == state.project.project
+    let current = choice.device == state.project.device && choice.project == state.project.project
+    return Toggle(
+      isOn: Binding(
+        get: { current },
+        set: { _ in model.intent("selectProject", choice.ref) })
+    ) {
       Label {
         Text(choice.count > 0 ? "\(choice.label)  \(choice.count)" : choice.label)
           .italic(choice.omada)
       } icon: {
-        Image(systemName: current ? "checkmark" : choice.symbol)
+        Image(systemName: choice.symbol)
       }
+      .labelStyle(.titleAndIcon)
     }
   }
 
