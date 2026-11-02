@@ -39,8 +39,10 @@ class ShellComposerState extends ConsumerState<ShellComposer>
     widget.config.controller,
   ]);
 
-  /// The value the shell last reported, so a change it made is not sent back
-  /// to it — which mid-composition would undo the input method's marked text.
+  /// The value the shell is reporting, so the change it makes is not sent
+  /// back to it — which mid-composition would undo the input method's marked
+  /// text. Held only while that change lands: a later one of Dart's own to
+  /// the same value has to reach the shell.
   TextEditingValue? _reported;
 
   /// The completion token a press of Escape closed the menu on; it stays
@@ -139,6 +141,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
         _reported = value;
         _outbox.remember(_valueOf(value));
         controller.value = value;
+        _reported = null;
       case "send":
         _logic.submit();
       case "queue":

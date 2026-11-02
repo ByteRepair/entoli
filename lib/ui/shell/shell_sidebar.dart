@@ -108,7 +108,13 @@ class SidebarPublisher extends ConsumerWidget {
     final String? empty;
     if (remote) {
       current =
-          mirrored.where((p) => p.project == selected.project).firstOrNull ??
+          mirrored
+              .where(
+                (p) =>
+                    p.device == selected.device &&
+                    p.project == selected.project,
+              )
+              .firstOrNull ??
           ProjectChoice(
             device: selected.device,
             project: selected.project,
@@ -257,7 +263,8 @@ Future<Object?> runSidebarIntent(
           description: intent.maybeString("description") ?? "",
           omada: intent.flag("omada"),
         ), ref.read(selectedProjectProvider).device)(context, ref);
-      } catch (_) {
+      } catch (e) {
+        logFailure("shell", "createProject", e);
         return "The project could not be created.";
       }
     case "openPage":
