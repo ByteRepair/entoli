@@ -7,6 +7,7 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/project.dart" show defaultEmptyChatQuestion;
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/selection.dart";
+import "package:agent_chat/ui/shell/shell_new_chat.dart";
 import "package:agent_chat/ui/shell/shell_outbox.dart";
 import "package:agent_chat/ui/widgets/liquid_glass.dart";
 
@@ -71,14 +72,45 @@ void main() {
     },
   );
 
-  testWidgets("the new-chat screen fills the page", (tester) async {
+  testWidgets("the new-chat screen goes to the shell, Flutter drawing none", (
+    tester,
+  ) async {
     await pump(tester);
-    final question = find.text(defaultEmptyChatQuestion);
-    expect(question, findsOneWidget);
-    expect(tester.getSize(question).height, greaterThan(0));
+    expect(find.text(defaultEmptyChatQuestion), findsNothing);
     expect(find.byType(AppBar), findsNothing);
+    expect(sent["newChat"]?["present"], isTrue);
+    expect(sent["newChat"]?["question"], defaultEmptyChatQuestion);
     expect(sent["chatBar"]?["title"], "New Chat");
     expect(sent["composer"]?["present"], isTrue);
+  });
+
+  testWidgets("a badge picks its project, and picked again the default", (
+    tester,
+  ) async {
+    await pump(tester);
+    final badges = sent["newChat"]!["projects"]! as List;
+    final first = badges.first as Map;
+    final screen = tester.state<ShellNewChatState>(find.byType(ShellNewChat));
+
+    screen.handle("pick", {"device": null, "project": first["project"]});
+    await tester.pump();
+    expect(
+      app.container.read(selectedProjectProvider).project,
+      first["project"],
+    );
+    expect((sent["newChat"]!["selected"]! as Map)["project"], first["project"]);
+
+    screen.handle("pick", {"device": null, "project": first["project"]});
+    await tester.pump();
+    expect(app.container.read(selectedProjectProvider).project, isNull);
+  });
+
+  testWidgets("a starter types its trigger into the composer", (tester) async {
+    await pump(tester);
+    final screen = tester.state<ShellNewChatState>(find.byType(ShellNewChat));
+    screen.handle("starter", {"trigger": "@", "name": "scout"});
+    await tester.pump();
+    expect(sent["composerValue"]?["text"], "@scout ");
   });
 
   testWidgets("a chat fills the page, its title in the toolbar", (

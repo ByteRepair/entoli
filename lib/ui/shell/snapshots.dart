@@ -553,3 +553,76 @@ class TurnSnapshot extends ShellSnapshot {
     },
   };
 }
+
+/// The new-chat screen: the question, the projects as badges — this
+/// device's, then each paired device's under its name — with the one the
+/// next chat goes to picked out, and a starter per `/skill` and `@agent` the
+/// library holds. Not [present] where no page is the new-chat screen.
+class NewChatSnapshot extends ShellSnapshot {
+  const NewChatSnapshot({
+    required this.present,
+    this.question = "",
+    this.image,
+    this.projects = const [],
+    this.devices = const [],
+    this.selected,
+    this.starters = const [],
+    this.starting = false,
+  });
+
+  static const absent = NewChatSnapshot(present: false);
+
+  final bool present;
+
+  /// What the screen asks; empty asks nothing.
+  final String question;
+
+  /// The figure over the question, as a Flutter asset key the Swift finds in
+  /// the app's bundle.
+  final String? image;
+
+  /// This device's projects that have a badge: every one but the default,
+  /// which is nothing picked.
+  final List<ProjectChoice> projects;
+
+  /// Each paired device's name, whether it is away, and its projects.
+  final List<({String name, bool offline, List<ProjectChoice> projects})>
+  devices;
+
+  /// The project picked out, as a `ProjectChoice`'s device and project.
+  final ({String? device, String? project})? selected;
+
+  /// Each starter's trigger, name and description.
+  final List<({String trigger, String name, String? description})> starters;
+
+  /// A paired device is making the chat: a spinner in the screen's place.
+  final bool starting;
+
+  @override
+  String get concern => "newChat";
+
+  @override
+  Map<String, Object?> toMap() => {
+    "present": present,
+    "question": question,
+    "image": image,
+    "projects": [for (final p in projects) p.toMap()],
+    "devices": [
+      for (final d in devices)
+        {
+          "name": d.name,
+          "offline": d.offline,
+          "projects": [for (final p in d.projects) p.toMap()],
+        },
+    ],
+    "selected": switch (selected) {
+      null => null,
+      (:final device, :final project) => {"device": device, "project": project},
+    },
+    "starters": [
+      for (final s in starters)
+        {"trigger": s.trigger, "name": s.name, "description": s.description},
+    ],
+    "starting": starting,
+  };
+}

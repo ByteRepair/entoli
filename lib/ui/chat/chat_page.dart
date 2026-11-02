@@ -29,6 +29,7 @@ import "../voice/voice_page.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/chip_row.dart";
 import "../shell/shell_composer.dart";
+import "../shell/shell_new_chat.dart";
 import "../shell/shell_turn.dart";
 import "../shell/snapshots.dart" show ToolbarItem;
 import "../widgets/completion_field.dart";
@@ -451,7 +452,10 @@ class _NewChatState extends ConsumerState<_NewChat> {
                 actions: {"settings": _openSettings},
               ),
         bottom: _bottomBar(),
-        child: _starting
+        // Under the native shell the shell draws the screen, spinner and all.
+        child: shell
+            ? ShellNewChat(at: at, controller: _controller, starting: _starting)
+            : _starting
             ? const Center(child: CircularProgressIndicator())
             : _EmptyChat(
                 project: at.project,

@@ -13,6 +13,7 @@ import "../commands.dart";
 import "../selection.dart";
 import "conversation_pane.dart";
 import "shell_composer.dart";
+import "shell_new_chat.dart";
 import "shell_outbox.dart";
 import "shell_sidebar.dart";
 import "shell_turn.dart";
@@ -150,6 +151,14 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
         final args = (intent.args["args"] as Map<Object?, Object?>?) ?? {};
         await ref
             .read(shellTurnSlotProvider)
+            .current
+            ?.handle(intent.string("name"), args.cast<String, Object?>());
+        return null;
+      // The new-chat screen's, the same way.
+      case "newChatScreen":
+        final args = (intent.args["args"] as Map<Object?, Object?>?) ?? {};
+        ref
+            .read(shellNewChatSlotProvider)
             .current
             ?.handle(intent.string("name"), args.cast<String, Object?>());
         return null;

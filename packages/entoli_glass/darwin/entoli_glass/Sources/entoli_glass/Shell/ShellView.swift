@@ -33,6 +33,13 @@ struct ShellView: View {
             model.insets(EdgeInsets(top: insets.top, leading: 0, bottom: insets.bottom, trailing: 0))
           }
       }
+      // Over the Flutter view, which draws nothing there: the new-chat
+      // screen, between the toolbar and the composer.
+      .overlay {
+        if model.newChat.present && !model.window.covered {
+          NewChatView(model: model).transition(.opacity)
+        }
+      }
       .safeAreaInset(edge: .bottom, spacing: 0) {
         VStack(spacing: 0) {
           if !model.turn.isEmpty && !model.window.covered {
