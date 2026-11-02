@@ -1,8 +1,8 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/ui/shell/shell_bridge.dart";
 import "package:agent_chat/ui/shell/shell_outbox.dart";
+import "package:agent_chat/ui/shell/shell_routes.dart";
 import "package:agent_chat/ui/shell/snapshots.dart";
 
 void main() {
@@ -81,5 +81,50 @@ void main() {
     navigator.currentState!.pop();
     await tester.pumpAndSettle();
     expect(routes.covered.value, isFalse);
+  });
+
+  group("going back to the conversation", () {
+    late ShellRoutes routes;
+    late GlobalKey<NavigatorState> navigator;
+
+    Future<void> pump(WidgetTester tester) async {
+      routes = ShellRoutes();
+      navigator = GlobalKey();
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: navigator,
+          navigatorObservers: [routes],
+          home: const SizedBox(),
+        ),
+      );
+    }
+
+    void push(Widget page) => navigator.currentState!.push(
+      MaterialPageRoute<void>(builder: (_) => page),
+    );
+
+    testWidgets("closes every page over it", (tester) async {
+      await pump(tester);
+      push(const Text("settings"));
+      push(const Text("a category"));
+      await tester.pumpAndSettle();
+
+      await toConversation(navigator.currentContext!, routes);
+      await tester.pumpAndSettle();
+      expect(routes.depth, 1);
+      expect(routes.covered.value, isFalse);
+    });
+
+    testWidgets("stops at a page that asks to stay", (tester) async {
+      await pump(tester);
+      push(const PopScope(canPop: false, child: Text("a prompt")));
+      push(const Text("over it"));
+      await tester.pumpAndSettle();
+
+      await toConversation(navigator.currentContext!, routes);
+      await tester.pumpAndSettle();
+      expect(find.text("a prompt"), findsOneWidget);
+      expect(routes.depth, 2);
+    });
   });
 }

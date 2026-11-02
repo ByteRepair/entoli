@@ -15,54 +15,11 @@ import "conversation_pane.dart";
 import "shell_composer.dart";
 import "shell_new_chat.dart";
 import "shell_outbox.dart";
+import "shell_routes.dart";
 import "shell_sidebar.dart";
 import "shell_turn.dart";
 import "shell_voice.dart";
 import "snapshots.dart";
-
-/// Whether a page is pushed over the conversation. On the app's Navigator,
-/// from `main`; only the shell reads it.
-class ShellRoutes extends NavigatorObserver {
-  final List<Route<Object?>> _stack = [];
-
-  /// A page over the first route, which is the conversation's. A dialog is a
-  /// route too and covers nothing: it draws over the Flutter view alone.
-  final ValueNotifier<bool> covered = ValueNotifier(false);
-
-  void _changed() =>
-      covered.value = _stack.skip(1).any((route) => route is PageRoute);
-
-  @override
-  void didPush(Route<Object?> route, Route<Object?>? previousRoute) {
-    _stack.add(route);
-    _changed();
-  }
-
-  @override
-  void didPop(Route<Object?> route, Route<Object?>? previousRoute) {
-    _stack.remove(route);
-    _changed();
-  }
-
-  @override
-  void didRemove(Route<Object?> route, Route<Object?>? previousRoute) {
-    _stack.remove(route);
-    _changed();
-  }
-
-  @override
-  void didReplace({Route<Object?>? newRoute, Route<Object?>? oldRoute}) {
-    final at = oldRoute == null ? -1 : _stack.indexOf(oldRoute);
-    if (newRoute != null) {
-      at < 0 ? _stack.add(newRoute) : _stack[at] = newRoute;
-    } else if (at >= 0) {
-      _stack.removeAt(at);
-    }
-    _changed();
-  }
-}
-
-final shellRoutesProvider = Provider<ShellRoutes>((ref) => ShellRoutes());
 
 /// The app under the native shell, in `AppShell`'s place: the Flutter half of
 /// a window SwiftUI owns. It asks the Swift to take the window, sends it the
