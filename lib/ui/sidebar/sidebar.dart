@@ -1,8 +1,10 @@
 import "dart:async";
 
+import "package:flutter/cupertino.dart" show CupertinoIcons;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../core/platform/form_factor.dart";
 import "../../domain/chat_search.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
@@ -103,6 +105,16 @@ class _SidebarState extends ConsumerState<Sidebar> {
                 children: [
                   const Expanded(child: _ProjectMenu()),
                   ..._projectButtons(context, ref, selected),
+                  // Apple's apps put compose at the top of the list it adds
+                  // to, a plain glyph in the accent colour — Notes, Mail,
+                  // Messages — rather than anything filled or floating.
+                  if (isApple)
+                    IconButton(
+                      icon: const Icon(CupertinoIcons.square_pencil),
+                      color: scheme.primary,
+                      tooltip: "New chat",
+                      onPressed: () => openNewChat(context, ref),
+                    ),
                 ],
               ),
             ),
@@ -120,17 +132,9 @@ class _SidebarState extends ConsumerState<Sidebar> {
                     ),
             ),
             // The menu bar holds the app's pages where it is always on screen,
-            // which leaves the new chat alone at the bottom.
-            if (menuBarAlwaysShown)
-              ListTile(
-                leading: const Icon(Icons.add),
-                title: const Text("New chat"),
-                tileColor: scheme.secondary,
-                iconColor: scheme.onSecondary,
-                textColor: scheme.onSecondary,
-                onTap: () => openNewChat(context, ref),
-              )
-            else ...[
+            // and compose is in the header on Apple's platforms, which leaves
+            // nothing at the bottom.
+            if (!menuBarAlwaysShown) ...[
               const Divider(height: 1),
               Stack(
                 alignment: Alignment.centerRight,
@@ -155,15 +159,16 @@ class _SidebarState extends ConsumerState<Sidebar> {
                       ),
                     ],
                   ),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 16),
-                    child: FloatingActionButton(
-                      heroTag: null,
-                      tooltip: "New chat",
-                      onPressed: () => openNewChat(context, ref),
-                      child: const Icon(Icons.add),
+                  if (!isApple)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 16),
+                      child: FloatingActionButton(
+                        heroTag: null,
+                        tooltip: "New chat",
+                        onPressed: () => openNewChat(context, ref),
+                        child: const Icon(Icons.add),
+                      ),
                     ),
-                  ),
                 ],
               ),
             ],

@@ -16,3 +16,6 @@ bool get isDesktop =>
 bool get isAndroid => defaultTargetPlatform == TargetPlatform.android;
 
 bool get isMac => defaultTargetPlatform == TargetPlatform.macOS;
+
+/// macOS or iOS: where a control should look the way Apple's own apps draw it.
+bool get isApple => isMac || defaultTargetPlatform == TargetPlatform.iOS;
