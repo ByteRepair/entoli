@@ -14,18 +14,20 @@ import "../../core/noise.dart";
 /// rest.
 ///
 /// [stops] are the points left to right, each with the label shown under it;
-/// what they mean is the caller's.
+/// what they mean is the caller's. [help] is the line under the labels.
 class ThinkingSlider<T> extends StatefulWidget {
   const ThinkingSlider({
     super.key,
     required this.stops,
     required this.value,
     required this.onChanged,
+    this.help,
   }) : assert(stops.length > 1);
 
   final Map<T, String> stops;
   final T value;
   final ValueChanged<T> onChanged;
+  final String? help;
 
   @override
   State<ThinkingSlider<T>> createState() => _ThinkingSliderState<T>();
@@ -33,8 +35,6 @@ class ThinkingSlider<T> extends StatefulWidget {
 
 class _ThinkingSliderState<T> extends State<ThinkingSlider<T>>
     with SingleTickerProviderStateMixin {
-  static final _noise = ValueNoise(7);
-
   /// Seconds of motion so far: what the pattern is drawn at.
   final _phase = ValueNotifier<double>(0);
   late final Ticker _ticker = createTicker(_tick);
@@ -42,12 +42,13 @@ class _ThinkingSliderState<T> extends State<ThinkingSlider<T>>
   var _until = Duration.zero;
   var _hovered = false;
 
-  List<T> get _keys => widget.stops.keys.toList();
+  late var _keys = widget.stops.keys.toList();
   int get _index => math.max(0, _keys.indexOf(widget.value));
 
   @override
   void didUpdateWidget(ThinkingSlider<T> old) {
     super.didUpdateWidget(old);
+    _keys = widget.stops.keys.toList();
     if (old.value != widget.value) _think();
   }
 
@@ -132,14 +133,17 @@ class _ThinkingSliderState<T> extends State<ThinkingSlider<T>>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  CustomPaint(
-                    size: Size(constraints.maxWidth, 44),
-                    painter: _ThoughtPainter(
-                      noise: _noise,
-                      phase: _phase,
-                      count: labels.length,
-                      index: index,
-                      scheme: scheme,
+                  // Repainted every frame while it moves, without the text
+                  // around it.
+                  RepaintBoundary(
+                    child: CustomPaint(
+                      size: Size(constraints.maxWidth, 44),
+                      painter: _ThoughtPainter(
+                        phase: _phase,
+                        count: labels.length,
+                        index: index,
+                        scheme: scheme,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -161,6 +165,10 @@ class _ThinkingSliderState<T> extends State<ThinkingSlider<T>>
                         ),
                     ],
                   ),
+                  if (widget.help case final help?) ...[
+                    const SizedBox(height: 8),
+                    Text(help, style: theme.textTheme.bodySmall),
+                  ],
                 ],
               ),
             ),
@@ -176,20 +184,33 @@ class _ThinkingSliderState<T> extends State<ThinkingSlider<T>>
 /// the points over it.
 class _ThoughtPainter extends CustomPainter {
   _ThoughtPainter({
-    required this.noise,
     required this.phase,
     required this.count,
     required this.index,
     required this.scheme,
   }) : super(repaint: phase);
 
-  final ValueNoise noise;
   final ValueNotifier<double> phase;
   final int count;
   final int index;
   final ColorScheme scheme;
 
+  static final _noise = ValueNoise(7);
   static const _cell = 3.5;
+
+  /// A dot's colour by how much of a line it is, in 256 steps, lit and not:
+  /// built once per painter rather than twice per dot per frame.
+  late final _lit = _ramp(0.25, 0.75);
+  late final _dim = _ramp(0.1, 0.25);
+
+  List<Color> _ramp(double alpha, double gain) => [
+    for (var i = 0; i < 256; i++)
+      Color.lerp(
+        scheme.outlineVariant,
+        scheme.primary,
+        i / 255,
+      )!.withValues(alpha: alpha + gain * i / 255),
+  ];
 
   double _pointX(int i, double width) => (i + 0.5) / count * width;
 
@@ -213,24 +234,24 @@ class _ThoughtPainter extends CustomPainter {
       // and more contour lines through it.
       final octaves = 1 + u * 4;
       final lines = 2 + u * 10;
-      final lit = x <= litTo;
+      final colours = x <= litTo ? _lit : _dim;
       for (var y = _cell / 2; y < size.height; y += _cell) {
         final (nx, ny) = (x / size.height * 0.45, y / size.height * 0.45);
         // The field warped by itself, so the lines curl like smoke.
-        final warp = noise.fractal(nx * 0.6 + t * 0.12, ny * 0.6 - t * 0.08, 2);
-        final n = noise.fractal(
+        final warp = _noise.fractal(
+          nx * 0.6 + t * 0.12,
+          ny * 0.6 - t * 0.08,
+          2,
+        );
+        final n = _noise.fractal(
           nx + warp * 1.8,
           ny + warp * 1.2 + t * 0.2,
           octaves,
         );
-        final line = math
-            .pow(0.5 + 0.5 * math.cos(2 * math.pi * n * lines), 6)
-            .toDouble();
-        dot.color = Color.lerp(
-          scheme.outlineVariant,
-          scheme.primary,
-          line,
-        )!.withValues(alpha: lit ? 0.25 + 0.75 * line : 0.1 + 0.25 * line);
+        final wave = 0.5 + 0.5 * math.cos(2 * math.pi * n * lines);
+        final squared = wave * wave;
+        final line = squared * squared * squared;
+        dot.color = colours[(line * 255).round()];
         canvas.drawCircle(Offset(x, y), _cell / 2 * (0.35 + 0.65 * line), dot);
       }
     }

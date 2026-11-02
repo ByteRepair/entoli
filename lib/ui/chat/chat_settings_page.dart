@@ -1,7 +1,8 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../domain/app_settings.dart" show ReasoningEffort;
+import "../../domain/app_settings.dart"
+    show ReasoningEffort, reasoningEffortLabels;
 import "../../domain/builtin_project.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/models.dart";
@@ -17,7 +18,6 @@ import "../widgets/resettable_field.dart";
 import "../widgets/settings_card.dart";
 import "../widgets/temp_chat_ttl_field.dart";
 import "../widgets/thinking_slider.dart";
-import "../settings/llm_settings.dart" show reasoningEffortLabels;
 import "../workspace/workspace_page.dart";
 
 /// The settings a chat that has not been made yet will run its first turn
@@ -376,8 +376,8 @@ class _LlmField extends ConsumerWidget {
   }
 }
 
-/// How long this chat's model thinks: Default is the app's answer, and the
-/// other points this chat's own.
+/// How long this chat's model thinks. Null follows Settings > LLMs, which the
+/// slider then shows and the reset restores, the way [InheritableSlider] does.
 class _ThinkingField extends ConsumerWidget {
   const _ThinkingField({required this.value, required this.onChanged});
 
@@ -391,27 +391,15 @@ class _ThinkingField extends ConsumerWidget {
     );
     return LabelledField(
       label: "Thinking",
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ThinkingSlider<ReasoningEffort?>(
-            stops: {
-              null: "Default",
-              for (final e in ReasoningEffort.values)
-                if (e != ReasoningEffort.auto) e: reasoningEffortLabels[e]!,
-            },
-            value: value,
-            onChanged: onChanged,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            inherited == ReasoningEffort.auto
-                ? "Default leaves it to the model, as Settings > LLMs does."
-                : "Default is Settings > LLMs' "
-                      "${reasoningEffortLabels[inherited]}.",
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
+      child: ResettableField(
+        onReset: () => onChanged(null),
+        resetLabel: "Settings > LLMs (${reasoningEffortLabels[inherited]})",
+        child: ThinkingSlider(
+          stops: reasoningEffortLabels,
+          value: value ?? inherited,
+          onChanged: onChanged,
+          help: value == null ? "Follows Settings > LLMs." : null,
+        ),
       ),
     );
   }

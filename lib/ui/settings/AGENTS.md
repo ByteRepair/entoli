@@ -197,7 +197,8 @@ secret and rides in `settings.json` beside the URL.
 **LLMs** is what a new chat is answered by and what names it, and how long
 that model thinks — `ReasoningEffort`, sent only to a model the catalog says
 reasons, since another may refuse the field; a chat's settings, and the
-new-chat screen's, can override it in `meta.json`, Default being the app's. Under it the **Agent** — command
+new-chat screen's, can override it in `meta.json`, a reset beside it putting
+the chat back on the app's. Under it the **Agent** — command
 approval mode and the classifier model, which travel together because auto
 mode is unusable without one, and the standing permission rules the agent
 consults before any of it — and a **Turns** section — how a turn runs and is

@@ -87,7 +87,8 @@ void main() {
       );
       await settleIo(tester);
       await scrollTo(tester, find.text("Thinking"));
-      expect(find.text("Default is Settings > LLMs' Low."), findsOneWidget);
+      expect(find.text("Follows Settings > LLMs."), findsOneWidget);
+      expect(find.byTooltip("Reset to Settings > LLMs (Low)"), findsOneWidget);
 
       await tester.tap(find.text("High"));
       await settleIo(tester);

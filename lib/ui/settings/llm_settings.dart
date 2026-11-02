@@ -93,33 +93,19 @@ class ImageSection extends ConsumerWidget {
         if (settings.imageProviderId != null)
           LabelledField(
             label: "Quality",
-            child: _Helped(
-              ThinkingSlider(
-                stops: const {
-                  ImageQuality.auto: "Default",
-                  ImageQuality.low: "Low",
-                  ImageQuality.medium: "Medium",
-                  ImageQuality.high: "High",
-                },
-                value: settings.imageQuality,
-                onChanged: notifier.setImageQuality,
-              ),
-              "Higher costs more and takes longer. Some providers may not "
-              "accept a quality setting, and it may have no effect.",
+            child: ThinkingSlider(
+              stops: imageQualityLabels,
+              value: settings.imageQuality,
+              onChanged: notifier.setImageQuality,
+              help:
+                  "Higher costs more and takes longer. Some providers may not "
+                  "accept a quality setting, and it may have no effect.",
             ),
           ),
       ],
     );
   }
 }
-
-/// What each [ReasoningEffort] is called on a slider.
-const reasoningEffortLabels = {
-  ReasoningEffort.auto: "Default",
-  ReasoningEffort.low: "Low",
-  ReasoningEffort.medium: "Medium",
-  ReasoningEffort.high: "High",
-};
 
 /// How long the chat LLM thinks before it answers.
 class ReasoningField extends ConsumerWidget {
@@ -128,34 +114,14 @@ class ReasoningField extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) => LabelledField(
     label: "Thinking",
-    child: _Helped(
-      ThinkingSlider(
-        stops: reasoningEffortLabels,
-        value: ref.watch(appSettingsProvider.select((s) => s.reasoningEffort)),
-        onChanged: ref.read(appSettingsProvider.notifier).setReasoningEffort,
-      ),
-      "How long a model that reasons thinks before it answers; longer is "
-      "slower and costs more. Models that do not reason are sent nothing.",
+    child: ThinkingSlider(
+      stops: reasoningEffortLabels,
+      value: ref.watch(appSettingsProvider.select((s) => s.reasoningEffort)),
+      onChanged: ref.read(appSettingsProvider.notifier).setReasoningEffort,
+      help:
+          "How long a model that reasons thinks before it answers; longer is "
+          "slower and costs more. Models that do not reason are sent nothing.",
     ),
-  );
-}
-
-/// A slider over the line that says what it does, the way a field's helper
-/// text sits under the field.
-class _Helped extends StatelessWidget {
-  const _Helped(this.child, this.help);
-
-  final Widget child;
-  final String help;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      child,
-      const SizedBox(height: 8),
-      Text(help, style: Theme.of(context).textTheme.bodySmall),
-    ],
   );
 }
 

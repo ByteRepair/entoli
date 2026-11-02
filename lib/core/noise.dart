@@ -9,16 +9,16 @@ class ValueNoise {
 
   final List<int> _table;
 
-  int _hash(int x, int y) => _table[(_table[x & 255] + y) & 255];
-
-  double _corner(int x, int y) => _hash(x, y) / 255;
+  /// The lattice value at row [y] of the column whose hash is [column].
+  double _corner(int column, int y) => _table[(column + y) & 255] / 255;
 
   /// The field at ([x], [y]), from 0 to 1.
   double at(double x, double y) {
     final (x0, y0) = (x.floor(), y.floor());
     final (fx, fy) = (_ease(x - x0), _ease(y - y0));
-    final top = _lerp(_corner(x0, y0), _corner(x0 + 1, y0), fx);
-    final bottom = _lerp(_corner(x0, y0 + 1), _corner(x0 + 1, y0 + 1), fx);
+    final (left, right) = (_table[x0 & 255], _table[(x0 + 1) & 255]);
+    final top = _lerp(_corner(left, y0), _corner(right, y0), fx);
+    final bottom = _lerp(_corner(left, y0 + 1), _corner(right, y0 + 1), fx);
     return _lerp(top, bottom, fy);
   }
 
