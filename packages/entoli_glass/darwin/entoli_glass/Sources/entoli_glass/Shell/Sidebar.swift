@@ -65,7 +65,11 @@ struct SidebarView: View {
   private var selection: Binding<String?> {
     Binding(
       get: { state.selected },
-      set: { id in if let id { model.intent("openChat", ["id": id]) } })
+      set: { id in
+        guard let id else { return }
+        model.intent("openChat", ["id": id])
+        model.showDetail()
+      })
   }
 
   var body: some View {
@@ -103,11 +107,24 @@ struct SidebarView: View {
       ToolbarItem {
         Button {
           model.intent("newChat")
+          model.showDetail()
         } label: {
           Label("New Chat", systemImage: "square.and.pencil")
         }
         .help("New chat")
       }
+      #if os(iOS)
+        // What the menu bar holds on a Mac: the app's own pages.
+        ToolbarItem(placement: .topBarLeading) {
+          Menu {
+            appPage("settings", "Settings", "gearshape")
+            appPage("profile", "Profile", "person.crop.circle")
+            appPage("marketplace", "Marketplace", "storefront")
+          } label: {
+            Label("More", systemImage: "ellipsis")
+          }
+        }
+      #endif
     }
     .alert("Rename chat", isPresented: present($renaming)) {
       TextField("Chat title", text: $title)
@@ -127,6 +144,17 @@ struct SidebarView: View {
     }
     .sheet(isPresented: $creating) {
       NewProjectSheet(model: model, omada: state.omadaByDefault)
+    }
+  }
+
+  /// One of the app's pages, opened over the chat: on an iPhone the chat is
+  /// the column to show it in.
+  private func appPage(_ page: String, _ label: String, _ symbol: String) -> some View {
+    Button {
+      model.intent("openPage", ["page": page])
+      model.showDetail()
+    } label: {
+      Label(label, systemImage: symbol)
     }
   }
 
@@ -256,6 +284,7 @@ private struct ProjectHeader: View {
     if state.pages.contains(page) {
       Button {
         model.intent("openPage", ["page": page])
+        model.showDetail()
       } label: {
         Image(systemName: symbol)
       }

@@ -167,6 +167,15 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
       view.model = model
       view.measure()
     }
+
+    /// The width offered, and the height measured: an empty text view with
+    /// no scrolling would otherwise answer the width of its text, nothing,
+    /// and be laid out too narrow to tap.
+    func sizeThatFits(
+      _ proposal: ProposedViewSize, uiView: FieldView, context: Context
+    ) -> CGSize? {
+      CGSize(width: proposal.width ?? uiView.bounds.width, height: model.fieldHeight)
+    }
   }
 
   final class FieldView: UITextView, UITextViewDelegate, ComposerEditor {

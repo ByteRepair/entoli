@@ -122,7 +122,9 @@ struct ComposerView: View {
     .padding(.horizontal, 14)
     .frame(minHeight: Self.control)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .glassControl("field", in: glass, shape: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    .glassControl(
+      "field", in: glass, shape: RoundedRectangle(cornerRadius: 20, style: .continuous),
+      interactive: false)
   }
 
   private var modeSymbol: String? {

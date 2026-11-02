@@ -19,12 +19,16 @@ struct ShellView: View {
   /// first and is the source of the second.
   @State private var columns = NavigationSplitViewVisibility.all
 
+  /// Which column an iPhone shows: the list until a chat or a new one is
+  /// asked for, and the list again on the way back.
+  @State private var compactColumn = NavigationSplitViewColumn.sidebar
+
   private func visibility(_ shown: Bool) -> NavigationSplitViewVisibility {
     shown ? .all : .detailOnly
   }
 
   var body: some View {
-    NavigationSplitView(columnVisibility: $columns) {
+    NavigationSplitView(columnVisibility: $columns, preferredCompactColumn: $compactColumn) {
       SidebarView(model: model)
         .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 400)
     } detail: {
@@ -86,6 +90,7 @@ struct ShellView: View {
       guard visibility(shown) != columns else { return }
       withAnimation(.smooth(duration: 0.3)) { columns = visibility(shown) }
     }
+    .onChange(of: model.detailAsked) { compactColumn = .detail }
     .onChange(of: columns) { _, columns in
       let shown = columns != .detailOnly
       if shown != model.window.sidebarShown { model.intent("sidebar", ["shown": shown]) }
@@ -146,6 +151,12 @@ extension View {
       .navigationTitle(bar.title)
       #if os(macOS)
         .navigationSubtitle(subtitle(bar))
+      #else
+        // A chat's title sits in its bar, as Messages' does.
+        .navigationBarTitleDisplayMode(.inline)
+        // A Flutter page over the chat has a bar and a back button of its
+        // own: one of each on screen.
+        .toolbar(model.window.covered ? .hidden : .automatic, for: .navigationBar)
       #endif
       .toolbar {
         if !model.window.covered {

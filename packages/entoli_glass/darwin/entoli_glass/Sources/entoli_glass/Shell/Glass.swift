@@ -63,10 +63,15 @@ struct GlassControl<S: Shape>: ViewModifier {
   var shape: S
   var tint: Color?
 
+  /// Whether the glass answers a touch itself, as a button's does. Not a
+  /// field's: interactive glass takes the touch, and a field has to have it.
+  var interactive = true
+
   func body(content: Content) -> some View {
     if #available(iOS 26.0, macOS 26.0, *) {
+      let glass = tint.map { Glass.regular.tint($0) } ?? .regular
       content
-        .glassEffect(tint.map { Glass.regular.tint($0).interactive() } ?? .regular.interactive(), in: shape)
+        .glassEffect(interactive ? glass.interactive() : glass, in: shape)
         .glassEffectID(id, in: namespace)
     } else if let tint {
       content.background(tint, in: shape).foregroundStyle(.white)
@@ -78,9 +83,11 @@ struct GlassControl<S: Shape>: ViewModifier {
 
 extension View {
   func glassControl<S: Shape>(
-    _ id: String, in namespace: Namespace.ID, shape: S, tint: Color? = nil
+    _ id: String, in namespace: Namespace.ID, shape: S, tint: Color? = nil,
+    interactive: Bool = true
   ) -> some View {
-    modifier(GlassControl(id: id, namespace: namespace, shape: shape, tint: tint))
+    modifier(
+      GlassControl(id: id, namespace: namespace, shape: shape, tint: tint, interactive: interactive))
   }
 
   func glassButton(prominent: Bool = false) -> some View {

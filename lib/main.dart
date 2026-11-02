@@ -353,10 +353,9 @@ class AppSession {
           LiquidGlass(
             available: glassAvailable,
             on: _glassAtLaunch!,
-            // macOS first; iOS shares the SwiftUI and follows.
-            shell:
-                _glassAtLaunch! &&
-                defaultTargetPlatform == TargetPlatform.macOS,
+            // Wherever the platform draws it: the shell is the same SwiftUI
+            // on both.
+            shell: _glassAtLaunch!,
           ),
         ),
         agentBrowserProvider.overrideWithValue(browser),

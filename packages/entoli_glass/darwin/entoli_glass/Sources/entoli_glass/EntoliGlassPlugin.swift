@@ -14,6 +14,8 @@ public final class EntoliGlassPlugin: NSObject, FlutterPlugin {
   public static func register(with registrar: FlutterPluginRegistrar) {
     #if os(macOS)
       ShellHost.shared = ShellHost(messenger: registrar.messenger, view: registrar.view)
+    #else
+      ShellHost.shared = ShellHost(messenger: registrar.messenger())
     #endif
   }
 }

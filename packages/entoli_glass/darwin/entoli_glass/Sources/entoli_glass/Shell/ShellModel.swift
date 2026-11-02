@@ -26,6 +26,12 @@ final class ShellModel: ObservableObject {
   @Published var strip: StripRequest?
   var stripReply: ((Any?) -> Void)?
 
+  /// Asked of the split view where it is one column — an iPhone — so a chat
+  /// opened or a new one started is shown rather than left behind the list.
+  @Published private(set) var detailAsked = 0
+
+  func showDetail() { detailAsked += 1 }
+
   /// The microphone's level: not published, being many times a second and
   /// read by the glow on each of its frames.
   let voiceLevel = VoiceLevel()

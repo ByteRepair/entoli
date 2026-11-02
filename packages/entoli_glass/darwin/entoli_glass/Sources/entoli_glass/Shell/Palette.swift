@@ -69,6 +69,7 @@ struct PaletteView: View {
   private func pick(_ item: PaletteState.Item) {
     if let chat = item.chat {
       say("pickChat", ["chat": chat])
+      model.showDetail()
     } else {
       say("pickProject", ["device": item.device, "project": item.project])
     }
