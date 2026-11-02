@@ -295,7 +295,10 @@ and the rest run their models as a server of their own or on the CPU.
   `Contents/Helpers/Entoli Models.app` is made by the Runner's last build
   phase (`tool/macos/embed-model-host.sh`): a copy of the Runner binary, an
   rpath to the app's `Frameworks` — the engine, EntoliMLX and the Dart code
-  are the app's, not copies — and an `Info.plist` of its own:
+  are the app's, not copies — one to the app's `MacOS`, where a debug build
+  keeps its code in `Entoli.debug.dylib` beside a stub executable (without it
+  the helper dies at launch and a model's load times out after thirty
+  seconds), and an `Info.plist` of its own:
   `io.byterepair.entoli.models`, `LSBackgroundOnly`, so no Dock icon and no
   second Entoli to LaunchServices. A copy rather than a target of its own,
   since the host runs the app's own code and a second source list would only

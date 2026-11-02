@@ -33,6 +33,12 @@ otool -l "$helper/Contents/MacOS/$executable" |
 # app's Contents.
 install_name_tool -add_rpath "@executable_path/../../../../Frameworks" \
   "$helper/Contents/MacOS/$executable"
+# A debug build's executable is a stub that loads `Entoli.debug.dylib` from
+# beside it, where the code really is; the helper finds the app's own copy
+# through its MacOS directory. A release has no such dylib, and the path finds
+# nothing it looks for.
+install_name_tool -add_rpath "@executable_path/../../../../MacOS" \
+  "$helper/Contents/MacOS/$executable"
 # No nib: `AppDelegate.main` starts the host on `entoli-models` before AppKit
 # would load one, so the bundle carries no window to load.
 
