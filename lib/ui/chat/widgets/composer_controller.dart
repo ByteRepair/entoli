@@ -36,6 +36,12 @@ class ComposerController extends TextEditingController {
       ? const []
       : [for (final unit in text.codeUnits) ?_embeds[unit]];
 
+  /// The embeds in the field by the code unit standing for each, for a field
+  /// that draws them itself.
+  Map<int, ComposerEmbed> get embedsByCode => _embeds.isEmpty
+      ? const {}
+      : {for (final unit in text.codeUnits) unit: ?_embeds[unit]};
+
   /// The field as runs of typed text and embeds, in order. Read on every
   /// keystroke, so a field that has never held an embed is one run.
   List<Object> _parts() {

@@ -6,9 +6,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../data/mime.dart" show pastedAttachment;
 import "../../../domain/models.dart";
-import "../../../domain/shell.dart";
 import "../../../domain/file_tools.dart" show guestWorkspacePath;
-import "../../../domain/wired_skill.dart";
 import "../../../providers.dart";
 import "../../fonts.dart";
 import "../../widgets/attachment_chip.dart";
@@ -17,6 +15,9 @@ import "../../widgets/dialogs.dart";
 import "code_block.dart";
 import "composer_controller.dart";
 import "composer_embed.dart";
+import "composer_logic.dart";
+
+export "composer_logic.dart" show SendCallback;
 
 class _SendIntent extends Intent {
   const _SendIntent();
@@ -40,8 +41,6 @@ class _PasteAction extends Action<PasteTextIntent> {
     if (!await attach()) paste?.invoke(intent);
   }
 }
-
-typedef SendCallback = void Function(String text, List<Attachment> attachments);
 
 /// Message composer with send/abort toggle. Calls onSend with the typed text
 /// and whatever is attached, then clears both; calls onAbort when a turn is
@@ -121,89 +120,46 @@ class ComposerState extends ConsumerState<Composer> {
 
   /// Held only so [embed] can put the caret in the field.
   final FocusNode _focus = FocusNode();
-  final List<Attachment> _attachments = [];
 
-  /// This message is a command to run rather than something to say. Drawn
-  /// rather than only obeyed: `!` sends the message somewhere else entirely,
-  /// and nothing else in the composer would say so before Send is pressed.
-  bool _shell = false;
-
-  /// This message runs a callback rather than asking for anything said: a
-  /// `/skill` flagged `invocation: callback` is one, and the composer says so
-  /// the same way it says so for a command — from the keystroke that decides
-  /// it, not from the turn that follows.
-  bool _wired = false;
-
-  /// How many embeds the field holds: each is taller than a line, so the
-  /// field is let grow by two lines for every one rather than scroll them
-  /// away under the line being typed.
-  int _embeds = 0;
-
-  /// Whether Send would do anything. Kept here so only the button redraws when
-  /// the answer flips, which is about twice a message.
-  final ValueNotifier<bool> _canSend = ValueNotifier(false);
-
-  /// Whether what is typed would steer the running turn, so the queue button
-  /// is on offer beside Send. A notifier for the reason [_canSend] is.
-  final ValueNotifier<bool> _queues = ValueNotifier(false);
-  late final Listenable _sendState = Listenable.merge([_canSend, _queues]);
+  /// The rules, which the native shell's composer shares. This build resolves
+  /// the field's decoration and the buttons either side of it, so it follows
+  /// the logic's shape and leaves Send's flips to the buttons' own builders.
+  late final ComposerLogic _logic = ComposerLogic(widget.controller)
+    ..addListener(_reshaped);
+  late final Listenable _sendState = Listenable.merge([
+    _logic.canSend,
+    _logic.queues,
+  ]);
 
   @override
   void initState() {
     super.initState();
-    widget.controller.addListener(_sync);
+    _configure();
   }
 
   @override
   void didUpdateWidget(Composer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller != widget.controller) {
-      oldWidget.controller.removeListener(_sync);
-      widget.controller.addListener(_sync);
-      _refresh();
-    } else if (oldWidget.agentSpeaking != widget.agentSpeaking) {
-      _refresh();
-    }
+    _logic.controller = widget.controller;
+    _configure();
   }
+
+  void _configure() => _logic.configure(
+    agentSpeaking: widget.agentSpeaking,
+    onSend: widget.onSend,
+    onQueue: widget.onQueue,
+    steers: widget.steers,
+  );
 
   @override
   void dispose() {
-    widget.controller.removeListener(_sync);
-    _canSend.dispose();
-    _queues.dispose();
+    _logic.dispose();
     _focus.dispose();
     super.dispose();
   }
 
-  void _sync() {
-    // Its own notifier rather than a `setState`, because this build resolves
-    // the field's decoration and the buttons either side of it, and that has no
-    // business re-running because Send went live.
-    _refresh();
-    // The field's text rather than the message: an embed is never `!` or a
-    // `/skill`, so the answer is the same without writing the message out.
-    final text = widget.controller.text;
-    final shell = shellBypassCommand(text) != null;
-    final wired = wiredSkillFromText(text) != null;
-    final embeds = widget.controller.embeds.length;
-    if (shell == _shell && wired == _wired && embeds == _embeds) return;
-    setState(() {
-      _shell = shell;
-      _wired = wired;
-      _embeds = embeds;
-    });
-  }
-
-  void _refresh() {
-    final canSend = _worthSending;
-    _canSend.value = canSend;
-    // Only asked with something typed: the room composes a message to answer,
-    // and a streaming reply rebuilds this page every frame.
-    _queues.value =
-        canSend &&
-        widget.agentSpeaking &&
-        widget.onQueue != null &&
-        (widget.steers?.call(widget.controller.message) ?? false);
+  void _reshaped() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _attach(AttachmentKind kind) async {
@@ -234,9 +190,7 @@ class ComposerState extends ConsumerState<Composer> {
   }
 
   void _add(List<Attachment> files) {
-    if (files.isEmpty || !mounted) return;
-    setState(() => _attachments.addAll(files));
-    _refresh();
+    if (mounted) _logic.attach(files);
   }
 
   /// Add [embed] to the message and put the caret on the line under it, so
@@ -250,32 +204,16 @@ class ComposerState extends ConsumerState<Composer> {
 
   /// Put back a message that was sent and taken back, ahead of whatever has
   /// been typed or attached since.
-  void restore(Draft said) {
-    final (:text, :attachments) = said;
-    widget.controller.prepend(text);
-    setState(() => _attachments.insertAll(0, attachments));
-    _refresh();
-  }
+  void restore(Draft said) => _logic.restore(said);
 
-  /// A file on its own is worth sending, and whitespace on its own is not. An
-  /// embed's character is not whitespace, so a quote alone is worth sending.
-  bool get _worthSending =>
-      widget.controller.text.trim().isNotEmpty || _attachments.isNotEmpty;
-
-  void _submit({bool queue = false}) {
-    // The button is dead when this is false, but Ctrl/Cmd+Enter reaches here
-    // without passing it.
-    if (!_worthSending) return;
-    final send = queue && _queues.value ? widget.onQueue! : widget.onSend;
-    send(widget.controller.message.trim(), List.of(_attachments));
-    widget.controller.clear();
-    setState(_attachments.clear);
-    _refresh();
-  }
+  void _submit({bool queue = false}) => _logic.submit(queue: queue);
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final shell = _logic.mode == ComposerMode.shell;
+    final wired = _logic.mode == ComposerMode.callback;
+    final embeds = _logic.embeds;
 
     return Container(
       decoration: BoxDecoration(
@@ -294,19 +232,19 @@ class ComposerState extends ConsumerState<Composer> {
           project: widget.project,
           device: widget.device,
           minLines: 1,
-          maxLines: 6 + 2 * _embeds.clamp(0, 4),
+          maxLines: 6 + 2 * embeds.clamp(0, 4),
           // The command in the face a command is read in, so what is about to
           // run looks like what it is while it is still being typed.
-          style: _shell ? codeBlockStyle(theme) : null,
+          style: shell ? codeBlockStyle(theme) : null,
           // A field's lines are held to the text's height unless told
           // otherwise, which would lay a card over the lines either side of
           // it; the strut is then a floor rather than the height.
-          strutStyle: _embeds > 0
+          strutStyle: embeds > 0
               ? const StrutStyle(forceStrutHeight: false)
               : null,
-          decoration: _shell
+          decoration: shell
               ? _shellField(theme)
-              : _wired
+              : wired
               ? _wiredField(theme)
               : _messageField,
           shortcuts: const {
@@ -335,15 +273,14 @@ class ComposerState extends ConsumerState<Composer> {
             mainAxisSize: MainAxisSize.min,
             children: [
               menu,
-              if (_shell) _cwdBar(theme),
-              if (_attachments.isNotEmpty)
+              if (shell) _cwdBar(theme),
+              if (_logic.attachments.isNotEmpty)
                 AttachmentStrip(
                   children: [
-                    for (final (i, attachment) in _attachments.indexed)
+                    for (final (i, attachment) in _logic.attachments.indexed)
                       AttachmentChip.pending(
                         attachment,
-                        onRemove: () =>
-                            setState(() => _attachments.removeAt(i)),
+                        onRemove: () => _logic.unattach(i),
                       ),
                   ],
                 ),
@@ -378,7 +315,7 @@ class ComposerState extends ConsumerState<Composer> {
                   // laid out again on every frame of it, and `Expanded` above
                   // takes whatever this gives up.
                   ValueListenableBuilder<bool>(
-                    valueListenable: _canSend,
+                    valueListenable: _logic.canSend,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -405,7 +342,7 @@ class ComposerState extends ConsumerState<Composer> {
                   // running turn, in the slot the voice button gives up:
                   // outlined beside the filled Send, which steers.
                   ValueListenableBuilder<bool>(
-                    valueListenable: _queues,
+                    valueListenable: _logic.queues,
                     builder: (context, queues, _) => AnimatedSize(
                       duration: const Duration(milliseconds: 180),
                       curve: Curves.easeOut,
@@ -429,26 +366,26 @@ class ComposerState extends ConsumerState<Composer> {
                   ListenableBuilder(
                     listenable: _sendState,
                     builder: (context, _) =>
-                        widget.agentSpeaking && !_canSend.value
+                        widget.agentSpeaking && !_logic.canSend.value
                         ? IconButton.filled(
                             onPressed: widget.onAbort,
                             icon: const Icon(Icons.stop),
                             tooltip: "Stop",
                           )
                         : IconButton.filled(
-                            onPressed: _canSend.value ? _submit : null,
+                            onPressed: _logic.canSend.value ? _submit : null,
                             icon: Icon(
-                              _shell
+                              shell
                                   ? Icons.play_arrow
-                                  : _wired
+                                  : wired
                                   ? Icons.auto_awesome
                                   : Icons.send,
                             ),
-                            tooltip: _shell
+                            tooltip: shell
                                 ? "Run"
-                                : _wired
+                                : wired
                                 ? "Compact"
-                                : _queues.value
+                                : _logic.queues.value
                                 ? "Send now, read at its next step"
                                 : "Send",
                           ),
