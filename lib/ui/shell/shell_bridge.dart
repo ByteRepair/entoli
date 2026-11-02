@@ -17,6 +17,7 @@ import "shell_new_chat.dart";
 import "shell_outbox.dart";
 import "shell_sidebar.dart";
 import "shell_turn.dart";
+import "shell_voice.dart";
 import "snapshots.dart";
 
 /// Whether a page is pushed over the conversation. On the app's Navigator,
@@ -159,6 +160,14 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
         final args = (intent.args["args"] as Map<Object?, Object?>?) ?? {};
         ref
             .read(shellNewChatSlotProvider)
+            .current
+            ?.handle(intent.string("name"), args.cast<String, Object?>());
+        return null;
+      // Voice mode's controls, the same way.
+      case "voice":
+        final args = (intent.args["args"] as Map<Object?, Object?>?) ?? {};
+        ref
+            .read(shellVoiceSlotProvider)
             .current
             ?.handle(intent.string("name"), args.cast<String, Object?>());
         return null;

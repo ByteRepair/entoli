@@ -626,3 +626,74 @@ class NewChatSnapshot extends ShellSnapshot {
     "starting": starting,
   };
 }
+
+/// Voice mode, drawn by the shell over the whole window: the session's status
+/// and its word, whether the microphone is shut and what shut means, what
+/// went wrong, the chat's title and what has been said. The microphone's
+/// level goes on its own, many times a second, as `voiceLevel`.
+class VoiceSnapshot extends ShellSnapshot {
+  const VoiceSnapshot({
+    required this.present,
+    this.title = "Voice",
+    this.status = "off",
+    this.word = "",
+    this.paused = false,
+    this.hushed = false,
+    this.pushToTalk = false,
+    this.on = false,
+    this.error,
+    this.lines = const [],
+    this.heard = 0xFF6C63FF,
+    this.spoken = 0xFF2DD4BF,
+  });
+
+  static const absent = VoiceSnapshot(present: false);
+
+  final bool present;
+  final String title;
+
+  /// A `VoiceStatus`'s name.
+  final String status;
+
+  /// What the screen says this is.
+  final String word;
+  final bool paused;
+
+  /// Shut and silent: the one look that is the state's rather than the
+  /// status's.
+  final bool hushed;
+  final bool pushToTalk;
+
+  /// The session is running: the microphone's button does something.
+  final bool on;
+  final String? error;
+
+  /// The transcript's last lines: each one's kind (`said`, `replied`,
+  /// `activity`) and its text.
+  final List<({String kind, String text})> lines;
+
+  /// The two voices' colours, as ARGB in this appearance.
+  final int heard;
+  final int spoken;
+
+  @override
+  String get concern => "voice";
+
+  @override
+  Map<String, Object?> toMap() => {
+    "present": present,
+    "title": title,
+    "status": status,
+    "word": word,
+    "paused": paused,
+    "hushed": hushed,
+    "pushToTalk": pushToTalk,
+    "on": on,
+    "error": error,
+    "lines": [
+      for (final line in lines) {"kind": line.kind, "text": line.text},
+    ],
+    "heard": heard,
+    "spoken": spoken,
+  };
+}

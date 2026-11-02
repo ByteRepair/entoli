@@ -8,7 +8,9 @@ import "../../providers.dart";
 import "../chat/chat_controller.dart";
 import "../chat/widgets/turn_surface.dart";
 import "../settings/settings_category.dart";
+import "../shell/shell_voice.dart";
 import "../widgets/dialogs.dart";
+import "../widgets/liquid_glass.dart";
 import "../widgets/nav_drawer.dart";
 import "transcript.dart";
 import "voice_controller.dart";
@@ -110,6 +112,17 @@ class _VoicePageState extends ConsumerState<VoicePage> {
     // The session and nothing else: what the chat is doing changes sixty times
     // a second while a reply streams, and none of it reaches this page.
     final voice = ref.watch(voiceControllerProvider(widget.chatId));
+
+    // The native shell draws voice mode over the whole window; this route
+    // stays, so leaving is still popping it and the session still lives as
+    // long as the page.
+    if (ref.watch(liquidGlassProvider).shell) {
+      return ShellVoice(
+        voice: voice,
+        controller: _voice,
+        onDone: () => Navigator.of(context).maybePop(),
+      );
+    }
 
     return Scaffold(
       // Nothing in the actions: the bar's own back arrow already pops this

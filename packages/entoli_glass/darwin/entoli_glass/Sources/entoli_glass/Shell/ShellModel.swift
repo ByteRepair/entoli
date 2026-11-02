@@ -18,6 +18,11 @@ final class ShellModel: ObservableObject {
   @Published var chatBar = ChatBarState()
   @Published var turn = TurnState()
   @Published var newChat = NewChatState()
+  @Published var voice = VoiceState()
+
+  /// The microphone's level: not published, being many times a second and
+  /// read by the glow on each of its frames.
+  let voiceLevel = VoiceLevel()
 
   /// The composer's own object, so a keystroke redraws it and nothing else.
   private(set) lazy var composer = ComposerModel(shell: self)
@@ -41,6 +46,10 @@ final class ShellModel: ObservableObject {
       if let state: SidebarState = decode(value), state != sidebar { sidebar = state }
     case "chatBar":
       if let state: ChatBarState = decode(value), state != chatBar { chatBar = state }
+    case "voice":
+      if let state: VoiceState = decode(value), state != voice { voice = state }
+    case "voiceLevel":
+      voiceLevel.set(((value as? [String: Any])?["level"] as? NSNumber)?.doubleValue ?? 0)
     case "newChat":
       if let state: NewChatState = decode(value), state != newChat { newChat = state }
     case "turn":

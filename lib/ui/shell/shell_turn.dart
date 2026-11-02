@@ -33,9 +33,12 @@ class ShellTurnSurface extends ConsumerStatefulWidget {
   ConsumerState<ShellTurnSurface> createState() => ShellTurnSurfaceState();
 }
 
-/// Where the turn surface's intents go: the one on screen.
+/// Where the turn surface's intents go: the one on top. Voice mode's is over
+/// the chat page's, and when it goes the chat page's draws again.
 class ShellTurnSlot {
-  ShellTurnSurfaceState? current;
+  final List<ShellTurnSurfaceState> _stack = [];
+
+  ShellTurnSurfaceState? get current => _stack.lastOrNull;
 }
 
 final shellTurnSlotProvider = Provider<ShellTurnSlot>((ref) => ShellTurnSlot());
@@ -48,12 +51,26 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface> {
   List<RunningThing> _running = const [];
 
   @override
+  void initState() {
+    super.initState();
+    _slot._stack.add(this);
+  }
+
+  @override
   void dispose() {
-    if (_slot.current == this) {
-      _slot.current = null;
+    final top = _slot.current == this;
+    _slot._stack.remove(this);
+    if (top) {
       _outbox.post(TurnSnapshot.none);
+      // The one underneath, sent again: nothing it watches has changed, so
+      // nothing else would rebuild it.
+      _slot.current?._resend();
     }
     super.dispose();
+  }
+
+  void _resend() {
+    if (mounted) setState(() {});
   }
 
   /// What the shell's turn surface sent.
@@ -106,7 +123,8 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface> {
 
   @override
   Widget build(BuildContext context) {
-    _slot.current = this;
+    // One underneath another sends nothing: the shell draws the top one.
+    if (_slot.current != this) return const SizedBox.shrink();
     final view = widget.view;
     final notifier = widget.notifier;
     final chat = view.chat;

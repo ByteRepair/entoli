@@ -27,10 +27,13 @@ struct GlassButton: ViewModifier {
 /// none.
 struct GlassSurface<S: Shape>: ViewModifier {
   var shape: S
+  var tint: Color?
 
   func body(content: Content) -> some View {
     if #available(iOS 26.0, macOS 26.0, *) {
-      content.glassEffect(.regular, in: shape)
+      content.glassEffect(tint.map { Glass.regular.tint($0) } ?? .regular, in: shape)
+    } else if let tint {
+      content.background(tint.opacity(0.5), in: shape)
     } else {
       content.background(.regularMaterial, in: shape)
     }
@@ -84,7 +87,7 @@ extension View {
     modifier(GlassButton(prominent: prominent))
   }
 
-  func glassSurface<S: Shape>(_ shape: S) -> some View {
-    modifier(GlassSurface(shape: shape))
+  func glassSurface<S: Shape>(_ shape: S, tint: Color? = nil) -> some View {
+    modifier(GlassSurface(shape: shape, tint: tint))
   }
 }

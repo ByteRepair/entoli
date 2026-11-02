@@ -55,6 +55,14 @@ struct ShellView: View {
       }
       .chatBar(model)
     }
+    // Voice mode over everything: the sidebar too, as the Flutter page was
+    // pushed over the whole window.
+    .overlay {
+      if model.voice.present {
+        VoiceView(model: model).transition(.opacity)
+      }
+    }
+    .animation(.smooth(duration: 0.3), value: model.voice.present)
     .preferredColorScheme(model.window.colorScheme)
   }
 }
