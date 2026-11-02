@@ -3,6 +3,7 @@ import "dart:convert";
 import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../core/log.dart";
 import "snapshots.dart";
 
 /// Where the snapshots go: [deliver] once per change of a concern's map.
@@ -42,19 +43,18 @@ class ShellOutbox {
 /// as it is rather than turning the codec's dictionary back into JSON first.
 class _ChannelOutbox extends ShellOutbox {
   _ChannelOutbox()
-    : super(
-        (concern, map) => shellChannel.invokeMethod<void>("snapshot", {
-          "concern": concern,
-          "value": map,
-        }),
-      );
+    : super((concern, map) => _snapshot(concern, {"value": map}));
 
   @override
   void deliver(String concern, Map<String, Object?> map, String encoded) =>
-      shellChannel.invokeMethod<void>("snapshot", {
-        "concern": concern,
-        "json": encoded,
-      });
+      _snapshot(concern, {"json": encoded});
+
+  static void _snapshot(String concern, Map<String, Object?> payload) =>
+      shellChannel
+          .invokeMethod<void>("snapshot", {"concern": concern, ...payload})
+          .catchError(
+            (Object e) => logFailure("shell", "snapshot $concern", e),
+          );
 }
 
 final shellOutboxProvider = Provider<ShellOutbox>(

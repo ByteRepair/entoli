@@ -36,13 +36,17 @@ class ShellBridge extends ConsumerStatefulWidget {
 class _ShellBridgeState extends ConsumerState<ShellBridge> {
   late final CommandScope _scope = ref.read(commandScopeProvider);
 
-  late final ValueNotifier<EdgeInsets> _insets = ref.read(shellInsetsProvider);
+  /// The bridge the channel's handler is, which is the last one mounted. A
+  /// restart builds the next session's before it takes this one down, so the
+  /// one going clears the handler only while it is still its own.
+  static _ShellBridgeState? _listening;
 
   @override
   void initState() {
     super.initState();
     HardwareKeyboard.instance.addHandler(_key);
     _scope.attach(_commands);
+    _listening = this;
     shellChannel.setMethodCallHandler(_handle);
     // Once per process: the window stays the shell's across a restore's
     // restart, and a second start is answered with nothing to do.
@@ -55,7 +59,10 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_key);
     _scope.detach(_commands);
-    shellChannel.setMethodCallHandler(null);
+    if (identical(_listening, this)) {
+      _listening = null;
+      shellChannel.setMethodCallHandler(null);
+    }
     super.dispose();
   }
 
@@ -75,7 +82,7 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     switch (call.method) {
       case "insets":
         double at(String key) => (args[key] as num? ?? 0).toDouble();
-        _insets.value = EdgeInsets.fromLTRB(
+        shellInsets.value = EdgeInsets.fromLTRB(
           at("left"),
           at("top"),
           at("right"),
@@ -126,35 +133,33 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
 }
 
 /// How much of the Flutter view the shell's own bars cover: the toolbar above,
-/// the composer below. Zero with no shell.
-final shellInsetsProvider = Provider<ValueNotifier<EdgeInsets>>((ref) {
-  final insets = ValueNotifier(EdgeInsets.zero);
-  ref.onDispose(insets.dispose);
-  return insets;
-});
+/// the composer below. Zero with no shell. The process's rather than a
+/// session's, as the window is: the Swift says it only when it changes, so a
+/// restart's session would otherwise start at zero and stay there, the
+/// conversation under the bars.
+final shellInsets = ValueNotifier(EdgeInsets.zero);
 
-/// [shellInsetsProvider] as the padding of everything under [child]. Above
+/// [shellInsets] as the padding of everything under [child]. Above
 /// the Navigator, from `MaterialApp.builder`: a page pushed over the
 /// conversation is the Navigator's, not the bridge's, and its bar has to
 /// clear the toolbar as the conversation does.
-class ShellInsets extends ConsumerWidget {
+class ShellInsets extends StatelessWidget {
   const ShellInsets({super.key, required this.child});
 
   final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) =>
-      ValueListenableBuilder<EdgeInsets>(
-        valueListenable: ref.watch(shellInsetsProvider),
-        child: child,
-        builder: (context, insets, child) {
-          final media = MediaQuery.of(context);
-          return MediaQuery(
-            data: media.copyWith(padding: insets, viewPadding: insets),
-            child: child!,
-          );
-        },
+  Widget build(BuildContext context) => ValueListenableBuilder<EdgeInsets>(
+    valueListenable: shellInsets,
+    child: child,
+    builder: (context, insets, child) {
+      final media = MediaQuery.of(context);
+      return MediaQuery(
+        data: media.copyWith(padding: insets, viewPadding: insets),
+        child: child!,
       );
+    },
+  );
 }
 
 /// Sends the [WindowSnapshot]. A widget of its own, like every publisher, so
