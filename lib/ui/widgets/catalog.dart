@@ -82,9 +82,7 @@ class CatalogTile extends StatelessWidget {
             ),
           if (progress != null) ...[
             const SizedBox(height: 6),
-            LinearProgressIndicator(
-              value: progress!.unpacking ? null : progress!.fraction,
-            ),
+            LinearProgressIndicator(value: progress!.bar),
             const SizedBox(height: 4),
             Text(
               progress!.unpacking

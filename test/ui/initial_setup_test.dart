@@ -155,7 +155,7 @@ void main() {
     expect(helium.installs, 0);
   });
   test("the plan's policy says how the bar counts", () {
-    const step = FakeStep("a", unpackShare: 0.5);
+    const step = FakeStep("a");
     const half = DownloadProgress(received: 50, total: 100);
     const unpacking = DownloadProgress(received: 0, total: 0, unpacking: true);
 
@@ -165,9 +165,10 @@ void main() {
 
     // The whole plan: the second of two steps, half fetched, is a quarter of
     // the way through its own half.
-    expect(const PlanProgress().fraction(step, 1, 2, half), 0.625);
-    expect(const PlanProgress().fraction(step, 1, 2, unpacking), 0.75);
-    expect(const PlanProgress().fraction(step, 0, 2, null), 0);
+    const plan = PlanProgress(unpackShare: 0.5);
+    expect(plan.fraction(step, 1, 2, half), 0.625);
+    expect(plan.fraction(step, 1, 2, unpacking), 0.75);
+    expect(plan.fraction(step, 0, 2, null), 0);
   });
 
   testWidgets("a plan's steps run one after another on one screen", (
@@ -218,8 +219,7 @@ class _Done extends Notifier<Set<String>> {
 /// A step that downloads nothing: started, it is done at once where
 /// [finishes], and waits to be finished by hand otherwise.
 class FakeStep extends SetupStep {
-  const FakeStep(this.name, {this.finishes = false, super.unpackShare})
-    : super(downloading: "Fetching $name", unpacking: "Opening $name");
+  const FakeStep(this.name, {this.finishes = false});
 
   @override
   final String name;

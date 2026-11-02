@@ -28,44 +28,19 @@ class SetupPlan {
 final setupPlanProvider = Provider<SetupPlan>((ref) {
   if (ref.watch(prootAvailableProvider) ||
       ref.watch(deviceAbiProvider) == "ios") {
-    return const SetupPlan([
-      AlpineSetup(
-        downloading: "Downloading Alpine Linux",
-        unpacking: "Unpacking Alpine Linux",
-        // Thousands of small files, which a phone writes slowly.
-        unpackShare: 0.4,
-      ),
-    ]);
+    return const SetupPlan([AlpineSetup()]);
   }
   final browser = ref.watch(agentBrowserProvider);
   if (browser.available && !browser.inApp) {
-    return const SetupPlan([
-      HeliumSetup(
-        downloading: "Downloading Helium",
-        unpacking: "Unpacking Helium",
-      ),
-    ], progress: PlanProgress());
+    return const SetupPlan([HeliumSetup()], progress: PlanProgress());
   }
   return const SetupPlan([]);
 });
 
 /// One thing a [SetupPlan] installs and makes the setting it is for. Picking
-/// it is what makes it [done], so the page has no Next. The plan words what
-/// the screen says while it downloads and while it unpacks.
+/// it is what makes it [done], so the page has no Next.
 abstract class SetupStep {
-  const SetupStep({
-    required this.downloading,
-    required this.unpacking,
-    this.unpackShare = 0.2,
-  });
-
-  /// The line under the bar while it downloads, and while it unpacks.
-  final String downloading;
-  final String unpacking;
-
-  /// How much of the step's share of the bar unpacking is, for a
-  /// [SetupProgress] that counts it.
-  final double unpackShare;
+  const SetupStep();
 
   /// What is installed, as the page names it.
   String get name;
@@ -92,11 +67,11 @@ abstract class SetupStep {
   /// The line under the bar, given where its download is.
   String status(DownloadProgress? progress) => switch (progress) {
     null => "Starting…",
-    DownloadProgress(unpacking: true) => "$unpacking…",
+    DownloadProgress(unpacking: true) => "Unpacking $name…",
     DownloadProgress(total: > 0) =>
-      "$downloading · ${formatSize(progress.received)} of "
+      "Downloading $name · ${formatSize(progress.received)} of "
           "${formatSize(progress.total)}",
-    _ => "$downloading…",
+    _ => "Downloading $name…",
   };
 }
 
@@ -126,13 +101,15 @@ class StepProgress extends SetupProgress {
     int done,
     int count,
     DownloadProgress? progress,
-  ) => progress == null || progress.unpacking ? null : progress.fraction;
+  ) => progress?.bar;
 }
 
 /// One bar for the whole plan, each step an equal share of it and unpacking
-/// its [SetupStep.unpackShare] of that, so it only ever moves forward.
+/// [unpackShare] of that, so it only ever moves forward.
 class PlanProgress extends SetupProgress {
-  const PlanProgress();
+  const PlanProgress({this.unpackShare = 0.2});
+
+  final double unpackShare;
 
   @override
   double fraction(
@@ -141,7 +118,7 @@ class PlanProgress extends SetupProgress {
     int count,
     DownloadProgress? progress,
   ) {
-    final fetched = 1 - step.unpackShare;
+    final fetched = 1 - unpackShare;
     final within = switch (progress) {
       null => 0.0,
       // Unpacking reports no count of its own, so it holds where the
@@ -154,11 +131,7 @@ class PlanProgress extends SetupProgress {
 }
 
 class AlpineSetup extends SetupStep {
-  const AlpineSetup({
-    required super.downloading,
-    required super.unpacking,
-    super.unpackShare,
-  });
+  const AlpineSetup();
 
   @override
   String get name => alpine.name;
@@ -200,11 +173,7 @@ class AlpineSetup extends SetupStep {
 /// The catalog's own rescan picks a first download, so there is nothing to
 /// listen for.
 class HeliumSetup extends SetupStep {
-  const HeliumSetup({
-    required super.downloading,
-    required super.unpacking,
-    super.unpackShare,
-  });
+  const HeliumSetup();
 
   @override
   String get name => "Helium";
@@ -308,9 +277,12 @@ class _SetupPageState extends ConsumerState<SetupPage> {
     step.listen(ref);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final downloads = ref.watch(step.downloads);
-    final progress = downloads.active[step.downloadId];
-    final failure = downloads.failures[step.downloadId];
+    final progress = ref.watch(
+      step.downloads.select((s) => s.active[step.downloadId]),
+    );
+    final failure = ref.watch(
+      step.downloads.select((s) => s.failures[step.downloadId]),
+    );
     final fraction = widget.plan.progress.fraction(
       step,
       index,
