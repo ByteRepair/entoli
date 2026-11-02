@@ -32,6 +32,7 @@ class AppSettings {
     this.imageModelId,
     this.imageProviderId,
     this.imageQuality = ImageQuality.auto,
+    this.favouriteModels = const [],
     this.instructionImports = true,
     this.nestedInstructions = true,
     this.instructionExcludes = const [],
@@ -113,6 +114,11 @@ class AppSettings {
   String? imageModelId;
   String? imageProviderId;
   ImageQuality imageQuality;
+
+  /// The models starred in a picker, as (provider id, model id), in the order
+  /// they were starred: what its Favourites section lists, for every role
+  /// that can use one.
+  List<(String, String)> favouriteModels;
 
   /// Whether `@path` references inside an AGENTS.md pull in more files. The
   /// files themselves are read into every turn; this and [nestedInstructions]
@@ -478,6 +484,11 @@ class AppSettings {
     imageQuality:
         ImageQuality.values.asNameMap()[json["imageQuality"]] ??
         ImageQuality.auto,
+    favouriteModels: [
+      for (final pair in json["favouriteModels"] as List? ?? const [])
+        if (pair case [final String provider, final String model])
+          (provider, model),
+    ],
     instructionImports: json["instructionImports"] as bool? ?? true,
     nestedInstructions: json["nestedInstructions"] as bool? ?? true,
     instructionExcludes: (json["instructionExcludes"] as List? ?? const [])
@@ -628,6 +639,10 @@ class AppSettings {
     if (imageModelId != null) "imageModelId": imageModelId,
     if (imageProviderId != null) "imageProviderId": imageProviderId,
     if (imageQuality != ImageQuality.auto) "imageQuality": imageQuality.name,
+    if (favouriteModels.isNotEmpty)
+      "favouriteModels": [
+        for (final (p, m) in favouriteModels) [p, m],
+      ],
     // Written only when off, so a file that predates the on defaults says
     // nothing and gets them.
     if (!instructionImports) "instructionImports": instructionImports,

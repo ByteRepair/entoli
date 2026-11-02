@@ -662,6 +662,15 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
       ..classifierModelId = choice.modelId,
   );
 
+  /// Stars [modelId] on [providerId], or takes its star back.
+  Future<void> toggleFavourite(String providerId, String modelId) =>
+      _update((s) {
+        final pair = (providerId, modelId);
+        s.favouriteModels = s.favouriteModels.contains(pair)
+            ? [...s.favouriteModels.where((f) => f != pair)]
+            : [...s.favouriteModels, pair];
+      });
+
   Future<void> setImageQuality(ImageQuality value) =>
       _update((s) => s.imageQuality = value);
 

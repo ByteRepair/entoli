@@ -279,6 +279,14 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
           for (final e in all) e.providerId: e.providerName,
         }..removeWhere((id, _) => !all.any((e) => e.providerId == id));
         final searching = _search.text.isNotEmpty;
+        final favourites = ref.watch(
+          appSettingsProvider.select((s) => s.favouriteModels),
+        );
+        // In the order they were starred, which is the order they were wanted.
+        final starred = [
+          for (final f in favourites)
+            ?all.where((e) => (e.providerId, e.info.id) == f).firstOrNull,
+        ];
         return Scaffold(
           appBar: AppBar(
             title: Text("Choose a ${widget.role.noun}"),
@@ -392,6 +400,15 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
                     ],
                   ),
                 ],
+                if (!searching && starred.isNotEmpty) ...[
+                  _header(theme, "Favourites"),
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    sliver: SliverList.list(
+                      children: [for (final e in starred) _card(e, favourites)],
+                    ),
+                  ),
+                ],
                 _header(
                   theme,
                   shown.length == 1 ? "1 model" : "${shown.length} models",
@@ -410,23 +427,7 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 96),
                     sliver: SliverList.builder(
                       itemCount: shown.length,
-                      itemBuilder: (context, i) {
-                        final e = shown[i];
-                        return _ModelCard(
-                          entry: e,
-                          selected: _picked(e.providerId, e.info.id),
-                          onTap: () => _pick(e.providerId, e.info.id),
-                          manage: e.custom
-                              ? (
-                                  edit: () => _openModelPage(
-                                    provider: e.providerId,
-                                    initial: e.info,
-                                  ),
-                                  delete: () => _deleteModel(e),
-                                )
-                              : null,
-                        );
-                      },
+                      itemBuilder: (context, i) => _card(shown[i], favourites),
                     ),
                   ),
               ],
@@ -436,6 +437,22 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
       },
     );
   }
+
+  Widget _card(CatalogEntry e, List<(String, String)> favourites) => _ModelCard(
+    entry: e,
+    selected: _picked(e.providerId, e.info.id),
+    favourite: favourites.contains((e.providerId, e.info.id)),
+    onTap: () => _pick(e.providerId, e.info.id),
+    onStar: () => ref
+        .read(appSettingsProvider.notifier)
+        .toggleFavourite(e.providerId, e.info.id),
+    manage: e.custom
+        ? (
+            edit: () => _openModelPage(provider: e.providerId, initial: e.info),
+            delete: () => _deleteModel(e),
+          )
+        : null,
+  );
 
   Widget _header(ThemeData theme, String text) => SliverToBoxAdapter(
     child: Padding(
@@ -520,13 +537,17 @@ class _ModelCard extends StatelessWidget {
   const _ModelCard({
     required this.entry,
     required this.selected,
+    required this.favourite,
     required this.onTap,
+    required this.onStar,
     this.manage,
   });
 
   final CatalogEntry entry;
   final bool selected;
+  final bool favourite;
   final VoidCallback onTap;
+  final VoidCallback onStar;
 
   /// Where it was added by hand: the user's to change, and nobody else's.
   final ({VoidCallback edit, VoidCallback delete})? manage;
@@ -588,6 +609,15 @@ class _ModelCard extends StatelessWidget {
                     ),
                   ),
                   if (selected) Icon(Icons.check_circle, color: scheme.primary),
+                  IconButton(
+                    tooltip: favourite
+                        ? "Remove from favourites"
+                        : "Add to favourites",
+                    isSelected: favourite,
+                    icon: const Icon(Icons.star_border),
+                    selectedIcon: Icon(Icons.star, color: scheme.primary),
+                    onPressed: onStar,
+                  ),
                   if (manage case final manage?)
                     PopupMenuButton<VoidCallback>(
                       tooltip: "Model options",
