@@ -53,12 +53,18 @@ the tour) shows `WelcomePage` instead of the shell while `licenceAccepted` in
 `settings.json` is still false, and the tour's Done writes the flag through the
 notifier, which swaps the shell in. The tour is the home content, not a route
 over it, so the back key cannot skip it and there is no back arrow; the tour
-also runs embedded here and has nothing of its own to leave. Ahead of it, where
-a Linux can run (proot on Android, the emulator on iOS), `InitialSetupGate`
-shows a setup screen that downloads Alpine through `rootfsDownloadsProvider`
-and picks it as the terminal, so a phone user never has to find the Terminal
-page; it shows only while the tour is unseen and no rootfs is picked, and a
-failure offers Retry or a Skip that lasts the launch. A tour page says
+also runs embedded here and has nothing of its own to leave. Ahead of it,
+`InitialSetupGate` shows a setup screen for the first `SetupStep` the device
+still wants, which downloads one thing through its catalog and picks it: where
+a Linux can run (proot on Android, the emulator on iOS) `AlpineSetup` makes
+Alpine the terminal, so a phone user never has to find the Terminal page, and
+where the agent's browser is one the app launches — the desktops —
+`HeliumSetup` downloads Helium and picks it as the agent's browser, which makes
+the embedded browser the desktops' default where it used to be off. A step
+shows only while the tour is unseen and its setting is unpicked, and a
+failure offers Retry or a Skip that lasts the launch. A step is a subclass: what
+it is called, the catalog it downloads through, when it is wanted, and how it
+is picked. A tour page says
 one thing in a line or two; a page with two points is two pages. Two pages
 hold Next: the provider page until some model is reachable, the model page —
 which embeds `DefaultsSection` from `llm_settings.dart`, so a row added there is
