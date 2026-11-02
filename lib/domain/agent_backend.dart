@@ -2,7 +2,7 @@ import "dart:async";
 
 import "package:flutter/foundation.dart" show ValueListenable;
 
-import "../domain/app_settings.dart" show ImageQuality;
+import "../domain/app_settings.dart" show ImageQuality, ReasoningEffort;
 import "../domain/ask.dart";
 import "../domain/shell_job.dart";
 import "../domain/builtin_project.dart";
@@ -404,6 +404,10 @@ class TurnSettings {
   final String? imageModel;
   final ImageQuality imageQuality;
 
+  /// How long the model thinks, sent only where it reasons. The chat's answer
+  /// over the app's.
+  final ReasoningEffort reasoningEffort;
+
   final Profile? profile;
 
   /// How this turn's replies are worded. The project's answer over the app's;
@@ -477,6 +481,7 @@ class TurnSettings {
     this.imageProvider,
     this.imageModel,
     this.imageQuality = ImageQuality.auto,
+    this.reasoningEffort = ReasoningEffort.auto,
     this.profile,
     this.sharedWorkspace = true,
     this.disabled = const {},

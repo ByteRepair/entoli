@@ -80,6 +80,19 @@ and does not work: `SingleActivator` has no `==`, so a second Tab entry does
 not replace the first, it queues behind it. Shift+Tab is left unbound, so there
 is always a key that leaves the field.
 
+`ThinkingSlider` is a choice of how hard something thinks: a bar of points,
+the least thought on the left and the most on the right, the labels under them
+the caller's (`stops`, in order). The bar is a halftone of contour lines
+through a noise field warped by itself — `ValueNoise` in `core/noise.dart` —
+with more layers of noise and more lines the further right a dot is, so the
+left is a few slow curves and the right a dense web; it is lit up to the point
+picked. It moves only while hovered and for a moment after a pick, because a
+ticker that never stops would keep every page holding one from settling, in a
+test and on a battery alike, and not at all where the platform asks for no
+animation. A tap or a drag anywhere over the bar or the labels picks the
+nearest point, the arrow keys step through them, and it is a slider to
+assistive technology.
+
 `EmptyPane` is the middle of a page with nothing on it. The workspace has two —
 a folder with no files in it, and a file the viewer could not read — and a
 placeholder differing between them by a few pixels of padding reads as a bug

@@ -409,7 +409,7 @@ void main() {
     testWidgets("defaults to auto, degraded to asking without a classifier", (
       tester,
     ) async {
-      await pumpSettings(tester, app, SettingsCategory.general);
+      await pumpSettings(tester, app, SettingsCategory.llms);
       await scrollTo(tester, find.text("Running commands"));
 
       expect(
@@ -420,7 +420,7 @@ void main() {
     });
 
     testWidgets("can be switched to run without asking", (tester) async {
-      await pumpSettings(tester, app, SettingsCategory.general);
+      await pumpSettings(tester, app, SettingsCategory.llms);
       await openModeDropdown(tester);
       await tester.tap(
         find.textContaining("Run everything without asking").last,
@@ -437,7 +437,7 @@ void main() {
     testWidgets("auto is disabled when no classifier model is set", (
       tester,
     ) async {
-      await pumpSettings(tester, app, SettingsCategory.general);
+      await pumpSettings(tester, app, SettingsCategory.llms);
       await openModeDropdown(tester);
       await tester.tap(find.textContaining("Ask before every command").last);
       await settleIo(tester);
@@ -464,7 +464,7 @@ void main() {
       await addProvider(tester, "OpenAI");
       await saveDialog(tester);
 
-      await openCategory(tester, SettingsCategory.general);
+      await openCategory(tester, SettingsCategory.llms);
       await openModeDropdown(tester);
       await tester.tap(
         find.textContaining("Run everything without asking").last,
@@ -491,7 +491,7 @@ void main() {
         ];
       await io(tester, () => settings.save(app.config, project: null));
       app.container.invalidate(projectSettingsProvider(null));
-      await pumpSettings(tester, app, SettingsCategory.general);
+      await pumpSettings(tester, app, SettingsCategory.llms);
       await scrollTo(tester, find.text("Permissions"));
 
       expect(find.text("Shell commands (bash): git *"), findsOneWidget);
@@ -503,7 +503,7 @@ void main() {
     testWidgets("a rule can set the sandbox and leave asking to the mode", (
       tester,
     ) async {
-      await pumpSettings(tester, app, SettingsCategory.general);
+      await pumpSettings(tester, app, SettingsCategory.llms);
       await scrollTo(tester, find.text("Add rule"));
       await tester.tap(find.text("Add rule"));
       await tester.pumpAndSettle();

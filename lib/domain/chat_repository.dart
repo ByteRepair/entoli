@@ -498,6 +498,7 @@ class ChatRepository {
       imageProvider: settings.imageProviderId,
       imageModel: settings.imageModelId,
       imageQuality: settings.imageQuality,
+      reasoningEffort: meta.reasoningEffort ?? settings.reasoningEffort,
       profile: profileUnder(builtIn, appProfile: settings.profile),
       memory:
           builtIn?.memory == MemoryPolicy.off ||

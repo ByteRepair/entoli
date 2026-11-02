@@ -672,6 +672,9 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setImageQuality(ImageQuality value) =>
       _update((s) => s.imageQuality = value);
 
+  Future<void> setReasoningEffort(ReasoningEffort value) =>
+      _update((s) => s.reasoningEffort = value);
+
   /// A model described by hand, on the provider it is reached through. One of
   /// the same id there is replaced, and so is [replacing] — the provider and id
   /// an edit moved it from — in the same write.

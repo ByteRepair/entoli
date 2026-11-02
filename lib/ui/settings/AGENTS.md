@@ -94,10 +94,7 @@ skill's greeting as a finished assistant turn under it. **General** is the app i
 round a corner is, and the app icon, which are what the app looks like; where
 the system has a palette of its own a Material 3 Expressive switch takes the
 place of the colours, and what any of it reaches is "What the settings page can
-change about it" — the **Agent** — command approval mode and the classifier
-model, which travel together because auto mode is unusable without one — the
-standing permission rules the agent consults before any of it, the environment,
-and deleting every chat. **Update** is the app keeping itself current: one
+change about it" — the environment, and deleting every chat. **Update** is the app keeping itself current: one
 switch, shown exactly where the platform half exists — Linux, Windows, macOS —
 and absent everywhere else without a word, since a phone reaches its newest
 build by means the row would only stand in front of. What the
@@ -208,10 +205,18 @@ keeps it, and the explicit remove clears it — because an empty field alone
 cannot say keep from clear once the field no longer echoes what is stored.
 The TURN password is in the store the same way; the TURN username is not a
 secret and rides in `settings.json` beside the URL.
-**LLMs** is what a new chat is answered by and what names it, under a
-**Turns** section beside it — how a turn runs and is bounded: the retry
-rounds, the step limit, the Total Context window and the Auto-compact switch
-and share. **Memory** is
+**LLMs** is what a new chat is answered by and what names it, and how long
+that model thinks — `ReasoningEffort`, sent only to a model the catalog says
+reasons, since another may refuse the field; a chat's settings, and the
+new-chat screen's, can override it in `meta.json`, a reset beside it putting
+the chat back on the app's. Under it the **Agent** — command
+approval mode and the classifier model, which travel together because auto
+mode is unusable without one, and the standing permission rules the agent
+consults before any of it — and a **Turns** section — how a turn runs and is
+bounded: the retry rounds, the step limit, the Total Context window and the
+Auto-compact switch and share. The Agent was under General until it moved
+beside the model it runs. How long the model thinks and the image model's
+Quality are both a `ThinkingSlider` (see `lib/ui/widgets/AGENTS.md`). **Memory** is
 what one conversation leaves the others: the two `AGENTS.md` files every turn
 is read from — the user's own at the root of the data directory and the
 project's in its workspace — and the ways a turn may keep what they pull in

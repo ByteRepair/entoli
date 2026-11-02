@@ -1,6 +1,8 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/app_settings.dart"
+    show ReasoningEffort, reasoningEffortLabels;
 import "../../domain/builtin_project.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/models.dart";
@@ -15,6 +17,7 @@ import "../widgets/model_picker.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/settings_card.dart";
 import "../widgets/temp_chat_ttl_field.dart";
+import "../widgets/thinking_slider.dart";
 import "../workspace/workspace_page.dart";
 
 /// The settings a chat that has not been made yet will run its first turn
@@ -61,6 +64,10 @@ class _NewChatSettingsPageState extends State<NewChatSettingsPage> {
         // `_LlmField` writes the pair onto the meta it was given and hands
         // back that same object, so there is nothing to take from it.
         _LlmField(meta: _meta, onChanged: (_) => setState(() {})),
+        _ThinkingField(
+          value: _meta.reasoningEffort,
+          onChanged: (v) => setState(() => _meta.reasoningEffort = v),
+        ),
         const Divider(),
         _ApprovalField(
           value: _meta.approveMode,
@@ -258,6 +265,11 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                           meta: _meta!,
                           onChanged: (m) => setState(() => _meta = m),
                         ),
+                        _ThinkingField(
+                          value: _meta!.reasoningEffort,
+                          onChanged: (v) =>
+                              setState(() => _meta!.reasoningEffort = v),
+                        ),
                       ],
                       const Divider(),
                       _ApprovalField(
@@ -358,6 +370,35 @@ class _LlmField extends ConsumerWidget {
           meta
             ..provider = choice.providerId
             ..model = choice.modelId,
+        ),
+      ),
+    );
+  }
+}
+
+/// How long this chat's model thinks. Null follows Settings > LLMs, which the
+/// slider then shows and the reset restores, the way [InheritableSlider] does.
+class _ThinkingField extends ConsumerWidget {
+  const _ThinkingField({required this.value, required this.onChanged});
+
+  final ReasoningEffort? value;
+  final ValueChanged<ReasoningEffort?> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final inherited = ref.watch(
+      appSettingsProvider.select((s) => s.reasoningEffort),
+    );
+    return LabelledField(
+      label: "Thinking",
+      child: ResettableField(
+        onReset: () => onChanged(null),
+        resetLabel: "Settings > LLMs (${reasoningEffortLabels[inherited]})",
+        child: ThinkingSlider(
+          stops: reasoningEffortLabels,
+          value: value ?? inherited,
+          onChanged: onChanged,
+          help: value == null ? "Follows Settings > LLMs." : null,
         ),
       ),
     );
