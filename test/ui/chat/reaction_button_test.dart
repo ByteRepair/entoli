@@ -1,4 +1,5 @@
 import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/reaction.dart";
@@ -10,9 +11,11 @@ void main() {
   ) async {
     final picked = <Reaction>[];
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(child: ReactionButton(onReact: picked.add)),
+      ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: Center(child: ReactionButton(onReact: picked.add)),
+          ),
         ),
       ),
     );
@@ -34,9 +37,11 @@ void main() {
   ) async {
     final picked = <Reaction>[];
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(child: ReactionButton(onReact: picked.add)),
+      ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: Center(child: ReactionButton(onReact: picked.add)),
+          ),
         ),
       ),
     );
@@ -52,9 +57,11 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(child: ReactionButton(onReact: (_) {})),
+      ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: Center(child: ReactionButton(onReact: (_) {})),
+          ),
         ),
       ),
     );
@@ -75,10 +82,12 @@ void main() {
   ) async {
     final picked = <Reaction>[];
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: ReactionButton(onReact: picked.add, chosen: const ["🔥"]),
+      ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: ReactionButton(onReact: picked.add, chosen: const ["🔥"]),
+            ),
           ),
         ),
       ),
