@@ -273,6 +273,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.15"
+  entoli_glass:
+    dependency: "direct main"
+    description:
+      path: "packages/entoli_glass"
+      relative: true
+    source: path
+    version: "0.1.0"
   fake_async:
     dependency: "direct dev"
     description:

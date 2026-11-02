@@ -26,6 +26,9 @@ abstract class ComposerEmbed {
 
   /// Drawn where its character is. [remove] takes it out of the field.
   Widget build(BuildContext context, VoidCallback remove);
+
+  /// What a native field draws it as: a title over a few lines of body.
+  ({String? title, String body}) get card;
 }
 
 /// Reads one paragraph of a message back into the embed that wrote it, or
@@ -49,6 +52,10 @@ class QuoteEmbed extends ComposerEmbed {
   @override
   Widget build(BuildContext context, VoidCallback remove) =>
       QuoteCard(quote: quote, onRemove: remove);
+
+  @override
+  ({String? title, String body}) get card =>
+      (title: quote.handle, body: formattedTextOf(quote.text).trim());
 }
 
 /// A quote as the composer draws it: the passage under the handle it answers,

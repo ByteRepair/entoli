@@ -1,6 +1,7 @@
 import "dart:async";
 import "dart:ui" show AppExitResponse;
 
+import "package:flutter/foundation.dart" show defaultTargetPlatform;
 import "package:flutter/material.dart";
 import "package:flutter/scheduler.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -55,6 +56,9 @@ import "ui/share/incoming_shares.dart";
 import "ui/triggers/incoming_open.dart";
 import "ui/selection.dart";
 import "ui/theme.dart";
+import "ui/shell/shell_bridge.dart";
+import "ui/app_routes.dart";
+import "ui/widgets/liquid_glass.dart";
 
 /// The model host's entry point: Entoli's own executable launched again as
 /// `entoli-models`, running the on-device models for the app that started it
@@ -89,6 +93,12 @@ void main() async {
 /// running the check again there would download the same release twice and —
 /// on Windows — arm a second exit-waiter over the first's.
 var _updateChecked = false;
+
+/// Whether this process draws in the system's glass, settled by the first
+/// session's settings. The process's for the reason [_updateChecked] is: a
+/// restore's restart is this process still running, its window already set
+/// up one way or the other.
+bool? _glassAtLaunch;
 
 /// Everything the app reads out of the data directory, and the container it is
 /// all reached through. One per run of the app — and a second one when a backup
@@ -126,6 +136,10 @@ class AppSession {
     // last step to the launch after it.
     await recoverRestore(dataDir, deleteTree: platform.deleteTree);
     final config = await AppConfig.load(dataDir);
+    final glassAvailable =
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS;
+    _glassAtLaunch ??= glassAvailable && AppSettings.load(config).liquidGlass;
     // Started here and awaited before the identity load below: the keyring
     // probe is decided once, so the identity's own first read must not race
     // this one, and the mirror the registry reads keys through is filled by
@@ -334,6 +348,9 @@ class AppSession {
         hostConfinementProvider.overrideWithValue(platform.hostConfinement()),
         appUpdateHostProvider.overrideWithValue(
           platform.createAppUpdateHost(cache),
+        ),
+        liquidGlassProvider.overrideWithValue(
+          LiquidGlass(available: glassAvailable, on: _glassAtLaunch!),
         ),
         agentBrowserProvider.overrideWithValue(browser),
         localEngineProvider.overrideWithValue(engine),
@@ -590,6 +607,10 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       darkTheme: entoliTheme(Brightness.dark, look),
       themeMode: mode,
       onGenerateRoute: appRoute,
+      navigatorObservers: [ref.read(appRoutesProvider)],
+      builder: ref.watch(liquidGlassProvider).on
+          ? (context, child) => ShellInsets(child: child!)
+          : null,
       // All four wrapped rather than folded into the shell: what another app
       // shared has to be offered a workspace over whatever is on screen and the
       // assistant gesture has to open a chat over it, both of which want a
@@ -601,11 +622,23 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
         child: IncomingAssistant(
           child: IncomingShares(
             child: IncomingTriggerOpen(
-              child: InitialSetupGate(child: WelcomeGate(child: AppShell())),
+              child: InitialSetupGate(child: WelcomeGate(child: _Shell())),
             ),
           ),
         ),
       ),
     );
   }
+}
+
+/// The Flutter app's own shell, or the Flutter half of the native one: which
+/// is the launch's, and never moves.
+class _Shell extends ConsumerWidget {
+  const _Shell();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) =>
+      ref.watch(liquidGlassProvider).on
+      ? const ShellBridge()
+      : const AppShell();
 }

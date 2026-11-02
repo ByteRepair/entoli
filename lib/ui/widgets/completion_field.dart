@@ -84,6 +84,46 @@ void insertCompletion(
   replaceIn(controller, at, at, "$space${kind.trigger}$name ");
 }
 
+/// Open [kind]'s menu in [controller] by typing its trigger — a skill's at the
+/// start of the message, the only place one is read from, and a mention's
+/// wherever the caret happens to be. One already typed at the start is
+/// reused rather than doubled.
+void openCompletion(TextEditingController controller, CompletionKind kind) {
+  final value = controller.value;
+  if (kind == CompletionKind.skill && value.text.startsWith(kind.trigger)) {
+    controller.selection = const TextSelection.collapsed(offset: 1);
+    return;
+  }
+  final at = _triggerAt(value, kind);
+  final space = at > 0 && !_isSpace(value.text.codeUnitAt(at - 1)) ? " " : "";
+  replaceIn(controller, at, at, "$space${kind.trigger}");
+}
+
+/// Take [option] for the [token] the caret is in: the token, up to the caret,
+/// becomes the whole name. The trailing space makes what follows arguments
+/// rather than more name.
+void acceptCompletion(
+  TextEditingController controller,
+  CompletionToken token,
+  CompletionOption option,
+) => replaceIn(
+  controller,
+  token.start,
+  controller.selection.baseOffset,
+  "${token.kind.trigger}${option.name} ",
+);
+
+/// What of [options] the typed [query] matches: its letters anywhere in the
+/// name, case aside.
+List<CompletionOption> matchingCompletions(
+  List<CompletionOption> options,
+  String query,
+) {
+  if (query.isEmpty) return options;
+  final needle = query.toLowerCase();
+  return options.where((o) => o.name.toLowerCase().contains(needle)).toList();
+}
+
 /// The menu entries that open a completion menu by typing its trigger, for a
 /// button that offers other things too — the composer's `+` also attaches
 /// files. Each carries its action as its value, so it runs once the menu has
@@ -233,16 +273,7 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
   /// caret happens to be. The menu that opens is tapped rather than typed at,
   /// so the field is left unfocused.
   void openMenu(CompletionKind kind) {
-    final value = widget.controller.value;
-    if (kind == CompletionKind.skill && value.text.startsWith(kind.trigger)) {
-      widget.controller.selection = const TextSelection.collapsed(offset: 1);
-    } else {
-      final at = _triggerAt(value, kind);
-      final space = at > 0 && !_isSpace(value.text.codeUnitAt(at - 1))
-          ? " "
-          : "";
-      _replace(at, at, "$space${kind.trigger}");
-    }
+    openCompletion(widget.controller, kind);
     // A caret already in place notifies nothing, so a menu that was dismissed
     // has to be reopened by hand.
     _syncToken();
@@ -266,17 +297,8 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
 
   void _accept(CompletionOption option) {
     final token = _token;
-    if (token == null) return;
-    // The trailing space makes what follows arguments rather than more name.
-    _replace(
-      token.start,
-      widget.controller.selection.baseOffset,
-      "${token.kind.trigger}${option.name} ",
-    );
+    if (token != null) acceptCompletion(widget.controller, token, option);
   }
-
-  void _replace(int start, int end, String text) =>
-      replaceIn(widget.controller, start, end, text);
 
   @override
   Widget build(BuildContext context) {
@@ -288,7 +310,7 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
     final options = token == null
         ? const <CompletionOption>[]
         : ref.watch(completionsProvider((project: project, kind: token.kind)));
-    final matches = _matching(options, token?.query ?? "");
+    final matches = matchingCompletions(options, token?.query ?? "");
 
     final field = Shortcuts(
       shortcuts: {
@@ -348,15 +370,6 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
           ? field
           : TabIndents(controller: widget.controller, child: field),
     );
-  }
-
-  List<CompletionOption> _matching(
-    List<CompletionOption> options,
-    String query,
-  ) {
-    if (query.isEmpty) return options;
-    final needle = query.toLowerCase();
-    return options.where((o) => o.name.toLowerCase().contains(needle)).toList();
   }
 
   Widget _menu(CompletionKind kind, List<CompletionOption> matches) {

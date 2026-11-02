@@ -42,10 +42,10 @@ named in a cross-reference is findable from this list.
 - `android/AGENTS.md` — Staying alive off screen, The workspaces in the Files
   app, Being the assistant, Waking for a trigger, The app icon, The debug
   build's own
-- `ios/AGENTS.md` — The icon, Export compliance, Privacy declarations, Why no host shell, The iSH driver, The rootfs, The menu bar,
+- `ios/AGENTS.md` — The icon, Export compliance, Privacy declarations, Why no host shell, The iSH driver, The rootfs, The native shell, The menu bar,
   The workspace inside the guest, Shortcuts
 - `macos/AGENTS.md` — Why no sandbox, The entitlements, What a command runs on,
-  The menu bar, Shortcuts,
+  The menu bar, The native shell, Shortcuts,
   What is absent, and honestly so, Voice mode, The icon, The DMG, Tests on
   this host
 - `macos/Runner/entoli.icon/AGENTS.md` — the app icon's Icon Composer package:
@@ -71,7 +71,8 @@ named in a cross-reference is findable from this list.
 - `lib/ui/share/AGENTS.md` — Sharing to Entoli
 - `lib/ui/AGENTS.md` — Opening a link, The theme, What the settings page can
   change about it, The keyboard and the caret, The app's commands, The menu
-  bar
+  bar, Liquid Glass (the native shell on iOS and macOS: the bridge, the
+  layout, voice mode and the glow, where the platforms differ)
 - `lib/ui/settings/AGENTS.md` — Setting overrides, What the app is, Backing it
   all up
 - `lib/ui/widgets/AGENTS.md` — Shared UI, A catalog of things to download, The

@@ -26,6 +26,7 @@ import "../selection.dart";
 import "../theme.dart";
 import "../widgets/add_button_row.dart";
 import "../widgets/busy.dart";
+import "../widgets/liquid_glass.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/editable_row.dart";
@@ -297,6 +298,9 @@ class _AppearanceSection extends ConsumerWidget {
     final notifier = ref.read(appSettingsProvider.notifier);
     final switchesLauncher = ref.watch(launcherIconsProvider).available;
     final hasSystemPalette = ref.watch(systemAccentProvider) != null;
+    final glass = ref.watch(liquidGlassProvider);
+    // Apple's look, whose colours and corners are not the app's to pick.
+    final appleLook = glass.available && settings.liquidGlass;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -331,9 +335,37 @@ class _AppearanceSection extends ConsumerWidget {
             value: settings.systemPalette,
             onChanged: notifier.setSystemPalette,
           ),
+        // In Material 3 Expressive's place on Apple's platforms, and like it
+        // the switch takes the colours' place: the app wears Apple's look.
+        if (glass.available)
+          SwitchListTile(
+            title: const Text("Liquid Glass"),
+            subtitle: const Text(
+              "Uses native system UI for drawing some parts of the app. "
+              "Changing this requires an app restart.",
+            ),
+            value: settings.liquidGlass,
+            // What this launch draws is settled at launch, so a switch that
+            // no longer matches it says so rather than appearing to do
+            // nothing. Switched back to what it started with, there is
+            // nothing to restart for.
+            onChanged: (on) async {
+              await notifier.setLiquidGlass(on);
+              if (on == glass.on || !context.mounted) return;
+              await tell(
+                context,
+                title: "Restart Entoli",
+                message:
+                    "Quit and reopen Entoli for Liquid Glass to turn "
+                    "${on ? "on" : "off"}.",
+              );
+            },
+          ),
         // One accent is the seed of the whole palette, secondary included, so
-        // while the system is picking there is nothing here to pick.
-        if (ref.watch(paletteAccentProvider) == null) ...[
+        // while the system is picking there is nothing here to pick — and
+        // under Liquid Glass neither the colours nor the corners are the
+        // app's.
+        if (ref.watch(paletteAccentProvider) == null && !appleLook) ...[
           _ChoiceRow(
             label: "Theme colours",
             children: [
@@ -356,17 +388,18 @@ class _AppearanceSection extends ConsumerWidget {
             onSecondary: notifier.setSecondaryColour,
           ),
         ],
-        _ChoiceRow(
-          label: "Corners",
-          children: [
-            for (final corner in CornerRadius.values)
-              _CornerChoice(
-                corner: corner,
-                selected: corner == settings.cornerRadius,
-                onTap: () => notifier.setCornerRadius(corner),
-              ),
-          ],
-        ),
+        if (!appleLook)
+          _ChoiceRow(
+            label: "Corners",
+            children: [
+              for (final corner in CornerRadius.values)
+                _CornerChoice(
+                  corner: corner,
+                  selected: corner == settings.cornerRadius,
+                  onTap: () => notifier.setCornerRadius(corner),
+                ),
+            ],
+          ),
         _ChoiceRow(
           label: "Icon",
           children: [

@@ -2620,6 +2620,12 @@ void main() {
         app.backend.scriptedSummary = "Everything so far.";
         await controller.send("grow a lot");
         await waitIdle(id);
+        // The compaction runs unawaited after the room settles, so idle is
+        // not yet the marker on the log: wait for that.
+        await waitFor(
+          () async => (await app.repo.openChat(id)).compactions.isNotEmpty,
+          what: "the compaction",
+        );
         expect(app.backend.compactionCalls, hasLength(1));
         final chat = await app.repo.openChat(id);
         expect(chat.compactions.single.summary, "Everything so far.");

@@ -424,6 +424,23 @@ final busyChatsProvider = Provider<ValueListenable<Set<String>>>((ref) {
   return busy;
 });
 
+/// [busyChatsProvider]'s set as a value, for what watches it rather than
+/// listening: the native shell's publishers, whose build is what they send.
+final busyChatIdsProvider = NotifierProvider<BusyChatIds, Set<String>>(
+  BusyChatIds.new,
+);
+
+class BusyChatIds extends Notifier<Set<String>> {
+  @override
+  Set<String> build() {
+    final busy = ref.watch(busyChatsProvider);
+    void changed() => state = busy.value;
+    busy.addListener(changed);
+    ref.onDispose(() => busy.removeListener(changed));
+    return busy.value;
+  }
+}
+
 /// What voice mode listens and speaks with, as the catalog page offers it:
 /// an on-device model under [localProviderId], a provider's under its id.
 ModelChoice voiceRecognitionChoice(AppSettings s) => (
@@ -842,6 +859,11 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// startup, where the platform it is on can do that.
   Future<void> setAutoUpdate(bool value) =>
       _update((s) => s.autoUpdate = value);
+
+  /// Whether the next launch draws in the system's glass; this one keeps
+  /// what it started with.
+  Future<void> setLiquidGlass(bool value) =>
+      _update((s) => s.liquidGlass = value);
 
   /// Which browser the agent drives; null turns its tools off.
   Future<void> setAgentBrowser(String? value) =>
@@ -1738,6 +1760,21 @@ final emptyChatQuestionProvider = Provider.family<String, String?>((
         );
   return emptyChatQuestionFor(project, description: description) ?? "";
 });
+
+/// [emptyChatQuestionProvider] for wherever the next chat goes: a paired
+/// device's project asks over the description that device mirrored.
+final newChatQuestionProvider = Provider.autoDispose.family<String, ProjectRef>(
+  (ref, at) => at.device == null
+      ? ref.watch(emptyChatQuestionProvider(at.project))
+      : emptyChatQuestionFor(
+              at.project,
+              description: ref
+                  .watch(remoteProjectProvider(at))
+                  ?.settings
+                  .description,
+            ) ??
+            "",
+);
 
 class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   ProjectSettingsNotifier(this.project);

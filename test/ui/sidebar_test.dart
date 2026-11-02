@@ -1,7 +1,9 @@
+import "dart:async";
 import "dart:io";
 
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/app_settings.dart";
@@ -492,6 +494,95 @@ void main() {
       expect(find.byType(ProjectPalette), findsNothing);
       expect(app.container.read(selectedProjectProvider).project, "work");
       expect(app.container.read(selectedChatIdProvider), chat.state.id);
+    });
+
+    // A pick changes what the pane shows, and a page over it that asks
+    // before it goes is asked: a discard takes the pick, a keep does not.
+    group("a pick over a page that asks first", () {
+      late String picked;
+      late WidgetRef widgetRef;
+      late BuildContext widgetContext;
+
+      Future<void> pickOverEditedPage(WidgetTester tester) async {
+        picked = (await io(
+          tester,
+          () => app.seedChat(title: "work notes"),
+        )).state.id;
+        await pumpBeside(
+          tester,
+          beside: Consumer(
+            builder: (context, ref, _) {
+              widgetRef = ref;
+              widgetContext = context;
+              return const SizedBox();
+            },
+          ),
+        );
+        final navigator = Navigator.of(widgetContext);
+        navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => const Scaffold(body: Text("chat settings")),
+          ),
+        );
+        navigator.push(
+          MaterialPageRoute<void>(
+            builder: (page) => PopScope(
+              canPop: false,
+              onPopInvokedWithResult: (didPop, _) async {
+                if (didPop) return;
+                final discard = await showDialog<bool>(
+                  context: page,
+                  builder: (dialog) => AlertDialog(
+                    title: const Text("Discard?"),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialog, false),
+                        child: const Text("Keep"),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialog, true),
+                        child: const Text("Discard"),
+                      ),
+                    ],
+                  ),
+                );
+                if (discard == true && page.mounted) Navigator.pop(page);
+              },
+              child: const Scaffold(body: Text("an edited file")),
+            ),
+          ),
+        );
+        await settleIo(tester);
+
+        unawaited(showProjectPalette(widgetContext, widgetRef));
+        await settleIo(tester);
+        await tester.tap(find.text("work notes"));
+        await settleIo(tester);
+        expect(find.text("Discard?"), findsOneWidget);
+      }
+
+      testWidgets("a discard closes every page and opens the pick", (
+        tester,
+      ) async {
+        await pickOverEditedPage(tester);
+        await tester.tap(find.text("Discard"));
+        await settleIo(tester);
+
+        expect(find.text("an edited file"), findsNothing);
+        expect(find.text("chat settings"), findsNothing);
+        expect(app.container.read(selectedChatIdProvider), picked);
+      });
+
+      testWidgets("a keep leaves the page, and the chat, as they were", (
+        tester,
+      ) async {
+        await pickOverEditedPage(tester);
+        await tester.tap(find.text("Keep"));
+        await settleIo(tester);
+
+        expect(find.text("an edited file"), findsOneWidget);
+        expect(app.container.read(selectedChatIdProvider), isNot(picked));
+      });
     });
 
     testWidgets("enter picks the row the arrow keys are on", (tester) async {

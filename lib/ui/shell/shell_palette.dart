@@ -1,0 +1,186 @@
+import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
+
+import "../../domain/models.dart";
+import "../../domain/project.dart";
+import "../../providers.dart";
+import "../selection.dart";
+import "../sidebar/project_palette.dart" show paletteListing;
+import "../sidebar/remote_projects.dart";
+import "shell_outbox.dart";
+import "../app_routes.dart";
+import "shell_sidebar.dart" show projectSymbol, remoteSymbol;
+import "snapshots.dart";
+
+/// Whether the native palette is open, what is typed in it, and which opening
+/// this is.
+typedef PaletteState = ({bool open, String query, int serial});
+
+class ShellPalette extends Notifier<PaletteState> {
+  @override
+  PaletteState build() => (open: false, query: "", serial: 0);
+
+  /// Open it empty: Cmd+K, or the menu's Switch Project.
+  void open() => state = (open: true, query: "", serial: state.serial + 1);
+
+  void close() => state = (open: false, query: "", serial: state.serial);
+
+  void search(String query) =>
+      state = (open: state.open, query: query, serial: state.serial);
+}
+
+final shellPaletteProvider = NotifierProvider<ShellPalette, PaletteState>(
+  ShellPalette.new,
+);
+
+/// Sends the [PaletteSnapshot] while the palette is open: `ProjectPalette`'s
+/// list, [paletteListing] — the default project and the built-ins, the
+/// user's projects, other devices', then every chat, running ones first — or,
+/// with something typed, the projects and chats it matches. Everything is
+/// read in [build], the publisher's own, as `SidebarPublisher` reads it and
+/// for the same reason.
+class PalettePublisher extends ConsumerWidget {
+  const PalettePublisher({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final palette = ref.watch(shellPaletteProvider);
+    ref
+        .read(shellOutboxProvider)
+        .post(
+          palette.open
+              ? _snapshot(ref, palette)
+              : PaletteSnapshot(open: false, serial: palette.serial),
+        );
+    return const SizedBox.shrink();
+  }
+
+  PaletteSnapshot _snapshot(WidgetRef ref, PaletteState palette) {
+    final running = ref.watch(busyChatIdsProvider);
+    final selected = ref.watch(selectedProjectProvider);
+    final selectedChat = ref.watch(selectedChatIdProvider);
+    final chats = (ref.watch(chatListProvider).value ?? const <ChatState>[])
+        .where((c) => !c.isExpired())
+        .toList();
+    final (:counts, :busy) = projectCounts(chats, running);
+
+    PaletteItem local(String? p) => PaletteItem(
+      id: "p::${p ?? ""}",
+      label: projectLabel(p),
+      project: p,
+      symbol: projectSymbol(p),
+      omada: ref.watch(omadaOnProvider(p)),
+      trailing: "${counts[p] ?? 0}",
+      busy: busy.contains(p),
+      current: selected == localProject(p),
+    );
+    PaletteItem mirrored(RemoteEntry e) => PaletteItem(
+      id: "p:${e.scope.device}:${e.scope.project ?? ""}",
+      label: e.label,
+      device: e.scope.device,
+      project: e.scope.project,
+      symbol: remoteSymbol,
+      omada: e.omada,
+      trailing: "${e.count}",
+      current: e.scope == selected,
+    );
+
+    final listing = paletteListing(
+      named: ref.watch(projectListProvider).value ?? const <String>[],
+      chats: chats,
+      remotes: remoteEntries(
+        ref.watch(remoteChatsProvider),
+        ref.watch(deviceProjectsProvider),
+        ref.watch(syncPeersProvider),
+      ),
+      query: palette.query,
+      running: running,
+    );
+    final sections = <({String heading, List<PaletteItem> items})>[
+      if (!listing.searching) ...[
+        (heading: "", items: [for (final p in listing.projects) local(p)]),
+        (heading: "", items: [for (final p in listing.mine) local(p)]),
+        (
+          heading: "Other Devices",
+          items: [for (final e in listing.devices) mirrored(e)],
+        ),
+      ] else
+        (
+          heading: "Projects",
+          items: [
+            for (final p in listing.projects) local(p),
+            for (final e in listing.devices) mirrored(e),
+          ],
+        ),
+      (
+        heading: "Chats",
+        items: [
+          for (final chat in listing.chats)
+            PaletteItem(
+              id: "c:${chat.id}",
+              label: chat.title.orUntitled,
+              chat: chat.id,
+              trailing: projectLabel(chat.project),
+              busy: running.contains(chat.id),
+              current: chat.id == selectedChat,
+            ),
+        ],
+      ),
+    ];
+    return PaletteSnapshot(
+      open: true,
+      query: palette.query,
+      sections: [
+        for (final s in sections)
+          if (s.items.isNotEmpty) s,
+      ],
+      serial: palette.serial,
+      omadaByDefault: ref.watch(
+        appSettingsProvider.select((s) => s.omadaByDefault),
+      ),
+    );
+  }
+}
+
+/// Runs what the native palette sends, in [context] under the Navigator.
+/// Answers what the Swift waits on, which is nothing: a project made from the
+/// palette is the sidebar's `createProject`.
+Future<Object?> runPaletteIntent(
+  BuildContext context,
+  WidgetRef ref,
+  ShellIntent intent,
+) async {
+  final palette = ref.read(shellPaletteProvider.notifier);
+  switch (intent.name) {
+    case "search":
+      palette.search(intent.maybeString("query") ?? "");
+    case "close":
+      palette.close();
+    case "pickProject":
+      palette.close();
+      if (!await toConversation(context, ref.read(appRoutesProvider))) {
+        return null;
+      }
+      selectProject(ref, (
+        device: intent.maybeString("device"),
+        project: intent.maybeString("project"),
+      ));
+    case "pickChat":
+      palette.close();
+      final id = intent.string("chat");
+      final chat = ref
+          .read(chatListProvider)
+          .value
+          ?.where((c) => c.id == id)
+          .firstOrNull;
+      if (chat == null) return null;
+      if (!context.mounted ||
+          !await toConversation(context, ref.read(appRoutesProvider))) {
+        return null;
+      }
+      // Into its project first: the sidebar lists one, and would otherwise
+      // deny the chat on screen.
+      ref.read(selectedChatIdProvider.notifier).reveal(chat);
+  }
+  return null;
+}

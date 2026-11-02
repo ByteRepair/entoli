@@ -1,0 +1,22 @@
+name: entoli_glass
+description: Entoli's chrome drawn by Apple's own frameworks on iOS and macOS, around the Flutter that draws the conversation.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.2
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      ios:
+        pluginClass: EntoliGlassPlugin
+        sharedDarwinSource: true
+      macos:
+        pluginClass: EntoliGlassPlugin
+        sharedDarwinSource: true

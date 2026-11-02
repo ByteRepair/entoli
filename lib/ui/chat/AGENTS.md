@@ -827,9 +827,10 @@ project, and the pin or the countdown. It followed the scroll position at
 first — the mark and "Entoli" at the top of the list, the title once past it —
 and that put the app's name where the chat's belongs for every conversation
 short enough not to scroll, which is most of the ones being started. The mark is
-still on the bar for the three places there is no chat to name — the new-chat
-screen, a chat being read off disk, and a paired device's list with nothing
-picked out of it.
+still on the bar for the two places there is no chat to name — the new-chat
+screen and a chat being read off disk. Under the native shell there is no
+Flutter bar at all: the window's toolbar names the chat (see "Liquid Glass" in
+`lib/ui/AGENTS.md`).
 
 **The bar grows with what it has to say.** Every line is counted, the title's
 own included, and Material's 56dp toolbar is only the floor. Counting up from
@@ -897,11 +898,10 @@ utterance. Both go through `SelectedChatId.create`, which is a method on the
 notifier rather than a function beside the widgets for a plain reason — a
 `Notifier` has a `Ref` and no `WidgetRef`, and the voice controller is one.
 
-The one place nothing selected is not a new chat is a paired device's list,
-which `ChatPage` checks first: a new chat is this device's and takes the sidebar
-home with it, so picking a device would bounce straight back off it. That arm
-says to pick a chat, and is now a peer of the new-chat arm rather than an
-exception to it — neither writes anything.
+There is no exception for a paired device either: with one of its projects
+picked, nothing selected is the new-chat screen for that project, its question
+and starters that device's, and the first message asks the device to make the
+chat.
 
 `NewChatSettingsPage` is the settings of a chat that does not exist yet: the
 model, the approve mode, the memory switch and the TTL, which are values and

@@ -74,6 +74,28 @@ Window tabbing is off (`NSWindow.allowsAutomaticWindowTabbing`, in
 `MainFlutterWindow.awakeFromNib`): the app has one window, and AppKit would
 otherwise add Show Tab Bar and Show All Tabs to the View menu.
 
+## The native shell
+
+With Liquid Glass on (see "Liquid Glass" in `lib/ui/AGENTS.md`) the window's
+content is SwiftUI's, and the Runner does not know: `MainFlutterWindow` makes
+the `FlutterViewController` and its channels exactly as it always has, and the
+`entoli_glass` plugin, on Dart's `start`, puts an `NSHostingController` in as
+the window's content with that same controller embedded in it — taken as a
+child of a container rather than handed to SwiftUI, since SwiftUI makes a
+representable's controller again whenever its identity changes and the
+Flutter one has one parent at a time. The frame is kept, `sizingOptions` is
+empty so nothing SwiftUI lays out resizes the window, and
+`sceneBridgingOptions` makes the split view's toolbar and title the window's
+own, unified, over full-size content. The wake and hide paths, the model host
+and every channel are untouched; only what fills the window changes.
+
+The sidebar is a `NavigationSplitView` column, which on 26 floats over the
+detail: the Flutter view runs under the toolbar and the composer and never
+under it. The window's appearance is `NSApp.appearance`, not the window's,
+since a popover, a menu and a sheet are windows of their own. The menu bar
+stays Flutter's, and the native composer takes its own editing keys — see
+"Where the platforms differ" under "Liquid Glass" in `lib/ui/AGENTS.md`.
+
 ## Shortcuts
 
 Entoli's actions in the Shortcuts app, and through it Siri and Spotlight, on

@@ -17,6 +17,24 @@ const runningSources = <RunningSource>[
   subAgentsRunning,
 ];
 
+/// What [chatId] has running, from each of [runningSources] in turn: the
+/// things that stand alone, and the rest gathered by their group.
+({List<RunningThing> alone, Map<String, List<RunningThing>> groups}) runningOf(
+  WidgetRef ref,
+  ChatViewState view,
+  String chatId,
+) {
+  final alone = <RunningThing>[];
+  final groups = <String, List<RunningThing>>{};
+  for (final source in runningSources) {
+    for (final thing in source(ref, view, chatId)) {
+      final group = thing.group;
+      group == null ? alone.add(thing) : (groups[group] ??= []).add(thing);
+    }
+  }
+  return (alone: alone, groups: groups);
+}
+
 /// What the chat has running beside the reply, as one row of pills that
 /// scrolls sideways: what each of [runningSources] has, those of a kind
 /// gathered into a group that opens to a pill apiece. Not turn-scoped: a
@@ -63,14 +81,7 @@ class _RunningStripState extends ConsumerState<RunningStrip> {
     final view = widget.view;
     final chatId = view.chat?.state.id;
     if (chatId == null) return const SizedBox.shrink();
-    final alone = <RunningThing>[];
-    final groups = <String, List<RunningThing>>{};
-    for (final source in runningSources) {
-      for (final thing in source(ref, view, chatId)) {
-        final group = thing.group;
-        group == null ? alone.add(thing) : (groups[group] ??= []).add(thing);
-      }
-    }
+    final (:alone, :groups) = runningOf(ref, view, chatId);
     Widget pill(RunningThing thing) => Builder(
       builder: (context) => RunningPill(
         label: thing.label,

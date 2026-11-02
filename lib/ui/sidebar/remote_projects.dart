@@ -1,5 +1,6 @@
 import "../../data/sync/peers.dart" show PeerState;
 import "../../data/sync/sync_hub.dart" show RemoteChatEntry;
+import "../../domain/models.dart" show ChatState;
 import "../../domain/project.dart";
 
 /// How a project on a paired device is read out. Its default project is the
@@ -43,4 +44,19 @@ List<RemoteEntry> remoteEntries(
     (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
   );
   return entries;
+}
+
+/// How many of [chats] each project of this device's holds, and which of them
+/// has one of [running]: what the project lists draw beside each name.
+({Map<String?, int> counts, Set<String?> busy}) projectCounts(
+  Iterable<ChatState> chats,
+  Set<String> running,
+) {
+  final counts = <String?, int>{};
+  final busy = <String?>{};
+  for (final chat in chats) {
+    counts[chat.project] = (counts[chat.project] ?? 0) + 1;
+    if (running.contains(chat.id)) busy.add(chat.project);
+  }
+  return (counts: counts, busy: busy);
 }

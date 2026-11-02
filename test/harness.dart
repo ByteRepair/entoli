@@ -46,7 +46,9 @@ import "package:agent_chat/ui/chat/activity/activities.dart"
 import "package:agent_chat/ui/chat/activity/activity.dart"
     show activityCatalogProvider;
 import "package:agent_chat/ui/widgets/resettable_field.dart" show LabelledField;
+import "package:agent_chat/ui/app_routes.dart";
 import "package:agent_chat/ui/routes.dart";
+import "package:agent_chat/ui/widgets/liquid_glass.dart";
 import "package:agent_chat/ui/widgets/model_picker.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/trigger.dart";
@@ -199,6 +201,7 @@ class TestApp {
     http.Client? marketplaceClient,
     Future<bool> Function(String apiKey)? acceptsKey,
     AgentBrowser Function(AppConfig config)? browser,
+    LiquidGlass liquidGlass = const LiquidGlass(),
   }) {
     final config = tempConfig();
     seedCatalog(testProviderModels);
@@ -274,6 +277,7 @@ class TestApp {
                 PromptLibraryNotifier(project, library ?? testLibrary()),
           ),
           launcherIconsProvider.overrideWithValue(launcher),
+          liquidGlassProvider.overrideWithValue(liquidGlass),
           appUpdateHostProvider.overrideWithValue(updateHost),
           systemAccentProvider.overrideWithValue(systemAccent),
           fileHandoffProvider.overrideWithValue(files),
@@ -501,6 +505,9 @@ class TestApp {
         child: MaterialApp(
           theme: entoliTheme(brightness),
           onGenerateRoute: appRoute,
+          // As `main` attaches it: what closes the pages over the
+          // conversation counts them by it.
+          navigatorObservers: [container.read(appRoutesProvider)],
           home: FocusFollowsKeyboard(child: child),
         ),
       ),

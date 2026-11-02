@@ -20,6 +20,11 @@ class ResumeBar extends StatelessWidget {
   /// "Step limit reached" when the turn ended that way.
   final String? notice;
 
+  /// What the bar says: [notice], else how long ago the turn was started.
+  static String lineOf(DateTime startedAt, {String? notice}) =>
+      notice ??
+      "Unfinished turn from ${formatAge(DateTime.now().difference(startedAt))}";
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -40,8 +45,7 @@ class ResumeBar extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              notice ??
-                  "Unfinished turn from ${formatAge(DateTime.now().difference(startedAt))}",
+              lineOf(startedAt, notice: notice),
               style: theme.textTheme.bodySmall,
             ),
           ),
