@@ -47,6 +47,7 @@ extension ShellModel {
 /// The strip over the Flutter view: a capsule of the system's glass just
 /// above what opened it, centred on it and kept inside the view, each choice
 /// a glass button of its own. A click anywhere else, or Escape, dismisses it.
+/// A layer of `FlutterCanvas`, which gives it the view's frame.
 struct StripLayer: View {
   @ObservedObject var model: ShellModel
   @Namespace private var glass
@@ -69,7 +70,7 @@ struct StripLayer: View {
         #endif
       }
     }
-    .ignoresSafeArea()
+    // Its frame is the canvas's: see `FlutterCanvas`, which says the edges.
     .animation(.snappy(duration: 0.18), value: model.strip)
   }
 

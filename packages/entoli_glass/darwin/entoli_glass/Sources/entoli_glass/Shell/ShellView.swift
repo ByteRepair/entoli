@@ -29,15 +29,12 @@ struct ShellView: View {
         .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 400)
     } detail: {
       GeometryReader { proxy in
-        FlutterPane(controller: flutter)
-          // Under the toolbar and the composer, which it scrolls beneath;
-          // never under the sidebar, which on 26 floats over the detail.
-          .ignoresSafeArea(edges: [.top, .bottom])
-          // In the Flutter view's own coordinates, which a strip's anchor is.
-          .overlay { StripLayer(model: model) }
-          .onChange(of: proxy.safeAreaInsets, initial: true) { _, insets in
-            model.insets(EdgeInsets(top: insets.top, leading: 0, bottom: insets.bottom, trailing: 0))
-          }
+        FlutterCanvas(flutter: flutter) {
+          StripLayer(model: model)
+        }
+        .onChange(of: proxy.safeAreaInsets, initial: true) { _, insets in
+          model.insets(EdgeInsets(top: insets.top, leading: 0, bottom: insets.bottom, trailing: 0))
+        }
       }
       // Over the Flutter view, which draws nothing there: the new-chat
       // screen, between the toolbar and the composer.
@@ -93,6 +90,34 @@ struct ShellView: View {
       let shown = columns != .detailOnly
       if shown != model.window.sidebarShown { model.intent("sidebar", ["shown": shown]) }
     }
+  }
+}
+
+/// The Flutter view, and every layer drawn in its coordinates over it — a
+/// strip anchored on a button in a message, and whatever comes next. One
+/// container, so what the layers share is said once: the view runs under the
+/// toolbar and the composer, which it scrolls beneath, and never under the
+/// sidebar, which on 26 floats over the detail; a layer is laid out over
+/// exactly the view's frame, so a point Dart names is the same point here;
+/// and nothing a layer draws leaves that frame, so none of them can end up
+/// behind the sidebar however it lays itself out.
+struct FlutterCanvas<Layers: View>: View {
+  let flutter: PlatformViewController
+  @ViewBuilder var layers: Layers
+
+  /// The edges the view and its layers run under.
+  static var edges: Edge.Set { [.top, .bottom] }
+
+  var body: some View {
+    ZStack(alignment: .topLeading) {
+      FlutterPane(controller: flutter)
+        .ignoresSafeArea(edges: Self.edges)
+      layers
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .ignoresSafeArea(edges: Self.edges)
+    }
+    .ignoresSafeArea(edges: Self.edges)
+    .clipped()
   }
 }
 
