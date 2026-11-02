@@ -1545,7 +1545,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
             onWithdrawn: (said) => _handle?.restore(said),
           ),
         switch (view.roomPhase) {
-          RoomPhase.waitingOnYou => TurnQuestions(view: view, notifier: driver),
+          // The shell draws the question with the rest of the turn surface,
+          // in the composer's place.
+          RoomPhase.waitingOnYou =>
+            ref.watch(liquidGlassProvider).shell
+                ? const SizedBox.shrink()
+                : TurnQuestions(view: view, notifier: driver),
           _ => _composerOf(
             ref,
             key: _composer,

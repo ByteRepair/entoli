@@ -27,14 +27,33 @@ struct TurnState: Decodable, Equatable {
     var project = false
   }
 
+  struct Option: Decodable, Equatable {
+    var label: String
+    var detail: String?
+    var answer: String
+  }
+
+  struct Question: Decodable, Equatable {
+    var question: String
+    var summary: String?
+    var options: [Option]
+  }
+
+  struct Asked: Decodable, Equatable {
+    var id: String
+    var questions: [Question]
+  }
+
   var resume: String?
   var running: [Running] = []
   var steers: [Steer] = []
   var withdrawable = false
   var approvals: [Approval] = []
+  var question: Asked?
 
   var isEmpty: Bool {
     resume == nil && running.isEmpty && steers.isEmpty && approvals.isEmpty
+      && question == nil
   }
 }
 
@@ -56,6 +75,15 @@ struct TurnSurfaceView: View {
       if !turn.running.isEmpty { runningRow }
       if !turn.steers.isEmpty { steerCard }
       ForEach(turn.approvals) { approvalCard($0) }
+      if let asked = turn.question {
+        QuestionPanel(asked: asked) { answers in
+          let sent: [Any] = answers.map { answer -> Any in answer ?? NSNull() }
+          say("answer", ["id": asked.id, "answers": sent])
+        }
+        // A new request starts again: what was picked was for the last one.
+        .id(asked.id)
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
+      }
     }
     .padding(.horizontal, 8)
     .animation(ComposerView.motion, value: turn)

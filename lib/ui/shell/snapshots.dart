@@ -1,5 +1,7 @@
 import "dart:convert";
 
+import "../../domain/ask.dart" show AskQuestion;
+
 /// What the native shell draws, one concern at a time, and what it sends
 /// back. The shell is SwiftUI around the one Flutter view on iOS and macOS
 /// with Liquid Glass on; it holds no state of its own past what a snapshot
@@ -499,7 +501,13 @@ class TurnSnapshot extends ShellSnapshot {
     this.steers = const [],
     this.withdrawable = false,
     this.approvals = const [],
+    this.question,
   });
+
+  /// What the turn is waiting to be told, in the composer's place: the
+  /// request's id and its questions, each with its options. The shell holds
+  /// what is picked until Send, as the Flutter panel does.
+  final ({String id, List<AskQuestion> questions})? question;
 
   static const none = TurnSnapshot();
 
@@ -526,5 +534,22 @@ class TurnSnapshot extends ShellSnapshot {
     ],
     "withdrawable": withdrawable,
     "approvals": [for (final a in approvals) a.toMap()],
+    "question": switch (question) {
+      null => null,
+      (:final id, :final questions) => {
+        "id": id,
+        "questions": [
+          for (final q in questions)
+            {
+              "question": q.question,
+              "summary": q.summary,
+              "options": [
+                for (final o in q.options)
+                  {"label": o.label, "detail": o.detail, "answer": o.answer},
+              ],
+            },
+        ],
+      },
+    },
   };
 }

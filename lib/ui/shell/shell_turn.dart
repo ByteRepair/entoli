@@ -94,6 +94,13 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface> {
               ? approval
               : null,
         );
+      case "answer":
+        // One per question, null for each left unanswered.
+        final answers = [
+          for (final answer in args["answers"]! as List<Object?>)
+            answer as String?,
+        ];
+        await notifier.answerQuestions(id(), answers);
     }
   }
 
@@ -115,6 +122,10 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface> {
     }
     // Standing alone first, as the Flutter strip draws them.
     _running = [...alone, ...grouped];
+    // One panel, the first turn waiting on answers, as `TurnQuestions` draws.
+    final asked = view.roomPhase == RoomPhase.waitingOnYou
+        ? view.questions.values.expand((q) => q).firstOrNull
+        : null;
     _outbox.post(
       TurnSnapshot(
         resume: chat != null && chat.unfinished && !view.isRunning
@@ -141,6 +152,9 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface> {
           for (final approvals in view.approvals.values)
             for (final approval in approvals) _approval(approval, notifier),
         ],
+        question: asked == null
+            ? null
+            : (id: asked.id, questions: asked.questions),
       ),
     );
     return const SizedBox.shrink();
