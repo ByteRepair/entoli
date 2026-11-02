@@ -23,6 +23,14 @@ class ShellOutbox {
     _sent[snapshot.concern] = encoded;
     send(snapshot.concern, snapshot.toMap());
   }
+
+  /// Take [snapshot] as what the Swift already shows, without sending it:
+  /// what it reported itself, which sent back would undo what it is doing.
+  void remember(ShellSnapshot snapshot) =>
+      _sent[snapshot.concern] = snapshot.encode();
+
+  /// A one-off with nothing to compare against, such as taking the focus.
+  void say(String concern) => send(concern, const {});
 }
 
 final shellOutboxProvider = Provider<ShellOutbox>(

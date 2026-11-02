@@ -17,7 +17,7 @@ import "composer_controller.dart";
 import "composer_embed.dart";
 import "composer_logic.dart";
 
-export "composer_logic.dart" show SendCallback;
+export "composer_logic.dart" show ComposerHandle, SendCallback;
 
 class _SendIntent extends Intent {
   const _SendIntent();
@@ -115,7 +115,7 @@ class Composer extends ConsumerStatefulWidget {
   ConsumerState<Composer> createState() => ComposerState();
 }
 
-class ComposerState extends ConsumerState<Composer> {
+class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   final GlobalKey<CompletionFieldState> _field = GlobalKey();
 
   /// Held only so [embed] can put the caret in the field.
@@ -197,6 +197,7 @@ class ComposerState extends ConsumerState<Composer> {
   /// what is typed next answers it. Focused, unlike everything else here:
   /// choosing Reply is asking to write, and a caret left wherever the field
   /// last had one lands what is typed beside the card.
+  @override
   void embed(ComposerEmbed embed) {
     widget.controller.append(embed);
     _focus.requestFocus();
@@ -204,6 +205,7 @@ class ComposerState extends ConsumerState<Composer> {
 
   /// Put back a message that was sent and taken back, ahead of whatever has
   /// been typed or attached since.
+  @override
   void restore(Draft said) => _logic.restore(said);
 
   void _submit({bool queue = false}) => _logic.submit(queue: queue);

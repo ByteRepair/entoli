@@ -15,6 +15,10 @@ final class ShellModel: ObservableObject {
 
   @Published var window = WindowState()
   @Published var sidebar = SidebarState()
+  @Published var chatBar = ChatBarState()
+
+  /// The composer's own object, so a keystroke redraws it and nothing else.
+  private(set) lazy var composer = ComposerModel(shell: self)
 
   /// Told when the window's own state changes, for what SwiftUI cannot set:
   /// the window's appearance.
@@ -33,6 +37,14 @@ final class ShellModel: ObservableObject {
       }
     case "sidebar":
       if let state: SidebarState = decode(value), state != sidebar { sidebar = state }
+    case "chatBar":
+      if let state: ChatBarState = decode(value), state != chatBar { chatBar = state }
+    case "composer":
+      if let look: ComposerLook = decode(value) { composer.apply(look) }
+    case "composerValue":
+      if let value: ComposerValue = decode(value) { composer.apply(value) }
+    case "composerFocus":
+      composer.focus()
     default:
       break
     }
@@ -43,9 +55,14 @@ final class ShellModel: ObservableObject {
   func intent(
     _ name: String, _ args: [String: Any?] = [:], done: ((String?) -> Void)? = nil
   ) {
+    intent(name, args) { done?($0 as? String) }
+  }
+
+  /// [intent], hearing whatever Dart answered.
+  func intent(_ name: String, _ args: [String: Any?], answered: ((Any?) -> Void)?) {
     let args = args.mapValues { $0 ?? NSNull() }
     channel.invokeMethod("intent", arguments: ["name": name, "args": args]) { answer in
-      done?(answer as? String)
+      answered?(answer)
     }
   }
 
@@ -85,4 +102,22 @@ struct WindowState: Decodable, Equatable {
     default: nil
     }
   }
+}
+
+/// `ToolbarItem`.
+struct ToolbarItemState: Decodable, Equatable, Identifiable {
+  var id: String
+  var label: String
+  var symbol: String?
+  var spinner = false
+}
+
+/// `ChatBarSnapshot`.
+struct ChatBarState: Decodable, Equatable {
+  var title = "Entoli"
+  var subtitle = ""
+  var expiresAt: Double?
+  var items: [ToolbarItemState] = []
+
+  var expires: Date? { expiresAt.map { Date(timeIntervalSince1970: $0 / 1000) } }
 }

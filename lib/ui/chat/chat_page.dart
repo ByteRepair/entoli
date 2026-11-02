@@ -14,6 +14,7 @@ import "../../domain/agent_backend.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/end_turn.dart";
 import "../../domain/models.dart";
+import "../../domain/plan.dart" show sectionsProgress;
 import "../../domain/reaction.dart" show Reactions, reactionsOn;
 import "../../domain/room/room_state.dart";
 import "../../domain/project.dart";
@@ -26,13 +27,16 @@ import "../voice/read_aloud.dart";
 import "../voice/voice_page.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/chip_row.dart";
+import "../shell/shell_composer.dart";
+import "../shell/snapshots.dart" show ToolbarItem;
 import "../widgets/completion_field.dart";
+import "../widgets/liquid_glass.dart";
 import "../widgets/side_panel_frame.dart";
 import "../widgets/scrolling.dart";
 import "chat_settings_page.dart";
 import "chat_controller.dart";
 import "mirror_controller.dart";
-import "plan_page.dart" show PlanButton;
+import "plan_page.dart" show PlanButton, openPlan;
 import "activity/card.dart" show ActivitySource, liveMessageOf;
 import "activity/format.dart" show formatRemaining;
 import "widgets/chapter_rail.dart";
@@ -44,8 +48,55 @@ import "widgets/message_bubble.dart";
 import "widgets/message_text.dart";
 import "widgets/omada_separator.dart" show ConversationSeparator;
 import "widgets/needs_setup_bar.dart";
+import "widgets/plan_view.dart" show planProvider;
 import "widgets/turn_surface.dart";
 import "widgets/view_only_bar.dart";
+
+/// The page's composer: Flutter's, or with the native shell the one it draws,
+/// both with [Composer]'s arguments and the same rules.
+Widget _composerOf(
+  WidgetRef ref, {
+  Key? key,
+  required ComposerController controller,
+  required bool agentSpeaking,
+  required SendCallback onSend,
+  required VoidCallback onAbort,
+  SendCallback? onQueue,
+  bool Function(String text)? steers,
+  String? project,
+  String? device,
+  VoidCallback? onVoice,
+  required String? workspace,
+  String? workspaceHome,
+}) => ref.watch(liquidGlassProvider).shell
+    ? ShellComposer(
+        key: key,
+        controller: controller,
+        agentSpeaking: agentSpeaking,
+        onSend: onSend,
+        onAbort: onAbort,
+        onQueue: onQueue,
+        steers: steers,
+        project: project,
+        device: device,
+        onVoice: onVoice,
+        workspace: workspace,
+        workspaceHome: workspaceHome,
+      )
+    : Composer(
+        key: key,
+        controller: controller,
+        agentSpeaking: agentSpeaking,
+        onSend: onSend,
+        onAbort: onAbort,
+        onQueue: onQueue,
+        steers: steers,
+        project: project,
+        device: device,
+        onVoice: onVoice,
+        workspace: workspace,
+        workspaceHome: workspaceHome,
+      );
 
 class ChatPage extends ConsumerWidget {
   const ChatPage({super.key});
@@ -79,6 +130,8 @@ class _ReadableColumn extends StatelessWidget {
   const _ReadableColumn({
     required this.child,
     required this.bottom,
+    this.shell = false,
+    this.bar,
     this.banner,
     this.side,
     this.sideWidth = 0,
@@ -86,6 +139,14 @@ class _ReadableColumn extends StatelessWidget {
 
   final Widget child;
   final Widget bottom;
+
+  /// Inside the native shell, whose toolbar is over the top of the page and
+  /// whose composer is under the bottom of it: the conversation scrolls under
+  /// the toolbar, and what is at the bottom sits above the composer.
+  final bool shell;
+
+  /// What publishes the shell's toolbar for this page; nothing on screen.
+  final Widget? bar;
   final Widget? banner;
   final Widget? side;
   final double sideWidth;
@@ -94,7 +155,32 @@ class _ReadableColumn extends StatelessWidget {
   static const _sideGap = 16.0;
 
   @override
-  Widget build(BuildContext context) => Column(
+  Widget build(BuildContext context) {
+    final insets = MediaQuery.paddingOf(context);
+    final page = _column(context);
+    if (!shell) return page;
+    return Stack(
+      children: [
+        ?bar,
+        Positioned.fill(
+          child: MediaQuery.removePadding(
+            context: context,
+            removeBottom: true,
+            removeTop: banner != null,
+            child: Padding(
+              padding: EdgeInsets.only(
+                top: banner != null ? insets.top : 0,
+                bottom: insets.bottom,
+              ),
+              child: page,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _column(BuildContext context) => Column(
     children: [
       ?banner,
       Expanded(
@@ -207,7 +293,8 @@ class _NewChatState extends ConsumerState<_NewChat> {
     // A paired device's project: its setup and its voice are that device's.
     if (at.device != null) {
       if (ref.watch(projectFrozenProvider(at))) return const ViewOnlyBar();
-      return Composer(
+      return _composerOf(
+        ref,
         controller: _controller,
         agentSpeaking: false,
         onSend: _send,
@@ -218,7 +305,8 @@ class _NewChatState extends ConsumerState<_NewChat> {
       );
     }
     if (ref.watch(setupCompleteProvider(project))) {
-      return Composer(
+      return _composerOf(
+        ref,
         controller: _controller,
         agentSpeaking: false,
         onSend: _send,
@@ -234,22 +322,41 @@ class _NewChatState extends ConsumerState<_NewChat> {
   @override
   Widget build(BuildContext context) {
     final at = ref.watch(selectedProjectProvider);
+    final shell = ref.watch(liquidGlassProvider).shell;
     return Scaffold(
-      appBar: AppBar(
-        leading: SidePanelButton.leadingOf(context),
-        title: const _AppBrand(),
-        actions: [
-          // A paired device's chat takes its settings once it is there:
-          // these name this device's models.
-          if (at.device == null)
-            IconButton(
-              icon: const Icon(Icons.tune),
-              tooltip: "Chat settings",
-              onPressed: _openSettings,
+      appBar: shell
+          ? null
+          : AppBar(
+              leading: SidePanelButton.leadingOf(context),
+              title: const _AppBrand(),
+              actions: [
+                // A paired device's chat takes its settings once it is there:
+                // these name this device's models.
+                if (at.device == null)
+                  IconButton(
+                    icon: const Icon(Icons.tune),
+                    tooltip: "Chat settings",
+                    onPressed: _openSettings,
+                  ),
+              ],
             ),
-        ],
-      ),
       body: _ReadableColumn(
+        shell: shell,
+        bar: !shell
+            ? null
+            : ShellChatBar(
+                title: "New Chat",
+                subtitle: at.project == null ? "" : projectLabel(at.project),
+                items: [
+                  if (at.device == null)
+                    const ToolbarItem(
+                      id: "settings",
+                      label: "Chat settings",
+                      symbol: "slider.horizontal.3",
+                    ),
+                ],
+                actions: {"settings": _openSettings},
+              ),
         bottom: _bottomBar(),
         child: _starting
             ? const Center(child: CircularProgressIndicator())
@@ -727,7 +834,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   final ComposerController _controller = ComposerController();
 
   /// What a steer taken back is put back into, attachments and all.
-  final GlobalKey<ComposerState> _composer = GlobalKey();
+  final GlobalKey _composer = GlobalKey();
+
+  /// The composer on screen, whichever draws it.
+  ComposerHandle? get _handle => _composer.currentState as ComposerHandle?;
   late final ScrollController _scroll = ScrollController();
   late final ScrollFollow _follow = ScrollFollow(_scroll);
 
@@ -1226,38 +1336,43 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
         ],
       ),
     );
+    final shell = ref.watch(liquidGlassProvider).shell;
     return Scaffold(
-      appBar: AppBar(
-        leading: SidePanelButton.leadingOf(context),
-        titleSpacing: 0,
-        toolbarHeight: barHeight,
-        title: InkWell(
-          onTap: () => openChatSettings(context, widget.chatId),
-          // Fills the bar between leading and actions so the whole strip
-          // opens the chat's settings, not just the text.
-          child: SizedBox(
-            height: barHeight,
-            width: double.infinity,
-            child: Align(alignment: Alignment.centerLeft, child: title),
-          ),
-        ),
-        actions: [
-          if (view.isRunning)
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Theme.of(context).colorScheme.onSurface,
+      appBar: shell
+          ? null
+          : AppBar(
+              leading: SidePanelButton.leadingOf(context),
+              titleSpacing: 0,
+              toolbarHeight: barHeight,
+              title: InkWell(
+                onTap: () => openChatSettings(context, widget.chatId),
+                // Fills the bar between leading and actions so the whole strip
+                // opens the chat's settings, not just the text.
+                child: SizedBox(
+                  height: barHeight,
+                  width: double.infinity,
+                  child: Align(alignment: Alignment.centerLeft, child: title),
                 ),
               ),
+              actions: [
+                if (view.isRunning)
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
+                PlanButton(chatId: widget.chatId),
+              ],
             ),
-          PlanButton(chatId: widget.chatId),
-        ],
-      ),
       body: _ReadableColumn(
+        shell: shell,
+        bar: !shell ? null : _shellBar(chat.state, view),
         banner: banner,
         bottom: bottom,
         side: ValueListenableBuilder<_Outline>(
@@ -1324,11 +1439,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
         TurnSurface(
           view: view,
           notifier: driver,
-          onWithdrawn: (said) => _composer.currentState?.restore(said),
+          onWithdrawn: (said) => _handle?.restore(said),
         ),
         switch (view.roomPhase) {
           RoomPhase.waitingOnYou => TurnQuestions(view: view, notifier: driver),
-          _ => Composer(
+          _ => _composerOf(
+            ref,
             key: _composer,
             controller: _controller,
             agentSpeaking: view.roomPhase == RoomPhase.agentSpeaking,
@@ -1351,7 +1467,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   /// A passage being answered, into the composer — or, while a question
   /// stands in its place, into what the composer will hold when it is back.
   void _reply(ComposerEmbed quote) {
-    final composer = _composer.currentState;
+    final composer = _handle;
     composer == null ? _controller.append(quote) : composer.embed(quote);
   }
 
@@ -1499,6 +1615,40 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
           ),
         ),
       ],
+    );
+  }
+
+  /// The shell's toolbar for this chat: its title, what [_details] says
+  /// under it as one line, the running spinner, the plan and the settings.
+  Widget _shellBar(ChatState state, ChatViewState view) {
+    final plan = ref.watch(planProvider(widget.chatId)).value;
+    final progress = plan == null ? null : sectionsProgress(plan);
+    return ShellChatBar(
+      title: state.title.orUntitled,
+      subtitle: [
+        if (state.project != null) projectLabel(state.project),
+        if (state.pinned) "Pinned",
+      ].join(" · "),
+      expiresAt: state.tempTtlExpiresAt,
+      items: [
+        if (view.isRunning)
+          const ToolbarItem(id: "running", label: "Running", spinner: true),
+        if (progress != null)
+          ToolbarItem(
+            id: "plan",
+            label: "Plan, ${progress.$1} of ${progress.$2} done",
+            symbol: "checklist",
+          ),
+        const ToolbarItem(
+          id: "settings",
+          label: "Chat settings",
+          symbol: "info.circle",
+        ),
+      ],
+      actions: {
+        "plan": () => openPlan(context, widget.chatId),
+        "settings": () => openChatSettings(context, widget.chatId),
+      },
     );
   }
 

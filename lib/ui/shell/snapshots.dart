@@ -226,3 +226,193 @@ class SidebarSnapshot extends ShellSnapshot {
     "omadaByDefault": omadaByDefault,
   };
 }
+
+/// One button of the chat's toolbar, or its spinner.
+class ToolbarItem {
+  const ToolbarItem({
+    required this.id,
+    required this.label,
+    this.symbol,
+    this.spinner = false,
+  });
+
+  /// What a press sends back, as a `toolbar` intent's `id`.
+  final String id;
+
+  /// Its tooltip and accessibility label.
+  final String label;
+
+  /// An SF Symbol's name; none for the spinner.
+  final String? symbol;
+  final bool spinner;
+
+  Map<String, Object?> toMap() => {
+    "id": id,
+    "label": label,
+    "symbol": symbol,
+    "spinner": spinner,
+  };
+}
+
+/// The window's title and toolbar while the conversation is in front: the
+/// chat's title, what the Flutter bar said under it, and its buttons.
+class ChatBarSnapshot extends ShellSnapshot {
+  const ChatBarSnapshot({
+    required this.title,
+    this.subtitle = "",
+    this.expiresAt,
+    this.items = const [],
+  });
+
+  final String title;
+  final String subtitle;
+
+  /// When a temporary chat expires, in milliseconds since the epoch; the
+  /// Swift counts down to it.
+  final int? expiresAt;
+  final List<ToolbarItem> items;
+
+  @override
+  String get concern => "chatBar";
+
+  @override
+  Map<String, Object?> toMap() => {
+    "title": title,
+    "subtitle": subtitle,
+    "expiresAt": expiresAt,
+    "items": [for (final item in items) item.toMap()],
+  };
+}
+
+/// One entry of the composer's `/` or `@` menu.
+class ComposerOptionSnapshot {
+  const ComposerOptionSnapshot({
+    required this.label,
+    this.hint,
+    this.description,
+  });
+
+  /// The trigger and the name, as they will be typed.
+  final String label;
+  final String? hint;
+  final String? description;
+
+  Map<String, Object?> toMap() => {
+    "label": label,
+    "hint": hint,
+    "description": description,
+  };
+}
+
+/// Everything the native composer draws apart from its text, which is
+/// [ComposerValueSnapshot]. Not [present] where no page has a composer: a
+/// question stands in its place, or the project needs setting up.
+class ComposerSnapshot extends ShellSnapshot {
+  const ComposerSnapshot({
+    required this.present,
+    this.mode = "message",
+    this.hint = "",
+    this.sendLabel = "Send",
+    this.canSend = false,
+    this.queues = false,
+    this.speaking = false,
+    this.voice = false,
+    this.maxLines = 6,
+    this.attachments = const [],
+    this.menu = const [],
+    this.cwd,
+    this.cards = const {},
+    this.accent = 0xFF007AFF,
+    this.dark = false,
+  });
+
+  static const absent = ComposerSnapshot(present: false);
+
+  final bool present;
+
+  /// A `ComposerMode`'s name.
+  final String mode;
+
+  /// What an empty field says.
+  final String hint;
+
+  /// What Send is called where it is not Stop.
+  final String sendLabel;
+  final bool canSend;
+
+  /// What is typed would steer the running turn, so Queue is on offer.
+  final bool queues;
+
+  /// A turn is running: an empty field's button is Stop.
+  final bool speaking;
+
+  /// Voice mode can be opened from here.
+  final bool voice;
+  final int maxLines;
+
+  /// The pending files: each one's name, and whether it is an image.
+  final List<({String name, bool image})> attachments;
+
+  /// The open completion menu, empty for none.
+  final List<ComposerOptionSnapshot> menu;
+
+  /// Where a `!` command will run, for shell mode's row.
+  final String? cwd;
+
+  /// The embeds in the field, by the code unit standing for each.
+  final Map<int, ({String? title, String body})> cards;
+
+  /// The app's primary colour, as ARGB, which the app's controls wear.
+  final int accent;
+
+  /// Which appearance the app is drawn in.
+  final bool dark;
+
+  @override
+  String get concern => "composer";
+
+  @override
+  Map<String, Object?> toMap() => {
+    "present": present,
+    "mode": mode,
+    "hint": hint,
+    "sendLabel": sendLabel,
+    "canSend": canSend,
+    "queues": queues,
+    "speaking": speaking,
+    "voice": voice,
+    "maxLines": maxLines,
+    "attachments": [
+      for (final a in attachments) {"name": a.name, "image": a.image},
+    ],
+    "menu": [for (final option in menu) option.toMap()],
+    "cwd": cwd,
+    "cards": [
+      for (final MapEntry(:key, :value) in cards.entries)
+        {"code": key, "title": value.title, "body": value.body},
+    ],
+    "accent": accent,
+    "dark": dark,
+  };
+}
+
+/// The composer's text and selection, in UTF-16 code units, sent when Dart
+/// changed them: a completion taken, a message restored, the field cleared on
+/// send. What the user typed is never sent back to them.
+class ComposerValueSnapshot extends ShellSnapshot {
+  const ComposerValueSnapshot({
+    required this.text,
+    required this.start,
+    required this.end,
+  });
+
+  final String text;
+  final int start;
+  final int end;
+
+  @override
+  String get concern => "composerValue";
+
+  @override
+  Map<String, Object?> toMap() => {"text": text, "start": start, "end": end};
+}

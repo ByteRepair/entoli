@@ -4,8 +4,16 @@ import "../../../domain/models.dart";
 import "../../../domain/shell.dart";
 import "../../../domain/wired_skill.dart";
 import "composer_controller.dart";
+import "composer_embed.dart";
 
 typedef SendCallback = void Function(String text, List<Attachment> attachments);
+
+/// What a page asks of whichever composer it has, the Flutter one or the
+/// native shell's: a steer taken back put back, and a passage replied to.
+abstract interface class ComposerHandle {
+  void restore(Draft said);
+  void embed(ComposerEmbed embed);
+}
 
 /// What the field is about to do with what is typed in it.
 enum ComposerMode {

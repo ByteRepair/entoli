@@ -12,6 +12,7 @@ import "../command_intents.dart";
 import "../commands.dart";
 import "../selection.dart";
 import "conversation_pane.dart";
+import "shell_composer.dart";
 import "shell_outbox.dart";
 import "shell_sidebar.dart";
 import "snapshots.dart";
@@ -131,9 +132,21 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
   /// What the user did in the shell, answered with what the Swift waits on:
   /// an error to show, or null.
   Future<Object?> _run(ShellIntent intent) async {
-    if (intent.name == "sidebar") {
-      ref.read(sidebarShownProvider.notifier).set(intent.flag("shown"));
-      return null;
+    final slots = ref.read(shellSlotsProvider);
+    switch (intent.name) {
+      case "sidebar":
+        ref.read(sidebarShownProvider.notifier).set(intent.flag("shown"));
+        return null;
+      // The composer's own events, as `name` and `args` inside the intent's.
+      case "composer":
+        final args = (intent.args["args"] as Map<Object?, Object?>?) ?? {};
+        return slots.composer?.handle(
+          intent.string("name"),
+          args.cast<String, Object?>(),
+        );
+      case "toolbar":
+        slots.bar?.press(intent.string("id"));
+        return null;
     }
     final sidebar = await runSidebarIntent(context, ref, intent);
     if (!sidebar.handled) logFailure("shell", "no intent ${intent.name}");
