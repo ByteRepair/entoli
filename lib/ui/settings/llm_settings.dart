@@ -104,15 +104,22 @@ class ImageSection extends ConsumerWidget {
                 value: settings.imageQuality,
                 onChanged: notifier.setImageQuality,
               ),
-              "Sent to OpenAI's image models; higher costs more and takes "
-              "longer. OpenRouter's image models take no quality and ignore "
-              "it.",
+              "Higher costs more and takes longer. Some providers may not "
+              "accept a quality setting, and it may have no effect.",
             ),
           ),
       ],
     );
   }
 }
+
+/// What each [ReasoningEffort] is called on a slider.
+const reasoningEffortLabels = {
+  ReasoningEffort.auto: "Default",
+  ReasoningEffort.low: "Low",
+  ReasoningEffort.medium: "Medium",
+  ReasoningEffort.high: "High",
+};
 
 /// How long the chat LLM thinks before it answers.
 class ReasoningField extends ConsumerWidget {
@@ -123,12 +130,7 @@ class ReasoningField extends ConsumerWidget {
     label: "Thinking",
     child: _Helped(
       ThinkingSlider(
-        stops: const {
-          ReasoningEffort.auto: "Default",
-          ReasoningEffort.low: "Low",
-          ReasoningEffort.medium: "Medium",
-          ReasoningEffort.high: "High",
-        },
+        stops: reasoningEffortLabels,
         value: ref.watch(appSettingsProvider.select((s) => s.reasoningEffort)),
         onChanged: ref.read(appSettingsProvider.notifier).setReasoningEffort,
       ),

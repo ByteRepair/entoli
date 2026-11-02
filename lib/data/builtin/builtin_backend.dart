@@ -342,7 +342,7 @@ class BuiltinBackend implements AgentBackend {
       );
       // Only to a model the catalog says reasons: another may refuse the field.
       final reasoningEffort = target.info?.reasoning == true
-          ? AppSettings.load(config).reasoningEffort.wire
+          ? settings.reasoningEffort.wire
           : null;
       final runner = SubAgentRunner(
         client: gatedClient,
