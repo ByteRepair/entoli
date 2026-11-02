@@ -44,51 +44,44 @@ extension ShellModel {
   }
 }
 
-/// The strip over the Flutter view: a capsule of the system's glass just
-/// above what opened it, centred on it and kept inside the view, each choice
-/// a glass button of its own. A click anywhere else, or Escape, dismisses it.
-/// A layer of `FlutterCanvas`, which gives it the view's frame.
+/// The strip over the Flutter view, as the system presents a small control
+/// anchored on content: a popover from what opened it, in the system's glass
+/// and its own window, so it is clipped by nothing and sits over the sidebar
+/// or the toolbar where that is where the room is. Its placement, its arrow,
+/// and its dismissal — a click elsewhere, Escape — are the popover's. Each
+/// choice is a glass button of its own.
+///
+/// A layer of `FlutterCanvas`, which gives it the view's frame, so the anchor
+/// Dart sends is a rect in this view. It takes no clicks itself.
 struct StripLayer: View {
   @ObservedObject var model: ShellModel
   @Namespace private var glass
 
   private static let button: CGFloat = 40
 
+  /// The popover's own dismissal is the strip dismissed; a pick has already
+  /// answered and cleared it.
+  private var shown: Binding<StripRequest?> {
+    Binding(
+      get: { model.strip },
+      set: { if $0 == nil { model.answerStrip(nil) } })
+  }
+
   var body: some View {
-    GeometryReader { box in
-      if let strip = model.strip {
-        ZStack(alignment: .topLeading) {
-          Color.clear
-            .contentShape(Rectangle())
-            .onTapGesture { model.answerStrip(nil) }
-          capsule(strip)
-            .position(position(of: strip, in: box.size))
-            .transition(.scale(scale: 0.85, anchor: .bottom).combined(with: .opacity))
-        }
-        #if os(macOS)
-          .onExitCommand { model.answerStrip(nil) }
-        #endif
+    Color.clear
+      .allowsHitTesting(false)
+      .popover(
+        item: shown,
+        attachmentAnchor: .rect(.rect(model.strip?.anchor ?? .zero)),
+        arrowEdge: .top
+      ) { strip in
+        choices(strip)
+          // A popover on an iPhone too, not the sheet it would become.
+          .presentationCompactAdaptation(.popover)
       }
-    }
-    // Its frame is the canvas's: see `FlutterCanvas`, which says the edges.
-    .animation(.snappy(duration: 0.18), value: model.strip)
   }
 
-  private func width(of strip: StripRequest) -> CGFloat {
-    CGFloat(strip.choices.count) * (Self.button + 4) + 8
-  }
-
-  /// Centred over the anchor and a little above it, held inside the view.
-  private func position(of strip: StripRequest, in size: CGSize) -> CGPoint {
-    let half = width(of: strip) / 2
-    let height = Self.button + 8
-    let x = min(max(strip.anchor.midX, half + 8), size.width - half - 8)
-    let above = strip.anchor.minY - 6 - height / 2
-    let y = above > height / 2 + 8 ? above : strip.anchor.maxY + 6 + height / 2
-    return CGPoint(x: x, y: y)
-  }
-
-  private func capsule(_ strip: StripRequest) -> some View {
+  private func choices(_ strip: StripRequest) -> some View {
     GlassGroup(spacing: 4) {
       HStack(spacing: 4) {
         ForEach(Array(strip.choices.enumerated()), id: \.offset) { i, choice in
@@ -106,10 +99,8 @@ struct StripLayer: View {
           .accessibilityLabel(choice.name)
         }
       }
-      .padding(4)
-      .glassSurface(Capsule())
+      .padding(6)
     }
-    .shadow(color: .black.opacity(0.15), radius: 12, y: 4)
   }
 }
 

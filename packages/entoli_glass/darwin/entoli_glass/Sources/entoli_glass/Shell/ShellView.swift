@@ -93,14 +93,14 @@ struct ShellView: View {
   }
 }
 
-/// The Flutter view, and every layer drawn in its coordinates over it — a
-/// strip anchored on a button in a message, and whatever comes next. One
-/// container, so what the layers share is said once: the view runs under the
-/// toolbar and the composer, which it scrolls beneath, and never under the
-/// sidebar, which on 26 floats over the detail; a layer is laid out over
-/// exactly the view's frame, so a point Dart names is the same point here;
-/// and nothing a layer draws leaves that frame, so none of them can end up
-/// behind the sidebar however it lays itself out.
+/// The Flutter view, and every layer drawn in its coordinates over it — the
+/// anchor of a popover from a button in a message, and whatever comes next.
+/// One container, so what the layers share is said once: the view runs under
+/// the toolbar and the composer, which it scrolls beneath, and never under
+/// the sidebar, which on 26 floats over the detail; and a layer is laid out
+/// over exactly the view's frame, so a point Dart names is the same point
+/// here. What floats over everything — a popover — is the system's
+/// presentation, in a window of its own, rather than something drawn here.
 struct FlutterCanvas<Layers: View>: View {
   let flutter: PlatformViewController
   @ViewBuilder var layers: Layers
@@ -117,7 +117,6 @@ struct FlutterCanvas<Layers: View>: View {
         .ignoresSafeArea(edges: Self.edges)
     }
     .ignoresSafeArea(edges: Self.edges)
-    .clipped()
   }
 }
 
