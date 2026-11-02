@@ -340,6 +340,10 @@ class BuiltinBackend implements AgentBackend {
         project: project,
         feed: subAgents,
       );
+      // Only to a model the catalog says reasons: another may refuse the field.
+      final reasoningEffort = target.info?.reasoning == true
+          ? AppSettings.load(config).reasoningEffort.wire
+          : null;
       final runner = SubAgentRunner(
         client: gatedClient,
         shell: shell,
@@ -347,6 +351,7 @@ class BuiltinBackend implements AgentBackend {
         projectWorkspace: projectWorkspace,
         environment: settings.environment,
         model: target.modelId,
+        reasoningEffort: reasoningEffort,
         library: libraryFor(project),
         options: options,
         webSearch: webSearch,
@@ -499,6 +504,7 @@ class BuiltinBackend implements AgentBackend {
         projectWorkspace: projectWorkspace,
         environment: settings.environment,
         model: target.modelId,
+        reasoningEffort: reasoningEffort,
         // One attempt per request: the controller retries a failed turn itself,
         // and the two retrying would be the same patience twice. Sub-agents
         // keep the default — see the parent runner below. The step limit is

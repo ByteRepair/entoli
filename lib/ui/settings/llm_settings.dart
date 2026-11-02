@@ -9,6 +9,7 @@ import "../widgets/dialogs.dart";
 import "../widgets/model_picker.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
+import "../widgets/thinking_slider.dart";
 
 /// What a new chat gets. A live reference, not a snapshot: retargeting it
 /// retargets every chat that pinned nothing. The LLM field's Default is the
@@ -92,36 +93,68 @@ class ImageSection extends ConsumerWidget {
         if (settings.imageProviderId != null)
           LabelledField(
             label: "Quality",
-            child: DropdownButtonFormField<ImageQuality>(
-              initialValue: settings.imageQuality,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                helperText:
-                    "Sent to OpenAI's image models; higher costs more "
-                    "and takes longer. OpenRouter's image models take no "
-                    "quality and ignore it.",
-                helperMaxLines: 3,
+            child: _Helped(
+              ThinkingSlider(
+                stops: const {
+                  ImageQuality.auto: "Default",
+                  ImageQuality.low: "Low",
+                  ImageQuality.medium: "Medium",
+                  ImageQuality.high: "High",
+                },
+                value: settings.imageQuality,
+                onChanged: notifier.setImageQuality,
               ),
-              items: [
-                for (final q in ImageQuality.values)
-                  DropdownMenuItem(
-                    value: q,
-                    child: Text(switch (q) {
-                      ImageQuality.auto => "Provider default",
-                      ImageQuality.low => "Low",
-                      ImageQuality.medium => "Medium",
-                      ImageQuality.high => "High",
-                    }),
-                  ),
-              ],
-              onChanged: (value) {
-                if (value != null) notifier.setImageQuality(value);
-              },
+              "Sent to OpenAI's image models; higher costs more and takes "
+              "longer. OpenRouter's image models take no quality and ignore "
+              "it.",
             ),
           ),
       ],
     );
   }
+}
+
+/// How long the chat LLM thinks before it answers.
+class ReasoningField extends ConsumerWidget {
+  const ReasoningField({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => LabelledField(
+    label: "Thinking",
+    child: _Helped(
+      ThinkingSlider(
+        stops: const {
+          ReasoningEffort.auto: "Default",
+          ReasoningEffort.low: "Low",
+          ReasoningEffort.medium: "Medium",
+          ReasoningEffort.high: "High",
+        },
+        value: ref.watch(appSettingsProvider.select((s) => s.reasoningEffort)),
+        onChanged: ref.read(appSettingsProvider.notifier).setReasoningEffort,
+      ),
+      "How long a model that reasons thinks before it answers; longer is "
+      "slower and costs more. Models that do not reason are sent nothing.",
+    ),
+  );
+}
+
+/// A slider over the line that says what it does, the way a field's helper
+/// text sits under the field.
+class _Helped extends StatelessWidget {
+  const _Helped(this.child, this.help);
+
+  final Widget child;
+  final String help;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      child,
+      const SizedBox(height: 8),
+      Text(help, style: Theme.of(context).textTheme.bodySmall),
+    ],
+  );
 }
 
 /// How a turn runs and is bounded: the retry rounds, the step limit, the

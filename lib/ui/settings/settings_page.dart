@@ -178,13 +178,8 @@ Widget _categoryBody(SettingsCategory category, {Key? key}) =>
 /// page of its own. [SettingsCategory.welcome] is not filed anywhere: the tour
 /// is a body of its own, which [_categoryBody] renders whole.
 List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
-  // The agent's own settings are here rather than under LLMs: the mode is a
-  // behaviour, and the classifier picker travels with it because auto mode
-  // is unusable without one.
   SettingsCategory.general => const [
     _AppearanceSection(),
-    Divider(),
-    _AgentSection(),
     Divider(),
     _OmadaSection(),
     Divider(),
@@ -233,7 +228,17 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
   SettingsCategory.byteRepair => const [ByteRepairSection()],
   SettingsCategory.sync => const [SyncSection()],
   SettingsCategory.providers => const [_ProvidersEditor()],
-  SettingsCategory.llms => const [DefaultsSection(), Divider(), TurnsSection()],
+  // The agent's own settings are under LLMs, beside the model it runs: the
+  // classifier picker travels with the mode because auto mode is unusable
+  // without one.
+  SettingsCategory.llms => const [
+    DefaultsSection(),
+    ReasoningField(),
+    Divider(),
+    _AgentSection(),
+    Divider(),
+    TurnsSection(),
+  ],
   SettingsCategory.images => const [ImageSection()],
   // The two things the agent carries between conversations: the files the
   // user writes (instructions) and the ones it writes (memories).

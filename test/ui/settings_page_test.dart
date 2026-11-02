@@ -219,13 +219,15 @@ void main() {
     // scrollTo ends in ensureVisible, which throws unless the finder matches
     // exactly one widget — reaching each section is the assertion.
     await scrollTo(tester, find.text("Appearance"));
-    await scrollTo(tester, find.text("Agent"));
     await scrollTo(tester, find.text("Environment"));
     await scrollTo(tester, find.text("Delete all chats"));
+    expect(find.text("Running commands"), findsNothing);
 
     await openCategory(tester, SettingsCategory.llms);
     expect(find.text("New chats"), findsOneWidget);
     expect(find.text("Appearance"), findsNothing);
+    await scrollTo(tester, find.text("Agent"));
+    await scrollTo(tester, find.text("Turns"));
 
     await openCategory(tester, SettingsCategory.providers);
     expect(find.text("Add provider"), findsOneWidget);

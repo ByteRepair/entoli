@@ -20,6 +20,19 @@ import "tone.dart";
 /// is; [auto] sends nothing and leaves the provider's own default.
 enum ImageQuality { auto, low, medium, high }
 
+/// How long a reasoning model thinks before it answers, sent as the OpenAI
+/// shape's `reasoning_effort` and mapped onto a thinking budget for
+/// Anthropic. [auto] sends nothing and leaves the model's own default.
+enum ReasoningEffort {
+  auto,
+  low,
+  medium,
+  high;
+
+  /// What the request carries, or null for nothing.
+  String? get wire => this == auto ? null : name;
+}
+
 /// Persisted app-level settings (default model for new chats, etc.).
 class AppSettings {
   AppSettings({
@@ -32,6 +45,7 @@ class AppSettings {
     this.imageModelId,
     this.imageProviderId,
     this.imageQuality = ImageQuality.auto,
+    this.reasoningEffort = ReasoningEffort.auto,
     this.instructionImports = true,
     this.nestedInstructions = true,
     this.instructionExcludes = const [],
@@ -113,6 +127,10 @@ class AppSettings {
   String? imageModelId;
   String? imageProviderId;
   ImageQuality imageQuality;
+
+  /// How long the chat LLM thinks, where it is a model that reasons. Sent to
+  /// no other: a model that does not reason may refuse the field.
+  ReasoningEffort reasoningEffort;
 
   /// Whether `@path` references inside an AGENTS.md pull in more files. The
   /// files themselves are read into every turn; this and [nestedInstructions]
@@ -478,6 +496,9 @@ class AppSettings {
     imageQuality:
         ImageQuality.values.asNameMap()[json["imageQuality"]] ??
         ImageQuality.auto,
+    reasoningEffort:
+        ReasoningEffort.values.asNameMap()[json["reasoningEffort"]] ??
+        ReasoningEffort.auto,
     instructionImports: json["instructionImports"] as bool? ?? true,
     nestedInstructions: json["nestedInstructions"] as bool? ?? true,
     instructionExcludes: (json["instructionExcludes"] as List? ?? const [])
@@ -628,6 +649,8 @@ class AppSettings {
     if (imageModelId != null) "imageModelId": imageModelId,
     if (imageProviderId != null) "imageProviderId": imageProviderId,
     if (imageQuality != ImageQuality.auto) "imageQuality": imageQuality.name,
+    if (reasoningEffort != ReasoningEffort.auto)
+      "reasoningEffort": reasoningEffort.name,
     // Written only when off, so a file that predates the on defaults says
     // nothing and gets them.
     if (!instructionImports) "instructionImports": instructionImports,
