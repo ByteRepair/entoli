@@ -10,7 +10,7 @@ import "../sidebar/project_palette.dart"
     show chatsByRecency, createProject, isUserProject;
 import "../sidebar/remote_projects.dart";
 import "shell_outbox.dart";
-import "shell_routes.dart";
+import "../app_routes.dart";
 import "shell_sidebar.dart" show projectSymbol;
 import "snapshots.dart";
 
@@ -185,7 +185,9 @@ Future<Object?> runPaletteIntent(
       palette.close();
     case "pickProject":
       palette.close();
-      await toConversation(context, ref.read(shellRoutesProvider));
+      if (!await toConversation(context, ref.read(appRoutesProvider))) {
+        return null;
+      }
       selectProject(ref, (
         device: args["device"] as String?,
         project: args["project"] as String?,
@@ -199,7 +201,10 @@ Future<Object?> runPaletteIntent(
           ?.where((c) => c.id == id)
           .firstOrNull;
       if (chat == null) return null;
-      await toConversation(context, ref.read(shellRoutesProvider));
+      if (!context.mounted ||
+          !await toConversation(context, ref.read(appRoutesProvider))) {
+        return null;
+      }
       // Into its project first: the sidebar lists one, and would otherwise
       // deny the chat on screen.
       ref.read(selectedChatIdProvider.notifier).reveal(chat);

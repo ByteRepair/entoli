@@ -15,7 +15,7 @@ import "../sidebar/chat_groups.dart";
 import "../sidebar/project_palette.dart";
 import "../sidebar/remote_projects.dart";
 import "shell_outbox.dart";
-import "shell_routes.dart";
+import "../app_routes.dart";
 import "snapshots.dart";
 
 /// What the native sidebar's search field holds. Dart's rather than the
@@ -222,8 +222,9 @@ Future<({bool handled, Object? answer})> runSidebarIntent(
   // What changes what the detail shows closes the pages over it first.
   const navigates = {"openChat", "newChat", "selectProject", "move"};
   if (navigates.contains(intent.name)) {
-    await toConversation(context, ref.read(shellRoutesProvider));
-    if (!context.mounted) return (handled: true, answer: null);
+    final reached = await toConversation(context, ref.read(appRoutesProvider));
+    // A page asking first is left asking; nothing changes under it.
+    if (!reached || !context.mounted) return (handled: true, answer: null);
   }
   switch (intent.name) {
     case "search":

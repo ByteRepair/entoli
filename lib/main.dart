@@ -57,7 +57,7 @@ import "ui/triggers/incoming_open.dart";
 import "ui/selection.dart";
 import "ui/theme.dart";
 import "ui/shell/shell_bridge.dart";
-import "ui/shell/shell_routes.dart";
+import "ui/app_routes.dart";
 import "ui/widgets/liquid_glass.dart";
 
 /// The model host's entry point: Entoli's own executable launched again as
@@ -613,7 +613,7 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       darkTheme: entoliTheme(Brightness.dark, look),
       themeMode: mode,
       onGenerateRoute: appRoute,
-      navigatorObservers: [ref.read(shellRoutesProvider)],
+      navigatorObservers: [ref.read(appRoutesProvider)],
       builder: ref.watch(liquidGlassProvider).shell
           ? (context, child) => ShellInsets(child: child!)
           : null,

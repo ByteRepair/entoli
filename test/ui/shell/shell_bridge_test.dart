@@ -2,7 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/ui/shell/shell_outbox.dart";
-import "package:agent_chat/ui/shell/shell_routes.dart";
+import "package:agent_chat/ui/app_routes.dart";
 import "package:agent_chat/ui/shell/snapshots.dart";
 
 void main() {
@@ -53,7 +53,7 @@ void main() {
   testWidgets("a page covers the conversation, and a dialog does not", (
     tester,
   ) async {
-    final routes = ShellRoutes();
+    final routes = AppRoutes();
     final navigator = GlobalKey<NavigatorState>();
     await tester.pumpWidget(
       MaterialApp(
@@ -84,11 +84,11 @@ void main() {
   });
 
   group("going back to the conversation", () {
-    late ShellRoutes routes;
+    late AppRoutes routes;
     late GlobalKey<NavigatorState> navigator;
 
     Future<void> pump(WidgetTester tester) async {
-      routes = ShellRoutes();
+      routes = AppRoutes();
       navigator = GlobalKey();
       await tester.pumpWidget(
         MaterialApp(
@@ -109,8 +109,9 @@ void main() {
       push(const Text("a category"));
       await tester.pumpAndSettle();
 
-      await toConversation(navigator.currentContext!, routes);
+      final reached = await toConversation(navigator.currentContext!, routes);
       await tester.pumpAndSettle();
+      expect(reached, isTrue);
       expect(routes.depth, 1);
       expect(routes.covered.value, isFalse);
     });
@@ -121,10 +122,40 @@ void main() {
       push(const Text("over it"));
       await tester.pumpAndSettle();
 
-      await toConversation(navigator.currentContext!, routes);
+      final reached = await toConversation(navigator.currentContext!, routes);
       await tester.pumpAndSettle();
+      expect(reached, isFalse);
       expect(find.text("a prompt"), findsOneWidget);
       expect(routes.depth, 2);
+    });
+
+    testWidgets("leaves a page's question asking, rather than asking again", (
+      tester,
+    ) async {
+      await pump(tester);
+      // An edited file: back opens "Discard?", which is a route more.
+      push(
+        Builder(
+          builder: (context) => PopScope(
+            canPop: false,
+            onPopInvokedWithResult: (didPop, _) {
+              if (didPop) return;
+              showDialog<void>(
+                context: context,
+                builder: (_) => const AlertDialog(title: Text("Discard?")),
+              );
+            },
+            child: const Text("an edited file"),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final reached = await toConversation(navigator.currentContext!, routes);
+      await tester.pumpAndSettle();
+      expect(reached, isFalse);
+      expect(find.text("Discard?"), findsOneWidget);
+      expect(find.text("an edited file"), findsOneWidget);
     });
   });
 }

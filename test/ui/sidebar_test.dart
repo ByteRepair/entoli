@@ -1,7 +1,9 @@
+import "dart:async";
 import "dart:io";
 
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/app_settings.dart";
@@ -492,6 +494,51 @@ void main() {
       expect(find.byType(ProjectPalette), findsNothing);
       expect(app.container.read(selectedProjectProvider).project, "work");
       expect(app.container.read(selectedChatIdProvider), chat.state.id);
+    });
+
+    // A pick changes what the pane shows, but not under a page still asking
+    // whether to discard what was edited in it.
+    testWidgets("a pick under a page asking first is not taken", (
+      tester,
+    ) async {
+      final chat = await io(tester, () => app.seedChat(title: "work notes"));
+      late WidgetRef widgetRef;
+      late BuildContext widgetContext;
+      await pumpBeside(
+        tester,
+        beside: Consumer(
+          builder: (context, ref, _) {
+            widgetRef = ref;
+            widgetContext = context;
+            return const SizedBox();
+          },
+        ),
+      );
+      Navigator.of(widgetContext).push(
+        MaterialPageRoute<void>(
+          builder: (context) => PopScope(
+            canPop: false,
+            onPopInvokedWithResult: (didPop, _) {
+              if (didPop) return;
+              showDialog<void>(
+                context: context,
+                builder: (_) => const AlertDialog(title: Text("Discard?")),
+              );
+            },
+            child: const Scaffold(body: Text("an edited file")),
+          ),
+        ),
+      );
+      await settleIo(tester);
+
+      unawaited(showProjectPalette(widgetContext, widgetRef));
+      await settleIo(tester);
+      await tester.tap(find.text("work notes"));
+      await settleIo(tester);
+
+      expect(find.text("Discard?"), findsOneWidget);
+      expect(find.text("an edited file"), findsOneWidget);
+      expect(app.container.read(selectedChatIdProvider), isNot(chat.state.id));
     });
 
     testWidgets("enter picks the row the arrow keys are on", (tester) async {

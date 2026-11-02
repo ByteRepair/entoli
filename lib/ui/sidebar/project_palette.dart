@@ -12,6 +12,7 @@ import "../../domain/project_settings.dart";
 import "../../providers.dart";
 import "../widgets/nav_drawer.dart";
 import "remote_projects.dart";
+import "../app_routes.dart";
 import "../selection.dart";
 
 /// What picking a row does. Run by whoever opened the palette, with its own
@@ -37,6 +38,12 @@ Future<void> showProjectPalette(BuildContext context, WidgetRef ref) async {
           ),
   );
   if (action == null || !context.mounted) return;
+  // A pick changes what the pane shows, so the pages over it close first —
+  // and a page asking before it goes is left asking, the pick not taken.
+  if (!await toConversation(context, ref.read(appRoutesProvider)) ||
+      !context.mounted) {
+    return;
+  }
   try {
     await action(context, ref);
   } catch (e) {

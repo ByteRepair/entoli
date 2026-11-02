@@ -16,7 +16,7 @@ import "shell_composer.dart";
 import "shell_new_chat.dart";
 import "shell_outbox.dart";
 import "shell_palette.dart";
-import "shell_routes.dart";
+import "../app_routes.dart";
 import "shell_sidebar.dart";
 import "shell_turn.dart";
 import "shell_voice.dart";
@@ -203,7 +203,7 @@ class _WindowPublisher extends ConsumerWidget {
     final theme = ref.watch(appSettingsProvider.select((s) => s.appTheme));
     final shown = ref.watch(sidebarShownProvider);
     return ValueListenableBuilder<bool>(
-      valueListenable: ref.watch(shellRoutesProvider).covered,
+      valueListenable: ref.watch(appRoutesProvider).covered,
       builder: (context, covered, _) {
         ref
             .read(shellOutboxProvider)
