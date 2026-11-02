@@ -22,4 +22,8 @@ class DownloadProgress {
   /// indeterminate rather than guessing.
   double? get fraction =>
       total <= 0 ? null : (received / total).clamp(0.0, 1.0);
+
+  /// What a bar shows: [fraction], and indeterminate while it unpacks, which
+  /// reports no count of its own.
+  double? get bar => unpacking ? null : fraction;
 }
