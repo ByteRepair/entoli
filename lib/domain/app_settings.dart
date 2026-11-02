@@ -9,6 +9,7 @@ import "corner_radius.dart";
 import "llm_provider.dart";
 import "local_llm.dart";
 import "local_model.dart" show localProviderId;
+import "model_capability.dart" show ModelRef;
 import "permission.dart";
 import "profile.dart";
 import "project_settings.dart";
@@ -115,10 +116,9 @@ class AppSettings {
   String? imageProviderId;
   ImageQuality imageQuality;
 
-  /// The models starred in a picker, as (provider id, model id), in the order
-  /// they were starred: what its Favourites section lists, for every role
-  /// that can use one.
-  List<(String, String)> favouriteModels;
+  /// The models starred in a picker, in the order they were starred: what its
+  /// Favourites section lists, for every role that can use one.
+  List<ModelRef> favouriteModels;
 
   /// Whether `@path` references inside an AGENTS.md pull in more files. The
   /// files themselves are read into every turn; this and [nestedInstructions]
@@ -486,8 +486,8 @@ class AppSettings {
         ImageQuality.auto,
     favouriteModels: [
       for (final pair in json["favouriteModels"] as List? ?? const [])
-        if (pair case [final String provider, final String model])
-          (provider, model),
+        if (pair case [final String providerId, final String modelId])
+          (providerId: providerId, modelId: modelId),
     ],
     instructionImports: json["instructionImports"] as bool? ?? true,
     nestedInstructions: json["nestedInstructions"] as bool? ?? true,
@@ -641,7 +641,7 @@ class AppSettings {
     if (imageQuality != ImageQuality.auto) "imageQuality": imageQuality.name,
     if (favouriteModels.isNotEmpty)
       "favouriteModels": [
-        for (final (p, m) in favouriteModels) [p, m],
+        for (final f in favouriteModels) [f.providerId, f.modelId],
       ],
     // Written only when off, so a file that predates the on defaults says
     // nothing and gets them.

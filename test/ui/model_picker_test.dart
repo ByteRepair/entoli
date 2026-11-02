@@ -191,7 +191,7 @@ void main() {
     await settleIo(tester);
 
     expect(app.container.read(appSettingsProvider).favouriteModels, [
-      (testProviderId, "llama-3"),
+      (providerId: testProviderId, modelId: "llama-3"),
     ]);
     final labels = catalogLabels(tester);
     expect(labels.indexOf("Favourites"), lessThan(labels.indexOf("4 models")));

@@ -31,6 +31,8 @@ class CatalogEntry {
 
   /// Added by hand rather than listed by models.dev.
   final bool custom;
+
+  ModelRef get ref => (providerId: providerId, modelId: info.id);
 }
 
 /// What a picker's model is for, which decides what it is offered.
@@ -284,8 +286,7 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
         );
         // In the order they were starred, which is the order they were wanted.
         final starred = [
-          for (final f in favourites)
-            ?all.where((e) => (e.providerId, e.info.id) == f).firstOrNull,
+          for (final f in favourites) ?all.where((e) => e.ref == f).firstOrNull,
         ];
         return Scaffold(
           appBar: AppBar(
@@ -438,14 +439,12 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
     );
   }
 
-  Widget _card(CatalogEntry e, List<(String, String)> favourites) => _ModelCard(
+  Widget _card(CatalogEntry e, List<ModelRef> favourites) => _ModelCard(
     entry: e,
     selected: _picked(e.providerId, e.info.id),
-    favourite: favourites.contains((e.providerId, e.info.id)),
+    favourite: favourites.contains(e.ref),
     onTap: () => _pick(e.providerId, e.info.id),
-    onStar: () => ref
-        .read(appSettingsProvider.notifier)
-        .toggleFavourite(e.providerId, e.info.id),
+    onStar: () => ref.read(appSettingsProvider.notifier).toggleFavourite(e.ref),
     manage: e.custom
         ? (
             edit: () => _openModelPage(provider: e.providerId, initial: e.info),
