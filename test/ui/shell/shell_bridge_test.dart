@@ -129,33 +129,69 @@ void main() {
       expect(routes.depth, 2);
     });
 
-    testWidgets("leaves a page's question asking, rather than asking again", (
+    /// An edited file: back opens "Discard?", which is a route more, and
+    /// Discard closes the question and then the page.
+    Widget edited() => Builder(
+      builder: (page) => PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) async {
+          if (didPop) return;
+          final discard = await showDialog<bool>(
+            context: page,
+            builder: (dialog) => AlertDialog(
+              title: const Text("Discard?"),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialog, false),
+                  child: const Text("Keep"),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(dialog, true),
+                  child: const Text("Discard"),
+                ),
+              ],
+            ),
+          );
+          if (discard == true && page.mounted) Navigator.pop(page);
+        },
+        child: const Text("an edited file"),
+      ),
+    );
+
+    testWidgets("asks a page that asks, and goes on past it on a discard", (
       tester,
     ) async {
       await pump(tester);
-      // An edited file: back opens "Discard?", which is a route more.
-      push(
-        Builder(
-          builder: (context) => PopScope(
-            canPop: false,
-            onPopInvokedWithResult: (didPop, _) {
-              if (didPop) return;
-              showDialog<void>(
-                context: context,
-                builder: (_) => const AlertDialog(title: Text("Discard?")),
-              );
-            },
-            child: const Text("an edited file"),
-          ),
-        ),
-      );
+      push(const Text("chat settings"));
+      push(edited());
       await tester.pumpAndSettle();
 
-      final reached = await toConversation(navigator.currentContext!, routes);
+      final going = toConversation(navigator.currentContext!, routes);
       await tester.pumpAndSettle();
-      expect(reached, isFalse);
       expect(find.text("Discard?"), findsOneWidget);
+
+      await tester.tap(find.text("Discard"));
+      await tester.pumpAndSettle();
+      expect(await going, isTrue);
+      expect(routes.depth, 1);
+      expect(find.text("chat settings"), findsNothing);
+    });
+
+    testWidgets("stops at a page kept, closing nothing past it", (
+      tester,
+    ) async {
+      await pump(tester);
+      push(const Text("chat settings"));
+      push(edited());
+      await tester.pumpAndSettle();
+
+      final going = toConversation(navigator.currentContext!, routes);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text("Keep"));
+      await tester.pumpAndSettle();
+      expect(await going, isFalse);
       expect(find.text("an edited file"), findsOneWidget);
+      expect(routes.depth, 3);
     });
   });
 }
