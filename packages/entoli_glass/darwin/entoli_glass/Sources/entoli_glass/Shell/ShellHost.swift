@@ -46,7 +46,9 @@ final class ShellHost {
         start()
       case "snapshot":
         let args = call.arguments as? [String: Any]
-        model.apply(concern: args?["concern"] as? String ?? "", value: args?["value"])
+        model.apply(
+          concern: args?["concern"] as? String ?? "", value: args?["value"],
+          json: args?["json"] as? String)
       // Answered when a choice is picked or the strip is dismissed.
       case "strip":
         model.showStrip(call.arguments as? [String: Any] ?? [:]) { result($0) }
@@ -79,8 +81,8 @@ final class ShellHost {
       // of their own, and the system's glass follows the app. Nil follows
       // the system.
       model.onWindow = { state in
-        NSApp.appearance = state.appearance.map {
-          NSAppearance(named: $0 == "dark" ? .darkAqua : .aqua)
+        NSApp.appearance = state.colorScheme.map {
+          NSAppearance(named: $0 == .dark ? .darkAqua : .aqua)
         } ?? nil
       }
       model.onWindow?(model.window)
@@ -105,9 +107,9 @@ final class ShellHost {
       // presented from it and take its style.
       model.onWindow = { [weak window] state in
         window?.overrideUserInterfaceStyle =
-          switch state.appearance {
-          case "dark": .dark
-          case "light": .light
+          switch state.colorScheme {
+          case .dark: .dark
+          case .light: .light
           default: .unspecified
           }
       }

@@ -60,6 +60,10 @@ private struct CardFace: View {
   var width: CGFloat
   var accent: Color
 
+  /// How far in from the card's trailing edge a click is on its cross: the
+  /// symbol and the padding around it, with room for a finger's error.
+  static let crossWidth: CGFloat = 36
+
   var body: some View {
     HStack(alignment: .top, spacing: 8) {
       Capsule().fill(accent).frame(width: 3)
@@ -132,6 +136,13 @@ private func displayed(_ text: String, model: ComposerModel, width: CGFloat, sca
   return out
 }
 
+/// A selection Dart sent, held to [length]: what the field holds may be
+/// behind it by an input method's marked text.
+private func clamped(start: Int, end: Int, length: Int) -> NSRange {
+  let from = min(max(start, 0), length)
+  return NSRange(location: from, length: min(max(end, from), length) - from)
+}
+
 /// The embed code a card at [index] of [storage] stands for, if it is one.
 private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16? {
   guard index >= 0, index < storage.length else { return nil }
@@ -193,9 +204,8 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
       attributedText = displayed(text, model: model, width: cardWidth, scale: traitCollection.displayScale)
       typingAttributes = fieldAttributes(model.mode)
       let length = attributedText.length
-      let from = min(max(start, 0), length)
-      selectedRange = NSRange(location: from, length: min(max(end, from), length) - from)
-      model.empty = text.isEmpty
+      selectedRange = clamped(start: start, end: end, length: length)
+      model.shown(text: text)
       measure()
     }
 
@@ -229,13 +239,7 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
       let cap = line * CGFloat(model.maxLines) + textContainerInset.top + textContainerInset.bottom
       let height = min(fit, cap)
       isScrollEnabled = fit > cap
-      if abs(model.fieldHeight - height) > 0.5 {
-        // After this update, and on the view's own curve: the field grows a
-        // line at a time with everything else rather than jumping.
-        DispatchQueue.main.async {
-          withAnimation(ComposerView.motion) { model.fieldHeight = height }
-        }
-      }
+      model.measured(height: height)
     }
 
     private func report() {
@@ -380,9 +384,8 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
           scale: window?.backingScaleFactor ?? 2))
       typingAttributes = fieldAttributes(model.mode)
       let length = storage.length
-      let from = min(max(start, 0), length)
-      setSelectedRange(NSRange(location: from, length: min(max(end, from), length) - from))
-      model.empty = text.isEmpty
+      setSelectedRange(clamped(start: start, end: end, length: length))
+      model.shown(text: text)
       measure()
     }
 
@@ -423,13 +426,7 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
       let cap = line * CGFloat(model.maxLines) + insets
       let height = min(fit, cap)
       enclosingScrollView?.hasVerticalScroller = fit > cap
-      if abs(model.fieldHeight - height) > 0.5 {
-        // After this update, and on the view's own curve: the field grows a
-        // line at a time with everything else rather than jumping.
-        DispatchQueue.main.async {
-          withAnimation(ComposerView.motion) { model.fieldHeight = height }
-        }
-      }
+      model.measured(height: height)
     }
 
     private func report() {
@@ -448,16 +445,34 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
       report()
     }
 
-    /// A click on a card takes it out, which the card's own cross says it
-    /// does.
-    func textView(
-      _ textView: NSTextView, clickedOn cell: any NSTextAttachmentCellProtocol,
-      in cellFrame: NSRect, at charIndex: Int
-    ) {
-      guard let storage = textStorage, let code = embedCode(in: storage, at: charIndex) else {
+    /// A click on a card's cross takes the card out; anywhere else on it is
+    /// the field's, as a click on a letter is. Hit here rather than through
+    /// the delegate's attachment click, which AppKit never sends for an
+    /// attachment that is an image with no cell to be clicked.
+    override func mouseDown(with event: NSEvent) {
+      if let code = cross(at: convert(event.locationInWindow, from: nil)) {
+        model?.say("unembed", ["code": Int(code)])
         return
       }
-      model?.say("unembed", ["code": Int(code)])
+      super.mouseDown(with: event)
+    }
+
+    /// The embed whose card's cross is under [point], in the view's own
+    /// coordinates.
+    private func cross(at point: NSPoint) -> UInt16? {
+      guard let layout = layoutManager, let container = textContainer,
+        let storage = textStorage, storage.length > 0
+      else { return nil }
+      let origin = textContainerOrigin
+      let glyph = layout.glyphIndex(
+        for: NSPoint(x: point.x - origin.x, y: point.y - origin.y), in: container)
+      guard let code = embedCode(in: storage, at: layout.characterIndexForGlyph(at: glyph))
+      else { return nil }
+      let card = layout.boundingRect(
+        forGlyphRange: NSRange(location: glyph, length: 1), in: container
+      ).offsetBy(dx: origin.x, dy: origin.y)
+      guard card.contains(point), point.x >= card.maxX - CardFace.crossWidth else { return nil }
+      return code
     }
 
     // MARK: Keys

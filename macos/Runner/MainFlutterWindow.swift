@@ -26,6 +26,10 @@ class MainFlutterWindow: NSWindow {
     NSWindow.allowsAutomaticWindowTabbing = false
 
     let flutterViewController = FlutterViewController()
+    // Until Flutter's first frame the view is its own background, black
+    // unless told otherwise: the window's colour instead, light or dark as
+    // the window is, so a launch is not a black window first.
+    flutterViewController.backgroundColor = .windowBackgroundColor
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: true)

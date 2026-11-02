@@ -24,6 +24,19 @@ import "steer_strip.dart";
 /// goes differs — the chat page swaps it for the composer, because there is
 /// nothing useful to type until it is answered, while the voice screen keeps
 /// the circle above it — but how it is wired does not.
+/// Which answers [approval] is offered beside Deny, which always is: Allow for
+/// this call, and the Always answers that write a rule. A this-turn-only
+/// answer to a directory grant would lapse at the next turn, so where a rule
+/// can be written that is the answer; a mirrored chat keeps Allow, its
+/// Always answers being absent.
+({bool allow, bool always}) approvalAnswers(
+  TurnDriver driver,
+  ToolApproval approval,
+) => (
+  allow: !(driver.rulesWritable && approval.toolName == addDirectoryName),
+  always: driver.rulesWritable,
+);
+
 class TurnSurface extends StatelessWidget {
   const TurnSurface({
     super.key,
@@ -68,35 +81,34 @@ class TurnSurface extends StatelessWidget {
         ),
         for (final approvals in view.approvals.values)
           for (final approval in approvals)
-            ApprovalBanner(
-              approval: approval,
-              // A mirrored chat keeps it: with no always answers there,
-              // Deny would be all that was left.
-              onAllow:
-                  notifier.rulesWritable &&
-                      approval.toolName == addDirectoryName
-                  ? null
-                  : () => notifier.respondApproval(
-                      approval.id,
-                      ApprovalResponse.allow,
-                    ),
-              onDeny: () =>
-                  notifier.respondApproval(approval.id, ApprovalResponse.deny),
-              onAlwaysAllowChat: !notifier.rulesWritable
-                  ? null
-                  : () => notifier.respondApproval(
-                      approval.id,
-                      ApprovalResponse.alwaysAllowChat,
-                      approval: approval,
-                    ),
-              onAlwaysAllowProject: !notifier.rulesWritable
-                  ? null
-                  : () => notifier.respondApproval(
-                      approval.id,
-                      ApprovalResponse.alwaysAllowProject,
-                      approval: approval,
-                    ),
-            ),
+            if (approvalAnswers(notifier, approval) case final offers)
+              ApprovalBanner(
+                approval: approval,
+                onAllow: !offers.allow
+                    ? null
+                    : () => notifier.respondApproval(
+                        approval.id,
+                        ApprovalResponse.allow,
+                      ),
+                onDeny: () => notifier.respondApproval(
+                  approval.id,
+                  ApprovalResponse.deny,
+                ),
+                onAlwaysAllowChat: !offers.always
+                    ? null
+                    : () => notifier.respondApproval(
+                        approval.id,
+                        ApprovalResponse.alwaysAllowChat,
+                        approval: approval,
+                      ),
+                onAlwaysAllowProject: !offers.always
+                    ? null
+                    : () => notifier.respondApproval(
+                        approval.id,
+                        ApprovalResponse.alwaysAllowProject,
+                        approval: approval,
+                      ),
+              ),
       ],
     );
   }

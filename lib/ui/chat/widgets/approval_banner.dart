@@ -50,14 +50,18 @@ class ApprovalBanner extends StatelessWidget {
   /// a banner tall enough to bury the conversation behind it is worse.
   static const mostHeight = 132.0;
 
+  /// What [approval] asks, and the icon it is asked under.
+  static (IconData, String) headingOf(ToolApproval approval) =>
+      approval.unsandboxed
+      ? (Icons.shield_outlined, "Run without the sandbox?")
+      : toolUIFor(approval.toolName).approval;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final detail = approval.argumentsText ?? approval.argumentsJson;
-    final (icon, title) = approval.unsandboxed
-        ? (Icons.shield_outlined, "Run without the sandbox?")
-        : toolUIFor(approval.toolName).approval;
+    final (icon, title) = headingOf(approval);
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),

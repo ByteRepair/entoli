@@ -178,6 +178,26 @@ Future<({String name, String value})?> promptForPair(
   );
 }
 
+/// Say something that needs the user to act elsewhere, with nothing here to
+/// choose: one button that closes it.
+Future<void> tell(
+  BuildContext context, {
+  required String title,
+  required String message,
+}) => showDialog<void>(
+  context: context,
+  builder: (context) => AlertDialog(
+    title: Text(title),
+    content: Text(message),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text("OK"),
+      ),
+    ],
+  ),
+);
+
 /// Ask before doing something irreversible. A null [confirmLabel] leaves only
 /// a way out, for when there is nothing to confirm.
 Future<bool> confirm(

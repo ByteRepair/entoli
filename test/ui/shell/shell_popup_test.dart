@@ -39,7 +39,7 @@ void main() {
       ProviderScope(
         overrides: [
           liquidGlassProvider.overrideWithValue(
-            const LiquidGlass(available: true, on: true, shell: true),
+            const LiquidGlass(available: true, on: true),
           ),
         ],
         child: MaterialApp(

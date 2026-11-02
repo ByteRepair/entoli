@@ -23,6 +23,11 @@ struct ComposerView: View {
 
   static let motion = Animation.snappy(duration: 0.22)
 
+  /// How much of the accent a prominent button's glass takes: enough to say
+  /// it is the one to press, little enough that it is still glass the
+  /// conversation shows through rather than a solid disc.
+  private static let prominence = 0.55
+
   /// Everything that changes what the view lays out, so one animation
   /// carries all of it.
   private struct Shape: Equatable {
@@ -172,7 +177,9 @@ struct ComposerView: View {
         .contentShape(Circle())
     }
     .buttonStyle(.plain)
-    .glassControl(id, in: glass, shape: Circle(), tint: prominent ? model.accent : nil)
+    .glassControl(
+      id, in: glass, shape: Circle(),
+      tint: prominent ? model.accent.opacity(Self.prominence) : nil)
     .help(label)
     .accessibilityLabel(label)
   }

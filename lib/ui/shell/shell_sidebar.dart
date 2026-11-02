@@ -1,7 +1,7 @@
-import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../core/log.dart";
 import "../../domain/chat_search.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
@@ -42,48 +42,30 @@ String projectSymbol(String? project) {
   return project == null ? "house" : "folder";
 }
 
-const _remoteSymbol = "laptopcomputer.and.iphone";
+/// A paired device's project, which has no symbol of its own.
+const remoteSymbol = "laptopcomputer.and.iphone";
 
 /// Sends the [SidebarSnapshot]: what `Sidebar` draws, read the same way.
-class SidebarPublisher extends ConsumerStatefulWidget {
+/// Everything is read in [build], the publisher's own, so each of it rebuilds
+/// it: a provider watched from a builder beneath can be missed, and the list
+/// with it — the chats arriving a frame after the first snapshot went out
+/// empty.
+class SidebarPublisher extends ConsumerWidget {
   const SidebarPublisher({super.key});
 
   @override
-  ConsumerState<SidebarPublisher> createState() => _SidebarPublisherState();
-}
-
-/// Everything read in [build], the publisher's own, so each of it rebuilds
-/// it: a provider watched from a builder beneath can be missed, and the list
-/// with it — the chats arriving a frame after the first snapshot went out
-/// empty. The running chats are a listenable, so they are listened to here
-/// and rebuild it the same way.
-class _SidebarPublisherState extends ConsumerState<SidebarPublisher> {
-  late final BusyListenable _busy;
-
-  @override
-  void initState() {
-    super.initState();
-    _busy = BusyListenable(ref, this);
-  }
-
-  @override
-  void dispose() {
-    _busy.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // The list the query was written against has just been replaced.
     ref.listen(
       selectedProjectProvider,
       (_, _) => ref.read(shellSearchProvider.notifier).set(""),
     );
-    ref.read(shellOutboxProvider).post(_snapshot(ref, _busy.value));
+    ref.read(shellOutboxProvider).post(_snapshot(ref));
     return const SizedBox.shrink();
   }
 
-  SidebarSnapshot _snapshot(WidgetRef ref, Set<String> busy) {
+  SidebarSnapshot _snapshot(WidgetRef ref) {
+    final busy = ref.watch(busyChatIdsProvider);
     final selected = ref.watch(selectedProjectProvider);
     final query = ref.watch(shellSearchProvider);
     final named = ref.watch(projectListProvider).value ?? const <String>[];
@@ -98,12 +80,7 @@ class _SidebarPublisherState extends ConsumerState<SidebarPublisher> {
       peers,
     );
 
-    final counts = <String?, int>{};
-    final running = <String?>{};
-    for (final chat in chats) {
-      counts[chat.project] = (counts[chat.project] ?? 0) + 1;
-      if (busy.contains(chat.id)) running.add(chat.project);
-    }
+    final (:counts, busy: _) = projectCounts(chats, busy);
     ProjectChoice local(String? p) => ProjectChoice(
       device: null,
       project: p,
@@ -111,7 +88,6 @@ class _SidebarPublisherState extends ConsumerState<SidebarPublisher> {
       symbol: projectSymbol(p),
       omada: ref.watch(omadaOnProvider(p)),
       count: counts[p] ?? 0,
-      busy: running.contains(p),
     );
     final projects = [for (final p in everyProject(named)) local(p)];
     final mirrored = [
@@ -120,7 +96,7 @@ class _SidebarPublisherState extends ConsumerState<SidebarPublisher> {
           device: e.scope.device,
           project: e.scope.project,
           label: e.label,
-          symbol: _remoteSymbol,
+          symbol: remoteSymbol,
           omada: e.omada,
           count: e.count,
         ),
@@ -140,7 +116,7 @@ class _SidebarPublisherState extends ConsumerState<SidebarPublisher> {
               peers[selected.device]?.name ?? selected.device!,
               selected.project,
             ),
-            symbol: _remoteSymbol,
+            symbol: remoteSymbol,
           );
       final mine =
           remotes
@@ -207,7 +183,6 @@ class _SidebarPublisherState extends ConsumerState<SidebarPublisher> {
       empty: empty,
       projects: projects,
       devices: mirrored,
-      moveTargets: projects,
       omadaByDefault: ref.watch(
         appSettingsProvider.select((s) => s.omadaByDefault),
       ),
@@ -229,10 +204,10 @@ ProjectRef _projectOf(ShellIntent intent) => (
   project: intent.maybeString("project"),
 );
 
-/// Runs what the native sidebar sends, in [context] under the Navigator.
-/// Answers whether it was the sidebar's, and with what the Swift waits on:
-/// an error to show, or null.
-Future<({bool handled, Object? answer})> runSidebarIntent(
+/// Runs what the native sidebar sends, in [context] under the Navigator: the
+/// intents sent under no surface's name. Answers what the Swift waits on: an
+/// error to show, or null.
+Future<Object?> runSidebarIntent(
   BuildContext context,
   WidgetRef ref,
   ShellIntent intent,
@@ -244,7 +219,7 @@ Future<({bool handled, Object? answer})> runSidebarIntent(
   if (navigates.contains(intent.name)) {
     final reached = await toConversation(context, ref.read(appRoutesProvider));
     // A page asking first is left asking; nothing changes under it.
-    if (!reached || !context.mounted) return (handled: true, answer: null);
+    if (!reached || !context.mounted) return null;
   }
   switch (intent.name) {
     case "search":
@@ -275,12 +250,7 @@ Future<({bool handled, Object? answer})> runSidebarIntent(
       if (chat() case final chat?) await edits.delete(chat);
     case "createProject":
       final name = projectNameFrom(intent.string("name"));
-      if (name == null) {
-        return (
-          handled: true,
-          answer: "That is not a name a project can have.",
-        );
-      }
+      if (name == null) return "That is not a name a project can have.";
       try {
         await createProject((
           name: name,
@@ -288,7 +258,7 @@ Future<({bool handled, Object? answer})> runSidebarIntent(
           omada: intent.flag("omada"),
         ), ref.read(selectedProjectProvider).device)(context, ref);
       } catch (_) {
-        return (handled: true, answer: "The project could not be created.");
+        return "The project could not be created.";
       }
     case "openPage":
       final at = ref.read(selectedProjectProvider);
@@ -307,38 +277,7 @@ Future<({bool handled, Object? answer})> runSidebarIntent(
           openMarketplace(context);
       }
     default:
-      return (handled: false, answer: null);
+      logFailure("shell", "no intent ${intent.name}");
   }
-  return (handled: true, answer: null);
-}
-
-/// [busyChatsProvider]'s set, followed for a publisher's state: it rebuilds
-/// the state when the set changes, and when the provider gives another.
-class BusyListenable {
-  BusyListenable(this._ref, this._state) {
-    _follow(_ref.read(busyChatsProvider));
-    _ref.listenManual(busyChatsProvider, (_, next) => _follow(next));
-  }
-
-  final WidgetRef _ref;
-  final State _state;
-  ValueListenable<Set<String>>? _source;
-
-  Set<String> get value => _source?.value ?? const {};
-
-  void _follow(ValueListenable<Set<String>> next) {
-    if (identical(next, _source)) return;
-    final first = _source == null;
-    _source?.removeListener(_changed);
-    _source = next..addListener(_changed);
-    // The first is what the state builds with; a later one is a change.
-    if (!first) _changed();
-  }
-
-  void _changed() {
-    // ignore: invalid_use_of_protected_member
-    if (_state.mounted) _state.setState(() {});
-  }
-
-  void dispose() => _source?.removeListener(_changed);
+  return null;
 }

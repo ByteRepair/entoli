@@ -1,74 +1,42 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../domain/file_tools.dart" show guestWorkspacePath;
 import "../../domain/models.dart";
 import "../../domain/project.dart" show ProjectRef;
 import "../../providers.dart";
-import "../chat/widgets/composer_controller.dart";
+import "../chat/widgets/composer.dart";
 import "../chat/widgets/composer_embed.dart";
 import "../chat/widgets/composer_logic.dart";
 import "../widgets/completion_field.dart";
 import "../widgets/dialogs.dart";
 import "shell_outbox.dart";
+import "shell_slots.dart";
 import "snapshots.dart";
 
-/// Where the shell's composer and chat bar intents go: the ones on screen.
-/// A page sets itself here when it is built and clears itself when it goes,
-/// so the last one built is the one answering.
-class ShellSlots {
-  ShellComposerState? composer;
-  ShellChatBarState? bar;
-}
-
-final shellSlotsProvider = Provider<ShellSlots>((ref) => ShellSlots());
-
-/// The composer, drawn by the native shell: [Composer]'s arguments, and its
-/// rules through the same [ComposerLogic], with no Flutter of its own on
-/// screen. It sends the shell what to draw and runs what the user did there;
-/// the text is Dart's, in [controller], as it is for [Composer].
+/// The composer, drawn by the native shell: configured by a [Composer] that
+/// is never mounted, and its rules through the same [ComposerLogic], with no
+/// Flutter of its own on screen. It sends the shell what to draw and runs what
+/// the user did there; the text is Dart's, in the config's controller, as it
+/// is for [Composer].
 class ShellComposer extends ConsumerStatefulWidget {
-  const ShellComposer({
-    super.key,
-    required this.controller,
-    required this.agentSpeaking,
-    required this.onSend,
-    required this.onAbort,
-    this.onQueue,
-    this.steers,
-    this.project,
-    this.device,
-    this.onVoice,
-    this.workspace,
-    this.workspaceHome,
-  });
+  const ShellComposer({super.key, required this.config});
 
-  final ComposerController controller;
-  final bool agentSpeaking;
-  final SendCallback onSend;
-  final VoidCallback onAbort;
-  final SendCallback? onQueue;
-  final bool Function(String text)? steers;
-  final String? project;
-  final String? device;
-  final VoidCallback? onVoice;
-  final String? workspace;
-  final String? workspaceHome;
+  final Composer config;
 
   @override
   ConsumerState<ShellComposer> createState() => ShellComposerState();
 }
 
 class ShellComposerState extends ConsumerState<ShellComposer>
-    implements ComposerHandle {
+    implements ComposerHandle, ShellSurface {
   late final ShellOutbox _outbox = ref.read(shellOutboxProvider);
   late final ShellSlots _slots = ref.read(shellSlotsProvider);
-  late final ComposerLogic _logic = ComposerLogic(widget.controller);
+  late final ComposerLogic _logic = ComposerLogic(widget.config.controller);
   late final Listenable _shape = Listenable.merge([
     _logic,
     _logic.canSend,
     _logic.queues,
-    widget.controller,
+    widget.config.controller,
   ]);
 
   /// The value the shell last reported, so a change it made is not sent back
@@ -86,19 +54,19 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   @override
   void initState() {
     super.initState();
-    _slots.composer = this;
+    _slots.claim(ShellConcern.composer, this);
     _configure();
-    widget.controller.addListener(_pushValue);
+    widget.config.controller.addListener(_pushValue);
     _pushValue();
   }
 
   @override
   void didUpdateWidget(ShellComposer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller != widget.controller) {
-      oldWidget.controller.removeListener(_pushValue);
-      widget.controller.addListener(_pushValue);
-      _logic.controller = widget.controller;
+    if (oldWidget.config.controller != widget.config.controller) {
+      oldWidget.config.controller.removeListener(_pushValue);
+      widget.config.controller.addListener(_pushValue);
+      _logic.controller = widget.config.controller;
       _pushValue();
     }
     _configure();
@@ -106,9 +74,8 @@ class ShellComposerState extends ConsumerState<ShellComposer>
 
   @override
   void dispose() {
-    widget.controller.removeListener(_pushValue);
-    if (_slots.composer == this) {
-      _slots.composer = null;
+    widget.config.controller.removeListener(_pushValue);
+    if (_slots.leave(ShellConcern.composer, this)) {
       _outbox.post(ComposerSnapshot.absent);
     }
     _logic.dispose();
@@ -116,10 +83,10 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   }
 
   void _configure() => _logic.configure(
-    agentSpeaking: widget.agentSpeaking,
-    onSend: widget.onSend,
-    onQueue: widget.onQueue,
-    steers: widget.steers,
+    agentSpeaking: widget.config.agentSpeaking,
+    onSend: widget.config.onSend,
+    onQueue: widget.config.onQueue,
+    steers: widget.config.steers,
   );
 
   @override
@@ -128,12 +95,12 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   /// Add [embed] and put the caret in the field, as [Composer.embed] does.
   @override
   void embed(ComposerEmbed embed) {
-    widget.controller.append(embed);
+    widget.config.controller.append(embed);
     _outbox.say("composerFocus");
   }
 
   void _pushValue() {
-    final value = widget.controller.value;
+    final value = widget.config.controller.value;
     if (value == _reported) return;
     _outbox.post(_valueOf(value));
   }
@@ -155,8 +122,9 @@ class ShellComposerState extends ConsumerState<ShellComposer>
 
   /// What the shell's composer sent. Answers what it waits on: whether a
   /// paste took files from the clipboard.
+  @override
   Future<Object?> handle(String name, Map<String, Object?> args) async {
-    final controller = widget.controller;
+    final controller = widget.config.controller;
     switch (name) {
       case "edited":
         final text = args["text"]! as String;
@@ -176,9 +144,9 @@ class ShellComposerState extends ConsumerState<ShellComposer>
       case "queue":
         _logic.submit(queue: true);
       case "stop":
-        widget.onAbort();
+        widget.config.onAbort();
       case "voice":
-        widget.onVoice?.call();
+        widget.config.onVoice?.call();
       case "attach":
         final kind = args["kind"] == "image"
             ? AttachmentKind.image
@@ -221,36 +189,39 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   /// made one, else the workspace in the guest's own words. See
   /// `Composer._cwdBar`.
   String? _cwd() {
-    final workspace = widget.workspace;
+    final workspace = widget.config.workspace;
     if (workspace == null) return null;
     final live = ref
         .read(
           chatShellCwdProvider((
             workspace: workspace,
-            workspaceHome: widget.workspaceHome,
+            workspaceHome: widget.config.workspaceHome,
           )),
         )
         ?.value;
-    if (live != null) return live;
-    final root = ref.read(shellProvider).guestRoot;
-    final home = widget.workspaceHome;
-    return root != null && home != null
-        ? guestWorkspacePath(root, home, workspace)
-        : workspace;
+    return live ??
+        workingDirectoryFallback(
+          workspace: workspace,
+          guestRoot: ref.read(shellProvider).guestRoot,
+          home: widget.config.workspaceHome,
+        );
   }
 
   @override
   Widget build(BuildContext context) {
-    final ProjectRef project = (device: widget.device, project: widget.project);
+    final ProjectRef project = (
+      device: widget.config.device,
+      project: widget.config.project,
+    );
     // Held while the composer is up, so a paired device's menu is there by
     // the time a `/` is typed.
-    if (widget.device != null) ref.watch(promptLibraryOf(project));
-    final cwd = widget.workspace == null
+    if (widget.config.device != null) ref.watch(promptLibraryOf(project));
+    final cwd = widget.config.workspace == null
         ? null
         : ref.watch(
             chatShellCwdProvider((
-              workspace: widget.workspace,
-              workspaceHome: widget.workspaceHome,
+              workspace: widget.config.workspace,
+              workspaceHome: widget.config.workspaceHome,
             )),
           );
     final theme = Theme.of(context);
@@ -263,7 +234,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
     return ListenableBuilder(
       listenable: Listenable.merge([_shape, ?cwd]),
       builder: (context, _) {
-        final controller = widget.controller;
+        final controller = widget.config.controller;
         final token = activeCompletionToken(controller.value);
         if (token != _dismissed) _dismissed = null;
         final open = token != null && token != _dismissed;
@@ -277,24 +248,13 @@ class ShellComposerState extends ConsumerState<ShellComposer>
           ComposerSnapshot(
             present: true,
             mode: mode.name,
-            hint: switch (mode) {
-              ComposerMode.shell => "Shell command",
-              ComposerMode.callback => "Compact the conversation",
-              ComposerMode.message => "Message",
-            },
-            sendLabel: switch (mode) {
-              ComposerMode.shell => "Run",
-              ComposerMode.callback => "Compact",
-              ComposerMode.message =>
-                _logic.queues.value
-                    ? "Send now, read at its next step"
-                    : "Send",
-            },
+            hint: mode.hint ?? "Message",
+            sendLabel: mode.sendLabel(queues: _logic.queues.value),
             canSend: _logic.canSend.value,
             queues: _logic.queues.value,
-            speaking: widget.agentSpeaking,
-            voice: widget.onVoice != null,
-            maxLines: 6 + 2 * _logic.embeds.clamp(0, 4),
+            speaking: widget.config.agentSpeaking,
+            voice: widget.config.onVoice != null,
+            maxLines: _logic.maxLines,
             attachments: [
               for (final a in _logic.attachments)
                 (name: a.filename, image: a.mimeType.startsWith("image/")),
@@ -346,27 +306,27 @@ class ShellChatBar extends ConsumerStatefulWidget {
   ConsumerState<ShellChatBar> createState() => ShellChatBarState();
 }
 
-class ShellChatBarState extends ConsumerState<ShellChatBar> {
+class ShellChatBarState extends ConsumerState<ShellChatBar>
+    implements ShellSurface {
   late final ShellSlots _slots = ref.read(shellSlotsProvider);
 
   @override
-  void initState() {
-    super.initState();
-    _slots.bar = this;
-  }
-
-  @override
   void dispose() {
-    if (_slots.bar == this) _slots.bar = null;
+    _slots.leave(ShellConcern.toolbar, this);
     super.dispose();
   }
 
-  void press(String id) => widget.actions[id]?.call();
+  /// A press on one of the items.
+  @override
+  Future<Object?> handle(String name, Map<String, Object?> args) async {
+    widget.actions[args["id"]]?.call();
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
     // The last built is the one answering, as it is the one on screen.
-    _slots.bar = this;
+    _slots.claim(ShellConcern.toolbar, this);
     ref
         .read(shellOutboxProvider)
         .post(

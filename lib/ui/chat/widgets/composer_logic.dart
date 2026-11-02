@@ -1,5 +1,6 @@
 import "package:flutter/foundation.dart";
 
+import "../../../domain/file_tools.dart" show guestWorkspacePath;
 import "../../../domain/models.dart";
 import "../../../domain/shell.dart";
 import "../../../domain/wired_skill.dart";
@@ -30,6 +31,36 @@ enum ComposerMode {
   /// decides it.
   callback,
 }
+
+/// What each composer says about its [ComposerMode], in its own dress.
+extension ComposerModeWords on ComposerMode {
+  /// The field's hint, where the mode has one of its own; a message's is the
+  /// composer's.
+  String? get hint => switch (this) {
+    ComposerMode.shell => "Shell command",
+    ComposerMode.callback => "Compact the conversation",
+    ComposerMode.message => null,
+  };
+
+  /// What the send button does, said as its tooltip or label. [queues] is
+  /// [ComposerLogic.queues]: what is typed would steer the running turn.
+  String sendLabel({required bool queues}) => switch (this) {
+    ComposerMode.shell => "Run",
+    ComposerMode.callback => "Compact",
+    ComposerMode.message => queues ? "Send now, read at its next step" : "Send",
+  };
+}
+
+/// Where a `!` command runs before the shell has said: [workspace], in the
+/// guest's own words where commands run in one under [guestRoot]. [home] is
+/// the project workspace beside it, what the guest path is worded from.
+String workingDirectoryFallback({
+  required String workspace,
+  required String? guestRoot,
+  required String? home,
+}) => guestRoot != null && home != null
+    ? guestWorkspacePath(guestRoot, home, workspace)
+    : workspace;
 
 /// What a composer decides, apart from how it is drawn: what is attached,
 /// which [ComposerMode] the text puts it in, whether Send would do anything,
@@ -87,8 +118,6 @@ class ComposerLogic extends ChangeNotifier {
     if (changed) _refresh();
   }
 
-  bool get agentSpeaking => _turn.agentSpeaking;
-
   final List<Attachment> _attachments = [];
   List<Attachment> get attachments => List.unmodifiable(_attachments);
 
@@ -99,6 +128,10 @@ class ComposerLogic extends ChangeNotifier {
   /// lets itself grow by them rather than scroll them away.
   int _embeds = 0;
   int get embeds => _embeds;
+
+  /// How many lines the field grows to before it scrolls: two more per embed,
+  /// up to four of them.
+  int get maxLines => 6 + 2 * _embeds.clamp(0, 4);
 
   /// Whether Send would do anything.
   final ValueNotifier<bool> canSend = ValueNotifier(false);

@@ -117,24 +117,13 @@ final class ComposerModel: ObservableObject {
   var cwd: String? { look.cwd }
   var attachments: [ComposerLook.Attachment] { look.attachments }
 
-  var accent: Color {
-    let argb = look.accent
-    return Color(
-      red: Double((argb >> 16) & 0xFF) / 255, green: Double((argb >> 8) & 0xFF) / 255,
-      blue: Double(argb & 0xFF) / 255, opacity: Double((argb >> 24) & 0xFF) / 255)
-  }
+  var accent: Color { Color(argb: look.accent) }
 
-  var menu: [ComposerOption] {
-    look.menu.enumerated().map { i, option in
-      ComposerOption(id: i, label: option.label, hint: option.hint, detail: option.description)
-    }
-  }
-
-  var cards: [UInt16: ComposerCard] {
-    Dictionary(
-      look.cards.map { (UInt16(truncatingIfNeeded: $0.code), ComposerCard(title: $0.title, body: $0.body)) },
-      uniquingKeysWith: { first, _ in first })
-  }
+  /// The menu's rows and the cards by their codes, as [look] last said them:
+  /// made when it changes rather than on every read, the field reading the
+  /// cards once per character it draws.
+  private(set) var menu: [ComposerOption] = []
+  private(set) var cards: [UInt16: ComposerCard] = [:]
 
   func apply(_ next: ComposerLook) {
     guard next != look else { return }
@@ -142,13 +131,31 @@ final class ComposerModel: ObservableObject {
       || next.accent != look.accent
     // A different list starts again at its first row; the same one keeps the
     // row the arrows are on.
-    if next.menu != look.menu { highlighted = 0 }
+    if next.menu != look.menu {
+      highlighted = 0
+      menu = next.menu.enumerated().map { i, option in
+        ComposerOption(id: i, label: option.label, hint: option.hint, detail: option.description)
+      }
+    }
+    if next.cards != look.cards {
+      cards = Dictionary(
+        next.cards.map {
+          (UInt16(truncatingIfNeeded: $0.code), ComposerCard(title: $0.title, body: $0.body))
+        },
+        uniquingKeysWith: { first, _ in first })
+    }
     look = next
     if restyle { editor?.restyle() }
   }
 
+  /// The value Dart and the field last agreed on, so a report that changes
+  /// nothing is not sent: one keystroke both edits the text and moves the
+  /// caret, and the field says so for each.
+  private var known: ComposerValue?
+
   /// A value Dart set: a completion taken, a message restored, a send.
   func apply(_ value: ComposerValue) {
+    known = value
     if let editor {
       editor.apply(text: value.text, start: value.start, end: value.end)
     } else {
@@ -161,14 +168,33 @@ final class ComposerModel: ObservableObject {
   }
 
   /// Tell Dart something happened; [then] hears what it answered.
-  func say(_ name: String, _ args: [String: Any] = [:], then: ((Any?) -> Void)? = nil) {
-    shell?.intent("composer", ["name": name, "args": args], answered: then)
+  func say(_ name: String, _ args: [String: Any?] = [:], then: ((Any?) -> Void)? = nil) {
+    shell?.say("composer", name, args, answered: then)
   }
 
   /// The field changed, or its caret moved.
   func edited(text: String, start: Int, end: Int) {
-    empty = text.isEmpty
+    shown(text: text)
+    let value = ComposerValue(text: text, start: start, end: end)
+    guard value != known else { return }
+    known = value
     say("edited", ["text": text, "start": start, "end": end])
+  }
+
+  /// What the field now holds, for the hint over it: published only when
+  /// that flips, not on every keystroke.
+  func shown(text: String) {
+    if empty != text.isEmpty { empty = text.isEmpty }
+  }
+
+  /// The field's measured height, after the update that measured it and on
+  /// the view's own curve: the field grows a line at a time with everything
+  /// else rather than jumping.
+  func measured(height: CGFloat) {
+    guard abs(fieldHeight - height) > 0.5 else { return }
+    DispatchQueue.main.async {
+      withAnimation(ComposerView.motion) { self.fieldHeight = height }
+    }
   }
 
   /// Ask Dart to take files off the clipboard; [then] hears whether it did.

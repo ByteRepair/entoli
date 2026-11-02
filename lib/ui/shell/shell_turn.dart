@@ -2,14 +2,16 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/models.dart";
-import "../../domain/permission.dart" show addDirectoryName;
 import "../../domain/room/room_state.dart";
-import "../chat/activity/format.dart" show formatAge;
 import "../chat/chat_controller.dart";
-import "../chat/tool_ui/tools.dart";
+import "../chat/widgets/approval_banner.dart";
+import "../chat/widgets/resume_bar.dart";
 import "../chat/widgets/running_pill.dart";
-import "../chat/widgets/running_strip.dart" show runningSources;
+import "../chat/widgets/running_strip.dart" show runningOf;
+import "../chat/widgets/steer_strip.dart";
+import "../chat/widgets/turn_surface.dart" show approvalAnswers;
 import "shell_outbox.dart";
+import "shell_slots.dart";
 import "snapshots.dart";
 
 /// [TurnSurface] drawn by the native shell, wired the same way: the resume
@@ -33,19 +35,12 @@ class ShellTurnSurface extends ConsumerStatefulWidget {
   ConsumerState<ShellTurnSurface> createState() => ShellTurnSurfaceState();
 }
 
-/// Where the turn surface's intents go: the one on top. Voice mode's is over
-/// the chat page's, and when it goes the chat page's draws again.
-class ShellTurnSlot {
-  final List<ShellTurnSurfaceState> _stack = [];
-
-  ShellTurnSurfaceState? get current => _stack.lastOrNull;
-}
-
-final shellTurnSlotProvider = Provider<ShellTurnSlot>((ref) => ShellTurnSlot());
-
-class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface> {
+/// One of a stack: voice mode's is over the chat page's, and when it goes the
+/// chat page's draws again.
+class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface>
+    implements ShellSurface {
   late final ShellOutbox _outbox = ref.read(shellOutboxProvider);
-  late final ShellTurnSlot _slot = ref.read(shellTurnSlotProvider);
+  late final ShellSlots _slots = ref.read(shellSlotsProvider);
 
   /// The pills as last sent, which a `running` intent names one of by index.
   List<RunningThing> _running = const [];
@@ -53,18 +48,19 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface> {
   @override
   void initState() {
     super.initState();
-    _slot._stack.add(this);
+    _slots.claim(ShellConcern.turn, this);
   }
 
   @override
   void dispose() {
-    final top = _slot.current == this;
-    _slot._stack.remove(this);
-    if (top) {
+    if (_slots.leave(ShellConcern.turn, this)) {
       _outbox.post(TurnSnapshot.none);
       // The one underneath, sent again: nothing it watches has changed, so
       // nothing else would rebuild it.
-      _slot.current?._resend();
+      if (_slots.top(ShellConcern.turn)
+          case final ShellTurnSurfaceState under) {
+        under._resend();
+      }
     }
     super.dispose();
   }
@@ -74,7 +70,8 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface> {
   }
 
   /// What the shell's turn surface sent.
-  Future<void> handle(String name, Map<String, Object?> args) async {
+  @override
+  Future<Object?> handle(String name, Map<String, Object?> args) async {
     final notifier = widget.notifier;
     String id() => args["id"]! as String;
     switch (name) {
@@ -95,7 +92,7 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface> {
             .expand((a) => a)
             .where((a) => a.id == id())
             .firstOrNull;
-        if (approval == null) return;
+        if (approval == null) return null;
         final answer = switch (args["answer"]) {
           "allow" => ApprovalResponse.allow,
           "chat" => ApprovalResponse.alwaysAllowChat,
@@ -119,27 +116,24 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface> {
         ];
         await notifier.answerQuestions(id(), answers);
     }
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
     // One underneath another sends nothing: the shell draws the top one.
-    if (_slot.current != this) return const SizedBox.shrink();
+    if (_slots.top(ShellConcern.turn) != this) return const SizedBox.shrink();
     final view = widget.view;
     final notifier = widget.notifier;
     final chat = view.chat;
     final chatId = chat?.state.id;
-    final alone = <RunningThing>[];
-    final grouped = <RunningThing>[];
-    if (chatId != null) {
-      for (final source in runningSources) {
-        for (final thing in source(ref, view, chatId)) {
-          (thing.group == null ? alone : grouped).add(thing);
-        }
-      }
-    }
     // Standing alone first, as the Flutter strip draws them.
-    _running = [...alone, ...grouped];
+    if (chatId == null) {
+      _running = const [];
+    } else {
+      final (:alone, :groups) = runningOf(ref, view, chatId);
+      _running = [...alone, ...groups.values.expand((g) => g)];
+    }
     // One panel, the first turn waiting on answers, as `TurnQuestions` draws.
     final asked = view.roomPhase == RoomPhase.waitingOnYou
         ? view.questions.values.expand((q) => q).firstOrNull
@@ -147,9 +141,10 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface> {
     _outbox.post(
       TurnSnapshot(
         resume: chat != null && chat.unfinished && !view.isRunning
-            ? view.unfinishedNotice ??
-                  "Unfinished turn from "
-                      "${formatAge(DateTime.now().difference(chat.messages.last.createdAt))}"
+            ? ResumeBar.lineOf(
+                chat.messages.last.createdAt,
+                notice: view.unfinishedNotice,
+              )
             : null,
         running: [
           for (final (i, thing) in _running.indexed)
@@ -163,7 +158,8 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface> {
             ),
         ],
         steers: [
-          for (final say in view.steering) (id: say.id, line: _line(say)),
+          for (final say in view.steering)
+            (id: say.id, line: SteerStrip.line(say)),
         ],
         withdrawable: widget.onWithdrawn != null,
         approvals: [
@@ -180,30 +176,18 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface> {
 
   /// [ApprovalBanner]'s question, and the answers it offers.
   static ApprovalSnapshot _approval(ToolApproval approval, TurnDriver driver) {
-    final (icon, title) = approval.unsandboxed
-        ? (Icons.shield_outlined, "Run without the sandbox?")
-        : toolUIFor(approval.toolName).approval;
+    final (icon, title) = ApprovalBanner.headingOf(approval);
+    final offers = approvalAnswers(driver, approval);
     return ApprovalSnapshot(
       id: approval.id,
       title: title,
       symbol: _symbolOf(icon) ?? "checkmark.shield",
       tool: approval.toolName,
       detail: approval.argumentsText ?? approval.argumentsJson,
-      // A this-turn-only answer to a directory grant would lapse at the next
-      // turn; a mirrored chat keeps it, its always answers being absent.
-      allow: !(driver.rulesWritable && approval.toolName == addDirectoryName),
-      chat: driver.rulesWritable,
-      project: driver.rulesWritable,
+      allow: offers.allow,
+      chat: offers.always,
+      project: offers.always,
     );
-  }
-
-  static final _space = RegExp(r"\s+");
-
-  /// A say on one line, or the files it carries where it said nothing.
-  static String _line(Message say) {
-    final text = say.plainText.trim().replaceAll(_space, " ");
-    if (text.isNotEmpty) return text;
-    return say.files.map((f) => f.filename).join(", ");
   }
 }
 

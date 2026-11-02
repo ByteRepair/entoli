@@ -116,7 +116,7 @@ class _VoicePageState extends ConsumerState<VoicePage> {
     // The native shell draws voice mode over the whole window; this route
     // stays, so leaving is still popping it and the session still lives as
     // long as the page.
-    if (ref.watch(liquidGlassProvider).shell) {
+    if (ref.watch(liquidGlassProvider).on) {
       return ShellVoice(
         voice: voice,
         controller: _voice,

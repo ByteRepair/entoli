@@ -31,15 +31,6 @@ struct VoiceState: Decodable, Equatable {
   }
 }
 
-extension Color {
-  /// An ARGB the way Dart's `toARGB32` gives one.
-  init(argb: Int) {
-    self.init(
-      red: Double((argb >> 16) & 0xFF) / 255, green: Double((argb >> 8) & 0xFF) / 255,
-      blue: Double(argb & 0xFF) / 255, opacity: Double((argb >> 24) & 0xFF) / 255)
-  }
-}
-
 /// Voice mode, over the whole window: the glow under the word for what it is
 /// doing, five lines of what has been said, the turn's surface, and three
 /// buttons with one promise each — the microphone, the reply, and going back
@@ -64,8 +55,8 @@ struct VoiceView: View {
     }
   }
 
-  private func say(_ name: String, _ args: [String: Any] = [:]) {
-    model.intent("voice", ["name": name, "args": args])
+  private func say(_ name: String, _ args: [String: Any?] = [:]) {
+    model.say("voice", name, args)
   }
 
   var body: some View {

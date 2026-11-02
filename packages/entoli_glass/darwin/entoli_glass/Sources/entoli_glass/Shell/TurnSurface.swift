@@ -90,8 +90,8 @@ struct TurnSurfaceView: View {
     .animation(ComposerView.motion, value: open)
   }
 
-  private func say(_ name: String, _ args: [String: Any] = [:]) {
-    model.intent("turn", ["name": name, "args": args])
+  private func say(_ name: String, _ args: [String: Any?] = [:]) {
+    model.say("turn", name, args)
   }
 
   // MARK: Resume

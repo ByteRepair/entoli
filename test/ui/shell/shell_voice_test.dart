@@ -28,7 +28,7 @@ void main() {
   Widget shell(Widget child) => ProviderScope(
     overrides: [
       liquidGlassProvider.overrideWithValue(
-        const LiquidGlass(available: true, on: true, shell: true),
+        const LiquidGlass(available: true, on: true),
       ),
       shellOutboxProvider.overrideWithValue(
         ShellOutbox((concern, map) {

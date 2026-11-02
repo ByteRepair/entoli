@@ -1,17 +1,15 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../domain/chat_search.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
 import "../../providers.dart";
 import "../selection.dart";
-import "../sidebar/project_palette.dart"
-    show chatsByRecency, createProject, isUserProject;
+import "../sidebar/project_palette.dart" show paletteListing;
 import "../sidebar/remote_projects.dart";
 import "shell_outbox.dart";
 import "../app_routes.dart";
-import "shell_sidebar.dart" show BusyListenable, projectSymbol;
+import "shell_sidebar.dart" show projectSymbol, remoteSymbol;
 import "snapshots.dart";
 
 /// Whether the native palette is open, what is typed in it, and which opening
@@ -35,70 +33,36 @@ final shellPaletteProvider = NotifierProvider<ShellPalette, PaletteState>(
   ShellPalette.new,
 );
 
-const _remoteSymbol = "laptopcomputer.and.iphone";
-
 /// Sends the [PaletteSnapshot] while the palette is open: `ProjectPalette`'s
-/// list, read and narrowed the same way — the default project and the
-/// built-ins, the user's projects, other devices', then every chat, running
-/// ones first — or, with something typed, the projects and chats it matches.
-class PalettePublisher extends ConsumerStatefulWidget {
+/// list, [paletteListing] — the default project and the built-ins, the
+/// user's projects, other devices', then every chat, running ones first — or,
+/// with something typed, the projects and chats it matches. Everything is
+/// read in [build], the publisher's own, as `SidebarPublisher` reads it and
+/// for the same reason.
+class PalettePublisher extends ConsumerWidget {
   const PalettePublisher({super.key});
 
   @override
-  ConsumerState<PalettePublisher> createState() => _PalettePublisherState();
-}
-
-/// Everything read in [build], the publisher's own, as `SidebarPublisher`
-/// reads it, and for the same reason.
-class _PalettePublisherState extends ConsumerState<PalettePublisher> {
-  late final BusyListenable _busy;
-
-  @override
-  void initState() {
-    super.initState();
-    _busy = BusyListenable(ref, this);
-  }
-
-  @override
-  void dispose() {
-    _busy.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final palette = ref.watch(shellPaletteProvider);
-    final outbox = ref.read(shellOutboxProvider);
-    outbox.post(
-      palette.open
-          ? _snapshot(ref, palette, _busy.value)
-          : PaletteSnapshot(open: false, serial: palette.serial),
-    );
+    ref
+        .read(shellOutboxProvider)
+        .post(
+          palette.open
+              ? _snapshot(ref, palette)
+              : PaletteSnapshot(open: false, serial: palette.serial),
+        );
     return const SizedBox.shrink();
   }
 
-  PaletteSnapshot _snapshot(
-    WidgetRef ref,
-    PaletteState palette,
-    Set<String> running,
-  ) {
+  PaletteSnapshot _snapshot(WidgetRef ref, PaletteState palette) {
+    final running = ref.watch(busyChatIdsProvider);
     final selected = ref.watch(selectedProjectProvider);
     final selectedChat = ref.watch(selectedChatIdProvider);
-    final named = ref.watch(projectListProvider).value ?? const <String>[];
     final chats = (ref.watch(chatListProvider).value ?? const <ChatState>[])
         .where((c) => !c.isExpired())
         .toList();
-    final remotes = remoteEntries(
-      ref.watch(remoteChatsProvider),
-      ref.watch(deviceProjectsProvider),
-      ref.watch(syncPeersProvider),
-    );
-    final counts = <String?, int>{};
-    final busy = <String?>{};
-    for (final chat in chats) {
-      counts[chat.project] = (counts[chat.project] ?? 0) + 1;
-      if (running.contains(chat.id)) busy.add(chat.project);
-    }
+    final (:counts, :busy) = projectCounts(chats, running);
 
     PaletteItem local(String? p) => PaletteItem(
       id: "p::${p ?? ""}",
@@ -115,50 +79,43 @@ class _PalettePublisherState extends ConsumerState<PalettePublisher> {
       label: e.label,
       device: e.scope.device,
       project: e.scope.project,
-      symbol: _remoteSymbol,
+      symbol: remoteSymbol,
       omada: e.omada,
       trailing: "${e.count}",
       current: e.scope == selected,
     );
 
-    final needle = searchNeedle(palette.query);
-    final every = everyProject(named);
-    final sections = <({String heading, List<PaletteItem> items})>[];
-    if (needle.isEmpty) {
-      sections
-        ..add((
-          heading: "",
-          items: [
-            for (final p in every.where((p) => !isUserProject(p))) local(p),
-          ],
-        ))
-        ..add((
-          heading: "",
-          items: [for (final p in every.where(isUserProject)) local(p)],
-        ));
-      if (remotes.isNotEmpty) {
-        sections.add((
+    final listing = paletteListing(
+      named: ref.watch(projectListProvider).value ?? const <String>[],
+      chats: chats,
+      remotes: remoteEntries(
+        ref.watch(remoteChatsProvider),
+        ref.watch(deviceProjectsProvider),
+        ref.watch(syncPeersProvider),
+      ),
+      query: palette.query,
+      running: running,
+    );
+    final sections = <({String heading, List<PaletteItem> items})>[
+      if (!listing.searching) ...[
+        (heading: "", items: [for (final p in listing.projects) local(p)]),
+        (heading: "", items: [for (final p in listing.mine) local(p)]),
+        (
           heading: "Other Devices",
-          items: [for (final e in remotes) mirrored(e)],
-        ));
-      }
-    } else {
-      final projects = [
-        for (final p in every)
-          if (projectLabel(p).toLowerCase().contains(needle)) local(p),
-        for (final e in remotes)
-          if (e.label.toLowerCase().contains(needle)) mirrored(e),
-      ];
-      if (projects.isNotEmpty) {
-        sections.add((heading: "Projects", items: projects));
-      }
-    }
-    final found = chatsByRecency(chatsMatching(chats, palette.query), running);
-    if (found.isNotEmpty) {
-      sections.add((
+          items: [for (final e in listing.devices) mirrored(e)],
+        ),
+      ] else
+        (
+          heading: "Projects",
+          items: [
+            for (final p in listing.projects) local(p),
+            for (final e in listing.devices) mirrored(e),
+          ],
+        ),
+      (
         heading: "Chats",
         items: [
-          for (final chat in found)
+          for (final chat in listing.chats)
             PaletteItem(
               id: "c:${chat.id}",
               label: chat.title.orUntitled,
@@ -168,8 +125,8 @@ class _PalettePublisherState extends ConsumerState<PalettePublisher> {
               current: chat.id == selectedChat,
             ),
         ],
-      ));
-    }
+      ),
+    ];
     return PaletteSnapshot(
       open: true,
       query: palette.query,
@@ -186,17 +143,17 @@ class _PalettePublisherState extends ConsumerState<PalettePublisher> {
 }
 
 /// Runs what the native palette sends, in [context] under the Navigator.
-/// Answers what the Swift waits on: an error to show, or null.
+/// Answers what the Swift waits on, which is nothing: a project made from the
+/// palette is the sidebar's `createProject`.
 Future<Object?> runPaletteIntent(
   BuildContext context,
   WidgetRef ref,
-  String name,
-  Map<String, Object?> args,
+  ShellIntent intent,
 ) async {
   final palette = ref.read(shellPaletteProvider.notifier);
-  switch (name) {
+  switch (intent.name) {
     case "search":
-      palette.search(args["query"] as String? ?? "");
+      palette.search(intent.maybeString("query") ?? "");
     case "close":
       palette.close();
     case "pickProject":
@@ -205,12 +162,12 @@ Future<Object?> runPaletteIntent(
         return null;
       }
       selectProject(ref, (
-        device: args["device"] as String?,
-        project: args["project"] as String?,
+        device: intent.maybeString("device"),
+        project: intent.maybeString("project"),
       ));
     case "pickChat":
       palette.close();
-      final id = args["chat"]! as String;
+      final id = intent.string("chat");
       final chat = ref
           .read(chatListProvider)
           .value
@@ -224,20 +181,6 @@ Future<Object?> runPaletteIntent(
       // Into its project first: the sidebar lists one, and would otherwise
       // deny the chat on screen.
       ref.read(selectedChatIdProvider.notifier).reveal(chat);
-    case "createProject":
-      final dir = projectNameFrom(args["name"] as String? ?? "");
-      if (dir == null) return "That is not a name a project can have.";
-      try {
-        if (!context.mounted) return null;
-        await createProject((
-          name: dir,
-          description: args["description"] as String? ?? "",
-          omada: args["omada"] == true,
-        ), ref.read(selectedProjectProvider).device)(context, ref);
-      } catch (_) {
-        return "The project could not be created.";
-      }
-      palette.close();
   }
   return null;
 }

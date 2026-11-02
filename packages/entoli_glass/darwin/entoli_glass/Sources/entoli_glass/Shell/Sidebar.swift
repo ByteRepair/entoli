@@ -8,7 +8,6 @@ struct ProjectChoice: Decodable, Equatable, Hashable {
   var symbol: String
   var omada = false
   var count = 0
-  var busy = false
 
   /// Its `ProjectRef`, as an intent hands it back.
   var ref: [String: Any?] { ["device": device, "project": project] }
@@ -43,7 +42,6 @@ struct SidebarState: Decodable, Equatable {
   var empty: String?
   var projects: [ProjectChoice] = []
   var devices: [ProjectChoice] = []
-  var moveTargets: [ProjectChoice] = []
   var omadaByDefault = false
 }
 
@@ -174,7 +172,7 @@ struct SidebarView: View {
     }
     if !row.remote {
       Menu("Move to Project") {
-        ForEach(state.moveTargets, id: \.self) { target in
+        ForEach(state.projects, id: \.self) { target in
           Button(target.label) {
             model.intent("move", ["id": row.id, "project": target.project])
           }

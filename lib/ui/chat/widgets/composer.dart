@@ -6,7 +6,6 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../data/mime.dart" show pastedAttachment;
 import "../../../domain/models.dart";
-import "../../../domain/file_tools.dart" show guestWorkspacePath;
 import "../../../providers.dart";
 import "../../fonts.dart";
 import "../../widgets/attachment_chip.dart";
@@ -234,7 +233,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
           project: widget.project,
           device: widget.device,
           minLines: 1,
-          maxLines: 6 + 2 * embeds.clamp(0, 4),
+          maxLines: _logic.maxLines,
           // The command in the face a command is read in, so what is about to
           // run looks like what it is while it is still being typed.
           style: shell ? codeBlockStyle(theme) : null,
@@ -383,13 +382,9 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
                                   ? Icons.auto_awesome
                                   : Icons.send,
                             ),
-                            tooltip: shell
-                                ? "Run"
-                                : wired
-                                ? "Compact"
-                                : _logic.queues.value
-                                ? "Send now, read at its next step"
-                                : "Send",
+                            tooltip: _logic.mode.sendLabel(
+                              queues: _logic.queues.value,
+                            ),
                           ),
                   ),
                 ],
@@ -414,7 +409,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
       borderSide: BorderSide(color: theme.colorScheme.tertiary, width: width),
     );
     return _messageField.copyWith(
-      hintText: "Shell command",
+      hintText: ComposerMode.shell.hint,
       prefixIcon: Icon(
         Icons.terminal,
         size: 18,
@@ -431,7 +426,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   /// callback is not sent to a model and runs nothing on the machine — the
   /// command's dressing would say more than is true.
   InputDecoration _wiredField(ThemeData theme) => _messageField.copyWith(
-    hintText: "Compact the conversation",
+    hintText: ComposerMode.callback.hint,
     prefixIcon: Icon(
       Icons.auto_awesome,
       size: 18,
@@ -455,13 +450,11 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
     // words: the guest's vocabulary where this shell has one, so a chat
     // reopened before its next command says where the command will run and
     // not the host path it is keyed by.
-    final fallback = () {
-      final root = ref.watch(shellProvider).guestRoot;
-      final home = widget.workspaceHome;
-      return root != null && home != null
-          ? guestWorkspacePath(root, home, workspace)
-          : workspace;
-    }();
+    final fallback = workingDirectoryFallback(
+      workspace: workspace,
+      guestRoot: ref.watch(shellProvider).guestRoot,
+      home: widget.workspaceHome,
+    );
     Widget row(String? live) => Container(
       margin: const EdgeInsets.only(bottom: 8),
       constraints: const BoxConstraints(minHeight: 32),

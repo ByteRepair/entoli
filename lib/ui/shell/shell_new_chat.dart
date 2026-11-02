@@ -9,20 +9,16 @@ import "../selection.dart";
 import "../sidebar/remote_projects.dart";
 import "../widgets/completion_field.dart";
 import "shell_outbox.dart";
+import "shell_slots.dart";
 import "shell_sidebar.dart" show projectSymbol;
 import "snapshots.dart";
 
 /// The asset the new-chat screen stands its figure on.
 const _athena = "assets/images/athena.png";
 
-/// Where the new-chat screen's intents go: the one on screen.
-class ShellNewChatSlot {
-  ShellNewChatState? current;
-}
-
-final shellNewChatSlotProvider = Provider<ShellNewChatSlot>(
-  (ref) => ShellNewChatSlot(),
-);
+/// How many starters the screen offers: a row or two of chips, not a
+/// catalogue.
+const _starters = 6;
 
 /// The new-chat screen's body — `_EmptyChat` on the new-chat screen — drawn
 /// by the native shell: the same question, badges and starters, read the same
@@ -48,21 +44,22 @@ class ShellNewChat extends ConsumerStatefulWidget {
   ConsumerState<ShellNewChat> createState() => ShellNewChatState();
 }
 
-class ShellNewChatState extends ConsumerState<ShellNewChat> {
+class ShellNewChatState extends ConsumerState<ShellNewChat>
+    implements ShellSurface {
   late final ShellOutbox _outbox = ref.read(shellOutboxProvider);
-  late final ShellNewChatSlot _slot = ref.read(shellNewChatSlotProvider);
+  late final ShellSlots _slots = ref.read(shellSlotsProvider);
 
   @override
   void dispose() {
-    if (_slot.current == this) {
-      _slot.current = null;
+    if (_slots.leave(ShellConcern.newChatScreen, this)) {
       _outbox.post(NewChatSnapshot.absent);
     }
     super.dispose();
   }
 
   /// What the native screen sent.
-  void handle(String name, Map<String, Object?> args) {
+  @override
+  Future<Object?> handle(String name, Map<String, Object?> args) async {
     switch (name) {
       // Picking the badge already picked is the default project, which is
       // nothing picked: the row is a set of toggles.
@@ -84,23 +81,14 @@ class ShellNewChatState extends ConsumerState<ShellNewChat> {
           args["name"]! as String,
         );
     }
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
-    _slot.current = this;
+    _slots.claim(ShellConcern.newChatScreen, this);
     final at = widget.at;
-    final remote = at.device != null;
-    final question = remote
-        ? emptyChatQuestionFor(
-                at.project,
-                description: ref
-                    .watch(remoteProjectProvider(at))
-                    ?.settings
-                    .description,
-              ) ??
-              ""
-        : ref.watch(emptyChatQuestionProvider(at.project));
+    final question = ref.watch(newChatQuestionProvider(at));
     final named = ref.watch(projectListProvider).value ?? const <String>[];
     final peers = ref.watch(syncPeersProvider);
     final entries = remoteEntries(
@@ -156,7 +144,7 @@ class ShellNewChatState extends ConsumerState<ShellNewChat> {
                 name: option.name,
                 description: option.description,
               ),
-        ],
+        ].take(_starters).toList(),
         starting: widget.starting,
       ),
     );

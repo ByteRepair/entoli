@@ -130,7 +130,6 @@ void main() {
       widgetRef,
       const ShellIntent("createProject", {"name": "   "}),
     );
-    expect(answer.handled, isTrue);
-    expect(answer.answer, isA<String>());
+    expect(answer, isA<String>());
   });
 }

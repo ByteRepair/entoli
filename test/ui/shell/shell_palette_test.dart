@@ -5,6 +5,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/shell/shell_outbox.dart";
 import "package:agent_chat/ui/shell/shell_palette.dart";
+import "package:agent_chat/ui/shell/snapshots.dart";
 
 import "../../harness.dart";
 
@@ -53,7 +54,7 @@ void main() {
   ]) async {
     await io(
       tester,
-      () => runPaletteIntent(widgetContext, widgetRef, name, args),
+      () => runPaletteIntent(widgetContext, widgetRef, ShellIntent(name, args)),
     );
     await settleIo(tester);
   }

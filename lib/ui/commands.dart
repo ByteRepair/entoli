@@ -163,7 +163,7 @@ class Commands {
         openNewChatIn(context, ref, omadaBaseProject);
       // Under the native shell, the shell's own palette.
       case AppCommand.switchProject:
-        if (ref.read(liquidGlassProvider).shell) {
+        if (ref.read(liquidGlassProvider).on) {
           ref.read(shellPaletteProvider.notifier).open();
         } else {
           await showProjectPalette(context, ref);

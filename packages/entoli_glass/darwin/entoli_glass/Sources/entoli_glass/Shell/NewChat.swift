@@ -49,7 +49,7 @@ struct NewChatView: View {
   private var state: NewChatState { model.newChat }
 
   private func say(_ name: String, _ args: [String: Any?]) {
-    model.intent("newChatScreen", ["name": name, "args": args.mapValues { $0 ?? NSNull() }])
+    model.say("newChatScreen", name, args)
   }
 
   var body: some View {
@@ -100,7 +100,7 @@ struct NewChatView: View {
               .foregroundStyle(.secondary)
           } else {
             FlowLayout(spacing: 8) {
-              ForEach(state.starters.prefix(6), id: \.self) { starter in
+              ForEach(state.starters, id: \.self) { starter in
                 Button {
                   say("starter", ["trigger": starter.trigger, "name": starter.name])
                 } label: {
@@ -145,19 +145,25 @@ struct NewChatView: View {
 }
 
 /// A Flutter asset out of the app's own bundle: `App.framework` keeps them
-/// under `flutter_assets`.
+/// under `flutter_assets`. Read and decoded once, not on every body.
+@MainActor
 private func flutterAsset(_ key: String) -> Image? {
+  if let image = flutterAssets[key] { return image }
   #if os(iOS)
     let base = Bundle.main.bundleURL.appendingPathComponent("Frameworks/App.framework/flutter_assets")
     guard let image = UIImage(contentsOfFile: base.appendingPathComponent(key).path) else { return nil }
-    return Image(uiImage: image)
+    let read = Image(uiImage: image)
   #else
     let base = Bundle.main.bundleURL.appendingPathComponent(
       "Contents/Frameworks/App.framework/Resources/flutter_assets")
     guard let image = NSImage(contentsOf: base.appendingPathComponent(key)) else { return nil }
-    return Image(nsImage: image)
+    let read = Image(nsImage: image)
   #endif
+  flutterAssets[key] = read
+  return read
 }
+
+@MainActor private var flutterAssets: [String: Image] = [:]
 
 /// Rows of whatever fits, centred, wrapping to the next as a chip row does.
 struct FlowLayout: Layout {

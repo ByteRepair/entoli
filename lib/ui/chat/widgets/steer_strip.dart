@@ -51,7 +51,7 @@ class SteerStrip extends StatelessWidget {
                     TextSpan(
                       children: [
                         TextSpan(
-                          text: _line(say),
+                          text: line(say),
                           style: theme.textTheme.bodyMedium,
                         ),
                         TextSpan(text: "  at the next step", style: quiet),
@@ -81,7 +81,8 @@ class SteerStrip extends StatelessWidget {
 
   static final _space = RegExp(r"\s+");
 
-  static String _line(Message say) {
+  /// [say] on one line, or the files it carries where it said nothing.
+  static String line(Message say) {
     final text = say.plainText.trim().replaceAll(_space, " ");
     if (text.isNotEmpty) return text;
     return say.files.map((f) => f.filename).join(", ");

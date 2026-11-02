@@ -45,7 +45,7 @@ struct PaletteView: View {
   private var palette: PaletteState { model.palette }
 
   private func say(_ name: String, _ args: [String: Any?] = [:]) {
-    model.intent("palette", ["name": name, "args": args.mapValues { $0 ?? NSNull() }])
+    model.say("palette", name, args)
   }
 
   /// The row the arrows are on: the one moved to, else the project shown
@@ -92,7 +92,9 @@ struct PaletteView: View {
   }
 
   private var panel: some View {
-    VStack(spacing: 0) {
+    // Once for every row, rather than each row looking through them all.
+    let activeId = self.activeId
+    return VStack(spacing: 0) {
       HStack(spacing: 10) {
         Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
         TextField("Switch project or open a chat", text: $query)
@@ -143,7 +145,7 @@ struct PaletteView: View {
                   .padding(.top, 10)
                   .padding(.bottom, 2)
               }
-              ForEach(section.items) { row($0) }
+              ForEach(section.items) { row($0, on: $0.id == activeId) }
             }
           }
           .padding(8)
@@ -166,9 +168,8 @@ struct PaletteView: View {
     }
   }
 
-  private func row(_ item: PaletteState.Item) -> some View {
-    let on = item.id == activeId
-    return Button {
+  private func row(_ item: PaletteState.Item, on: Bool) -> some View {
+    Button {
       pick(item)
     } label: {
       HStack(spacing: 10) {

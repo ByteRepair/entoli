@@ -50,7 +50,7 @@ class ReactionButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final shell = ref.watch(liquidGlassProvider).shell;
+    final shell = ref.watch(liquidGlassProvider).on;
     return ActionIcon(
       icon: Icons.add_reaction_outlined,
       tooltip: "React",

@@ -243,12 +243,7 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
     return ValueListenableBuilder<Set<String>>(
       valueListenable: running,
       builder: (context, runningIds, _) {
-        final counts = <String?, int>{};
-        final busy = <String?>{};
-        for (final chat in chats) {
-          counts[chat.project] = (counts[chat.project] ?? 0) + 1;
-          if (runningIds.contains(chat.id)) busy.add(chat.project);
-        }
+        final (:counts, :busy) = projectCounts(chats, runningIds);
 
         _Choice local(String? p) => _Choice(
           build: (active) => _Row(
@@ -275,39 +270,40 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
           action: (_, ref) => selectProject(ref, e.scope),
         );
 
-        final needle = searchNeedle(_query);
+        final listing = paletteListing(
+          named: named,
+          chats: chats,
+          remotes: remotes,
+          query: _query,
+          running: runningIds,
+        );
         final items = <_Item>[];
         int? current;
-        if (needle.isEmpty) {
-          final every = everyProject(named);
-          final builtIn = every.where((p) => !isUserProject(p));
-          final mine = every.where(isUserProject);
+        if (!listing.searching) {
           var index = 0;
-          for (final p in builtIn) {
-            if (selected == localProject(p)) current = index;
-            items.add(local(p));
+          void add(_Choice choice, {required bool isCurrent}) {
+            if (isCurrent) current = index;
+            items.add(choice);
             index++;
+          }
+
+          for (final p in listing.projects) {
+            add(local(p), isCurrent: selected == localProject(p));
           }
           items.add(const _Rule());
-          for (final p in mine) {
-            if (selected == localProject(p)) current = index;
-            items.add(local(p));
-            index++;
+          for (final p in listing.mine) {
+            add(local(p), isCurrent: selected == localProject(p));
           }
-          if (remotes.isNotEmpty) {
+          if (listing.devices.isNotEmpty) {
             items.add(const _Heading("Other devices"));
-            for (final e in remotes) {
-              if (e.scope == selected) current = index;
-              items.add(mirrored(e));
-              index++;
+            for (final e in listing.devices) {
+              add(mirrored(e), isCurrent: e.scope == selected);
             }
           }
         } else {
           final projects = [
-            for (final p in everyProject(named))
-              if (projectLabel(p).toLowerCase().contains(needle)) local(p),
-            for (final e in remotes)
-              if (e.label.toLowerCase().contains(needle)) mirrored(e),
+            for (final p in listing.projects) local(p),
+            for (final e in listing.devices) mirrored(e),
           ];
           if (projects.isNotEmpty) {
             items
@@ -316,7 +312,7 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
           }
         }
 
-        final found = chatsByRecency(chatsMatching(chats, _query), runningIds);
+        final found = listing.chats;
         if (found.isNotEmpty) {
           if (items.isNotEmpty) items.add(const _Rule());
           for (final chat in found) {
@@ -465,6 +461,53 @@ List<ChatState> chatsByRecency(
 /// below it.
 bool isUserProject(String? project) =>
     project != null && isProjectName(project);
+
+/// What the palette lists, apart from how it is drawn — the Flutter palette
+/// and the native shell's draw the same. With nothing typed ([searching]
+/// false), [projects] is the default project and the built-ins, [mine] the
+/// user's own below a rule, and [devices] every paired device's; with
+/// something typed, [projects] and [devices] are those whose names match and
+/// [mine] is empty. [chats] are those whose titles match, running first.
+({
+  bool searching,
+  List<String?> projects,
+  List<String?> mine,
+  List<RemoteEntry> devices,
+  List<ChatState> chats,
+})
+paletteListing({
+  required List<String> named,
+  required List<ChatState> chats,
+  required List<RemoteEntry> remotes,
+  required String query,
+  required Set<String> running,
+}) {
+  final needle = searchNeedle(query);
+  final every = everyProject(named);
+  final found = chatsByRecency(chatsMatching(chats, query), running);
+  if (needle.isEmpty) {
+    return (
+      searching: false,
+      projects: [...every.where((p) => !isUserProject(p))],
+      mine: [...every.where(isUserProject)],
+      devices: remotes,
+      chats: found,
+    );
+  }
+  return (
+    searching: true,
+    projects: [
+      for (final p in every)
+        if (projectLabel(p).toLowerCase().contains(needle)) p,
+    ],
+    mine: const [],
+    devices: [
+      for (final e in remotes)
+        if (e.label.toLowerCase().contains(needle)) e,
+    ],
+    chats: found,
+  );
+}
 
 class _Row extends StatelessWidget {
   const _Row({

@@ -11,22 +11,20 @@ import "../app_menu_bar.dart";
 import "../command_intents.dart";
 import "../commands.dart";
 import "../selection.dart";
-import "conversation_pane.dart";
-import "shell_composer.dart";
-import "shell_new_chat.dart";
+import "../app_routes.dart";
+import "../chat/chat_page.dart";
 import "shell_outbox.dart";
 import "shell_palette.dart";
-import "../app_routes.dart";
 import "shell_sidebar.dart";
-import "shell_turn.dart";
-import "shell_voice.dart";
+import "shell_slots.dart";
 import "snapshots.dart";
 
 /// The app under the native shell, in `AppShell`'s place: the Flutter half of
 /// a window SwiftUI owns. It asks the Swift to take the window, sends it the
-/// snapshots it draws, runs what it sends back, and draws [ConversationPane].
-/// The shell's bars reach it, and every page over it, as padding: see
-/// [ShellInsets]. The commands and their keys attach here as they do to
+/// snapshots it draws, runs what it sends back, and draws the open
+/// conversation, [ChatPage]. The shell's bars reach it, and every page over
+/// it, as padding, so it scrolls under them: see [ShellInsets]. The pages it
+/// pushes draw over it inside the same view. The commands and their keys attach here as they do to
 /// `AppShell`, and the menu bar is still `AppMenuBar`.
 class ShellBridge extends ConsumerStatefulWidget {
   const ShellBridge({super.key});
@@ -93,60 +91,26 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
   /// What the user did in the shell, answered with what the Swift waits on:
   /// an error to show, or null.
   Future<Object?> _run(ShellIntent intent) async {
-    final slots = ref.read(shellSlotsProvider);
+    // A surface's own, as its name and args inside the intent's: to the one
+    // on screen.
+    if (_surfaces[intent.name] case final concern?) {
+      final own = intent.nested;
+      return ref
+          .read(shellSlotsProvider)
+          .top(concern)
+          ?.handle(own.name, own.args);
+    }
     switch (intent.name) {
       case "sidebar":
         ref.read(sidebarShownProvider.notifier).set(intent.flag("shown"));
         return null;
-      // The composer's own events, as `name` and `args` inside the intent's.
-      case "composer":
-        final args = (intent.args["args"] as Map<Object?, Object?>?) ?? {};
-        return slots.composer?.handle(
-          intent.string("name"),
-          args.cast<String, Object?>(),
-        );
-      // The turn surface's, the same way.
-      case "turn":
-        final args = (intent.args["args"] as Map<Object?, Object?>?) ?? {};
-        await ref
-            .read(shellTurnSlotProvider)
-            .current
-            ?.handle(intent.string("name"), args.cast<String, Object?>());
-        return null;
-      // The new-chat screen's, the same way.
-      case "newChatScreen":
-        final args = (intent.args["args"] as Map<Object?, Object?>?) ?? {};
-        ref
-            .read(shellNewChatSlotProvider)
-            .current
-            ?.handle(intent.string("name"), args.cast<String, Object?>());
-        return null;
-      // Voice mode's controls, the same way.
-      case "voice":
-        final args = (intent.args["args"] as Map<Object?, Object?>?) ?? {};
-        ref
-            .read(shellVoiceSlotProvider)
-            .current
-            ?.handle(intent.string("name"), args.cast<String, Object?>());
-        return null;
-      // The palette's, the same way, answered with an error to show or null.
       case "palette":
-        final args = (intent.args["args"] as Map<Object?, Object?>?) ?? {};
-        return runPaletteIntent(
-          context,
-          ref,
-          intent.string("name"),
-          args.cast<String, Object?>(),
-        );
-      case "toolbar":
-        slots.bar?.press(intent.string("id"));
-        return null;
+        return runPaletteIntent(context, ref, intent.nested);
     }
-    if (!mounted) return null;
-    final sidebar = await runSidebarIntent(context, ref, intent);
-    if (!sidebar.handled) logFailure("shell", "no intent ${intent.name}");
-    return sidebar.answer;
+    return runSidebarIntent(context, ref, intent);
   }
+
+  static final _surfaces = ShellConcern.values.asNameMap();
 
   @override
   Widget build(BuildContext context) => const AppMenuBar(
@@ -155,7 +119,7 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
         _WindowPublisher(),
         SidebarPublisher(),
         PalettePublisher(),
-        Positioned.fill(child: ConversationPane()),
+        Positioned.fill(child: ChatPage()),
       ],
     ),
   );
@@ -211,11 +175,7 @@ class _WindowPublisher extends ConsumerWidget {
               WindowSnapshot(
                 covered: covered,
                 sidebarShown: shown,
-                appearance: switch (theme) {
-                  AppTheme.system => null,
-                  AppTheme.light => "light",
-                  AppTheme.dark => "dark",
-                },
+                appearance: theme == AppTheme.system ? null : theme.name,
               ),
             );
         return const SizedBox.shrink();

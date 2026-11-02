@@ -350,13 +350,7 @@ class AppSession {
           platform.createAppUpdateHost(cache),
         ),
         liquidGlassProvider.overrideWithValue(
-          LiquidGlass(
-            available: glassAvailable,
-            on: _glassAtLaunch!,
-            // Wherever the platform draws it: the shell is the same SwiftUI
-            // on both.
-            shell: _glassAtLaunch!,
-          ),
+          LiquidGlass(available: glassAvailable, on: _glassAtLaunch!),
         ),
         agentBrowserProvider.overrideWithValue(browser),
         localEngineProvider.overrideWithValue(engine),
@@ -614,7 +608,7 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       themeMode: mode,
       onGenerateRoute: appRoute,
       navigatorObservers: [ref.read(appRoutesProvider)],
-      builder: ref.watch(liquidGlassProvider).shell
+      builder: ref.watch(liquidGlassProvider).on
           ? (context, child) => ShellInsets(child: child!)
           : null,
       // All four wrapped rather than folded into the shell: what another app
@@ -644,7 +638,7 @@ class _Shell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) =>
-      ref.watch(liquidGlassProvider).shell
+      ref.watch(liquidGlassProvider).on
       ? const ShellBridge()
       : const AppShell();
 }

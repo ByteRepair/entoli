@@ -174,7 +174,7 @@ extension View {
           ToolbarItemGroup(placement: .primaryAction) {
             ForEach(bar.items.filter { !$0.spinner }) { item in
               Button {
-                model.intent("toolbar", ["id": item.id])
+                model.say("toolbar", "press", ["id": item.id])
               } label: {
                 Label(item.label, systemImage: item.symbol ?? "circle")
               }

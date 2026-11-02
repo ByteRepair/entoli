@@ -47,31 +47,37 @@ final class ShellModel: ObservableObject {
     self.channel = channel
   }
 
-  func apply(concern: String, value: Any?) {
+  /// A snapshot from Dart: [json] as its outbox compared it, or [value] for
+  /// a one-off with nothing to compare.
+  func apply(concern: String, value: Any?, json: String?) {
+    func decode<T: Decodable>() -> T? {
+      guard let data = json?.data(using: .utf8) else { return nil }
+      return try? Self.decoder.decode(T.self, from: data)
+    }
     switch concern {
     case "window":
-      if let state: WindowState = decode(value), state != window {
+      if let state: WindowState = decode(), state != window {
         window = state
         onWindow?(state)
       }
     case "sidebar":
-      if let state: SidebarState = decode(value), state != sidebar { sidebar = state }
+      if let state: SidebarState = decode(), state != sidebar { sidebar = state }
     case "chatBar":
-      if let state: ChatBarState = decode(value), state != chatBar { chatBar = state }
+      if let state: ChatBarState = decode(), state != chatBar { chatBar = state }
     case "palette":
-      if let state: PaletteState = decode(value), state != palette { palette = state }
+      if let state: PaletteState = decode(), state != palette { palette = state }
     case "voice":
-      if let state: VoiceState = decode(value), state != voice { voice = state }
+      if let state: VoiceState = decode(), state != voice { voice = state }
     case "voiceLevel":
       voiceLevel.set(((value as? [String: Any])?["level"] as? NSNumber)?.doubleValue ?? 0)
     case "newChat":
-      if let state: NewChatState = decode(value), state != newChat { newChat = state }
+      if let state: NewChatState = decode(), state != newChat { newChat = state }
     case "turn":
-      if let state: TurnState = decode(value), state != turn { turn = state }
+      if let state: TurnState = decode(), state != turn { turn = state }
     case "composer":
-      if let look: ComposerLook = decode(value) { composer.apply(look) }
+      if let look: ComposerLook = decode() { composer.apply(look) }
     case "composerValue":
-      if let value: ComposerValue = decode(value) { composer.apply(value) }
+      if let value: ComposerValue = decode() { composer.apply(value) }
     case "composerFocus":
       composer.focus()
     default:
@@ -95,6 +101,18 @@ final class ShellModel: ObservableObject {
     }
   }
 
+  /// What the user did on one of the surfaces Dart keeps a stack of — the
+  /// composer, the turn, the new-chat screen, voice mode, the toolbar — sent
+  /// under its [concern] to the one on screen: see `ShellSlots`. [answered]
+  /// hears what Dart answered.
+  func say(
+    _ concern: String, _ name: String, _ args: [String: Any?] = [:],
+    answered: ((Any?) -> Void)? = nil
+  ) {
+    intent(
+      concern, ["name": name, "args": args.mapValues { $0 ?? NSNull() }], answered: answered)
+  }
+
   private var reported: EdgeInsets?
 
   /// How much of the Flutter view the shell's own bars cover, which Dart
@@ -110,11 +128,15 @@ final class ShellModel: ObservableObject {
       ])
   }
 
-  private func decode<T: Decodable>(_ value: Any?) -> T? {
-    guard let value, JSONSerialization.isValidJSONObject(value),
-      let data = try? JSONSerialization.data(withJSONObject: value)
-    else { return nil }
-    return try? JSONDecoder().decode(T.self, from: data)
+  private static let decoder = JSONDecoder()
+}
+
+extension Color {
+  /// An ARGB the way Dart's `toARGB32` gives one.
+  init(argb: Int) {
+    self.init(
+      red: Double((argb >> 16) & 0xFF) / 255, green: Double((argb >> 8) & 0xFF) / 255,
+      blue: Double(argb & 0xFF) / 255, opacity: Double((argb >> 24) & 0xFF) / 255)
   }
 }
 

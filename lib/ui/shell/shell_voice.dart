@@ -3,27 +3,18 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/models.dart";
-import "../../domain/room/room_state.dart";
 import "../chat/chat_controller.dart";
 import "../theme.dart";
 import "../voice/transcript.dart";
 import "../voice/voice_controller.dart";
 import "shell_outbox.dart";
+import "shell_slots.dart";
 import "shell_turn.dart";
 import "snapshots.dart";
 
 /// How many of the transcript's lines go to the shell: more than its window
 /// shows, so there is some of the conversation to scroll back through.
 const _keptLines = 40;
-
-/// Where voice mode's intents go: the one on screen.
-class ShellVoiceSlot {
-  ShellVoiceState? current;
-}
-
-final shellVoiceSlotProvider = Provider<ShellVoiceSlot>(
-  (ref) => ShellVoiceSlot(),
-);
 
 /// `VoicePage`'s body under the native shell, which draws voice mode over the
 /// whole window: the session sent as a [VoiceSnapshot], the microphone's
@@ -46,16 +37,17 @@ class ShellVoice extends ConsumerStatefulWidget {
   ConsumerState<ShellVoice> createState() => ShellVoiceState();
 }
 
-class ShellVoiceState extends ConsumerState<ShellVoice> {
+class ShellVoiceState extends ConsumerState<ShellVoice>
+    implements ShellSurface {
   late final ShellOutbox _outbox = ref.read(shellOutboxProvider);
-  late final ShellVoiceSlot _slot = ref.read(shellVoiceSlotProvider);
+  late final ShellSlots _slots = ref.read(shellSlotsProvider);
   final _transcript = Transcript();
   ValueListenable<double>? _level;
 
   @override
   void initState() {
     super.initState();
-    _slot.current = this;
+    _slots.claim(ShellConcern.voice, this);
     _follow(widget.voice.level);
   }
 
@@ -68,8 +60,7 @@ class ShellVoiceState extends ConsumerState<ShellVoice> {
   @override
   void dispose() {
     _level?.removeListener(_sendLevel);
-    if (_slot.current == this) {
-      _slot.current = null;
+    if (_slots.leave(ShellConcern.voice, this)) {
       _outbox.post(VoiceSnapshot.absent);
     }
     super.dispose();
@@ -87,7 +78,8 @@ class ShellVoiceState extends ConsumerState<ShellVoice> {
       _outbox.send("voiceLevel", {"level": _level?.value ?? 0});
 
   /// What the native voice screen sent.
-  void handle(String name, Map<String, Object?> args) {
+  @override
+  Future<Object?> handle(String name, Map<String, Object?> args) async {
     final controller = widget.controller;
     switch (name) {
       case "mute":
@@ -99,6 +91,7 @@ class ShellVoiceState extends ConsumerState<ShellVoice> {
       case "done":
         widget.onDone();
     }
+    return null;
   }
 
   @override
@@ -137,17 +130,6 @@ class ShellVoiceState extends ConsumerState<ShellVoice> {
     // The turn's surface, the chat page's own: over voice mode while it is up,
     // a question in it too, since the chat page's is hidden beneath.
     if (chat == null || driver == null) return const SizedBox.shrink();
-    return _VoiceTurn(view: chat, driver: driver);
+    return ShellTurnSurface(view: chat, notifier: driver);
   }
-}
-
-class _VoiceTurn extends StatelessWidget {
-  const _VoiceTurn({required this.view, required this.driver});
-
-  final ChatViewState view;
-  final TurnDriver driver;
-
-  @override
-  Widget build(BuildContext context) =>
-      ShellTurnSurface(view: view, notifier: driver);
 }

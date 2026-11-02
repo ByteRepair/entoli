@@ -285,10 +285,12 @@ macOS theme — whatever was picked, leaving what was picked where it was for
 the switch going off. Light, Dark and System stay, being the one appearance
 choice the native chrome follows too. **It is read once, at launch**
 (`_glassAtLaunch` in `main`): the shell takes the window before any page is
-built, so a change says it takes effect at the next launch rather than
-appearing to do nothing. `LiquidGlass` (`widgets/liquid_glass.dart`) is the
-launch's answer — `available` on the two Apples, `on` as it started, and
-`shell`, the window being the shell's.
+built, so switching it away from what the launch started with asks, in a
+dialog, for the app to be quit and reopened rather than appearing to do
+nothing. The in-app restart a restore makes is not one: it is this process
+still running, its window already the shell's or not. `LiquidGlass` (`widgets/liquid_glass.dart`) is the
+launch's answer — `available` on the two Apples, and `on` as it started, the
+window then being the shell's.
 
 ### The bridge
 
@@ -296,14 +298,16 @@ launch's answer — `available` on the two Apples, `on` as it started, and
 one client: the Flutter app on every other platform, and on these with the
 switch off, reads its providers as it always has. With the shell, `main` puts
 `ShellBridge` where `AppShell` would be. It asks the Swift to `start`, sends
-it what to draw, runs what it sends back, and draws `ConversationPane` — the
-chat page, with no bar and no composer of its own.
+it what to draw, runs what it sends back, and draws `ChatPage`, with no bar
+and no composer of its own.
 
 One channel, `entoli_glass/shell` (the plugin package `packages/entoli_glass`,
 `sharedDarwinSource`, one tree of Swift for both Runners):
 
-- **To Swift:** `start`; `snapshot` with a `concern` and its `value`; and
-  `strip`, a request answered later (below).
+- **To Swift:** `start`; `snapshot` with a `concern` and its `json` — the
+  string the outbox compared, which the Swift decodes as it is — or, for a
+  one-off with nothing to compare, its `value`; and `strip`, a request
+  answered later (below).
 - **From Swift:** `insets`, how much of the Flutter view the shell's bars
   cover; and `intent`, a `name` and its `args`, answered with whatever the
   Swift waits on — an error to show, a paste's yes or no, or nothing.
@@ -323,25 +327,30 @@ published by a widget of its own, so what it watches rebuilds it and nothing
 else; and a provider watched from a builder beneath one, rather than the
 widget's own build, can be missed — the sidebar went out empty on some
 launches because the chat list landed a frame after a first snapshot read it
-from a `ValueListenableBuilder`. `BusyListenable` is how a publisher follows
-the running chats, which are a listenable, and still reads everything in its
-build.
+from a `ValueListenableBuilder`. The running chats are a listenable, so the
+publishers watch `busyChatIdsProvider`, its set as a value.
 
 **An intent goes to whoever is on screen.** The sidebar's run in
-`runSidebarIntent`; the composer's, the turn surface's, the new-chat screen's,
-voice mode's and the toolbar's go to the widget that published them, through
-a slot it sets when it is built and clears when it goes, so the last built is
-the one answering. Turn surfaces stack — voice mode's over the chat page's —
-and the one beneath sends again when the top one goes, nothing it watches
-having changed to rebuild it. A row's rename and a delete's confirmation are
+`runSidebarIntent` and the palette's in `runPaletteIntent`. The composer's,
+the turn surface's, the new-chat screen's, voice mode's and the toolbar's are
+a `ShellConcern` each, sent by `ShellModel.say` as their own name and args
+inside the intent's, and go to the `ShellSurface` on top of that concern's
+stack in `ShellSlots`: each claims the top when it mounts — or, where the last
+built is the one on screen, when it is built — and leaves when it goes,
+taking its snapshot back if it was on top. Turn surfaces stack — voice mode's
+over the chat page's — and the one beneath sends again when the top one goes,
+nothing it watches having changed to rebuild it. A row's rename and a delete's confirmation are
 native dialogs that send the edit itself, which `ChatEdits` makes as it does
 for the Flutter sidebar's dialogs.
 
 **The composer's rules are one copy.** `ComposerLogic` is what a composer
 decides apart from how it is drawn — what is attached, which mode the text
 puts it in, whether Send would do anything, whether Queue is on offer,
-sending — and the Flutter `Composer` and `ShellComposer` both draw it, with
-the same arguments, the chat page choosing between them in one place. Both
+sending — and the words and limits that follow from it: each mode's hint and
+send label, how far the field grows, where a `!` command runs before the
+shell has said. The Flutter `Composer` and `ShellComposer` both draw it, the
+shell's configured by a `Composer` it never mounts, the chat page choosing
+between them in one place. Both
 answer `ComposerHandle`, so Reply and a steer taken back reach either. The
 text is Dart's `ComposerController`: what the native field types arrives as
 `edited` and is not sent back to it, which mid-composition would undo the

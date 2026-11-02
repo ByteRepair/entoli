@@ -56,51 +56,13 @@ import "widgets/browser_strip.dart" show BrowserPrompts;
 import "widgets/turn_surface.dart";
 import "widgets/view_only_bar.dart";
 
-/// The page's composer: Flutter's, or with the native shell the one it draws,
-/// both with [Composer]'s arguments and the same rules.
-Widget _composerOf(
-  WidgetRef ref, {
-  Key? key,
-  required ComposerController controller,
-  required bool agentSpeaking,
-  required SendCallback onSend,
-  required VoidCallback onAbort,
-  SendCallback? onQueue,
-  bool Function(String text)? steers,
-  String? project,
-  String? device,
-  VoidCallback? onVoice,
-  required String? workspace,
-  String? workspaceHome,
-}) => ref.watch(liquidGlassProvider).shell
-    ? ShellComposer(
-        key: key,
-        controller: controller,
-        agentSpeaking: agentSpeaking,
-        onSend: onSend,
-        onAbort: onAbort,
-        onQueue: onQueue,
-        steers: steers,
-        project: project,
-        device: device,
-        onVoice: onVoice,
-        workspace: workspace,
-        workspaceHome: workspaceHome,
-      )
-    : Composer(
-        key: key,
-        controller: controller,
-        agentSpeaking: agentSpeaking,
-        onSend: onSend,
-        onAbort: onAbort,
-        onQueue: onQueue,
-        steers: steers,
-        project: project,
-        device: device,
-        onVoice: onVoice,
-        workspace: workspace,
-        workspaceHome: workspaceHome,
-      );
+/// The page's composer: [composer] itself, or with the native shell the one
+/// it draws, configured by it and keyed as it is. The configuration is never
+/// mounted there, so its key is the shell composer's alone.
+Widget _composerOf(WidgetRef ref, Composer composer) =>
+    ref.watch(liquidGlassProvider).on
+    ? ShellComposer(key: composer.key, config: composer)
+    : composer;
 
 class ChatPage extends ConsumerWidget {
   const ChatPage({super.key});
@@ -134,7 +96,6 @@ class _ReadableColumn extends StatelessWidget {
   const _ReadableColumn({
     required this.child,
     required this.bottom,
-    this.shell = false,
     this.bar,
     this.banner,
     this.side,
@@ -144,13 +105,14 @@ class _ReadableColumn extends StatelessWidget {
   final Widget child;
   final Widget bottom;
 
-  /// Inside the native shell, whose toolbar is over the top of the page and
-  /// whose composer is over the bottom of it: the conversation scrolls under
-  /// both, and what is at the bottom floats over it, above the composer.
-  final bool shell;
-
-  /// What publishes the shell's toolbar for this page; nothing on screen.
+  /// What publishes the native shell's toolbar for this page, drawing nothing
+  /// on screen; only inside the shell, whose toolbar is over the top of the
+  /// page and whose composer is over the bottom of it. The conversation then
+  /// scrolls under both, and what is at the bottom floats over it, above the
+  /// composer.
   final Widget? bar;
+
+  bool get _shell => bar != null;
   final Widget? banner;
   final Widget? side;
   final double sideWidth;
@@ -162,7 +124,7 @@ class _ReadableColumn extends StatelessWidget {
   Widget build(BuildContext context) {
     final insets = MediaQuery.paddingOf(context);
     final page = _column(context);
-    if (!shell) return page;
+    if (!_shell) return page;
     // Expanded to the page: the bar draws nothing, and a stack sized by its
     // children would size itself to that. A tooltip on this page opens above
     // what it is about: the page runs under the composer, and a tooltip only
@@ -197,7 +159,7 @@ class _ReadableColumn extends StatelessWidget {
             final column = Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: _readableWidth),
-                child: shell
+                child: _shell
                     ? _FloatingBottom(bottom: bottom, child: child)
                     : Column(
                         children: [
@@ -395,25 +357,29 @@ class _NewChatState extends ConsumerState<_NewChat> {
       if (ref.watch(projectFrozenProvider(at))) return const ViewOnlyBar();
       return _composerOf(
         ref,
-        controller: _controller,
-        agentSpeaking: false,
-        onSend: _send,
-        onAbort: () {},
-        project: project,
-        device: at.device,
-        workspace: null,
+        Composer(
+          controller: _controller,
+          agentSpeaking: false,
+          onSend: _send,
+          onAbort: () {},
+          project: project,
+          device: at.device,
+          workspace: null,
+        ),
       );
     }
     if (ref.watch(setupCompleteProvider(project))) {
       return _composerOf(
         ref,
-        controller: _controller,
-        agentSpeaking: false,
-        onSend: _send,
-        onAbort: () {},
-        project: project,
-        onVoice: () => startVoiceChat(context, ref, meta: _meta),
-        workspace: null,
+        Composer(
+          controller: _controller,
+          agentSpeaking: false,
+          onSend: _send,
+          onAbort: () {},
+          project: project,
+          onVoice: () => startVoiceChat(context, ref, meta: _meta),
+          workspace: null,
+        ),
       );
     }
     return const NeedsSetupBar();
@@ -422,7 +388,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
   @override
   Widget build(BuildContext context) {
     final at = ref.watch(selectedProjectProvider);
-    final shell = ref.watch(liquidGlassProvider).shell;
+    final shell = ref.watch(liquidGlassProvider).on;
     return Scaffold(
       appBar: shell
           ? null
@@ -441,7 +407,6 @@ class _NewChatState extends ConsumerState<_NewChat> {
               ],
             ),
       body: _ReadableColumn(
-        shell: shell,
         bar: !shell
             ? null
             : ShellChatBar(
@@ -571,18 +536,9 @@ class _EmptyChat extends ConsumerWidget {
         ))
           (kind: kind, option: option),
     ];
-    final question = remote
-        ? emptyChatQuestionFor(
-                project,
-                description: ref
-                    .watch(
-                      remoteProjectProvider((device: device, project: project)),
-                    )
-                    ?.settings
-                    .description,
-              ) ??
-              ""
-        : ref.watch(emptyChatQuestionProvider(project));
+    final question = ref.watch(
+      newChatQuestionProvider((device: device, project: project)),
+    );
 
     return Center(
       child: SingleChildScrollView(
@@ -933,6 +889,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   /// How far off the end still counts as reading the latest: inside it a turn
   /// keeps the view pinned, outside it the jump button appears.
   static const _slack = 200.0;
+
+  /// Inside the native shell: settled at launch, so read once.
+  late final bool _shell = ref.read(liquidGlassProvider).on;
 
   final ComposerController _controller = ComposerController();
 
@@ -1439,9 +1398,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
         ],
       ),
     );
-    final shell = ref.watch(liquidGlassProvider).shell;
     return Scaffold(
-      appBar: shell
+      appBar: _shell
           ? null
           : AppBar(
               leading: SidePanelButton.leadingOf(context),
@@ -1474,8 +1432,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
               ],
             ),
       body: _ReadableColumn(
-        shell: shell,
-        bar: !shell ? null : _shellBar(chat.state, view),
+        bar: !_shell ? null : _shellBar(chat.state, view),
         banner: banner,
         bottom: bottom,
         side: ValueListenableBuilder<_Outline>(
@@ -1541,7 +1498,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       children: [
         // Under the native shell the shell draws it, all but the browser's
         // prompts, which are fields and a picker and stay Flutter's.
-        if (ref.watch(liquidGlassProvider).shell) ...[
+        if (_shell) ...[
           ShellTurnSurface(
             view: view,
             notifier: driver,
@@ -1558,24 +1515,26 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
           // The shell draws the question with the rest of the turn surface,
           // in the composer's place.
           RoomPhase.waitingOnYou =>
-            ref.watch(liquidGlassProvider).shell
+            _shell
                 ? const SizedBox.shrink()
                 : TurnQuestions(view: view, notifier: driver),
           _ => _composerOf(
             ref,
-            key: _composer,
-            controller: _controller,
-            agentSpeaking: view.roomPhase == RoomPhase.agentSpeaking,
-            onSend: send,
-            onQueue: (text, attachments) =>
-                send(text, attachments, queue: true),
-            steers: driver.steers,
-            onAbort: driver.abort,
-            project: project,
-            device: device,
-            onVoice: onVoice,
-            workspace: workspace,
-            workspaceHome: workspaceHome,
+            Composer(
+              key: _composer,
+              controller: _controller,
+              agentSpeaking: view.roomPhase == RoomPhase.agentSpeaking,
+              onSend: send,
+              onQueue: (text, attachments) =>
+                  send(text, attachments, queue: true),
+              steers: driver.steers,
+              onAbort: driver.abort,
+              project: project,
+              device: device,
+              onVoice: onVoice,
+              workspace: workspace,
+              workspaceHome: workspaceHome,
+            ),
           ),
         },
       ],
@@ -1717,11 +1676,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
         // composer, which the list runs under.
         Positioned(
           right: 16,
-          bottom:
-              12 +
-              (ref.watch(liquidGlassProvider).shell
-                  ? MediaQuery.paddingOf(context).bottom
-                  : 0),
+          bottom: 12 + (_shell ? MediaQuery.paddingOf(context).bottom : 0),
           child: ValueListenableBuilder<bool>(
             valueListenable: _atBottom,
             builder: (context, atBottom, child) =>

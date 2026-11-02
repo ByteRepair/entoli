@@ -71,6 +71,10 @@ class ShellIntent {
   String? maybeString(String key) => args[key] as String?;
   bool flag(String key) => args[key] as bool? ?? false;
   int integer(String key) => (args[key]! as num).toInt();
+
+  /// The intent of one of the surfaces it was sent under, its own name and
+  /// args inside this one's.
+  ShellIntent get nested => ShellIntent.fromMap(args);
 }
 
 /// A project as the switcher lists it, and as a chat's Move offers it.
@@ -83,7 +87,6 @@ class ProjectChoice {
     required this.symbol,
     this.omada = false,
     this.count = 0,
-    this.busy = false,
   });
 
   final String? device;
@@ -97,9 +100,6 @@ class ProjectChoice {
   final bool omada;
   final int count;
 
-  /// One of its chats is running.
-  final bool busy;
-
   Map<String, Object?> toMap() => {
     "device": device,
     "project": project,
@@ -107,7 +107,6 @@ class ProjectChoice {
     "symbol": symbol,
     "omada": omada,
     "count": count,
-    "busy": busy,
   };
 }
 
@@ -182,7 +181,6 @@ class SidebarSnapshot extends ShellSnapshot {
     required this.empty,
     required this.projects,
     required this.devices,
-    required this.moveTargets,
     required this.omadaByDefault,
   });
 
@@ -199,14 +197,12 @@ class SidebarSnapshot extends ShellSnapshot {
   /// What to say where there are no rows, null where there are.
   final String? empty;
 
-  /// This device's projects, the default and the built-ins first.
+  /// This device's projects, the default and the built-ins first: the
+  /// switcher's, and where a local chat can be moved to.
   final List<ProjectChoice> projects;
 
   /// The paired devices' projects.
   final List<ProjectChoice> devices;
-
-  /// Where a local chat can be moved to.
-  final List<ProjectChoice> moveTargets;
 
   /// What the new-project sheet's Omada switch starts at.
   final bool omadaByDefault;
@@ -224,7 +220,6 @@ class SidebarSnapshot extends ShellSnapshot {
     "empty": empty,
     "projects": [for (final p in projects) p.toMap()],
     "devices": [for (final p in devices) p.toMap()],
-    "moveTargets": [for (final p in moveTargets) p.toMap()],
     "omadaByDefault": omadaByDefault,
   };
 }
