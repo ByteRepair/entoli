@@ -11,8 +11,33 @@ null resolves to), the `promptForText` / `promptForPair` / `confirm` /
 `pickProject` dialogs and `copyToClipboard` beside them, `showAnchoredMenu`,
 `NavDrawer` and `navBreakpoint`, `SidePanelFrame` (below), `ActionIcon`, `AttachmentChip` /
 `AttachmentStrip`, `EmptyPane`, `Nothing`, `TempChatTtlField`, `TristateToggle`,
-`CompletionField`,
+`CompletionField`, `PromptField` (below), `DiscardGuard`, `SearchField` and
+`ListHeading`,
 `text_input.dart` — the sections below — and `catalog.dart`.
+
+`PromptField` is prose the model reads — a trigger's prompt, an agent's system
+prompt, the profile's and a project's instructions — shown as markdown the way
+the chat sets it, over an Edit button that opens `PromptPage`: a box that is
+the whole page, Save and Discard, discarding asking first. It is one widget
+because the three pages had grown three answers to one question — a field a
+few lines tall that scrolled, for text that is written once, read many times,
+and often long. The page is `CompletionField` where `/skills` and `@agents`
+mean something (a prompt, which is dispatched through the library) and a plain
+field where they do not (instructions, where `@` pulls in a file). A message
+edited in the chat opens the same page, its Save called Send.
+
+`DiscardGuard` is every editor page's way out: a pop with something to lose
+asks, one with nothing leaves, and Save leaves by `Navigator.pop`, which the
+guard does not stop. It asks for `edited` when the pop comes rather than at
+build, since most of what a page edits sits in controllers that change with no
+rebuild. Four pages had written it out, two the same way, one differently, and
+two not at all — the trigger editor and the profile page, where back threw the
+edits away. `DiscardButton` is the close in the bar of a page whose way out is
+discarding.
+
+`SearchField` is the rounded search box over a list — the sidebar's, the
+marketplace's and the project palette's — and `ListHeading` the caption a list's
+groups sit under. Two were copies of the sidebar's, one had drifted.
 
 `SidePanelFrame` is a navigation panel beside a page where the window is wide
 enough and the panel shown, and the page's drawer where it is narrow — the
@@ -213,9 +238,9 @@ at.
 Giving focus away is the composer's rule; taking it back when the keyboard goes
 is the app's, and is the next section.
 
-The sidebar's new-chat button is a `FloatingActionButton` over the profile and
-settings tiles, which is the one part of the sidebar that is not a list of
-chats and has room to its right. Not `Scaffold.floatingActionButton`: the
+The sidebar's new-chat button is, off Apple's platforms, a
+`FloatingActionButton` over the profile and settings tiles, which is the one
+part of the sidebar that is not a list of chats and has room to its right. Not `Scaffold.floatingActionButton`: the
 sidebar is deliberately a `Material`, since an inner `Scaffold` would shadow
 the one holding the drawer.
 

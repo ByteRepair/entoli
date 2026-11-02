@@ -26,9 +26,9 @@ result is `Nothing("Nothing matches here.")`, distinct from the empty-index
 line. The tag picker (`marketplace_tags.dart`) lists the tab's tags with
 each one's entry count, and Clear when anything is ticked; over a tab whose
 list has not landed it is never opened, the press saying "The tab has not
-loaded yet." The search box and the heading row are the sidebar's two,
-copied rather than imported — extracting them out of the sidebar waits for a
-third caller.
+loaded yet." The search box and the heading row are the sidebar's:
+`SearchField` and `ListHeading`, shared once the project palette made a third
+caller.
 
 The list is the site's `index.json` per section
 (`byterepair.github.io/entoli-marketplace`). The URL is

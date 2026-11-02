@@ -68,9 +68,10 @@ void main() {
           find.byType(TextField).at(1),
           "A research agent",
         );
-        await tester.enterText(
-          find.byType(TextField).at(2),
+        await writePrompt(
+          tester,
           "You are a research agent.",
+          label: "System prompt",
         );
         await tester.tap(find.text("Save"));
         await settleIo(tester, least: 15);
@@ -101,7 +102,7 @@ void main() {
       await tester.tap(find.text("Add agent"));
       await settleIo(tester);
       await tester.enterText(find.byType(TextField).at(0), "looker");
-      await tester.enterText(find.byType(TextField).at(2), "You look.");
+      await writePrompt(tester, "You look.", label: "System prompt");
 
       Future<void> flip(String label) async {
         final tile = find.widgetWithText(SwitchListTile, label);
@@ -163,7 +164,10 @@ void main() {
         "researcher",
       );
       await tester.enterText(find.byType(TextField).at(1), "New desc");
-      await tester.enterText(find.byType(TextField).at(2), "New body.");
+      // The body is shown, not typed in: it is written on a page of its own.
+      expect(find.text("Old body."), findsOneWidget);
+      await writePrompt(tester, "New body.", label: "System prompt");
+      expect(find.text("New body."), findsOneWidget);
       await tester.tap(find.text("Save"));
       await settleIo(tester, least: 15);
 
@@ -281,7 +285,6 @@ void main() {
       await settleIo(tester);
 
       await tester.enterText(find.byType(TextField).at(0), "../escape");
-      await tester.enterText(find.byType(TextField).at(2), "body");
       await tester.tap(find.text("Save"));
       await settleIo(tester);
 
@@ -460,9 +463,10 @@ void main() {
       await settleIo(tester);
       await tester.enterText(find.byType(TextField).at(0), "researcher");
       await tester.enterText(find.byType(TextField).at(1), "A research agent");
-      await tester.enterText(
-        find.byType(TextField).at(2),
+      await writePrompt(
+        tester,
         "You are a research agent.",
+        label: "System prompt",
       );
       await tester.tap(find.text("Save"));
       await settleIo(tester, least: 15);
@@ -530,7 +534,7 @@ void main() {
       await pickImage(tester, app, name: "photo.png");
       await tester.enterText(find.byType(TextField).at(0), "scout");
       await tester.enterText(find.byType(TextField).at(1), "A scout.");
-      await tester.enterText(find.byType(TextField).at(2), "You are a scout.");
+      await writePrompt(tester, "You are a scout.", label: "System prompt");
       await tester.tap(find.text("Save"));
       await settleIo(tester, least: 15);
 
@@ -559,7 +563,7 @@ void main() {
       await settleIo(tester);
       await tester.enterText(find.byType(TextField).at(0), "tester");
       await tester.enterText(find.byType(TextField).at(1), "A test agent");
-      await tester.enterText(find.byType(TextField).at(2), "You test things.");
+      await writePrompt(tester, "You test things.", label: "System prompt");
       await tester.tap(find.text("Save"));
       await settleIo(tester, least: 15);
 

@@ -11,7 +11,8 @@ import "../../domain/project.dart"
         ProjectRef,
         defaultEmptyChatQuestion,
         emptyChatQuestionFor,
-        localProject;
+        localProject,
+        projectDescriptionHelp;
 import "../../domain/project_settings.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../domain/tristate.dart";
@@ -323,6 +324,10 @@ class _DescriptionCard extends ConsumerWidget {
           title: "Description",
           initial: description ?? "",
           hint: defaultEmptyChatQuestion,
+          // The field it was written in when the project was made.
+          helper: projectDescriptionHelp,
+          minLines: 2,
+          maxLines: 5,
           confirmLabel: "Save",
           allowBlank: true,
         );

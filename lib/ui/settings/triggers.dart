@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:convert";
 
 import "package:clock/clock.dart";
 import "package:flutter/material.dart";
@@ -7,13 +8,13 @@ import "package:uuid/uuid.dart";
 
 import "../../domain/date_words.dart" show describeFire, shortDate, timeOfDay;
 import "../../domain/models.dart" show CompletionKind;
-import "../chat/widgets/markdown_text.dart";
 import "../../domain/project.dart";
 import "../../domain/trigger.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
-import "../widgets/completion_field.dart";
 import "../widgets/dialogs.dart" show confirm, promptForText;
+import "../widgets/discard_guard.dart";
+import "../widgets/prompt_field.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 import "../widgets/temp_chat_ttl_field.dart";
@@ -178,7 +179,7 @@ class _TriggerTile extends ConsumerWidget {
 
 /// The add/edit page, pushed over whatever listed the triggers. What the
 /// trigger is stays the middle of the page, but as the message it will send
-/// rather than as a box to type in: writing it is [TriggerPromptPage]'s, and
+/// rather than as a box to type in: writing it is [PromptPage]'s, and
 /// this shows what was written the way the chat will.
 ///
 /// A trigger the agent registered through the tools opens as its own kind of
@@ -219,6 +220,22 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
     _project = trigger?.project;
     _member = trigger?.member;
     _tempChatTtl = trigger?.tempChatTtl;
+    _initialSource = _sourceJson();
+  }
+
+  /// The source as it opened, by its JSON: the sources have no equality of
+  /// their own, and the JSON is what a save would write.
+  late final String _initialSource;
+  String _sourceJson() => jsonEncode(_source.toJson());
+
+  bool get _edited {
+    final trigger = widget.trigger;
+    return _name.text != (trigger?.name ?? "") ||
+        _prompt != (trigger?.prompt ?? "") ||
+        _sourceJson() != _initialSource ||
+        _project != trigger?.project ||
+        _member != trigger?.member ||
+        _tempChatTtl != trigger?.tempChatTtl;
   }
 
   @override
@@ -240,93 +257,103 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
     final isNew = widget.trigger == null;
     final registered = widget.trigger?.byAgent ?? false;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(isNew ? "New trigger" : "Edit trigger"),
-        actions: [
-          if (!isNew)
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              tooltip: "Delete trigger",
-              onPressed: _delete,
-            ),
-          // The agent's trigger is the switch and the delete: anything else
-          // saved here would rewrite what its conversation armed (source,
-          // anchor, re-enable) from a page whose prompt it refuses to touch.
-          if (!registered)
-            TextButton(onPressed: _save, child: const Text("Save")),
-        ],
-      ),
-      body: ListView(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: TextFormField(
-              controller: _name,
-              decoration: const InputDecoration(labelText: "Name"),
-            ),
-          ),
-          LabelledField(
-            label: "When",
-            child: SegmentedButton<_SourceKind>(
-              segments: const [
-                ButtonSegment(value: _SourceKind.schedule, label: Text("Time")),
-                ButtonSegment(
-                  value: _SourceKind.timer,
-                  label: Text("Countdown"),
-                ),
-                ButtonSegment(value: _SourceKind.file, label: Text("Files")),
-              ],
-              selected: {_kindOf(_source)},
-              // Nothing is saved from this page while it is the agent's, so
-              // nothing here looks editable either — the rows below follow
-              // the same gate.
-              onSelectionChanged: registered
-                  ? null
-                  : (selection) => setState(() {
-                      _source = _sourceFor(selection.first);
-                    }),
-            ),
-          ),
-          ..._sourceFields(editable: !registered),
-          _memberField(!registered),
-          _PromptPreview(
-            prompt: _prompt,
-            onEdit: _editPrompt,
-            editable: !registered,
-          ),
-          const Divider(height: 1),
-          if (!registered) ...[
-            TempChatTtlField(
-              value: _tempChatTtl,
-              onChanged: (ttl) => setState(() => _tempChatTtl = ttl),
-              project: _project,
+    return DiscardGuard(
+      edited: () => _edited,
+      message: "Throw away the edits to this trigger?",
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(isNew ? "New trigger" : "Edit trigger"),
+          actions: [
+            if (!isNew)
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: "Delete trigger",
+                onPressed: _delete,
+              ),
+            // The agent's trigger is the switch and the delete: anything else
+            // saved here would rewrite what its conversation armed (source,
+            // anchor, re-enable) from a page whose prompt it refuses to touch.
+            if (!registered)
+              TextButton(onPressed: _save, child: const Text("Save")),
+          ],
+        ),
+        body: ListView(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: TextFormField(
+                controller: _name,
+                decoration: const InputDecoration(labelText: "Name"),
+              ),
             ),
             LabelledField(
-              label: "Project",
-              child: DropdownButtonFormField<String?>(
-                initialValue: projectOrDefault(_project, named),
-                isExpanded: true,
-                items: [
-                  for (final project in everyProject(named))
-                    DropdownMenuItem(
-                      value: project,
-                      child: Text(projectLabel(project)),
-                    ),
+              label: "When",
+              child: SegmentedButton<_SourceKind>(
+                segments: const [
+                  ButtonSegment(
+                    value: _SourceKind.schedule,
+                    label: Text("Time"),
+                  ),
+                  ButtonSegment(
+                    value: _SourceKind.timer,
+                    label: Text("Countdown"),
+                  ),
+                  ButtonSegment(value: _SourceKind.file, label: Text("Files")),
                 ],
-                onChanged: (project) => setState(() => _project = project),
+                selected: {_kindOf(_source)},
+                // Nothing is saved from this page while it is the agent's, so
+                // nothing here looks editable either — the rows below follow
+                // the same gate.
+                onSelectionChanged: registered
+                    ? null
+                    : (selection) => setState(() {
+                        _source = _sourceFor(selection.first);
+                      }),
               ),
             ),
-          ] else
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text(
-                "This trigger was set by the agent in its chat. Switch it off "
-                "or delete it here; the prompt is the conversation's.",
-                style: TextStyle(fontStyle: FontStyle.italic),
-              ),
+            ..._sourceFields(editable: !registered),
+            _memberField(!registered),
+            PromptField(
+              label: "Prompt",
+              value: _prompt,
+              hint: "What should the agent do?",
+              project: _project,
+              editable: !registered,
+              onChanged: (prompt) => setState(() => _prompt = prompt),
             ),
-        ],
+            const Divider(height: 1),
+            if (!registered) ...[
+              TempChatTtlField(
+                value: _tempChatTtl,
+                onChanged: (ttl) => setState(() => _tempChatTtl = ttl),
+                project: _project,
+              ),
+              LabelledField(
+                label: "Project",
+                child: DropdownButtonFormField<String?>(
+                  initialValue: projectOrDefault(_project, named),
+                  isExpanded: true,
+                  items: [
+                    for (final project in everyProject(named))
+                      DropdownMenuItem(
+                        value: project,
+                        child: Text(projectLabel(project)),
+                      ),
+                  ],
+                  onChanged: (project) => setState(() => _project = project),
+                ),
+              ),
+            ] else
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text(
+                  "This trigger was set by the agent in its chat. Switch it off "
+                  "or delete it here; the prompt is the conversation's.",
+                  style: TextStyle(fontStyle: FontStyle.italic),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -509,16 +536,6 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
         registeredAt: _clock.now(),
       ),
     );
-  }
-
-  Future<void> _editPrompt() async {
-    final edited = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => TriggerPromptPage(prompt: _prompt, project: _project),
-      ),
-    );
-    if (edited == null || !mounted) return;
-    setState(() => _prompt = edited);
   }
 
   Future<void> _pickDate() async {
@@ -740,180 +757,6 @@ class _FileSourceFieldState extends State<_FileSourceField> {
         paths: paths ?? source.paths,
         events: events ?? source.events,
         cooldown: source.cooldown,
-      ),
-    );
-  }
-}
-
-/// The prompt as the chat will render it, over the button that changes it.
-/// Formatted rather than raw: what a trigger sends is a message, and a
-/// message is read as markdown everywhere else in the app — so a prompt with a
-/// list in it is checked here rather than in the chat it eventually runs in.
-class _PromptPreview extends StatelessWidget {
-  const _PromptPreview({
-    required this.prompt,
-    required this.onEdit,
-    this.editable = true,
-  });
-
-  final String prompt;
-  final VoidCallback onEdit;
-  final bool editable;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return LabelledField(
-      label: "Prompt",
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          InkWell(
-            onTap: editable ? onEdit : null,
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: theme.colorScheme.outlineVariant),
-              ),
-              child: prompt.trim().isEmpty
-                  ? Text(
-                      "What should the agent do?",
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    )
-                  : MarkdownText(prompt),
-            ),
-          ),
-          if (editable) ...[
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: onEdit,
-                icon: const Icon(Icons.edit_outlined, size: 18),
-                label: const Text("Edit prompt"),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// The prompt on a page of its own: the box is the page, and it is the
-/// composer's own field, so `/commands` and `@agents` complete here the way
-/// they do in a chat — a trigger's prompt is dispatched through the same
-/// library, and being offered them anywhere else and not here was the tell.
-///
-/// Pops the new prompt, or nothing where it was discarded.
-class TriggerPromptPage extends StatefulWidget {
-  const TriggerPromptPage({super.key, required this.prompt, this.project});
-
-  final String prompt;
-
-  /// The project whose library the `/` and `@` menus offer, so a trigger's
-  /// prompt is composed against the same set the chat it makes will be. Null
-  /// is the default project, the way it is everywhere a project is named.
-  final String? project;
-
-  @override
-  State<TriggerPromptPage> createState() => _TriggerPromptPageState();
-}
-
-class _TriggerPromptPageState extends State<TriggerPromptPage> {
-  final GlobalKey<CompletionFieldState> _field = GlobalKey();
-  late final TextEditingController _controller = TextEditingController(
-    text: widget.prompt,
-  );
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  bool get _edited => _controller.text != widget.prompt;
-
-  /// Discarding is the one way out that loses what was typed, so it asks —
-  /// and the back key comes through here for the same reason.
-  Future<void> _discard() async {
-    if (_edited) {
-      final ok = await confirm(
-        context,
-        title: "Discard changes",
-        message: "Throw away the edits to this prompt?",
-        confirmLabel: "Discard",
-        destructive: true,
-      );
-      if (!ok) return;
-    }
-    if (mounted) Navigator.of(context).pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) unawaited(_discard());
-      },
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text("Prompt"),
-          leading: IconButton(
-            icon: const Icon(Icons.close),
-            tooltip: "Discard",
-            onPressed: _discard,
-          ),
-          actions: [
-            PopupMenuButton<VoidCallback>(
-              icon: const Icon(Icons.add),
-              tooltip: "Insert",
-              onSelected: (action) => action(),
-              itemBuilder: (context) => completionInsertItems(context, _field),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(_controller.text),
-              child: const Text("Save"),
-            ),
-          ],
-        ),
-        body: SafeArea(
-          child: CompletionField(
-            key: _field,
-            controller: _controller,
-            project: widget.project,
-            expands: true,
-            maxLines: null,
-            autofocus: true,
-            textAlignVertical: TextAlignVertical.top,
-            decoration: const InputDecoration(
-              hintText: "What should the agent do?",
-              alignLabelWithHint: true,
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 12,
-              ),
-            ),
-            // The box is the page, so the menu goes under it — where the
-            // composer's is, which is against the edge the field is on.
-            layout: (menu, field) => Column(
-              children: [
-                Expanded(child: field),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: menu,
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

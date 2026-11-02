@@ -252,12 +252,13 @@ be a conversation rewrite from a settings page.
 
 **The prompt is not typed here.** The middle of the page is what the trigger
 will send, rendered the way the chat will render it, over the button that opens
-`TriggerPromptPage` — a box that is the whole page, Save and Discard, and
-nothing else. A trigger is written once and read many times afterwards, so the
-page it is read on shows the message; and a prompt long enough to need the room
-had a box a few lines tall to grow in before. Discarding asks, and so does the
-back key through a `PopScope`, since it is the one way out that loses what was
-typed.
+its page — `PromptField`, shared with an agent's system prompt and the
+instructions (see "Shared UI" in `lib/ui/widgets/AGENTS.md`). A trigger is
+written once and read many times afterwards, so the page it is read on shows
+the message; and a prompt long enough to need the room had a box a few lines
+tall to grow in before. Discarding asks, on the prompt page and on the editor
+under it alike — `DiscardGuard`, since leaving is the one way out that loses
+what was typed.
 
 What is typed in it is `CompletionField` — the composer's, so `/skills` and
 `@agents` complete there and the `+` offers them; a trigger's prompt is

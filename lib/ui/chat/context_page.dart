@@ -5,6 +5,8 @@ import "../../domain/models.dart";
 import "../../domain/prompt_library.dart" show nameOf;
 import "../../providers.dart";
 import "../widgets/agent_picture.dart";
+import "../widgets/empty_pane.dart";
+import "../widgets/section_header.dart" show mutedParagraph;
 import "mirror_controller.dart";
 
 /// What fills each participant's context window, out of the model's whole,
@@ -38,7 +40,13 @@ class ContextPage extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text("Context")),
       body: contexts.isEmpty
-          ? const _Empty()
+          ? const EmptyPane(
+              icon: Icons.data_usage,
+              title: "Nothing measured yet",
+              detail:
+                  "The context is measured on each request. Send a message "
+                  "to see it.",
+            )
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -53,13 +61,11 @@ class ContextPage extends ConsumerWidget {
                   const SizedBox(height: 12),
                 ],
                 const SizedBox(height: 4),
-                Text(
+                mutedParagraph(
+                  context,
                   "The total is the provider's count where it reports one. "
                   "The split is estimated at four characters a token.",
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
                 ),
               ],
             ),
@@ -298,35 +304,6 @@ class _Bar extends StatelessWidget {
           ],
         );
       },
-    );
-  }
-}
-
-class _Empty extends StatelessWidget {
-  const _Empty();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final muted = theme.colorScheme.onSurfaceVariant;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.data_usage, size: 48, color: muted),
-            const SizedBox(height: 12),
-            Text("Nothing measured yet", style: theme.textTheme.titleMedium),
-            const SizedBox(height: 4),
-            Text(
-              "The context is measured on each request. Send a message to see it.",
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(color: muted),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
