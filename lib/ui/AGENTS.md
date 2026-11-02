@@ -242,8 +242,9 @@ held by that screen until there is a chat, for the same reason.
 `appMenus` (`app_menu_bar.dart`) is the menu bar as data: menus of groups of
 commands, and the platform's own items after them (Hide, Quit, Full Screen —
 macOS's alone, dropped where `PlatformProvidedMenuItem.hasMenu` says no).
-`AppMenuBar` draws it as Flutter's `PlatformMenuBar` inside `AppShell`, below
-the Navigator the commands open their pages on. A command's keys and its menu
+`AppMenuBar` draws it as Flutter's `PlatformMenuBar` inside `AppShell` — or
+`ShellBridge`, under the native shell (see "Liquid Glass") — below the
+Navigator the commands open their pages on. A command's keys and its menu
 item both run it, and whichever hears the keys first does: Flutter's key
 handler where it gets them, the platform's menu where it does.
 
@@ -261,3 +262,159 @@ which the setting is the `shown` of: hidden, the chat pane takes the window and
 its bar has a button that brings the sidebar back, so it is in reach on a
 platform with no menus too. A narrow window has the sidebar as a drawer
 whatever the setting says.
+
+## Liquid Glass
+
+On iOS and macOS the app's chrome can be Apple's own: a SwiftUI window, its
+sidebar, toolbar, composer, turn surface, new-chat screen, voice mode, project
+palette and popovers drawn by the system in the glass this version of the OS
+draws its own apps in — Liquid Glass on 26, its materials before that, since
+every glass call names what the OS provides rather than drawing a look of its
+own (`Glass.swift`). The conversation itself, and every page pushed over it,
+stay Flutter: one Flutter view, embedded in the SwiftUI window. So a feature
+in a reply or on a settings page is still built once, and only the chrome is
+built twice — a native copy of what the Flutter app draws, with the rules
+shared.
+
+**It is the switch in Settings > General > Appearance**, `liquidGlass` in
+`settings.json`, on by default and written only when off, the way `autoUpdate`
+is. It sits where Material 3 Expressive sits on Android, and like it takes the
+colours' place: while it is on the theme colours and the corners are not on
+the page, and `appLookProvider` hands `entoliTheme` the defaults — the iOS /
+macOS theme — whatever was picked, leaving what was picked where it was for
+the switch going off. Light, Dark and System stay, being the one appearance
+choice the native chrome follows too. **It is read once, at launch**
+(`_glassAtLaunch` in `main`): the shell takes the window before any page is
+built, so a change says it takes effect at the next launch rather than
+appearing to do nothing. `LiquidGlass` (`widgets/liquid_glass.dart`) is the
+launch's answer — `available` on the two Apples, `on` as it started, and
+`shell`, the window being the shell's.
+
+### The bridge
+
+`lib/ui/shell/` is the only Dart that knows the shell exists, and Swift is its
+one client: the Flutter app on every other platform, and on these with the
+switch off, reads its providers as it always has. With the shell, `main` puts
+`ShellBridge` where `AppShell` would be. It asks the Swift to `start`, sends
+it what to draw, runs what it sends back, and draws `ConversationPane` — the
+chat page, with no bar and no composer of its own.
+
+One channel, `entoli_glass/shell` (the plugin package `packages/entoli_glass`,
+`sharedDarwinSource`, one tree of Swift for both Runners):
+
+- **To Swift:** `start`; `snapshot` with a `concern` and its `value`; and
+  `strip`, a request answered later (below).
+- **From Swift:** `insets`, how much of the Flutter view the shell's bars
+  cover; and `intent`, a `name` and its `args`, answered with whatever the
+  Swift waits on — an error to show, a paste's yes or no, or nothing.
+
+**A snapshot is a concern's whole state, sent when it changed.** Each is a
+typed class with a `toMap` in `snapshots.dart`, and `ShellOutbox` compares it
+as JSON and sends only a difference, since most are rebuilt on every frame a
+turn streams. The Swift holds what the last one said and nothing of its own,
+a `Decodable` mirror per concern: `window` (a page covering the conversation,
+the sidebar shown, the appearance), `sidebar`, `chatBar`, `composer` and
+`composerValue`, `turn`, `newChat`, `voice` and `voiceLevel`, `palette`. The
+microphone's level is the one sent raw, many times a second, and the glow
+reads it per frame rather than redrawing the shell for it.
+
+**A publisher reads what it sends in its own build.** Each concern is
+published by a widget of its own, so what it watches rebuilds it and nothing
+else; and a provider watched from a builder beneath one, rather than the
+widget's own build, can be missed — the sidebar went out empty on some
+launches because the chat list landed a frame after a first snapshot read it
+from a `ValueListenableBuilder`. `BusyListenable` is how a publisher follows
+the running chats, which are a listenable, and still reads everything in its
+build.
+
+**An intent goes to whoever is on screen.** The sidebar's run in
+`runSidebarIntent`; the composer's, the turn surface's, the new-chat screen's,
+voice mode's and the toolbar's go to the widget that published them, through
+a slot it sets when it is built and clears when it goes, so the last built is
+the one answering. Turn surfaces stack — voice mode's over the chat page's —
+and the one beneath sends again when the top one goes, nothing it watches
+having changed to rebuild it. A row's rename and a delete's confirmation are
+native dialogs that send the edit itself, which `ChatEdits` makes as it does
+for the Flutter sidebar's dialogs.
+
+**The composer's rules are one copy.** `ComposerLogic` is what a composer
+decides apart from how it is drawn — what is attached, which mode the text
+puts it in, whether Send would do anything, whether Queue is on offer,
+sending — and the Flutter `Composer` and `ShellComposer` both draw it, with
+the same arguments, the chat page choosing between them in one place. Both
+answer `ComposerHandle`, so Reply and a steer taken back reach either. The
+text is Dart's `ComposerController`: what the native field types arrives as
+`edited` and is not sent back to it, which mid-composition would undo the
+input method's marked text, and what Dart changes — a completion taken, a
+message put back, the field cleared on send — goes as `composerValue`. A quote
+card is an attachment character in the native field carrying its embed's code
+unit, so offsets mean the same on both sides.
+
+### The layout
+
+**The Flutter view runs under the toolbar and the composer, never under the
+sidebar**, and how far those reach goes to Dart as top and bottom padding.
+`ShellInsets` applies it above the Navigator, from `MaterialApp.builder`, so a
+page pushed over the conversation clears the toolbar as the conversation
+does. On the chat page `_FloatingBottom` lets the conversation run the whole
+height and pads it by the composer and by whatever Flutter still draws above
+it — the browser's prompts, a setup or offline bar — measured, so the last
+message clears both; and tooltips there open above what they are about,
+since a tooltip knows only the Flutter view's room and below is behind the
+composer. On iOS the keyboard is left out of the insets: Flutter hears of it
+itself, and counted twice the conversation went up under the toolbar.
+
+`FlutterCanvas` is the Flutter view and every layer drawn in its coordinates,
+in one container: the edges are said once, and a layer gets exactly the
+view's frame, so a point Dart names is the same point there. What floats over
+everything is the system's own presentation instead. The reaction strip is a
+`strip` request — the anchor's rect in Flutter's coordinates and the choices
+— which the Swift answers when one is picked or the popover dismissed: a
+popover, in the system's glass and a window of its own, so it is clipped by
+nothing and placed, dismissed and read out as a popover is.
+
+**A Flutter page over the conversation covers the chrome.** `AppRoutes`
+(`app_routes.dart`), on the Navigator from `main`, says whether a page is
+pushed over the first route; the shell steps its buttons, composer and
+new-chat screen aside while one is, and an iPhone its navigation bar, the page
+having one of its own. A dialog covers nothing. **A pick closes the pages
+first**, in either shell: opening a chat, a new one or another project from
+the sidebar or the palette goes through `toConversation`, which closes each
+page the way the back key would. A page that asks before it goes is asked,
+and waited for — a discard goes on to the next page and the pick, a keep
+stops there with nothing changed under it. Asking again instead, the first
+version, closed the question and asked again for ever.
+
+The appearance is the app's, not the window's: popovers, menus and sheets are
+windows of their own, so `NSApp.appearance` on macOS and the window's
+`overrideUserInterfaceStyle` on iOS follow Light, Dark and System.
+
+### Voice mode, and the glow
+
+`VoicePage` stays a Flutter route, so leaving it is still popping it and the
+session still lives exactly as long as the page; under the shell it draws
+nothing, and the Swift draws voice mode over the whole window from its
+snapshots. The orb is new here: a mesh gradient of the two voices' colours
+(`Glow.swift`, macOS 15 and iOS 18; a blurred canvas of the same blobs
+before), faded to a soft disc behind the system's clear glass. It drifts
+while starting, swells with the microphone while listening, orbits while a
+turn runs, beats in the reply's colour while speaking, and sits grey and still
+— not redrawing — while the microphone is shut.
+
+### Where the platforms differ
+
+The menu bar is still Flutter's `PlatformMenuBar` on macOS, `AppMenuBar`
+inside `ShellBridge`, so `appMenus` stays the one definition. It has no Edit
+menu, so the native field takes its own editing keys — cut, copy, paste,
+select all, undo, and Return's send and queue — in `performKeyEquivalent`,
+which the window offers a view before the menu bar; an Edit menu would have
+sent the same keys to Flutter's own text fields too. On an iPhone the split
+view is a stack: opening a chat or a new one asks for the detail column,
+nothing selected being the new-chat screen rather than the list, and the
+app's pages are a menu on the list's bar, there being no menu bar to hold
+them. The hosting is each Runner's own story — see "The native shell" in
+`macos/AGENTS.md` and `ios/AGENTS.md`.
+
+What is tested is the Dart half, `test/ui/shell/`: every snapshot's map, every
+intent against the app's fakes, the stacking, the page closing. The Swift is
+checked by building both Runners and looking.

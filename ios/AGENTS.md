@@ -590,6 +590,33 @@ picks the x86_64 zip for an i686 guest and the tail's verification refuses
 what lands — a setup still reports it did not succeed even after make and
 github-cli installed.
 
+## The native shell
+
+With Liquid Glass on (see "Liquid Glass" in `lib/ui/AGENTS.md`) the
+`entoli_glass` plugin, on Dart's `start`, makes a `UIHostingController` the
+scene window's root, with the `FlutterViewController` the storyboard made
+embedded in it as a child. The Runner is untouched: the implicit engine, its
+registrations and `SceneDelegate` are as they were, and the plugin finds the
+window as the one whose root is Flutter's.
+
+The plugin's package is iOS 17 and macOS 14, the floor the app already has for
+MLX, and the Runner's targets say 17.0 outright rather than "the recommended
+version": Flutter writes its generated plugin package's platform from the
+targets', and the recommended one resolved to 15, which an iOS 17 package
+refuses.
+
+An iPhone is the split view collapsed to a stack, so opening a chat or a new
+one asks for the detail column (`detailAsked`), the new-chat screen being
+nothing selected rather than the list; the app's pages — Settings, Profile,
+Marketplace — are a menu on the list's bar, the menu bar being iPadOS's and
+not there without a pointer. A Flutter page over the chat hides the native
+navigation bar, the page having its own. The keyboard reaches the native
+composer through the safe area, which carries it above the keys, and is left
+out of the insets Dart is told: Flutter hears of it itself. The appearance is
+the window's `overrideUserInterfaceStyle`, which a popover and a sheet
+presented from it take. iPad is the split view uncollapsed, and has had less
+looking at than either.
+
 ## The menu bar
 
 Flutter's engine draws a menu bar on macOS alone, so iPadOS's is the app's
