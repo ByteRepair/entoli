@@ -340,7 +340,7 @@ void main() {
         expect(find.text("Corners"), findsNothing);
       });
 
-      testWidgets("off, they are back, and the switch says when it lands", (
+      testWidgets("off, they are back, and the switch asks for a restart", (
         tester,
       ) async {
         await pumpAppearance(tester, app);
@@ -348,8 +348,28 @@ void main() {
         await settleIo(tester);
 
         expect(AppSettings.load(app.config).liquidGlass, isFalse);
-        expect(find.textContaining("when Entoli restarts"), findsOneWidget);
+        expect(
+          find.text("Quit and reopen Entoli for Liquid Glass to turn off."),
+          findsOneWidget,
+        );
+        await tester.tap(find.text("OK"));
+        await settleIo(tester);
         expect(find.text("Corners"), findsOneWidget);
+      });
+
+      testWidgets("switched back to how it launched, there is no restart", (
+        tester,
+      ) async {
+        await pumpAppearance(tester, app);
+        await tester.tap(find.text("Liquid Glass"));
+        await settleIo(tester);
+        await tester.tap(find.text("OK"));
+        await settleIo(tester);
+        await tester.tap(find.text("Liquid Glass"));
+        await settleIo(tester);
+
+        expect(AppSettings.load(app.config).liquidGlass, isTrue);
+        expect(find.text("Restart Entoli"), findsNothing);
       });
 
       testWidgets("on, the app wears the system's look whatever was picked", (
