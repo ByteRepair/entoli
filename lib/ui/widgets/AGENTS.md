@@ -322,6 +322,14 @@ cached copy in `<dataDir>/models.json`, then a fetch when that is a day old,
 or when the first provider is added. So with no network and no cache the
 Defaults are still pickable. Run the generator when a preset's defaults change.
 
+A card's star puts its model in `AppSettings.favouriteModels`, one app-level
+list of (provider, model) pairs, and the Favourites section under Quick picks
+lists the starred ones the picker's role can use, in the order they were
+starred — so one list serves every picker, and an image model starred there
+does not turn up among the chat models. A starred model whose provider has gone
+is simply not listed; the pair stays until it is unstarred, should the provider
+come back.
+
 A model the catalog does not list is added on the "Add model" page, onto the
 provider it is reached through (`LlmProviderConfig.customModels`, in the same
 shape), where it comes before the catalog's own entry of the same id.
