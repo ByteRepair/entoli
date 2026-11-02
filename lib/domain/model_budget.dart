@@ -19,8 +19,8 @@ import "local_model.dart";
 ///   still lets this process grow by is measured too. A phone gets three fifths
 ///   of the smaller of the two — less than a Mac's share, since the UI it
 ///   draws beside the model is what the user feels, and slowing it would make
-///   the whole phone feel sluggish. On an 8 GB phone that is the 2B and no
-///   larger.
+///   the whole phone feel sluggish. On an 8 GB phone that is short of the
+///   4B, so MLX offers it nothing; a 12 GB one gets the 4B.
 /// - **llama.cpp on Android and Linux is bounded by memory.** It reads the
 ///   weights into RAM whichever device runs them. A Linux machine gets three
 ///   fifths of it. An Android phone gets half: it shares that RAM with every
