@@ -55,8 +55,11 @@
       window.contentViewController = host
       window.setFrame(frame, display: true)
       self.host = host
-      model.onWindow = { [weak window] state in
-        window?.appearance = state.appearance.map {
+      // The app's, not the window's: popovers, menus and sheets are windows
+      // of their own, and the system's glass follows the app. Nil follows
+      // the system.
+      model.onWindow = { state in
+        NSApp.appearance = state.appearance.map {
           NSAppearance(named: $0 == "dark" ? .darkAqua : .aqua)
         } ?? nil
       }

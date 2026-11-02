@@ -169,10 +169,11 @@ final shellInsetsProvider = Provider<ValueNotifier<EdgeInsets>>((ref) {
   return insets;
 });
 
-/// [shellInsetsProvider] as the padding of everything under [child]. Above
-/// the Navigator, from `MaterialApp.builder`: a page pushed over the
-/// conversation is the Navigator's, not the bridge's, and its bar has to
-/// clear the toolbar as the conversation does.
+/// [shellInsetsProvider] as the padding of everything under [child], and the
+/// margin every tooltip keeps. Above the Navigator, from
+/// `MaterialApp.builder`: a page pushed over the conversation is the
+/// Navigator's, not the bridge's, and its bar has to clear the toolbar as the
+/// conversation does.
 class ShellInsets extends ConsumerWidget {
   const ShellInsets({super.key, required this.child});
 
@@ -185,9 +186,22 @@ class ShellInsets extends ConsumerWidget {
         child: child,
         builder: (context, insets, child) {
           final media = MediaQuery.of(context);
+          // A tooltip goes where the Flutter view has room for it, and the
+          // view runs under the toolbar and the composer: so every tooltip is
+          // kept off both, once, here.
+          final tooltips = TooltipTheme.of(context);
+          final margin = tooltips.margin?.resolve(TextDirection.ltr);
           return MediaQuery(
             data: media.copyWith(padding: insets, viewPadding: insets),
-            child: child!,
+            child: TooltipTheme(
+              data: tooltips.copyWith(
+                margin: (margin ?? EdgeInsets.zero).copyWith(
+                  top: (margin?.top ?? 0) + insets.top,
+                  bottom: (margin?.bottom ?? 0) + insets.bottom,
+                ),
+              ),
+              child: child!,
+            ),
           );
         },
       );
