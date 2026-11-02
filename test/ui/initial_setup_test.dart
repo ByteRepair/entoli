@@ -1,6 +1,8 @@
 import "dart:async";
 
 import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
@@ -11,6 +13,7 @@ import "package:agent_chat/domain/download.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/initial_setup_gate.dart";
+import "package:agent_chat/ui/settings/downloads.dart" show DownloadState;
 
 import "../harness.dart";
 
@@ -151,7 +154,99 @@ void main() {
     expect(find.text("tour"), findsOneWidget);
     expect(helium.installs, 0);
   });
+  test("the plan's policy says how the bar counts", () {
+    const step = FakeStep("a", unpackShare: 0.5);
+    const half = DownloadProgress(received: 50, total: 100);
+    const unpacking = DownloadProgress(received: 0, total: 0, unpacking: true);
+
+    // The current download alone, with nothing to count while it unpacks.
+    expect(const StepProgress().fraction(step, 1, 2, half), 0.5);
+    expect(const StepProgress().fraction(step, 1, 2, unpacking), isNull);
+
+    // The whole plan: the second of two steps, half fetched, is a quarter of
+    // the way through its own half.
+    expect(const PlanProgress().fraction(step, 1, 2, half), 0.625);
+    expect(const PlanProgress().fraction(step, 1, 2, unpacking), 0.75);
+    expect(const PlanProgress().fraction(step, 0, 2, null), 0);
+  });
+
+  testWidgets("a plan's steps run one after another on one screen", (
+    tester,
+  ) async {
+    app = TestApp.create();
+    var finished = false;
+    await app.pump(
+      tester,
+      SetupPage(
+        plan: const SetupPlan([
+          FakeStep("first", finishes: true),
+          FakeStep("second"),
+        ], progress: PlanProgress()),
+        onFinished: () => finished = true,
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(app.container.read(fakeStepsDone), {"first"});
+    expect(find.text("Installing second, so it is tested."), findsOneWidget);
+    expect(find.text("Step 2 of 2 · Starting…"), findsOneWidget);
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+          .value,
+      0.5,
+    );
+
+    app.container.read(fakeStepsDone.notifier).finish("second");
+    await tester.pump();
+    await tester.pump();
+    expect(finished, isTrue);
+  });
 }
+
+/// Which [FakeStep]s are done.
+final fakeStepsDone = NotifierProvider<_Done, Set<String>>(_Done.new);
+
+class _Done extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  void finish(String name) => state = {...state, name};
+}
+
+/// A step that downloads nothing: started, it is done at once where
+/// [finishes], and waits to be finished by hand otherwise.
+class FakeStep extends SetupStep {
+  const FakeStep(this.name, {this.finishes = false, super.unpackShare})
+    : super(downloading: "Fetching $name", unpacking: "Opening $name");
+
+  @override
+  final String name;
+  final bool finishes;
+
+  @override
+  String get purpose => "it is tested.";
+
+  @override
+  String get settingsPage => "nowhere";
+
+  @override
+  ProviderListenable<DownloadState> get downloads => _noDownloads;
+
+  @override
+  String get downloadId => name;
+
+  @override
+  bool done(WidgetRef ref) => ref.watch(fakeStepsDone).contains(name);
+
+  @override
+  void start(WidgetRef ref) {
+    if (finishes) ref.read(fakeStepsDone.notifier).finish(name);
+  }
+}
+
+final _noDownloads = Provider((ref) => const DownloadState());
 
 /// Helium's download, finishing when [installing] does.
 class FakeHelium implements EmbeddedBrowser {

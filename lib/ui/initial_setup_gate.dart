@@ -2,20 +2,70 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
+import "../core/formatting.dart";
+import "../domain/agent_browser.dart" show embeddedBrowserId;
+import "../domain/download.dart";
 import "../domain/rootfs.dart";
 import "../providers.dart";
-import "../domain/agent_browser.dart" show embeddedBrowserId;
 import "settings/browser_settings.dart";
 import "settings/downloads.dart" show DownloadState;
 import "settings/rootfs_downloads.dart";
 import "widgets/app_mark.dart";
-import "../core/formatting.dart";
 
-/// One thing the first launch installs ahead of the welcome tour and makes the
-/// setting it is for. Picking it is what takes it off [pending], so the page
-/// has no Next: it is done when the setting is.
+/// What a platform's first launch sets up ahead of the welcome tour: its
+/// steps, in order, and how the bar counts them.
+class SetupPlan {
+  const SetupPlan(this.steps, {this.progress = const StepProgress()});
+
+  final List<SetupStep> steps;
+  final SetupProgress progress;
+}
+
+/// The plan this device runs. A phone gets Alpine as where commands run —
+/// proot on Android, the emulator on iOS — and a desktop, whose agent drives
+/// a browser the app launches rather than its own WebView, gets Helium as that
+/// browser. Anywhere else nothing is set up.
+final setupPlanProvider = Provider<SetupPlan>((ref) {
+  if (ref.watch(prootAvailableProvider) ||
+      ref.watch(deviceAbiProvider) == "ios") {
+    return const SetupPlan([
+      AlpineSetup(
+        downloading: "Downloading Alpine Linux",
+        unpacking: "Unpacking Alpine Linux",
+        // Thousands of small files, which a phone writes slowly.
+        unpackShare: 0.4,
+      ),
+    ]);
+  }
+  final browser = ref.watch(agentBrowserProvider);
+  if (browser.available && !browser.inApp) {
+    return const SetupPlan([
+      HeliumSetup(
+        downloading: "Downloading Helium",
+        unpacking: "Unpacking Helium",
+      ),
+    ], progress: PlanProgress());
+  }
+  return const SetupPlan([]);
+});
+
+/// One thing a [SetupPlan] installs and makes the setting it is for. Picking
+/// it is what makes it [done], so the page has no Next. The plan words what
+/// the screen says while it downloads and while it unpacks.
 abstract class SetupStep {
-  const SetupStep();
+  const SetupStep({
+    required this.downloading,
+    required this.unpacking,
+    this.unpackShare = 0.2,
+  });
+
+  /// The line under the bar while it downloads, and while it unpacks.
+  final String downloading;
+  final String unpacking;
+
+  /// How much of the step's share of the bar unpacking is, for a
+  /// [SetupProgress] that counts it.
+  final double unpackShare;
 
   /// What is installed, as the page names it.
   String get name;
@@ -30,21 +80,85 @@ abstract class SetupStep {
   ProviderListenable<DownloadState> get downloads;
   String get downloadId;
 
-  /// Whether this device wants it and nothing is picked yet. Watched.
-  bool pending(WidgetRef ref);
+  /// Whether its setting is picked. Watched.
+  bool done(WidgetRef ref);
 
   /// Picks it where it is already on disk, otherwise starts the download.
   void start(WidgetRef ref);
 
   /// Picks it once its download lands, where the catalog does not already.
   void listen(WidgetRef ref) {}
+
+  /// The line under the bar, given where its download is.
+  String status(DownloadProgress? progress) => switch (progress) {
+    null => "Starting…",
+    DownloadProgress(unpacking: true) => "$unpacking…",
+    DownloadProgress(total: > 0) =>
+      "$downloading · ${formatSize(progress.received)} of "
+          "${formatSize(progress.total)}",
+    _ => "$downloading…",
+  };
 }
 
-/// Alpine as where commands run, wherever a Linux can — proot on Android, the
-/// emulator on iOS — so a phone's terminal is Alpine before the user has had
-/// to find the Terminal page.
+/// How the setup screen's bar reads.
+abstract class SetupProgress {
+  const SetupProgress();
+
+  /// The bar from 0 to 1, or null to leave it indeterminate: [done] of
+  /// [count] steps are behind [step], whose download is at [progress].
+  double? fraction(
+    SetupStep step,
+    int done,
+    int count,
+    DownloadProgress? progress,
+  );
+}
+
+/// The bar is the current step's download alone, filling again for each step
+/// and indeterminate while there is nothing to count — before the first byte
+/// and while it unpacks.
+class StepProgress extends SetupProgress {
+  const StepProgress();
+
+  @override
+  double? fraction(
+    SetupStep step,
+    int done,
+    int count,
+    DownloadProgress? progress,
+  ) => progress == null || progress.unpacking ? null : progress.fraction;
+}
+
+/// One bar for the whole plan, each step an equal share of it and unpacking
+/// its [SetupStep.unpackShare] of that, so it only ever moves forward.
+class PlanProgress extends SetupProgress {
+  const PlanProgress();
+
+  @override
+  double fraction(
+    SetupStep step,
+    int done,
+    int count,
+    DownloadProgress? progress,
+  ) {
+    final fetched = 1 - step.unpackShare;
+    final within = switch (progress) {
+      null => 0.0,
+      // Unpacking reports no count of its own, so it holds where the
+      // download left off until the step is done.
+      DownloadProgress(unpacking: true) => fetched,
+      _ => fetched * (progress.fraction ?? 0),
+    };
+    return (done + within) / count;
+  }
+}
+
 class AlpineSetup extends SetupStep {
-  const AlpineSetup();
+  const AlpineSetup({
+    required super.downloading,
+    required super.unpacking,
+    super.unpackShare,
+  });
 
   @override
   String get name => alpine.name;
@@ -62,10 +176,8 @@ class AlpineSetup extends SetupStep {
   String get downloadId => alpine.id;
 
   @override
-  bool pending(WidgetRef ref) =>
-      (ref.watch(prootAvailableProvider) ||
-          ref.watch(deviceAbiProvider) == "ios") &&
-      ref.watch(appSettingsProvider.select((s) => s.rootfsId == null));
+  bool done(WidgetRef ref) =>
+      ref.watch(appSettingsProvider.select((s) => s.rootfsId != null));
 
   @override
   void start(WidgetRef ref) {
@@ -85,11 +197,14 @@ class AlpineSetup extends SetupStep {
       });
 }
 
-/// Helium as the agent's browser, wherever the browser is one the app
-/// launches rather than its own WebView — the desktops. The catalog's own
-/// rescan picks a first download, so there is nothing to listen for.
+/// The catalog's own rescan picks a first download, so there is nothing to
+/// listen for.
 class HeliumSetup extends SetupStep {
-  const HeliumSetup();
+  const HeliumSetup({
+    required super.downloading,
+    required super.unpacking,
+    super.unpackShare,
+  });
 
   @override
   String get name => "Helium";
@@ -108,12 +223,8 @@ class HeliumSetup extends SetupStep {
   String get downloadId => EmbeddedBrowserDownloads.id;
 
   @override
-  bool pending(WidgetRef ref) {
-    final browser = ref.watch(agentBrowserProvider);
-    return browser.available &&
-        !browser.inApp &&
-        ref.watch(appSettingsProvider.select((s) => s.agentBrowser == null));
-  }
+  bool done(WidgetRef ref) =>
+      ref.watch(appSettingsProvider.select((s) => s.agentBrowser != null));
 
   @override
   void start(WidgetRef ref) {
@@ -127,13 +238,10 @@ class HeliumSetup extends SetupStep {
   }
 }
 
-/// Shows [InitialSetupPage] for the first of [steps] this device still wants,
-/// while the welcome tour is unseen. Everywhere else, and once the tour has
-/// been seen, it is [child] alone.
+/// Shows [SetupPage] over this device's [setupPlanProvider] while the welcome
+/// tour is unseen and a step of it is not done. Otherwise it is [child] alone.
 class InitialSetupGate extends ConsumerStatefulWidget {
   const InitialSetupGate({super.key, required this.child});
-
-  static const steps = <SetupStep>[AlpineSetup(), HeliumSetup()];
 
   final Widget child;
 
@@ -142,62 +250,74 @@ class InitialSetupGate extends ConsumerStatefulWidget {
 }
 
 class _InitialSetupGateState extends ConsumerState<InitialSetupGate> {
-  /// Skip is for this launch only: the tour being seen is what stops the page
-  /// coming back, so a skip that is not followed by the tour asks again.
-  final _skipped = <SetupStep>{};
+  /// Every step done or skipped. A skip is for this launch only: the tour
+  /// being seen is what stops the page coming back, so a skip that is not
+  /// followed by the tour asks again.
+  bool _finished = false;
 
   @override
   Widget build(BuildContext context) {
-    if (ref.watch(appSettingsProvider.select((s) => s.licenceAccepted))) {
+    if (_finished ||
+        ref.watch(appSettingsProvider.select((s) => s.licenceAccepted))) {
       return widget.child;
     }
-    final step = InitialSetupGate.steps
-        .where((s) => !_skipped.contains(s) && s.pending(ref))
-        .firstOrNull;
-    if (step == null) return widget.child;
-    return InitialSetupPage(
-      key: ValueKey(step),
-      step: step,
-      onSkip: () => setState(() => _skipped.add(step)),
+    final plan = ref.watch(setupPlanProvider);
+    if (plan.steps.every((s) => s.done(ref))) return widget.child;
+    return SetupPage(
+      plan: plan,
+      onFinished: () => setState(() => _finished = true),
     );
   }
 }
 
-/// Installs [step] and picks it.
-class InitialSetupPage extends ConsumerStatefulWidget {
-  const InitialSetupPage({super.key, required this.step, required this.onSkip});
+/// Runs [plan]'s steps one after another on one screen, each started when the
+/// one before it is done or skipped, and says [onFinished] when none is left.
+class SetupPage extends ConsumerStatefulWidget {
+  const SetupPage({super.key, required this.plan, required this.onFinished});
 
-  final SetupStep step;
-  final VoidCallback onSkip;
+  final SetupPlan plan;
+  final VoidCallback onFinished;
 
   @override
-  ConsumerState<InitialSetupPage> createState() => _InitialSetupPageState();
+  ConsumerState<SetupPage> createState() => _SetupPageState();
 }
 
-class _InitialSetupPageState extends ConsumerState<InitialSetupPage> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _start());
-  }
+class _SetupPageState extends ConsumerState<SetupPage> {
+  final _skipped = <SetupStep>{};
+  SetupStep? _started;
 
-  void _start() {
-    if (mounted) widget.step.start(ref);
+  void _start(SetupStep step) {
+    _started = step;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) step.start(ref);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final step = widget.step;
+    final steps = widget.plan.steps;
+    final index = steps.indexWhere(
+      (s) => !_skipped.contains(s) && !s.done(ref),
+    );
+    if (index < 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => widget.onFinished());
+      return const Scaffold();
+    }
+    final step = steps[index];
+    if (step != _started) _start(step);
     step.listen(ref);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final downloads = ref.watch(step.downloads);
     final progress = downloads.active[step.downloadId];
     final failure = downloads.failures[step.downloadId];
-    final fraction =
-        progress == null || progress.total <= 0 || progress.unpacking
-        ? null
-        : (progress.received / progress.total).clamp(0.0, 1.0);
+    final fraction = widget.plan.progress.fraction(
+      step,
+      index,
+      steps.length,
+      progress,
+    );
+    final status = step.status(progress);
 
     return Scaffold(
       body: SafeArea(
@@ -238,12 +358,9 @@ class _InitialSetupPageState extends ConsumerState<InitialSetupPage> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      progress == null
-                          ? "Starting…"
-                          : progress.unpacking
-                          ? "Unpacking…"
-                          : "${formatSize(progress.received)} of "
-                                "${formatSize(progress.total)}",
+                      steps.length > 1
+                          ? "Step ${index + 1} of ${steps.length} · $status"
+                          : status,
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: scheme.onSurfaceVariant,
@@ -262,12 +379,12 @@ class _InitialSetupPageState extends ConsumerState<InitialSetupPage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         TextButton(
-                          onPressed: widget.onSkip,
+                          onPressed: () => setState(() => _skipped.add(step)),
                           child: const Text("Skip"),
                         ),
                         const SizedBox(width: 12),
                         FilledButton(
-                          onPressed: _start,
+                          onPressed: () => step.start(ref),
                           child: const Text("Retry"),
                         ),
                       ],

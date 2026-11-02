@@ -54,17 +54,23 @@ the tour) shows `WelcomePage` instead of the shell while `licenceAccepted` in
 notifier, which swaps the shell in. The tour is the home content, not a route
 over it, so the back key cannot skip it and there is no back arrow; the tour
 also runs embedded here and has nothing of its own to leave. Ahead of it,
-`InitialSetupGate` shows a setup screen for the first `SetupStep` the device
-still wants, which downloads one thing through its catalog and picks it: where
-a Linux can run (proot on Android, the emulator on iOS) `AlpineSetup` makes
-Alpine the terminal, so a phone user never has to find the Terminal page, and
-where the agent's browser is one the app launches — the desktops —
-`HeliumSetup` downloads Helium and picks it as the agent's browser, which makes
-the embedded browser the desktops' default where it used to be off. A step
-shows only while the tour is unseen and its setting is unpicked, and a
-failure offers Retry or a Skip that lasts the launch. A step is a subclass: what
-it is called, the catalog it downloads through, when it is wanted, and how it
-is picked. A tour page says
+`InitialSetupGate` shows `SetupPage` over the device's `SetupPlan` while the
+tour is unseen and a step of it is not done. A plan is what a platform hands
+the one setup screen: its `SetupStep`s in order, each with the line it shows
+while it downloads and while it unpacks, and a `SetupProgress` — the bar's
+policy. `setupPlanProvider` is where each platform submits its plan: where a
+Linux can run (proot on Android, the emulator on iOS) Alpine as the terminal,
+so a phone user never has to find the Terminal page, its bar the download
+alone (`StepProgress`); where the agent's browser is one the app launches —
+the desktops — Helium as that browser, which makes the embedded browser the
+desktops' default where it used to be off, its bar the whole plan
+(`PlanProgress`, each step an equal share and unpacking its `unpackShare` of
+that, so it only moves forward). The page runs the steps one after another,
+each started when the one before is done or skipped; a step is done when its
+setting is picked, so the page has no Next. A failure offers Retry, or a Skip
+that lasts the launch. A step subclass says what it is called, the catalog it
+downloads through, when it is done, and how it is picked; what it says on
+screen is the plan's. A tour page says
 one thing in a line or two; a page with two points is two pages. Two pages
 hold Next: the provider page until some model is reachable, the model page —
 which embeds `DefaultsSection` from `llm_settings.dart`, so a row added there is
