@@ -42,16 +42,13 @@ class PromptField extends StatelessWidget {
   static const _previewHeight = 320.0;
 
   Future<void> _edit(BuildContext context) async {
-    final edited = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => PromptPage(
-          title: label,
-          text: value,
-          hint: hint,
-          project: project,
-          completions: completions,
-        ),
-      ),
+    final edited = await PromptPage.open(
+      context,
+      title: label,
+      text: value,
+      hint: hint,
+      project: project,
+      completions: completions,
     );
     if (edited != null) onChanged(edited);
   }
@@ -147,6 +144,30 @@ class PromptPage extends StatefulWidget {
   final String? device;
 
   final bool completions;
+
+  /// Pushes the page and answers what it popped.
+  static Future<String?> open(
+    BuildContext context, {
+    required String title,
+    required String text,
+    required String hint,
+    String? project,
+    String? device,
+    bool completions = true,
+    String confirmLabel = "Save",
+  }) => Navigator.of(context).push<String>(
+    MaterialPageRoute(
+      builder: (_) => PromptPage(
+        title: title,
+        text: text,
+        hint: hint,
+        project: project,
+        device: device,
+        completions: completions,
+        confirmLabel: confirmLabel,
+      ),
+    ),
+  );
 
   @override
   State<PromptPage> createState() => _PromptPageState();

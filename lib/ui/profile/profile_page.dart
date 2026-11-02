@@ -139,7 +139,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   String? _opened;
 
-  bool get _edited => _loaded && _snapshot() != _opened;
+  bool get _edited => _opened != null && _snapshot() != _opened;
 
   String _instructionsPath(AppConfig config) => widget.project == null
       ? config.globalInstructionsFile

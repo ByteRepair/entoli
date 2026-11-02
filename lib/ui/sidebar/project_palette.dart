@@ -661,7 +661,7 @@ class _NewProjectState extends State<_NewProject> {
                 decoration: const InputDecoration(
                   labelText: "Description",
                   hintText: defaultEmptyChatQuestion,
-                  helperText: "What a new chat in this project asks.",
+                  helperText: projectDescriptionHelp,
                   border: OutlineInputBorder(),
                   alignLabelWithHint: true,
                 ),

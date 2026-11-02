@@ -94,6 +94,26 @@ class _SidebarState extends ConsumerState<Sidebar> {
     // reason switching clears the selected chat. Kept, it would answer a
     // project the user has left with "nothing matches".
     ref.listen(selectedProjectProvider, (_, _) => _search.clear());
+    final pages = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ListTile(
+          leading: const Icon(Icons.person_outline),
+          title: const Text("Profile"),
+          onTap: () => openProfile(context),
+        ),
+        ListTile(
+          leading: const Icon(Icons.storefront_outlined),
+          title: const Text("Marketplace"),
+          onTap: () => openMarketplace(context),
+        ),
+        ListTile(
+          leading: const Icon(Icons.settings),
+          title: const Text("Settings"),
+          onTap: () => openSettings(context),
+        ),
+      ],
+    );
     // Material, not Scaffold: the shell's Scaffold owns the drawer, and an
     // inner one would shadow it.
     return Material(
@@ -137,30 +157,13 @@ class _SidebarState extends ConsumerState<Sidebar> {
             // nothing at the bottom.
             if (!menuBarAlwaysShown) ...[
               const Divider(height: 1),
-              Stack(
-                alignment: Alignment.centerRight,
-                children: [
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ListTile(
-                        leading: const Icon(Icons.person_outline),
-                        title: const Text("Profile"),
-                        onTap: () => openProfile(context),
-                      ),
-                      ListTile(
-                        leading: const Icon(Icons.storefront_outlined),
-                        title: const Text("Marketplace"),
-                        onTap: () => openMarketplace(context),
-                      ),
-                      ListTile(
-                        leading: const Icon(Icons.settings),
-                        title: const Text("Settings"),
-                        onTap: () => openSettings(context),
-                      ),
-                    ],
-                  ),
-                  if (!isApple)
+              if (isApple)
+                pages
+              else
+                Stack(
+                  alignment: Alignment.centerRight,
+                  children: [
+                    pages,
                     Padding(
                       padding: const EdgeInsets.only(right: 16),
                       child: FloatingActionButton(
@@ -170,8 +173,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         child: const Icon(Icons.add),
                       ),
                     ),
-                ],
-              ),
+                  ],
+                ),
             ],
           ],
         ),

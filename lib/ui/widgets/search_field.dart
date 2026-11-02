@@ -2,9 +2,10 @@ import "package:flutter/material.dart";
 
 /// The rounded search box over a list: the sidebar's chats, the marketplace's
 /// entries and the project palette's choices. The clear button comes and goes
-/// with what the controller holds, listened to here so the field is not
-/// rebuilt from above for it.
-class SearchField extends StatelessWidget {
+/// with whether the controller holds anything, listened to here so the field is
+/// not rebuilt from above for it — and only when that flips, not on every caret
+/// move the controller also reports.
+class SearchField extends StatefulWidget {
   const SearchField({
     super.key,
     required this.controller,
@@ -23,44 +24,74 @@ class SearchField extends StatelessWidget {
   final ValueChanged<String>? onSubmitted;
 
   @override
+  State<SearchField> createState() => _SearchFieldState();
+}
+
+class _SearchFieldState extends State<SearchField> {
+  late bool _empty = widget.controller.text.isEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_changed);
+  }
+
+  @override
+  void didUpdateWidget(SearchField old) {
+    super.didUpdateWidget(old);
+    if (old.controller == widget.controller) return;
+    old.controller.removeListener(_changed);
+    widget.controller.addListener(_changed);
+    _empty = widget.controller.text.isEmpty;
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_changed);
+    super.dispose();
+  }
+
+  void _changed() {
+    final empty = widget.controller.text.isEmpty;
+    if (empty != _empty) setState(() => _empty = empty);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: padding,
-      child: ValueListenableBuilder<TextEditingValue>(
-        valueListenable: controller,
-        builder: (context, value, _) => TextField(
-          controller: controller,
-          autofocus: autofocus,
-          textInputAction: textInputAction,
-          onSubmitted: onSubmitted,
-          style: theme.textTheme.bodyMedium,
-          decoration: InputDecoration(
-            isDense: true,
-            filled: true,
-            fillColor: theme.colorScheme.surfaceContainerHighest,
-            hintText: hint,
-            prefixIcon: const Icon(Icons.search, size: 20),
-            prefixIconConstraints: const BoxConstraints(
-              minWidth: 40,
-              minHeight: 36,
-            ),
-            suffixIcon: value.text.isEmpty
-                ? null
-                : IconButton(
-                    icon: const Icon(Icons.close, size: 18),
-                    tooltip: "Clear search",
-                    onPressed: controller.clear,
-                  ),
-            suffixIconConstraints: const BoxConstraints(
-              minWidth: 36,
-              minHeight: 36,
-            ),
-            contentPadding: const EdgeInsets.symmetric(vertical: 10),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(24),
-              borderSide: BorderSide.none,
-            ),
+      padding: widget.padding,
+      child: TextField(
+        controller: widget.controller,
+        autofocus: widget.autofocus,
+        textInputAction: widget.textInputAction,
+        onSubmitted: widget.onSubmitted,
+        style: theme.textTheme.bodyMedium,
+        decoration: InputDecoration(
+          isDense: true,
+          filled: true,
+          fillColor: theme.colorScheme.surfaceContainerHighest,
+          hintText: widget.hint,
+          prefixIcon: const Icon(Icons.search, size: 20),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 40,
+            minHeight: 36,
+          ),
+          suffixIcon: _empty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  tooltip: "Clear search",
+                  onPressed: widget.controller.clear,
+                ),
+          suffixIconConstraints: const BoxConstraints(
+            minWidth: 36,
+            minHeight: 36,
+          ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(24),
+            borderSide: BorderSide.none,
           ),
         ),
       ),

@@ -177,17 +177,14 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   /// the `/` and `@` it was written with complete here the way they did there.
   Future<void> _edit() async {
     final at = ref.read(selectedProjectProvider);
-    final edited = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => PromptPage(
-          title: "Edit message",
-          text: widget.message.plainText,
-          hint: "Message",
-          project: at.project,
-          device: at.device,
-          confirmLabel: "Send",
-        ),
-      ),
+    final edited = await PromptPage.open(
+      context,
+      title: "Edit message",
+      text: widget.message.plainText,
+      hint: "Message",
+      project: at.project,
+      device: at.device,
+      confirmLabel: "Send",
     );
     final text = edited?.trim() ?? "";
     // A blank message says nothing, so sending one is not what was meant.

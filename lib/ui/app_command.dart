@@ -2,10 +2,10 @@ import "package:flutter/foundation.dart";
 import "package:flutter/services.dart";
 import "package:flutter/widgets.dart";
 
+import "../core/platform/form_factor.dart";
+
 /// Whether the platform's chord key is Cmd rather than Ctrl.
-bool get appleKeyboard =>
-    defaultTargetPlatform == TargetPlatform.macOS ||
-    defaultTargetPlatform == TargetPlatform.iOS;
+bool get appleKeyboard => isApple;
 
 /// Whether this platform draws the app's menus: macOS's menu bar, and iPadOS's
 /// over a channel of the app's own — which an iPhone answers with its keys.
