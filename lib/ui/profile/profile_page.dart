@@ -11,6 +11,7 @@ import "../../domain/documents.dart" show RenameWriter;
 import "../../domain/profile.dart";
 import "../../domain/tone.dart";
 import "../../providers.dart";
+import "../widgets/prompt_field.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart" show mutedParagraph;
 import "../widgets/text_file_page.dart";
@@ -40,7 +41,7 @@ class ProfilePage extends ConsumerStatefulWidget {
 }
 
 class _ProfilePageState extends ConsumerState<ProfilePage> {
-  final _instructions = TextEditingController();
+  String _instructions = "";
   final _name = TextEditingController();
   final _dob = TextEditingController();
   final _religion = TextEditingController();
@@ -85,7 +86,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     final path = _instructionsPath(config);
     try {
       final file = File(path);
-      if (file.existsSync()) _instructions.text = await file.readAsString();
+      if (file.existsSync()) _instructions = await file.readAsString();
     } catch (_) {
       // A file that will not read is shown as empty; saving overwrites it.
     }
@@ -191,11 +192,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   Future<void> _save() async {
     setState(() => _saving = true);
     final config = ref.read(appConfigProvider);
-    await _writeInstructions(
-      config,
-      _instructionsPath(config),
-      _instructions.text,
-    );
+    await _writeInstructions(config, _instructionsPath(config), _instructions);
     if (isDesktop) await _saveLinked(config);
     if (widget.project == null) {
       final profile = _profile();
@@ -237,12 +234,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   Future<void> _clear() async {
-    _instructions.clear();
     _name.clear();
     _dob.clear();
     _religion.clear();
     _profession.clear();
     setState(() {
+      _instructions = "";
       if (widget.project == null) {
         _linked = [];
       } else {
@@ -318,7 +315,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   @override
   void dispose() {
-    _instructions.dispose();
     _name.dispose();
     _dob.dispose();
     _religion.dispose();
@@ -460,21 +456,20 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     ),
                   ),
                 ),
-                LabelledField(
+                // No completions: an `@` here is a file to pull in rather
+                // than an agent to address.
+                PromptField(
                   label: "General instructions",
-                  child: TextField(
-                    controller: _instructions,
-                    maxLines: 8,
-                    // Only the project's file follows `@path`: the global
-                    // one's are left as text, so no example there.
-                    decoration: InputDecoration(
-                      hintText: global
-                          ? "Standing rules for the agent, applied to every turn"
-                          : "Standing rules for this project's chats\n\n"
-                                "Pull in a file from the project workspace with "
-                                "a line like:\n@docs/style.md",
-                    ),
-                  ),
+                  value: _instructions,
+                  completions: false,
+                  // Only the project's file follows `@path`: the global
+                  // one's are left as text, so no example there.
+                  hint: global
+                      ? "Standing rules for the agent, applied to every turn"
+                      : "Standing rules for this project's chats\n\n"
+                            "Pull in a file from the project workspace with "
+                            "a line like:\n@docs/style.md",
+                  onChanged: (text) => setState(() => _instructions = text),
                 ),
                 if (isDesktop) ..._linkedSection(global),
                 const SizedBox(height: 24),

@@ -23,9 +23,8 @@ import "../../providers.dart";
 import "../widgets/add_button_row.dart";
 import "../widgets/agent_picture.dart";
 import "../widgets/busy.dart";
-import "../widgets/completion_field.dart";
 import "../widgets/dialogs.dart";
-import "../widgets/resettable_field.dart";
+import "../widgets/prompt_field.dart";
 import "../widgets/section_header.dart";
 
 const _agentFiles = XTypeGroup(
@@ -482,11 +481,11 @@ typedef AgentEdit = ({
 /// written. A mention already written into a conversation keeps the meaning it
 /// was recorded with; a new mention of the old name is what a rename loses,
 /// which is why a rename onto a name another agent holds is refused here. The
-/// body is `CompletionField`, so `/skills` and `@agents` complete there the
-/// way they do in a trigger's prompt; an agent's prompt is dispatched through
-/// the same library. The picture rides the same save: picked bytes are written
-/// as `<name>.png` beside the `.md`, a remove takes it away, and a save
-/// touching neither leaves what is there — a rename moves it, and a rename
+/// body is a `PromptField`, the trigger's prompt's: shown as it is set, and
+/// written on a page of its own where `/skills` and `@agents` complete; an
+/// agent's prompt is dispatched through the same library. The picture rides
+/// the same save: picked bytes are written as `<name>.png` beside the `.md`,
+/// a remove takes it away, and a save touching neither leaves what is there — a rename moves it, and a rename
 /// with a fresh pick or a remove replaces or takes the old one rather than
 /// leaving it behind. The tools are switches over the registry's grantable
 /// ones, grouped as the tools group themselves.
@@ -525,9 +524,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
   late final TextEditingController _description = TextEditingController(
     text: widget.initial.description,
   );
-  late final TextEditingController _body = TextEditingController(
-    text: widget.initial.instructions,
-  );
+  late String _body = widget.initial.instructions;
   String? _nameError;
 
   /// What an agent may be granted, listed whatever this device can run: the
@@ -566,14 +563,13 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
   void dispose() {
     _name.dispose();
     _description.dispose();
-    _body.dispose();
     super.dispose();
   }
 
   bool get _edited =>
       _name.text != widget.initial.name ||
       _description.text != widget.initial.description ||
-      _body.text != widget.initial.instructions ||
+      _body != widget.initial.instructions ||
       !setEquals(_tools, _initialTools) ||
       _pictureTouched;
 
@@ -646,7 +642,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
       agent: widget.initial.edited(
         name: name,
         description: _description.text,
-        instructions: _body.text,
+        instructions: _body,
         tools: unchanged
             ? null
             : {
@@ -798,28 +794,28 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                 onChanged: (_) => setState(() => _nameError = null),
               ),
               const SizedBox(height: 12),
+              // Wraps and grows down rather than scrolling sideways: a
+              // description is often a sentence or two, and the whole of it
+              // should be read before it is saved. Still one line of the
+              // menu's, so Enter is done rather than a line break.
               TextField(
                 controller: _description,
+                minLines: 1,
+                maxLines: null,
+                textInputAction: TextInputAction.done,
                 decoration: const InputDecoration(
                   labelText: "Description",
-                  hintText: "One line shown in the @agent menu",
+                  hintText: "Shown in the @agent menu",
                 ),
               ),
               const SizedBox(height: 12),
-              LabelledField(
+              PromptField(
                 label: "System prompt",
+                value: _body,
+                hint: "The system prompt the agent runs under.",
+                project: widget.project,
                 padding: EdgeInsets.zero,
-                child: CompletionField(
-                  controller: _body,
-                  project: widget.project,
-                  minLines: 6,
-                  maxLines: 12,
-                  autofocus: !widget.isNew,
-                  decoration: const InputDecoration(
-                    hintText: "The system prompt the agent runs under.",
-                    alignLabelWithHint: true,
-                  ),
-                ),
+                onChanged: (body) => setState(() => _body = body),
               ),
               const SizedBox(height: 16),
               Text("Tools", style: Theme.of(context).textTheme.titleMedium),

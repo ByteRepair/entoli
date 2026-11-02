@@ -163,11 +163,8 @@ void main() {
   testWidgets(
     "only the project's field shows an import, the one that follows it",
     (tester) async {
-      bool hintsImport() => tester
-          .widgetList<TextField>(find.byType(TextField))
-          .any(
-            (f) => f.decoration?.hintText?.contains("@docs/style.md") ?? false,
-          );
+      bool hintsImport() =>
+          find.textContaining("@docs/style.md").evaluate().isNotEmpty;
 
       await app.pump(tester, const ProfilePage(project: null));
       await settleIo(tester);

@@ -11,8 +11,18 @@ null resolves to), the `promptForText` / `promptForPair` / `confirm` /
 `pickProject` dialogs and `copyToClipboard` beside them, `showAnchoredMenu`,
 `NavDrawer` and `navBreakpoint`, `SidePanelFrame` (below), `ActionIcon`, `AttachmentChip` /
 `AttachmentStrip`, `EmptyPane`, `Nothing`, `TempChatTtlField`, `TristateToggle`,
-`CompletionField`,
+`CompletionField`, `PromptField` (below),
 `text_input.dart` — the sections below — and `catalog.dart`.
+
+`PromptField` is prose the model reads — a trigger's prompt, an agent's system
+prompt, the profile's and a project's instructions — shown as markdown the way
+the chat sets it, over an Edit button that opens `PromptPage`: a box that is
+the whole page, Save and Discard, discarding asking first. It is one widget
+because the three pages had grown three answers to one question — a field a
+few lines tall that scrolled, for text that is written once, read many times,
+and often long. The page is `CompletionField` where `/skills` and `@agents`
+mean something (a prompt, which is dispatched through the library) and a plain
+field where they do not (instructions, where `@` pulls in a file).
 
 `SidePanelFrame` is a navigation panel beside a page where the window is wide
 enough and the panel shown, and the page's drawer where it is narrow — the

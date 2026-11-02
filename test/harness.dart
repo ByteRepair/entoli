@@ -32,6 +32,7 @@ import "package:agent_chat/domain/app_secrets.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/app_update.dart";
 import "package:agent_chat/domain/builtin_project.dart";
+import "package:agent_chat/ui/widgets/prompt_field.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
@@ -1143,4 +1144,25 @@ Future<void> writeSkill(
   await file.writeAsString(
     "---\nname: $name\ndescription: do $name$metadataBlock\n---\n\nDo $name.\n",
   );
+}
+
+/// Write [text] into the [PromptField] labelled [label], through the page
+/// that edits it. Every finder is anchored to that page: a route under
+/// another is still in the tree, and its fields with it.
+Future<void> writePrompt(
+  WidgetTester tester,
+  String text, {
+  String label = "Prompt",
+}) async {
+  final edit = find.text("Edit ${label.toLowerCase()}");
+  await scrollTo(tester, edit);
+  await tester.tap(edit);
+  await settleIo(tester);
+  final page = find.byType(PromptPage);
+  await tester.enterText(
+    find.descendant(of: page, matching: find.byType(TextField)),
+    text,
+  );
+  await tester.tap(find.descendant(of: page, matching: find.text("Save")));
+  await settleIo(tester);
 }
