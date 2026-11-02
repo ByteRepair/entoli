@@ -24,6 +24,7 @@ import "../widgets/add_button_row.dart";
 import "../widgets/agent_picture.dart";
 import "../widgets/busy.dart";
 import "../widgets/dialogs.dart";
+import "../widgets/discard_guard.dart";
 import "../widgets/prompt_field.dart";
 import "../widgets/section_header.dart";
 
@@ -573,20 +574,6 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
       !setEquals(_tools, _initialTools) ||
       _pictureTouched;
 
-  Future<void> _discard() async {
-    if (_edited) {
-      final ok = await confirm(
-        context,
-        title: "Discard changes",
-        message: "Throw away the edits to this agent?",
-        confirmLabel: "Discard",
-        destructive: true,
-      );
-      if (!ok) return;
-    }
-    if (mounted) Navigator.of(context).pop();
-  }
-
   /// What a pick or a remove records: the touched flag is the save's answer,
   /// the bytes only what the row shows and what goes back where a pick made.
   void _pick(Uint8List? bytes) => setState(() {
@@ -720,21 +707,15 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) unawaited(_discard());
-      },
+    return DiscardGuard(
+      edited: () => _edited,
+      message: "Throw away the edits to this agent?",
       child: Scaffold(
         appBar: AppBar(
           title: Text(
             widget.isNew ? "Add agent" : "Edit ${widget.initial.name}",
           ),
-          leading: IconButton(
-            icon: const Icon(Icons.close),
-            tooltip: "Discard",
-            onPressed: _discard,
-          ),
+          leading: const DiscardButton(),
           actions: [TextButton(onPressed: _save, child: const Text("Save"))],
         ),
         body: SafeArea(

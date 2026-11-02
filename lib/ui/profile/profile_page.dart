@@ -1,3 +1,4 @@
+import "dart:convert";
 import "dart:io";
 
 import "package:file_selector/file_selector.dart" show openFiles;
@@ -11,6 +12,7 @@ import "../../domain/documents.dart" show RenameWriter;
 import "../../domain/profile.dart";
 import "../../domain/tone.dart";
 import "../../providers.dart";
+import "../widgets/discard_guard.dart";
 import "../widgets/prompt_field.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart" show mutedParagraph;
@@ -117,8 +119,27 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       _tone = project.tone;
       _citations = project.citations;
     }
+    _opened = _snapshot();
     if (mounted) setState(() => _loaded = true);
   }
+
+  /// Everything a save writes, as one comparable value: what the page opened
+  /// on is [_opened], and the guard asks whether it still is.
+  String _snapshot() => jsonEncode([
+    _instructions,
+    _name.text,
+    _dob.text,
+    _religion.text,
+    _profession.text,
+    _tone?.name,
+    _citations,
+    _linked,
+    _off.toList()..sort(),
+  ]);
+
+  String? _opened;
+
+  bool get _edited => _loaded && _snapshot() != _opened;
 
   String _instructionsPath(AppConfig config) => widget.project == null
       ? config.globalInstructionsFile
@@ -364,117 +385,114 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             inherited: _appCitations,
             onChanged: (value) => setState(() => _citations = value),
           );
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(global ? "Profile" : "Project instructions"),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.restart_alt),
-            tooltip: "Clear",
-            onPressed: _loaded && !_saving ? _clear : null,
-          ),
-          IconButton(
-            icon: const Icon(Icons.check),
-            tooltip: "Save",
-            onPressed: _loaded && !_saving ? _save : null,
-          ),
-        ],
-      ),
-      body: !_loaded
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              children: [
-                if (global)
+    return DiscardGuard(
+      edited: () => _edited,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(global ? "Profile" : "Project instructions"),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.restart_alt),
+              tooltip: "Clear",
+              onPressed: _loaded && !_saving ? _clear : null,
+            ),
+            IconButton(
+              icon: const Icon(Icons.check),
+              tooltip: "Save",
+              onPressed: _loaded && !_saving ? _save : null,
+            ),
+          ],
+        ),
+        body: !_loaded
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                children: [
+                  if (global)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                      child: mutedParagraph(
+                        context,
+                        "About you, in every turn, in every project.",
+                      ),
+                    ),
+                  if (global)
+                    LabelledField(
+                      label: "Name",
+                      child: TextField(controller: _name),
+                    ),
+                  if (global)
+                    LabelledField(
+                      label: "Date of birth",
+                      child: TextField(
+                        controller: _dob,
+                        readOnly: true,
+                        decoration: InputDecoration(
+                          hintText: "Not set",
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.calendar_today),
+                            onPressed: _pickDate,
+                            tooltip: "Pick date",
+                          ),
+                        ),
+                        onTap: _pickDate,
+                      ),
+                    ),
+                  if (global)
+                    LabelledField(
+                      label: "Religion",
+                      child: TextField(controller: _religion),
+                    ),
+                  if (global)
+                    LabelledField(
+                      label: "Profession",
+                      child: TextField(controller: _profession),
+                    ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                    child: Text(
-                      "About you, in every turn, in every project.",
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                    child: mutedParagraph(
+                      context,
+                      global
+                          ? "How replies are worded, in every turn. A project "
+                                "can give its own answers below."
+                          : "How this project's replies are worded, in place of "
+                                "the app's answer.",
                     ),
                   ),
-                if (global)
-                  LabelledField(
-                    label: "Name",
-                    child: TextField(controller: _name),
-                  ),
-                if (global)
-                  LabelledField(
-                    label: "Date of birth",
-                    child: TextField(
-                      controller: _dob,
-                      readOnly: true,
-                      decoration: InputDecoration(
-                        hintText: "Not set",
-                        suffixIcon: IconButton(
-                          icon: const Icon(Icons.calendar_today),
-                          onPressed: _pickDate,
-                          tooltip: "Pick date",
-                        ),
-                      ),
-                      onTap: _pickDate,
+                  toneRow,
+                  citationsRow,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                    child: mutedParagraph(
+                      context,
+                      global
+                          ? "Your global instructions, read by every user project's "
+                                "turns; the built-in projects run on the app's own "
+                                "note. Stored at the root of your data directory, "
+                                "where a conversation's commands cannot reach them."
+                          : "The AGENTS.md at this project's workspace root, read by "
+                                "every chat's turn in it.",
                     ),
                   ),
-                if (global)
-                  LabelledField(
-                    label: "Religion",
-                    child: TextField(controller: _religion),
+                  // No completions: an `@` here is a file to pull in rather
+                  // than an agent to address.
+                  PromptField(
+                    label: "General instructions",
+                    value: _instructions,
+                    completions: false,
+                    // Only the project's file follows `@path`: the global
+                    // one's are left as text, so no example there.
+                    hint: global
+                        ? "Standing rules for the agent, applied to every turn"
+                        : "Standing rules for this project's chats\n\n"
+                              "Pull in a file from the project workspace with "
+                              "a line like:\n@docs/style.md",
+                    onChanged: (text) => setState(() => _instructions = text),
                   ),
-                if (global)
-                  LabelledField(
-                    label: "Profession",
-                    child: TextField(controller: _profession),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                  child: Text(
-                    global
-                        ? "How replies are worded, in every turn. A project "
-                              "can give its own answers below."
-                        : "How this project's replies are worded, in place of "
-                              "the app's answer.",
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-                toneRow,
-                citationsRow,
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                  child: Text(
-                    global
-                        ? "Your global instructions, read by every user project's "
-                              "turns; the built-in projects run on the app's own "
-                              "note. Stored at the root of your data directory, "
-                              "where a conversation's commands cannot reach them."
-                        : "The AGENTS.md at this project's workspace root, read by "
-                              "every chat's turn in it.",
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-                // No completions: an `@` here is a file to pull in rather
-                // than an agent to address.
-                PromptField(
-                  label: "General instructions",
-                  value: _instructions,
-                  completions: false,
-                  // Only the project's file follows `@path`: the global
-                  // one's are left as text, so no example there.
-                  hint: global
-                      ? "Standing rules for the agent, applied to every turn"
-                      : "Standing rules for this project's chats\n\n"
-                            "Pull in a file from the project workspace with "
-                            "a line like:\n@docs/style.md",
-                  onChanged: (text) => setState(() => _instructions = text),
-                ),
-                if (isDesktop) ..._linkedSection(global),
-                const SizedBox(height: 24),
-              ],
-            ),
+                  if (isDesktop) ..._linkedSection(global),
+                  const SizedBox(height: 24),
+                ],
+              ),
+      ),
     );
   }
 }

@@ -323,6 +323,10 @@ class _DescriptionCard extends ConsumerWidget {
           title: "Description",
           initial: description ?? "",
           hint: defaultEmptyChatQuestion,
+          // The field it was written in when the project was made.
+          helper: "What a new chat in this project asks.",
+          minLines: 2,
+          maxLines: 5,
           confirmLabel: "Save",
           allowBlank: true,
         );

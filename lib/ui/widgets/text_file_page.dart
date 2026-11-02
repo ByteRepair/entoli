@@ -14,6 +14,7 @@ import "../../providers.dart";
 import "../chat/widgets/code_block.dart";
 import "busy.dart";
 import "dialogs.dart";
+import "discard_guard.dart";
 import "empty_pane.dart";
 import "../../core/formatting.dart";
 
@@ -160,27 +161,14 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
   void _setScale(double scale) =>
       setState(() => _textScale = scale.clamp(0.6, 2.4));
 
-  Future<bool> _leave() async {
-    if (!_dirty) return true;
-    return confirm(
-      context,
-      title: "Discard your changes?",
-      message: "${widget.name} has edits that have not been saved.",
-      confirmLabel: "Discard",
-      destructive: true,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final content = _content;
     final mod = Theme.of(context).platform == TargetPlatform.macOS;
-    return PopScope(
-      canPop: !_dirty,
-      onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) return;
-        if (await _leave() && context.mounted) Navigator.of(context).pop();
-      },
+    return DiscardGuard(
+      edited: () => _dirty,
+      title: "Discard your changes?",
+      message: "${widget.name} has edits that have not been saved.",
       child: CallbackShortcuts(
         bindings: {
           SingleActivator(

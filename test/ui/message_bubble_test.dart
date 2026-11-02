@@ -1126,7 +1126,7 @@ void main() {
     },
   );
 
-  testWidgets("the edit dialog returns what was typed, or nothing on Cancel", (
+  testWidgets("the edit page returns what was typed, or nothing on Discard", (
     tester,
   ) async {
     String? edited;
@@ -1141,10 +1141,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.widgetWithText(TextField, "helo"), findsOneWidget);
-    await tester.tap(find.text("Cancel"));
+    await tester.tap(find.byTooltip("Discard"));
     await tester.pumpAndSettle();
 
-    // Cancelled: the dialog is all it is, nothing sent.
+    // Discarded: the page is all it is, nothing sent.
     expect(edited, isNull);
 
     // And what was typed on it comes back through the callback.

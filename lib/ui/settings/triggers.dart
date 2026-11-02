@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:convert";
 
 import "package:clock/clock.dart";
 import "package:flutter/material.dart";
@@ -12,6 +13,7 @@ import "../../domain/trigger.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
 import "../widgets/dialogs.dart" show confirm, promptForText;
+import "../widgets/discard_guard.dart";
 import "../widgets/prompt_field.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
@@ -218,6 +220,22 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
     _project = trigger?.project;
     _member = trigger?.member;
     _tempChatTtl = trigger?.tempChatTtl;
+    _initialSource = _sourceJson();
+  }
+
+  /// The source as it opened, by its JSON: the sources have no equality of
+  /// their own, and the JSON is what a save would write.
+  late final String _initialSource;
+  String _sourceJson() => jsonEncode(_source.toJson());
+
+  bool get _edited {
+    final trigger = widget.trigger;
+    return _name.text != (trigger?.name ?? "") ||
+        _prompt != (trigger?.prompt ?? "") ||
+        _sourceJson() != _initialSource ||
+        _project != trigger?.project ||
+        _member != trigger?.member ||
+        _tempChatTtl != trigger?.tempChatTtl;
   }
 
   @override
@@ -239,96 +257,103 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
     final isNew = widget.trigger == null;
     final registered = widget.trigger?.byAgent ?? false;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(isNew ? "New trigger" : "Edit trigger"),
-        actions: [
-          if (!isNew)
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              tooltip: "Delete trigger",
-              onPressed: _delete,
-            ),
-          // The agent's trigger is the switch and the delete: anything else
-          // saved here would rewrite what its conversation armed (source,
-          // anchor, re-enable) from a page whose prompt it refuses to touch.
-          if (!registered)
-            TextButton(onPressed: _save, child: const Text("Save")),
-        ],
-      ),
-      body: ListView(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: TextFormField(
-              controller: _name,
-              decoration: const InputDecoration(labelText: "Name"),
-            ),
-          ),
-          LabelledField(
-            label: "When",
-            child: SegmentedButton<_SourceKind>(
-              segments: const [
-                ButtonSegment(value: _SourceKind.schedule, label: Text("Time")),
-                ButtonSegment(
-                  value: _SourceKind.timer,
-                  label: Text("Countdown"),
-                ),
-                ButtonSegment(value: _SourceKind.file, label: Text("Files")),
-              ],
-              selected: {_kindOf(_source)},
-              // Nothing is saved from this page while it is the agent's, so
-              // nothing here looks editable either — the rows below follow
-              // the same gate.
-              onSelectionChanged: registered
-                  ? null
-                  : (selection) => setState(() {
-                      _source = _sourceFor(selection.first);
-                    }),
-            ),
-          ),
-          ..._sourceFields(editable: !registered),
-          _memberField(!registered),
-          PromptField(
-            label: "Prompt",
-            value: _prompt,
-            hint: "What should the agent do?",
-            project: _project,
-            editable: !registered,
-            onChanged: (prompt) => setState(() => _prompt = prompt),
-          ),
-          const Divider(height: 1),
-          if (!registered) ...[
-            TempChatTtlField(
-              value: _tempChatTtl,
-              onChanged: (ttl) => setState(() => _tempChatTtl = ttl),
-              project: _project,
+    return DiscardGuard(
+      edited: () => _edited,
+      message: "Throw away the edits to this trigger?",
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(isNew ? "New trigger" : "Edit trigger"),
+          actions: [
+            if (!isNew)
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: "Delete trigger",
+                onPressed: _delete,
+              ),
+            // The agent's trigger is the switch and the delete: anything else
+            // saved here would rewrite what its conversation armed (source,
+            // anchor, re-enable) from a page whose prompt it refuses to touch.
+            if (!registered)
+              TextButton(onPressed: _save, child: const Text("Save")),
+          ],
+        ),
+        body: ListView(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: TextFormField(
+                controller: _name,
+                decoration: const InputDecoration(labelText: "Name"),
+              ),
             ),
             LabelledField(
-              label: "Project",
-              child: DropdownButtonFormField<String?>(
-                initialValue: projectOrDefault(_project, named),
-                isExpanded: true,
-                items: [
-                  for (final project in everyProject(named))
-                    DropdownMenuItem(
-                      value: project,
-                      child: Text(projectLabel(project)),
-                    ),
+              label: "When",
+              child: SegmentedButton<_SourceKind>(
+                segments: const [
+                  ButtonSegment(
+                    value: _SourceKind.schedule,
+                    label: Text("Time"),
+                  ),
+                  ButtonSegment(
+                    value: _SourceKind.timer,
+                    label: Text("Countdown"),
+                  ),
+                  ButtonSegment(value: _SourceKind.file, label: Text("Files")),
                 ],
-                onChanged: (project) => setState(() => _project = project),
+                selected: {_kindOf(_source)},
+                // Nothing is saved from this page while it is the agent's, so
+                // nothing here looks editable either — the rows below follow
+                // the same gate.
+                onSelectionChanged: registered
+                    ? null
+                    : (selection) => setState(() {
+                        _source = _sourceFor(selection.first);
+                      }),
               ),
             ),
-          ] else
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text(
-                "This trigger was set by the agent in its chat. Switch it off "
-                "or delete it here; the prompt is the conversation's.",
-                style: TextStyle(fontStyle: FontStyle.italic),
-              ),
+            ..._sourceFields(editable: !registered),
+            _memberField(!registered),
+            PromptField(
+              label: "Prompt",
+              value: _prompt,
+              hint: "What should the agent do?",
+              project: _project,
+              editable: !registered,
+              onChanged: (prompt) => setState(() => _prompt = prompt),
             ),
-        ],
+            const Divider(height: 1),
+            if (!registered) ...[
+              TempChatTtlField(
+                value: _tempChatTtl,
+                onChanged: (ttl) => setState(() => _tempChatTtl = ttl),
+                project: _project,
+              ),
+              LabelledField(
+                label: "Project",
+                child: DropdownButtonFormField<String?>(
+                  initialValue: projectOrDefault(_project, named),
+                  isExpanded: true,
+                  items: [
+                    for (final project in everyProject(named))
+                      DropdownMenuItem(
+                        value: project,
+                        child: Text(projectLabel(project)),
+                      ),
+                  ],
+                  onChanged: (project) => setState(() => _project = project),
+                ),
+              ),
+            ] else
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text(
+                  "This trigger was set by the agent in its chat. Switch it off "
+                  "or delete it here; the prompt is the conversation's.",
+                  style: TextStyle(fontStyle: FontStyle.italic),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

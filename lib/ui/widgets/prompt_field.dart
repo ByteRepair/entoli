@@ -1,10 +1,8 @@
-import "dart:async";
-
 import "package:flutter/material.dart";
 
 import "../chat/widgets/markdown_text.dart";
 import "completion_field.dart";
-import "dialogs.dart" show confirm;
+import "discard_guard.dart";
 import "resettable_field.dart";
 
 /// Prose the model reads — a trigger's prompt, an agent's system prompt, a
@@ -125,17 +123,28 @@ class PromptPage extends StatefulWidget {
     required this.text,
     required this.hint,
     this.project,
+    this.device,
     this.completions = true,
+    this.confirmLabel = "Save",
   });
 
   final String title;
   final String text;
   final String hint;
 
+  /// What leaving with the text is called: Save where it is written back,
+  /// Send where it goes on to the model at once (a message edited).
+  final String confirmLabel;
+
   /// The project whose library the `/` and `@` menus offer, so the text is
   /// composed against the set it will be read with. Null is the default
   /// project, the way it is everywhere a project is named.
   final String? project;
+
+  /// The paired device whose project [project] is, where it is not this
+  /// one's — a mirrored chat's message is composed against its home's
+  /// library, the way its composer is.
+  final String? device;
 
   final bool completions;
 
@@ -157,22 +166,6 @@ class _PromptPageState extends State<PromptPage> {
 
   bool get _edited => _controller.text != widget.text;
 
-  /// Discarding is the one way out that loses what was typed, so it asks —
-  /// and the back key comes through here for the same reason.
-  Future<void> _discard() async {
-    if (_edited) {
-      final ok = await confirm(
-        context,
-        title: "Discard changes",
-        message: "Throw away these edits?",
-        confirmLabel: "Discard",
-        destructive: true,
-      );
-      if (!ok) return;
-    }
-    if (mounted) Navigator.of(context).pop();
-  }
-
   @override
   Widget build(BuildContext context) {
     final decoration = InputDecoration(
@@ -181,19 +174,12 @@ class _PromptPageState extends State<PromptPage> {
       border: InputBorder.none,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
     );
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) unawaited(_discard());
-      },
+    return DiscardGuard(
+      edited: () => _edited,
       child: Scaffold(
         appBar: AppBar(
           title: Text(widget.title),
-          leading: IconButton(
-            icon: const Icon(Icons.close),
-            tooltip: "Discard",
-            onPressed: _discard,
-          ),
+          leading: const DiscardButton(),
           actions: [
             if (widget.completions)
               PopupMenuButton<VoidCallback>(
@@ -205,7 +191,7 @@ class _PromptPageState extends State<PromptPage> {
               ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(_controller.text),
-              child: const Text("Save"),
+              child: Text(widget.confirmLabel),
             ),
           ],
         ),
@@ -215,6 +201,7 @@ class _PromptPageState extends State<PromptPage> {
                   key: _field,
                   controller: _controller,
                   project: widget.project,
+                  device: widget.device,
                   expands: true,
                   maxLines: null,
                   autofocus: true,

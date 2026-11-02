@@ -11,6 +11,7 @@ import "../../domain/project.dart";
 import "../../domain/project_settings.dart";
 import "../../providers.dart";
 import "../widgets/nav_drawer.dart";
+import "../widgets/search_field.dart";
 import "remote_projects.dart";
 import "../selection.dart";
 
@@ -359,21 +360,11 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
   // A column rather than a lazy list: the arrow keys scroll the active row
   // into view, which a row never built cannot be.
   List<Widget> _rows(List<_Item> items, List<_Choice> choices, int active) {
-    final theme = Theme.of(context);
     var index = 0;
     return [
       for (final item in items)
         switch (item) {
-          _Heading(:final text) => Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
-            child: Text(
-              text,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+          _Heading(:final text) => ListHeading(text, top: 12),
           _Rule() => const Divider(indent: 16, endIndent: 16),
           _Choice() => () {
             final i = index++;
@@ -406,27 +397,15 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
                 const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
                     _move(-1, choices.length, active),
               },
-              child: TextField(
+              child: SearchField(
                 controller: _search,
+                hint: "Search projects and chats",
+                padding: EdgeInsets.zero,
                 autofocus: true,
                 textInputAction: TextInputAction.go,
                 onSubmitted: (_) {
                   if (choices.isNotEmpty) _pick(choices[active].action);
                 },
-                decoration: InputDecoration(
-                  isDense: true,
-                  filled: true,
-                  fillColor: Theme.of(
-                    context,
-                  ).colorScheme.surfaceContainerHighest,
-                  hintText: "Search projects and chats",
-                  prefixIcon: const Icon(Icons.search, size: 20),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
               ),
             ),
           ),

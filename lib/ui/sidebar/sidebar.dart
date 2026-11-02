@@ -17,6 +17,7 @@ import "../project_actions.dart";
 import "../settings/settings_category.dart";
 import "../selection.dart";
 import "../widgets/nothing.dart";
+import "../widgets/search_field.dart";
 import "chat_groups.dart";
 import "project_palette.dart";
 import "remote_projects.dart";
@@ -213,7 +214,7 @@ class _LocalChatList extends ConsumerWidget {
             }
             return Column(
               children: [
-                _SearchField(controller: search, query: query),
+                SearchField(controller: search, hint: "Search chats"),
                 Expanded(
                   child: _ChatList(chats: chats, query: query),
                 ),
@@ -263,7 +264,7 @@ class _RemoteChatList extends ConsumerWidget {
     }
     return Column(
       children: [
-        _SearchField(controller: search, query: query),
+        SearchField(controller: search, hint: "Search chats"),
         Expanded(
           child: ValueListenableBuilder<String>(
             valueListenable: query,
@@ -311,59 +312,6 @@ class _RemoteChatList extends ConsumerWidget {
   }
 }
 
-class _SearchField extends StatelessWidget {
-  const _SearchField({required this.controller, required this.query});
-
-  final TextEditingController controller;
-
-  /// The same text the controller holds, listened to so the clear button comes
-  /// and goes without the field itself being rebuilt from above.
-  final ValueNotifier<String> query;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      child: ValueListenableBuilder<String>(
-        valueListenable: query,
-        builder: (context, text, _) => TextField(
-          controller: controller,
-          textInputAction: TextInputAction.search,
-          style: theme.textTheme.bodyMedium,
-          decoration: InputDecoration(
-            isDense: true,
-            filled: true,
-            fillColor: theme.colorScheme.surfaceContainerHighest,
-            hintText: "Search chats",
-            prefixIcon: const Icon(Icons.search, size: 20),
-            prefixIconConstraints: const BoxConstraints(
-              minWidth: 40,
-              minHeight: 36,
-            ),
-            suffixIcon: text.isEmpty
-                ? null
-                : IconButton(
-                    icon: const Icon(Icons.close, size: 18),
-                    tooltip: "Clear search",
-                    onPressed: controller.clear,
-                  ),
-            suffixIconConstraints: const BoxConstraints(
-              minWidth: 36,
-              minHeight: 36,
-            ),
-            contentPadding: const EdgeInsets.symmetric(vertical: 10),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(24),
-              borderSide: BorderSide.none,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// The chats of the project being shown, filtered by what is in the search
 /// field and under a heading for the day, the week or the month they were last
 /// touched in.
@@ -391,7 +339,7 @@ class _ChatList extends ConsumerWidget {
               found,
               now: DateTime.now(),
             )) ...[
-              SliverToBoxAdapter(child: _Heading(group.heading)),
+              SliverToBoxAdapter(child: ListHeading(group.heading)),
               SliverList.builder(
                 itemCount: group.chats.length,
                 itemBuilder: (context, i) => _ChatTile(
@@ -403,27 +351,6 @@ class _ChatList extends ConsumerWidget {
           ],
         );
       },
-    );
-  }
-}
-
-class _Heading extends StatelessWidget {
-  const _Heading(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
-      child: Text(
-        text,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
     );
   }
 }

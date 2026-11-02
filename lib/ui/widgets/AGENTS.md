@@ -11,7 +11,8 @@ null resolves to), the `promptForText` / `promptForPair` / `confirm` /
 `pickProject` dialogs and `copyToClipboard` beside them, `showAnchoredMenu`,
 `NavDrawer` and `navBreakpoint`, `SidePanelFrame` (below), `ActionIcon`, `AttachmentChip` /
 `AttachmentStrip`, `EmptyPane`, `Nothing`, `TempChatTtlField`, `TristateToggle`,
-`CompletionField`, `PromptField` (below),
+`CompletionField`, `PromptField` (below), `DiscardGuard`, `SearchField` and
+`ListHeading`,
 `text_input.dart` — the sections below — and `catalog.dart`.
 
 `PromptField` is prose the model reads — a trigger's prompt, an agent's system
@@ -22,7 +23,21 @@ because the three pages had grown three answers to one question — a field a
 few lines tall that scrolled, for text that is written once, read many times,
 and often long. The page is `CompletionField` where `/skills` and `@agents`
 mean something (a prompt, which is dispatched through the library) and a plain
-field where they do not (instructions, where `@` pulls in a file).
+field where they do not (instructions, where `@` pulls in a file). A message
+edited in the chat opens the same page, its Save called Send.
+
+`DiscardGuard` is every editor page's way out: a pop with something to lose
+asks, one with nothing leaves, and Save leaves by `Navigator.pop`, which the
+guard does not stop. It asks for `edited` when the pop comes rather than at
+build, since most of what a page edits sits in controllers that change with no
+rebuild. Four pages had written it out, two the same way, one differently, and
+two not at all — the trigger editor and the profile page, where back threw the
+edits away. `DiscardButton` is the close in the bar of a page whose way out is
+discarding.
+
+`SearchField` is the rounded search box over a list — the sidebar's, the
+marketplace's and the project palette's — and `ListHeading` the caption a list's
+groups sit under. Two were copies of the sidebar's, one had drifted.
 
 `SidePanelFrame` is a navigation panel beside a page where the window is wide
 enough and the panel shown, and the page's drawer where it is narrow — the

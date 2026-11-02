@@ -246,6 +246,31 @@ void main() {
       );
     });
 
+    testWidgets("leaving with an edit asks first, and leaving without one "
+        "does not", (tester) async {
+      await openEditor(tester, trigger: seeded());
+
+      // Untouched: back leaves at once.
+      await tester.pageBack();
+      await settleIo(tester);
+      expect(find.byType(TriggerEditorPage), findsNothing);
+
+      await tester.tap(find.text("Morning sweep"));
+      await settleIo(tester);
+      await tester.enterText(find.byType(TextFormField).first, "Evening");
+      await tester.pageBack();
+      await settleIo(tester);
+      expect(
+        find.text("Throw away the edits to this trigger?"),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text("Discard"));
+      await settleIo(tester);
+      expect(find.byType(TriggerEditorPage), findsNothing);
+      expect(app.container.read(triggersProvider).single.name, "Morning sweep");
+    });
+
     testWidgets("discarding leaves the prompt as it was", (tester) async {
       await openEditor(tester, trigger: seeded());
 
