@@ -56,6 +56,7 @@ import "ui/share/incoming_shares.dart";
 import "ui/triggers/incoming_open.dart";
 import "ui/selection.dart";
 import "ui/theme.dart";
+import "ui/shell/shell_bridge.dart";
 import "ui/widgets/liquid_glass.dart";
 
 /// The model host's entry point: Entoli's own executable launched again as
@@ -348,7 +349,14 @@ class AppSession {
           platform.createAppUpdateHost(cache),
         ),
         liquidGlassProvider.overrideWithValue(
-          LiquidGlass(available: glassAvailable, on: _glassAtLaunch!),
+          LiquidGlass(
+            available: glassAvailable,
+            on: _glassAtLaunch!,
+            // macOS first; iOS shares the SwiftUI and follows.
+            shell:
+                _glassAtLaunch! &&
+                defaultTargetPlatform == TargetPlatform.macOS,
+          ),
         ),
         agentBrowserProvider.overrideWithValue(browser),
         localEngineProvider.overrideWithValue(engine),
@@ -605,6 +613,7 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       darkTheme: entoliTheme(Brightness.dark, look),
       themeMode: mode,
       onGenerateRoute: appRoute,
+      navigatorObservers: [ref.read(shellRoutesProvider)],
       // All four wrapped rather than folded into the shell: what another app
       // shared has to be offered a workspace over whatever is on screen and the
       // assistant gesture has to open a chat over it, both of which want a
@@ -616,11 +625,23 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
         child: IncomingAssistant(
           child: IncomingShares(
             child: IncomingTriggerOpen(
-              child: InitialSetupGate(child: WelcomeGate(child: AppShell())),
+              child: InitialSetupGate(child: WelcomeGate(child: _Shell())),
             ),
           ),
         ),
       ),
     );
   }
+}
+
+/// The Flutter app's own shell, or the Flutter half of the native one: which
+/// is the launch's, and never moves.
+class _Shell extends ConsumerWidget {
+  const _Shell();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) =>
+      ref.watch(liquidGlassProvider).shell
+      ? const ShellBridge()
+      : const AppShell();
 }

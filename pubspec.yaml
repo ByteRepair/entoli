@@ -14,6 +14,8 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.9
+  entoli_glass:
+    path: packages/entoli_glass
 
   # State management
   flutter_riverpod: ^3.4.2

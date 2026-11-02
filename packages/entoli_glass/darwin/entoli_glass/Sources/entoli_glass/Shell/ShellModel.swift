@@ -1,0 +1,79 @@
+import SwiftUI
+
+#if os(iOS)
+  import Flutter
+#else
+  import FlutterMacOS
+#endif
+
+/// What the shell draws, as Dart last said it, one published value per
+/// concern; and the way back, [intent]. Holds nothing of its own: a snapshot
+/// replaces what was there, and a tap is an intent Dart answers with the next
+/// snapshot. See `lib/ui/shell/snapshots.dart`, whose maps these decode.
+final class ShellModel: ObservableObject {
+  private let channel: FlutterMethodChannel
+
+  @Published var window = WindowState()
+
+  /// Told when the window's own state changes, for what SwiftUI cannot set:
+  /// the window's appearance.
+  var onWindow: ((WindowState) -> Void)?
+
+  init(channel: FlutterMethodChannel) {
+    self.channel = channel
+  }
+
+  func apply(concern: String, value: Any?) {
+    switch concern {
+    case "window":
+      if let state: WindowState = decode(value), state != window {
+        window = state
+        onWindow?(state)
+      }
+    default:
+      break
+    }
+  }
+
+  /// What the user did, for Dart to run: see `ShellBridge._run`.
+  func intent(_ name: String, _ args: [String: Any] = [:]) {
+    channel.invokeMethod("intent", arguments: ["name": name, "args": args])
+  }
+
+  private var reported: EdgeInsets?
+
+  /// How much of the Flutter view the shell's own bars cover, which Dart
+  /// hands the conversation as padding so it scrolls under them.
+  func insets(_ insets: EdgeInsets) {
+    guard insets != reported else { return }
+    reported = insets
+    channel.invokeMethod(
+      "insets",
+      arguments: [
+        "top": insets.top, "bottom": insets.bottom,
+        "left": insets.leading, "right": insets.trailing,
+      ])
+  }
+
+  private func decode<T: Decodable>(_ value: Any?) -> T? {
+    guard let value, JSONSerialization.isValidJSONObject(value),
+      let data = try? JSONSerialization.data(withJSONObject: value)
+    else { return nil }
+    return try? JSONDecoder().decode(T.self, from: data)
+  }
+}
+
+/// `WindowSnapshot`.
+struct WindowState: Decodable, Equatable {
+  var covered = false
+  var sidebarShown = true
+  var appearance: String?
+
+  var colorScheme: ColorScheme? {
+    switch appearance {
+    case "light": .light
+    case "dark": .dark
+    default: nil
+    }
+  }
+}

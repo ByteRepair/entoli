@@ -5,7 +5,11 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 /// owns the window before any page is built, so a change to the setting waits
 /// for a restart. See "Liquid Glass" in `lib/ui/AGENTS.md`.
 class LiquidGlass {
-  const LiquidGlass({this.available = false, this.on = false});
+  const LiquidGlass({
+    this.available = false,
+    this.on = false,
+    this.shell = false,
+  });
 
   /// iOS and macOS, whose frameworks draw it; the settings row shows on these
   /// and nowhere else.
@@ -13,6 +17,11 @@ class LiquidGlass {
 
   /// What this launch started with.
   final bool on;
+
+  /// The window is the native shell's, and Flutter draws the conversation
+  /// inside it: [on], where the shell has been built for the platform. See
+  /// `lib/ui/shell/`.
+  final bool shell;
 }
 
 /// Overridden in `main` with the launch's answer.
