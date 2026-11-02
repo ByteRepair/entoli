@@ -21,6 +21,11 @@ final class ShellModel: ObservableObject {
   @Published var voice = VoiceState()
   @Published var palette = PaletteState()
 
+  /// A strip of choices over the Flutter view, and who waits on its answer:
+  /// see `Strip.swift`.
+  @Published var strip: StripRequest?
+  var stripReply: ((Any?) -> Void)?
+
   /// The microphone's level: not published, being many times a second and
   /// read by the glow on each of its frames.
   let voiceLevel = VoiceLevel()

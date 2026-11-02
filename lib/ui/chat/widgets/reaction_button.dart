@@ -1,13 +1,17 @@
 import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../domain/reaction.dart";
+import "../../shell/shell_popup.dart";
 import "../../widgets/action_icon.dart";
 import "../../widgets/anchored_menu.dart";
+import "../../widgets/liquid_glass.dart";
 
 /// The smiley under a message, and the strip of reactions it opens just above
 /// itself, centred on it. What the message already has is shown chosen, and
-/// picking it again takes it back.
-class ReactionButton extends StatelessWidget {
+/// picking it again takes it back. Under the native shell the strip is the
+/// shell's, in the system's glass.
+class ReactionButton extends ConsumerWidget {
   const ReactionButton({
     super.key,
     required this.onReact,
@@ -20,20 +24,39 @@ class ReactionButton extends StatelessWidget {
   /// The emoji already reacted with.
   final List<String> chosen;
 
-  Future<void> _pick(BuildContext context) async {
-    final picked = await showAnchoredPopup<Reaction>(
-      context,
-      (_) => _Strip(chosen: chosen),
-    );
+  Future<void> _pick(BuildContext context, bool shell) async {
+    final anchor = shell ? anchorOf(context) : null;
+    final Reaction? picked;
+    if (anchor != null) {
+      final at = await showShellStrip(
+        anchor: anchor,
+        choices: [
+          for (final r in Reaction.values) (glyph: r.emoji, name: r.name),
+        ],
+        chosen: {
+          for (final (i, r) in Reaction.values.indexed)
+            if (chosen.contains(r.emoji)) i,
+        },
+      );
+      picked = at == null ? null : Reaction.values.elementAtOrNull(at);
+    } else {
+      picked = await showAnchoredPopup<Reaction>(
+        context,
+        (_) => _Strip(chosen: chosen),
+      );
+    }
     if (picked != null && context.mounted) onReact(picked);
   }
 
   @override
-  Widget build(BuildContext context) => ActionIcon(
-    icon: Icons.add_reaction_outlined,
-    tooltip: "React",
-    onPressed: () => _pick(context),
-  );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final shell = ref.watch(liquidGlassProvider).shell;
+    return ActionIcon(
+      icon: Icons.add_reaction_outlined,
+      tooltip: "React",
+      onPressed: () => _pick(context, shell),
+    );
+  }
 }
 
 /// The six reactions on a pill that hugs them, the chosen ones filled.

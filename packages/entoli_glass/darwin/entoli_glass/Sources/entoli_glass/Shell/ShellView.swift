@@ -33,6 +33,8 @@ struct ShellView: View {
           // Under the toolbar and the composer, which it scrolls beneath;
           // never under the sidebar, which on 26 floats over the detail.
           .ignoresSafeArea(edges: [.top, .bottom])
+          // In the Flutter view's own coordinates, which a strip's anchor is.
+          .overlay { StripLayer(model: model) }
           .onChange(of: proxy.safeAreaInsets, initial: true) { _, insets in
             model.insets(EdgeInsets(top: insets.top, leading: 0, bottom: insets.bottom, trailing: 0))
           }

@@ -28,6 +28,10 @@
         case "snapshot":
           let args = call.arguments as? [String: Any]
           model.apply(concern: args?["concern"] as? String ?? "", value: args?["value"])
+        // Answered when a choice is picked or the strip is dismissed.
+        case "strip":
+          model.showStrip(call.arguments as? [String: Any] ?? [:]) { result($0) }
+          return
         default:
           return result(FlutterMethodNotImplemented)
         }
