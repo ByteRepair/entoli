@@ -151,4 +151,14 @@ void main() {
     expect(sent["turn"]?["resume"], isNull);
     expect(sent["turn"]?["approvals"], isEmpty);
   });
+
+  testWidgets("a tooltip on the page opens above what it is about", (
+    tester,
+  ) async {
+    await openChat(tester);
+    await pump(tester, composer: 80);
+    await settleIo(tester);
+    final list = tester.element(find.byType(SuperListView));
+    expect(TooltipTheme.of(list).preferBelow, isFalse);
+  });
 }

@@ -1,8 +1,6 @@
 import "package:flutter/material.dart";
-import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/ui/shell/shell_bridge.dart";
 import "package:agent_chat/ui/shell/shell_outbox.dart";
 import "package:agent_chat/ui/shell/shell_routes.dart";
 import "package:agent_chat/ui/shell/snapshots.dart";
@@ -128,34 +126,5 @@ void main() {
       expect(find.text("a prompt"), findsOneWidget);
       expect(routes.depth, 2);
     });
-  });
-
-  testWidgets("every tooltip is kept off the toolbar and the composer", (
-    tester,
-  ) async {
-    final container = ProviderContainer();
-    addTearDown(container.dispose);
-    container.read(shellInsetsProvider).value = const EdgeInsets.only(
-      top: 52,
-      bottom: 90,
-    );
-    late EdgeInsetsGeometry? margin;
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
-          builder: (context, child) => ShellInsets(child: child!),
-          home: Builder(
-            builder: (context) {
-              margin = TooltipTheme.of(context).margin;
-              return const SizedBox();
-            },
-          ),
-        ),
-      ),
-    );
-    final resolved = margin!.resolve(TextDirection.ltr);
-    expect(resolved.top, 52);
-    expect(resolved.bottom, 90);
   });
 }

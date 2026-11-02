@@ -164,21 +164,27 @@ class _ReadableColumn extends StatelessWidget {
     final page = _column(context);
     if (!shell) return page;
     // Expanded to the page: the bar draws nothing, and a stack sized by its
-    // children would size itself to that.
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        ?bar,
-        // A banner is not scrolled under: it sits below the toolbar.
-        MediaQuery.removePadding(
-          context: context,
-          removeTop: banner != null,
-          child: Padding(
-            padding: EdgeInsets.only(top: banner != null ? insets.top : 0),
-            child: page,
+    // children would size itself to that. A tooltip on this page opens above
+    // what it is about: the page runs under the composer, and a tooltip only
+    // knows the room the Flutter view has, so below would be behind it.
+    final tooltips = TooltipTheme.of(context);
+    return TooltipTheme(
+      data: tooltips.copyWith(preferBelow: false),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ?bar,
+          // A banner is not scrolled under: it sits below the toolbar.
+          MediaQuery.removePadding(
+            context: context,
+            removeTop: banner != null,
+            child: Padding(
+              padding: EdgeInsets.only(top: banner != null ? insets.top : 0),
+              child: page,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
