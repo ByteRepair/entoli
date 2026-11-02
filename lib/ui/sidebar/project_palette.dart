@@ -54,10 +54,11 @@ const remoteGlyph = Icons.devices_outlined;
 
 /// What the new-project page hands back. A blank description is left unset,
 /// which is the default question rather than none at all.
-typedef _NewProjectAnswer = ({String name, String description, bool omada});
+typedef NewProjectAnswer = ({String name, String description, bool omada});
 
-/// Made on the device the sidebar is showing, which may be a paired one.
-PaletteAction _createProject(_NewProjectAnswer answer, String? device) =>
+/// Made on the device the sidebar is showing, which may be a paired one: the
+/// palette's new-project page and the native shell's sheet.
+PaletteAction createProject(NewProjectAnswer answer, String? device) =>
     (context, ref) async {
       if (device != null) {
         final description = answer.description.trim();
@@ -202,7 +203,7 @@ class _ProjectPaletteState extends ConsumerState<ProjectPalette> {
                   // Made before the palette goes, so the page can say it is
                   // waiting on a paired device.
                   onCreate: (answer) async {
-                    await _createProject(
+                    await createProject(
                       answer,
                       ref.read(selectedProjectProvider).device,
                     )(context, ref);
@@ -582,7 +583,7 @@ class _NewProject extends StatefulWidget {
 
   final bool omadaByDefault;
   final VoidCallback onBack;
-  final Future<void> Function(_NewProjectAnswer) onCreate;
+  final Future<void> Function(NewProjectAnswer) onCreate;
 
   @override
   State<_NewProject> createState() => _NewProjectState();

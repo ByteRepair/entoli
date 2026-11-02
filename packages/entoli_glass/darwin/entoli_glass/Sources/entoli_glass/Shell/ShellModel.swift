@@ -14,6 +14,7 @@ final class ShellModel: ObservableObject {
   private let channel: FlutterMethodChannel
 
   @Published var window = WindowState()
+  @Published var sidebar = SidebarState()
 
   /// Told when the window's own state changes, for what SwiftUI cannot set:
   /// the window's appearance.
@@ -30,14 +31,22 @@ final class ShellModel: ObservableObject {
         window = state
         onWindow?(state)
       }
+    case "sidebar":
+      if let state: SidebarState = decode(value), state != sidebar { sidebar = state }
     default:
       break
     }
   }
 
-  /// What the user did, for Dart to run: see `ShellBridge._run`.
-  func intent(_ name: String, _ args: [String: Any] = [:]) {
-    channel.invokeMethod("intent", arguments: ["name": name, "args": args])
+  /// What the user did, for Dart to run: see `ShellBridge._run`. [done] is
+  /// told what Dart answered once it has run: an error to show, or nil.
+  func intent(
+    _ name: String, _ args: [String: Any?] = [:], done: ((String?) -> Void)? = nil
+  ) {
+    let args = args.mapValues { $0 ?? NSNull() }
+    channel.invokeMethod("intent", arguments: ["name": name, "args": args]) { answer in
+      done?(answer as? String)
+    }
   }
 
   private var reported: EdgeInsets?

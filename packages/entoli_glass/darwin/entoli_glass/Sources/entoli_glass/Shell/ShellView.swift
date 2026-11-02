@@ -16,14 +16,16 @@ struct ShellView: View {
 
   var body: some View {
     NavigationSplitView(columnVisibility: columns) {
-      List {}
-        .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 360)
+      SidebarView(model: model)
+        .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 400)
     } detail: {
       GeometryReader { proxy in
         FlutterPane(controller: flutter)
-          .ignoresSafeArea()
+          // Under the toolbar and the bottom bar, which it scrolls beneath;
+          // never under the sidebar, which on 26 floats over the detail.
+          .ignoresSafeArea(edges: [.top, .bottom])
           .onChange(of: proxy.safeAreaInsets, initial: true) { _, insets in
-            model.insets(insets)
+            model.insets(EdgeInsets(top: insets.top, leading: 0, bottom: insets.bottom, trailing: 0))
           }
       }
       .navigationTitle("Entoli")

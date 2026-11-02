@@ -70,3 +70,159 @@ class ShellIntent {
   bool flag(String key) => args[key] as bool? ?? false;
   int integer(String key) => (args[key]! as num).toInt();
 }
+
+/// A project as the switcher lists it, and as a chat's Move offers it.
+/// [device] and [project] are its `ProjectRef`, which an intent hands back.
+class ProjectChoice {
+  const ProjectChoice({
+    required this.device,
+    required this.project,
+    required this.label,
+    required this.symbol,
+    this.omada = false,
+    this.count = 0,
+    this.busy = false,
+  });
+
+  final String? device;
+  final String? project;
+  final String label;
+
+  /// An SF Symbol's name.
+  final String symbol;
+
+  /// Drawn italic, as the Flutter app draws an Omada project's name.
+  final bool omada;
+  final int count;
+
+  /// One of its chats is running.
+  final bool busy;
+
+  Map<String, Object?> toMap() => {
+    "device": device,
+    "project": project,
+    "label": label,
+    "symbol": symbol,
+    "omada": omada,
+    "count": count,
+    "busy": busy,
+  };
+}
+
+/// One chat's row.
+class SidebarRow {
+  const SidebarRow({
+    required this.id,
+    required this.title,
+    this.pinned = false,
+    this.busy = false,
+    this.temporary = false,
+    this.offline = false,
+    this.mutable = true,
+    this.remote = false,
+  });
+
+  final String id;
+  final String title;
+  final bool pinned;
+
+  /// A turn runs in it, or its browser tab is open.
+  final bool busy;
+
+  /// It will expire: the hourglass.
+  final bool temporary;
+
+  /// A mirror whose home device is away.
+  final bool offline;
+
+  /// Its menu is on offer: false for a mirror whose device is away.
+  final bool mutable;
+
+  /// A mirror, whose projects are its home device's, so it has no Move.
+  final bool remote;
+
+  Map<String, Object?> toMap() => {
+    "id": id,
+    "title": title,
+    "pinned": pinned,
+    "busy": busy,
+    "temporary": temporary,
+    "offline": offline,
+    "mutable": mutable,
+    "remote": remote,
+  };
+}
+
+/// The rows under one heading; a paired device's list is one group with no
+/// heading, a mirror answering to no date this sidebar could place it under.
+class SidebarGroup {
+  const SidebarGroup(this.heading, this.rows);
+
+  final String heading;
+  final List<SidebarRow> rows;
+
+  Map<String, Object?> toMap() => {
+    "heading": heading,
+    "rows": [for (final row in rows) row.toMap()],
+  };
+}
+
+/// The sidebar: the project being shown and the pages it has beside its
+/// chats, its chats under their headings as the search leaves them, and every
+/// project for the switcher.
+class SidebarSnapshot extends ShellSnapshot {
+  const SidebarSnapshot({
+    required this.project,
+    required this.pages,
+    required this.groups,
+    required this.selected,
+    required this.query,
+    required this.empty,
+    required this.projects,
+    required this.devices,
+    required this.moveTargets,
+    required this.omadaByDefault,
+  });
+
+  final ProjectChoice project;
+
+  /// Of `workspace`, `memories` and `projectSettings`, the ones it has.
+  final List<String> pages;
+  final List<SidebarGroup> groups;
+  final String? selected;
+
+  /// What the search field holds: Dart's, so switching project clears it.
+  final String query;
+
+  /// What to say where there are no rows, null where there are.
+  final String? empty;
+
+  /// This device's projects, the default and the built-ins first.
+  final List<ProjectChoice> projects;
+
+  /// The paired devices' projects.
+  final List<ProjectChoice> devices;
+
+  /// Where a local chat can be moved to.
+  final List<ProjectChoice> moveTargets;
+
+  /// What the new-project sheet's Omada switch starts at.
+  final bool omadaByDefault;
+
+  @override
+  String get concern => "sidebar";
+
+  @override
+  Map<String, Object?> toMap() => {
+    "project": project.toMap(),
+    "pages": pages,
+    "groups": [for (final group in groups) group.toMap()],
+    "selected": selected,
+    "query": query,
+    "empty": empty,
+    "projects": [for (final p in projects) p.toMap()],
+    "devices": [for (final p in devices) p.toMap()],
+    "moveTargets": [for (final p in moveTargets) p.toMap()],
+    "omadaByDefault": omadaByDefault,
+  };
+}

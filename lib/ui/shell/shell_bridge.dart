@@ -12,33 +12,9 @@ import "../command_intents.dart";
 import "../commands.dart";
 import "../selection.dart";
 import "conversation_pane.dart";
+import "shell_outbox.dart";
+import "shell_sidebar.dart";
 import "snapshots.dart";
-
-/// Where the snapshots go: [send] once per change of a concern's map.
-class ShellOutbox {
-  ShellOutbox(this.send);
-
-  /// Over [shellChannel], to the Swift.
-  ShellOutbox.channel()
-    : send = ((concern, map) => shellChannel.invokeMethod<void>("snapshot", {
-        "concern": concern,
-        "value": map,
-      }));
-
-  final void Function(String concern, Map<String, Object?> map) send;
-  final Map<String, String> _sent = {};
-
-  void post(ShellSnapshot snapshot) {
-    final encoded = snapshot.encode();
-    if (_sent[snapshot.concern] == encoded) return;
-    _sent[snapshot.concern] = encoded;
-    send(snapshot.concern, snapshot.toMap());
-  }
-}
-
-final shellOutboxProvider = Provider<ShellOutbox>(
-  (ref) => ShellOutbox.channel(),
-);
 
 /// Whether a page is pushed over the conversation. On the app's Navigator,
 /// from `main`; only the shell reads it.
@@ -147,18 +123,21 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
         );
       case "intent":
         if (!mounted) return null;
-        _run(ShellIntent.fromMap(args));
+        return _run(ShellIntent.fromMap(args));
     }
     return null;
   }
 
-  void _run(ShellIntent intent) {
-    switch (intent.name) {
-      case "sidebar":
-        ref.read(sidebarShownProvider.notifier).set(intent.flag("shown"));
-      default:
-        logFailure("shell", "no intent ${intent.name}");
+  /// What the user did in the shell, answered with what the Swift waits on:
+  /// an error to show, or null.
+  Future<Object?> _run(ShellIntent intent) async {
+    if (intent.name == "sidebar") {
+      ref.read(sidebarShownProvider.notifier).set(intent.flag("shown"));
+      return null;
     }
+    final sidebar = await runSidebarIntent(context, ref, intent);
+    if (!sidebar.handled) logFailure("shell", "no intent ${intent.name}");
+    return sidebar.answer;
   }
 
   @override
@@ -166,6 +145,7 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     child: Stack(
       children: [
         _WindowPublisher(),
+        SidebarPublisher(),
         Positioned.fill(child: ConversationPane()),
       ],
     ),

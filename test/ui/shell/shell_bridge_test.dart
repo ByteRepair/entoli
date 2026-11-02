@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/ui/shell/shell_bridge.dart";
+import "package:agent_chat/ui/shell/shell_outbox.dart";
 import "package:agent_chat/ui/shell/snapshots.dart";
 
 void main() {
