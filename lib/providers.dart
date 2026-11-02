@@ -833,6 +833,11 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setAutoUpdate(bool value) =>
       _update((s) => s.autoUpdate = value);
 
+  /// Whether the next launch draws in the system's glass; this one keeps
+  /// what it started with.
+  Future<void> setLiquidGlass(bool value) =>
+      _update((s) => s.liquidGlass = value);
+
   /// Which browser the agent drives; null turns its tools off.
   Future<void> setAgentBrowser(String? value) =>
       _update((s) => s.agentBrowser = value);

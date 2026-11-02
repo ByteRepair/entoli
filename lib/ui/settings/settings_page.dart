@@ -26,6 +26,7 @@ import "../selection.dart";
 import "../theme.dart";
 import "../widgets/add_button_row.dart";
 import "../widgets/busy.dart";
+import "../widgets/liquid_glass.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/editable_row.dart";
@@ -292,6 +293,7 @@ class _AppearanceSection extends ConsumerWidget {
     final notifier = ref.read(appSettingsProvider.notifier);
     final switchesLauncher = ref.watch(launcherIconsProvider).available;
     final hasSystemPalette = ref.watch(systemAccentProvider) != null;
+    final glass = ref.watch(liquidGlassProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -373,6 +375,21 @@ class _AppearanceSection extends ConsumerWidget {
               ),
           ],
         ),
+        if (glass.available)
+          SwitchListTile(
+            title: const Text("Liquid Glass"),
+            // What this launch draws is settled at launch, so a switch that
+            // no longer matches it says so rather than appearing to do
+            // nothing.
+            subtitle: Text(
+              "Draw the sidebar, the chat's bar and the composer with "
+              "Apple's own controls, in the glass this version of the OS "
+              "draws its own apps in."
+              "${settings.liquidGlass == glass.on ? "" : " Restart Entoli for this to take effect."}",
+            ),
+            value: settings.liquidGlass,
+            onChanged: notifier.setLiquidGlass,
+          ),
       ],
     );
   }

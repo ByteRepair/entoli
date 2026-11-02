@@ -86,6 +86,7 @@ class AppSettings {
     this.totalContext = defaultTotalContext,
     this.licenceAccepted = false,
     this.autoUpdate = true,
+    this.liquidGlass = true,
     this.agentBrowser,
     this.agentBrowserVisible = false,
     this.agentBrowserApproval = BrowserApproval.never,
@@ -397,6 +398,14 @@ class AppSettings {
   /// on default. See `app_update.dart` for what the check does.
   bool autoUpdate;
 
+  /// Whether iOS and macOS draw the app's chrome — the sidebar, a chat's bar
+  /// and composer, the new-chat and voice pages — in Apple's own controls and
+  /// glass, a SwiftUI shell around the Flutter that draws the conversation.
+  /// Read once at launch, since the shell owns the window before any page is
+  /// built: a change waits for a restart. Default on and written only when
+  /// off, as [autoUpdate] is.
+  bool liquidGlass;
+
   /// The default when nothing is set: five carry-ons per failure. A named
   /// constant so the settings page's switch — which turns the feature on at
   /// the default — and the load and save answers are one number.
@@ -577,6 +586,7 @@ class AppSettings {
     // says nothing and gets the on default — the same bargain the memory
     // gates are held to.
     autoUpdate: json["autoUpdate"] as bool? ?? true,
+    liquidGlass: json["liquidGlass"] as bool? ?? true,
     agentBrowser: _orNull(json["agentBrowser"] as String?),
     agentBrowserVisible: json["agentBrowserVisible"] as bool? ?? false,
     agentBrowserApproval:
@@ -696,6 +706,7 @@ class AppSettings {
     if (totalContext != defaultTotalContext) "totalContext": totalContext,
     if (licenceAccepted) "licenceAccepted": licenceAccepted,
     if (!autoUpdate) "autoUpdate": autoUpdate,
+    if (!liquidGlass) "liquidGlass": liquidGlass,
     if (agentBrowser != null) "agentBrowser": agentBrowser,
     if (agentBrowserVisible) "agentBrowserVisible": agentBrowserVisible,
     if (agentBrowserApproval != BrowserApproval.never)
