@@ -9,6 +9,7 @@ import "corner_radius.dart";
 import "llm_provider.dart";
 import "local_llm.dart";
 import "local_model.dart" show localProviderId;
+import "model_capability.dart" show ModelRef;
 import "permission.dart";
 import "profile.dart";
 import "project_settings.dart";
@@ -32,6 +33,7 @@ class AppSettings {
     this.imageModelId,
     this.imageProviderId,
     this.imageQuality = ImageQuality.auto,
+    this.favouriteModels = const [],
     this.instructionImports = true,
     this.nestedInstructions = true,
     this.instructionExcludes = const [],
@@ -113,6 +115,10 @@ class AppSettings {
   String? imageModelId;
   String? imageProviderId;
   ImageQuality imageQuality;
+
+  /// The models starred in a picker, in the order they were starred: what its
+  /// Favourites section lists, for every role that can use one.
+  List<ModelRef> favouriteModels;
 
   /// Whether `@path` references inside an AGENTS.md pull in more files. The
   /// files themselves are read into every turn; this and [nestedInstructions]
@@ -478,6 +484,11 @@ class AppSettings {
     imageQuality:
         ImageQuality.values.asNameMap()[json["imageQuality"]] ??
         ImageQuality.auto,
+    favouriteModels: [
+      for (final pair in json["favouriteModels"] as List? ?? const [])
+        if (pair case [final String providerId, final String modelId])
+          (providerId: providerId, modelId: modelId),
+    ],
     instructionImports: json["instructionImports"] as bool? ?? true,
     nestedInstructions: json["nestedInstructions"] as bool? ?? true,
     instructionExcludes: (json["instructionExcludes"] as List? ?? const [])
@@ -628,6 +639,10 @@ class AppSettings {
     if (imageModelId != null) "imageModelId": imageModelId,
     if (imageProviderId != null) "imageProviderId": imageProviderId,
     if (imageQuality != ImageQuality.auto) "imageQuality": imageQuality.name,
+    if (favouriteModels.isNotEmpty)
+      "favouriteModels": [
+        for (final f in favouriteModels) [f.providerId, f.modelId],
+      ],
     // Written only when off, so a file that predates the on defaults says
     // nothing and gets them.
     if (!instructionImports) "instructionImports": instructionImports,
