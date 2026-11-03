@@ -69,12 +69,18 @@ each started when the one before is done or skipped; a step is done when its
 setting is picked, so the page has no Next. A failure offers Retry, or a Skip
 that lasts the launch. A step subclass says what it is called, the catalog it
 downloads through, when it is done, and how it is picked; the line under the
-bar is "Downloading" or "Unpacking" and that name. A tour page says
-one thing in a line or two; a page with two points is two pages. Two pages
-hold Next: the provider page until some model is reachable, the model page —
-which embeds `DefaultsSection` from `llm_settings.dart`, so a row added there is
-on the tour too — until a default is picked. The memory page is one switch,
-the Memory category's "Keep memories", the rest left at their defaults. The
+bar is "Downloading" or "Unpacking" and that name. The tour is four
+pages, and a page is added only when what it says cannot ride one already
+there. The intro says what the app is, a short list under the name rather than
+a slide per point. The model page holds Next until some model is reachable and
+a default is picked: the provider rows first, then — once a model is reachable
+— `DefaultsSection` from `llm_settings.dart`, so a row added there is on the
+tour too. The extras page is optional throughout: a row into each extra, a row
+dropped where its category is not offered. Memory is not among them, its own
+page's switch being the one place it is turned on, nor is anything already on
+by the time the tour runs: the terminal, which the setup page installs where
+one is needed, and the browser — Helium installed by the desktops' setup, the
+phones' WebView on by default. The
 last page says AI can make mistakes and holds Done behind a checkbox taking
 responsibility for what the user lets it do, at the end of the AGPL text
 (`bundledLicence`, embedded from `LICENSE` by `tool/gen_licence.dart`), so

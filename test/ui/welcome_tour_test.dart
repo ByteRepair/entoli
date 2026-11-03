@@ -37,10 +37,10 @@ void main() {
     }
   }
 
-  // Six pages of what the app is, then the provider page.
-  Future<void> walkToProviders(WidgetTester tester) => next(tester, 6);
+  // The intro, then the model page.
+  Future<void> walkToProviders(WidgetTester tester) => next(tester);
 
-  Future<void> walkToLast(WidgetTester tester) => next(tester, 12);
+  Future<void> walkToLast(WidgetTester tester) => next(tester, 3);
 
   Finder licence() => find.descendant(
     of: find.byKey(const ValueKey("licence")),
@@ -72,36 +72,30 @@ void main() {
     await app.pump(tester, const WelcomePage());
 
     expect(find.text("Welcome to Entoli"), findsOneWidget);
+    // What the app is, on the intro rather than a slide each.
+    expect(find.text("Bring your own model"), findsOneWidget);
+    await scrollTo(tester, find.text("Yours alone"));
+    expect(find.text("Yours alone"), findsOneWidget);
     expect(back(), findsNothing);
 
-    await next(tester);
-    expect(find.text("Bring your own model"), findsOneWidget);
+    await walkToProviders(tester);
+    expect(find.text("Connect a model"), findsOneWidget);
+    expect(find.text("4 models ready"), findsOneWidget);
     await tester.tap(back());
     await tester.pumpAndSettle();
     expect(find.text("Welcome to Entoli"), findsOneWidget);
 
     await walkToProviders(tester);
-    expect(find.text("Connect a model"), findsOneWidget);
-    expect(find.text("4 models ready"), findsOneWidget);
-
-    await next(tester);
-    expect(find.text("Pick a model"), findsOneWidget);
-    // Both halves of the LLM pickers travel with the page.
+    // Both halves of the LLM pickers travel with the page, once a model is
+    // reachable.
+    await scrollTo(tester, find.text("Title LLM"));
     expect(find.text("LLM"), findsOneWidget);
     expect(find.text("Title LLM"), findsOneWidget);
 
     await next(tester);
-    // One switch, and it is the Memory category's "Keep memories".
-    expect(find.text("Remember things"), findsOneWidget);
-    expect(find.byType(SwitchListTile), findsOneWidget);
-    expect(find.text("Memory LLM"), findsNothing);
-    final memory = app.container.read(appSettingsProvider).autoMemory;
-    await tester.tap(find.text("Enable memories"));
-    await settleIo(tester);
-    expect(app.container.read(appSettingsProvider).autoMemory, !memory);
-
-    await next(tester);
     expect(find.text("More to set up"), findsOneWidget);
+    // Memory is its own settings page's to switch, not the tour's.
+    expect(find.byType(SwitchListTile), findsNothing);
     expect(find.text("Marketplace"), findsOneWidget);
     await scrollTo(tester, find.text("Byte Repair"));
     expect(find.text("Byte Repair"), findsOneWidget);
@@ -113,9 +107,6 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.text("More to set up"), findsOneWidget);
-
-    await next(tester, 2);
-    expect(find.text("Yours alone"), findsOneWidget);
 
     await next(tester);
     expect(find.text("Check its work"), findsOneWidget);
@@ -209,7 +200,7 @@ void main() {
   );
 
   // Unseeded, unlike the walks, so the model page's gate has something to
-  // hold.
+  // hold once a model is reachable.
   testWidgets("Next is held on the model page until a model is picked", (
     tester,
   ) async {
@@ -217,19 +208,20 @@ void main() {
     app = TestApp.create();
     await app.pump(tester, const WelcomePage());
     await walkToProviders(tester);
-    await next(tester);
 
+    expect(find.text("4 models ready"), findsOneWidget);
     expect(tester.widget<FilledButton>(button("Next")).onPressed, isNull);
 
     // Picked through the LLM picker the page embeds, which is how a user
-    // unlocks it.
+    // unlocks it. It sits under the provider rows.
+    await scrollTo(tester, find.text("Title LLM"));
     await openPickerFor(tester);
     await tester.tap(find.text("Llama 3").last);
     await settleIo(tester, least: 3);
     expect(tester.widget<FilledButton>(button("Next")).onPressed, isNotNull);
 
     await next(tester);
-    expect(find.text("Remember things"), findsOneWidget);
+    expect(find.text("More to set up"), findsOneWidget);
   });
 
   testWidgets("the first-run page has no back arrow", (tester) async {

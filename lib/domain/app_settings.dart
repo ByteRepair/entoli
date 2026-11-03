@@ -486,8 +486,9 @@ class AppSettings {
   static const defaultKvCachePrompts = 10;
 
   /// The browser the agent drives: null off, `embedded` for the downloaded
-  /// Helium, or a Chromium-family executable's path. See "The browser" in
-  /// `lib/data/builtin/AGENTS.md`.
+  /// Helium, or a Chromium-family executable's path. On the phones the
+  /// WebView is on by default: null and `webview` are on, `off` is off. See
+  /// "The browser" in `lib/data/builtin/AGENTS.md`.
   String? agentBrowser;
 
   /// Whether that browser runs with a window. Hidden by default, with its
