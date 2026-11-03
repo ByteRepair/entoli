@@ -8,6 +8,7 @@ import "../../providers.dart";
 import "../chat/widgets/view_only_bar.dart" show MirrorStrip;
 import "../widgets/dialogs.dart";
 import "../widgets/empty_pane.dart";
+import "../widgets/page_bar.dart";
 
 /// The row that opens the memories, on the project settings pages. The default
 /// project has no settings page, so its store is a button in the sidebar
@@ -232,7 +233,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
       if (was == true && !now) _reload();
     });
     return Scaffold(
-      appBar: AppBar(
+      appBar: PageBar(
         title: Text(widget.title),
         actions: [
           IconButton(

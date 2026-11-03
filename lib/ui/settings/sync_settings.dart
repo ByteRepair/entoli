@@ -16,6 +16,7 @@ import "../widgets/dialogs.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 import "paired_device_page.dart";
+import "../widgets/page_bar.dart";
 
 /// The Sync category: this device's name, then how to pair a new device, the
 /// paired-device list, and the relay and TURN rows for reaching peers over
@@ -105,7 +106,7 @@ class RelaySettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text("Internet relay")),
+      appBar: PageBar(title: const Text("Internet relay")),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
@@ -158,7 +159,7 @@ class TurnSettingsPage extends ConsumerWidget {
     final settings = ref.watch(appSettingsProvider);
     final secrets = ref.watch(appSecretsProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text("TURN server")),
+      appBar: PageBar(title: const Text("TURN server")),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
@@ -525,7 +526,7 @@ class _PairingJoinPageState extends State<PairingJoinPage> {
       context,
       hub.cancelPairing,
       child: Scaffold(
-        appBar: AppBar(title: const Text("Pairing")),
+        appBar: PageBar(title: const Text("Pairing")),
         body: _PairingStageView.watching(
           context,
           hub,
@@ -735,7 +736,7 @@ class _PairingWindowPageState extends State<PairingWindowPage> {
       context,
       hub.cancelPairingWindow,
       child: Scaffold(
-        appBar: AppBar(title: const Text("Pairing window")),
+        appBar: PageBar(title: const Text("Pairing window")),
         body: ValueListenableBuilder<PairingActivity?>(
           valueListenable: hub.pairing,
           builder: (context, pairing, _) {
@@ -859,7 +860,7 @@ class _ManualInvitePageState extends State<ManualInvitePage> {
       context,
       widget.hub.cancelManualInvite,
       child: Scaffold(
-        appBar: AppBar(title: const Text("Manual invite")),
+        appBar: PageBar(title: const Text("Manual invite")),
         body: _watching ? _watchingBody() : _inviteBody(),
       ),
     );
@@ -988,7 +989,7 @@ class _ScanQrPageState extends State<_ScanQrPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Scan QR code")),
+      appBar: PageBar(title: const Text("Scan QR code")),
       body: MobileScanner(
         controller: _controller,
         errorBuilder: (context, error) =>

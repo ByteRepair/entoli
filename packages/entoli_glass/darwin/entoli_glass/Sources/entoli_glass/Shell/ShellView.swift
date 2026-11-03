@@ -66,7 +66,7 @@ struct ShellView: View {
         }
         .animation(ComposerView.motion, value: model.turn.isEmpty)
       }
-      .chatBar(model)
+      .windowBar(model)
     }
     // Voice mode over everything: the sidebar too, as the Flutter page was
     // pushed over the whole window.
@@ -148,71 +148,18 @@ private struct ComposerSlot: View {
 }
 
 extension View {
-  /// The window's title, what the chat's Flutter bar said under it, and its
-  /// buttons; the buttons step aside while a Flutter page covers the chat,
-  /// that page having a bar of its own.
-  fileprivate func chatBar(_ model: ShellModel) -> some View {
-    let bar = model.chatBar
+  /// The window's title bar: the chat's, or the Flutter page's over it — a
+  /// way back and the page's own buttons in place of the chat's. A page with
+  /// no bar of its own leaves the chat's title standing and nothing to press.
+  fileprivate func windowBar(_ model: ShellModel) -> some View {
+    let page = model.window.covered
+    let bar =
+      !page ? model.chatBar : model.pageBar.present ? model.pageBar : model.chatBar.bare
     return self
-      .navigationTitle(bar.title)
-      #if os(macOS)
-        .navigationSubtitle(subtitle(bar))
-      #else
-        // A chat's title sits in its bar, as Messages' does.
-        .navigationBarTitleDisplayMode(.inline)
-        // A Flutter page over the chat has a bar and a back button of its
-        // own: one of each on screen.
-        .toolbar(model.window.covered ? .hidden : .automatic, for: .navigationBar)
+      .titleBar(bar) { name, args in model.say(page ? "pageBar" : "toolbar", name, args) }
+      #if os(iOS)
+        // A page whose bar Flutter still draws has it alone: one on screen.
+        .toolbar(page && !model.pageBar.present ? .hidden : .automatic, for: .navigationBar)
       #endif
-      .toolbar {
-        if !model.window.covered {
-          // The spinner on its own, with no glass behind it: in the buttons'
-          // group the system draws it as a control, a button that is not.
-          if let spinner = bar.items.first(where: \.spinner) {
-            Spinner(label: spinner.label)
-          }
-          ToolbarItemGroup(placement: .primaryAction) {
-            ForEach(bar.items.filter { !$0.spinner }) { item in
-              Button {
-                model.say("toolbar", "press", ["id": item.id])
-              } label: {
-                Label(item.label, systemImage: item.symbol ?? "circle")
-              }
-              .help(item.label)
-            }
-          }
-        }
-      }
   }
-}
-
-/// A turn running, as the toolbar says it: a small spinner beside the
-/// buttons, bare.
-private struct Spinner: ToolbarContent {
-  let label: String
-
-  private var spinner: some View {
-    ProgressView()
-      .controlSize(.small)
-      .frame(width: 20, height: 20)
-      .help(label)
-      .accessibilityLabel(label)
-  }
-
-  var body: some ToolbarContent {
-    if #available(iOS 26.0, macOS 26.0, *) {
-      ToolbarItem(placement: .primaryAction) { spinner }
-        .sharedBackgroundVisibility(.hidden)
-    } else {
-      ToolbarItem(placement: .primaryAction) { spinner }
-    }
-  }
-}
-
-/// The line under the title: the project and the pin, and a temporary chat's
-/// countdown, which the system keeps counting.
-private func subtitle(_ bar: ChatBarState) -> Text {
-  guard let expires = bar.expires else { return Text(bar.subtitle) }
-  let lead = bar.subtitle.isEmpty ? Text("") : Text("\(bar.subtitle) · ")
-  return lead + Text("Expires in ") + Text(expires, style: .relative)
 }

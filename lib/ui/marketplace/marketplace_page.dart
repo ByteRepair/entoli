@@ -12,6 +12,7 @@ import "marketplace_entry_preview.dart";
 import "marketplace_groups.dart";
 import "marketplace_tags.dart";
 import "unreachable.dart";
+import "../widgets/page_bar.dart";
 
 /// One tab's list, fetched on first watch and kept. A refresh re-runs the
 /// fetch by invalidating; nothing watches it between visits, so a reopen
@@ -93,7 +94,7 @@ class _MarketplacePageState extends ConsumerState<MarketplacePage> {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        appBar: AppBar(
+        appBar: PageBar(
           title: const Text("Marketplace"),
           actions: [
             Builder(

@@ -18,6 +18,7 @@ import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart" show mutedParagraph;
 import "../widgets/text_file_page.dart";
 import "linked_instructions.dart";
+import "../widgets/page_bar.dart";
 
 /// Open the app-level profile: the sidebar's tile and the app menu.
 void openProfile(BuildContext context) => Navigator.of(
@@ -388,7 +389,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     return DiscardGuard(
       edited: () => _edited,
       child: Scaffold(
-        appBar: AppBar(
+        appBar: PageBar(
           title: Text(global ? "Profile" : "Project instructions"),
           actions: [
             IconButton(

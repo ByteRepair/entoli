@@ -15,6 +15,7 @@ import "../../core/formatting.dart";
 import "../fonts.dart";
 import "catalog.dart" show InfoTag;
 import "dialogs.dart" show confirm;
+import "page_bar.dart";
 
 /// One model a picker can offer, with the provider it is reached through.
 class CatalogEntry {
@@ -289,7 +290,7 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
           for (final f in favourites) ?all.where((e) => e.ref == f).firstOrNull,
         ];
         return Scaffold(
-          appBar: AppBar(
+          appBar: PageBar(
             title: Text("Choose a ${widget.role.noun}"),
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(112),
@@ -884,7 +885,7 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
     );
     _provider ??= providers.firstOrNull?.id;
     return Scaffold(
-      appBar: AppBar(
+      appBar: PageBar(
         title: Text(widget.initial == null ? "Add model" : "Edit model"),
         actions: [
           Padding(

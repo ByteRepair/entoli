@@ -17,6 +17,7 @@ import "dialogs.dart";
 import "discard_guard.dart";
 import "empty_pane.dart";
 import "../../core/formatting.dart";
+import "page_bar.dart";
 
 /// A text file, read and edited in the app rather than handed to another —
 /// a workspace file, or an instruction file the user linked. See
@@ -200,7 +201,7 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
         child: Focus(
           autofocus: true,
           child: Scaffold(
-            appBar: AppBar(
+            appBar: PageBar(
               title: Text(
                 _dirty ? "${widget.name} •" : widget.name,
                 overflow: TextOverflow.ellipsis,

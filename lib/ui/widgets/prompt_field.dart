@@ -4,6 +4,7 @@ import "../chat/widgets/markdown_text.dart";
 import "completion_field.dart";
 import "discard_guard.dart";
 import "resettable_field.dart";
+import "page_bar.dart";
 
 /// Prose the model reads — a trigger's prompt, an agent's system prompt, a
 /// set of instructions — shown as the chat will render it, over the button
@@ -198,7 +199,7 @@ class _PromptPageState extends State<PromptPage> {
     return DiscardGuard(
       edited: () => _edited,
       child: Scaffold(
-        appBar: AppBar(
+        appBar: PageBar(
           title: Text(widget.title),
           leading: const DiscardButton(),
           actions: [

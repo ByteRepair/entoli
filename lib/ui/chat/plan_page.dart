@@ -3,6 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/plan.dart";
 import "widgets/plan_view.dart";
+import "../widgets/page_bar.dart";
 
 /// Open [chatId]'s plan: the app bar's button, the plan card's and the app's
 /// Chat menu.
@@ -24,7 +25,7 @@ class PlanPage extends ConsumerWidget {
     final sections = plan.value;
     final (done, total) = sectionsProgress(sections ?? const []);
     return Scaffold(
-      appBar: AppBar(title: const Text("Plan")),
+      appBar: PageBar(title: const Text("Plan")),
       body: switch (plan) {
         AsyncValue(isLoading: true, hasValue: false) => const Center(
           child: CircularProgressIndicator(),

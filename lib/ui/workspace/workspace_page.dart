@@ -11,6 +11,7 @@ import "../widgets/empty_pane.dart";
 import "../../core/formatting.dart";
 import "../widgets/settings_card.dart";
 import "../widgets/text_file_page.dart";
+import "../widgets/page_bar.dart";
 
 /// The row that opens the explorer, on the chat and project settings pages
 /// alike. Both hold a workspace and neither has anything else to say about it.
@@ -188,7 +189,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
         if (!didPop) _back();
       },
       child: Scaffold(
-        appBar: AppBar(
+        appBar: PageBar(
           leading: BackButton(onPressed: _back),
           title: _Title(
             text: _selected.isNotEmpty
@@ -304,12 +305,19 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
 
 /// The folder's name over where it sits under the root. `AppBar` has one line
 /// to give, and losing the path is losing the only thing that says which of two
-/// folders called `src` this is.
-class _Title extends StatelessWidget {
+/// folders called `src` this is. A [PageTitle], so a title bar that draws its
+/// own says both too.
+class _Title extends StatelessWidget implements PageTitle {
   const _Title({required this.text, required this.under});
 
   final String text;
   final String? under;
+
+  @override
+  String get title => text;
+
+  @override
+  String? get subtitle => under;
 
   @override
   Widget build(BuildContext context) {

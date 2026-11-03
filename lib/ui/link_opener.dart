@@ -13,6 +13,7 @@ import "../data/sync/sync_hub.dart";
 import "../domain/chat_store.dart";
 import "../domain/link_opener.dart";
 import "widgets/dialogs.dart";
+import "widgets/page_bar.dart";
 
 /// Web, mail and phone links alone: anything else, `file:` included, would
 /// hand the OS whatever scheme a model wrote.
@@ -247,7 +248,7 @@ class _WebViewPageState extends State<_WebViewPage> {
       if (!didPop && _canGoBack) await _controller.goBack();
     },
     child: Scaffold(
-      appBar: AppBar(
+      appBar: PageBar(
         title: Text(_title, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
@@ -333,14 +334,14 @@ class _ArtifactWebViewPageState extends State<_ArtifactWebViewPage> {
   Widget build(BuildContext context) {
     if (_error != null) {
       return Scaffold(
-        appBar: AppBar(title: const Text("Artifact")),
+        appBar: PageBar(title: const Text("Artifact")),
         body: Center(child: Text(_error!)),
       );
     }
     final controller = _controller;
     if (controller == null) {
       return Scaffold(
-        appBar: AppBar(title: Text(_title, overflow: TextOverflow.ellipsis)),
+        appBar: PageBar(title: Text(_title, overflow: TextOverflow.ellipsis)),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -350,7 +351,7 @@ class _ArtifactWebViewPageState extends State<_ArtifactWebViewPage> {
         if (!didPop && _canGoBack) await controller.goBack();
       },
       child: Scaffold(
-        appBar: AppBar(title: Text(_title, overflow: TextOverflow.ellipsis)),
+        appBar: PageBar(title: Text(_title, overflow: TextOverflow.ellipsis)),
         body: _webView(controller),
       ),
     );

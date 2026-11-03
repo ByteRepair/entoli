@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 
 import "../widgets/nothing.dart";
+import "../widgets/page_bar.dart";
 
 /// The tags a tab's entries carry, ticked to filter its list. An entry shows
 /// only when it carries every tag ticked, and no ticked tag filters nothing.
@@ -26,7 +27,7 @@ class MarketplaceTagPickerPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(
+      appBar: PageBar(
         title: const Text("Tags"),
         actions: [
           ValueListenableBuilder<Set<String>>(

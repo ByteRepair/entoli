@@ -26,6 +26,7 @@ import "../widgets/dialogs.dart";
 import "../widgets/discard_guard.dart";
 import "../widgets/prompt_field.dart";
 import "../widgets/section_header.dart";
+import "../widgets/page_bar.dart";
 
 const _agentFiles = XTypeGroup(
   label: "Agent",
@@ -710,7 +711,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
       edited: () => _edited,
       message: "Throw away the edits to this agent?",
       child: Scaffold(
-        appBar: AppBar(
+        appBar: PageBar(
           title: Text(
             widget.isNew ? "Add agent" : "Edit ${widget.initial.name}",
           ),

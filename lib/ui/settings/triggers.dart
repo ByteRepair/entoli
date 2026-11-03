@@ -18,6 +18,7 @@ import "../widgets/prompt_field.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 import "../widgets/temp_chat_ttl_field.dart";
+import "../widgets/page_bar.dart";
 
 /// The Triggers category: a prompt a schedule, a countdown or a file change
 /// sends. Android, macOS, iOS and Linux all have a platform half: on Android
@@ -261,7 +262,7 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
       edited: () => _edited,
       message: "Throw away the edits to this trigger?",
       child: Scaffold(
-        appBar: AppBar(
+        appBar: PageBar(
           title: Text(isNew ? "New trigger" : "Edit trigger"),
           actions: [
             if (!isNew)
