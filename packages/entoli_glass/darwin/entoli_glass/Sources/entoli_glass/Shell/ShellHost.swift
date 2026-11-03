@@ -15,7 +15,6 @@ import SwiftUI
 final class ShellHost {
   static var shared: ShellHost?
 
-  private let channel: FlutterMethodChannel
   private let model: ShellModel
 
   #if os(macOS)
@@ -23,41 +22,23 @@ final class ShellHost {
     private var host: NSHostingController<ShellView>?
 
     init(messenger: FlutterBinaryMessenger, view: NSView?) {
-      channel = FlutterMethodChannel(name: "entoli_glass/shell", binaryMessenger: messenger)
-      model = ShellModel(channel: channel)
+      model = ShellModel(messenger: messenger)
       self.view = view
-      listen()
+      listen(messenger)
     }
   #else
     private var host: UIHostingController<ShellView>?
 
     init(messenger: FlutterBinaryMessenger) {
-      channel = FlutterMethodChannel(name: "entoli_glass/shell", binaryMessenger: messenger)
-      model = ShellModel(channel: channel)
-      listen()
+      model = ShellModel(messenger: messenger)
+      listen(messenger)
     }
   #endif
 
-  private func listen() {
-    channel.setMethodCallHandler { [weak self] call, result in
-      guard let self else { return result(nil) }
-      switch call.method {
-      case "start":
-        start()
-      case "snapshot":
-        let args = call.arguments as? [String: Any]
-        model.apply(
-          concern: args?["concern"] as? String ?? "", value: args?["value"],
-          json: args?["json"] as? String)
-      // Answered when a choice is picked or the strip is dismissed.
-      case "strip":
-        model.showStrip(call.arguments as? [String: Any] ?? [:]) { result($0) }
-        return
-      default:
-        return result(FlutterMethodNotImplemented)
-      }
-      result(nil)
-    }
+  /// What Dart says, to the model; and `start`, to this.
+  private func listen(_ messenger: FlutterBinaryMessenger) {
+    model.onStart = { [weak self] in self?.start() }
+    NativeShellSetup.setUp(binaryMessenger: messenger, api: model)
   }
 
   #if os(macOS)

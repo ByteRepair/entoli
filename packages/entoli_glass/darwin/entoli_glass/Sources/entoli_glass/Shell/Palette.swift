@@ -1,33 +1,13 @@
 import SwiftUI
 
-/// `PaletteSnapshot`.
-struct PaletteState: Decodable, Equatable {
-  struct Item: Decodable, Equatable, Identifiable {
-    var id: String
-    var label: String
-    var chat: String?
-    var device: String?
-    var project: String?
-    var symbol = ""
-    var omada = false
-    var trailing = ""
-    var busy = false
-    var current = false
-  }
+extension PaletteSnapshot {
+  static let initial = PaletteSnapshot(
+    open: false, query: "", sections: [], serial: 0)
 
-  struct Section: Decodable, Equatable {
-    var heading: String
-    var items: [Item]
-  }
-
-  var open = false
-  var query = ""
-  var sections: [Section] = []
-  var serial = 0
-  var omadaByDefault = false
-
-  var items: [Item] { sections.flatMap(\.items) }
+  var items: [PaletteItem] { sections.flatMap(\.items) }
 }
+
+extension PaletteItem: Identifiable {}
 
 /// The project palette, Cmd+K's, as a panel over the window in the system's
 /// glass: a search field over the projects and every chat, the arrow keys
@@ -42,11 +22,8 @@ struct PaletteView: View {
   @State private var creating = false
   @FocusState private var focused: Bool
 
-  private var palette: PaletteState { model.palette }
-
-  private func say(_ name: String, _ args: [String: Any?] = [:]) {
-    model.say("palette", name, args)
-  }
+  private var palette: PaletteSnapshot { model.palette }
+  private var say: PaletteIntents { model.say.palette }
 
   /// The row the arrows are on: the one moved to, else the project shown
   /// while nothing is typed, else the first.
@@ -66,12 +43,12 @@ struct PaletteView: View {
     active = items[min(max(at + by, 0), items.count - 1)].id
   }
 
-  private func pick(_ item: PaletteState.Item) {
+  private func pick(_ item: PaletteItem) {
     if let chat = item.chat {
-      say("pickChat", ["chat": chat])
+      say.pickChat(chat: chat) { _ in }
       model.showDetail()
     } else {
-      say("pickProject", ["device": item.device, "project": item.project])
+      say.pickProject(device: item.device, project: item.project) { _ in }
     }
   }
 
@@ -80,14 +57,14 @@ struct PaletteView: View {
       // Clicking outside it closes it, as a popover does.
       Color.black.opacity(0.12)
         .ignoresSafeArea()
-        .onTapGesture { say("close") }
+        .onTapGesture { say.close { _ in } }
       panel
         .frame(maxWidth: 560)
         .padding(.top, 80)
         .padding(.horizontal, 24)
     }
     .sheet(isPresented: $creating) {
-      NewProjectSheet(model: model, omada: palette.omadaByDefault) { say("close") }
+      NewProjectSheet(model: model, omada: model.sidebar.omadaByDefault) { say.close { _ in } }
     }
   }
 
@@ -113,7 +90,7 @@ struct PaletteView: View {
             return .handled
           }
           .onKeyPress(.escape) {
-            say("close")
+            say.close { _ in }
             return .handled
           }
         Button {
@@ -164,11 +141,11 @@ struct PaletteView: View {
     }
     .onChange(of: query) { _, query in
       active = nil
-      if query != palette.query { say("search", ["query": query]) }
+      if query != palette.query { say.search(query: query) { _ in } }
     }
   }
 
-  private func row(_ item: PaletteState.Item, on: Bool) -> some View {
+  private func row(_ item: PaletteItem, on: Bool) -> some View {
     Button {
       pick(item)
     } label: {

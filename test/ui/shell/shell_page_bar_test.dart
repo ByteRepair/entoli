@@ -1,30 +1,29 @@
+import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/ui/shell/shell_outbox.dart";
 import "package:agent_chat/ui/shell/shell_slots.dart";
 import "package:agent_chat/ui/widgets/liquid_glass.dart";
 import "package:agent_chat/ui/widgets/page_bar.dart";
 
+import "fake_native_shell.dart";
+
 /// A page's bar under the native shell: the window's title bar, each action
 /// drawn as the system's, and none of it drawn by Flutter.
 void main() {
-  late Map<String, Map<String, Object?>> sent;
+  late FakeNativeShell shell;
   late ProviderContainer container;
   final navigator = GlobalKey<NavigatorState>();
 
-  setUp(() => sent = {});
   tearDown(() => container.dispose());
 
   Future<void> pump(WidgetTester tester, {bool glass = true}) async {
+    shell = FakeNativeShell.install();
     container = ProviderContainer(
       overrides: [
         liquidGlassProvider.overrideWithValue(
           LiquidGlass(available: true, on: glass),
-        ),
-        shellOutboxProvider.overrideWithValue(
-          ShellOutbox((concern, map) => sent[concern] = map),
         ),
       ],
     );
@@ -44,14 +43,11 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<void> say(String name, [Map<String, Object?> args = const {}]) =>
-      container
-          .read(shellSlotsProvider)
-          .top(ShellConcern.pageBar)!
-          .handle(name, args);
+  /// The bar the window's title bar is answering for.
+  TitleBarIntents bar() => container.read(shellSlotsProvider).pageBar.top!;
 
-  List<Map<String, Object?>> items() =>
-      (sent["pageBar"]!["items"]! as List).cast<Map<String, Object?>>();
+  TitleBarSnapshot sent() => shell.lastPageBar!;
+  List<TitleBarItem> items() => sent().items;
 
   testWidgets("a page's bar is the window's, its tick the confirm", (
     tester,
@@ -76,14 +72,14 @@ void main() {
       ),
     );
     expect(find.byType(AppBar), findsNothing);
-    expect(sent["pageBar"], containsPair("title", "Chat settings"));
-    expect(sent["pageBar"], containsPair("leading", "back"));
-    expect(items().map((i) => (i["symbol"], i["style"], i["enabled"])), [
-      ("plus", "icon", false),
-      ("checkmark", "confirm", true),
+    expect(sent().title, "Chat settings");
+    expect(sent().leading, TitleBarLeading.back);
+    expect(items().map((i) => (i.symbol, i.style, i.enabled)), [
+      ("plus", TitleBarItemStyle.icon, false),
+      ("checkmark", TitleBarItemStyle.confirm, true),
     ]);
 
-    await say("press", {"id": items()[1]["id"]});
+    bar().press(items()[1].id);
     expect(saved, 1);
   });
 
@@ -103,16 +99,16 @@ void main() {
         body: Text("general"),
       ),
     );
-    expect(sent["pageBar"], containsPair("title", "General"));
+    expect(sent().title, "General");
 
-    await say("back");
+    bar().back();
     await tester.pumpAndSettle();
     expect(find.text("general"), findsNothing);
-    expect(sent["pageBar"], containsPair("title", "Settings"));
+    expect(sent().title, "Settings");
 
-    await say("back");
+    bar().back();
     await tester.pumpAndSettle();
-    expect(sent["pageBar"], containsPair("present", false));
+    expect(sent().present, isFalse);
   });
 
   testWidgets("a discard is a close, a menu its choices", (tester) async {
@@ -143,12 +139,15 @@ void main() {
         body: const Text("edit"),
       ),
     );
-    expect(sent["pageBar"], containsPair("leading", "close"));
-    final menu = (items().first["menu"]! as List).single as Map;
-    expect((menu["label"], menu["hint"]), ("Skill", "/"));
-    expect((items().last["label"], items().last["style"]), ("Save", "text"));
+    expect(sent().leading, TitleBarLeading.close);
+    final menu = items().first.menu.single;
+    expect((menu.label, menu.hint), ("Skill", "/"));
+    expect(
+      (items().last.label, items().last.style),
+      ("Save", TitleBarItemStyle.text),
+    );
 
-    await say("press", {"id": menu["id"]});
+    bar().press(menu.id);
     expect(picked, 1);
   });
 
@@ -163,6 +162,6 @@ void main() {
     );
     expect(find.byType(AppBar), findsOneWidget);
     expect(find.text("Settings"), findsOneWidget);
-    expect(sent, isEmpty);
+    expect(shell.sent, isEmpty);
   });
 }

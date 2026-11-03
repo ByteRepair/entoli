@@ -1,3 +1,4 @@
+import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -5,13 +6,24 @@ import "../../domain/models.dart";
 import "../../domain/project.dart" show ProjectRef;
 import "../../providers.dart";
 import "../chat/widgets/composer.dart";
+import "../chat/widgets/composer_controller.dart";
 import "../chat/widgets/composer_embed.dart";
 import "../chat/widgets/composer_logic.dart";
 import "../widgets/completion_field.dart";
 import "../widgets/dialogs.dart";
 import "shell_outbox.dart";
 import "shell_slots.dart";
-import "snapshots.dart";
+
+/// A composer menu as the contract names it, and back.
+CompletionKind completionOf(ComposerTrigger trigger) => switch (trigger) {
+  ComposerTrigger.skill => CompletionKind.skill,
+  ComposerTrigger.agent => CompletionKind.agent,
+};
+
+ComposerTrigger triggerOf(CompletionKind kind) => switch (kind) {
+  CompletionKind.skill => ComposerTrigger.skill,
+  CompletionKind.agent => ComposerTrigger.agent,
+};
 
 /// The composer, drawn by the native shell: configured by a [Composer] that
 /// is never mounted, and its rules through the same [ComposerLogic], with no
@@ -28,7 +40,7 @@ class ShellComposer extends ConsumerStatefulWidget {
 }
 
 class ShellComposerState extends ConsumerState<ShellComposer>
-    implements ComposerHandle, ShellSurface {
+    implements ComposerHandle, ComposerIntents {
   late final ShellOutbox _outbox = ref.read(shellOutboxProvider);
   late final ShellSlots _slots = ref.read(shellSlotsProvider);
   late final ComposerLogic _logic = ComposerLogic(widget.config.controller);
@@ -56,7 +68,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   @override
   void initState() {
     super.initState();
-    _slots.claim(ShellConcern.composer, this);
+    _slots.composer.claim(this);
     _configure();
     widget.config.controller.addListener(_pushValue);
     _pushValue();
@@ -77,8 +89,8 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   @override
   void dispose() {
     widget.config.controller.removeListener(_pushValue);
-    if (_slots.leave(ShellConcern.composer, this)) {
-      _outbox.post(ComposerSnapshot.absent);
+    if (_slots.composer.leave(this)) {
+      _outbox.composer(ComposerSnapshot(present: false));
     }
     _logic.dispose();
     super.dispose();
@@ -98,13 +110,13 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   @override
   void embed(ComposerEmbed embed) {
     widget.config.controller.append(embed);
-    _outbox.say("composerFocus");
+    _outbox.focusComposer();
   }
 
   void _pushValue() {
     final value = widget.config.controller.value;
     if (value == _reported) return;
-    _outbox.post(_valueOf(value));
+    _outbox.composerValue(_valueOf(value));
   }
 
   static ComposerValueSnapshot _valueOf(TextEditingValue value) {
@@ -122,70 +134,85 @@ class ShellComposerState extends ConsumerState<ShellComposer>
     if (mounted) _logic.attach(files);
   }
 
-  /// What the shell's composer sent. Answers what it waits on: whether a
-  /// paste took files from the clipboard.
+  ComposerController get _controller => widget.config.controller;
+
   @override
-  Future<Object?> handle(String name, Map<String, Object?> args) async {
-    final controller = widget.config.controller;
-    switch (name) {
-      case "edited":
-        final text = args["text"]! as String;
-        int at(String key) => (args[key]! as num).toInt().clamp(0, text.length);
-        final value = TextEditingValue(
-          text: text,
-          selection: TextSelection(
-            baseOffset: at("start"),
-            extentOffset: at("end"),
-          ),
-        );
-        _reported = value;
-        _outbox.remember(_valueOf(value));
-        controller.value = value;
-        _reported = null;
-      case "send":
-        _logic.submit();
-      case "queue":
-        _logic.submit(queue: true);
-      case "stop":
-        widget.config.onAbort();
-      case "voice":
-        widget.config.onVoice?.call();
-      case "attach":
-        final kind = args["kind"] == "image"
-            ? AttachmentKind.image
-            : AttachmentKind.file;
-        _add(await ref.read(attachmentPickerProvider).pick(kind));
-      case "trigger":
-        _dismissed = null;
-        openCompletion(
-          controller,
-          args["kind"] == "@" ? CompletionKind.agent : CompletionKind.skill,
-        );
-        if (mounted) setState(() {});
-      case "pick":
-        final index = (args["index"]! as num).toInt();
-        final token = _token;
-        if (token != null && index >= 0 && index < _matches.length) {
-          acceptCompletion(controller, token, _matches[index]);
-        }
-      case "dismiss":
-        if (mounted) setState(() => _dismissed = _token);
-      case "unattach":
-        _logic.unattach((args["index"]! as num).toInt());
-      case "unembed":
-        final embed = controller.embedsByCode[(args["code"]! as num).toInt()];
-        if (embed != null) controller.remove(embed);
-      case "paste":
-        final files = await ref.read(clipboardFilesProvider).read();
-        _add(files);
-        return files.isNotEmpty;
-      case "copyCwd":
-        final cwd = _cwd();
-        if (cwd != null && mounted) {
-          await copyToClipboard(context, cwd, said: "Copied working directory");
-        }
+  Future<void> edited(String text, int start, int end) async {
+    int at(int offset) => offset.clamp(0, text.length);
+    final value = TextEditingValue(
+      text: text,
+      selection: TextSelection(baseOffset: at(start), extentOffset: at(end)),
+    );
+    _reported = value;
+    _outbox.rememberComposerValue(_valueOf(value));
+    _controller.value = value;
+    _reported = null;
+  }
+
+  @override
+  void send() => _logic.submit();
+
+  @override
+  void queue() => _logic.submit(queue: true);
+
+  @override
+  void stop() => widget.config.onAbort();
+
+  @override
+  void voice() => widget.config.onVoice?.call();
+
+  @override
+  Future<void> attach(AttachKind kind) async => _add(
+    await ref.read(attachmentPickerProvider).pick(switch (kind) {
+      AttachKind.image => AttachmentKind.image,
+      AttachKind.file => AttachmentKind.file,
+    }),
+  );
+
+  @override
+  Future<void> trigger(ComposerTrigger kind) async {
+    _dismissed = null;
+    openCompletion(_controller, completionOf(kind));
+    if (mounted) setState(() {});
+  }
+
+  /// A row of the menu as last drawn.
+  @override
+  Future<void> pick(int index) async {
+    final token = _token;
+    if (token != null && index >= 0 && index < _matches.length) {
+      acceptCompletion(_controller, token, _matches[index]);
     }
-    return null;
+  }
+
+  @override
+  Future<void> dismiss() async {
+    if (mounted) setState(() => _dismissed = _token);
+  }
+
+  @override
+  void unattach(int index) => _logic.unattach(index);
+
+  @override
+  Future<void> unembed(int code) async {
+    final embed = _controller.embedsByCode[code];
+    if (embed != null) _controller.remove(embed);
+  }
+
+  /// Whether a paste took files from the clipboard.
+  @override
+  Future<bool> paste() async {
+    final files = await ref.read(clipboardFilesProvider).read();
+    _add(files);
+    return files.isNotEmpty;
+  }
+
+  @override
+  Future<void> copyCwd() async {
+    final cwd = _cwd();
+    if (cwd != null && mounted) {
+      await copyToClipboard(context, cwd, said: "Copied working directory");
+    }
   }
 
   /// Where a `!` command is about to run: the shell's own report where it has
@@ -247,10 +274,14 @@ class ShellComposerState extends ConsumerState<ShellComposer>
         _token = token;
         _matches = open ? matchingCompletions(options, token.query) : const [];
         final mode = _logic.mode;
-        _outbox.post(
+        _outbox.composer(
           ComposerSnapshot(
             present: true,
-            mode: mode.name,
+            mode: switch (mode) {
+              ComposerMode.message => InputMode.message,
+              ComposerMode.shell => InputMode.shell,
+              ComposerMode.callback => InputMode.callback,
+            },
             hint: mode.hint ?? "Message",
             sendLabel: mode.sendLabel(queues: _logic.queues.value),
             canSend: _logic.canSend.value,
@@ -260,21 +291,27 @@ class ShellComposerState extends ConsumerState<ShellComposer>
             maxLines: _logic.maxLines,
             attachments: [
               for (final a in _logic.attachments)
-                (name: a.filename, image: a.mimeType.startsWith("image/")),
+                ComposerAttachment(
+                  name: a.filename,
+                  image: a.mimeType.startsWith("image/"),
+                ),
             ],
             menu: [
               for (final option in _matches)
-                ComposerOptionSnapshot(
+                ComposerMenuItem(
                   label: "${token!.kind.trigger}${option.name}",
                   hint: option.argumentHint,
-                  description: option.description,
+                  detail: option.description,
                 ),
             ],
             cwd: mode == ComposerMode.shell ? _cwd() : null,
             cards: {
               for (final MapEntry(:key, :value)
                   in controller.embedsByCode.entries)
-                key: value.card,
+                key: ComposerCard(
+                  title: value.card.title,
+                  body: value.card.body,
+                ),
             },
             accent: theme.colorScheme.primary.toARGB32(),
             dark: theme.brightness == Brightness.dark,
@@ -302,7 +339,7 @@ class ShellChatBar extends ConsumerStatefulWidget {
   final String title;
   final String subtitle;
   final DateTime? expiresAt;
-  final List<ToolbarItem> items;
+  final List<TitleBarItem> items;
   final Map<String, VoidCallback> actions;
 
   @override
@@ -310,30 +347,31 @@ class ShellChatBar extends ConsumerStatefulWidget {
 }
 
 class ShellChatBarState extends ConsumerState<ShellChatBar>
-    implements ShellSurface {
+    implements TitleBarIntents {
   late final ShellSlots _slots = ref.read(shellSlotsProvider);
 
   @override
   void dispose() {
-    _slots.leave(ShellConcern.toolbar, this);
+    _slots.chatBar.leave(this);
     super.dispose();
   }
 
+  /// The chat's bar has no way back: the conversation is the first page.
+  @override
+  Future<void> back() async {}
+
   /// A press on one of the items.
   @override
-  Future<Object?> handle(String name, Map<String, Object?> args) async {
-    widget.actions[args["id"]]?.call();
-    return null;
-  }
+  void press(String id) => widget.actions[id]?.call();
 
   @override
   Widget build(BuildContext context) {
     // The last built is the one answering, as it is the one on screen.
-    _slots.claim(ShellConcern.toolbar, this);
+    _slots.chatBar.claim(this);
     ref
         .read(shellOutboxProvider)
-        .post(
-          ChatBarSnapshot(
+        .chatBar(
+          TitleBarSnapshot(
             title: widget.title,
             subtitle: widget.subtitle,
             expiresAt: widget.expiresAt?.millisecondsSinceEpoch,

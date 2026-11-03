@@ -10,21 +10,21 @@ import SwiftUI
 ///
 /// What is picked is this view's until Send, as a form's is.
 struct QuestionPanel: View {
-  let asked: TurnState.Asked
+  let asked: QuestionRequest
   let send: ([String?]) -> Void
 
   @State private var answers: [String?]
   @State private var typed: [String]
   @State private var at = 0
 
-  init(asked: TurnState.Asked, send: @escaping ([String?]) -> Void) {
+  init(asked: QuestionRequest, send: @escaping ([String?]) -> Void) {
     self.asked = asked
     self.send = send
     _answers = State(initialValue: Array(repeating: nil, count: asked.questions.count))
     _typed = State(initialValue: Array(repeating: "", count: asked.questions.count))
   }
 
-  private var questions: [TurnState.Question] { asked.questions }
+  private var questions: [QuestionSnapshot] { asked.questions }
   private var several: Bool { questions.count > 1 }
 
   /// The answer at [index] is the typed one rather than an option's.
@@ -33,7 +33,7 @@ struct QuestionPanel: View {
     return questions[index].options.allSatisfy { $0.answer != answer }
   }
 
-  private func pick(_ option: TurnState.Option) {
+  private func pick(_ option: QuestionOption) {
     answers[at] = option.answer
     if at < questions.count - 1 { at += 1 }
   }
@@ -119,7 +119,7 @@ struct QuestionPanel: View {
     }
   }
 
-  private func optionRow(_ option: TurnState.Option) -> some View {
+  private func optionRow(_ option: QuestionOption) -> some View {
     let picked = answers[at] == option.answer
     return Button {
       pick(option)

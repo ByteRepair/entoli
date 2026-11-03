@@ -1,3 +1,4 @@
+import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -8,20 +9,20 @@ import "package:agent_chat/domain/project.dart" show defaultEmptyChatQuestion;
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/shell/shell_new_chat.dart";
-import "package:agent_chat/ui/shell/shell_outbox.dart";
 import "package:agent_chat/ui/widgets/liquid_glass.dart";
 
 import "../../harness.dart";
+import "fake_native_shell.dart";
 
 /// The chat page as the native shell hosts it: no Flutter bar or composer,
 /// the toolbar and the composer sent as snapshots instead.
 void main() {
   late TestApp app;
-  late Map<String, Map<String, Object?>> sent;
+  late FakeNativeShell shell;
 
   setUp(() {
     app = TestApp.create();
-    sent = {};
+    shell = FakeNativeShell.install();
   });
   tearDown(() => app.dispose());
 
@@ -33,9 +34,6 @@ void main() {
       overrides: [
         liquidGlassProvider.overrideWithValue(
           const LiquidGlass(available: true, on: true),
-        ),
-        shellOutboxProvider.overrideWithValue(
-          ShellOutbox((concern, map) => sent[concern] = map),
         ),
       ],
       child: Builder(
@@ -78,29 +76,25 @@ void main() {
     await pump(tester);
     expect(find.text(defaultEmptyChatQuestion), findsNothing);
     expect(find.byType(AppBar), findsNothing);
-    expect(sent["newChat"]?["present"], isTrue);
-    expect(sent["newChat"]?["question"], defaultEmptyChatQuestion);
-    expect(sent["chatBar"]?["title"], "New Chat");
-    expect(sent["composer"]?["present"], isTrue);
+    expect(shell.lastNewChat?.present, isTrue);
+    expect(shell.lastNewChat?.question, defaultEmptyChatQuestion);
+    expect(shell.lastChatBar?.title, "New Chat");
+    expect(shell.lastComposer?.present, isTrue);
   });
 
   testWidgets("a badge picks its project, and picked again the default", (
     tester,
   ) async {
     await pump(tester);
-    final badges = sent["newChat"]!["projects"]! as List;
-    final first = badges.first as Map;
+    final first = shell.lastNewChat!.projects.first;
     final screen = tester.state<ShellNewChatState>(find.byType(ShellNewChat));
 
-    screen.handle("pick", {"device": null, "project": first["project"]});
+    await screen.pick(null, first.project);
     await tester.pump();
-    expect(
-      app.container.read(selectedProjectProvider).project,
-      first["project"],
-    );
-    expect((sent["newChat"]!["selected"]! as Map)["project"], first["project"]);
+    expect(app.container.read(selectedProjectProvider).project, first.project);
+    expect(shell.lastNewChat!.selected!.project, first.project);
 
-    screen.handle("pick", {"device": null, "project": first["project"]});
+    await screen.pick(null, first.project);
     await tester.pump();
     expect(app.container.read(selectedProjectProvider).project, isNull);
   });
@@ -108,9 +102,9 @@ void main() {
   testWidgets("a starter types its trigger into the composer", (tester) async {
     await pump(tester);
     final screen = tester.state<ShellNewChatState>(find.byType(ShellNewChat));
-    screen.handle("starter", {"trigger": "@", "name": "scout"});
+    screen.starter(ComposerTrigger.agent, "scout");
     await tester.pump();
-    expect(sent["composerValue"]?["text"], "@scout ");
+    expect(shell.lastComposerValue?.text, "@scout ");
   });
 
   testWidgets("a chat fills the page, its title in the toolbar", (
@@ -119,7 +113,7 @@ void main() {
     await openChat(tester);
     await pump(tester);
     await settleIo(tester);
-    expect(sent["chatBar"]?["title"], "old chat");
+    expect(shell.lastChatBar?.title, "old chat");
     expect(tester.getSize(find.byType(SuperListView)).height, 600);
   });
 
@@ -141,15 +135,15 @@ void main() {
     await openChat(tester, finished: false);
     await pump(tester);
     await settleIo(tester);
-    expect(sent["turn"]?["resume"], startsWith("Unfinished turn"));
+    expect(shell.lastTurn?.resume, startsWith("Unfinished turn"));
   });
 
   testWidgets("a finished chat sends an empty turn surface", (tester) async {
     await openChat(tester);
     await pump(tester);
     await settleIo(tester);
-    expect(sent["turn"]?["resume"], isNull);
-    expect(sent["turn"]?["approvals"], isEmpty);
+    expect(shell.lastTurn?.resume, isNull);
+    expect(shell.lastTurn?.approvals, isEmpty);
   });
 
   testWidgets("a tooltip on the page opens above what it is about", (

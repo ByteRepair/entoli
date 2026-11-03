@@ -16,8 +16,6 @@ import "../chat/chat_page.dart";
 import "shell_outbox.dart";
 import "shell_palette.dart";
 import "shell_sidebar.dart";
-import "shell_slots.dart";
-import "snapshots.dart";
 
 /// The app under the native shell, in `AppShell`'s place: the Flutter half of
 /// a window SwiftUI owns. It asks the Swift to take the window, sends it the
@@ -36,9 +34,9 @@ class ShellBridge extends ConsumerStatefulWidget {
 class _ShellBridgeState extends ConsumerState<ShellBridge> {
   late final CommandScope _scope = ref.read(commandScopeProvider);
 
-  /// The bridge the channel's handler is, which is the last one mounted. A
+  /// The bridge the shell's events reach, which is the last one mounted. A
   /// restart builds the next session's before it takes this one down, so the
-  /// one going clears the handler only while it is still its own.
+  /// one going unbinds them only while they are still its own.
   static _ShellBridgeState? _listening;
 
   @override
@@ -47,12 +45,12 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     HardwareKeyboard.instance.addHandler(_key);
     _scope.attach(_commands);
     _listening = this;
-    shellChannel.setMethodCallHandler(_handle);
+    _bind(this);
     // Once per process: the window stays the shell's across a restore's
     // restart, and a second start is answered with nothing to do.
-    shellChannel
-        .invokeMethod<void>("start")
-        .catchError((Object e) => logFailure("shell", "start: $e"));
+    NativeShell().start().catchError(
+      (Object e) => logFailure("shell", "start: $e"),
+    );
   }
 
   @override
@@ -61,9 +59,22 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     _scope.detach(_commands);
     if (identical(_listening, this)) {
       _listening = null;
-      shellChannel.setMethodCallHandler(null);
+      _bind(null);
     }
     super.dispose();
+  }
+
+  /// What the shell sends under no surface's name — the window's own, the
+  /// sidebar's, the palette's — to [bridge], or to nothing. The surfaces'
+  /// own go to the one on top of each, through `ShellSlots`.
+  static void _bind(_ShellBridgeState? bridge) {
+    WindowEvents.setUp(bridge == null ? null : _Window(bridge.ref));
+    SidebarIntents.setUp(
+      bridge == null ? null : SidebarRunner(bridge.context, bridge.ref),
+    );
+    PaletteIntents.setUp(
+      bridge == null ? null : PaletteRunner(bridge.context, bridge.ref),
+    );
   }
 
   Commands _commands() => Commands.read(context, ref);
@@ -76,48 +87,6 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     if (command == null) return false;
     return _commands().run(command).isAvailable;
   }
-
-  Future<Object?> _handle(MethodCall call) async {
-    final args = (call.arguments as Map<Object?, Object?>?) ?? const {};
-    switch (call.method) {
-      case "insets":
-        double at(String key) => (args[key] as num? ?? 0).toDouble();
-        shellInsets.value = EdgeInsets.fromLTRB(
-          at("left"),
-          at("top"),
-          at("right"),
-          at("bottom"),
-        );
-      case "intent":
-        if (!mounted) return null;
-        return _run(ShellIntent.fromMap(args));
-    }
-    return null;
-  }
-
-  /// What the user did in the shell, answered with what the Swift waits on:
-  /// an error to show, or null.
-  Future<Object?> _run(ShellIntent intent) async {
-    // A surface's own, as its name and args inside the intent's: to the one
-    // on screen.
-    if (_surfaces[intent.name] case final concern?) {
-      final own = intent.nested;
-      return ref
-          .read(shellSlotsProvider)
-          .top(concern)
-          ?.handle(own.name, own.args);
-    }
-    switch (intent.name) {
-      case "sidebar":
-        ref.read(sidebarShownProvider.notifier).set(intent.flag("shown"));
-        return null;
-      case "palette":
-        return runPaletteIntent(context, ref, intent.nested);
-    }
-    return runSidebarIntent(context, ref, intent);
-  }
-
-  static final _surfaces = ShellConcern.values.asNameMap();
 
   @override
   Widget build(BuildContext context) => const AppMenuBar(
@@ -176,15 +145,31 @@ class _WindowPublisher extends ConsumerWidget {
       builder: (context, covered, _) {
         ref
             .read(shellOutboxProvider)
-            .post(
+            .window(
               WindowSnapshot(
                 covered: covered,
                 sidebarShown: shown,
-                appearance: theme == AppTheme.system ? null : theme.name,
+                dark: theme == AppTheme.system ? null : theme == AppTheme.dark,
               ),
             );
         return const SizedBox.shrink();
       },
     );
   }
+}
+
+/// The window's own events: how far the shell's bars reach, and the sidebar
+/// shown or hidden by the shell's own control.
+class _Window implements WindowEvents {
+  _Window(this.ref);
+
+  final WidgetRef ref;
+
+  @override
+  void insets(double left, double top, double right, double bottom) =>
+      shellInsets.value = EdgeInsets.fromLTRB(left, top, right, bottom);
+
+  @override
+  void sidebarShown(bool shown) =>
+      ref.read(sidebarShownProvider.notifier).set(shown);
 }

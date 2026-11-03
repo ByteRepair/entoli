@@ -1,32 +1,18 @@
 import SwiftUI
 
-/// `VoiceSnapshot`.
-struct VoiceState: Decodable, Equatable {
-  struct Line: Decodable, Equatable {
-    var kind: String
-    var text: String
-  }
-
-  var present = false
-  var title = "Voice"
-  var status = "off"
-  var word = ""
-  var paused = false
-  var hushed = false
-  var pushToTalk = false
-  var on = false
-  var error: String?
-  var lines: [Line] = []
-  var heard = 0xFF6C_63FF
-  var spoken = 0xFF2D_D4BF
+extension VoiceSnapshot {
+  static let initial = VoiceSnapshot(
+    present: false, title: "Voice", status: .off, word: "", paused: false, hushed: false,
+    pushToTalk: false, on: false, lines: [], heard: 0xFF6C_63FF, spoken: 0xFF2D_D4BF)
 
   var mode: GlowMode {
-    if hushed || status == "off" || status == "failed" { return .still }
+    if hushed { return .still }
     switch status {
-    case "starting": return .starting
-    case "thinking": return .thinking
-    case "speaking": return .speaking
-    default: return .listening
+    case .off, .failed: return .still
+    case .starting: return .starting
+    case .listening: return .listening
+    case .thinking: return .thinking
+    case .speaking: return .speaking
     }
   }
 }
@@ -42,22 +28,20 @@ struct VoiceView: View {
   /// Whether Talk is held down, so a release is said once.
   @State private var holding = false
 
-  private var voice: VoiceState { model.voice }
+  private var voice: VoiceSnapshot { model.voice }
   private var heard: Color { Color(argb: voice.heard) }
   private var spoken: Color { Color(argb: voice.spoken) }
 
   /// The word's dot and the Stop button wear what is doing the talking.
   private var tint: Color {
     switch voice.mode {
-    case .still: voice.status == "failed" ? .red : .secondary
+    case .still: voice.status == .failed ? .red : .secondary
     case .speaking: spoken
     default: heard
     }
   }
 
-  private func say(_ name: String, _ args: [String: Any?] = [:]) {
-    model.say("voice", name, args)
-  }
+  private var say: VoiceIntents { model.say.voice }
 
   var body: some View {
     ZStack {
@@ -96,7 +80,7 @@ struct VoiceView: View {
       .animation(.smooth, value: voice)
     }
     #if os(macOS)
-      .onExitCommand { say("done") }
+      .onExitCommand { say.done { _ in } }
     #endif
   }
 
@@ -108,13 +92,13 @@ struct VoiceView: View {
         VStack(alignment: .center, spacing: 6) {
           ForEach(Array(voice.lines.enumerated()), id: \.offset) { i, line in
             Text(line.text)
-              .font(line.kind == "activity" ? .callout : .body)
+              .font(line.kind == .activity ? .callout : .body)
               .foregroundStyle(
-                line.kind == "replied"
+                line.kind == .replied
                   ? AnyShapeStyle(.primary)
-                  : line.kind == "said" ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary)
+                  : line.kind == .said ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary)
               )
-              .italic(line.kind == "activity")
+              .italic(line.kind == .activity)
               .multilineTextAlignment(.center)
               .frame(maxWidth: .infinity, alignment: .center)
               .id(i)
@@ -148,26 +132,26 @@ struct VoiceView: View {
               .onChanged { _ in
                 guard voice.on, !holding else { return }
                 holding = true
-                say("talk", ["on": true])
+                say.talk(on: true) { _ in }
               }
               .onEnded { _ in
                 guard holding else { return }
                 holding = false
-                say("talk", ["on": false])
+                say.talk(on: false) { _ in }
               })
         } else {
           key(
             voice.paused ? "mic.slash" : "mic", voice.paused ? "Listen" : "Mute",
             help: voice.paused ? "Open the microphone" : "Shut the microphone",
             held: voice.paused, enabled: voice.on
-          ) { say("mute") }
+          ) { say.mute { _ in } }
         }
         key(
           "stop.fill", "Stop", help: "Stop the reply",
-          tint: voice.status == "speaking" ? spoken : nil,
-          enabled: voice.status == "speaking"
-        ) { say("stop") }
-        key("chevron.down", "Done", help: "Back to typing") { say("done") }
+          tint: voice.status == .speaking ? spoken : nil,
+          enabled: voice.status == .speaking
+        ) { say.stop { _ in } }
+        key("chevron.down", "Done", help: "Back to typing") { say.done { _ in } }
       }
     }
   }

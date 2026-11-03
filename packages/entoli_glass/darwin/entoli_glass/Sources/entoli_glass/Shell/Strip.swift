@@ -4,35 +4,23 @@ import SwiftUI
 /// reactions — where in the view, what to offer and which are picked. Dart
 /// waits on the answer: the index picked, or nil for a strip dismissed.
 struct StripRequest: Identifiable, Equatable {
-  struct Choice: Equatable {
-    var glyph: String
-    var name: String
-    var chosen: Bool
-  }
-
   let id = UUID()
 
   /// What opened it, in the Flutter view's coordinates.
   var anchor: CGRect
-  var choices: [Choice]
+  var choices: [StripOption]
 
   static func == (a: StripRequest, b: StripRequest) -> Bool { a.id == b.id }
 }
 
 extension ShellModel {
   /// Show a strip, answering the one already open as dismissed.
-  func showStrip(_ args: [String: Any], reply: @escaping (Any?) -> Void) {
+  func showStrip(_ request: ChoiceStrip, reply: @escaping (Int64?) -> Void) {
     answerStrip(nil)
-    func number(_ key: String) -> CGFloat { CGFloat((args[key] as? NSNumber)?.doubleValue ?? 0) }
-    let choices = (args["choices"] as? [[String: Any]] ?? []).map {
-      StripRequest.Choice(
-        glyph: $0["glyph"] as? String ?? "", name: $0["name"] as? String ?? "",
-        chosen: $0["chosen"] as? Bool ?? false)
-    }
     stripReply = reply
     strip = StripRequest(
-      anchor: CGRect(x: number("x"), y: number("y"), width: number("width"), height: number("height")),
-      choices: choices)
+      anchor: CGRect(x: request.x, y: request.y, width: request.width, height: request.height),
+      choices: request.options)
   }
 
   /// Tell Dart what was picked, or nil, and take the strip down.
@@ -40,7 +28,7 @@ extension ShellModel {
     let reply = stripReply
     stripReply = nil
     strip = nil
-    reply?(index.map { NSNumber(value: $0) } ?? nil)
+    reply?(index.map(Int64.init))
   }
 }
 

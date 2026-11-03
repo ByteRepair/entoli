@@ -32,9 +32,9 @@ struct ComposerView: View {
   /// carries all of it.
   private struct Shape: Equatable {
     var canSend, queues, speaking, voice: Bool
-    var mode: ComposerMode
+    var mode: InputMode
     var menu: Int
-    var attachments: [ComposerLook.Attachment]
+    var attachments: [ComposerAttachment]
     var cwd: Bool
   }
 
@@ -71,23 +71,23 @@ struct ComposerView: View {
   private var plus: some View {
     Menu {
       Button {
-        model.say("attach", ["kind": "image"])
+        model.say?.attach(kind: .image) { _ in }
       } label: {
         Label("Image", systemImage: "photo")
       }
       Button {
-        model.say("attach", ["kind": "file"])
+        model.say?.attach(kind: .file) { _ in }
       } label: {
         Label("File", systemImage: "paperclip")
       }
       Divider()
       Button {
-        model.say("trigger", ["kind": "/"])
+        model.say?.trigger(kind: .skill) { _ in }
       } label: {
         Label("Command", systemImage: "slash.circle")
       }
       Button {
-        model.say("trigger", ["kind": "@"])
+        model.say?.trigger(kind: .agent) { _ in }
       } label: {
         Label("Agent", systemImage: "at")
       }
@@ -142,17 +142,17 @@ struct ComposerView: View {
 
   @ViewBuilder private var trailing: some View {
     if model.voice && !model.speaking && !model.canSend {
-      button("voice", "Voice mode", systemImage: "waveform") { model.say("voice") }
+      button("voice", "Voice mode", systemImage: "waveform") { model.say?.voice { _ in } }
     }
     if model.queues {
-      button("queue", "Send after this turn", systemImage: "clock") { model.say("queue") }
+      button("queue", "Send after this turn", systemImage: "clock") { model.say?.queue { _ in } }
     }
     if model.speaking && !model.canSend {
-      button("send", "Stop", systemImage: "stop.fill", prominent: true) { model.say("stop") }
+      button("send", "Stop", systemImage: "stop.fill", prominent: true) { model.say?.stop { _ in } }
     } else {
       button(
         "send", model.sendLabel, systemImage: sendSymbol, prominent: model.canSend
-      ) { model.say("send") }
+      ) { model.say?.send { _ in } }
       .disabled(!model.canSend)
     }
   }
@@ -190,14 +190,14 @@ struct ComposerView: View {
     ScrollViewReader { proxy in
       ScrollView {
         LazyVStack(spacing: 0) {
-          ForEach(model.menu) { option in
+          ForEach(Array(model.menu.enumerated()), id: \.offset) { i, option in
             Button {
-              model.say("pick", ["index": option.id])
+              model.say?.pick(index: Int64(i)) { _ in }
             } label: {
-              menuRow(option)
+              menuRow(option, at: i)
             }
             .buttonStyle(.plain)
-            .id(option.id)
+            .id(i)
           }
         }
         .padding(.vertical, 4)
@@ -216,7 +216,7 @@ struct ComposerView: View {
         removal: .opacity.combined(with: .scale(scale: 0.98, anchor: .bottom))))
   }
 
-  private func menuRow(_ option: ComposerOption) -> some View {
+  private func menuRow(_ option: ComposerMenuItem, at row: Int) -> some View {
     HStack(spacing: 8) {
       Text(option.label).fontWeight(.semibold).lineLimit(1)
       if let hint = option.hint {
@@ -233,7 +233,7 @@ struct ComposerView: View {
     .background {
       // One highlight, which moves: a row's own would blink out on one row
       // and in on the next.
-      if option.id == model.highlighted {
+      if row == model.highlighted {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
           .fill(.tint.opacity(0.22))
           .padding(.horizontal, 4)
@@ -244,7 +244,7 @@ struct ComposerView: View {
 
   private func cwdRow(_ cwd: String) -> some View {
     Button {
-      model.say("copyCwd")
+      model.say?.copyCwd { _ in }
     } label: {
       HStack(spacing: 8) {
         Image(systemName: "terminal")
@@ -271,7 +271,7 @@ struct ComposerView: View {
             Image(systemName: attachment.image ? "photo" : "doc")
             Text(attachment.name).lineLimit(1)
             Button {
-              model.say("unattach", ["index": i])
+              model.say?.unattach(index: Int64(i)) { _ in }
             } label: {
               Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
             }

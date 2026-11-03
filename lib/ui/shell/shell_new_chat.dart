@@ -1,3 +1,4 @@
+import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -8,10 +9,10 @@ import "../../providers.dart";
 import "../selection.dart";
 import "../sidebar/remote_projects.dart";
 import "../widgets/completion_field.dart";
+import "shell_composer.dart" show completionOf, triggerOf;
 import "shell_outbox.dart";
 import "shell_slots.dart";
 import "shell_sidebar.dart" show projectSymbol;
-import "snapshots.dart";
 
 /// The asset the new-chat screen stands its figure on.
 const _athena = "assets/images/athena.png";
@@ -45,48 +46,36 @@ class ShellNewChat extends ConsumerStatefulWidget {
 }
 
 class ShellNewChatState extends ConsumerState<ShellNewChat>
-    implements ShellSurface {
+    implements NewChatIntents {
   late final ShellOutbox _outbox = ref.read(shellOutboxProvider);
   late final ShellSlots _slots = ref.read(shellSlotsProvider);
 
   @override
   void dispose() {
-    if (_slots.leave(ShellConcern.newChatScreen, this)) {
-      _outbox.post(NewChatSnapshot.absent);
+    if (_slots.newChat.leave(this)) {
+      _outbox.newChat(NewChatSnapshot(present: false));
     }
     super.dispose();
   }
 
-  /// What the native screen sent.
+  /// A badge. Picking the one already picked is the default project, which
+  /// is nothing picked: the row is a set of toggles.
   @override
-  Future<Object?> handle(String name, Map<String, Object?> args) async {
-    switch (name) {
-      // Picking the badge already picked is the default project, which is
-      // nothing picked: the row is a set of toggles.
-      case "pick":
-        final ProjectRef picked = (
-          device: args["device"] as String?,
-          project: args["project"] as String?,
-        );
-        selectProject(
-          ref,
-          picked == ref.read(selectedProjectProvider)
-              ? localProject(null)
-              : picked,
-        );
-      case "starter":
-        insertCompletion(
-          widget.controller,
-          args["trigger"] == "@" ? CompletionKind.agent : CompletionKind.skill,
-          args["name"]! as String,
-        );
-    }
-    return null;
+  Future<void> pick(String? device, String? project) async {
+    final ProjectRef picked = (device: device, project: project);
+    selectProject(
+      ref,
+      picked == ref.read(selectedProjectProvider) ? localProject(null) : picked,
+    );
   }
 
   @override
+  void starter(ComposerTrigger trigger, String name) =>
+      insertCompletion(widget.controller, completionOf(trigger), name);
+
+  @override
   Widget build(BuildContext context) {
-    _slots.claim(ShellConcern.newChatScreen, this);
+    _slots.newChat.claim(this);
     final at = widget.at;
     final question = ref.watch(newChatQuestionProvider(at));
     final named = ref.watch(projectListProvider).value ?? const <String>[];
@@ -97,7 +86,7 @@ class ShellNewChatState extends ConsumerState<ShellNewChat>
       peers,
     );
     final devices = {for (final e in entries) e.scope.device!};
-    _outbox.post(
+    _outbox.newChat(
       NewChatSnapshot(
         present: true,
         question: question,
@@ -105,7 +94,6 @@ class ShellNewChatState extends ConsumerState<ShellNewChat>
         projects: [
           for (final project in everyProject(named).whereType<String>())
             ProjectChoice(
-              device: null,
               project: project,
               label: projectLabel(project),
               // Only a built-in ships an icon; a user's badge is its name.
@@ -117,7 +105,7 @@ class ShellNewChatState extends ConsumerState<ShellNewChat>
         ],
         devices: [
           for (final device in devices)
-            (
+            DeviceSnapshot(
               name: peers[device]?.name ?? device,
               offline: peers[device]?.status != PeerStatus.online,
               projects: [
@@ -133,16 +121,16 @@ class ShellNewChatState extends ConsumerState<ShellNewChat>
               ],
             ),
         ],
-        selected: (device: at.device, project: at.project),
+        selected: ProjectPick(device: at.device, project: at.project),
         starters: [
           for (final kind in CompletionKind.values)
             for (final option in ref.watch(
               completionsProvider((project: at, kind: kind)),
             ))
-              (
-                trigger: kind.trigger,
+              StarterSnapshot(
+                trigger: triggerOf(kind),
                 name: option.name,
-                description: option.description,
+                detail: option.description,
               ),
         ].take(_starters).toList(),
         starting: widget.starting,

@@ -301,26 +301,34 @@ switch off, reads its providers as it always has. With the shell, `main` puts
 it what to draw, runs what it sends back, and draws `ChatPage`, with no bar
 and no composer of its own.
 
-One channel, `entoli_glass/shell` (the plugin package `packages/entoli_glass`,
-`sharedDarwinSource`, one tree of Swift for both Runners):
+**The wire is one definition, `pigeons/shell.dart`**, which Pigeon turns
+into the Dart in `packages/entoli_glass/lib/src/`, the Swift in the plugin's
+`Contract/` (one file for both Runners), and a fake of the Swift end for the
+tests. `tool/prepare.sh` runs it, and its output is not committed. A field or
+an intent the two sides read differently does not compile. It is a protocol a
+client could implement anywhere: the app holds every rule and all the state,
+and the client holds only the last snapshot of each concern. `NativeShell` is
+what the app says — `start`, a snapshot per concern, the one-offs
+`voiceLevel` and `focusComposer`, and `strip`, answered later (below); each
+`*Intents` API is what a surface's client says the user did, a method per
+intent, the few the client waits on (a project's error, a paste's yes or no)
+marked `@async`.
 
-- **To Swift:** `start`; `snapshot` with a `concern` and its `json` — the
-  string the outbox compared, which the Swift decodes as it is — or, for a
-  one-off with nothing to compare, its `value`; and `strip`, a request
-  answered later (below).
-- **From Swift:** `insets`, how much of the Flutter view the shell's bars
-  cover; and `intent`, a `name` and its `args`, answered with whatever the
-  Swift waits on — an error to show, a paste's yes or no, or nothing.
+**A snapshot is a concern's whole state, sent when it changed.** The
+contract's classes compare by value, and `ShellOutbox` sends one only when it
+differs from the last of its concern, since most are rebuilt on every frame
+a turn streams: `window`, `sidebar`, `chatBar` and `pageBar` (one
+`TitleBarSnapshot`), `composer` and `composerValue`, `turn`, `newChat`,
+`voice`, `palette`. The microphone's level goes raw, many times a second, and
+the glow reads it per frame rather than redrawing the shell for it.
+`ShellModel` is the Swift's `NativeShell`, holding what the last snapshot
+said and nothing of its own.
 
-**A snapshot is a concern's whole state, sent when it changed.** Each is a
-typed class with a `toMap` in `snapshots.dart`, and `ShellOutbox` compares it
-as JSON and sends only a difference, since most are rebuilt on every frame a
-turn streams. The Swift holds what the last one said and nothing of its own,
-a `Decodable` mirror per concern: `window` (a page covering the conversation,
-the sidebar shown, the appearance), `sidebar`, `chatBar` and `pageBar`,
-`composer` and `composerValue`, `turn`, `newChat`, `voice` and `voiceLevel`,
-`palette`. The microphone's level is the one sent raw, many times a second, and the glow
-reads it per frame rather than redrawing the shell for it.
+**Adding to it** is an edit to `pigeons/shell.dart` and `tool/prepare.sh`;
+the compiler then names every place that has to follow. A default is a
+constructor default there, and Swift's starting value before Dart has said
+anything is a `static let initial` beside its view, since Pigeon gives a
+Swift struct none. A field may not be called `description`, which is Swift's.
 
 **A publisher reads what it sends in its own build.** Each concern is
 published by a widget of its own, so what it watches rebuilds it and nothing
@@ -330,17 +338,16 @@ launches because the chat list landed a frame after a first snapshot read it
 from a `ValueListenableBuilder`. The running chats are a listenable, so the
 publishers watch `busyChatIdsProvider`, its set as a value.
 
-**An intent goes to whoever is on screen.** The sidebar's run in
-`runSidebarIntent` and the palette's in `runPaletteIntent`. The composer's,
-the turn surface's, the new-chat screen's, voice mode's, the toolbar's and a
-page's title bar's are
-a `ShellConcern` each, sent by `ShellModel.say` as their own name and args
-inside the intent's, and go to the `ShellSurface` on top of that concern's
-stack in `ShellSlots`: each claims the top when it mounts — or, where the last
-built is the one on screen, when it is built — and leaves when it goes,
-taking its snapshot back if it was on top. Turn surfaces stack — voice mode's
-over the chat page's — and the one beneath sends again when the top one goes,
-nothing it watches having changed to rebuild it. A row's rename and a delete's confirmation are
+**An intent goes to whoever is on screen.** The window's, the sidebar's and
+the palette's go to `ShellBridge`'s own runners. The composer's, the turn
+surface's, the new-chat screen's, voice mode's and the two title bars' (one
+API on the channels `chatBar` and `pageBar`) go to the widget on top of that
+surface's `ShellSlot`, which implements the `*Intents` itself: each claims the
+top when it mounts — or, where the last built is the one on screen, when it
+is built — and leaves when it goes, taking its snapshot back if it was on
+top, and the slot points the channel at whoever is on top now. Turn surfaces
+stack — voice mode's over the chat page's — and the one beneath sends again
+when the top one goes, nothing it watches having changed to rebuild it. A row's rename and a delete's confirmation are
 native dialogs that send the edit itself, which `ChatEdits` makes as it does
 for the Flutter sidebar's dialogs.
 
@@ -450,6 +457,7 @@ app's pages are a menu on the list's bar, there being no menu bar to hold
 them. The hosting is each Runner's own story — see "The native shell" in
 `macos/AGENTS.md` and `ios/AGENTS.md`.
 
-What is tested is the Dart half, `test/ui/shell/`: every snapshot's map, every
-intent against the app's fakes, the stacking, the page closing. The Swift is
-checked by building both Runners and looking.
+What is tested is the Dart half, `test/ui/shell/`: every snapshot as the
+Swift receives it, over the real channels to `FakeNativeShell`, every intent
+against the app's fakes, the stacking, the page closing. The Swift is checked
+by building both Runners and looking.

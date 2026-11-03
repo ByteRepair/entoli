@@ -99,7 +99,7 @@ struct ShellView: View {
     .onChange(of: model.detailAsked) { compactColumn = .detail }
     .onChange(of: columns) { _, columns in
       let shown = columns != .detailOnly
-      if shown != model.window.sidebarShown { model.intent("sidebar", ["shown": shown]) }
+      if shown != model.window.sidebarShown { model.say.window.sidebarShown(shown: shown) { _ in } }
     }
   }
 }
@@ -156,7 +156,7 @@ extension View {
     let bar =
       !page ? model.chatBar : model.pageBar.present ? model.pageBar : model.chatBar.bare
     return self
-      .titleBar(bar) { name, args in model.say(page ? "pageBar" : "toolbar", name, args) }
+      .titleBar(bar, intents: page ? model.say.pageBar : model.say.chatBar)
       #if os(iOS)
         // A page whose bar Flutter still draws has it alone: one on screen.
         .toolbar(page && !model.pageBar.present ? .hidden : .automatic, for: .navigationBar)

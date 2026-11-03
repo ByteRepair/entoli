@@ -1,3 +1,4 @@
+import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -6,8 +7,9 @@ import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/room/room_state.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
-import "package:agent_chat/ui/shell/shell_outbox.dart";
 import "package:agent_chat/ui/shell/shell_turn.dart";
+
+import "fake_native_shell.dart";
 
 /// Records what the native turn surface asked of the turn.
 class _Driver implements TurnDriver {
@@ -33,11 +35,11 @@ class _Driver implements TurnDriver {
 }
 
 void main() {
-  late Map<String, Map<String, Object?>> sent;
+  late FakeNativeShell shell;
   late _Driver driver;
 
   setUp(() {
-    sent = {};
+    shell = FakeNativeShell.install();
     driver = _Driver();
   });
 
@@ -47,11 +49,6 @@ void main() {
   ) async {
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          shellOutboxProvider.overrideWithValue(
-            ShellOutbox((concern, map) => sent[concern] = map),
-          ),
-        ],
         child: MaterialApp(
           home: ShellTurnSurface(view: view, notifier: driver),
         ),
@@ -82,19 +79,13 @@ void main() {
         },
       ),
     );
-    final question = sent["turn"]!["question"]! as Map;
-    expect(question["id"], "ask-1");
-    final asked = (question["questions"]! as List).single as Map;
-    expect(asked["question"], "Which?");
-    expect((asked["options"]! as List).map((o) => (o as Map)["label"]), [
-      "One",
-      "Two",
-    ]);
+    final question = shell.lastTurn!.question!;
+    expect(question.id, "ask-1");
+    final asked = question.questions.single;
+    expect(asked.question, "Which?");
+    expect(asked.options.map((o) => o.label), ["One", "Two"]);
 
-    await surface.handle("answer", {
-      "id": "ask-1",
-      "answers": ["Two"],
-    });
+    await surface.answer("ask-1", ["Two"]);
     expect(driver.answered.single.$1, "ask-1");
     expect(driver.answered.single.$2, ["Two"]);
   });
@@ -116,12 +107,12 @@ void main() {
         },
       ),
     );
-    final approval = (sent["turn"]!["approvals"]! as List).single as Map;
-    expect(approval["detail"], "ls -la");
-    expect(approval["allow"], isTrue);
-    expect(approval["chat"], isTrue);
+    final approval = shell.lastTurn!.approvals.single;
+    expect(approval.detail, "ls -la");
+    expect(approval.allow, isTrue);
+    expect(approval.chat, isTrue);
 
-    await surface.handle("approve", {"id": "call-1", "answer": "chat"});
+    await surface.approve("call-1", ApprovalAnswer.chat);
     expect(driver.approved.single, (
       "call-1",
       ApprovalResponse.alwaysAllowChat,
@@ -130,7 +121,7 @@ void main() {
 
   testWidgets("nothing waiting sends nothing to draw", (tester) async {
     await pump(tester, ChatViewState());
-    expect(sent["turn"]!["question"], isNull);
-    expect(sent["turn"]!["approvals"], isEmpty);
+    expect(shell.lastTurn!.question, isNull);
+    expect(shell.lastTurn!.approvals, isEmpty);
   });
 }

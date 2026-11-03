@@ -4,6 +4,7 @@ import "dart:typed_data";
 
 import "package:flutter/foundation.dart" show listEquals;
 import "package:collection/collection.dart" show IterableExtension;
+import "package:entoli_glass/entoli_glass.dart" show TitleBarItem;
 import "package:flutter/material.dart";
 import "package:flutter/rendering.dart"
     show RenderAbstractViewport, RenderProxyBox;
@@ -31,7 +32,6 @@ import "../widgets/chip_row.dart";
 import "../shell/shell_composer.dart";
 import "../shell/shell_new_chat.dart";
 import "../shell/shell_turn.dart";
-import "../shell/snapshots.dart" show ToolbarItem;
 import "../widgets/completion_field.dart";
 import "../widgets/liquid_glass.dart";
 import "../widgets/side_panel_frame.dart";
@@ -414,7 +414,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
                 subtitle: at.project == null ? "" : projectLabel(at.project),
                 items: [
                   if (at.device == null)
-                    const ToolbarItem(
+                    TitleBarItem(
                       id: "settings",
                       label: "Chat settings",
                       symbol: "slider.horizontal.3",
@@ -1710,14 +1710,14 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       expiresAt: state.tempTtlExpiresAt,
       items: [
         if (view.isRunning)
-          const ToolbarItem(id: "running", label: "Running", spinner: true),
+          TitleBarItem(id: "running", label: "Running", spinner: true),
         if (progress != null)
-          ToolbarItem(
+          TitleBarItem(
             id: "plan",
             label: "Plan, ${progress.$1} of ${progress.$2} done",
             symbol: "checklist",
           ),
-        const ToolbarItem(
+        TitleBarItem(
           id: "settings",
           label: "Chat settings",
           symbol: "info.circle",
