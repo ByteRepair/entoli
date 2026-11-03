@@ -102,6 +102,21 @@ void main() {
     expect(rule.border!.top.width, lessThanOrEqualTo(1));
   });
 
+  // A filled, rounded box shrinks to its text, so each quote was a slab of its
+  // own width and a nested one a box in a box. A bar alone reads at any width.
+  testWidgets("a quote is a bar, not a box, its text quieter", (tester) async {
+    final sheet = await sheetOf(tester);
+    final scheme = Theme.of(tester.element(find.byType(SizedBox))).colorScheme;
+    final quote = sheet.blockquoteDecoration! as BoxDecoration;
+
+    expect(quote.color, isNull);
+    expect(quote.borderRadius, isNull);
+    final border = quote.border! as Border;
+    expect(border.left.width, greaterThan(0));
+    expect(border.top, BorderSide.none);
+    expect(sheet.blockquote!.color, scheme.onSurfaceVariant);
+  });
+
   // A list is as much prose as a paragraph, and is the shape a reply most
   // often takes. `fromTheme` hands all four of these plain `bodyMedium`.
   testWidgets("every prose element is looser than Material's default", (

@@ -387,6 +387,12 @@ it introduces — the default is `EdgeInsets.zero` everywhere, which put a headi
 against the paragraph before it. And a horizontal rule was five pixels of
 `dividerColor`, which is a slab across the page rather than a rule.
 
+A quote is a bar and nothing else: `outlineVariant` down its left, its text a
+tone quieter than the reply's. `fromTheme` filled it and rounded it, and the box
+shrank to its own text, so every quote was a slab of a different width, the bar
+cut off at the corners, and a nested quote a box inside a box. The composer's
+quote card keeps its fill, being a thing to remove rather than a passage read.
+
 Prose is set looser than Material's 1.43, since a reply is read as prose in a
 column where the line you want next is the one below. That goes to `p`,
 `listBullet`, `blockquote` and `tableBody` rather than to `p` alone — the rule

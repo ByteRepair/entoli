@@ -40,7 +40,9 @@ MarkdownStyleSheet replyStyleSheet(ThemeData theme) {
   return base.copyWith(
     p: prose,
     listBullet: prose,
-    blockquote: prose,
+    // A quote is someone else's words, so it reads a tone quieter than the
+    // reply around it.
+    blockquote: prose.copyWith(color: theme.colorScheme.onSurfaceVariant),
     tableBody: prose,
     a: prose.copyWith(
       color: theme.colorScheme.primary,
@@ -65,11 +67,16 @@ MarkdownStyleSheet replyStyleSheet(ThemeData theme) {
     h4Padding: above,
     h5Padding: above,
     h6Padding: above,
-    // One tone below the default, which is `surfaceContainerHighest` — the
-    // tone inline code now takes, so a `word` inside a quote would otherwise
-    // be a chip the same colour as the quote holding it.
-    blockquoteDecoration: (base.blockquoteDecoration! as BoxDecoration)
-        .copyWith(color: theme.colorScheme.surfaceContainerHigh),
+    // A bar and nothing else. `fromTheme` fills the quote and rounds it, and
+    // the box shrinks to its own text: a slab of a different width per quote,
+    // the bar cut off at the rounded corners, and a nested quote a box inside
+    // a box. The bar alone says "quoted" at any width and any depth.
+    blockquoteDecoration: BoxDecoration(
+      border: Border(
+        left: BorderSide(color: theme.colorScheme.outlineVariant, width: 3),
+      ),
+    ),
+    blockquotePadding: const EdgeInsets.fromLTRB(14, 2, 0, 2),
     // Five pixels of `dividerColor` is a slab across the reply. A rule is a
     // rule — and `dividerColor` is `outline` in M3, a tone heavier than the
     // hairline this wants.
