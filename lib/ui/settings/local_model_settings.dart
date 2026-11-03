@@ -64,7 +64,7 @@ class LocalLlmSettingsPage extends ConsumerWidget {
     final controls = ref.watch(localEngineProvider).controls;
     final prefill = ref.watch(localPrefillProvider) != null;
     return Scaffold(
-      appBar: PageBar(title: const Text("LLM settings")),
+      appBar: PageBar(title: "LLM settings"),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
@@ -419,7 +419,7 @@ class _AddLocalModelPageState extends ConsumerState<AddLocalModelPage> {
       ),
     );
     return Scaffold(
-      appBar: PageBar(title: const Text("Add model")),
+      appBar: PageBar(title: "Add model"),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

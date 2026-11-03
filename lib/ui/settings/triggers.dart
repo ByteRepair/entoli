@@ -263,19 +263,18 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
       message: "Throw away the edits to this trigger?",
       child: Scaffold(
         appBar: PageBar(
-          title: Text(isNew ? "New trigger" : "Edit trigger"),
+          title: isNew ? "New trigger" : "Edit trigger",
           actions: [
             if (!isNew)
-              IconButton(
-                icon: const Icon(Icons.delete_outline),
-                tooltip: "Delete trigger",
+              PageAction.icon(
+                icon: Icons.delete_outline,
+                label: "Delete trigger",
                 onPressed: _delete,
               ),
             // The agent's trigger is the switch and the delete: anything else
             // saved here would rewrite what its conversation armed (source,
             // anchor, re-enable) from a page whose prompt it refuses to touch.
-            if (!registered)
-              TextButton(onPressed: _save, child: const Text("Save")),
+            if (!registered) PageAction.text(label: "Save", onPressed: _save),
           ],
         ),
         body: ListView(

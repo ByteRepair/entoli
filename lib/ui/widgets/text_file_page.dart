@@ -202,29 +202,26 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
           autofocus: true,
           child: Scaffold(
             appBar: PageBar(
-              title: Text(
-                _dirty ? "${widget.name} •" : widget.name,
-                overflow: TextOverflow.ellipsis,
-              ),
+              title: _dirty ? "${widget.name} •" : widget.name,
               actions: _tooLarge
-                  ? null
+                  ? const []
                   : [
                       if (_editing)
-                        IconButton(
-                          icon: const Icon(Icons.save_outlined),
-                          tooltip: "Save",
+                        PageAction.icon(
+                          icon: Icons.save_outlined,
+                          label: "Save",
                           onPressed: _dirty ? _save : null,
                         ),
                       if (_editing)
-                        IconButton(
-                          icon: const Icon(Icons.visibility_outlined),
-                          tooltip: "Preview",
+                        PageAction.icon(
+                          icon: Icons.visibility_outlined,
+                          label: "Preview",
                           onPressed: () => setState(() => _editing = false),
                         )
                       else
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined),
-                          tooltip: "Edit",
+                        PageAction.icon(
+                          icon: Icons.edit_outlined,
+                          label: "Edit",
                           onPressed: _canEdit
                               ? () => setState(() => _editing = true)
                               : null,
@@ -244,40 +241,30 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
     );
   }
 
-  Widget _menu(WorkspaceText? content) => PopupMenuButton<void Function()>(
-    tooltip: "More",
-    onSelected: (action) => action(),
-    itemBuilder: (context) => [
+  PageAction _menu(WorkspaceText? content) => PageAction.menu(
+    label: "More",
+    items: [
       if (_showsEditor)
-        CheckedPopupMenuItem(
+        PageMenuItem(
+          label: "Wrap lines",
           checked: _wrap,
-          value: () => setState(() => _wrap = !_wrap),
-          child: const Text("Wrap lines"),
+          onSelected: () => setState(() => _wrap = !_wrap),
         ),
-      PopupMenuItem(
-        value: _pickTextSize,
-        child: const ListTile(
-          leading: Icon(Icons.format_size),
-          title: Text("Text size"),
-          contentPadding: EdgeInsets.zero,
-        ),
+      PageMenuItem(
+        label: "Text size",
+        icon: Icons.format_size,
+        onSelected: _pickTextSize,
       ),
-      PopupMenuItem(
+      PageMenuItem(
+        label: "Copy",
+        icon: Icons.copy_all_outlined,
         enabled: content != null,
-        value: _copy,
-        child: const ListTile(
-          leading: Icon(Icons.copy_all_outlined),
-          title: Text("Copy"),
-          contentPadding: EdgeInsets.zero,
-        ),
+        onSelected: _copy,
       ),
-      PopupMenuItem(
-        value: _handOff,
-        child: const ListTile(
-          leading: Icon(Icons.open_in_new),
-          title: Text("Open in another app"),
-          contentPadding: EdgeInsets.zero,
-        ),
+      PageMenuItem(
+        label: "Open in another app",
+        icon: Icons.open_in_new,
+        onSelected: _handOff,
       ),
     ],
   );

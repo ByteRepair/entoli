@@ -390,18 +390,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       edited: () => _edited,
       child: Scaffold(
         appBar: PageBar(
-          title: Text(global ? "Profile" : "Project instructions"),
+          title: global ? "Profile" : "Project instructions",
           actions: [
-            IconButton(
-              icon: const Icon(Icons.restart_alt),
-              tooltip: "Clear",
+            PageAction.icon(
+              icon: Icons.restart_alt,
+              label: "Clear",
               onPressed: _loaded && !_saving ? _clear : null,
             ),
-            IconButton(
-              icon: const Icon(Icons.check),
-              tooltip: "Save",
-              onPressed: _loaded && !_saving ? _save : null,
-            ),
+            PageAction.confirm(onPressed: _loaded && !_saving ? _save : null),
           ],
         ),
         body: !_loaded
@@ -431,8 +427,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                           hintText: "Not set",
                           suffixIcon: IconButton(
                             icon: const Icon(Icons.calendar_today),
-                            onPressed: _pickDate,
                             tooltip: "Pick date",
+                            onPressed: _pickDate,
                           ),
                         ),
                         onTap: _pickDate,

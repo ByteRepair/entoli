@@ -190,13 +190,14 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
       },
       child: Scaffold(
         appBar: PageBar(
-          leading: BackButton(onPressed: _back),
-          title: _Title(
-            text: _selected.isNotEmpty
-                ? "${_selected.length} selected"
-                : (_atRoot ? widget.title : p.basename(_dir)),
-            under: _atRoot ? null : p.relative(_dir, from: widget.root),
-          ),
+          onBack: _back,
+          // The folder's name over where it sits under the root: losing the
+          // path is losing the only thing that says which of two folders
+          // called `src` this is.
+          title: _selected.isNotEmpty
+              ? "${_selected.length} selected"
+              : (_atRoot ? widget.title : p.basename(_dir)),
+          subtitle: _atRoot ? null : p.relative(_dir, from: widget.root),
           actions: _selecting ? _selectionActions() : _browseActions(handoff),
         ),
         floatingActionButton: !handoff.canShare || _selected.isEmpty
@@ -256,35 +257,35 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
 
   /// What can be done to what is picked. It replaces the browsing actions
   /// rather than sitting beside them.
-  List<Widget> _selectionActions() => [
+  List<PageAction> _selectionActions() => [
     if (_selected.isNotEmpty)
-      IconButton(
-        icon: const Icon(Icons.delete_outline),
-        tooltip: "Delete",
+      PageAction.icon(
+        icon: Icons.delete_outline,
+        label: "Delete",
         onPressed: _delete,
       ),
-    IconButton(
-      icon: const Icon(Icons.close),
-      tooltip: "Cancel selection",
+    PageAction.icon(
+      icon: Icons.close,
+      label: "Cancel selection",
       onPressed: () => setState(_clearSelection),
     ),
   ];
 
-  List<Widget> _browseActions(FileHandoff handoff) => [
+  List<PageAction> _browseActions(FileHandoff handoff) => [
     if (handoff.canReveal)
-      IconButton(
-        icon: const Icon(Icons.open_in_new),
-        tooltip: "Show in file manager",
+      PageAction.icon(
+        icon: Icons.open_in_new,
+        label: "Show in file manager",
         onPressed: () => _guard(() => handoff.reveal(_dir)),
       ),
-    IconButton(
-      icon: const Icon(Icons.create_new_folder_outlined),
-      tooltip: "New folder",
+    PageAction.icon(
+      icon: Icons.create_new_folder_outlined,
+      label: "New folder",
       onPressed: _newFolder,
     ),
-    IconButton(
-      icon: const Icon(Icons.checklist),
-      tooltip: "Select",
+    PageAction.icon(
+      icon: Icons.checklist,
+      label: "Select",
       onPressed: () => setState(() => _selecting = true),
     ),
   ];
@@ -301,40 +302,6 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   /// What the empty state offers: the share sheet, where there is one.
   String? _inboundRoute(FileHandoff handoff) =>
       handoff.canShare ? "Share files to Entoli to add your own." : null;
-}
-
-/// The folder's name over where it sits under the root. `AppBar` has one line
-/// to give, and losing the path is losing the only thing that says which of two
-/// folders called `src` this is. A [PageTitle], so a title bar that draws its
-/// own says both too.
-class _Title extends StatelessWidget implements PageTitle {
-  const _Title({required this.text, required this.under});
-
-  final String text;
-  final String? under;
-
-  @override
-  String get title => text;
-
-  @override
-  String? get subtitle => under;
-
-  @override
-  Widget build(BuildContext context) {
-    if (under == null) return Text(text, overflow: TextOverflow.ellipsis);
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(text, overflow: TextOverflow.ellipsis),
-        Text(
-          under!,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-      ],
-    );
-  }
 }
 
 class _Row extends StatelessWidget {

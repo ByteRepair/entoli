@@ -200,20 +200,18 @@ class _PromptPageState extends State<PromptPage> {
       edited: () => _edited,
       child: Scaffold(
         appBar: PageBar(
-          title: Text(widget.title),
-          leading: const DiscardButton(),
+          title: widget.title,
+          leading: PageLeading.close,
           actions: [
             if (widget.completions)
-              PopupMenuButton<VoidCallback>(
-                icon: const Icon(Icons.add),
-                tooltip: "Insert",
-                onSelected: (action) => action(),
-                itemBuilder: (context) =>
-                    completionInsertItems(context, _field),
+              PageAction.menu(
+                icon: Icons.add,
+                label: "Insert",
+                items: completionInsertChoices(_field),
               ),
-            TextButton(
+            PageAction.text(
+              label: widget.confirmLabel,
               onPressed: () => Navigator.of(context).pop(_controller.text),
-              child: Text(widget.confirmLabel),
             ),
           ],
         ),

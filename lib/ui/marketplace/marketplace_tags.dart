@@ -26,26 +26,23 @@ class MarketplaceTagPickerPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
-      appBar: PageBar(
-        title: const Text("Tags"),
-        actions: [
-          ValueListenableBuilder<Set<String>>(
-            valueListenable: ticked,
-            builder: (context, ticks, _) => ticks.isEmpty
-                ? const SizedBox.shrink()
-                : TextButton(
-                    onPressed: () => ticked.value = {},
-                    child: const Text("Clear"),
-                  ),
-          ),
-        ],
-      ),
-      body: tags.isEmpty
-          ? const Nothing("This tab's entries carry no tags yet.")
-          : ValueListenableBuilder<Set<String>>(
-              valueListenable: ticked,
-              builder: (context, ticks, _) => ListView(
+    // The whole page, so the bar's Clear comes and goes with the ticks.
+    return ValueListenableBuilder<Set<String>>(
+      valueListenable: ticked,
+      builder: (context, ticks, _) => Scaffold(
+        appBar: PageBar(
+          title: "Tags",
+          actions: [
+            if (ticks.isNotEmpty)
+              PageAction.text(
+                label: "Clear",
+                onPressed: () => ticked.value = {},
+              ),
+          ],
+        ),
+        body: tags.isEmpty
+            ? const Nothing("This tab's entries carry no tags yet.")
+            : ListView(
                 children: [
                   for (final (tag, count) in tags)
                     CheckboxListTile(
@@ -70,7 +67,7 @@ class MarketplaceTagPickerPage extends StatelessWidget {
                     ),
                 ],
               ),
-            ),
+      ),
     );
   }
 }

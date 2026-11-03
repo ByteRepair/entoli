@@ -396,27 +396,29 @@ stops there with nothing changed under it. Asking again instead, the first
 version, closed the question and asked again for ever.
 
 **A page's bar is the window's title bar.** A page says what its bar holds
-with `PageBar` (`widgets/page_bar.dart`), which takes exactly what an
-`AppBar` takes — `title`, `leading`, `actions`, `bottom` — and is one: with
-the shell off, or in a route that is not a page, it builds the `AppBar`.
-Under the shell it builds none, and sends the window's title bar instead,
-read from those same widgets: an `IconButton` is an icon, its Material icon
-looked up as an SF Symbol and a tick the system's confirm; a `TextButton` a
-word, a `FilledButton` a prominent one; a `PopupMenuButton` a menu of its
-entries; a `DiscardButton` leading a close rather than a back; a title that
-is not one `Text` a `PageTitle`, which says its words. So a page knows
-nothing of the shell, and what its bar is natively is said in one file: a
-new kind of button, or a new icon, is taught to `PageBar` and every page has
-it. What Flutter keeps is `bottom` — tabs, a search under the bar — drawn
-under the title bar, where the `AppBar` drew it. The bars stack as their
-pages do, `ShellPageBar` claiming the top as it mounts and giving it up as
-its page starts to leave, so the bar beneath is back for the whole of the
-way back; the back the title bar draws is the page's back key, so a page
-that asks before it goes is asked. The Swift is `TitleBar.swift`, one view
-for every bar the window has: the chat's is drawn by it too, its buttons
-sent under `toolbar` and a page's under `pageBar`. On an iPhone it hides the
-split view's own back while a page leads, the page's being the one that pops
-it.
+with `PageBar` (`widgets/page_bar.dart`) as data rather than widgets: a
+`title` and a `subtitle`, how it is left (`PageLeading`: back, or a close
+that discards), what leaving runs if not the back key, and its `actions`.
+Each action is a `PageAction` — `.icon`, `.confirm` (the tick), `.text`
+(`prominent` for a page's one filled button), `.menu` of `PageMenuItem`s —
+and draws itself both ways: as a button in an `AppBar`, which is what the
+bar is with the shell off or in a route that is not a page, and as an item
+of the window's title bar under it, the tick as the system's confirm and
+its Material icon looked up as an SF Symbol. That is the whole of the
+design: a page knows nothing of the shell, and neither bar is read back
+out of the other, so a new kind of action is a new `PageAction`, said once
+and drawn by both. An action that comes and goes is the page's `if`, the
+page rebuilding as it would for anything else it shows. What Flutter keeps
+under the shell is `bottom` — tabs, a search under the bar — drawn under
+the title bar, where the `AppBar` drew it. The bars stack as their pages
+do, `ShellPageBar` claiming the top as it mounts and giving it up as its
+page starts to leave, so the bar beneath is back for the whole of the way
+back; the back the title bar draws is the page's back key, so a page that
+asks before it goes is asked. The Swift is `TitleBar.swift`, one view for
+every bar the window has: the chat's is drawn by it too, its buttons sent
+under `toolbar` and a page's under `pageBar`. On an iPhone it hides the
+split view's own back while a page leads, the page's being the one that
+pops it.
 
 The appearance is the app's, not the window's: popovers, menus and sheets are
 windows of their own, so `NSApp.appearance` on macOS and the window's

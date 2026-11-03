@@ -93,42 +93,43 @@ class _MarketplacePageState extends ConsumerState<MarketplacePage> {
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
-      child: Scaffold(
-        appBar: PageBar(
-          title: const Text("Marketplace"),
-          actions: [
-            Builder(
-              builder: (context) => IconButton(
-                icon: const Icon(Icons.filter_list),
-                tooltip: "Filter by tag",
+      // A context under the tabs, which the filter asks which is open.
+      child: Builder(
+        builder: (context) => Scaffold(
+          appBar: PageBar(
+            title: "Marketplace",
+            actions: [
+              PageAction.icon(
+                icon: Icons.filter_list,
+                label: "Filter by tag",
                 onPressed: () => _openTags(context),
               ),
+            ],
+            bottom: TabBar(
+              tabs: [for (final kind in _tabs) Tab(text: kind.label)],
             ),
-          ],
-          bottom: TabBar(
-            tabs: [for (final kind in _tabs) Tab(text: kind.label)],
           ),
-        ),
-        body: Column(
-          children: [
-            SearchField(
-              controller: _search,
-              hint: "Search",
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-            ),
-            Expanded(
-              child: TabBarView(
-                children: [
-                  for (final kind in _tabs)
-                    _EntryList(
-                      kind: kind,
-                      query: _query,
-                      tagged: _tagged[kind]!,
-                    ),
-                ],
+          body: Column(
+            children: [
+              SearchField(
+                controller: _search,
+                hint: "Search",
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
               ),
-            ),
-          ],
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    for (final kind in _tabs)
+                      _EntryList(
+                        kind: kind,
+                        query: _query,
+                        tagged: _tagged[kind]!,
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

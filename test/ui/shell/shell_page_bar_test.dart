@@ -4,12 +4,11 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/ui/shell/shell_outbox.dart";
 import "package:agent_chat/ui/shell/shell_slots.dart";
-import "package:agent_chat/ui/widgets/discard_guard.dart";
 import "package:agent_chat/ui/widgets/liquid_glass.dart";
 import "package:agent_chat/ui/widgets/page_bar.dart";
 
-/// A page's bar under the native shell: the window's title bar, sent from
-/// the same widgets an `AppBar` takes, and none of it drawn by Flutter.
+/// A page's bar under the native shell: the window's title bar, each action
+/// drawn as the system's, and none of it drawn by Flutter.
 void main() {
   late Map<String, Map<String, Object?>> sent;
   late ProviderContainer container;
@@ -63,18 +62,14 @@ void main() {
       tester,
       Scaffold(
         appBar: PageBar(
-          title: const Text("Chat settings"),
+          title: "Chat settings",
           actions: [
-            IconButton(
-              icon: const Icon(Icons.add),
-              tooltip: "Add",
+            const PageAction.icon(
+              icon: Icons.add,
+              label: "Add",
               onPressed: null,
             ),
-            IconButton(
-              icon: const Icon(Icons.check),
-              tooltip: "Save",
-              onPressed: () => saved++,
-            ),
+            PageAction.confirm(onPressed: () => saved++),
           ],
         ),
         body: const Text("page"),
@@ -97,14 +92,14 @@ void main() {
     await push(
       tester,
       const Scaffold(
-        appBar: PageBar(title: Text("Settings")),
+        appBar: PageBar(title: "Settings"),
         body: Text("settings"),
       ),
     );
     await push(
       tester,
       const Scaffold(
-        appBar: PageBar(title: Text("General")),
+        appBar: PageBar(title: "General"),
         body: Text("general"),
       ),
     );
@@ -121,33 +116,31 @@ void main() {
   });
 
   testWidgets("a discard is a close, a menu its choices", (tester) async {
-    String? picked;
+    var picked = 0;
     await pump(tester);
     await push(
       tester,
-      DiscardGuard(
-        edited: () => false,
-        child: Scaffold(
-          appBar: PageBar(
-            title: const Text("Edit"),
-            leading: const DiscardButton(),
-            actions: [
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.add),
-                tooltip: "Insert",
-                onSelected: (value) => picked = value,
-                itemBuilder: (context) => const [
-                  PopupMenuItem(
-                    value: "skill",
-                    child: Row(children: [Text("Skill"), Text("/")]),
-                  ),
-                ],
-              ),
-              TextButton(onPressed: () {}, child: const Text("Save")),
-            ],
-          ),
-          body: const Text("edit"),
+      Scaffold(
+        appBar: PageBar(
+          title: "Edit",
+          leading: PageLeading.close,
+          actions: [
+            PageAction.menu(
+              icon: Icons.add,
+              label: "Insert",
+              items: [
+                PageMenuItem(
+                  label: "Skill",
+                  hint: "/",
+                  onSelected: () => picked++,
+                ),
+                PageMenuItem(label: "Agent", enabled: false, onSelected: () {}),
+              ],
+            ),
+            PageAction.text(label: "Save", onPressed: () {}),
+          ],
         ),
+        body: const Text("edit"),
       ),
     );
     expect(sent["pageBar"], containsPair("leading", "close"));
@@ -156,7 +149,7 @@ void main() {
     expect((items().last["label"], items().last["style"]), ("Save", "text"));
 
     await say("press", {"id": menu["id"]});
-    expect(picked, "skill");
+    expect(picked, 1);
   });
 
   testWidgets("without the shell it is an AppBar", (tester) async {
@@ -164,11 +157,12 @@ void main() {
     await push(
       tester,
       const Scaffold(
-        appBar: PageBar(title: Text("Settings")),
+        appBar: PageBar(title: "Settings"),
         body: Text("settings"),
       ),
     );
     expect(find.byType(AppBar), findsOneWidget);
+    expect(find.text("Settings"), findsOneWidget);
     expect(sent, isEmpty);
   });
 }

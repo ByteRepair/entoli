@@ -10,7 +10,7 @@ class PrivacyPolicyPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: PageBar(title: const Text("Privacy policy")),
+      appBar: PageBar(title: "Privacy policy"),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [const MarkdownText(bundledPrivacyPolicy)],

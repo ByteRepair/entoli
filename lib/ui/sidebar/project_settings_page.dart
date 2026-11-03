@@ -102,7 +102,7 @@ class ProjectSettingsPage extends ConsumerWidget {
     final remote = device != null;
     if (ref.watch(projectGoneProvider(at))) {
       return Scaffold(
-        appBar: PageBar(title: const Text("Project settings")),
+        appBar: PageBar(title: "Project settings"),
         body: const Center(
           child: Text("This project is no longer on that device."),
         ),
@@ -110,7 +110,7 @@ class ProjectSettingsPage extends ConsumerWidget {
     }
     if (!ref.watch(projectLoadedProvider(at))) {
       return Scaffold(
-        appBar: PageBar(title: const Text("Project settings")),
+        appBar: PageBar(title: "Project settings"),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -134,7 +134,7 @@ class ProjectSettingsPage extends ConsumerWidget {
     final builtIn = builtinProjectOf(project);
 
     return Scaffold(
-      appBar: PageBar(title: const Text("Project settings")),
+      appBar: PageBar(title: "Project settings"),
       body: Column(
         children: [
           if (remote)
@@ -563,7 +563,7 @@ class _ProjectEnvironmentPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(projectSettingsOf(at));
     return Scaffold(
-      appBar: PageBar(title: const Text("Environment")),
+      appBar: PageBar(title: "Environment"),
       body: EnvironmentSection(
         env: settings.environment ?? const {},
         description:
@@ -628,7 +628,7 @@ class _PromptsCard extends ConsumerWidget {
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => Scaffold(
-            appBar: PageBar(title: Text("${kind.label} — $project")),
+            appBar: PageBar(title: "${kind.label} — $project"),
             // The section owns the scroll: its footer (import, install-to)
             // is pinned to the bottom of the page rather than one row more
             // of a list here.
@@ -687,7 +687,7 @@ class _ProjectPermissionsPage extends ConsumerWidget {
     final notifier = ref.read(projectSettingsOf(at).notifier);
     final sandboxed = settings.sandbox ?? app.sandbox ?? true;
     return Scaffold(
-      appBar: PageBar(title: const Text("Permissions")),
+      appBar: PageBar(title: "Permissions"),
       body: ListView(
         children: [
           Padding(

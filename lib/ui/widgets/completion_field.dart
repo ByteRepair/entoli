@@ -6,6 +6,7 @@ import "../../domain/models.dart";
 import "../../domain/project.dart" show ProjectRef;
 import "../../domain/shell.dart";
 import "../../providers.dart";
+import "page_bar.dart";
 import "text_input.dart";
 
 class _MoveIntent extends Intent {
@@ -153,6 +154,18 @@ List<PopupMenuItem<VoidCallback>> completionInsertItems(
       ),
   ];
 }
+
+/// The same entries as [completionInsertItems], for a page bar's menu.
+List<PageMenuItem> completionInsertChoices(
+  GlobalKey<CompletionFieldState> field,
+) => [
+  for (final kind in CompletionKind.values)
+    PageMenuItem(
+      label: kind.label,
+      hint: kind.trigger,
+      onSelected: () => field.currentState?.openMenu(kind),
+    ),
+];
 
 /// Where the menu goes relative to the field. The default stacks them, which is
 /// the composer's arrangement of one field with a menu over it; a caller with a

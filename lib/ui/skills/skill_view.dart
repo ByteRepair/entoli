@@ -95,14 +95,14 @@ class _SkillViewPageState extends ConsumerState<SkillViewPage> {
     final theme = Theme.of(context);
     if (_loading) {
       return Scaffold(
-        appBar: PageBar(title: Text(widget.name)),
+        appBar: PageBar(title: widget.name),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
     final entries = _entries;
     if (entries == null) {
       return Scaffold(
-        appBar: PageBar(title: Text(widget.name)),
+        appBar: PageBar(title: widget.name),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
@@ -119,7 +119,7 @@ class _SkillViewPageState extends ConsumerState<SkillViewPage> {
     final name = parsed?.name ?? widget.name;
 
     return Scaffold(
-      appBar: PageBar(title: Text(name)),
+      appBar: PageBar(title: name),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

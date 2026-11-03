@@ -106,7 +106,7 @@ class RelaySettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
     return Scaffold(
-      appBar: PageBar(title: const Text("Internet relay")),
+      appBar: PageBar(title: "Internet relay"),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
@@ -159,7 +159,7 @@ class TurnSettingsPage extends ConsumerWidget {
     final settings = ref.watch(appSettingsProvider);
     final secrets = ref.watch(appSecretsProvider);
     return Scaffold(
-      appBar: PageBar(title: const Text("TURN server")),
+      appBar: PageBar(title: "TURN server"),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
@@ -526,7 +526,7 @@ class _PairingJoinPageState extends State<PairingJoinPage> {
       context,
       hub.cancelPairing,
       child: Scaffold(
-        appBar: PageBar(title: const Text("Pairing")),
+        appBar: PageBar(title: "Pairing"),
         body: _PairingStageView.watching(
           context,
           hub,
@@ -736,7 +736,7 @@ class _PairingWindowPageState extends State<PairingWindowPage> {
       context,
       hub.cancelPairingWindow,
       child: Scaffold(
-        appBar: PageBar(title: const Text("Pairing window")),
+        appBar: PageBar(title: "Pairing window"),
         body: ValueListenableBuilder<PairingActivity?>(
           valueListenable: hub.pairing,
           builder: (context, pairing, _) {
@@ -860,7 +860,7 @@ class _ManualInvitePageState extends State<ManualInvitePage> {
       context,
       widget.hub.cancelManualInvite,
       child: Scaffold(
-        appBar: PageBar(title: const Text("Manual invite")),
+        appBar: PageBar(title: "Manual invite"),
         body: _watching ? _watchingBody() : _inviteBody(),
       ),
     );
@@ -989,7 +989,7 @@ class _ScanQrPageState extends State<_ScanQrPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: PageBar(title: const Text("Scan QR code")),
+      appBar: PageBar(title: "Scan QR code"),
       body: MobileScanner(
         controller: _controller,
         errorBuilder: (context, error) =>

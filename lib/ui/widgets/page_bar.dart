@@ -6,28 +6,33 @@ import "../shell/snapshots.dart";
 import "discard_guard.dart";
 import "liquid_glass.dart";
 
-/// A page's bar: an [AppBar], taking the same [title], [leading], [actions]
-/// and [bottom], or under Liquid Glass the window's own title bar, drawn by
-/// the system from those same widgets. A page says what its bar holds once
-/// and in Flutter's words, and nothing of it knows which draws it: what an
-/// [IconButton], a [TextButton] or a [PopupMenuButton] is natively, which SF
-/// Symbol an icon is and that a tick is the system's confirm is said here,
-/// and only here. See "Liquid Glass" in `lib/ui/AGENTS.md`.
+/// A pushed page's bar, said as what it holds rather than drawn: a [title],
+/// the line under it, how the page is left, and its [actions]. Without the
+/// native shell it is an [AppBar]; under Liquid Glass it is the window's own
+/// title bar, which the system draws. A page knows nothing of which, and each
+/// [PageAction] draws itself either way. See "Liquid Glass" in
+/// `lib/ui/AGENTS.md`.
 ///
-/// What Flutter keeps under the shell is [bottom] — a page's tabs, a search
-/// under its bar — drawn beneath the title bar where the [AppBar] drew it.
+/// [bottom] — a page's tabs, a search under its bar — is Flutter's either
+/// way, drawn beneath whichever bar is above it.
 class PageBar extends ConsumerWidget implements PreferredSizeWidget {
   const PageBar({
     super.key,
-    this.leading,
-    this.title,
-    this.actions,
+    required this.title,
+    this.subtitle,
+    this.leading = PageLeading.back,
+    this.onBack,
+    this.actions = const [],
     this.bottom,
   });
 
-  final Widget? leading;
-  final Widget? title;
-  final List<Widget>? actions;
+  final String title;
+  final String? subtitle;
+  final PageLeading leading;
+
+  /// What leaving runs, in place of the back key.
+  final VoidCallback? onBack;
+  final List<PageAction> actions;
   final PreferredSizeWidget? bottom;
 
   /// The [AppBar]'s: a [Scaffold] gives the bar up to this much and takes
@@ -43,220 +48,314 @@ class PageBar extends ConsumerWidget implements PreferredSizeWidget {
     final native =
         ref.watch(liquidGlassProvider).on &&
         ModalRoute.of(context) is PageRoute;
-    if (!native) {
-      return AppBar(
-        leading: leading,
-        title: title,
-        actions: actions,
-        bottom: bottom,
-      );
-    }
-    // An action that rebuilds on its own sends the bar again when it would.
-    final listenables = [
-      for (final action in actions ?? const <Widget>[])
-        if (action case ValueListenableBuilder(:final valueListenable))
-          valueListenable,
-    ];
-    return ListenableBuilder(
-      listenable: Listenable.merge(listenables),
-      builder: (context, _) {
-        final bar = _NativeBar.of(context, this);
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ShellPageBar(
-              bar: bar.snapshot,
-              onBack: bar.back,
-              actions: bar.actions,
-            ),
-            // Under the window's title bar, which the shell reports as
-            // padding.
-            SizedBox(height: MediaQuery.paddingOf(context).top),
-            ?bottom,
-          ],
-        );
-      },
-    );
-  }
-}
-
-/// A title whose words are not one [Text]: what it says, to a title bar
-/// that draws its own.
-abstract interface class PageTitle {
-  String get title;
-
-  /// The line under it, if any.
-  String? get subtitle;
-}
-
-/// [PageBar]'s widgets as the title bar the shell draws, and what each of
-/// its buttons runs.
-class _NativeBar {
-  _NativeBar._(this._context);
-
-  factory _NativeBar.of(BuildContext context, PageBar page) {
-    final bar = _NativeBar._(context);
-    final items = [
-      for (final widget in page.actions ?? const <Widget>[]) ?bar._item(widget),
-    ];
-    final (title, subtitle) = _title(page.title);
-    bar.snapshot = PageBarSnapshot(
-      title: title,
-      subtitle: subtitle ?? "",
-      leading: bar._leading(page.leading),
-      items: items,
-    );
-    return bar;
+    return native ? _native(context) : _flutter(context);
   }
 
-  final BuildContext _context;
-  late final PageBarSnapshot snapshot;
-  final Map<String, VoidCallback> actions = {};
+  Widget _flutter(BuildContext context) => AppBar(
+    leading: switch (leading) {
+      PageLeading.close => const DiscardButton(),
+      PageLeading.back when onBack != null => BackButton(onPressed: onBack),
+      PageLeading.back => null,
+    },
+    title: subtitle == null
+        ? Text(title, overflow: TextOverflow.ellipsis)
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, overflow: TextOverflow.ellipsis),
+              Text(
+                subtitle!,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+    actions: [for (final action in actions) action._button(context)],
+    bottom: bottom,
+  );
 
-  /// What the title bar's way back runs: the leading's own, or the back key.
-  late VoidCallback back = () => Navigator.of(_context).maybePop();
-
-  int _ids = 0;
-  String _id(VoidCallback? run) {
-    final id = "${_ids++}";
-    if (run != null) actions[id] = run;
-    return id;
-  }
-
-  TitleBarLeading? _leading(Widget? leading) {
-    switch (leading) {
-      case null:
-        final route = ModalRoute.of(_context);
-        return route?.impliesAppBarDismissal ?? false
-            ? TitleBarLeading.back
-            : null;
-      case DiscardButton() || CloseButton():
-        return TitleBarLeading.close;
-      case BackButton(:final onPressed):
-        if (onPressed != null) back = onPressed;
-        return TitleBarLeading.back;
-      default:
-        return TitleBarLeading.back;
-    }
-  }
-
-  /// One of the actions, or null for one that draws nothing.
-  ToolbarItem? _item(Widget widget) {
-    switch (widget) {
-      case Padding(:final child?) || Align(:final child?):
-        return _item(child);
-      case Builder(:final builder):
-        return _item(builder(_context));
-      case ValueListenableBuilder(:final valueListenable, :final child):
-        // Untyped, as a menu's handler is below.
-        final dynamic untyped = widget;
-        return _item(untyped.builder(_context, valueListenable.value, child));
-      case SizedBox(child: null):
-        return null;
-      case IconButton(:final icon, :final tooltip, :final onPressed):
-        final data = icon is Icon ? icon.icon : null;
-        final symbol = data == null ? null : _symbols[data];
-        final label = tooltip ?? "";
-        final tick = data == Icons.check;
-        return ToolbarItem(
-          id: _id(onPressed),
-          label: label,
-          symbol: symbol,
-          // An icon with no symbol of its own says what it does instead.
-          style: tick
-              ? ToolbarStyle.confirm
-              : symbol == null
-              ? ToolbarStyle.text
-              : ToolbarStyle.icon,
-          enabled: onPressed != null,
-        );
-      case ButtonStyleButton(:final child, :final onPressed):
-        return ToolbarItem(
-          id: _id(onPressed),
-          label: _words(child).join(" "),
-          style: widget is FilledButton || widget is ElevatedButton
-              ? ToolbarStyle.prominent
-              : ToolbarStyle.text,
-          enabled: onPressed != null,
-        );
-      case PopupMenuButton():
-        return _menu(widget);
-      default:
-        return null;
-    }
-  }
-
-  /// A [PopupMenuButton], its entries built now: the bar is sent again
-  /// whenever the page builds, so what they say is never staler than the
-  /// rest of it.
-  ToolbarItem _menu(PopupMenuButton<dynamic> button) {
-    final icon = button.icon;
-    final data = icon is Icon ? icon.icon : null;
-    // Read untyped: the button's is a function of its own entry type, which
-    // a read through `dynamic` would check against and fail.
-    final dynamic untyped = button;
-    final dynamic picked = untyped.onSelected;
-    return ToolbarItem(
-      id: _id(null),
-      label: button.tooltip ?? "More",
-      symbol: (data == null ? null : _symbols[data]) ?? "ellipsis.circle",
-      enabled: button.enabled,
-      menu: [
-        for (final entry in button.itemBuilder(_context))
-          if (entry case PopupMenuItem(:final value, enabled: true))
-            _choice(entry, () {
-              if (picked != null) picked(value);
-            }),
+  Widget _native(BuildContext context) {
+    final presses = _Presses();
+    final dismisses = ModalRoute.of(context)?.impliesAppBarDismissal ?? false;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ShellPageBar(
+          bar: PageBarSnapshot(
+            title: title,
+            subtitle: subtitle ?? "",
+            leading: switch (leading) {
+              PageLeading.close => TitleBarLeading.close,
+              PageLeading.back when onBack != null || dismisses =>
+                TitleBarLeading.back,
+              PageLeading.back => null,
+            },
+            items: [for (final action in actions) action._item(presses)],
+          ),
+          onBack: onBack ?? () => Navigator.of(context).maybePop(),
+          actions: presses.runs,
+        ),
+        // Under the window's title bar, which the shell reports as padding.
+        SizedBox(height: MediaQuery.paddingOf(context).top),
+        ?bottom,
       ],
     );
   }
+}
 
-  /// One of a menu's entries, the first of its words its label and the rest
-  /// a hint after it.
-  ToolbarMenuItem _choice(PopupMenuItem<dynamic> entry, VoidCallback run) {
-    final words = _words(entry.child);
-    return ToolbarMenuItem(
-      id: _id(run),
-      label: words.firstOrNull ?? "",
-      hint: words.length > 1 ? words.skip(1).join(" ") : null,
-      checked: entry is CheckedPopupMenuItem && entry.checked,
+/// How a page is left: back to the one under it, or closed, discarding what
+/// it holds (`DiscardGuard` asking first).
+enum PageLeading { back, close }
+
+/// One of a page's buttons, said once and drawn by whichever bar the page
+/// has: a button in its [AppBar], or an item of the window's title bar.
+sealed class PageAction {
+  const PageAction();
+
+  /// A button drawn as its [icon], named by [label].
+  const factory PageAction.icon({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onPressed,
+  }) = _IconAction;
+
+  /// The page's tick: what keeps what was done on it.
+  const factory PageAction.confirm({
+    String label,
+    required VoidCallback? onPressed,
+  }) = _ConfirmAction;
+
+  /// A button that says what it does; [prominent] is the page's one
+  /// action, in the accent's fill.
+  const factory PageAction.text({
+    required String label,
+    required VoidCallback? onPressed,
+    bool prominent,
+  }) = _TextAction;
+
+  /// A button opening [items].
+  const factory PageAction.menu({
+    IconData? icon,
+    required String label,
+    required List<PageMenuItem> items,
+  }) = _MenuAction;
+
+  /// As the [AppBar] draws it.
+  Widget _button(BuildContext context);
+
+  /// As the window's title bar draws it, what a press runs kept in
+  /// [presses] under the id the item is sent with.
+  ToolbarItem _item(_Presses presses);
+}
+
+/// One choice of a [PageAction.menu].
+class PageMenuItem {
+  const PageMenuItem({
+    required this.label,
+    required this.onSelected,
+    this.icon,
+    this.hint,
+    this.checked,
+    this.enabled = true,
+  });
+
+  final String label;
+  final VoidCallback onSelected;
+  final IconData? icon;
+
+  /// Drawn after the label, quieter: a key or a trigger.
+  final String? hint;
+
+  /// Ticked or not, for a choice that turns something on and off; null for
+  /// one that does a thing.
+  final bool? checked;
+  final bool enabled;
+}
+
+class _IconAction extends PageAction {
+  const _IconAction({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget _button(BuildContext context) =>
+      IconButton(icon: Icon(icon), tooltip: label, onPressed: onPressed);
+
+  @override
+  ToolbarItem _item(_Presses presses) {
+    final symbol = _symbolOf(icon);
+    return ToolbarItem(
+      id: presses.add(onPressed),
+      label: label,
+      symbol: symbol,
+      // An icon the system has no symbol for says what it does instead.
+      style: symbol == null ? ToolbarStyle.text : ToolbarStyle.icon,
+      enabled: onPressed != null,
     );
   }
-
-  static (String, String?) _title(Widget? title) => switch (title) {
-    PageTitle(:final title, :final subtitle) => (title, subtitle),
-    _ => (_words(title).join(" "), null),
-  };
-
-  /// The words [widget] shows, from the widgets a bar's button or a menu's
-  /// entry is made of.
-  static List<String> _words(Widget? widget) => switch (widget) {
-    Text(:final data?) => [data],
-    Text(:final textSpan?) => [textSpan.toPlainText()],
-    ListTile(:final title) => _words(title),
-    Flex(:final children) => [for (final c in children) ..._words(c)],
-    Padding(:final child) ||
-    Align(:final child) ||
-    SizedBox(:final child) => _words(child),
-    Flexible(:final child) => _words(child),
-    _ => const [],
-  };
-
-  /// The app's Material icons as the SF Symbols the system draws.
-  static final Map<IconData, String> _symbols = {
-    Icons.add: "plus",
-    Icons.check: "checkmark",
-    Icons.checklist: "checklist",
-    Icons.close: "xmark",
-    Icons.copy: "doc.on.doc",
-    Icons.create_new_folder_outlined: "folder.badge.plus",
-    Icons.delete_outline: "trash",
-    Icons.edit_outlined: "pencil",
-    Icons.filter_list: "line.3.horizontal.decrease",
-    Icons.open_in_browser: "safari",
-    Icons.open_in_new: "arrow.up.forward.square",
-    Icons.restart_alt: "arrow.counterclockwise",
-    Icons.save_outlined: "square.and.arrow.down",
-    Icons.visibility_outlined: "eye",
-  };
 }
+
+class _ConfirmAction extends PageAction {
+  const _ConfirmAction({this.label = "Save", required this.onPressed});
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget _button(BuildContext context) => IconButton(
+    icon: const Icon(Icons.check),
+    tooltip: label,
+    onPressed: onPressed,
+  );
+
+  @override
+  ToolbarItem _item(_Presses presses) => ToolbarItem(
+    id: presses.add(onPressed),
+    label: label,
+    symbol: "checkmark",
+    style: ToolbarStyle.confirm,
+    enabled: onPressed != null,
+  );
+}
+
+class _TextAction extends PageAction {
+  const _TextAction({
+    required this.label,
+    required this.onPressed,
+    this.prominent = false,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final bool prominent;
+
+  @override
+  Widget _button(BuildContext context) => prominent
+      ? Padding(
+          padding: const EdgeInsets.only(right: 12),
+          child: FilledButton(onPressed: onPressed, child: Text(label)),
+        )
+      : TextButton(onPressed: onPressed, child: Text(label));
+
+  @override
+  ToolbarItem _item(_Presses presses) => ToolbarItem(
+    id: presses.add(onPressed),
+    label: label,
+    style: prominent ? ToolbarStyle.prominent : ToolbarStyle.text,
+    enabled: onPressed != null,
+  );
+}
+
+class _MenuAction extends PageAction {
+  const _MenuAction({this.icon, required this.label, required this.items});
+
+  final IconData? icon;
+  final String label;
+  final List<PageMenuItem> items;
+
+  @override
+  Widget _button(BuildContext context) => PopupMenuButton<VoidCallback>(
+    icon: icon == null ? null : Icon(icon),
+    tooltip: label,
+    onSelected: (run) => run(),
+    itemBuilder: (context) => [
+      for (final item in items)
+        if (item.checked case final checked?)
+          CheckedPopupMenuItem(
+            checked: checked,
+            enabled: item.enabled,
+            value: item.onSelected,
+            child: Text(item.label),
+          )
+        else
+          PopupMenuItem(
+            enabled: item.enabled,
+            value: item.onSelected,
+            child: ListTile(
+              leading: item.icon == null ? null : Icon(item.icon),
+              title: Text(item.label),
+              trailing: item.hint == null ? null : _Hint(item.hint!),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+    ],
+  );
+
+  @override
+  ToolbarItem _item(_Presses presses) => ToolbarItem(
+    id: presses.add(null),
+    label: label,
+    symbol: (icon == null ? null : _symbolOf(icon!)) ?? "ellipsis.circle",
+    menu: [
+      for (final item in items)
+        if (item.enabled)
+          ToolbarMenuItem(
+            id: presses.add(item.onSelected),
+            label: item.label,
+            hint: item.hint,
+            symbol: item.icon == null ? null : _symbolOf(item.icon!),
+            checked: item.checked ?? false,
+          ),
+    ],
+  );
+}
+
+class _Hint extends StatelessWidget {
+  const _Hint(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(
+      text,
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
+}
+
+/// What each item of a title bar runs when pressed, by the id it was sent
+/// under.
+class _Presses {
+  final Map<String, VoidCallback> runs = {};
+  int _next = 0;
+
+  String add(VoidCallback? run) {
+    final id = "${_next++}";
+    if (run != null) runs[id] = run;
+    return id;
+  }
+}
+
+/// The SF Symbol the system draws for one of the app's Material icons, or
+/// null where it has none named here.
+String? _symbolOf(IconData icon) => _symbols[icon];
+
+final Map<IconData, String> _symbols = {
+  Icons.add: "plus",
+  Icons.check: "checkmark",
+  Icons.checklist: "checklist",
+  Icons.close: "xmark",
+  Icons.copy: "doc.on.doc",
+  Icons.copy_all_outlined: "doc.on.doc",
+  Icons.create_new_folder_outlined: "folder.badge.plus",
+  Icons.delete_outline: "trash",
+  Icons.edit_outlined: "pencil",
+  Icons.filter_list: "line.3.horizontal.decrease",
+  Icons.format_size: "textformat.size",
+  Icons.open_in_browser: "safari",
+  Icons.open_in_new: "arrow.up.forward.square",
+  Icons.restart_alt: "arrow.counterclockwise",
+  Icons.save_outlined: "square.and.arrow.down",
+  Icons.visibility_outlined: "eye",
+};

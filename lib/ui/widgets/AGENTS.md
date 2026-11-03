@@ -12,9 +12,10 @@ null resolves to), the `promptForText` / `promptForPair` / `confirm` /
 `NavDrawer` and `navBreakpoint`, `SidePanelFrame` (below), `ActionIcon`, `AttachmentChip` /
 `AttachmentStrip`, `EmptyPane`, `Nothing`, `TempChatTtlField`, `TristateToggle`,
 `CompletionField`, `PromptField` (below), `DiscardGuard`, `SearchField`,
-`ListHeading`, `PageBar` — every pushed page's bar, an `AppBar` or under
-Liquid Glass the window's title bar (see "Liquid Glass" in
-`lib/ui/AGENTS.md`), so a page's bar is a `PageBar` and never an `AppBar` —
+`ListHeading`, `PageBar` and its `PageAction`s — every pushed page's bar,
+said as data and drawn as an `AppBar` or under Liquid Glass as the window's
+title bar (see "Liquid Glass" in `lib/ui/AGENTS.md`), so a page's bar is a
+`PageBar` and never an `AppBar` —
 `text_input.dart` — the sections below — and `catalog.dart`.
 
 `PromptField` is prose the model reads — a trigger's prompt, an agent's system

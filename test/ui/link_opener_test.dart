@@ -1,6 +1,7 @@
 import "package:agent_chat/ui/link_opener.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart";
 
@@ -36,14 +37,16 @@ void main() {
   Future<List<String>> openLink(WidgetTester tester, String url) async {
     final copied = clipboard(tester);
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Builder(
-            builder: (context) => TextButton(
-              onPressed: () => PlatformLinkOpener(
-                FakeChatStore(),
-              ).open(context, Uri.parse(url)),
-              child: const Text("open"),
+      ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => PlatformLinkOpener(
+                  FakeChatStore(),
+                ).open(context, Uri.parse(url)),
+                child: const Text("open"),
+              ),
             ),
           ),
         ),

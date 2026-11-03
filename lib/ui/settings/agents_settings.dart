@@ -712,11 +712,9 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
       message: "Throw away the edits to this agent?",
       child: Scaffold(
         appBar: PageBar(
-          title: Text(
-            widget.isNew ? "Add agent" : "Edit ${widget.initial.name}",
-          ),
-          leading: const DiscardButton(),
-          actions: [TextButton(onPressed: _save, child: const Text("Save"))],
+          title: widget.isNew ? "Add agent" : "Edit ${widget.initial.name}",
+          leading: PageLeading.close,
+          actions: [PageAction.text(label: "Save", onPressed: _save)],
         ),
         body: SafeArea(
           child: ListView(

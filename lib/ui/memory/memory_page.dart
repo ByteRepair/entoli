@@ -234,11 +234,11 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
     });
     return Scaffold(
       appBar: PageBar(
-        title: Text(widget.title),
+        title: widget.title,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            tooltip: "Add a memory",
+          PageAction.icon(
+            icon: Icons.add,
+            label: "Add a memory",
             onPressed: frozen ? null : _add,
           ),
         ],

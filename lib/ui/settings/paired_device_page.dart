@@ -133,7 +133,7 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
     // repeated sits one line down, and a title saying who this is a page
     // about would show it twice on a screen this short.
     return Scaffold(
-      appBar: PageBar(title: const Text("Paired device")),
+      appBar: PageBar(title: "Paired device"),
       body: !_loaded
           ? const Center(child: CircularProgressIndicator())
           : device == null

@@ -337,7 +337,7 @@ class _MarketplaceEntryPreviewPageState
         ? false
         : preview.installable(widget.kind);
     return Scaffold(
-      appBar: PageBar(title: Text("Marketplace · ${widget.kind.label}")),
+      appBar: PageBar(title: "Marketplace · ${widget.kind.label}"),
       body: _failed
           ? Unreachable(onRetry: _load, detail: _failureDetail)
           : preview == null

@@ -77,6 +77,7 @@ struct ToolbarMenuItemState: Decodable, Equatable, Identifiable {
   var id: String
   var label: String
   var hint: String?
+  var symbol: String?
   var checked = false
 }
 
@@ -152,8 +153,8 @@ private struct TitleBarButton: View {
             Button {
               press(choice.id)
             } label: {
-              if choice.checked {
-                Label(choice.label, systemImage: "checkmark")
+              if let symbol = choice.checked ? "checkmark" : choice.symbol {
+                Label(choice.label, systemImage: symbol)
               } else {
                 Text(choice.label)
               }

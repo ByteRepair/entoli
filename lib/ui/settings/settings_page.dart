@@ -116,7 +116,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       selected: wide ? category : null,
       onSelect: (category) => _open(category, push: !wide),
     );
-    final bar = PageBar(title: const Text("Settings"));
+    final bar = PageBar(title: "Settings");
 
     if (!wide) {
       return Scaffold(appBar: bar, body: categories);
@@ -137,7 +137,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 /// A category as the whole page: the bar holds nothing but its name, and
 /// leaving it is the back gesture.
 Scaffold _categoryScaffold(SettingsCategory category) => Scaffold(
-  appBar: PageBar(title: Text(category.label)),
+  appBar: PageBar(title: category.label),
   body: _categoryBody(category),
 );
 

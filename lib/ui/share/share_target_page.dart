@@ -28,11 +28,9 @@ class ShareTargetPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: PageBar(
-        title: Text(
-          files.length == 1
-              ? "Share 1 file to"
-              : "Share ${files.length} files to",
-        ),
+        title: files.length == 1
+            ? "Share 1 file to"
+            : "Share ${files.length} files to",
       ),
       body: ListView(
         children: [

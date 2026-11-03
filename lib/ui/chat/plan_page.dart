@@ -25,7 +25,7 @@ class PlanPage extends ConsumerWidget {
     final sections = plan.value;
     final (done, total) = sectionsProgress(sections ?? const []);
     return Scaffold(
-      appBar: PageBar(title: const Text("Plan")),
+      appBar: PageBar(title: "Plan"),
       body: switch (plan) {
         AsyncValue(isLoading: true, hasValue: false) => const Center(
           child: CircularProgressIndicator(),

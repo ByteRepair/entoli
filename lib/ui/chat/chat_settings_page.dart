@@ -51,13 +51,9 @@ class _NewChatSettingsPageState extends State<NewChatSettingsPage> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: PageBar(
-      title: const Text("Chat settings"),
+      title: "Chat settings",
       actions: [
-        IconButton(
-          icon: const Icon(Icons.check),
-          tooltip: "Save",
-          onPressed: () => Navigator.of(context).pop(_meta),
-        ),
+        PageAction.confirm(onPressed: () => Navigator.of(context).pop(_meta)),
       ],
     ),
     body: ListView(
@@ -210,12 +206,10 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
     );
     return Scaffold(
       appBar: PageBar(
-        title: const Text("Chat settings"),
+        title: "Chat settings",
         actions: [
-          IconButton(
-            icon: const Icon(Icons.check),
+          PageAction.confirm(
             onPressed: _saving || _meta == null || frozen ? null : _save,
-            tooltip: "Save",
           ),
         ],
       ),

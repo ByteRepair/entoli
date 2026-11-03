@@ -291,7 +291,7 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
         ];
         return Scaffold(
           appBar: PageBar(
-            title: Text("Choose a ${widget.role.noun}"),
+            title: "Choose a ${widget.role.noun}",
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(112),
               child: _Readable(
@@ -886,12 +886,9 @@ class _AddModelPageState extends ConsumerState<AddModelPage> {
     _provider ??= providers.firstOrNull?.id;
     return Scaffold(
       appBar: PageBar(
-        title: Text(widget.initial == null ? "Add model" : "Edit model"),
+        title: widget.initial == null ? "Add model" : "Edit model",
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: FilledButton(onPressed: _save, child: const Text("Save")),
-          ),
+          PageAction.text(label: "Save", onPressed: _save, prominent: true),
         ],
       ),
       body: Form(

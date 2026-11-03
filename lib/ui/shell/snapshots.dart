@@ -235,6 +235,7 @@ class ToolbarMenuItem {
     required this.id,
     required this.label,
     this.hint,
+    this.symbol,
     this.checked = false,
   });
 
@@ -245,6 +246,9 @@ class ToolbarMenuItem {
   /// Drawn after the label, quieter: a key or a trigger.
   final String? hint;
 
+  /// An SF Symbol's name, drawn before the label.
+  final String? symbol;
+
   /// Ticked, as a setting the choice turns on and off.
   final bool checked;
 
@@ -252,6 +256,7 @@ class ToolbarMenuItem {
     "id": id,
     "label": label,
     "hint": hint,
+    "symbol": symbol,
     "checked": checked,
   };
 }

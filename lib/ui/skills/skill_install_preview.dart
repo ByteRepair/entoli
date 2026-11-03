@@ -113,7 +113,7 @@ class _SkillInstallPreviewPageState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: PageBar(title: const Text("Install skill")),
+      appBar: PageBar(title: "Install skill"),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _package == null

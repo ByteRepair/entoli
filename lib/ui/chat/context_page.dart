@@ -39,7 +39,7 @@ class ContextPage extends ConsumerWidget {
             : a.compareTo(b),
       );
     return Scaffold(
-      appBar: PageBar(title: const Text("Context")),
+      appBar: PageBar(title: "Context"),
       body: contexts.isEmpty
           ? const EmptyPane(
               icon: Icons.data_usage,
