@@ -9,6 +9,7 @@ import "../../providers.dart";
 import "../selection.dart";
 import "../sidebar/remote_projects.dart";
 import "../widgets/completion_field.dart";
+import "shell_composer.dart" show completionOf, triggerOf;
 import "shell_outbox.dart";
 import "shell_slots.dart";
 import "shell_sidebar.dart" show projectSymbol;
@@ -69,11 +70,8 @@ class ShellNewChatState extends ConsumerState<ShellNewChat>
   }
 
   @override
-  void starter(String trigger, String name) => insertCompletion(
-    widget.controller,
-    trigger == "@" ? CompletionKind.agent : CompletionKind.skill,
-    name,
-  );
+  void starter(ComposerTrigger trigger, String name) =>
+      insertCompletion(widget.controller, completionOf(trigger), name);
 
   @override
   Widget build(BuildContext context) {
@@ -96,7 +94,6 @@ class ShellNewChatState extends ConsumerState<ShellNewChat>
         projects: [
           for (final project in everyProject(named).whereType<String>())
             ProjectChoice(
-              device: null,
               project: project,
               label: projectLabel(project),
               // Only a built-in ships an icon; a user's badge is its name.
@@ -131,7 +128,7 @@ class ShellNewChatState extends ConsumerState<ShellNewChat>
               completionsProvider((project: at, kind: kind)),
             ))
               StarterSnapshot(
-                trigger: kind.trigger,
+                trigger: triggerOf(kind),
                 name: option.name,
                 detail: option.description,
               ),

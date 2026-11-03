@@ -2,7 +2,7 @@ import SwiftUI
 
 extension PaletteSnapshot {
   static let initial = PaletteSnapshot(
-    open: false, query: "", sections: [], serial: 0, omadaByDefault: false)
+    open: false, query: "", sections: [], serial: 0)
 
   var items: [PaletteItem] { sections.flatMap(\.items) }
 }
@@ -64,7 +64,7 @@ struct PaletteView: View {
         .padding(.horizontal, 24)
     }
     .sheet(isPresented: $creating) {
-      NewProjectSheet(model: model, omada: palette.omadaByDefault) { say.close { _ in } }
+      NewProjectSheet(model: model, omada: model.sidebar.omadaByDefault) { say.close { _ in } }
     }
   }
 

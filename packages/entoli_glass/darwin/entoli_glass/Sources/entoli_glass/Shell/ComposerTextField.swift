@@ -33,7 +33,7 @@ private func dartText(of storage: NSAttributedString) -> String {
 
 /// How the field's text is set, as the mode asks: the body face for a
 /// message, the system's monospaced one for a command.
-private func fieldFont(_ mode: ComposerMode) -> PlatformFont {
+private func fieldFont(_ mode: InputMode) -> PlatformFont {
   #if os(iOS)
     let size = PlatformFont.preferredFont(forTextStyle: .body).pointSize
   #else
@@ -44,7 +44,7 @@ private func fieldFont(_ mode: ComposerMode) -> PlatformFont {
     : .systemFont(ofSize: size)
 }
 
-private func fieldAttributes(_ mode: ComposerMode) -> [NSAttributedString.Key: Any] {
+private func fieldAttributes(_ mode: InputMode) -> [NSAttributedString.Key: Any] {
   #if os(iOS)
     [.font: fieldFont(mode), .foregroundColor: PlatformColor.label]
   #else

@@ -149,11 +149,7 @@ class _WindowPublisher extends ConsumerWidget {
               WindowSnapshot(
                 covered: covered,
                 sidebarShown: shown,
-                appearance: switch (theme) {
-                  AppTheme.system => null,
-                  AppTheme.light => Appearance.light,
-                  AppTheme.dark => Appearance.dark,
-                },
+                dark: theme == AppTheme.system ? null : theme == AppTheme.dark,
               ),
             );
         return const SizedBox.shrink();

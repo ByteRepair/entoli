@@ -1,3 +1,4 @@
+import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -101,7 +102,7 @@ void main() {
   testWidgets("a starter types its trigger into the composer", (tester) async {
     await pump(tester);
     final screen = tester.state<ShellNewChatState>(find.byType(ShellNewChat));
-    screen.starter("@", "scout");
+    screen.starter(ComposerTrigger.agent, "scout");
     await tester.pump();
     expect(shell.lastComposerValue?.text, "@scout ");
   });

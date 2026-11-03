@@ -2,16 +2,17 @@ import SwiftUI
 
 extension VoiceSnapshot {
   static let initial = VoiceSnapshot(
-    present: false, title: "Voice", status: "off", word: "", paused: false, hushed: false,
+    present: false, title: "Voice", status: .off, word: "", paused: false, hushed: false,
     pushToTalk: false, on: false, lines: [], heard: 0xFF6C_63FF, spoken: 0xFF2D_D4BF)
 
   var mode: GlowMode {
-    if hushed || status == "off" || status == "failed" { return .still }
+    if hushed { return .still }
     switch status {
-    case "starting": return .starting
-    case "thinking": return .thinking
-    case "speaking": return .speaking
-    default: return .listening
+    case .off, .failed: return .still
+    case .starting: return .starting
+    case .listening: return .listening
+    case .thinking: return .thinking
+    case .speaking: return .speaking
     }
   }
 }
@@ -34,7 +35,7 @@ struct VoiceView: View {
   /// The word's dot and the Stop button wear what is doing the talking.
   private var tint: Color {
     switch voice.mode {
-    case .still: voice.status == "failed" ? .red : .secondary
+    case .still: voice.status == .failed ? .red : .secondary
     case .speaking: spoken
     default: heard
     }
@@ -91,13 +92,13 @@ struct VoiceView: View {
         VStack(alignment: .center, spacing: 6) {
           ForEach(Array(voice.lines.enumerated()), id: \.offset) { i, line in
             Text(line.text)
-              .font(line.kind == "activity" ? .callout : .body)
+              .font(line.kind == .activity ? .callout : .body)
               .foregroundStyle(
-                line.kind == "replied"
+                line.kind == .replied
                   ? AnyShapeStyle(.primary)
-                  : line.kind == "said" ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary)
+                  : line.kind == .said ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary)
               )
-              .italic(line.kind == "activity")
+              .italic(line.kind == .activity)
               .multilineTextAlignment(.center)
               .frame(maxWidth: .infinity, alignment: .center)
               .id(i)
@@ -147,8 +148,8 @@ struct VoiceView: View {
         }
         key(
           "stop.fill", "Stop", help: "Stop the reply",
-          tint: voice.status == "speaking" ? spoken : nil,
-          enabled: voice.status == "speaking"
+          tint: voice.status == .speaking ? spoken : nil,
+          enabled: voice.status == .speaking
         ) { say.stop { _ in } }
         key("chevron.down", "Done", help: "Back to typing") { say.done { _ in } }
       }

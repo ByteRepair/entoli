@@ -32,7 +32,7 @@ struct ComposerView: View {
   /// carries all of it.
   private struct Shape: Equatable {
     var canSend, queues, speaking, voice: Bool
-    var mode: ComposerMode
+    var mode: InputMode
     var menu: Int
     var attachments: [ComposerAttachment]
     var cwd: Bool
@@ -190,14 +190,14 @@ struct ComposerView: View {
     ScrollViewReader { proxy in
       ScrollView {
         LazyVStack(spacing: 0) {
-          ForEach(model.menu) { option in
+          ForEach(Array(model.menu.enumerated()), id: \.offset) { i, option in
             Button {
-              model.say?.pick(index: Int64(option.id)) { _ in }
+              model.say?.pick(index: Int64(i)) { _ in }
             } label: {
-              menuRow(option)
+              menuRow(option, at: i)
             }
             .buttonStyle(.plain)
-            .id(option.id)
+            .id(i)
           }
         }
         .padding(.vertical, 4)
@@ -216,7 +216,7 @@ struct ComposerView: View {
         removal: .opacity.combined(with: .scale(scale: 0.98, anchor: .bottom))))
   }
 
-  private func menuRow(_ option: ComposerOption) -> some View {
+  private func menuRow(_ option: ComposerMenuItem, at row: Int) -> some View {
     HStack(spacing: 8) {
       Text(option.label).fontWeight(.semibold).lineLimit(1)
       if let hint = option.hint {
@@ -233,7 +233,7 @@ struct ComposerView: View {
     .background {
       // One highlight, which moves: a row's own would blink out on one row
       // and in on the next.
-      if option.id == model.highlighted {
+      if row == model.highlighted {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
           .fill(.tint.opacity(0.22))
           .padding(.horizontal, 4)

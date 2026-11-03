@@ -20,9 +20,6 @@ import "package:pigeon/pigeon.dart";
         "packages/entoli_glass/darwin/entoli_glass/Sources/entoli_glass/Contract/ShellContract.g.swift",
   ),
 )
-/// The appearance the app wears where it is not the system's.
-enum Appearance { light, dark }
-
 /// The window around everything: whether a Flutter page covers the
 /// conversation — the native chrome steps aside for it — whether the sidebar
 /// is shown, and which appearance the app wears, which may not be the
@@ -33,8 +30,8 @@ class WindowSnapshot {
   bool covered;
   bool sidebarShown;
 
-  /// Null for the system's.
-  Appearance? appearance;
+  /// Whether the app is dark; null for the system's appearance.
+  bool? dark;
 }
 
 /// A project as the switcher lists it, and as a chat's Move offers it.
@@ -257,13 +254,17 @@ class ComposerCard {
   String body;
 }
 
+/// What the field is for: a message, a `!` command run on the machine, or an
+/// answer to a callback.
+enum InputMode { message, shell, callback }
+
 /// Everything the native composer draws apart from its text, which is
 /// [ComposerValueSnapshot]. Not [present] where no page has a composer: a
 /// question stands in its place, or the project needs setting up.
 class ComposerSnapshot {
   ComposerSnapshot({
     required this.present,
-    this.mode = "message",
+    this.mode = InputMode.message,
     this.hint = "",
     this.sendLabel = "Send",
     this.canSend = false,
@@ -281,8 +282,7 @@ class ComposerSnapshot {
 
   bool present;
 
-  /// A `ComposerMode`'s name: `message`, `shell` or `callback`.
-  String mode;
+  InputMode mode;
 
   /// What an empty field says.
   String hint;
@@ -449,8 +449,7 @@ class ProjectPick {
 
 /// A starter: a `/skill` or `@agent` the library holds.
 class StarterSnapshot {
-  /// `/` or `@`.
-  String trigger;
+  ComposerTrigger trigger;
   String name;
   String? detail;
 }
@@ -491,12 +490,18 @@ class NewChatSnapshot {
   bool starting;
 }
 
+/// Who a line of the transcript is: the user, the reply, or what the turn
+/// did.
+enum VoiceLineRole { said, replied, activity }
+
 /// One line of the transcript.
 class VoiceLineSnapshot {
-  /// `said`, `replied` or `activity`.
-  String kind;
+  VoiceLineRole kind;
   String text;
 }
+
+/// What voice mode is doing.
+enum VoicePhase { off, starting, listening, thinking, speaking, failed }
 
 /// Voice mode, drawn over the whole window: the session's status and its
 /// word, whether the microphone is shut and what shut means, what went wrong,
@@ -506,7 +511,7 @@ class VoiceSnapshot {
   VoiceSnapshot({
     required this.present,
     this.title = "Voice",
-    this.status = "off",
+    this.status = VoicePhase.off,
     this.word = "",
     this.paused = false,
     this.hushed = false,
@@ -521,8 +526,7 @@ class VoiceSnapshot {
   bool present;
   String title;
 
-  /// A `VoiceStatus`'s name.
-  String status;
+  VoicePhase status;
 
   /// What the screen says this is.
   String word;
@@ -598,7 +602,6 @@ class PaletteSnapshot {
     this.query = "",
     this.sections = const [],
     this.serial = 0,
-    this.omadaByDefault = false,
   });
 
   bool open;
@@ -607,9 +610,6 @@ class PaletteSnapshot {
 
   /// Which opening this is, so the client starts each one afresh.
   int serial;
-
-  /// What the new-project sheet's Omada switch starts at.
-  bool omadaByDefault;
 }
 
 /// One choice of a strip: its glyph, its name, and whether it is picked.
@@ -756,7 +756,7 @@ abstract class TurnIntents {
 @FlutterApi()
 abstract class NewChatIntents {
   void pick(String? device, String? project);
-  void starter(String trigger, String name);
+  void starter(ComposerTrigger trigger, String name);
 }
 
 /// Voice mode on screen.

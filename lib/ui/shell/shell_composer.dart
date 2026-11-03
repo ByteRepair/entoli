@@ -14,6 +14,17 @@ import "../widgets/dialogs.dart";
 import "shell_outbox.dart";
 import "shell_slots.dart";
 
+/// A composer menu as the contract names it, and back.
+CompletionKind completionOf(ComposerTrigger trigger) => switch (trigger) {
+  ComposerTrigger.skill => CompletionKind.skill,
+  ComposerTrigger.agent => CompletionKind.agent,
+};
+
+ComposerTrigger triggerOf(CompletionKind kind) => switch (kind) {
+  CompletionKind.skill => ComposerTrigger.skill,
+  CompletionKind.agent => ComposerTrigger.agent,
+};
+
 /// The composer, drawn by the native shell: configured by a [Composer] that
 /// is never mounted, and its rules through the same [ComposerLogic], with no
 /// Flutter of its own on screen. It sends the shell what to draw and runs what
@@ -134,7 +145,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
     );
     _reported = value;
     _outbox.rememberComposerValue(_valueOf(value));
-    widget.config.controller.value = value;
+    _controller.value = value;
     _reported = null;
   }
 
@@ -161,10 +172,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   @override
   Future<void> trigger(ComposerTrigger kind) async {
     _dismissed = null;
-    openCompletion(_controller, switch (kind) {
-      ComposerTrigger.skill => CompletionKind.skill,
-      ComposerTrigger.agent => CompletionKind.agent,
-    });
+    openCompletion(_controller, completionOf(kind));
     if (mounted) setState(() {});
   }
 
@@ -269,7 +277,11 @@ class ShellComposerState extends ConsumerState<ShellComposer>
         _outbox.composer(
           ComposerSnapshot(
             present: true,
-            mode: mode.name,
+            mode: switch (mode) {
+              ComposerMode.message => InputMode.message,
+              ComposerMode.shell => InputMode.shell,
+              ComposerMode.callback => InputMode.callback,
+            },
             hint: mode.hint ?? "Message",
             sendLabel: mode.sendLabel(queues: _logic.queues.value),
             canSend: _logic.canSend.value,

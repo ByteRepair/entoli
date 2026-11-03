@@ -141,9 +141,6 @@ class PalettePublisher extends ConsumerWidget {
           if (s.items.isNotEmpty) s,
       ],
       serial: palette.serial,
-      omadaByDefault: ref.watch(
-        appSettingsProvider.select((s) => s.omadaByDefault),
-      ),
     );
   }
 }

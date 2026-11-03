@@ -1,21 +1,9 @@
 import SwiftUI
 
-enum ComposerMode: String {
-  case message, shell, callback
-}
-
-/// One row of the `/` or `@` menu.
-struct ComposerOption: Identifiable, Equatable {
-  let id: Int
-  var label: String
-  var hint: String?
-  var detail: String?
-}
-
 extension ComposerSnapshot {
   /// No page has a composer yet.
   static let initial = ComposerSnapshot(
-    present: false, mode: "message", hint: "", sendLabel: "Send", canSend: false, queues: false,
+    present: false, mode: .message, hint: "", sendLabel: "Send", canSend: false, queues: false,
     speaking: false, voice: false, maxLines: 6, attachments: [], menu: [], cards: [:],
     accent: 0xFF00_7AFF, dark: false)
 }
@@ -64,7 +52,8 @@ final class ComposerModel: ObservableObject {
   }
 
   var present: Bool { look.present }
-  var mode: ComposerMode { ComposerMode(rawValue: look.mode) ?? .message }
+  var mode: InputMode { look.mode }
+  var menu: [ComposerMenuItem] { look.menu }
   var hint: String { look.hint }
   var sendLabel: String { look.sendLabel }
   var canSend: Bool { look.canSend }
@@ -78,10 +67,9 @@ final class ComposerModel: ObservableObject {
 
   var accent: Color { Color(argb: look.accent) }
 
-  /// The menu's rows and the cards by their codes, as [look] last said them:
-  /// made when it changes rather than on every read, the field reading the
-  /// cards once per character it draws.
-  private(set) var menu: [ComposerOption] = []
+  /// The cards by their codes, as [look] last said them: made when they
+  /// change rather than on every read, the field reading them once per
+  /// character it draws.
   private(set) var cards: [UInt16: ComposerCard] = [:]
 
   func apply(_ next: ComposerSnapshot) {
@@ -90,12 +78,7 @@ final class ComposerModel: ObservableObject {
       || next.accent != look.accent
     // A different list starts again at its first row; the same one keeps the
     // row the arrows are on.
-    if next.menu != look.menu {
-      highlighted = 0
-      menu = next.menu.enumerated().map { i, option in
-        ComposerOption(id: i, label: option.label, hint: option.hint, detail: option.detail)
-      }
-    }
+    if next.menu != look.menu { highlighted = 0 }
     if next.cards != look.cards {
       cards = Dictionary(
         next.cards.map { (UInt16(truncatingIfNeeded: $0.key), $0.value) },

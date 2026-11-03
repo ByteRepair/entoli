@@ -84,7 +84,6 @@ class SidebarPublisher extends ConsumerWidget {
 
     final (:counts, busy: _) = projectCounts(chats, busy);
     ProjectChoice local(String? p) => ProjectChoice(
-      device: null,
       project: p,
       label: projectLabel(p),
       symbol: projectSymbol(p),

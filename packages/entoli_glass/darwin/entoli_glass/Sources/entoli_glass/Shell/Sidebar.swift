@@ -311,12 +311,7 @@ struct NewProjectSheet: View {
             name: name, description: description, omada: omada
           ) { result in
             making = false
-            // Dart's error to show, or one of its own where nothing answered.
-            let error =
-              switch result {
-              case .success(let error): error
-              case .failure: "The project could not be created."
-              }
+            let error = (try? result.get()) ?? nil
             if let error {
               failure = error
             } else {

@@ -104,7 +104,14 @@ class ShellVoiceState extends ConsumerState<ShellVoice>
       VoiceSnapshot(
         present: true,
         title: chat?.chat?.state.title.orUntitled ?? "Voice",
-        status: voice.status.name,
+        status: switch (voice.status) {
+          VoiceStatus.off => VoicePhase.off,
+          VoiceStatus.starting => VoicePhase.starting,
+          VoiceStatus.listening => VoicePhase.listening,
+          VoiceStatus.thinking => VoicePhase.thinking,
+          VoiceStatus.speaking => VoicePhase.speaking,
+          VoiceStatus.failed => VoicePhase.failed,
+        },
         word: voice.word,
         paused: voice.paused,
         hushed: voice.hushed,
@@ -115,7 +122,14 @@ class ShellVoiceState extends ConsumerState<ShellVoice>
           for (final line in lines.skip(
             lines.length > _keptLines ? lines.length - _keptLines : 0,
           ))
-            VoiceLineSnapshot(kind: line.kind.name, text: line.text),
+            VoiceLineSnapshot(
+              kind: switch (line.kind) {
+                VoiceLineKind.said => VoiceLineRole.said,
+                VoiceLineKind.replied => VoiceLineRole.replied,
+                VoiceLineKind.activity => VoiceLineRole.activity,
+              },
+              text: line.text,
+            ),
         ],
         heard: heardColour(brightness).toARGB32(),
         spoken: spokenColour(brightness).toARGB32(),

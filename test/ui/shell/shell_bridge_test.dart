@@ -18,15 +18,11 @@ void main() {
       outbox.window(WindowSnapshot(covered: false, sidebarShown: true));
       expect(shell.sent["window"], hasLength(1));
       outbox.window(
-        WindowSnapshot(
-          covered: true,
-          sidebarShown: true,
-          appearance: Appearance.dark,
-        ),
+        WindowSnapshot(covered: true, sidebarShown: true, dark: true),
       );
       expect(shell.sent["window"], hasLength(2));
       expect(shell.lastWindow!.covered, isTrue);
-      expect(shell.lastWindow!.appearance, Appearance.dark);
+      expect(shell.lastWindow!.dark, isTrue);
     });
   });
 

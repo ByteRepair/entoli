@@ -68,48 +68,25 @@ final class ShellModel: ObservableObject {
   }
 }
 
-/// A snapshot from Dart replaces what was there; one equal to it changes
-/// nothing, so nothing that observes it redraws.
+/// A snapshot from Dart replaces what was there: Dart sends one only when it
+/// changed.
 extension ShellModel: NativeShell {
   func start() throws { onStart?() }
 
   func window(snapshot: WindowSnapshot) throws {
-    guard snapshot != window else { return }
     window = snapshot
     onWindow?(snapshot)
   }
 
-  func sidebar(snapshot: SidebarSnapshot) throws {
-    if snapshot != sidebar { sidebar = snapshot }
-  }
-
-  func chatBar(snapshot: TitleBarSnapshot) throws {
-    if snapshot != chatBar { chatBar = snapshot }
-  }
-
-  func pageBar(snapshot: TitleBarSnapshot) throws {
-    if snapshot != pageBar { pageBar = snapshot }
-  }
-
+  func sidebar(snapshot: SidebarSnapshot) throws { sidebar = snapshot }
+  func chatBar(snapshot: TitleBarSnapshot) throws { chatBar = snapshot }
+  func pageBar(snapshot: TitleBarSnapshot) throws { pageBar = snapshot }
   func composer(snapshot: ComposerSnapshot) throws { composer.apply(snapshot) }
-
   func composerValue(snapshot: ComposerValueSnapshot) throws { composer.apply(snapshot) }
-
-  func turn(snapshot: TurnSnapshot) throws {
-    if snapshot != turn { turn = snapshot }
-  }
-
-  func newChat(snapshot: NewChatSnapshot) throws {
-    if snapshot != newChat { newChat = snapshot }
-  }
-
-  func voice(snapshot: VoiceSnapshot) throws {
-    if snapshot != voice { voice = snapshot }
-  }
-
-  func palette(snapshot: PaletteSnapshot) throws {
-    if snapshot != palette { palette = snapshot }
-  }
+  func turn(snapshot: TurnSnapshot) throws { turn = snapshot }
+  func newChat(snapshot: NewChatSnapshot) throws { newChat = snapshot }
+  func voice(snapshot: VoiceSnapshot) throws { voice = snapshot }
+  func palette(snapshot: PaletteSnapshot) throws { palette = snapshot }
 
   func voiceLevel(level: Double) throws { voiceLevel.set(level) }
 
@@ -159,11 +136,5 @@ extension Color {
 extension WindowSnapshot {
   static let initial = WindowSnapshot(covered: false, sidebarShown: true)
 
-  var colorScheme: ColorScheme? {
-    switch appearance {
-    case .light: .light
-    case .dark: .dark
-    case nil: nil
-    }
-  }
+  var colorScheme: ColorScheme? { dark.map { $0 ? .dark : .light } }
 }

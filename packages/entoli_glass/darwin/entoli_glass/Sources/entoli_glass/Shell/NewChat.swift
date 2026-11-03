@@ -6,6 +6,11 @@ import SwiftUI
   import AppKit
 #endif
 
+extension ComposerTrigger {
+  /// What is typed to open its menu.
+  var glyph: String { self == .agent ? "@" : "/" }
+}
+
 extension NewChatSnapshot {
   static let initial = NewChatSnapshot(
     present: false, question: "", projects: [], devices: [], starters: [], starting: false)
@@ -77,7 +82,7 @@ struct NewChatView: View {
                 Button {
                   say.starter(trigger: starter.trigger, name: starter.name) { _ in }
                 } label: {
-                  Text("\(starter.trigger)\(starter.name)").font(.callout.monospaced())
+                  Text("\(starter.trigger.glyph)\(starter.name)").font(.callout.monospaced())
                 }
                 .glassButton()
                 .help(starter.detail ?? "")
