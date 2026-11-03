@@ -74,8 +74,8 @@ class QuoteCard extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 2),
       padding: const EdgeInsets.fromLTRB(10, 6, 2, 6),
       decoration: BoxDecoration(
-        // The tone a reply's own quotes are set on (`replyStyleSheet`), so the
-        // card reads as the passage it came from.
+        // A card, unlike a reply's quote (`replyStyleSheet`), which is a bar
+        // alone: this one is a thing in the composer that can be removed.
         color: theme.colorScheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(8),
         border: Border(
