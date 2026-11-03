@@ -1,3 +1,5 @@
+import "dart:async";
+
 import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -45,9 +47,9 @@ void main() {
 
   Future<void> run(
     WidgetTester tester,
-    Future<void> Function(SidebarRunner) intent,
+    FutureOr<void> Function(SidebarRunner) intent,
   ) async {
-    await io(tester, () => intent(sidebar));
+    await io(tester, () async => intent(sidebar));
     await settleIo(tester);
   }
 

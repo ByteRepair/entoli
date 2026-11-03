@@ -170,14 +170,10 @@ class _Window implements WindowEvents {
   final WidgetRef ref;
 
   @override
-  Future<void> insets(
-    double left,
-    double top,
-    double right,
-    double bottom,
-  ) async => shellInsets.value = EdgeInsets.fromLTRB(left, top, right, bottom);
+  void insets(double left, double top, double right, double bottom) =>
+      shellInsets.value = EdgeInsets.fromLTRB(left, top, right, bottom);
 
   @override
-  Future<void> sidebarShown(bool shown) async =>
+  void sidebarShown(bool shown) =>
       ref.read(sidebarShownProvider.notifier).set(shown);
 }

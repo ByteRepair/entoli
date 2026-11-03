@@ -1,3 +1,5 @@
+import "dart:async";
+
 import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -199,15 +201,6 @@ class SidebarPublisher extends ConsumerWidget {
   }
 }
 
-/// The chat [id] names, wherever it is: this device's, or a mirror.
-ChatState? _chatOf(WidgetRef ref, String id) =>
-    ref.read(chatListProvider).value?.where((c) => c.id == id).firstOrNull ??
-    ref
-        .read(remoteChatsProvider)
-        .where((e) => e.chatId == id)
-        .firstOrNull
-        ?.state;
-
 /// The app's own, under names [SidebarRunner]'s methods do not hide.
 const _selectProject = selectProject;
 const _createProject = createProject;
@@ -220,67 +213,67 @@ class SidebarRunner implements SidebarIntents {
   final BuildContext context;
   final WidgetRef ref;
 
-  ChatState? _chat(String id) => _chatOf(ref, id);
-
-  /// Close the pages over the conversation, for what changes what the detail
-  /// shows. Answers whether it got there: a page asking first is left
-  /// asking, and nothing changes under it.
-  Future<bool> _toConversation() async {
+  /// Run [then] once the pages over the conversation are closed, for what
+  /// changes what the detail shows. A page asking first is left asking, and
+  /// nothing changes under it.
+  Future<void> _closing(FutureOr<void> Function() then) async {
     final reached = await toConversation(context, ref.read(appRoutesProvider));
-    return reached && context.mounted;
+    if (reached && context.mounted) await then();
   }
 
+  /// [edit] the chat [id] names, wherever it is: this device's, or a mirror.
+  Future<void> _edit(String id, Future<void> Function(ChatState) edit) async {
+    final chat =
+        ref
+            .read(chatListProvider)
+            .value
+            ?.where((c) => c.id == id)
+            .firstOrNull ??
+        ref
+            .read(remoteChatsProvider)
+            .where((e) => e.chatId == id)
+            .firstOrNull
+            ?.state;
+    if (chat != null) await edit(chat);
+  }
+
+  ChatEdits get _edits => ref.read(chatEditsProvider);
+
   @override
-  Future<void> search(String query) async =>
+  void search(String query) =>
       ref.read(shellSearchProvider.notifier).set(query);
 
   @override
-  Future<void> openChat(String id) async {
-    if (!await _toConversation()) return;
-    ref.read(selectedChatIdProvider.notifier).select(id);
-  }
+  Future<void> openChat(String id) =>
+      _closing(() => ref.read(selectedChatIdProvider.notifier).select(id));
 
   @override
-  Future<void> newChat() async {
-    if (!await _toConversation()) return;
-    ref.read(selectedChatIdProvider.notifier).select(null);
-  }
+  Future<void> newChat() =>
+      _closing(() => ref.read(selectedChatIdProvider.notifier).select(null));
 
   @override
-  Future<void> selectProject(String? device, String? project) async {
-    if (!await _toConversation()) return;
-    _selectProject(ref, (device: device, project: project));
-  }
+  Future<void> selectProject(String? device, String? project) =>
+      _closing(() => _selectProject(ref, (device: device, project: project)));
 
   @override
-  Future<void> pin(String id, bool pinned) async {
-    if (_chat(id) case final chat?) {
-      await ref.read(chatEditsProvider).setPinned(chat, pinned);
-    }
-  }
+  Future<void> pin(String id, bool pinned) =>
+      _edit(id, (chat) => _edits.setPinned(chat, pinned));
 
   @override
-  Future<void> rename(String id, String title) async {
-    if (_chat(id) case final chat?) {
-      await ref.read(chatEditsProvider).retitle(chat, title);
-    }
-  }
+  Future<void> rename(String id, String title) =>
+      _edit(id, (chat) => _edits.retitle(chat, title));
 
   @override
-  Future<void> move(String id, String? project) async {
-    if (!await _toConversation()) return;
-    if (_chat(id) case final chat? when project != chat.project) {
-      await ref.read(chatEditsProvider).move(chat, project);
+  Future<void> delete(String id) => _edit(id, _edits.delete);
+
+  @override
+  Future<void> move(String id, String? project) => _closing(
+    () => _edit(id, (chat) async {
+      if (project == chat.project) return;
+      await _edits.move(chat, project);
       _selectProject(ref, localProject(project));
-    }
-  }
-
-  @override
-  Future<void> delete(String id) async {
-    if (_chat(id) case final chat?) {
-      await ref.read(chatEditsProvider).delete(chat);
-    }
-  }
+    }),
+  );
 
   @override
   Future<String?> createProject(
@@ -296,11 +289,11 @@ class SidebarRunner implements SidebarIntents {
         description: description,
         omada: omada,
       ), ref.read(selectedProjectProvider).device)(context, ref);
+      return null;
     } catch (e) {
       logFailure("shell", "createProject", e);
       return "The project could not be created.";
     }
-    return null;
   }
 
   @override

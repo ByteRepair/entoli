@@ -101,7 +101,7 @@ void main() {
   testWidgets("a starter types its trigger into the composer", (tester) async {
     await pump(tester);
     final screen = tester.state<ShellNewChatState>(find.byType(ShellNewChat));
-    await screen.starter("@", "scout");
+    screen.starter("@", "scout");
     await tester.pump();
     expect(shell.lastComposerValue?.text, "@scout ");
   });

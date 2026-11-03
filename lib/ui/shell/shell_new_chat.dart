@@ -69,7 +69,7 @@ class ShellNewChatState extends ConsumerState<ShellNewChat>
   }
 
   @override
-  Future<void> starter(String trigger, String name) async => insertCompletion(
+  void starter(String trigger, String name) => insertCompletion(
     widget.controller,
     trigger == "@" ? CompletionKind.agent : CompletionKind.skill,
     name,

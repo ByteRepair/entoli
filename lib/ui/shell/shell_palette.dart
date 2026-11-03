@@ -162,10 +162,10 @@ class PaletteRunner implements PaletteIntents {
   ShellPalette get _palette => ref.read(shellPaletteProvider.notifier);
 
   @override
-  Future<void> search(String query) async => _palette.search(query);
+  void search(String query) => _palette.search(query);
 
   @override
-  Future<void> close() async => _palette.close();
+  void close() => _palette.close();
 
   @override
   Future<void> pickProject(String? device, String? project) async {

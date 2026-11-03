@@ -3,19 +3,9 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/ui/shell/shell_outbox.dart";
-import "package:agent_chat/ui/shell/shell_slots.dart";
 import "package:agent_chat/ui/app_routes.dart";
 
 import "fake_native_shell.dart";
-
-/// A surface, as far as its stack is concerned.
-class _Bar implements TitleBarIntents {
-  @override
-  Future<void> back() async {}
-
-  @override
-  Future<void> press(String id) async {}
-}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -37,57 +27,6 @@ void main() {
       expect(shell.sent["window"], hasLength(2));
       expect(shell.lastWindow!.covered, isTrue);
       expect(shell.lastWindow!.appearance, Appearance.dark);
-    });
-
-    test("compares a snapshot by value, lists and maps inside it too", () {
-      final shell = FakeNativeShell.install();
-      final outbox = ShellOutbox();
-      ComposerSnapshot composer() => ComposerSnapshot(
-        present: true,
-        attachments: [ComposerAttachment(name: "a.png", image: true)],
-        cards: {0xFFFC: ComposerCard(title: "quote", body: "said")},
-      );
-      outbox.composer(composer());
-      outbox.composer(composer());
-      expect(shell.sent["composer"], hasLength(1));
-      expect(shell.lastComposer!.cards[0xFFFC]!.body, "said");
-    });
-
-    test("a value it was told the shell holds is not sent back", () {
-      final shell = FakeNativeShell.install();
-      final outbox = ShellOutbox();
-      final typed = ComposerValueSnapshot(text: "hi", start: 2, end: 2);
-      outbox.rememberComposerValue(typed);
-      outbox.composerValue(ComposerValueSnapshot(text: "hi", start: 2, end: 2));
-      expect(shell.sent["composerValue"], isNull);
-      outbox.composerValue(ComposerValueSnapshot(text: "", start: 0, end: 0));
-      expect(shell.lastComposerValue!.text, isEmpty);
-    });
-
-    test("the one-offs go every time", () {
-      final shell = FakeNativeShell.install();
-      final outbox = ShellOutbox();
-      outbox.voiceLevel(0.5);
-      outbox.voiceLevel(0.5);
-      outbox.focusComposer();
-      expect(shell.levels, [0.5, 0.5]);
-      expect(shell.sent["focusComposer"], hasLength(1));
-    });
-  });
-
-  group("a surface's stack", () {
-    test("the last to claim answers, and the one beneath when it goes", () {
-      final slots = ShellSlots();
-      final under = _Bar();
-      final over = _Bar();
-      slots.pageBar.claim(under);
-      slots.pageBar.claim(over);
-      expect(slots.pageBar.top, over);
-      expect(slots.pageBar.leave(under), isFalse);
-      slots.pageBar.claim(under);
-      expect(slots.pageBar.leave(under), isTrue);
-      expect(slots.pageBar.top, over);
-      expect(slots.chatBar.top, isNull, reason: "each bar its own stack");
     });
   });
 

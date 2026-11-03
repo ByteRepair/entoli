@@ -139,16 +139,16 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   }
 
   @override
-  Future<void> send() async => _logic.submit();
+  void send() => _logic.submit();
 
   @override
-  Future<void> queue() async => _logic.submit(queue: true);
+  void queue() => _logic.submit(queue: true);
 
   @override
-  Future<void> stop() async => widget.config.onAbort();
+  void stop() => widget.config.onAbort();
 
   @override
-  Future<void> voice() async => widget.config.onVoice?.call();
+  void voice() => widget.config.onVoice?.call();
 
   @override
   Future<void> attach(AttachKind kind) async => _add(
@@ -183,7 +183,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   }
 
   @override
-  Future<void> unattach(int index) async => _logic.unattach(index);
+  void unattach(int index) => _logic.unattach(index);
 
   @override
   Future<void> unembed(int code) async {
@@ -350,7 +350,7 @@ class ShellChatBarState extends ConsumerState<ShellChatBar>
 
   /// A press on one of the items.
   @override
-  Future<void> press(String id) async => widget.actions[id]?.call();
+  void press(String id) => widget.actions[id]?.call();
 
   @override
   Widget build(BuildContext context) {

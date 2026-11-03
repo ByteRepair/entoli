@@ -90,10 +90,10 @@ class _ShellPageBarState extends ConsumerState<ShellPageBar>
   void _publish() => _outbox.pageBar(widget.bar);
 
   @override
-  Future<void> back() async => widget.onBack();
+  void back() => widget.onBack();
 
   @override
-  Future<void> press(String id) async => widget.actions[id]?.call();
+  void press(String id) => widget.actions[id]?.call();
 
   @override
   Widget build(BuildContext context) {

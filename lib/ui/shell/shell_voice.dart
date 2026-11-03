@@ -77,16 +77,16 @@ class ShellVoiceState extends ConsumerState<ShellVoice>
   void _sendLevel() => _outbox.voiceLevel(_level?.value ?? 0);
 
   @override
-  Future<void> mute() async => widget.controller.togglePaused();
+  void mute() => widget.controller.togglePaused();
 
   @override
-  Future<void> talk(bool on) async => widget.controller.talk(on);
+  void talk(bool on) => widget.controller.talk(on);
 
   @override
-  Future<void> stop() async => widget.controller.hush();
+  void stop() => widget.controller.hush();
 
   @override
-  Future<void> done() async => widget.onDone();
+  void done() => widget.onDone();
 
   @override
   Widget build(BuildContext context) {

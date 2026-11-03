@@ -79,7 +79,7 @@ void main() {
       ("checkmark", TitleBarItemStyle.confirm, true),
     ]);
 
-    await bar().press(items()[1].id);
+    bar().press(items()[1].id);
     expect(saved, 1);
   });
 
@@ -101,12 +101,12 @@ void main() {
     );
     expect(sent().title, "General");
 
-    await bar().back();
+    bar().back();
     await tester.pumpAndSettle();
     expect(find.text("general"), findsNothing);
     expect(sent().title, "Settings");
 
-    await bar().back();
+    bar().back();
     await tester.pumpAndSettle();
     expect(sent().present, isFalse);
   });
@@ -147,7 +147,7 @@ void main() {
       ("Save", TitleBarItemStyle.text),
     );
 
-    await bar().press(menu.id);
+    bar().press(menu.id);
     expect(picked, 1);
   });
 

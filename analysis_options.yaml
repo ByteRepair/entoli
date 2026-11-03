@@ -20,6 +20,8 @@ analyzer:
   errors:
     deprecated_member_use: ignore
   exclude:
+    # Pigeon's input: a schema it reads, not code that is compiled.
+    - pigeons/**
     - lib/data/prompts/bundled_skill_data.dart
     - lib/domain/bundled_project_prompts.dart
     - build/**

@@ -301,57 +301,34 @@ switch off, reads its providers as it always has. With the shell, `main` puts
 it what to draw, runs what it sends back, and draws `ChatPage`, with no bar
 and no composer of its own.
 
-**The wire is one definition, `pigeons/shell.dart`**, and Pigeon generates
-both ends from it: the Dart in `packages/entoli_glass/lib/src/` (exported by
-`entoli_glass.dart`), the Swift in the plugin's `Contract/` — one file for both
-Runners, the plugin being `sharedDarwinSource` — and, for the tests, a fake of
-the Swift end. `tool/prepare.sh` runs it beside build_runner, and like the
-rest of the codegen its output is not committed: every CI build runs the
-script first. A field or an intent said once and read differently by the two
-sides does not compile, where a hand-mirrored map lost it in silence. It is
-written as a protocol rather than as this bridge's internals: the app is the
-server, holding every rule and every piece of state, and a client — today the
-SwiftUI around the Flutter view, in this process — holds only what the last
-snapshot of each concern said, and tells the app what the user did. Nothing
-in it assumes the client is native, or here.
+**The wire is one definition, `pigeons/shell.dart`**, which Pigeon turns
+into the Dart in `packages/entoli_glass/lib/src/`, the Swift in the plugin's
+`Contract/` (one file for both Runners), and a fake of the Swift end for the
+tests. `tool/prepare.sh` runs it, and its output is not committed. A field or
+an intent the two sides read differently does not compile. It is a protocol a
+client could implement anywhere: the app holds every rule and all the state,
+and the client holds only the last snapshot of each concern. `NativeShell` is
+what the app says — `start`, a snapshot per concern, the one-offs
+`voiceLevel` and `focusComposer`, and `strip`, answered later (below); each
+`*Intents` API is what a surface's client says the user did, a method per
+intent, the few the client waits on (a project's error, a paste's yes or no)
+marked `@async`.
 
-- **To the client, `NativeShell`:** `start`; a method per concern, each
-  taking that concern's snapshot; `voiceLevel` and `focusComposer`, one-offs
-  with nothing to compare; and `strip`, a request answered later (below).
-- **From the client, an `*Intents` API per surface:** `WindowEvents` — how
-  much of the Flutter view its bars cover, and the sidebar shown or hidden —
-  and `SidebarIntents`, `PaletteIntents`, `ComposerIntents`, `TurnIntents`,
-  `NewChatIntents`, `VoiceIntents` and `TitleBarIntents`, a method each per
-  thing the user can do there, answered with what the client waits on: a
-  project's error, a paste's yes or no, or nothing. The Swift calls them as
-  `model.say.turn.resume { _ in }`; an answer nobody waits on is dropped.
+**A snapshot is a concern's whole state, sent when it changed.** The
+contract's classes compare by value, and `ShellOutbox` sends one only when it
+differs from the last of its concern, since most are rebuilt on every frame
+a turn streams: `window`, `sidebar`, `chatBar` and `pageBar` (one
+`TitleBarSnapshot`), `composer` and `composerValue`, `turn`, `newChat`,
+`voice`, `palette`. The microphone's level goes raw, many times a second, and
+the glow reads it per frame rather than redrawing the shell for it.
+`ShellModel` is the Swift's `NativeShell`, holding what the last snapshot
+said and nothing of its own.
 
-**A snapshot is a concern's whole state, sent when it changed.** Each is a
-class of the contract, compared by value — field by field, the lists and
-maps inside it too — so `ShellOutbox` sends one only when it differs from the
-last of its concern, since most are rebuilt on every frame a turn streams; and
-the composer's text it was told the client already holds is not sent back.
-The Swift holds what the last one said and nothing of its own: `window` (a
-page covering the conversation, the sidebar shown, the appearance),
-`sidebar`, `chatBar` and `pageBar` (one `TitleBarSnapshot` shape for both),
-`composer` and `composerValue`, `turn`, `newChat`, `voice` and `voiceLevel`,
-`palette`. The microphone's level is the one sent raw, many times a second,
-and the glow reads it per frame rather than redrawing the shell for it.
-`ShellModel` is the Swift's `NativeShell`; a snapshot equal to the one it
-holds changes nothing, so nothing observing it redraws.
-
-**Adding to it.** A new field is a field in `pigeons/shell.dart`, with its
-default as a constructor default; `tool/prepare.sh`, and then each side reads
-it, or the build says where it does not. A new intent is a method on its
-surface's `*Intents`, marked `@async`: the Dart surface that implements the
-API fails to compile until it runs it, and the Swift view calls it by name. A
-new concern is a snapshot class, a method on `NativeShell` and the outbox's
-one line sending it, the Swift model's method holding it, and — where it is a
-surface a page draws — an `*Intents` API and a `ShellSlot` for it. Swift
-gives a generated struct no defaults, so the value the Swift starts at, before
-Dart has said anything, is written beside the view as a `static let initial`.
-Pigeon will not take a field named `description` (it is Swift's), which is why
-a starter's and a menu entry's text is `detail`.
+**Adding to it** is an edit to `pigeons/shell.dart` and `tool/prepare.sh`;
+the compiler then names every place that has to follow. A default is a
+constructor default there, and Swift's starting value before Dart has said
+anything is a `static let initial` beside its view, since Pigeon gives a
+Swift struct none. A field may not be called `description`, which is Swift's.
 
 **A publisher reads what it sends in its own build.** Each concern is
 published by a widget of its own, so what it watches rebuilds it and nothing
@@ -362,22 +339,17 @@ from a `ValueListenableBuilder`. The running chats are a listenable, so the
 publishers watch `busyChatIdsProvider`, its set as a value.
 
 **An intent goes to whoever is on screen.** The window's, the sidebar's and
-the palette's are always there: `ShellBridge` points them at its own
-`SidebarRunner` and `PaletteRunner` while it is mounted. The composer's, the
-turn surface's, the new-chat screen's, voice mode's and the two title bars'
-each go to the widget on top of that surface's `ShellSlot` in `ShellSlots`,
-which implements the surface's `*Intents` itself; the slot points the
-surface's channel at whoever is on top whenever that changes — the chat's
-title bar and a page's are one API on two channels, `chatBar` and `pageBar`.
-Each claims the top when it mounts — or, where the last built is the one on
-screen, when it is built — and leaves when it goes, taking its snapshot back
-if it was on top. Turn surfaces stack — voice mode's over the chat page's —
-and the one beneath sends again when the top one goes, nothing it watches
-having changed to rebuild it. A restart builds the next session's slots
-before the last session's widgets go, so only the newest `ShellSlots` points
-a channel anywhere. A row's rename and a delete's confirmation are native
-dialogs that send the edit itself, which `ChatEdits` makes as it does for the
-Flutter sidebar's dialogs.
+the palette's go to `ShellBridge`'s own runners. The composer's, the turn
+surface's, the new-chat screen's, voice mode's and the two title bars' (one
+API on the channels `chatBar` and `pageBar`) go to the widget on top of that
+surface's `ShellSlot`, which implements the `*Intents` itself: each claims the
+top when it mounts — or, where the last built is the one on screen, when it
+is built — and leaves when it goes, taking its snapshot back if it was on
+top, and the slot points the channel at whoever is on top now. Turn surfaces
+stack — voice mode's over the chat page's — and the one beneath sends again
+when the top one goes, nothing it watches having changed to rebuild it. A row's rename and a delete's confirmation are
+native dialogs that send the edit itself, which `ChatEdits` makes as it does
+for the Flutter sidebar's dialogs.
 
 **The composer's rules are one copy.** `ComposerLogic` is what a composer
 decides apart from how it is drawn — what is attached, which mode the text
@@ -486,8 +458,6 @@ them. The hosting is each Runner's own story — see "The native shell" in
 `macos/AGENTS.md` and `ios/AGENTS.md`.
 
 What is tested is the Dart half, `test/ui/shell/`: every snapshot as the
-client receives it — through the real channels and the contract's codec, to
-`FakeNativeShell`, which is Pigeon's generated `TestNativeShell` — every intent
+Swift receives it, over the real channels to `FakeNativeShell`, every intent
 against the app's fakes, the stacking, the page closing. The Swift is checked
-by building both Runners and looking; that it reads the same contract, the
-compiler checks.
+by building both Runners and looking.
