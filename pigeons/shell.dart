@@ -3,6 +3,12 @@
 // to draw, a concern's whole state at a time and only when it changed, and
 // what the client says the user did. See "Liquid Glass" in lib/ui/AGENTS.md.
 
+// Pigeon's style: a field with no default is declared bare, and Pigeon makes
+// it a required parameter of the class it generates. This file is read by
+// Pigeon, never compiled, so the one thing the analyzer would say of that is
+// set aside and everything else is checked.
+// ignore_for_file: not_initialized_non_nullable_instance_field
+
 import "package:pigeon/pigeon.dart";
 
 @ConfigurePigeon(
