@@ -4,12 +4,6 @@ enum ComposerMode: String {
   case message, shell, callback
 }
 
-/// A card in the field: what one embed character draws as.
-struct ComposerCard: Equatable {
-  var title: String?
-  var body: String
-}
-
 /// One row of the `/` or `@` menu.
 struct ComposerOption: Identifiable, Equatable {
   let id: Int
@@ -18,47 +12,12 @@ struct ComposerOption: Identifiable, Equatable {
   var detail: String?
 }
 
-/// `ComposerSnapshot`.
-struct ComposerLook: Decodable, Equatable {
-  struct Attachment: Decodable, Equatable, Hashable {
-    var name: String
-    var image: Bool
-  }
-
-  struct Option: Decodable, Equatable {
-    var label: String
-    var hint: String?
-    var description: String?
-  }
-
-  struct Card: Decodable, Equatable {
-    var code: Int
-    var title: String?
-    var body: String
-  }
-
-  var present = false
-  var mode = "message"
-  var hint = ""
-  var sendLabel = "Send"
-  var canSend = false
-  var queues = false
-  var speaking = false
-  var voice = false
-  var maxLines = 6
-  var attachments: [Attachment] = []
-  var menu: [Option] = []
-  var cwd: String?
-  var cards: [Card] = []
-  var accent = 0xFF00_7AFF
-  var dark = false
-}
-
-/// `ComposerValueSnapshot`.
-struct ComposerValue: Decodable, Equatable {
-  var text: String
-  var start: Int
-  var end: Int
+extension ComposerSnapshot {
+  /// No page has a composer yet.
+  static let initial = ComposerSnapshot(
+    present: false, mode: "message", hint: "", sendLabel: "Send", canSend: false, queues: false,
+    speaking: false, voice: false, maxLines: 6, attachments: [], menu: [], cards: [:],
+    accent: 0xFF00_7AFF, dark: false)
 }
 
 /// What the text view is to the model: told a value Dart set, asked to take
@@ -75,7 +34,7 @@ protocol ComposerEditor: AnyObject {
 /// did. Its own object rather than a field of [ShellModel], so a keystroke
 /// redraws the composer and nothing else.
 final class ComposerModel: ObservableObject {
-  @Published private(set) var look = ComposerLook()
+  @Published private(set) var look = ComposerSnapshot.initial
 
   /// The menu row the arrows are on: the view's own, since only it moves it.
   @Published var highlighted = 0
@@ -89,13 +48,13 @@ final class ComposerModel: ObservableObject {
   private weak var shell: ShellModel?
 
   /// The value Dart sent before the text view existed.
-  private var pending: ComposerValue?
+  private var pending: ComposerValueSnapshot?
 
   weak var editor: ComposerEditor? {
     didSet {
       if let value = pending, let editor {
         pending = nil
-        editor.apply(text: value.text, start: value.start, end: value.end)
+        editor.apply(text: value.text, start: Int(value.start), end: Int(value.end))
       }
     }
   }
@@ -112,10 +71,10 @@ final class ComposerModel: ObservableObject {
   var queues: Bool { look.queues }
   var speaking: Bool { look.speaking }
   var voice: Bool { look.voice }
-  var maxLines: Int { look.maxLines }
+  var maxLines: Int { Int(look.maxLines) }
   var dark: Bool { look.dark }
   var cwd: String? { look.cwd }
-  var attachments: [ComposerLook.Attachment] { look.attachments }
+  var attachments: [ComposerAttachment] { look.attachments }
 
   var accent: Color { Color(argb: look.accent) }
 
@@ -125,7 +84,7 @@ final class ComposerModel: ObservableObject {
   private(set) var menu: [ComposerOption] = []
   private(set) var cards: [UInt16: ComposerCard] = [:]
 
-  func apply(_ next: ComposerLook) {
+  func apply(_ next: ComposerSnapshot) {
     guard next != look else { return }
     let restyle = next.mode != look.mode || next.dark != look.dark || next.cards != look.cards
       || next.accent != look.accent
@@ -134,14 +93,12 @@ final class ComposerModel: ObservableObject {
     if next.menu != look.menu {
       highlighted = 0
       menu = next.menu.enumerated().map { i, option in
-        ComposerOption(id: i, label: option.label, hint: option.hint, detail: option.description)
+        ComposerOption(id: i, label: option.label, hint: option.hint, detail: option.detail)
       }
     }
     if next.cards != look.cards {
       cards = Dictionary(
-        next.cards.map {
-          (UInt16(truncatingIfNeeded: $0.code), ComposerCard(title: $0.title, body: $0.body))
-        },
+        next.cards.map { (UInt16(truncatingIfNeeded: $0.key), $0.value) },
         uniquingKeysWith: { first, _ in first })
     }
     look = next
@@ -151,13 +108,13 @@ final class ComposerModel: ObservableObject {
   /// The value Dart and the field last agreed on, so a report that changes
   /// nothing is not sent: one keystroke both edits the text and moves the
   /// caret, and the field says so for each.
-  private var known: ComposerValue?
+  private var known: ComposerValueSnapshot?
 
   /// A value Dart set: a completion taken, a message restored, a send.
-  func apply(_ value: ComposerValue) {
+  func apply(_ value: ComposerValueSnapshot) {
     known = value
     if let editor {
-      editor.apply(text: value.text, start: value.start, end: value.end)
+      editor.apply(text: value.text, start: Int(value.start), end: Int(value.end))
     } else {
       pending = value
     }
@@ -167,18 +124,16 @@ final class ComposerModel: ObservableObject {
     editor?.focus()
   }
 
-  /// Tell Dart something happened; [then] hears what it answered.
-  func say(_ name: String, _ args: [String: Any?] = [:], then: ((Any?) -> Void)? = nil) {
-    shell?.say("composer", name, args, answered: then)
-  }
+  /// What the user did, to the composer on top in Dart.
+  var say: ComposerIntents? { shell?.say.composer }
 
   /// The field changed, or its caret moved.
   func edited(text: String, start: Int, end: Int) {
     shown(text: text)
-    let value = ComposerValue(text: text, start: start, end: end)
+    let value = ComposerValueSnapshot(text: text, start: Int64(start), end: Int64(end))
     guard value != known else { return }
     known = value
-    say("edited", ["text": text, "start": start, "end": end])
+    say?.edited(text: text, start: value.start, end: value.end) { _ in }
   }
 
   /// What the field now holds, for the hint over it: published only when
@@ -199,7 +154,8 @@ final class ComposerModel: ObservableObject {
 
   /// Ask Dart to take files off the clipboard; [then] hears whether it did.
   func paste(then: @escaping (Bool) -> Void) {
-    say("paste") { then($0 as? Bool ?? false) }
+    guard let say else { return then(false) }
+    say.paste { then((try? $0.get()) ?? false) }
   }
 
   /// Move the menu's highlight, wrapping at either end.
@@ -212,6 +168,6 @@ final class ComposerModel: ObservableObject {
   func pickHighlighted() {
     let count = look.menu.count
     guard count > 0 else { return }
-    say("pick", ["index": highlighted % count])
+    say?.pick(index: Int64(highlighted % count)) { _ in }
   }
 }

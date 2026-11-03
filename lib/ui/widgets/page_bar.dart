@@ -1,8 +1,8 @@
+import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../shell/shell_page_bar.dart";
-import "../shell/snapshots.dart";
 import "discard_guard.dart";
 import "liquid_glass.dart";
 
@@ -82,7 +82,7 @@ class PageBar extends ConsumerWidget implements PreferredSizeWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         ShellPageBar(
-          bar: PageBarSnapshot(
+          bar: TitleBarSnapshot(
             title: title,
             subtitle: subtitle ?? "",
             leading: switch (leading) {
@@ -146,7 +146,7 @@ sealed class PageAction {
 
   /// As the window's title bar draws it, what a press runs kept in
   /// [presses] under the id the item is sent with.
-  ToolbarItem _item(_Presses presses);
+  TitleBarItem _item(_Presses presses);
 }
 
 /// One choice of a [PageAction.menu].
@@ -189,14 +189,14 @@ class _IconAction extends PageAction {
       IconButton(icon: Icon(icon), tooltip: label, onPressed: onPressed);
 
   @override
-  ToolbarItem _item(_Presses presses) {
+  TitleBarItem _item(_Presses presses) {
     final symbol = _symbolOf(icon);
-    return ToolbarItem(
+    return TitleBarItem(
       id: presses.add(onPressed),
       label: label,
       symbol: symbol,
       // An icon the system has no symbol for says what it does instead.
-      style: symbol == null ? ToolbarStyle.text : ToolbarStyle.icon,
+      style: symbol == null ? TitleBarItemStyle.text : TitleBarItemStyle.icon,
       enabled: onPressed != null,
     );
   }
@@ -216,11 +216,11 @@ class _ConfirmAction extends PageAction {
   );
 
   @override
-  ToolbarItem _item(_Presses presses) => ToolbarItem(
+  TitleBarItem _item(_Presses presses) => TitleBarItem(
     id: presses.add(onPressed),
     label: label,
     symbol: "checkmark",
-    style: ToolbarStyle.confirm,
+    style: TitleBarItemStyle.confirm,
     enabled: onPressed != null,
   );
 }
@@ -245,10 +245,10 @@ class _TextAction extends PageAction {
       : TextButton(onPressed: onPressed, child: Text(label));
 
   @override
-  ToolbarItem _item(_Presses presses) => ToolbarItem(
+  TitleBarItem _item(_Presses presses) => TitleBarItem(
     id: presses.add(onPressed),
     label: label,
-    style: prominent ? ToolbarStyle.prominent : ToolbarStyle.text,
+    style: prominent ? TitleBarItemStyle.prominent : TitleBarItemStyle.text,
     enabled: onPressed != null,
   );
 }
@@ -289,14 +289,14 @@ class _MenuAction extends PageAction {
   );
 
   @override
-  ToolbarItem _item(_Presses presses) => ToolbarItem(
+  TitleBarItem _item(_Presses presses) => TitleBarItem(
     id: presses.add(null),
     label: label,
     symbol: (icon == null ? null : _symbolOf(icon!)) ?? "ellipsis.circle",
     menu: [
       for (final item in items)
         if (item.enabled)
-          ToolbarMenuItem(
+          TitleBarMenuItem(
             id: presses.add(item.onSelected),
             label: item.label,
             hint: item.hint,

@@ -1,61 +1,17 @@
 import SwiftUI
 
-/// `TurnSnapshot`.
-struct TurnState: Decodable, Equatable {
-  struct Running: Decodable, Equatable, Identifiable {
-    var id: Int
-    var label: String
-    var tooltip: String
-    var group: String?
-    var symbol: String?
-    var mono = false
-  }
-
-  struct Steer: Decodable, Equatable, Identifiable {
-    var id: String
-    var line: String
-  }
-
-  struct Approval: Decodable, Equatable, Identifiable {
-    var id: String
-    var title: String
-    var symbol: String
-    var tool: String
-    var detail: String?
-    var allow = true
-    var chat = false
-    var project = false
-  }
-
-  struct Option: Decodable, Equatable {
-    var label: String
-    var detail: String?
-    var answer: String
-  }
-
-  struct Question: Decodable, Equatable {
-    var question: String
-    var summary: String?
-    var options: [Option]
-  }
-
-  struct Asked: Decodable, Equatable {
-    var id: String
-    var questions: [Question]
-  }
-
-  var resume: String?
-  var running: [Running] = []
-  var steers: [Steer] = []
-  var withdrawable = false
-  var approvals: [Approval] = []
-  var question: Asked?
+extension TurnSnapshot {
+  static let initial = TurnSnapshot(running: [], steers: [], withdrawable: false, approvals: [])
 
   var isEmpty: Bool {
     resume == nil && running.isEmpty && steers.isEmpty && approvals.isEmpty
       && question == nil
   }
 }
+
+extension RunningSnapshot: Identifiable {}
+extension SteerSnapshot: Identifiable {}
+extension ApprovalSnapshot: Identifiable {}
 
 /// What a running turn puts above the composer, in the system's glass: the
 /// offer to carry on an interrupted turn, what is running, the says the turn
@@ -67,7 +23,8 @@ struct TurnSurfaceView: View {
   /// Which groups of pills are open: the strip's own, as it is in Flutter.
   @State private var open: Set<String> = []
 
-  private var turn: TurnState { model.turn }
+  private var turn: TurnSnapshot { model.turn }
+  private var say: TurnIntents { model.say.turn }
 
   var body: some View {
     VStack(spacing: 6) {
@@ -77,8 +34,7 @@ struct TurnSurfaceView: View {
       ForEach(turn.approvals) { approvalCard($0) }
       if let asked = turn.question {
         QuestionPanel(asked: asked) { answers in
-          let sent: [Any] = answers.map { answer -> Any in answer ?? NSNull() }
-          say("answer", ["id": asked.id, "answers": sent])
+          say.answer(id: asked.id, answers: answers) { _ in }
         }
         // A new request starts again: what was picked was for the last one.
         .id(asked.id)
@@ -90,10 +46,6 @@ struct TurnSurfaceView: View {
     .animation(ComposerView.motion, value: open)
   }
 
-  private func say(_ name: String, _ args: [String: Any?] = [:]) {
-    model.say("turn", name, args)
-  }
-
   // MARK: Resume
 
   private func resumeRow(_ text: String) -> some View {
@@ -102,7 +54,7 @@ struct TurnSurfaceView: View {
       Text(text).font(.callout).lineLimit(1)
       Spacer(minLength: 8)
       Button {
-        say("resume")
+        say.resume { _ in }
       } label: {
         Label("Continue", systemImage: "play.fill")
       }
@@ -156,9 +108,9 @@ struct TurnSurfaceView: View {
     .transition(.opacity.combined(with: .move(edge: .bottom)))
   }
 
-  private func pill(_ thing: TurnState.Running) -> some View {
+  private func pill(_ thing: RunningSnapshot) -> some View {
     Button {
-      say("running", ["id": thing.id])
+      say.running(id: thing.id) { _ in }
     } label: {
       HStack(spacing: 6) {
         if let symbol = thing.symbol {
@@ -191,7 +143,7 @@ struct TurnSurfaceView: View {
             .lineLimit(1)
           Spacer(minLength: 4)
           Button {
-            say("queueSteer", ["id": steer.id])
+            say.queueSteer(id: steer.id) { _ in }
           } label: {
             Image(systemName: "clock")
           }
@@ -199,7 +151,7 @@ struct TurnSurfaceView: View {
           .help("Send after this turn instead")
           if turn.withdrawable {
             Button {
-              say("withdraw", ["id": steer.id])
+              say.withdraw(id: steer.id) { _ in }
             } label: {
               Image(systemName: "xmark")
             }
@@ -218,7 +170,7 @@ struct TurnSurfaceView: View {
 
   // MARK: Approvals
 
-  private func approvalCard(_ approval: TurnState.Approval) -> some View {
+  private func approvalCard(_ approval: ApprovalSnapshot) -> some View {
     VStack(alignment: .leading, spacing: 10) {
       HStack(spacing: 10) {
         Image(systemName: approval.symbol)
@@ -243,18 +195,18 @@ struct TurnSurfaceView: View {
       }
       HStack(spacing: 8) {
         Spacer(minLength: 0)
-        Button("Deny", role: .destructive) { answer(approval, "deny") }
+        Button("Deny", role: .destructive) { answer(approval, .deny) }
           .glassButton()
         if approval.chat {
-          Button("Always in Chat") { answer(approval, "chat") }.glassButton()
+          Button("Always in Chat") { answer(approval, .chat) }.glassButton()
         }
         if approval.project {
-          Button("Always in Project") { answer(approval, "project") }.glassButton()
+          Button("Always in Project") { answer(approval, .project) }.glassButton()
         }
         if approval.allow {
           // No Return shortcut: the window would take Return for it before
           // the composer's field heard it.
-          Button("Allow") { answer(approval, "allow") }
+          Button("Allow") { answer(approval, .allow) }
             .glassButton(prominent: true)
         }
       }
@@ -264,7 +216,7 @@ struct TurnSurfaceView: View {
     .transition(.opacity.combined(with: .move(edge: .bottom)))
   }
 
-  private func answer(_ approval: TurnState.Approval, _ answer: String) {
-    say("approve", ["id": approval.id, "answer": answer])
+  private func answer(_ approval: ApprovalSnapshot, _ answer: ApprovalAnswer) {
+    say.approve(id: approval.id, answer: answer) { _ in }
   }
 }

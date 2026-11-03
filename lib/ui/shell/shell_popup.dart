@@ -14,16 +14,22 @@ Future<int?> showShellStrip({
   Set<int> chosen = const {},
 }) async {
   try {
-    return await shellChannel.invokeMethod<int>("strip", {
-      "x": anchor.left,
-      "y": anchor.top,
-      "width": anchor.width,
-      "height": anchor.height,
-      "choices": [
-        for (final (i, c) in choices.indexed)
-          {"glyph": c.glyph, "name": c.name, "chosen": chosen.contains(i)},
-      ],
-    });
+    return await NativeShell().strip(
+      ChoiceStrip(
+        x: anchor.left,
+        y: anchor.top,
+        width: anchor.width,
+        height: anchor.height,
+        options: [
+          for (final (i, c) in choices.indexed)
+            StripOption(
+              glyph: c.glyph,
+              name: c.name,
+              chosen: chosen.contains(i),
+            ),
+        ],
+      ),
+    );
   } catch (e) {
     logFailure("shell", "strip: $e");
     return null;

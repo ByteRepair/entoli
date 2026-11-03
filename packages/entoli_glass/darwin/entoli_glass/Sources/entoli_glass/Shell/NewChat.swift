@@ -6,33 +6,9 @@ import SwiftUI
   import AppKit
 #endif
 
-/// `NewChatSnapshot`.
-struct NewChatState: Decodable, Equatable {
-  struct Device: Decodable, Equatable, Hashable {
-    var name: String
-    var offline: Bool
-    var projects: [ProjectChoice]
-  }
-
-  struct Selected: Decodable, Equatable {
-    var device: String?
-    var project: String?
-  }
-
-  struct Starter: Decodable, Equatable, Hashable {
-    var trigger: String
-    var name: String
-    var description: String?
-  }
-
-  var present = false
-  var question = ""
-  var image: String?
-  var projects: [ProjectChoice] = []
-  var devices: [Device] = []
-  var selected: Selected?
-  var starters: [Starter] = []
-  var starting = false
+extension NewChatSnapshot {
+  static let initial = NewChatSnapshot(
+    present: false, question: "", projects: [], devices: [], starters: [], starting: false)
 
   func isSelected(_ choice: ProjectChoice) -> Bool {
     selected?.device == choice.device && selected?.project == choice.project
@@ -46,11 +22,8 @@ struct NewChatState: Decodable, Equatable {
 struct NewChatView: View {
   @ObservedObject var model: ShellModel
 
-  private var state: NewChatState { model.newChat }
-
-  private func say(_ name: String, _ args: [String: Any?]) {
-    model.say("newChatScreen", name, args)
-  }
+  private var state: NewChatSnapshot { model.newChat }
+  private var say: NewChatIntents { model.say.newChat }
 
   var body: some View {
     if state.starting {
@@ -102,12 +75,12 @@ struct NewChatView: View {
             FlowLayout(spacing: 8) {
               ForEach(state.starters, id: \.self) { starter in
                 Button {
-                  say("starter", ["trigger": starter.trigger, "name": starter.name])
+                  say.starter(trigger: starter.trigger, name: starter.name) { _ in }
                 } label: {
                   Text("\(starter.trigger)\(starter.name)").font(.callout.monospaced())
                 }
                 .glassButton()
-                .help(starter.description ?? "")
+                .help(starter.detail ?? "")
               }
             }
           }
@@ -129,7 +102,7 @@ struct NewChatView: View {
   private func badge(_ choice: ProjectChoice) -> some View {
     let picked = state.isSelected(choice)
     return Button {
-      say("pick", ["device": choice.device, "project": choice.project])
+      say.pick(device: choice.device, project: choice.project) { _ in }
     } label: {
       HStack(spacing: 6) {
         if picked {

@@ -3,13 +3,11 @@ import SwiftUI
 /// A title bar: the window's title, the line under it, a way back where
 /// there is somewhere to go back to, and its buttons. Whatever is in front
 /// draws through this one view — the chat's bar and every Flutter page's —
-/// so they are the system's bar alike, and a press is said to Dart under
-/// whichever concern [say] names. See `TitleBarSnapshot`.
+/// so they are the system's bar alike, and a press goes to whichever bar's
+/// [intents] it was drawn with. See `TitleBarSnapshot`.
 struct TitleBar: ViewModifier {
-  let bar: TitleBarState
-
-  /// A press, or the way back, as an intent name and its args.
-  let say: (_ name: String, _ args: [String: Any?]) -> Void
+  let bar: TitleBarSnapshot
+  let intents: TitleBarIntents
 
   func body(content: Content) -> some View {
     content
@@ -23,34 +21,27 @@ struct TitleBar: ViewModifier {
         // split view's own would leave the page standing.
         .navigationBarBackButtonHidden(bar.leading != nil)
       #endif
-      .toolbar { TitleBarContent(bar: bar, say: say) }
+      .toolbar { TitleBarContent(bar: bar, intents: intents) }
   }
 }
 
 extension View {
-  func titleBar(
-    _ bar: TitleBarState, say: @escaping (_ name: String, _ args: [String: Any?]) -> Void
-  ) -> some View {
-    modifier(TitleBar(bar: bar, say: say))
+  func titleBar(_ bar: TitleBarSnapshot, intents: TitleBarIntents) -> some View {
+    modifier(TitleBar(bar: bar, intents: intents))
   }
 }
 
-/// `TitleBarSnapshot`: a chat's bar or a page's.
-struct TitleBarState: Decodable, Equatable {
-  /// False where no page has a bar: the window keeps the chat's title.
-  var present = true
-  var title = "Entoli"
-  var subtitle = ""
-  var expiresAt: Double?
-  var leading: Leading?
-  var items: [ToolbarItemState] = []
+extension TitleBarSnapshot {
+  /// The chat's, before Dart has said what it is.
+  static let initial = TitleBarSnapshot(present: true, title: "Entoli", subtitle: "", items: [])
 
-  enum Leading: String, Decodable { case back, close }
+  /// No page's bar: the window keeps the chat's title.
+  static let absent = TitleBarSnapshot(present: false, title: "", subtitle: "", items: [])
 
-  var expires: Date? { expiresAt.map { Date(timeIntervalSince1970: $0 / 1000) } }
+  var expires: Date? { expiresAt.map { Date(timeIntervalSince1970: Double($0) / 1000) } }
 
   /// The title alone, with nothing to press.
-  var bare: TitleBarState {
+  var bare: TitleBarSnapshot {
     var bar = self
     bar.leading = nil
     bar.items = []
@@ -58,34 +49,14 @@ struct TitleBarState: Decodable, Equatable {
   }
 }
 
-/// `ToolbarItem`.
-struct ToolbarItemState: Decodable, Equatable, Identifiable {
-  var id: String
-  var label: String
-  var symbol: String?
-  var spinner = false
-  var style = Style.icon
-  var enabled = true
-  var menu: [ToolbarMenuItemState] = []
-
-  /// `ToolbarStyle`.
-  enum Style: String, Decodable { case icon, text, prominent, confirm }
-}
-
-/// `ToolbarMenuItem`.
-struct ToolbarMenuItemState: Decodable, Equatable, Identifiable {
-  var id: String
-  var label: String
-  var hint: String?
-  var symbol: String?
-  var checked = false
-}
+extension TitleBarItem: Identifiable {}
+extension TitleBarMenuItem: Identifiable {}
 
 private struct TitleBarContent: ToolbarContent {
-  let bar: TitleBarState
-  let say: (_ name: String, _ args: [String: Any?]) -> Void
+  let bar: TitleBarSnapshot
+  let intents: TitleBarIntents
 
-  private var buttons: [ToolbarItemState] {
+  private var buttons: [TitleBarItem] {
     bar.items.filter { !$0.spinner && $0.style != .confirm }
   }
 
@@ -93,7 +64,7 @@ private struct TitleBarContent: ToolbarContent {
     if let leading = bar.leading {
       ToolbarItem(placement: .navigation) {
         Button {
-          say("back", [:])
+          intents.back { _ in }
         } label: {
           switch leading {
           case .back: Label("Back", systemImage: "chevron.backward")
@@ -111,14 +82,14 @@ private struct TitleBarContent: ToolbarContent {
     if !buttons.isEmpty {
       ToolbarItemGroup(placement: .primaryAction) {
         ForEach(buttons) { item in
-          TitleBarButton(item: item, say: say)
+          TitleBarButton(item: item, intents: intents)
         }
       }
     }
     // The tick: the system's confirm, where its bars put one.
     if let tick = bar.items.first(where: { $0.style == .confirm }) {
       ToolbarItem(placement: Self.confirm) {
-        TitleBarButton(item: tick, say: say)
+        TitleBarButton(item: tick, intents: intents)
       }
     }
   }
@@ -135,10 +106,10 @@ private struct TitleBarContent: ToolbarContent {
 
 /// One of a bar's buttons, drawn as its style says.
 private struct TitleBarButton: View {
-  let item: ToolbarItemState
-  let say: (_ name: String, _ args: [String: Any?]) -> Void
+  let item: TitleBarItem
+  let intents: TitleBarIntents
 
-  private func press(_ id: String) { say("press", ["id": id]) }
+  private func press(_ id: String) { intents.press(id: id) { _ in } }
 
   private var icon: some View {
     Label(item.label, systemImage: item.symbol ?? "circle")
@@ -216,7 +187,7 @@ private struct Spinner: ToolbarContent {
 
 /// The line under the title: the project and the pin, and a temporary chat's
 /// countdown, which the system keeps counting.
-private func subtitle(_ bar: TitleBarState) -> Text {
+private func subtitle(_ bar: TitleBarSnapshot) -> Text {
   guard let expires = bar.expires else { return Text(bar.subtitle) }
   let lead = bar.subtitle.isEmpty ? Text("") : Text("\(bar.subtitle) · ")
   return lead + Text("Expires in ") + Text(expires, style: .relative)

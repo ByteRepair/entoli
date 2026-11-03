@@ -1,3 +1,4 @@
+import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -10,7 +11,6 @@ import "../voice/voice_controller.dart";
 import "shell_outbox.dart";
 import "shell_slots.dart";
 import "shell_turn.dart";
-import "snapshots.dart";
 
 /// How many of the transcript's lines go to the shell: more than its window
 /// shows, so there is some of the conversation to scroll back through.
@@ -38,7 +38,7 @@ class ShellVoice extends ConsumerStatefulWidget {
 }
 
 class ShellVoiceState extends ConsumerState<ShellVoice>
-    implements ShellSurface {
+    implements VoiceIntents {
   late final ShellOutbox _outbox = ref.read(shellOutboxProvider);
   late final ShellSlots _slots = ref.read(shellSlotsProvider);
   final _transcript = Transcript();
@@ -47,7 +47,7 @@ class ShellVoiceState extends ConsumerState<ShellVoice>
   @override
   void initState() {
     super.initState();
-    _slots.claim(ShellConcern.voice, this);
+    _slots.voice.claim(this);
     _follow(widget.voice.level);
   }
 
@@ -60,8 +60,8 @@ class ShellVoiceState extends ConsumerState<ShellVoice>
   @override
   void dispose() {
     _level?.removeListener(_sendLevel);
-    if (_slots.leave(ShellConcern.voice, this)) {
-      _outbox.post(VoiceSnapshot.absent);
+    if (_slots.voice.leave(this)) {
+      _outbox.voice(VoiceSnapshot(present: false));
     }
     super.dispose();
   }
@@ -74,25 +74,19 @@ class ShellVoiceState extends ConsumerState<ShellVoice>
     _level = level?..addListener(_sendLevel);
   }
 
-  void _sendLevel() =>
-      _outbox.send("voiceLevel", {"level": _level?.value ?? 0});
+  void _sendLevel() => _outbox.voiceLevel(_level?.value ?? 0);
 
-  /// What the native voice screen sent.
   @override
-  Future<Object?> handle(String name, Map<String, Object?> args) async {
-    final controller = widget.controller;
-    switch (name) {
-      case "mute":
-        controller.togglePaused();
-      case "talk":
-        controller.talk(args["on"] == true);
-      case "stop":
-        controller.hush();
-      case "done":
-        widget.onDone();
-    }
-    return null;
-  }
+  Future<void> mute() async => widget.controller.togglePaused();
+
+  @override
+  Future<void> talk(bool on) async => widget.controller.talk(on);
+
+  @override
+  Future<void> stop() async => widget.controller.hush();
+
+  @override
+  Future<void> done() async => widget.onDone();
 
   @override
   Widget build(BuildContext context) {
@@ -106,7 +100,7 @@ class ShellVoiceState extends ConsumerState<ShellVoice>
         : ref.read(chatControllerProvider(chatId).notifier);
     final lines = _transcript.of(chat?.chat?.messages ?? const <Message>[]);
     final brightness = Theme.of(context).brightness;
-    _outbox.post(
+    _outbox.voice(
       VoiceSnapshot(
         present: true,
         title: chat?.chat?.state.title.orUntitled ?? "Voice",
@@ -121,7 +115,7 @@ class ShellVoiceState extends ConsumerState<ShellVoice>
           for (final line in lines.skip(
             lines.length > _keptLines ? lines.length - _keptLines : 0,
           ))
-            (kind: line.kind.name, text: line.text),
+            VoiceLineSnapshot(kind: line.kind.name, text: line.text),
         ],
         heard: heardColour(brightness).toARGB32(),
         spoken: spokenColour(brightness).toARGB32(),

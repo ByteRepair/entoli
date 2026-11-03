@@ -7,25 +7,29 @@ import SwiftUI
 #endif
 
 /// What the shell draws, as Dart last said it, one published value per
-/// concern; and the way back, [intent]. Holds nothing of its own: a snapshot
+/// concern; and the way back, [say]. Holds nothing of its own: a snapshot
 /// replaces what was there, and a tap is an intent Dart answers with the next
-/// snapshot. See `lib/ui/shell/snapshots.dart`, whose maps these decode.
+/// snapshot. Both are the protocol `pigeons/shell.dart` generates, this the
+/// [NativeShell] end of it.
 final class ShellModel: ObservableObject {
-  private let channel: FlutterMethodChannel
+  @Published var window = WindowSnapshot.initial
+  @Published var sidebar = SidebarSnapshot.initial
+  @Published var chatBar = TitleBarSnapshot.initial
+  @Published var pageBar = TitleBarSnapshot.absent
+  @Published var turn = TurnSnapshot.initial
+  @Published var newChat = NewChatSnapshot.initial
+  @Published var voice = VoiceSnapshot.initial
+  @Published var palette = PaletteSnapshot.initial
 
-  @Published var window = WindowState()
-  @Published var sidebar = SidebarState()
-  @Published var chatBar = TitleBarState()
-  @Published var pageBar = TitleBarState(present: false)
-  @Published var turn = TurnState()
-  @Published var newChat = NewChatState()
-  @Published var voice = VoiceState()
-  @Published var palette = PaletteState()
+  /// What the user did, for Dart to run: one object per surface, each a
+  /// method per intent it can send. A surface's go to the one on top of its
+  /// stack in Dart's `ShellSlots`.
+  let say: ShellIntents
 
   /// A strip of choices over the Flutter view, and who waits on its answer:
   /// see `Strip.swift`.
   @Published var strip: StripRequest?
-  var stripReply: ((Any?) -> Void)?
+  var stripReply: ((Int64?) -> Void)?
 
   /// Asked of the split view where it is one column — an iPhone — so a chat
   /// opened or a new one started is shown rather than left behind the list.
@@ -40,81 +44,15 @@ final class ShellModel: ObservableObject {
   /// The composer's own object, so a keystroke redraws it and nothing else.
   private(set) lazy var composer = ComposerModel(shell: self)
 
+  /// Told when Dart says `start`: the host takes the window.
+  var onStart: (() -> Void)?
+
   /// Told when the window's own state changes, for what SwiftUI cannot set:
   /// the window's appearance.
-  var onWindow: ((WindowState) -> Void)?
+  var onWindow: ((WindowSnapshot) -> Void)?
 
-  init(channel: FlutterMethodChannel) {
-    self.channel = channel
-  }
-
-  /// A snapshot from Dart: [json] as its outbox compared it, or [value] for
-  /// a one-off with nothing to compare.
-  func apply(concern: String, value: Any?, json: String?) {
-    func decode<T: Decodable>() -> T? {
-      guard let data = json?.data(using: .utf8) else { return nil }
-      return try? Self.decoder.decode(T.self, from: data)
-    }
-    switch concern {
-    case "window":
-      if let state: WindowState = decode(), state != window {
-        window = state
-        onWindow?(state)
-      }
-    case "sidebar":
-      if let state: SidebarState = decode(), state != sidebar { sidebar = state }
-    case "chatBar":
-      if let state: TitleBarState = decode(), state != chatBar { chatBar = state }
-    case "pageBar":
-      if let state: TitleBarState = decode(), state != pageBar { pageBar = state }
-    case "palette":
-      if let state: PaletteState = decode(), state != palette { palette = state }
-    case "voice":
-      if let state: VoiceState = decode(), state != voice { voice = state }
-    case "voiceLevel":
-      voiceLevel.set(((value as? [String: Any])?["level"] as? NSNumber)?.doubleValue ?? 0)
-    case "newChat":
-      if let state: NewChatState = decode(), state != newChat { newChat = state }
-    case "turn":
-      if let state: TurnState = decode(), state != turn { turn = state }
-    case "composer":
-      if let look: ComposerLook = decode() { composer.apply(look) }
-    case "composerValue":
-      if let value: ComposerValue = decode() { composer.apply(value) }
-    case "composerFocus":
-      composer.focus()
-    default:
-      break
-    }
-  }
-
-  /// What the user did, for Dart to run: see `ShellBridge._run`. [done] is
-  /// told what Dart answered once it has run: an error to show, or nil.
-  func intent(
-    _ name: String, _ args: [String: Any?] = [:], done: ((String?) -> Void)? = nil
-  ) {
-    intent(name, args) { done?($0 as? String) }
-  }
-
-  /// [intent], hearing whatever Dart answered.
-  func intent(_ name: String, _ args: [String: Any?], answered: ((Any?) -> Void)?) {
-    let args = args.mapValues { $0 ?? NSNull() }
-    channel.invokeMethod("intent", arguments: ["name": name, "args": args]) { answer in
-      answered?(answer)
-    }
-  }
-
-  /// What the user did on one of the surfaces Dart keeps a stack of — the
-  /// composer, the turn, the new-chat screen, voice mode, the toolbar, a
-  /// page's title bar — sent
-  /// under its [concern] to the one on screen: see `ShellSlots`. [answered]
-  /// hears what Dart answered.
-  func say(
-    _ concern: String, _ name: String, _ args: [String: Any?] = [:],
-    answered: ((Any?) -> Void)? = nil
-  ) {
-    intent(
-      concern, ["name": name, "args": args.mapValues { $0 ?? NSNull() }], answered: answered)
+  init(messenger: FlutterBinaryMessenger) {
+    say = ShellIntents(messenger: messenger)
   }
 
   private var reported: EdgeInsets?
@@ -124,37 +62,108 @@ final class ShellModel: ObservableObject {
   func insets(_ insets: EdgeInsets) {
     guard insets != reported else { return }
     reported = insets
-    channel.invokeMethod(
-      "insets",
-      arguments: [
-        "top": insets.top, "bottom": insets.bottom,
-        "left": insets.leading, "right": insets.trailing,
-      ])
+    say.window.insets(
+      left: insets.leading, top: insets.top, right: insets.trailing, bottom: insets.bottom
+    ) { _ in }
+  }
+}
+
+/// A snapshot from Dart replaces what was there; one equal to it changes
+/// nothing, so nothing that observes it redraws.
+extension ShellModel: NativeShell {
+  func start() throws { onStart?() }
+
+  func window(snapshot: WindowSnapshot) throws {
+    guard snapshot != window else { return }
+    window = snapshot
+    onWindow?(snapshot)
   }
 
-  private static let decoder = JSONDecoder()
+  func sidebar(snapshot: SidebarSnapshot) throws {
+    if snapshot != sidebar { sidebar = snapshot }
+  }
+
+  func chatBar(snapshot: TitleBarSnapshot) throws {
+    if snapshot != chatBar { chatBar = snapshot }
+  }
+
+  func pageBar(snapshot: TitleBarSnapshot) throws {
+    if snapshot != pageBar { pageBar = snapshot }
+  }
+
+  func composer(snapshot: ComposerSnapshot) throws { composer.apply(snapshot) }
+
+  func composerValue(snapshot: ComposerValueSnapshot) throws { composer.apply(snapshot) }
+
+  func turn(snapshot: TurnSnapshot) throws {
+    if snapshot != turn { turn = snapshot }
+  }
+
+  func newChat(snapshot: NewChatSnapshot) throws {
+    if snapshot != newChat { newChat = snapshot }
+  }
+
+  func voice(snapshot: VoiceSnapshot) throws {
+    if snapshot != voice { voice = snapshot }
+  }
+
+  func palette(snapshot: PaletteSnapshot) throws {
+    if snapshot != palette { palette = snapshot }
+  }
+
+  func voiceLevel(level: Double) throws { voiceLevel.set(level) }
+
+  func focusComposer() throws { composer.focus() }
+
+  func strip(request: ChoiceStrip, completion: @escaping (Result<Int64?, Error>) -> Void) {
+    showStrip(request) { completion(.success($0)) }
+  }
+}
+
+/// The intents, one object per surface. A call whose answer nobody waits on
+/// passes `{ _ in }`: Dart answers nothing, or no surface was on top to.
+struct ShellIntents {
+  let window: WindowEvents
+  let sidebar: SidebarIntents
+  let palette: PaletteIntents
+  let composer: ComposerIntents
+  let turn: TurnIntents
+  let newChat: NewChatIntents
+  let voice: VoiceIntents
+  /// The chat's title bar, and a Flutter page's: one view draws both.
+  let chatBar: TitleBarIntents
+  let pageBar: TitleBarIntents
+
+  init(messenger: FlutterBinaryMessenger) {
+    window = WindowEvents(binaryMessenger: messenger)
+    sidebar = SidebarIntents(binaryMessenger: messenger)
+    palette = PaletteIntents(binaryMessenger: messenger)
+    composer = ComposerIntents(binaryMessenger: messenger)
+    turn = TurnIntents(binaryMessenger: messenger)
+    newChat = NewChatIntents(binaryMessenger: messenger)
+    voice = VoiceIntents(binaryMessenger: messenger)
+    chatBar = TitleBarIntents(binaryMessenger: messenger, messageChannelSuffix: "chatBar")
+    pageBar = TitleBarIntents(binaryMessenger: messenger, messageChannelSuffix: "pageBar")
+  }
 }
 
 extension Color {
   /// An ARGB the way Dart's `toARGB32` gives one.
-  init(argb: Int) {
+  init(argb: Int64) {
     self.init(
       red: Double((argb >> 16) & 0xFF) / 255, green: Double((argb >> 8) & 0xFF) / 255,
       blue: Double(argb & 0xFF) / 255, opacity: Double((argb >> 24) & 0xFF) / 255)
   }
 }
 
-/// `WindowSnapshot`.
-struct WindowState: Decodable, Equatable {
-  var covered = false
-  var sidebarShown = true
-  var appearance: String?
+extension WindowSnapshot {
+  static let initial = WindowSnapshot(covered: false, sidebarShown: true)
 
   var colorScheme: ColorScheme? {
     switch appearance {
-    case "light": .light
-    case "dark": .dark
-    default: nil
+    case .light: .light
+    case .dark: .dark
+    case nil: nil
     }
   }
 }

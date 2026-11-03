@@ -1,3 +1,4 @@
+import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -17,7 +18,6 @@ import "../sidebar/project_palette.dart";
 import "../sidebar/remote_projects.dart";
 import "shell_outbox.dart";
 import "../app_routes.dart";
-import "snapshots.dart";
 
 /// What the native sidebar's search field holds. Dart's rather than the
 /// field's, so the one rule the Flutter sidebar searches by is the one here,
@@ -60,7 +60,7 @@ class SidebarPublisher extends ConsumerWidget {
       selectedProjectProvider,
       (_, _) => ref.read(shellSearchProvider.notifier).set(""),
     );
-    ref.read(shellOutboxProvider).post(_snapshot(ref));
+    ref.read(shellOutboxProvider).sidebar(_snapshot(ref));
     return const SizedBox.shrink();
   }
 
@@ -146,7 +146,7 @@ class SidebarPublisher extends ConsumerWidget {
               remote: true,
             ),
       ];
-      groups = [if (rows.isNotEmpty) SidebarGroup("", rows)];
+      groups = [if (rows.isNotEmpty) SidebarGroup(heading: "", rows: rows)];
       empty = mine.isEmpty
           ? "Nothing mirrored from this device yet."
           : rows.isEmpty
@@ -158,16 +158,19 @@ class SidebarPublisher extends ConsumerWidget {
       final found = chatsMatching(mine, query);
       groups = [
         for (final group in groupChatsByDate(found, now: DateTime.now()))
-          SidebarGroup(group.heading, [
-            for (final chat in group.chats)
-              SidebarRow(
-                id: chat.id,
-                title: chat.title.orUntitled,
-                pinned: chat.pinned,
-                busy: busy.contains(chat.id),
-                temporary: chat.tempTtlExpiresAt != null,
-              ),
-          ]),
+          SidebarGroup(
+            heading: group.heading,
+            rows: [
+              for (final chat in group.chats)
+                SidebarRow(
+                  id: chat.id,
+                  title: chat.title.orUntitled,
+                  pinned: chat.pinned,
+                  busy: busy.contains(chat.id),
+                  temporary: chat.tempTtlExpiresAt != null,
+                ),
+            ],
+          ),
       ];
       empty = mine.isEmpty
           ? "No chats in this project yet."
@@ -179,9 +182,9 @@ class SidebarPublisher extends ConsumerWidget {
     return SidebarSnapshot(
       project: current,
       pages: [
-        if (projectHasWorkspace(selected)) "workspace",
-        if (projectHasMemories(selected)) "memories",
-        if (projectHasSettings(selected)) "projectSettings",
+        if (projectHasWorkspace(selected)) ShellPage.workspace,
+        if (projectHasMemories(selected)) ShellPage.memories,
+        if (projectHasSettings(selected)) ShellPage.projectSettings,
       ],
       groups: groups,
       selected: ref.watch(selectedChatIdProvider),
@@ -197,7 +200,7 @@ class SidebarPublisher extends ConsumerWidget {
 }
 
 /// The chat [id] names, wherever it is: this device's, or a mirror.
-ChatState? _chat(WidgetRef ref, String id) =>
+ChatState? _chatOf(WidgetRef ref, String id) =>
     ref.read(chatListProvider).value?.where((c) => c.id == id).firstOrNull ??
     ref
         .read(remoteChatsProvider)
@@ -205,86 +208,117 @@ ChatState? _chat(WidgetRef ref, String id) =>
         .firstOrNull
         ?.state;
 
-ProjectRef _projectOf(ShellIntent intent) => (
-  device: intent.maybeString("device"),
-  project: intent.maybeString("project"),
-);
+/// The app's own, under names [SidebarRunner]'s methods do not hide.
+const _selectProject = selectProject;
+const _createProject = createProject;
 
 /// Runs what the native sidebar sends, in [context] under the Navigator: the
-/// intents sent under no surface's name. Answers what the Swift waits on: an
-/// error to show, or null.
-Future<Object?> runSidebarIntent(
-  BuildContext context,
-  WidgetRef ref,
-  ShellIntent intent,
-) async {
-  final edits = ref.read(chatEditsProvider);
-  ChatState? chat() => _chat(ref, intent.string("id"));
-  // What changes what the detail shows closes the pages over it first.
-  const navigates = {"openChat", "newChat", "selectProject", "move"};
-  if (navigates.contains(intent.name)) {
+/// intents sent under no surface's name.
+class SidebarRunner implements SidebarIntents {
+  SidebarRunner(this.context, this.ref);
+
+  final BuildContext context;
+  final WidgetRef ref;
+
+  ChatState? _chat(String id) => _chatOf(ref, id);
+
+  /// Close the pages over the conversation, for what changes what the detail
+  /// shows. Answers whether it got there: a page asking first is left
+  /// asking, and nothing changes under it.
+  Future<bool> _toConversation() async {
     final reached = await toConversation(context, ref.read(appRoutesProvider));
-    // A page asking first is left asking; nothing changes under it.
-    if (!reached || !context.mounted) return null;
+    return reached && context.mounted;
   }
-  switch (intent.name) {
-    case "search":
-      ref.read(shellSearchProvider.notifier).set(intent.string("query"));
-    case "openChat":
-      ref.read(selectedChatIdProvider.notifier).select(intent.string("id"));
-    case "newChat":
-      ref.read(selectedChatIdProvider.notifier).select(null);
-    case "selectProject":
-      selectProject(ref, _projectOf(intent));
-    case "pin":
-      if (chat() case final chat?) {
-        await edits.setPinned(chat, intent.flag("pinned"));
-      }
-    case "rename":
-      if (chat() case final chat?) {
-        await edits.retitle(chat, intent.string("title"));
-      }
-    case "move":
-      if (chat() case final chat?) {
-        final project = intent.maybeString("project");
-        if (project != chat.project) {
-          await edits.move(chat, project);
-          selectProject(ref, localProject(project));
-        }
-      }
-    case "delete":
-      if (chat() case final chat?) await edits.delete(chat);
-    case "createProject":
-      final name = projectNameFrom(intent.string("name"));
-      if (name == null) return "That is not a name a project can have.";
-      try {
-        await createProject((
-          name: name,
-          description: intent.maybeString("description") ?? "",
-          omada: intent.flag("omada"),
-        ), ref.read(selectedProjectProvider).device)(context, ref);
-      } catch (e) {
-        logFailure("shell", "createProject", e);
-        return "The project could not be created.";
-      }
-    case "openPage":
-      final at = ref.read(selectedProjectProvider);
-      switch (intent.string("page")) {
-        case "workspace":
-          openProjectWorkspace(context, ref, at);
-        case "memories":
-          openProjectMemories(context, at);
-        case "projectSettings":
-          openProjectSettings(context, at);
-        case "settings":
-          openSettings(context);
-        case "profile":
-          openProfile(context);
-        case "marketplace":
-          openMarketplace(context);
-      }
-    default:
-      logFailure("shell", "no intent ${intent.name}");
+
+  @override
+  Future<void> search(String query) async =>
+      ref.read(shellSearchProvider.notifier).set(query);
+
+  @override
+  Future<void> openChat(String id) async {
+    if (!await _toConversation()) return;
+    ref.read(selectedChatIdProvider.notifier).select(id);
   }
-  return null;
+
+  @override
+  Future<void> newChat() async {
+    if (!await _toConversation()) return;
+    ref.read(selectedChatIdProvider.notifier).select(null);
+  }
+
+  @override
+  Future<void> selectProject(String? device, String? project) async {
+    if (!await _toConversation()) return;
+    _selectProject(ref, (device: device, project: project));
+  }
+
+  @override
+  Future<void> pin(String id, bool pinned) async {
+    if (_chat(id) case final chat?) {
+      await ref.read(chatEditsProvider).setPinned(chat, pinned);
+    }
+  }
+
+  @override
+  Future<void> rename(String id, String title) async {
+    if (_chat(id) case final chat?) {
+      await ref.read(chatEditsProvider).retitle(chat, title);
+    }
+  }
+
+  @override
+  Future<void> move(String id, String? project) async {
+    if (!await _toConversation()) return;
+    if (_chat(id) case final chat? when project != chat.project) {
+      await ref.read(chatEditsProvider).move(chat, project);
+      _selectProject(ref, localProject(project));
+    }
+  }
+
+  @override
+  Future<void> delete(String id) async {
+    if (_chat(id) case final chat?) {
+      await ref.read(chatEditsProvider).delete(chat);
+    }
+  }
+
+  @override
+  Future<String?> createProject(
+    String name,
+    String description,
+    bool omada,
+  ) async {
+    final named = projectNameFrom(name);
+    if (named == null) return "That is not a name a project can have.";
+    try {
+      await _createProject((
+        name: named,
+        description: description,
+        omada: omada,
+      ), ref.read(selectedProjectProvider).device)(context, ref);
+    } catch (e) {
+      logFailure("shell", "createProject", e);
+      return "The project could not be created.";
+    }
+    return null;
+  }
+
+  @override
+  Future<void> openPage(ShellPage page) async {
+    final at = ref.read(selectedProjectProvider);
+    switch (page) {
+      case ShellPage.workspace:
+        openProjectWorkspace(context, ref, at);
+      case ShellPage.memories:
+        openProjectMemories(context, at);
+      case ShellPage.projectSettings:
+        openProjectSettings(context, at);
+      case ShellPage.settings:
+        openSettings(context);
+      case ShellPage.profile:
+        openProfile(context);
+      case ShellPage.marketplace:
+        openMarketplace(context);
+    }
+  }
 }

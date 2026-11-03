@@ -1,62 +1,62 @@
-import "dart:convert";
-
 import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../core/log.dart";
-import "snapshots.dart";
 
-/// Where the snapshots go: [deliver] once per change of a concern's map.
+/// Where the snapshots go: each concern to the [NativeShell], once per
+/// change. Most are rebuilt on every frame a turn streams, so a snapshot
+/// equal to the last one sent for its concern is not sent again; the
+/// contract's classes are values, compared field by field.
 class ShellOutbox {
-  ShellOutbox(this.send);
+  ShellOutbox([NativeShell? shell]) : _shell = shell ?? NativeShell();
 
-  /// Over [shellChannel], to the Swift.
-  factory ShellOutbox.channel() = _ChannelOutbox;
+  final NativeShell _shell;
+  final Map<String, Object> _sent = {};
 
-  /// A one-off with no snapshot behind it — the microphone's level, taking
-  /// the focus — and, by default, every snapshot's map.
-  final void Function(String concern, Map<String, Object?> map) send;
-  final Map<String, String> _sent = {};
+  void window(WindowSnapshot snapshot) =>
+      _post("window", snapshot, _shell.window);
+  void sidebar(SidebarSnapshot snapshot) =>
+      _post("sidebar", snapshot, _shell.sidebar);
+  void chatBar(TitleBarSnapshot snapshot) =>
+      _post("chatBar", snapshot, _shell.chatBar);
+  void pageBar(TitleBarSnapshot snapshot) =>
+      _post("pageBar", snapshot, _shell.pageBar);
+  void composer(ComposerSnapshot snapshot) =>
+      _post("composer", snapshot, _shell.composer);
+  void composerValue(ComposerValueSnapshot snapshot) =>
+      _post("composerValue", snapshot, _shell.composerValue);
+  void turn(TurnSnapshot snapshot) => _post("turn", snapshot, _shell.turn);
+  void newChat(NewChatSnapshot snapshot) =>
+      _post("newChat", snapshot, _shell.newChat);
+  void voice(VoiceSnapshot snapshot) => _post("voice", snapshot, _shell.voice);
+  void palette(PaletteSnapshot snapshot) =>
+      _post("palette", snapshot, _shell.palette);
 
-  void post(ShellSnapshot snapshot) {
-    final map = snapshot.toMap();
-    final encoded = jsonEncode(map);
-    if (_sent[snapshot.concern] == encoded) return;
-    _sent[snapshot.concern] = encoded;
-    deliver(snapshot.concern, map, encoded);
+  /// Take [value] as what the shell's composer already holds, without sending
+  /// it: what it reported itself, which sent back would undo what it is
+  /// doing.
+  void rememberComposerValue(ComposerValueSnapshot value) =>
+      _sent["composerValue"] = value;
+
+  /// The microphone's level: many times a second, nothing to compare against.
+  void voiceLevel(double level) =>
+      _watch("voiceLevel", _shell.voiceLevel(level));
+
+  /// Put the caret in the composer's field.
+  void focusComposer() => _watch("focusComposer", _shell.focusComposer());
+
+  void _post<T extends Object>(
+    String concern,
+    T snapshot,
+    Future<void> Function(T) send,
+  ) {
+    if (_sent[concern] == snapshot) return;
+    _sent[concern] = snapshot;
+    _watch(concern, send(snapshot));
   }
 
-  /// Send a changed snapshot, [encoded] being its [map] as JSON.
-  void deliver(String concern, Map<String, Object?> map, String encoded) =>
-      send(concern, map);
-
-  /// Take [snapshot] as what the Swift already shows, without sending it:
-  /// what it reported itself, which sent back would undo what it is doing.
-  void remember(ShellSnapshot snapshot) =>
-      _sent[snapshot.concern] = snapshot.encode();
-
-  /// A one-off with nothing to compare against, such as taking the focus.
-  void say(String concern) => send(concern, const {});
+  static void _watch(String concern, Future<void> sending) => sending
+      .catchError((Object e) => logFailure("shell", "snapshot $concern", e));
 }
 
-/// The snapshots as the JSON they were compared as, which the Swift decodes
-/// as it is rather than turning the codec's dictionary back into JSON first.
-class _ChannelOutbox extends ShellOutbox {
-  _ChannelOutbox()
-    : super((concern, map) => _snapshot(concern, {"value": map}));
-
-  @override
-  void deliver(String concern, Map<String, Object?> map, String encoded) =>
-      _snapshot(concern, {"json": encoded});
-
-  static void _snapshot(String concern, Map<String, Object?> payload) =>
-      shellChannel
-          .invokeMethod<void>("snapshot", {"concern": concern, ...payload})
-          .catchError(
-            (Object e) => logFailure("shell", "snapshot $concern", e),
-          );
-}
-
-final shellOutboxProvider = Provider<ShellOutbox>(
-  (ref) => ShellOutbox.channel(),
-);
+final shellOutboxProvider = Provider<ShellOutbox>((ref) => ShellOutbox());

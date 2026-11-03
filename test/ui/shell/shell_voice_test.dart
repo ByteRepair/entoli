@@ -3,25 +3,23 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/ui/shell/shell_outbox.dart";
 import "package:agent_chat/ui/shell/shell_voice.dart";
 import "package:agent_chat/ui/voice/voice_controller.dart";
 import "package:agent_chat/ui/voice/voice_page.dart";
 import "package:agent_chat/ui/widgets/liquid_glass.dart";
 
 import "../../harness.dart";
+import "fake_native_shell.dart";
 
 /// Voice mode under the native shell: the page draws nothing of its own and
 /// sends the shell the session, the transcript and the turn.
 void main() {
   late TestApp app;
-  late Map<String, Map<String, Object?>> sent;
-  late List<double> levels;
+  late FakeNativeShell native;
 
   setUp(() {
     app = TestApp.create();
-    sent = {};
-    levels = [];
+    native = FakeNativeShell.install();
   });
   tearDown(() => app.dispose());
 
@@ -29,15 +27,6 @@ void main() {
     overrides: [
       liquidGlassProvider.overrideWithValue(
         const LiquidGlass(available: true, on: true),
-      ),
-      shellOutboxProvider.overrideWithValue(
-        ShellOutbox((concern, map) {
-          if (concern == "voiceLevel") {
-            levels.add((map["level"]! as num).toDouble());
-          } else {
-            sent[concern] = map;
-          }
-        }),
       ),
     ],
     child: child,
@@ -72,18 +61,17 @@ void main() {
       shell(VoicePage(chatId: chat.state.id)),
       settle: false,
     );
-    for (var i = 0; i < 20 && sent["turn"]?["resume"] == null; i++) {
+    for (var i = 0; i < 20 && native.lastTurn?.resume == null; i++) {
       await io(tester, () async {});
       await tester.pump(const Duration(milliseconds: 50));
     }
 
     expect(find.byType(Scaffold), findsNothing, reason: "the shell draws it");
-    final voice = sent["voice"]!;
-    expect(voice["present"], isTrue);
-    expect(voice["title"], "Walk");
-    final lines = (voice["lines"]! as List).cast<Map<Object?, Object?>>();
-    expect(lines.map((l) => l["text"]), containsAll(["go on", "Half a"]));
-    expect(sent["turn"]?["resume"], startsWith("Unfinished turn"));
+    final voice = native.lastVoice!;
+    expect(voice.present, isTrue);
+    expect(voice.title, "Walk");
+    expect(voice.lines.map((l) => l.text), containsAll(["go on", "Half a"]));
+    expect(native.lastTurn?.resume, startsWith("Unfinished turn"));
   });
 
   testWidgets("the microphone's level goes as it moves", (tester) async {
@@ -102,10 +90,10 @@ void main() {
       ),
       settle: false,
     );
-    expect(sent["voice"]?["word"], "Listening");
+    expect(native.lastVoice?.word, "Listening");
 
     level.value = 0.5;
     level.value = 0.9;
-    expect(levels, [0.5, 0.9]);
+    expect(native.levels, [0.5, 0.9]);
   });
 }

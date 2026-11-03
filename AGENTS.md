@@ -538,7 +538,8 @@ is `logDetail`, which is debug-only.
   backend, so a build without the SDK still accelerates most phones, and the
   settings page says the device has no accelerator only when it has neither an
   NPU nor a Vulkan-1.1 GPU — see "What the NPU actually is".
-- Setup: `tool/prepare.sh` — packages plus codegen. The generated sources are
+- Setup: `tool/prepare.sh` — packages plus codegen: build_runner, the
+  embedded prompts, and Pigeon for the native shell's protocol. The generated sources are
   not in the repository, so a fresh clone does not compile until it has run,
   and it wants running again whenever a `@freezed` or `@JsonSerializable` type
   changes. `dart run build_runner watch` is the answer while editing

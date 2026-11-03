@@ -267,7 +267,7 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
         let code = embedCode(in: attributedText, at: textItem.range.location)
       else { return defaultAction }
       return UIAction { [weak self] _ in
-        self?.model?.say("unembed", ["code": Int(code)])
+        self?.model?.say?.unembed(code: Int64(code)) { _ in }
       }
     }
 
@@ -295,12 +295,12 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
       return commands
     }
 
-    @objc private func sendKey() { model?.say("send") }
-    @objc private func queueKey() { model?.say("queue") }
+    @objc private func sendKey() { model?.say?.send { _ in } }
+    @objc private func queueKey() { model?.say?.queue { _ in } }
     @objc private func upKey() { model?.move(-1) }
     @objc private func downKey() { model?.move(1) }
     @objc private func pickKey() { model?.pickHighlighted() }
-    @objc private func dismissKey() { model?.say("dismiss") }
+    @objc private func dismissKey() { model?.say?.dismiss { _ in } }
     @objc private func indentKey() { insertText("  ") }
 
     // MARK: Paste
@@ -451,7 +451,7 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
     /// attachment that is an image with no cell to be clicked.
     override func mouseDown(with event: NSEvent) {
       if let code = cross(at: convert(event.locationInWindow, from: nil)) {
-        model?.say("unembed", ["code": Int(code)])
+        model?.say?.unembed(code: Int64(code)) { _ in }
         return
       }
       super.mouseDown(with: event)
@@ -499,11 +499,11 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
       // Return and the keypad's Enter.
       if event.keyCode == 36 || event.keyCode == 76 {
         if flags == .command {
-          model?.say("send")
+          model?.say?.send { _ in }
           return true
         }
         if flags == .option {
-          model?.say("queue")
+          model?.say?.queue { _ in }
           return true
         }
         return false
@@ -535,7 +535,7 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
           model.pickHighlighted()
           return true
         case #selector(cancelOperation(_:)):
-          model.say("dismiss")
+          model.say?.dismiss { _ in }
           return true
         default:
           return false

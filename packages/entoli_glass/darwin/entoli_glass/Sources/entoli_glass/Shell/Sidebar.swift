@@ -1,48 +1,15 @@
 import SwiftUI
 
-/// `ProjectChoice`.
-struct ProjectChoice: Decodable, Equatable, Hashable {
-  var device: String?
-  var project: String?
-  var label: String
-  var symbol: String
-  var omada = false
-  var count = 0
-
-  /// Its `ProjectRef`, as an intent hands it back.
-  var ref: [String: Any?] { ["device": device, "project": project] }
+extension SidebarSnapshot {
+  static let initial = SidebarSnapshot(
+    project: ProjectChoice(label: "", symbol: "house", omada: false, count: 0), pages: [],
+    groups: [], query: "", projects: [], devices: [], omadaByDefault: false)
 }
 
-/// `SidebarRow`.
-struct SidebarRow: Decodable, Equatable, Identifiable {
-  var id: String
-  var title: String
-  var pinned = false
-  var busy = false
-  var temporary = false
-  var offline = false
-  var mutable = true
-  var remote = false
-}
+extension SidebarRow: Identifiable {}
 
-/// `SidebarGroup`.
-struct SidebarGroup: Decodable, Equatable, Identifiable {
-  var heading: String
-  var rows: [SidebarRow]
+extension SidebarGroup: Identifiable {
   var id: String { heading }
-}
-
-/// `SidebarSnapshot`.
-struct SidebarState: Decodable, Equatable {
-  var project = ProjectChoice(label: "", symbol: "house")
-  var pages: [String] = []
-  var groups: [SidebarGroup] = []
-  var selected: String?
-  var query = ""
-  var empty: String?
-  var projects: [ProjectChoice] = []
-  var devices: [ProjectChoice] = []
-  var omadaByDefault = false
 }
 
 /// The native sidebar: the project switcher over the project's chats, the
@@ -58,14 +25,14 @@ struct SidebarView: View {
   @State private var deleting: SidebarRow?
   @State private var creating = false
 
-  private var state: SidebarState { model.sidebar }
+  private var state: SidebarSnapshot { model.sidebar }
 
   private var selection: Binding<String?> {
     Binding(
       get: { state.selected },
       set: { id in
         guard let id else { return }
-        model.intent("openChat", ["id": id])
+        model.say.sidebar.openChat(id: id) { _ in }
         model.showDetail()
       })
   }
@@ -99,7 +66,7 @@ struct SidebarView: View {
       .navigationBarTitleDisplayMode(.inline)
     #endif
     .onChange(of: query) { _, query in
-      if query != state.query { model.intent("search", ["query": query]) }
+      if query != state.query { model.say.sidebar.search(query: query) { _ in } }
     }
     .onChange(of: state.query) { _, query in self.query = query }
     .safeAreaInset(edge: .top, spacing: 0) {
@@ -108,7 +75,7 @@ struct SidebarView: View {
     .toolbar {
       ToolbarItem {
         Button {
-          model.intent("newChat")
+          model.say.sidebar.newChat { _ in }
           model.showDetail()
         } label: {
           Label("New Chat", systemImage: "square.and.pencil")
@@ -119,9 +86,9 @@ struct SidebarView: View {
         // What the menu bar holds on a Mac: the app's own pages.
         ToolbarItem(placement: .topBarLeading) {
           Menu {
-            appPage("settings", "Settings", "gearshape")
-            appPage("profile", "Profile", "person.crop.circle")
-            appPage("marketplace", "Marketplace", "storefront")
+            appPage(.settings, "Settings", "gearshape")
+            appPage(.profile, "Profile", "person.crop.circle")
+            appPage(.marketplace, "Marketplace", "storefront")
           } label: {
             Label("More", systemImage: "ellipsis")
           }
@@ -131,7 +98,7 @@ struct SidebarView: View {
     .alert("Rename chat", isPresented: present($renaming)) {
       TextField("Chat title", text: $title)
       Button("Rename") {
-        if let row = renaming { model.intent("rename", ["id": row.id, "title": title]) }
+        if let row = renaming { model.say.sidebar.rename(id: row.id, title: title) { _ in } }
       }
       Button("Cancel", role: .cancel) {}
     }
@@ -139,7 +106,7 @@ struct SidebarView: View {
       "Delete chat?", isPresented: present($deleting),
       presenting: deleting
     ) { row in
-      Button("Delete", role: .destructive) { model.intent("delete", ["id": row.id]) }
+      Button("Delete", role: .destructive) { model.say.sidebar.delete(id: row.id) { _ in } }
       Button("Cancel", role: .cancel) {}
     } message: { row in
       Text("Delete \u{201C}\(row.title)\u{201D}? This cannot be undone.")
@@ -151,9 +118,9 @@ struct SidebarView: View {
 
   /// One of the app's pages, opened over the chat: on an iPhone the chat is
   /// the column to show it in.
-  private func appPage(_ page: String, _ label: String, _ symbol: String) -> some View {
+  private func appPage(_ page: ShellPage, _ label: String, _ symbol: String) -> some View {
     Button {
-      model.intent("openPage", ["page": page])
+      model.say.sidebar.openPage(page: page) { _ in }
       model.showDetail()
     } label: {
       Label(label, systemImage: symbol)
@@ -164,7 +131,7 @@ struct SidebarView: View {
   /// Flutter sidebar's row, less Move for a mirror.
   @ViewBuilder private func menu(_ row: SidebarRow) -> some View {
     Button(row.pinned ? "Unpin" : "Pin") {
-      model.intent("pin", ["id": row.id, "pinned": !row.pinned])
+      model.say.sidebar.pin(id: row.id, pinned: !row.pinned) { _ in }
     }
     Button("Rename…") {
       title = row.title
@@ -174,7 +141,7 @@ struct SidebarView: View {
       Menu("Move to Project") {
         ForEach(state.projects, id: \.self) { target in
           Button(target.label) {
-            model.intent("move", ["id": row.id, "project": target.project])
+            model.say.sidebar.move(id: row.id, project: target.project) { _ in }
           }
           .disabled(target.project == state.project.project)
         }
@@ -221,7 +188,7 @@ private struct ProjectHeader: View {
   @ObservedObject var model: ShellModel
   @Binding var creating: Bool
 
-  private var state: SidebarState { model.sidebar }
+  private var state: SidebarSnapshot { model.sidebar }
 
   var body: some View {
     HStack(spacing: 4) {
@@ -254,9 +221,9 @@ private struct ProjectHeader: View {
       .buttonStyle(.plain)
       .menuIndicator(.hidden)
       .help("Switch project")
-      page("workspace", "folder", "Workspace")
-      page("memories", "brain", "Memories")
-      page("projectSettings", "gearshape", "Project settings")
+      page(.workspace, "folder", "Workspace")
+      page(.memories, "brain", "Memories")
+      page(.projectSettings, "gearshape", "Project settings")
     }
     .padding(.horizontal, 12)
     .padding(.vertical, 6)
@@ -270,7 +237,9 @@ private struct ProjectHeader: View {
     return Toggle(
       isOn: Binding(
         get: { current },
-        set: { _ in model.intent("selectProject", choice.ref) })
+        set: { _ in
+          model.say.sidebar.selectProject(device: choice.device, project: choice.project) { _ in }
+        })
     ) {
       Label {
         Text(choice.count > 0 ? "\(choice.label)  \(choice.count)" : choice.label)
@@ -282,10 +251,10 @@ private struct ProjectHeader: View {
     }
   }
 
-  @ViewBuilder private func page(_ page: String, _ symbol: String, _ label: String) -> some View {
+  @ViewBuilder private func page(_ page: ShellPage, _ symbol: String, _ label: String) -> some View {
     if state.pages.contains(page) {
       Button {
-        model.intent("openPage", ["page": page])
+        model.say.sidebar.openPage(page: page) { _ in }
         model.showDetail()
       } label: {
         Image(systemName: symbol)
@@ -338,10 +307,16 @@ struct NewProjectSheet: View {
         Button {
           making = true
           failure = nil
-          model.intent(
-            "createProject", ["name": name, "description": description, "omada": omada]
-          ) { error in
+          model.say.sidebar.createProject(
+            name: name, description: description, omada: omada
+          ) { result in
             making = false
+            // Dart's error to show, or one of its own where nothing answered.
+            let error =
+              switch result {
+              case .success(let error): error
+              case .failure: "The project could not be created."
+              }
             if let error {
               failure = error
             } else {

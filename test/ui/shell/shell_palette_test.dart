@@ -1,25 +1,24 @@
-import "package:flutter/material.dart";
+import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/ui/selection.dart";
-import "package:agent_chat/ui/shell/shell_outbox.dart";
 import "package:agent_chat/ui/shell/shell_palette.dart";
-import "package:agent_chat/ui/shell/snapshots.dart";
 
 import "../../harness.dart";
+import "fake_native_shell.dart";
 
 /// The native palette's Dart half: what it lists, how a query narrows it,
 /// and what a pick does.
 void main() {
   late TestApp app;
-  late List<Map<String, Object?>> sent;
+  late FakeNativeShell shell;
   late WidgetRef widgetRef;
-  late BuildContext widgetContext;
+  late PaletteRunner palette;
 
   setUp(() {
     app = TestApp.create();
-    sent = [];
+    shell = FakeNativeShell.install();
   });
   tearDown(() => app.dispose());
 
@@ -27,17 +26,10 @@ void main() {
     await app.pump(
       tester,
       ProviderScope(
-        overrides: [
-          shellOutboxProvider.overrideWithValue(
-            ShellOutbox((concern, map) {
-              if (concern == "palette") sent.add(map);
-            }),
-          ),
-        ],
         child: Consumer(
           builder: (context, ref, _) {
             widgetRef = ref;
-            widgetContext = context;
+            palette = PaletteRunner(context, ref);
             return const PalettePublisher();
           },
         ),
@@ -49,19 +41,16 @@ void main() {
 
   Future<void> run(
     WidgetTester tester,
-    String name, [
-    Map<String, Object?> args = const {},
-  ]) async {
-    await io(
-      tester,
-      () => runPaletteIntent(widgetContext, widgetRef, ShellIntent(name, args)),
-    );
+    Future<void> Function(PaletteRunner) intent,
+  ) async {
+    await io(tester, () => intent(palette));
     await settleIo(tester);
   }
 
-  List<Map<Object?, Object?>> items() => [
-    for (final section in sent.last["sections"]! as List)
-      ...((section as Map)["items"]! as List).cast<Map<Object?, Object?>>(),
+  PaletteSnapshot last() => shell.lastPalette!;
+
+  List<PaletteItem> items() => [
+    for (final section in last().sections) ...section.items,
   ];
 
   testWidgets("closed it sends nothing to list; open, projects and chats", (
@@ -69,16 +58,16 @@ void main() {
   ) async {
     await io(tester, () => app.seedChat(title: "first"));
     await pump(tester);
-    expect(sent.last["open"], isFalse);
+    expect(last().open, isFalse);
 
     widgetRef.read(shellPaletteProvider.notifier).open();
     // The chats are read off disk once something is watching them.
     await io(tester, () async {});
     await settleIo(tester);
-    expect(sent.last["open"], isTrue);
+    expect(last().open, isTrue);
     final rows = items();
-    expect(rows.where((r) => r["chat"] == null), isNotEmpty);
-    expect(rows.map((r) => r["label"]), contains("first"));
+    expect(rows.where((r) => r.chat == null), isNotEmpty);
+    expect(rows.map((r) => r.label), contains("first"));
   });
 
   testWidgets("a query narrows to what it matches", (tester) async {
@@ -88,8 +77,8 @@ void main() {
     widgetRef.read(shellPaletteProvider.notifier).open();
     await settleIo(tester);
 
-    await run(tester, "search", {"query": "APP"});
-    final labels = items().map((r) => r["label"]);
+    await run(tester, (p) => p.search("APP"));
+    final labels = items().map((r) => r.label);
     expect(labels, contains("apples"));
     expect(labels, isNot(contains("pears")));
   });
@@ -100,9 +89,9 @@ void main() {
     widgetRef.read(shellPaletteProvider.notifier).open();
     await settleIo(tester);
 
-    await run(tester, "pickChat", {"chat": chat.state.id});
+    await run(tester, (p) => p.pickChat(chat.state.id));
     expect(app.container.read(selectedChatIdProvider), chat.state.id);
-    expect(sent.last["open"], isFalse);
+    expect(last().open, isFalse);
   });
 
   testWidgets("picking a project switches to it", (tester) async {
@@ -110,8 +99,8 @@ void main() {
     widgetRef.read(shellPaletteProvider.notifier).open();
     await settleIo(tester);
 
-    await run(tester, "pickProject", {"device": null, "project": "anonymous"});
+    await run(tester, (p) => p.pickProject(null, "anonymous"));
     expect(app.container.read(selectedProjectProvider).project, "anonymous");
-    expect(sent.last["open"], isFalse);
+    expect(last().open, isFalse);
   });
 }

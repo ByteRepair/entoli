@@ -34,7 +34,7 @@ struct ComposerView: View {
     var canSend, queues, speaking, voice: Bool
     var mode: ComposerMode
     var menu: Int
-    var attachments: [ComposerLook.Attachment]
+    var attachments: [ComposerAttachment]
     var cwd: Bool
   }
 
@@ -71,23 +71,23 @@ struct ComposerView: View {
   private var plus: some View {
     Menu {
       Button {
-        model.say("attach", ["kind": "image"])
+        model.say?.attach(kind: .image) { _ in }
       } label: {
         Label("Image", systemImage: "photo")
       }
       Button {
-        model.say("attach", ["kind": "file"])
+        model.say?.attach(kind: .file) { _ in }
       } label: {
         Label("File", systemImage: "paperclip")
       }
       Divider()
       Button {
-        model.say("trigger", ["kind": "/"])
+        model.say?.trigger(kind: .skill) { _ in }
       } label: {
         Label("Command", systemImage: "slash.circle")
       }
       Button {
-        model.say("trigger", ["kind": "@"])
+        model.say?.trigger(kind: .agent) { _ in }
       } label: {
         Label("Agent", systemImage: "at")
       }
@@ -142,17 +142,17 @@ struct ComposerView: View {
 
   @ViewBuilder private var trailing: some View {
     if model.voice && !model.speaking && !model.canSend {
-      button("voice", "Voice mode", systemImage: "waveform") { model.say("voice") }
+      button("voice", "Voice mode", systemImage: "waveform") { model.say?.voice { _ in } }
     }
     if model.queues {
-      button("queue", "Send after this turn", systemImage: "clock") { model.say("queue") }
+      button("queue", "Send after this turn", systemImage: "clock") { model.say?.queue { _ in } }
     }
     if model.speaking && !model.canSend {
-      button("send", "Stop", systemImage: "stop.fill", prominent: true) { model.say("stop") }
+      button("send", "Stop", systemImage: "stop.fill", prominent: true) { model.say?.stop { _ in } }
     } else {
       button(
         "send", model.sendLabel, systemImage: sendSymbol, prominent: model.canSend
-      ) { model.say("send") }
+      ) { model.say?.send { _ in } }
       .disabled(!model.canSend)
     }
   }
@@ -192,7 +192,7 @@ struct ComposerView: View {
         LazyVStack(spacing: 0) {
           ForEach(model.menu) { option in
             Button {
-              model.say("pick", ["index": option.id])
+              model.say?.pick(index: Int64(option.id)) { _ in }
             } label: {
               menuRow(option)
             }
@@ -244,7 +244,7 @@ struct ComposerView: View {
 
   private func cwdRow(_ cwd: String) -> some View {
     Button {
-      model.say("copyCwd")
+      model.say?.copyCwd { _ in }
     } label: {
       HStack(spacing: 8) {
         Image(systemName: "terminal")
@@ -271,7 +271,7 @@ struct ComposerView: View {
             Image(systemName: attachment.image ? "photo" : "doc")
             Text(attachment.name).lineLimit(1)
             Button {
-              model.say("unattach", ["index": i])
+              model.say?.unattach(index: Int64(i)) { _ in }
             } label: {
               Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
             }

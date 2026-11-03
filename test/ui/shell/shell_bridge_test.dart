@@ -1,52 +1,93 @@
+import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/ui/shell/shell_outbox.dart";
+import "package:agent_chat/ui/shell/shell_slots.dart";
 import "package:agent_chat/ui/app_routes.dart";
-import "package:agent_chat/ui/shell/snapshots.dart";
+
+import "fake_native_shell.dart";
+
+/// A surface, as far as its stack is concerned.
+class _Bar implements TitleBarIntents {
+  @override
+  Future<void> back() async {}
+
+  @override
+  Future<void> press(String id) async {}
+}
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group("the outbox", () {
-    test("sends a concern once per change of its map", () {
-      final sent = <(String, Map<String, Object?>)>[];
-      final outbox = ShellOutbox((concern, map) => sent.add((concern, map)));
-      const shown = WindowSnapshot(
-        covered: false,
-        sidebarShown: true,
-        appearance: null,
-      );
-      outbox.post(shown);
-      outbox.post(shown);
-      expect(sent, hasLength(1));
-      outbox.post(
-        const WindowSnapshot(
+    test("sends a concern once per change, over the channel", () {
+      final shell = FakeNativeShell.install();
+      final outbox = ShellOutbox();
+      outbox.window(WindowSnapshot(covered: false, sidebarShown: true));
+      outbox.window(WindowSnapshot(covered: false, sidebarShown: true));
+      expect(shell.sent["window"], hasLength(1));
+      outbox.window(
+        WindowSnapshot(
           covered: true,
           sidebarShown: true,
-          appearance: null,
+          appearance: Appearance.dark,
         ),
       );
-      expect(sent, hasLength(2));
-      expect(sent.last.$1, "window");
-      expect(sent.last.$2["covered"], isTrue);
+      expect(shell.sent["window"], hasLength(2));
+      expect(shell.lastWindow!.covered, isTrue);
+      expect(shell.lastWindow!.appearance, Appearance.dark);
+    });
+
+    test("compares a snapshot by value, lists and maps inside it too", () {
+      final shell = FakeNativeShell.install();
+      final outbox = ShellOutbox();
+      ComposerSnapshot composer() => ComposerSnapshot(
+        present: true,
+        attachments: [ComposerAttachment(name: "a.png", image: true)],
+        cards: {0xFFFC: ComposerCard(title: "quote", body: "said")},
+      );
+      outbox.composer(composer());
+      outbox.composer(composer());
+      expect(shell.sent["composer"], hasLength(1));
+      expect(shell.lastComposer!.cards[0xFFFC]!.body, "said");
+    });
+
+    test("a value it was told the shell holds is not sent back", () {
+      final shell = FakeNativeShell.install();
+      final outbox = ShellOutbox();
+      final typed = ComposerValueSnapshot(text: "hi", start: 2, end: 2);
+      outbox.rememberComposerValue(typed);
+      outbox.composerValue(ComposerValueSnapshot(text: "hi", start: 2, end: 2));
+      expect(shell.sent["composerValue"], isNull);
+      outbox.composerValue(ComposerValueSnapshot(text: "", start: 0, end: 0));
+      expect(shell.lastComposerValue!.text, isEmpty);
+    });
+
+    test("the one-offs go every time", () {
+      final shell = FakeNativeShell.install();
+      final outbox = ShellOutbox();
+      outbox.voiceLevel(0.5);
+      outbox.voiceLevel(0.5);
+      outbox.focusComposer();
+      expect(shell.levels, [0.5, 0.5]);
+      expect(shell.sent["focusComposer"], hasLength(1));
     });
   });
 
-  group("an intent", () {
-    test("reads its name and arguments off Swift's map", () {
-      final intent = ShellIntent.fromMap({
-        "name": "sidebar",
-        "args": {"shown": false, "id": "c1", "index": 2.0},
-      });
-      expect(intent.name, "sidebar");
-      expect(intent.flag("shown"), isFalse);
-      expect(intent.string("id"), "c1");
-      expect(intent.integer("index"), 2);
-    });
-
-    test("with no arguments has none", () {
-      final intent = ShellIntent.fromMap({"name": "newChat"});
-      expect(intent.args, isEmpty);
-      expect(intent.flag("anything"), isFalse);
+  group("a surface's stack", () {
+    test("the last to claim answers, and the one beneath when it goes", () {
+      final slots = ShellSlots();
+      final under = _Bar();
+      final over = _Bar();
+      slots.pageBar.claim(under);
+      slots.pageBar.claim(over);
+      expect(slots.pageBar.top, over);
+      expect(slots.pageBar.leave(under), isFalse);
+      slots.pageBar.claim(under);
+      expect(slots.pageBar.leave(under), isTrue);
+      expect(slots.pageBar.top, over);
+      expect(slots.chatBar.top, isNull, reason: "each bar its own stack");
     });
   });
 

@@ -1,3 +1,4 @@
+import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -10,7 +11,6 @@ import "../sidebar/remote_projects.dart";
 import "shell_outbox.dart";
 import "../app_routes.dart";
 import "shell_sidebar.dart" show projectSymbol, remoteSymbol;
-import "snapshots.dart";
 
 /// Whether the native palette is open, what is typed in it, and which opening
 /// this is.
@@ -47,7 +47,7 @@ class PalettePublisher extends ConsumerWidget {
     final palette = ref.watch(shellPaletteProvider);
     ref
         .read(shellOutboxProvider)
-        .post(
+        .palette(
           palette.open
               ? _snapshot(ref, palette)
               : PaletteSnapshot(open: false, serial: palette.serial),
@@ -96,23 +96,29 @@ class PalettePublisher extends ConsumerWidget {
       query: palette.query,
       running: running,
     );
-    final sections = <({String heading, List<PaletteItem> items})>[
+    final sections = [
       if (!listing.searching) ...[
-        (heading: "", items: [for (final p in listing.projects) local(p)]),
-        (heading: "", items: [for (final p in listing.mine) local(p)]),
-        (
+        PaletteSection(
+          heading: "",
+          items: [for (final p in listing.projects) local(p)],
+        ),
+        PaletteSection(
+          heading: "",
+          items: [for (final p in listing.mine) local(p)],
+        ),
+        PaletteSection(
           heading: "Other Devices",
           items: [for (final e in listing.devices) mirrored(e)],
         ),
       ] else
-        (
+        PaletteSection(
           heading: "Projects",
           items: [
             for (final p in listing.projects) local(p),
             for (final e in listing.devices) mirrored(e),
           ],
         ),
-      (
+      PaletteSection(
         heading: "Chats",
         items: [
           for (final chat in listing.chats)
@@ -142,45 +148,47 @@ class PalettePublisher extends ConsumerWidget {
   }
 }
 
-/// Runs what the native palette sends, in [context] under the Navigator.
-/// Answers what the Swift waits on, which is nothing: a project made from the
-/// palette is the sidebar's `createProject`.
-Future<Object?> runPaletteIntent(
-  BuildContext context,
-  WidgetRef ref,
-  ShellIntent intent,
-) async {
-  final palette = ref.read(shellPaletteProvider.notifier);
-  switch (intent.name) {
-    case "search":
-      palette.search(intent.maybeString("query") ?? "");
-    case "close":
-      palette.close();
-    case "pickProject":
-      palette.close();
-      if (!await toConversation(context, ref.read(appRoutesProvider))) {
-        return null;
-      }
-      selectProject(ref, (
-        device: intent.maybeString("device"),
-        project: intent.maybeString("project"),
-      ));
-    case "pickChat":
-      palette.close();
-      final id = intent.string("chat");
-      final chat = ref
-          .read(chatListProvider)
-          .value
-          ?.where((c) => c.id == id)
-          .firstOrNull;
-      if (chat == null) return null;
-      if (!context.mounted ||
-          !await toConversation(context, ref.read(appRoutesProvider))) {
-        return null;
-      }
-      // Into its project first: the sidebar lists one, and would otherwise
-      // deny the chat on screen.
-      ref.read(selectedChatIdProvider.notifier).reveal(chat);
+/// The app's own, under a name [PaletteRunner]'s methods do not hide.
+const _selectProject = selectProject;
+
+/// Runs what the native palette sends, in [context] under the Navigator. A
+/// project made from the palette is the sidebar's `createProject`.
+class PaletteRunner implements PaletteIntents {
+  PaletteRunner(this.context, this.ref);
+
+  final BuildContext context;
+  final WidgetRef ref;
+
+  ShellPalette get _palette => ref.read(shellPaletteProvider.notifier);
+
+  @override
+  Future<void> search(String query) async => _palette.search(query);
+
+  @override
+  Future<void> close() async => _palette.close();
+
+  @override
+  Future<void> pickProject(String? device, String? project) async {
+    _palette.close();
+    if (!await toConversation(context, ref.read(appRoutesProvider))) return;
+    _selectProject(ref, (device: device, project: project));
   }
-  return null;
+
+  @override
+  Future<void> pickChat(String id) async {
+    _palette.close();
+    final chat = ref
+        .read(chatListProvider)
+        .value
+        ?.where((c) => c.id == id)
+        .firstOrNull;
+    if (chat == null) return;
+    if (!context.mounted ||
+        !await toConversation(context, ref.read(appRoutesProvider))) {
+      return;
+    }
+    // Into its project first: the sidebar lists one, and would otherwise
+    // deny the chat on screen.
+    ref.read(selectedChatIdProvider.notifier).reveal(chat);
+  }
 }
