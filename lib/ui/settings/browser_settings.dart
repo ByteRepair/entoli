@@ -166,10 +166,10 @@ class _AgentBrowserSectionState extends ConsumerState<AgentBrowserSection> {
               "A WebView kept off screen. The chat's "
               "browser card shows its page.",
             ),
-            value: picked != null,
+            value: browser.configured,
             onChanged: (on) => ref
                 .read(appSettingsProvider.notifier)
-                .setAgentBrowser(on ? webViewBrowserId : null),
+                .setAgentBrowser(on ? webViewBrowserId : browserOffId),
           )
         else ...[
           FutureBuilder<List<FoundBrowser>>(

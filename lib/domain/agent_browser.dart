@@ -487,6 +487,10 @@ const embeddedBrowserId = "embedded";
 /// The setting's value where the browser is the app's own WebView.
 const webViewBrowserId = "webview";
 
+/// The setting's value where the user turned the WebView off. The phones'
+/// browser is on by default, so unset is on and off has to be written.
+const browserOffId = "off";
+
 /// Where there is no browser to drive: the web.
 class UnavailableAgentBrowser extends AgentBrowser {
   const UnavailableAgentBrowser();

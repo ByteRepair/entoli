@@ -917,9 +917,12 @@ permission. All of this was checked on an emulator: clicks, screenshots and
 the screencast with the app backgrounded and with the screen off.
 
 `AgentBrowser.inApp` is what the UI reads, not the platform: Settings > Agent
-Browser is then a switch (`agentBrowser` is `webViewBrowserId` or null; any
-other value, a desktop's path from a restored backup, is off), with no window
-toggle and no Helium, and the chat's browser card, the user's view of the page,
+Browser is then a switch, **on by default**: unset and `webViewBrowserId` are
+on, `browserOffId` is what turning it off writes, and any other value, a
+desktop's path from a restored backup, is off. Off has to be written because
+unset is on — the desktops' the other way round, where Helium's setup step
+is what turns theirs on. There is no window toggle and no Helium, and the
+chat's browser card, the user's view of the page,
 draws no "Open in a window". What it lacks: downloads (a WebView's go to a
 `DownloadListener`, not the protocol) and uBlock Origin. Passkeys are
 rejected rather than missing: WebView has no WebAuthn unless the app opts in,

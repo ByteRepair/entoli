@@ -57,9 +57,14 @@ class CdpBrowser extends AgentBrowser {
 
   String? get _executable {
     final value = picked();
+    // The WebView is on unless turned off; a desktop's path, from a restored
+    // backup, is not a pick here.
+    if (webViews != null) {
+      return value == null || value == webViewBrowserId
+          ? webViewBrowserId
+          : null;
+    }
     if (value == null) return null;
-    // A desktop's path, from a restored backup, is not a pick here.
-    if (webViews != null) return value == webViewBrowserId ? value : null;
     if (value == embeddedBrowserId) return embedded.executable;
     return File(value).existsSync() ? value : null;
   }

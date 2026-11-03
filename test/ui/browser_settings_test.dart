@@ -4,6 +4,7 @@ import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/browser/cdp_browser.dart";
 import "package:agent_chat/data/browser/helium.dart";
+import "package:agent_chat/domain/agent_browser.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/providers.dart";
 
@@ -15,8 +16,8 @@ void main() {
 
   tearDown(() => app.dispose());
 
-  // Android's browser is the app's WebView: a switch, with nothing to pick,
-  // no window to show and no Helium to download.
+  // Android's browser is the app's WebView: a switch, on by default, with
+  // nothing to pick, no window to show and no Helium to download.
   testWidgets("Android turns the WebView on and off rather than picking a "
       "browser", (tester) async {
     app = TestApp.create(
@@ -34,14 +35,16 @@ void main() {
     expect(find.text("Show the browser window"), findsNothing);
     expect(find.text("Embedded browser"), findsNothing);
     final browser = app.container.read(agentBrowserProvider);
-    expect(browser.configured, isFalse);
-
-    await tester.tap(find.text("Let the agent use a browser"));
-    await tester.pumpAndSettle();
     expect(browser.configured, isTrue);
 
     await tester.tap(find.text("Let the agent use a browser"));
     await tester.pumpAndSettle();
     expect(browser.configured, isFalse);
+    // Off is written, since unset is on.
+    expect(app.container.read(appSettingsProvider).agentBrowser, browserOffId);
+
+    await tester.tap(find.text("Let the agent use a browser"));
+    await tester.pumpAndSettle();
+    expect(browser.configured, isTrue);
   });
 }

@@ -54,45 +54,8 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
 
   late final _pageWidgets = <Widget>[
     _IntroPage(),
-    _Slide(
-      icon: Icons.key,
-      title: "Bring your own model",
-      body:
-          "Connect a provider you choose, or run a model right on this "
-          "device. Your chats stay private.",
-    ),
-    _Slide(
-      icon: Icons.terminal,
-      title: "It works on your machine",
-      body: "The agent runs commands in a workspace here, with your approval.",
-    ),
-    _Slide(
-      icon: Icons.folder_outlined,
-      title: "Made of your files",
-      body: "Skills, agents and memories are plain files you own.",
-    ),
-    _Slide(
-      icon: Icons.alarm,
-      title: "Works on schedule",
-      body: "Have it run a task at a time you pick, or when a file changes.",
-    ),
-    _Slide(
-      icon: Icons.sync,
-      title: "On all your devices",
-      body: "Pair your devices and pick up a chat where you left it.",
-    ),
-    _ProviderPage(),
     _ModelPage(),
-    _MemoryPage(),
     _ExtrasPage(),
-    _IdeasPage(),
-    _Slide(
-      icon: Icons.lock_outline,
-      title: "Yours alone",
-      body:
-          "Nothing leaves your model without your say-so, and no service "
-          "stamps its watermark on what Entoli writes for you.",
-    ),
     _ResponsibilityPage(accepted: _accepted),
   ];
 
@@ -151,20 +114,16 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
 
   @override
   Widget build(BuildContext context) {
-    // The two setup pages hold the tour: the provider page until some model is
-    // reachable, the model page until a default is picked. The swipe cannot go
-    // around the button. Named off the page list, so reordering or inserting a
-    // page cannot move a gate to the wrong one.
+    // The model page holds the tour until some model is reachable and a
+    // default is picked. The swipe cannot go around the button. Named off the
+    // page list, so reordering or inserting a page cannot move the gate.
     final reachable = ref.watch(
       availableModelsProvider.select((m) => _agentModels(m.value) > 0),
     );
     final chosen = ref.watch(
       appSettingsProvider.select((s) => s.defaultProviderId != null),
     );
-    final current = _pageWidgets[_page];
-    final gate =
-        (current is _ProviderPage && !reachable) ||
-        (current is _ModelPage && !chosen);
+    final gate = _pageWidgets[_page] is _ModelPage && !(reachable && chosen);
     return Column(
       children: [
         Expanded(
@@ -398,9 +357,43 @@ class _Slide extends StatelessWidget {
   }
 }
 
-/// The opening page: the mark on a soft glow, the name, one line.
+/// The opening page: the mark on a soft glow, the name, one line, and what the
+/// app is as a short list rather than a slide each.
 class _IntroPage extends StatelessWidget {
   const _IntroPage();
+
+  static const _features = [
+    (
+      Icons.key,
+      "Bring your own model",
+      "A provider you choose, or one running right on this device.",
+    ),
+    (
+      Icons.terminal,
+      "It works on your machine",
+      "Commands run in a workspace here, with your approval.",
+    ),
+    (
+      Icons.folder_outlined,
+      "Made of your files",
+      "Skills, agents and memories are plain files you own.",
+    ),
+    (
+      Icons.alarm,
+      "Works on schedule",
+      "A task at a time you pick, or when a file changes.",
+    ),
+    (
+      Icons.sync,
+      "On all your devices",
+      "Pair them and pick up a chat where you left it.",
+    ),
+    (
+      Icons.lock_outline,
+      "Yours alone",
+      "Nothing leaves without your say-so, and nothing is watermarked.",
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -410,8 +403,8 @@ class _IntroPage extends StatelessWidget {
       children: [
         Center(
           child: Container(
-            width: 200,
-            height: 200,
+            width: 144,
+            height: 144,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
@@ -422,10 +415,10 @@ class _IntroPage extends StatelessWidget {
                 ],
               ),
             ),
-            child: const AppMark(size: 104),
+            child: const AppMark(size: 76),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         Text(
           "Welcome to Entoli",
           textAlign: TextAlign.center,
@@ -439,6 +432,14 @@ class _IntroPage extends StatelessWidget {
             color: scheme.onSurfaceVariant,
           ),
         ),
+        const SizedBox(height: 20),
+        for (final (icon, title, detail) in _features)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(icon, color: scheme.primary),
+            title: Text(title),
+            subtitle: Text(detail),
+          ),
       ],
     );
   }
@@ -450,9 +451,10 @@ int _agentModels(List<ModelOption>? models) => (models ?? const [])
     .where((m) => !isTitleOnlyModel(m.providerId, m.modelId))
     .length;
 
-/// Where the model runs. Next waits here until some model is reachable.
-class _ProviderPage extends ConsumerWidget {
-  const _ProviderPage();
+/// Where the model runs, and once one is reachable, which answers a new chat.
+/// Next waits here until some model is reachable and a default is picked.
+class _ModelPage extends ConsumerWidget {
+  const _ModelPage();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -477,13 +479,26 @@ class _ProviderPage extends ConsumerWidget {
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 250),
           child: count > 0
-              ? Row(
+              ? Column(
                   key: const ValueKey(true),
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Icon(Icons.check_circle, size: 18, color: scheme.primary),
-                    const SizedBox(width: 8),
-                    Text(count == 1 ? "1 model ready" : "$count models ready"),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.check_circle,
+                          size: 18,
+                          color: scheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          count == 1 ? "1 model ready" : "$count models ready",
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const DefaultsSection(),
                   ],
                 )
               : Text(
@@ -492,45 +507,6 @@ class _ProviderPage extends ConsumerWidget {
                   textAlign: TextAlign.center,
                   style: TextStyle(color: scheme.onSurfaceVariant),
                 ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Which model answers a new chat. Next waits here until one is picked.
-class _ModelPage extends StatelessWidget {
-  const _ModelPage();
-
-  @override
-  Widget build(BuildContext context) => const _Slide(
-    icon: Icons.auto_awesome_outlined,
-    title: "Pick a model",
-    body: "The one that answers a new chat, and the one that names it.",
-    children: [DefaultsSection()],
-  );
-}
-
-/// One switch: the Memory category's "Keep memories", every other memory
-/// setting left at its default.
-class _MemoryPage extends ConsumerWidget {
-  const _MemoryPage();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final on = ref.watch(appSettingsProvider.select((s) => s.autoMemory));
-    return _Slide(
-      icon: Icons.psychology,
-      title: "Remember things",
-      body: "The agent can keep what it learns between chats.",
-      children: [
-        Card(
-          child: SwitchListTile(
-            title: const Text("Enable memories"),
-            value: on,
-            onChanged: (value) =>
-                ref.read(appSettingsProvider.notifier).setAutoMemory(value),
-          ),
         ),
       ],
     );
@@ -572,40 +548,6 @@ class _ExtrasPage extends StatelessWidget {
         title: "Image generation",
         detail: "Let the agent make images, shown in the chat.",
         category: SettingsCategory.images,
-      ),
-      _SetupRow.category(
-        title: "Terminal",
-        detail: "Run commands here, or in an isolated Linux.",
-        category: SettingsCategory.terminal,
-      ),
-    ],
-  );
-}
-
-/// A few things to ask for, as chips rather than a paragraph.
-class _IdeasPage extends StatelessWidget {
-  const _IdeasPage();
-
-  static const _ideas = [
-    (Icons.newspaper, "Summarise the news"),
-    (Icons.mail_outline, "Draft that email"),
-    (Icons.code, "Write and test code"),
-    (Icons.web, "Publish a page"),
-  ];
-
-  @override
-  Widget build(BuildContext context) => _Slide(
-    icon: Icons.lightbulb_outline,
-    title: "Ask it anything",
-    children: [
-      Wrap(
-        alignment: WrapAlignment.center,
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          for (final (icon, label) in _ideas)
-            Chip(avatar: Icon(icon, size: 18), label: Text(label)),
-        ],
       ),
     ],
   );
