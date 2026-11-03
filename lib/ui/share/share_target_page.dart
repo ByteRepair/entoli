@@ -6,6 +6,7 @@ import "../../domain/models.dart" show ChatTitle;
 import "../../domain/project.dart";
 import "../../domain/workspace.dart";
 import "../../providers.dart";
+import "../widgets/page_bar.dart";
 
 /// Where the files another app shared should go. Every workspace Entoli has is
 /// a row — each project's shared one, the default included, then each chat's
@@ -26,12 +27,10 @@ class ShareTargetPage extends ConsumerWidget {
     final chats = ref.watch(chatListProvider).value ?? const [];
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          files.length == 1
-              ? "Share 1 file to"
-              : "Share ${files.length} files to",
-        ),
+      appBar: PageBar(
+        title: files.length == 1
+            ? "Share 1 file to"
+            : "Share ${files.length} files to",
       ),
       body: ListView(
         children: [

@@ -20,6 +20,7 @@ import "../widgets/install_destination.dart";
 import "../widgets/nothing.dart";
 import "unreachable.dart";
 import "marketplace.dart";
+import "../widgets/page_bar.dart";
 
 /// Everything one entry is previewed and installed with, fetched at open:
 /// the README, and the bytes an Install puts somewhere — a skill's whole
@@ -336,7 +337,7 @@ class _MarketplaceEntryPreviewPageState
         ? false
         : preview.installable(widget.kind);
     return Scaffold(
-      appBar: AppBar(title: Text("Marketplace · ${widget.kind.label}")),
+      appBar: PageBar(title: "Marketplace · ${widget.kind.label}"),
       body: _failed
           ? Unreachable(onRetry: _load, detail: _failureDetail)
           : preview == null

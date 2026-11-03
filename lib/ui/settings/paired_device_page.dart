@@ -10,6 +10,7 @@ import "../../providers.dart";
 import "../fonts.dart" show monoFamily;
 import "../widgets/dialogs.dart";
 import "../widgets/section_header.dart";
+import "../widgets/page_bar.dart";
 
 /// The verbatim values' face: this page's fingerprints and last address
 /// render in the bundled mono, not the platform alias the rest of the sync
@@ -132,7 +133,7 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
     // repeated sits one line down, and a title saying who this is a page
     // about would show it twice on a screen this short.
     return Scaffold(
-      appBar: AppBar(title: const Text("Paired device")),
+      appBar: PageBar(title: "Paired device"),
       body: !_loaded
           ? const Center(child: CircularProgressIndicator())
           : device == null

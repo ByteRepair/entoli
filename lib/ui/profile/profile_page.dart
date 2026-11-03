@@ -18,6 +18,7 @@ import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart" show mutedParagraph;
 import "../widgets/text_file_page.dart";
 import "linked_instructions.dart";
+import "../widgets/page_bar.dart";
 
 /// Open the app-level profile: the sidebar's tile and the app menu.
 void openProfile(BuildContext context) => Navigator.of(
@@ -388,19 +389,15 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     return DiscardGuard(
       edited: () => _edited,
       child: Scaffold(
-        appBar: AppBar(
-          title: Text(global ? "Profile" : "Project instructions"),
+        appBar: PageBar(
+          title: global ? "Profile" : "Project instructions",
           actions: [
-            IconButton(
-              icon: const Icon(Icons.restart_alt),
-              tooltip: "Clear",
+            PageAction.icon(
+              icon: Icons.restart_alt,
+              label: "Clear",
               onPressed: _loaded && !_saving ? _clear : null,
             ),
-            IconButton(
-              icon: const Icon(Icons.check),
-              tooltip: "Save",
-              onPressed: _loaded && !_saving ? _save : null,
-            ),
+            PageAction.confirm(onPressed: _loaded && !_saving ? _save : null),
           ],
         ),
         body: !_loaded
@@ -430,8 +427,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                           hintText: "Not set",
                           suffixIcon: IconButton(
                             icon: const Icon(Icons.calendar_today),
-                            onPressed: _pickDate,
                             tooltip: "Pick date",
+                            onPressed: _pickDate,
                           ),
                         ),
                         onTap: _pickDate,

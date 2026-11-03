@@ -225,39 +225,91 @@ class SidebarSnapshot extends ShellSnapshot {
 }
 
 /// One button of the chat's toolbar, or its spinner.
+/// How a [ToolbarItem] is drawn: an icon, a word, a word in the accent's
+/// fill, or the page's tick — the system's confirm, where it has one.
+enum ToolbarStyle { icon, text, prominent, confirm }
+
+/// One choice of a [ToolbarItem] that opens a menu.
+class ToolbarMenuItem {
+  const ToolbarMenuItem({
+    required this.id,
+    required this.label,
+    this.hint,
+    this.symbol,
+    this.checked = false,
+  });
+
+  /// What a pick sends back, as a press's `id`.
+  final String id;
+  final String label;
+
+  /// Drawn after the label, quieter: a key or a trigger.
+  final String? hint;
+
+  /// An SF Symbol's name, drawn before the label.
+  final String? symbol;
+
+  /// Ticked, as a setting the choice turns on and off.
+  final bool checked;
+
+  Map<String, Object?> toMap() => {
+    "id": id,
+    "label": label,
+    "hint": hint,
+    "symbol": symbol,
+    "checked": checked,
+  };
+}
+
+/// A button of a title bar.
 class ToolbarItem {
   const ToolbarItem({
     required this.id,
     required this.label,
     this.symbol,
     this.spinner = false,
+    this.style = ToolbarStyle.icon,
+    this.enabled = true,
+    this.menu = const [],
   });
 
-  /// What a press sends back, as a `toolbar` intent's `id`.
+  /// What a press sends back, as a press intent's `id`.
   final String id;
 
-  /// Its tooltip and accessibility label.
+  /// Its tooltip and accessibility label, and the word a text one shows.
   final String label;
 
   /// An SF Symbol's name; none for the spinner.
   final String? symbol;
   final bool spinner;
+  final ToolbarStyle style;
+  final bool enabled;
+
+  /// Its choices, where it opens a menu rather than doing one thing.
+  final List<ToolbarMenuItem> menu;
 
   Map<String, Object?> toMap() => {
     "id": id,
     "label": label,
     "symbol": symbol,
     "spinner": spinner,
+    "style": style.name,
+    "enabled": enabled,
+    "menu": [for (final item in menu) item.toMap()],
   };
 }
 
-/// The window's title and toolbar while the conversation is in front: the
-/// chat's title, what the Flutter bar said under it, and its buttons.
-class ChatBarSnapshot extends ShellSnapshot {
-  const ChatBarSnapshot({
+/// What leads a title bar: nothing, a way back, or a close that discards.
+enum TitleBarLeading { back, close }
+
+/// A title bar as the Swift draws it, whichever page it is for: one shape,
+/// so one view draws them all. See `TitleBar.swift`.
+sealed class TitleBarSnapshot extends ShellSnapshot {
+  const TitleBarSnapshot({
     required this.title,
     this.subtitle = "",
     this.expiresAt,
+    this.leading,
     this.items = const [],
   });
 
@@ -267,18 +319,57 @@ class ChatBarSnapshot extends ShellSnapshot {
   /// When a temporary chat expires, in milliseconds since the epoch; the
   /// Swift counts down to it.
   final int? expiresAt;
+  final TitleBarLeading? leading;
   final List<ToolbarItem> items;
 
-  @override
-  String get concern => "chatBar";
+  /// Whether there is a bar to draw at all.
+  bool get present => true;
 
   @override
   Map<String, Object?> toMap() => {
+    "present": present,
     "title": title,
     "subtitle": subtitle,
     "expiresAt": expiresAt,
+    "leading": leading?.name,
     "items": [for (final item in items) item.toMap()],
   };
+}
+
+/// The window's title and toolbar while the conversation is in front: the
+/// chat's title, what the Flutter bar said under it, and its buttons.
+class ChatBarSnapshot extends TitleBarSnapshot {
+  const ChatBarSnapshot({
+    required super.title,
+    super.subtitle,
+    super.expiresAt,
+    super.items,
+  });
+
+  @override
+  String get concern => "chatBar";
+}
+
+/// The bar of the Flutter page over the conversation, `PageBar`'s: the
+/// window's title bar while the page is in front, with a way back and the
+/// page's own buttons. [none] where no page has one.
+class PageBarSnapshot extends TitleBarSnapshot {
+  const PageBarSnapshot({
+    required super.title,
+    super.subtitle,
+    super.leading = TitleBarLeading.back,
+    super.items,
+  }) : _present = true;
+
+  const PageBarSnapshot.none() : _present = false, super(title: "");
+
+  final bool _present;
+
+  @override
+  bool get present => _present;
+
+  @override
+  String get concern => "pageBar";
 }
 
 /// One entry of the composer's `/` or `@` menu.

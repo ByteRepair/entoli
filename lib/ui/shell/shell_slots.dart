@@ -2,10 +2,10 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 /// The surfaces the native shell draws for a page, each answering the intents
 /// sent under its name: `ShellModel.say` on the Swift side.
-enum ShellConcern { composer, turn, newChatScreen, voice, toolbar }
+enum ShellConcern { composer, turn, newChatScreen, voice, toolbar, pageBar }
 
 /// One of them on a page: the composer, the turn surface, the new-chat
-/// screen, voice mode, the chat's toolbar.
+/// screen, voice mode, the chat's toolbar, a page's title bar.
 abstract interface class ShellSurface {
   /// What the shell sent it: [name] says what, [args] the rest. Answers what
   /// the Swift waits on, or null.

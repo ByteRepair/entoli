@@ -19,6 +19,7 @@ import "../widgets/settings_card.dart";
 import "../widgets/temp_chat_ttl_field.dart";
 import "../widgets/thinking_slider.dart";
 import "../workspace/workspace_page.dart";
+import "../widgets/page_bar.dart";
 
 /// The settings a chat that has not been made yet will run its first turn
 /// under, popped back as a [ChatMeta] for the new-chat screen to hold until it
@@ -49,14 +50,10 @@ class _NewChatSettingsPageState extends State<NewChatSettingsPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: const Text("Chat settings"),
+    appBar: PageBar(
+      title: "Chat settings",
       actions: [
-        IconButton(
-          icon: const Icon(Icons.check),
-          tooltip: "Save",
-          onPressed: () => Navigator.of(context).pop(_meta),
-        ),
+        PageAction.confirm(onPressed: () => Navigator.of(context).pop(_meta)),
       ],
     ),
     body: ListView(
@@ -208,13 +205,11 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
       },
     );
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Chat settings"),
+      appBar: PageBar(
+        title: "Chat settings",
         actions: [
-          IconButton(
-            icon: const Icon(Icons.check),
+          PageAction.confirm(
             onPressed: _saving || _meta == null || frozen ? null : _save,
-            tooltip: "Save",
           ),
         ],
       ),

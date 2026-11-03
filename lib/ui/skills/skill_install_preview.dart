@@ -12,6 +12,7 @@ import "../../providers.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/install_bar.dart";
 import "../widgets/install_destination.dart";
+import "../widgets/page_bar.dart";
 
 /// A full page that shows a skill the model drafted and packaged, with an
 /// Install button. Pushed from `SkillInstallActivity`'s card; back gesture closes.
@@ -112,7 +113,7 @@ class _SkillInstallPreviewPageState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text("Install skill")),
+      appBar: PageBar(title: "Install skill"),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _package == null

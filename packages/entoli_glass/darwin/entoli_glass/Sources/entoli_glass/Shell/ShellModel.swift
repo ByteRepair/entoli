@@ -15,7 +15,8 @@ final class ShellModel: ObservableObject {
 
   @Published var window = WindowState()
   @Published var sidebar = SidebarState()
-  @Published var chatBar = ChatBarState()
+  @Published var chatBar = TitleBarState()
+  @Published var pageBar = TitleBarState(present: false)
   @Published var turn = TurnState()
   @Published var newChat = NewChatState()
   @Published var voice = VoiceState()
@@ -63,7 +64,9 @@ final class ShellModel: ObservableObject {
     case "sidebar":
       if let state: SidebarState = decode(), state != sidebar { sidebar = state }
     case "chatBar":
-      if let state: ChatBarState = decode(), state != chatBar { chatBar = state }
+      if let state: TitleBarState = decode(), state != chatBar { chatBar = state }
+    case "pageBar":
+      if let state: TitleBarState = decode(), state != pageBar { pageBar = state }
     case "palette":
       if let state: PaletteState = decode(), state != palette { palette = state }
     case "voice":
@@ -102,7 +105,8 @@ final class ShellModel: ObservableObject {
   }
 
   /// What the user did on one of the surfaces Dart keeps a stack of — the
-  /// composer, the turn, the new-chat screen, voice mode, the toolbar — sent
+  /// composer, the turn, the new-chat screen, voice mode, the toolbar, a
+  /// page's title bar — sent
   /// under its [concern] to the one on screen: see `ShellSlots`. [answered]
   /// hears what Dart answered.
   func say(
@@ -153,22 +157,4 @@ struct WindowState: Decodable, Equatable {
     default: nil
     }
   }
-}
-
-/// `ToolbarItem`.
-struct ToolbarItemState: Decodable, Equatable, Identifiable {
-  var id: String
-  var label: String
-  var symbol: String?
-  var spinner = false
-}
-
-/// `ChatBarSnapshot`.
-struct ChatBarState: Decodable, Equatable {
-  var title = "Entoli"
-  var subtitle = ""
-  var expiresAt: Double?
-  var items: [ToolbarItemState] = []
-
-  var expires: Date? { expiresAt.map { Date(timeIntervalSince1970: $0 / 1000) } }
 }

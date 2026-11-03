@@ -8,6 +8,7 @@ import "../widgets/agent_picture.dart";
 import "../widgets/empty_pane.dart";
 import "../widgets/section_header.dart" show mutedParagraph;
 import "mirror_controller.dart";
+import "../widgets/page_bar.dart";
 
 /// What fills each participant's context window, out of the model's whole,
 /// with the auto-compact threshold marked on it.
@@ -38,7 +39,7 @@ class ContextPage extends ConsumerWidget {
             : a.compareTo(b),
       );
     return Scaffold(
-      appBar: AppBar(title: const Text("Context")),
+      appBar: PageBar(title: "Context"),
       body: contexts.isEmpty
           ? const EmptyPane(
               icon: Icons.data_usage,

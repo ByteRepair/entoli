@@ -57,6 +57,7 @@ import "terminal_settings.dart";
 import "voice_settings.dart";
 import "settings_category.dart";
 import "welcome_page.dart";
+import "../widgets/page_bar.dart";
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key, this.initialCategory, this.focus = false});
@@ -115,7 +116,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       selected: wide ? category : null,
       onSelect: (category) => _open(category, push: !wide),
     );
-    final bar = AppBar(title: const Text("Settings"));
+    final bar = PageBar(title: "Settings");
 
     if (!wide) {
       return Scaffold(appBar: bar, body: categories);
@@ -136,7 +137,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 /// A category as the whole page: the bar holds nothing but its name, and
 /// leaving it is the back gesture.
 Scaffold _categoryScaffold(SettingsCategory category) => Scaffold(
-  appBar: AppBar(title: Text(category.label)),
+  appBar: PageBar(title: category.label),
   body: _categoryBody(category),
 );
 

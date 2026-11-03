@@ -18,6 +18,7 @@ import "../widgets/prompt_field.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 import "../widgets/temp_chat_ttl_field.dart";
+import "../widgets/page_bar.dart";
 
 /// The Triggers category: a prompt a schedule, a countdown or a file change
 /// sends. Android, macOS, iOS and Linux all have a platform half: on Android
@@ -261,20 +262,19 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
       edited: () => _edited,
       message: "Throw away the edits to this trigger?",
       child: Scaffold(
-        appBar: AppBar(
-          title: Text(isNew ? "New trigger" : "Edit trigger"),
+        appBar: PageBar(
+          title: isNew ? "New trigger" : "Edit trigger",
           actions: [
             if (!isNew)
-              IconButton(
-                icon: const Icon(Icons.delete_outline),
-                tooltip: "Delete trigger",
+              PageAction.icon(
+                icon: Icons.delete_outline,
+                label: "Delete trigger",
                 onPressed: _delete,
               ),
             // The agent's trigger is the switch and the delete: anything else
             // saved here would rewrite what its conversation armed (source,
             // anchor, re-enable) from a page whose prompt it refuses to touch.
-            if (!registered)
-              TextButton(onPressed: _save, child: const Text("Save")),
+            if (!registered) PageAction.text(label: "Save", onPressed: _save),
           ],
         ),
         body: ListView(

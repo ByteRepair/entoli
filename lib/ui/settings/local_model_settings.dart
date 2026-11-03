@@ -11,6 +11,7 @@ import "../widgets/catalog.dart";
 import "../../core/formatting.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
+import "../widgets/page_bar.dart";
 
 /// The accelerators this phone turned out to have, or null where the engine
 /// offers no choice. Asked once and kept: it spawns the server with
@@ -63,7 +64,7 @@ class LocalLlmSettingsPage extends ConsumerWidget {
     final controls = ref.watch(localEngineProvider).controls;
     final prefill = ref.watch(localPrefillProvider) != null;
     return Scaffold(
-      appBar: AppBar(title: const Text("LLM settings")),
+      appBar: PageBar(title: "LLM settings"),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
@@ -418,7 +419,7 @@ class _AddLocalModelPageState extends ConsumerState<AddLocalModelPage> {
       ),
     );
     return Scaffold(
-      appBar: AppBar(title: const Text("Add model")),
+      appBar: PageBar(title: "Add model"),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
