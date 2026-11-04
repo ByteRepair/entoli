@@ -59,6 +59,41 @@ void main() {
     expect(routes.covered.value, isFalse);
   });
 
+  testWidgets("a sheet rises over the composer, and covers no page", (
+    tester,
+  ) async {
+    final routes = AppRoutes();
+    final navigator = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigator,
+        navigatorObservers: [routes],
+        home: const SizedBox(),
+      ),
+    );
+    expect(routes.sheeted.value, isFalse);
+
+    showDialog<void>(
+      context: navigator.currentContext!,
+      builder: (_) => const SizedBox(),
+    );
+    await tester.pumpAndSettle();
+    expect(routes.sheeted.value, isFalse);
+    navigator.currentState!.pop();
+    await tester.pumpAndSettle();
+
+    showModalBottomSheet<void>(
+      context: navigator.currentContext!,
+      builder: (_) => const SizedBox(height: 100),
+    );
+    await tester.pumpAndSettle();
+    expect(routes.sheeted.value, isTrue);
+    expect(routes.covered.value, isFalse);
+    navigator.currentState!.pop();
+    await tester.pumpAndSettle();
+    expect(routes.sheeted.value, isFalse);
+  });
+
   group("going back to the conversation", () {
     late AppRoutes routes;
     late GlobalKey<NavigatorState> navigator;

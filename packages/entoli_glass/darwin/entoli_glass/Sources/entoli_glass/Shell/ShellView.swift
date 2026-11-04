@@ -65,6 +65,14 @@ struct ShellView: View {
           ComposerSlot(composer: model.composer, covered: model.window.covered)
         }
         .animation(ComposerView.motion, value: model.turn.isEmpty)
+        // A sheet Flutter raised is meant to be over the composer, and the
+        // Flutter view is under it: the composer stands aside while one is
+        // up, which the sheet hides anyway. It keeps its room, so the insets
+        // Dart is told — and the conversation under the sheet — stay put.
+        .opacity(model.window.sheeted ? 0 : 1)
+        .allowsHitTesting(!model.window.sheeted)
+        .accessibilityHidden(model.window.sheeted)
+        .animation(.easeOut(duration: 0.2), value: model.window.sheeted)
       }
       .windowBar(model)
     }
