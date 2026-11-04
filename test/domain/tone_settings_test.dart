@@ -57,7 +57,9 @@ void main() {
       final repo = repoWith(AppSettings(tone: Tone.formal, citations: true));
       final chat = await repo.createChat();
 
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+      await repo
+          .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+          .toList();
 
       final settings = backend.prompts.single.settings;
       expect(settings.tone, Tone.formal);
@@ -68,7 +70,9 @@ void main() {
       final repo = repoWith(AppSettings());
       final chat = await repo.createChat();
 
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+      await repo
+          .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+          .toList();
 
       final settings = backend.prompts.single.settings;
       expect(settings.tone, Tone.none);
@@ -81,7 +85,9 @@ void main() {
       final repo = repoWith(AppSettings(tone: Tone.direct, citations: true));
       final chat = await repo.createChat(project: "proj");
 
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+      await repo
+          .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+          .toList();
 
       final settings = backend.prompts.single.settings;
       expect(settings.tone, Tone.kind);
@@ -95,7 +101,9 @@ void main() {
       final repo = repoWith(AppSettings(citations: true));
       final chat = await repo.createChat(project: "proj");
 
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+      await repo
+          .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+          .toList();
 
       expect(backend.prompts.single.settings.citations, isFalse);
     });

@@ -598,9 +598,22 @@ Future<void> writeChatVia(
 
 /// The records, plus the one closing each reply. A log with no closing record
 /// reads as a turn the process was killed in the middle of, which is the point
-/// of `finished: false` and a surprise everywhere else.
+/// of `finished: false` and a surprise everywhere else. Stamped the way the
+/// room writes every message: a reply that names no author is Athena's, and
+/// a say that names no one was said to her.
 List<ChatRecord> _asWritten(List<Message> messages, bool finished) => [
-  ...recordsOf(messages),
+  ...recordsOf([
+    for (final m in messages)
+      switch (m.role) {
+        MessageRole.assistant when m.author == null => m.copyWith(
+          author: "@athena",
+        ),
+        MessageRole.user when m.addressees.isEmpty => m.copyWith(
+          addressees: const ["@athena"],
+        ),
+        _ => m,
+      },
+  ]),
   if (finished)
     for (final m in messages.where((m) => m.role == MessageRole.assistant))
       ChatRecord.turnEnd(

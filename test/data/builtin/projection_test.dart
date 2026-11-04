@@ -614,39 +614,17 @@ void main() {
     );
 
     test(
-      "the main agent's unnamed replies reach a member as labeled too",
-      () async {
-        final projected = await project([
-          asked("what happened?"),
-          said(MessageRole.assistant, const [
-            MessagePart.text(text: "I looked."),
-          ]),
-        ], viewer: "researcher");
-
-        expect(projected.map((m) => m.role), [LlmRole.user, LlmRole.user]);
-        expect(projected.last.text, isNot(contains("@researcher")));
-        // The unnamed reply is the house's — the wording says who wrote it
-        // without naming a member handle.
-        expect(projected.last.text, contains("another agent"));
-      },
-    );
-
-    test(
-      "a conversation with no authors is worded for the house exactly as before",
+      "a sub-agent's transcript, which has no authors, is all its own",
       () async {
         final messages = [
           asked("what is 2+2?"),
           said(MessageRole.assistant, const [MessagePart.text(text: "four")]),
         ];
-        final forHouse = await project(messages);
-        expect(forHouse.map((m) => m.role), [LlmRole.user, LlmRole.assistant]);
-        // The house is unnamed and the reply is unnamed: the same viewer, so
-        // the reply is the house's own, whatever the date — the wording the
-        // cache warms on. `first` rides along unchanged too.
-        expect(
-          (await project(messages)).map((m) => m.text),
-          forHouse.map((m) => m.text),
-        );
+        final transcript = await project(messages);
+        expect(transcript.map((m) => m.role), [
+          LlmRole.user,
+          LlmRole.assistant,
+        ]);
       },
     );
 
@@ -713,7 +691,6 @@ void main() {
         ], viewer: "reviewer");
         expect(forReviewer.map((m) => m.role), [LlmRole.user, LlmRole.user]);
         expect(forReviewer.first.text, contains("addressed to @researcher"));
-        expect(forReviewer.first.text, isNot(contains("(main agent)")));
 
         // The addressee's own view: the say is theirs, verbatim.
         final forResearcher = await project([
@@ -725,24 +702,23 @@ void main() {
           userTurnText("check the logs for @researcher", at: at, first: true),
         );
 
-        // The house reads the same say labeled: not its mail.
-        final forHouse = await project([
+        // Athena reads the same say labeled: not her mail.
+        final forAthena = await project([
           addressed("check the logs for @researcher", ["@researcher"]),
-        ]);
-        expect(forHouse.single.text, contains("addressed to @researcher"));
+        ], viewer: "athena");
+        expect(forAthena.single.text, contains("addressed to @researcher"));
         expect(
-          forHouse.single.text,
+          forAthena.single.text,
           isNot(
             userTurnText("check the logs for @researcher", at: at, first: true),
           ),
         );
 
-        // A say the room routed to nobody is the house's mail; a member reading
-        // it knows so from the label without a list to name.
-        final houseMail = await project([
-          asked("anyone home?"),
+        // A say naming nobody went to Athena; a member reading it knows so.
+        final athenaMail = await project([
+          addressed("anyone home?", ["@athena"]),
         ], viewer: "researcher");
-        expect(houseMail.single.text, contains("addressed to (main agent)"));
+        expect(athenaMail.single.text, contains("addressed to @athena"));
       },
     );
 
@@ -763,44 +739,39 @@ void main() {
     test(
       "the dress is the viewer's first own mail, not the room's opener",
       () async {
-        // The room opened on the house's mail; the reviewer's first own mail
+        // The room opened on Athena's mail; the reviewer's first own mail
         // came later, and is what their session dresses.
-        final forReviewer = await project([
-          asked("anyone home?"),
-          said(MessageRole.assistant, const [
-            MessagePart.text(text: "the house says yes"),
+        final opening = [
+          addressed("anyone home?", ["@athena"]),
+          authoredReply("@athena", const [
+            MessagePart.text(text: "Athena says yes"),
           ]),
           addressed("review the diff", ["@reviewer"]),
-        ], viewer: "reviewer");
+        ];
+        final forReviewer = await project(opening, viewer: "reviewer");
 
-        expect(forReviewer[0].text, contains("addressed to (main agent)"));
+        expect(forReviewer[0].text, contains("addressed to @athena"));
         expect(forReviewer[0].text, isNot(contains("The user asks:")));
         expect(
           forReviewer.last.text,
           userTurnText("review the diff", at: at, first: true),
         );
 
-        // The house's own view dresses the room's opener, its first mail.
-        final forHouse = await project([
-          asked("anyone home?"),
-          said(MessageRole.assistant, const [
-            MessagePart.text(text: "the house says yes"),
-          ]),
-          addressed("review the diff", ["@reviewer"]),
-        ]);
+        // Athena's own view dresses the room's opener, her first mail.
+        final forAthena = await project(opening, viewer: "athena");
         expect(
-          forHouse.first.text,
+          forAthena.first.text,
           userTurnText("anyone home?", at: at, first: true),
         );
-        expect(forHouse.last.text, contains("addressed to @reviewer"));
-        expect(forHouse.last.text, isNot(contains("The user asks:")));
+        expect(forAthena.last.text, contains("addressed to @reviewer"));
+        expect(forAthena.last.text, isNot(contains("The user asks:")));
 
         // And once dressed, a viewer's later mail does not dress again — the
         // dress is once per conversation, per viewer.
         final later = [
           ...[
-            asked("anyone home?"),
-            said(MessageRole.assistant, const [MessagePart.text(text: "yes")]),
+            addressed("anyone home?", ["@athena"]),
+            authoredReply("@athena", const [MessagePart.text(text: "yes")]),
             addressed("review the diff", ["@reviewer"]),
             authoredReply("@reviewer"),
             addressed("review it again", ["@reviewer"]),

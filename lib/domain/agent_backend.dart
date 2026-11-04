@@ -446,18 +446,10 @@ class TurnSettings {
   /// shell's to read on each command, for the reason they are settings.
   final Map<String, String> environment;
 
-  /// The member this turn is answered by, where the project runs Omada and
-  /// the message addressed exactly one: the named agent runs the turn under
-  /// its own prompt and session, and its reply is the one on the record. Null
-  /// is the main agent — the house — answering as it always has.
-  final String? omadaMember;
-
-  /// Whether Omada runs in this turn's project at all: the room is in force
-  /// whatever the say was addressed. The roster tool's gate, beside
-  /// [omadaMember] — that one says who answers, this says the room exists at
-  /// all. A say in the room that names a member who has since left the
-  /// library still answers through the house, so the room fact and the
-  /// member fact stay separate.
+  /// Whether Omada runs in this turn's project: the room holds the whole
+  /// library rather than Athena alone. Gates the roster tool and `end_turn`,
+  /// and keeps mentions from being delegations, every agent being in the
+  /// room.
   final bool omada;
 
   /// How many model calls this turn may make before it stops. The app's own
@@ -488,7 +480,6 @@ class TurnSettings {
     this.bundledInstructions,
     this.includesUserInstructions = false,
     this.environment = const {},
-    this.omadaMember,
     this.omada = false,
     this.turnMaxSteps,
     this.tone = Tone.none,
@@ -621,11 +612,13 @@ abstract class AgentBackend {
   /// what the model is shown of a user turn is the whole message, attachments
   /// named rather than passed. See "The projection" in `lib/domain/AGENTS.md`.
   ///
-  /// [steers] is what the user says to the turn while it runs, read at each
-  /// step boundary.
+  /// [participant] answers it, under their own file and in a session of
+  /// their own. [steers] is what the user says to the turn while it runs,
+  /// read at each step boundary.
   Stream<AgentEvent> sendPrompt(
     String chatId,
     Message prompt, {
+    required String participant,
     List<Message> history,
     List<ConversationCompaction> compactions,
     TurnSettings settings,
@@ -638,20 +631,17 @@ abstract class AgentBackend {
   /// is already held.
   Stream<AgentEvent> resumeTurn(
     String chatId, {
+    required String participant,
     List<Message> history,
     List<ConversationCompaction> compactions,
     TurnSettings settings,
     SteerInbox? steers,
   });
 
-  /// Drop the chat's live session so the next prompt starts a clean one,
-  /// seeded with [history]. [compactions] say where the conversation is
-  /// summarized: the rebuild puts the summary where the log put it.
-  Future<void> resetSession(
-    String chatId, {
-    List<Message> history = const [],
-    List<ConversationCompaction> compactions = const [],
-  });
+  /// Drop the chat's live sessions: the conversation they hold is no longer
+  /// the one being read. Each participant's next turn fills afresh from the
+  /// history it is sent with.
+  Future<void> resetSession(String chatId);
 
   /// Release everything this backend holds. Called when the app exits.
   Future<void> shutdown();

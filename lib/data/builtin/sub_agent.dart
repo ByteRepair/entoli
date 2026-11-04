@@ -19,8 +19,8 @@ import "tools/agent_tool.dart" show AgentCapabilities;
 import "tools/turn.dart" show SubAgents;
 import "builtin_options.dart";
 
-/// Spawns sub-agents for `task` tool calls — the main agent scheduling
-/// delegated participant turns, each with its own [BuiltinSession] and a
+/// Spawns sub-agents for `task` tool calls — a participant scheduling
+/// delegated turns, each with its own [BuiltinSession] and a
 /// transcript of its own under `subagents/`. What makes a sub-agent sub is
 /// the reply route: it runs to completion headless and never addresses the
 /// room — its final text returns as the tool result, readable by the main
@@ -107,7 +107,7 @@ class SubAgentRunner implements SubAgents {
 
   /// Run one sub-agent. The [agentName] is looked up in the [library]; a name
   /// that is not found falls back to `general`, and a missing `general` runs
-  /// as the main agent would. The [prompt] is the sub-agent's whole task — it
+  /// under no file at all. The [prompt] is the sub-agent's whole task — it
   /// sees nothing else of the parent's conversation.
   @override
   Future<ShellResult> run(

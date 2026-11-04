@@ -1,8 +1,8 @@
 import "../models.dart";
 import "../project_settings.dart" show OmadaOrdering;
 
-/// One item of the room's schedule: what a member (or the main agent, where
-/// the schedule names nobody) has been addressed to run. Either a user
+/// One item of the room's schedule: what a participant has been addressed to
+/// run. Either a user
 /// prompt — already on the log where it was said while the room ran — or a
 /// handoff, the reply that names the member. [generation] is the dispatch
 /// wave the item belongs to: zero is the user's own, uncapped, and one and
@@ -30,9 +30,7 @@ class ScheduledItem {
 /// each other fans out by the member count every wave, and the generation cap
 /// bounds depth, not breadth.
 class Schedule {
-  /// The null key is the main agent, who answers what no member was
-  /// addressed for.
-  final Map<String?, List<ScheduledItem>> _queues = {};
+  final Map<String, List<ScheduledItem>> _queues = {};
 
   /// The replies of turns that finished while a sibling was still speaking,
   /// in finish order: their handoffs wait for the settle the last one causes.
@@ -47,15 +45,8 @@ class Schedule {
 
   bool get isEmpty => _queues.values.every((q) => q.isEmpty);
 
-  /// Queue a user prompt for [members], or for the main agent where it names
-  /// nobody.
+  /// Queue a user prompt for [members].
   void addPrompt(List<String> members, Message prompt) {
-    if (members.isEmpty) {
-      (_queues[null] ??= []).add(
-        ScheduledItem(userPrompt: prompt, generation: 0),
-      );
-      return;
-    }
     for (final member in members) {
       (_queues[member] ??= []).add(
         ScheduledItem(userPrompt: prompt, generation: 0),
@@ -65,8 +56,7 @@ class Schedule {
 
   /// Hand [members] a turn on [reply], one generation past [generation].
   /// [thread] is the conversation, for which of two handoffs is the later. A
-  /// reply naming nobody is the round ending, not the house speaking
-  /// unprompted, so it queues nothing.
+  /// reply naming nobody is the round ending, so it queues nothing.
   ///
   /// Post: each of [members] holds exactly one waiting handoff.
   void addHandoff(
@@ -118,8 +108,8 @@ class Schedule {
   Future<void> dispatch({
     required OmadaOrdering Function() ordering,
     required int Function() cap,
-    required Set<String?> Function() busy,
-    required Future<void> Function(String? member, ScheduledItem item) run,
+    required Set<String> Function() busy,
+    required Future<void> Function(String member, ScheduledItem item) run,
   }) async {
     if (_dispatching) {
       _dispatchPending = true;
@@ -140,8 +130,8 @@ class Schedule {
   Future<void> _pass(
     OmadaOrdering ordering,
     int cap,
-    Set<String?> Function() busy,
-    Future<void> Function(String?, ScheduledItem) run,
+    Set<String> Function() busy,
+    Future<void> Function(String, ScheduledItem) run,
   ) async {
     var started = 0;
     for (final member in _queues.keys.toList()) {

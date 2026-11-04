@@ -505,7 +505,8 @@ void main() {
       await controller.regenerate(messagesOf(id)[2].id);
       await waitIdle(id);
 
-      final seeded = app.backend.resets.single.map((m) => m.plainText);
+      expect(app.backend.resets, [id]);
+      final seeded = app.backend.prompts.last.history.map((m) => m.plainText);
       expect(seeded, containsAll(["first", "first answer"]));
       expect(seeded, isNot(contains("second")));
       expect(seeded.join("\n"), isNot(contains("my private notes")));
@@ -671,9 +672,12 @@ void main() {
       app.backend.resets.clear();
 
       await controller.stepThread(second, -1);
+      expect(app.backend.resets, [id]);
 
+      await controller.send("and then?");
+      await waitIdle(id);
       expect(
-        app.backend.resets.single.map((m) => m.plainText),
+        app.backend.prompts.last.history.map((m) => m.plainText),
         contains("first answer"),
       );
     });
@@ -1472,35 +1476,35 @@ void main() {
         // Both members run, in the order the message named them: the mention
         // list is the schedule. The first rides the opening turn; the second
         // is dispatched at the settle it causes.
-        expect(prompts[0].settings.omadaMember, "explore");
-        expect(prompts[1].settings.omadaMember, "build");
+        expect(prompts[0].participant, "explore");
+        expect(prompts[1].participant, "build");
         // The second member answers the same prompt — the message was
         // addressed to them both.
         expect(prompts[1].prompt.id, prompts[0].prompt.id);
       },
     );
 
-    test("a direct chat never stamps, whatever the prompt names", () async {
+    test("a direct chat is Athena's, whatever the prompt names", () async {
       // Omada off: the reply is the main agent's, using the named agent's
       // instructions. No stamp, no label - the label would claim a member
       // authored the house's voice.
       final (id, _) = await chatWithOneTurn("hello @explore, find the tests");
 
       expect(messagesOf(id).first.documents, contains("@explore"));
-      expect(messagesOf(id).last.author, isNull);
-      expect(app.backend.prompts.single.prompt.addressees, isEmpty);
+      expect(messagesOf(id).last.author, "@athena");
+      expect(app.backend.prompts.single.prompt.addressees, ["@athena"]);
     });
 
     test(
       "a command is not addressed to anyone it names, resent or not",
       () async {
         final (id, controller) = await chatWithOneTurn("!grep @explore src/");
-        expect(messagesOf(id).last.author, isNull);
+        expect(messagesOf(id).last.author, "@athena");
 
         await controller.regenerate(messagesOf(id).last.id);
         await waitIdle(id);
 
-        expect(messagesOf(id).last.author, isNull);
+        expect(messagesOf(id).last.author, "@athena");
       },
     );
 
@@ -1543,7 +1547,7 @@ void main() {
       // what the next member is answering.
       expect(app.backend.prompts[1].prompt.id, messages[1].id);
       // And the settings carried the member to the backend.
-      expect(app.backend.prompts[1].settings.omadaMember, "explore");
+      expect(app.backend.prompts[1].participant, "explore");
       // The round's second reply is authored by the member it was addressed
       // to — the record's `author` is what the label reads.
       expect(messages.last.author, "@explore");
@@ -1563,7 +1567,7 @@ void main() {
       await waitIdle(id, limit: const Duration(seconds: 5));
 
       expect(
-        [for (final p in app.backend.prompts) p.settings.omadaMember],
+        [for (final p in app.backend.prompts) p.participant],
         ["explore", "build"],
       );
       expect(messagesOf(id)[1].addressees, ["@build"]);
@@ -1615,9 +1619,7 @@ void main() {
       );
       await waitIdle(id, limit: const Duration(seconds: 5));
 
-      final members = [
-        for (final p in app.backend.prompts) p.settings.omadaMember,
-      ];
+      final members = [for (final p in app.backend.prompts) p.participant];
       expect(members.where((m) => m == "general"), hasLength(1));
       // The one turn answers the newest reply, the older one in its history.
       final messages = messagesOf(id);
@@ -1737,7 +1739,7 @@ void main() {
       await waitIdle(id, limit: const Duration(seconds: 5));
 
       expect(app.backend.prompts, hasLength(2));
-      expect(app.backend.prompts[1].settings.omadaMember, "build");
+      expect(app.backend.prompts[1].participant, "build");
     });
 
     for (final ordering in [
@@ -1770,7 +1772,7 @@ void main() {
           );
           expect(app.backend.hold?.isCompleted, isFalse);
           expect(
-            [for (final p in app.backend.prompts) p.settings.omadaMember],
+            [for (final p in app.backend.prompts) p.participant],
             ["explore", "build"],
           );
 
@@ -1803,7 +1805,7 @@ void main() {
       // The first wave was two turns; the handoff from explore's reply is
       // the third prompt, dispatched at the settle the wave caused.
       expect(app.backend.prompts, hasLength(3));
-      expect(app.backend.prompts[2].settings.omadaMember, "build");
+      expect(app.backend.prompts[2].participant, "build");
     });
 
     test("relay hands off while a sibling still holds the floor", () async {
@@ -1832,7 +1834,7 @@ void main() {
       // Two prompts while the hold is still up: the handoff ran while the
       // first turn's stream is held open beside it.
       expect(app.backend.hold?.isCompleted, isFalse);
-      expect(app.backend.prompts[1].settings.omadaMember, "build");
+      expect(app.backend.prompts[1].participant, "build");
       // The handoff's prompt is explore's mentioning reply, said again as
       // what the next member is answering.
       expect(app.backend.prompts[1].prompt.id, messagesOf(id)[1].id);
@@ -1875,7 +1877,7 @@ void main() {
         limit: const Duration(seconds: 5),
       );
       expect(app.backend.hold?.isCompleted, isFalse);
-      expect(app.backend.prompts[1].settings.omadaMember, "build");
+      expect(app.backend.prompts[1].participant, "build");
       // The turn ran on the message the log already holds, not a second
       // composition of the same words.
       expect(app.backend.prompts[1].prompt.id, said.id);
@@ -1914,7 +1916,7 @@ void main() {
       // The addressee and one handoff; explore's second mention would be
       // generation 2 and the cap stopped it.
       expect(app.backend.prompts, hasLength(2));
-      expect(app.backend.prompts[1].settings.omadaMember, "build");
+      expect(app.backend.prompts[1].participant, "build");
     });
 
     test("a relay round ended in error clears the lanes", () async {
@@ -1951,7 +1953,7 @@ void main() {
       ];
       await controller.send("hello @build, you are next");
       await waitIdle(id, limit: const Duration(seconds: 5));
-      expect(app.backend.prompts.last.settings.omadaMember, "build");
+      expect(app.backend.prompts.last.participant, "build");
     });
 
     test(
@@ -1999,7 +2001,7 @@ void main() {
         expect(textOf(messages[1]), "recovered");
         expect(textOf(messages[3]), "on it");
         expect(app.backend.resumes, hasLength(1));
-        expect(app.backend.resumes.single.settings.omadaMember, "explore");
+        expect(app.backend.resumes.single.participant, "explore");
       },
     );
 
@@ -2050,7 +2052,7 @@ void main() {
         await waitIdle(id, limit: const Duration(seconds: 5));
 
         expect(app.backend.prompts, hasLength(2));
-        expect(app.backend.prompts[1].settings.omadaMember, "explore");
+        expect(app.backend.prompts[1].participant, "explore");
         expect(app.backend.prompts[1].prompt.id, said.id);
         expect(
           messagesOf(
@@ -2103,7 +2105,7 @@ void main() {
           .where((m) => textOf(m) == "one more thing")
           .single;
       expect(app.backend.prompts, hasLength(2));
-      expect(app.backend.prompts[1].settings.omadaMember, isNull);
+      expect(app.backend.prompts[1].participant, "athena");
       expect(app.backend.prompts[1].prompt.id, said.id);
       expect(
         messagesOf(id).where((m) => textOf(m) == "one more thing"),
@@ -2280,23 +2282,23 @@ void main() {
       final messages = messagesOf(id);
       // The say for build ran as build's turn on the message the log
       // already holds; the say for the house ran as the main agent's.
-      expect(app.backend.prompts[1].settings.omadaMember, "build");
+      expect(app.backend.prompts[1].participant, "build");
       expect(app.backend.prompts[1].prompt.id, messages[2].id);
-      expect(app.backend.prompts[2].settings.omadaMember, isNull);
+      expect(app.backend.prompts[2].participant, "athena");
       expect(app.backend.prompts[2].prompt.id, messages[3].id);
       // And the handoff followed: explore's mentioning reply, build's turn.
-      expect(app.backend.prompts[3].settings.omadaMember, "build");
+      expect(app.backend.prompts[3].participant, "build");
       expect(app.backend.prompts[3].prompt.id, messages[1].id);
     });
 
-    test("a message naming no known member is answered by the house", () async {
+    test("a message naming no known member is answered by Athena", () async {
       await _inTeam(app);
       for (final text in ["plain hello", "hello @nobody-knows-me"]) {
         final (id, _) = await chatWithOneTurn(text, project: "team");
         final sent = app.backend.prompts.last;
-        expect(sent.settings.omadaMember, isNull);
-        expect(sent.prompt.addressees, isEmpty);
-        expect(messagesOf(id).last.author, isNull);
+        expect(sent.participant, "athena");
+        expect(sent.prompt.addressees, ["@athena"]);
+        expect(messagesOf(id).last.author, "@athena");
       }
     });
 
@@ -2345,7 +2347,7 @@ void main() {
       final buildSay = messagesOf(id)[2];
       expect(buildSay.addressees, ["@build"]);
       expect(app.backend.prompts.last.prompt.addressees, ["@build"]);
-      expect(app.backend.prompts.last.settings.omadaMember, "build");
+      expect(app.backend.prompts.last.participant, "build");
     });
 
     /// A trigger fire through the real driver, into a chat that already had a
@@ -2372,18 +2374,18 @@ void main() {
         const text = "@explore\n\ncheck the builds\n\n(schedule: 9:00)";
         final id = await fire("team", text);
 
-        expect(app.backend.prompts.last.settings.omadaMember, "explore");
+        expect(app.backend.prompts.last.participant, "explore");
         expect(app.backend.prompts.last.prompt.plainText, text);
         expect(messagesOf(id).last.author, "@explore");
       },
     );
 
-    test("a trigger fire naming no member reaches the house", () async {
+    test("a trigger fire naming no member reaches Athena", () async {
       await _inTeam(app);
       final id = await fire("team", "check the builds\n\n(schedule: 9:00)");
 
-      expect(app.backend.prompts.last.settings.omadaMember, isNull);
-      expect(messagesOf(id).last.author, isNull);
+      expect(app.backend.prompts.last.participant, "athena");
+      expect(messagesOf(id).last.author, "@athena");
     });
 
     // Omada off: no promotion, no stamp — the mention rides inline.
@@ -2392,8 +2394,8 @@ void main() {
       () async {
         final id = await fire(null, "@explore\n\ncheck the builds");
 
-        expect(app.backend.prompts.last.settings.omadaMember, isNull);
-        expect(messagesOf(id).last.author, isNull);
+        expect(app.backend.prompts.last.participant, "athena");
+        expect(messagesOf(id).last.author, "@athena");
         expect(app.backend.prompts.last.prompt.plainText, contains("@explore"));
       },
     );

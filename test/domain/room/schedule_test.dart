@@ -10,13 +10,13 @@ Message _msg(String id, {MessageRole role = MessageRole.user}) =>
 void main() {
   /// One dispatch, recording who ran what. [busy] is fixed for the pass, the
   /// way a room with turns already in flight reads it.
-  Future<List<(String?, String)>> dispatch(
+  Future<List<(String, String)>> dispatch(
     Schedule s,
     OmadaOrdering o, {
     int cap = 10,
-    Set<String?> busy = const {},
+    Set<String> busy = const {},
   }) async {
-    final ran = <(String?, String)>[];
+    final ran = <(String, String)>[];
     await s.dispatch(
       ordering: () => o,
       cap: () => cap,
@@ -48,11 +48,6 @@ void main() {
       expect(s.isEmpty, isTrue);
     },
   );
-
-  test("a prompt naming nobody is the house's", () async {
-    final s = Schedule()..addPrompt(const [], _msg("p"));
-    expect(await dispatch(s, OmadaOrdering.sequential), [(null, "p")]);
-  });
 
   test("a reply naming nobody queues nothing", () {
     final s = Schedule()

@@ -139,7 +139,8 @@ class BuiltinBackend implements AgentBackend {
   @override
   ValueListenable<Set<String>> get runningTurns => _running;
 
-  final Map<String, BuiltinSession> _sessions = {};
+  /// Each chat's sessions, one per participant who has spoken there.
+  final Map<String, Map<String, BuiltinSession>> _sessions = {};
 
   /// The newest usage each chat's model reported, in context tokens — the
   /// fact the auto-compact threshold reads, and what a backend that forgets
@@ -191,6 +192,7 @@ class BuiltinBackend implements AgentBackend {
   Stream<AgentEvent> sendPrompt(
     String chatId,
     Message prompt, {
+    required String participant,
     List<Message> history = const [],
     List<ConversationCompaction> compactions = const [],
     TurnSettings settings = const TurnSettings(),
@@ -198,6 +200,7 @@ class BuiltinBackend implements AgentBackend {
   }) => _start(
     chatId,
     prompt,
+    participant: participant,
     history: history,
     compactions: compactions,
     settings: settings,
@@ -207,6 +210,7 @@ class BuiltinBackend implements AgentBackend {
   @override
   Stream<AgentEvent> resumeTurn(
     String chatId, {
+    required String participant,
     List<Message> history = const [],
     List<ConversationCompaction> compactions = const [],
     TurnSettings settings = const TurnSettings(),
@@ -214,6 +218,7 @@ class BuiltinBackend implements AgentBackend {
   }) => _start(
     chatId,
     null,
+    participant: participant,
     history: history,
     compactions: compactions,
     settings: settings,
@@ -226,6 +231,7 @@ class BuiltinBackend implements AgentBackend {
   Stream<AgentEvent> _start(
     String chatId,
     Message? prompt, {
+    required String participant,
     List<Message> history = const [],
     List<ConversationCompaction> compactions = const [],
     required TurnSettings settings,
@@ -239,6 +245,7 @@ class BuiltinBackend implements AgentBackend {
         chatId,
         prompt,
         controller,
+        participant: participant,
         history: history,
         compactions: compactions,
         settings: settings,
@@ -256,6 +263,7 @@ class BuiltinBackend implements AgentBackend {
     String chatId,
     Message? prompt,
     StreamController<AgentEvent> controller, {
+    required String participant,
     List<Message> history = const [],
     List<ConversationCompaction> compactions = const [],
     required TurnSettings settings,
@@ -276,6 +284,7 @@ class BuiltinBackend implements AgentBackend {
           controller,
           stopKey,
           history: history,
+          participant: participant,
           project: project,
           sharedWorkspace: settings.sharedWorkspace,
           environment: settings.environment,
@@ -482,20 +491,23 @@ class BuiltinBackend implements AgentBackend {
         chatId,
         history,
         rebuild: prompt == null,
-        viewer: settings.omadaMember,
+        viewer: participant,
         compactions: compactions,
       );
-      // A member turn runs as the member's file, as the library stands now.
-      // A member no longer in it has been routed to the main agent already.
-      final memberDoc = settings.omadaMember == null
-          ? null
-          : libraryFor(
-              settings.project,
-            )?.find(CompletionKind.agent, settings.omadaMember!);
+      // A turn runs as its participant's file, as the library stands now.
+      // One the library has lost since its turn was scheduled — a member
+      // deleted mid-round, a reply carried on after its agent went — runs
+      // under no file at all, and says so.
+      final file = libraryFor(
+        settings.project,
+      )?.find(CompletionKind.agent, participant);
+      if (file == null) {
+        logFailure("turn", "no agent file for @$participant in $chatId");
+      }
       final agent = BuiltinAgent(
         session: session,
-        viewer: settings.omadaMember,
-        agent: AgentDefinition.of(memberDoc),
+        viewer: participant,
+        agent: AgentDefinition.of(file),
         loadResource: _resourcesOf(chatId),
         steers: steers,
         client: gatedClient,
@@ -517,10 +529,10 @@ class BuiltinBackend implements AgentBackend {
         skills:
             libraryFor(settings.project)?.entries(CompletionKind.skill) ??
             const [],
-        // The room's participants, an omada turn's data alone: the library's
-        // agents, already tier-walked (the default set under My Team's under
-        // the project's own). Null keeps the tool off the list where there
-        // is no room.
+        // An Omada room's participants: the library's agents, already
+        // tier-walked (the default set under My Team's under the project's
+        // own). Null — a direct room, Athena alone — keeps the roster tool
+        // and `end_turn` off the list.
         roomParticipants: settings.omada
             ? libraryFor(settings.project)?.entries(CompletionKind.agent)
             : null,
@@ -619,19 +631,16 @@ class BuiltinBackend implements AgentBackend {
       _running.replace(stopKey, agent.cancel);
 
       // A resumed turn has no prompt of its own to read `@agent` mentions out
-      // of, so they come off the message that started it. A member turn is
-      // the other shape: the mention is what routed the turn to it.
+      // of, so they come off the message that started it.
       final said =
           prompt ?? history.lastWhereOrNull((m) => m.role == MessageRole.user);
-      final mentions = memberDoc != null
-          ? const <String>[]
-          : mentionedAgents(said?.documents ?? const {});
+      final mentions = mentionedAgents(said?.documents ?? const {});
       final events = prompt == null
           ? agent.resume(mentions: mentions)
           : agent.run(
               prompt,
               mentions: mentions,
-              mayDress: mayDress(session, history, settings.omadaMember),
+              mayDress: mayDress(session, history, participant),
             );
 
       var reply = "";
@@ -729,6 +738,7 @@ class BuiltinBackend implements AgentBackend {
     StreamController<AgentEvent> controller,
     String stopKey, {
     required List<Message> history,
+    required String participant,
     required String? project,
     required bool sharedWorkspace,
     Map<String, String> environment = const {},
@@ -760,7 +770,7 @@ class BuiltinBackend implements AgentBackend {
     // The session does not feed the command and the command does not feed it:
     // a chat reopened after a restart fills its session from the log, and that
     // reading runs while the command takes its time rather than ahead of it.
-    final filling = _sessionOf(chatId, history);
+    final filling = _sessionOf(chatId, history, viewer: participant);
     final result = await run.result;
     final session = await filling;
     // Stopped past the grace: the turn ended without its part, so the session
@@ -782,9 +792,11 @@ class BuiltinBackend implements AgentBackend {
     // through `assistantMessages`. The `!` turn writes its own reply, and that
     // is the only way it differs. The dress is the room's fact, read like
     // every dispatch's — see [mayDress].
-    final dress = mayDress(session, history, null);
+    final dress = mayDress(session, history, participant);
     session.messages
-      ..addAll(await _projected(chatId, [prompt], first: dress))
+      ..addAll(
+        await _projected(chatId, [prompt], first: dress, viewer: participant),
+      )
       ..addAll(assistantMessages([part]));
   }
 
@@ -795,17 +807,13 @@ class BuiltinBackend implements AgentBackend {
   /// author, never through the dresser. An empty history on a warm session
   /// is the caller saying nothing about the room, and not this predicate's
   /// call — the held words stand.
-  bool mayDress(
-    BuiltinSession session,
-    List<Message> history,
-    String? viewer,
-  ) =>
+  bool mayDress(BuiltinSession session, List<Message> history, String viewer) =>
       (session.isFresh || history.isNotEmpty) &&
       !history
           .where((m) => m.role == MessageRole.user)
           .any((m) => addressedTo(m, viewer));
 
-  /// The chat's session, worded for [viewer] — null the house — and filled
+  /// The chat's session for the participant [viewer], filled
   /// from [history] where a fill is due: a participant's first turn fills
   /// whole, worded for them, and a resume rebuilds whether or not the
   /// session is held. **A warm session runs `_syncSession` first** — the
@@ -820,11 +828,13 @@ class BuiltinBackend implements AgentBackend {
     String chatId,
     List<Message> history, {
     bool rebuild = false,
-    String? viewer,
+    required String viewer,
     List<ConversationCompaction> compactions = const [],
   }) async {
-    final key = _memberKey(chatId, viewer);
-    final session = _sessions.putIfAbsent(key, BuiltinSession.new);
+    final session = (_sessions[chatId] ??= {}).putIfAbsent(
+      viewer,
+      BuiltinSession.new,
+    );
     if (rebuild || session.isFresh) {
       session.replaceWith(
         await _projected(
@@ -864,7 +874,7 @@ class BuiltinBackend implements AgentBackend {
     BuiltinSession session,
     String chatId,
     List<Message> history, {
-    required String? viewer,
+    required String viewer,
   }) async {
     // No history is the caller saying nothing about the room — the held
     // words stand, whatever they are. The room's own dispatches always pass
@@ -941,7 +951,7 @@ class BuiltinBackend implements AgentBackend {
   Future<void> _refillFromLog(
     BuiltinSession session,
     String chatId, {
-    required String? viewer,
+    required String viewer,
   }) async {
     final replayed = replayTree(await store.readRecords(chatId));
     if (replayed.messages.isEmpty) return;
@@ -1020,7 +1030,7 @@ class BuiltinBackend implements AgentBackend {
     String chatId,
     List<Message> messages, {
     bool first = true,
-    String? viewer,
+    required String viewer,
     List<ConversationCompaction> compactions = const [],
     ResourceLoader? load,
   }) async => projectionOf(
@@ -1188,9 +1198,12 @@ class BuiltinBackend implements AgentBackend {
     // Loop-invariant: the markers do not change across the ladder.
     final priorSummary = compactions.lastOrNull?.summary;
     for (var attempt = 0; attempt < 3; attempt++) {
+      // Summarized as Athena reads the room: the default route's view, in
+      // which the room's says to nobody else are her own.
       final projected = await _projected(
         chatId,
         span,
+        viewer: athena,
         load: loader,
         compactions: compactions,
       );
@@ -1221,6 +1234,7 @@ class BuiltinBackend implements AgentBackend {
           final after = await _projected(
             chatId,
             history,
+            viewer: athena,
             load: loader,
             compactions: [...compactions, marker],
           );
@@ -1666,33 +1680,10 @@ class BuiltinBackend implements AgentBackend {
   }
 
   @override
-  Future<void> resetSession(
-    String chatId, {
-    List<Message> history = const [],
-    List<ConversationCompaction> compactions = const [],
-  }) async {
+  Future<void> resetSession(String chatId) async {
     await _running.stopAll(chatId);
-    final house = _sessions.putIfAbsent(chatId, BuiltinSession.new);
-    house.replaceWith(
-      await _projected(chatId, history, compactions: compactions),
-    );
-    house.coveredBy(history);
-    // The room's other participants read on their own dispatches, which the
-    // sync fills from wherever the log now is: a session worded for them
-    // before the rewind holds a conversation the log no longer describes.
-    _forgetMemberSessions(chatId);
+    _sessions.remove(chatId);
   }
-
-  /// What a member's session is keyed by: the chat, and the bare member name
-  /// the room's schedule keys by — the house's own is the chat id bare.
-  String _memberKey(String chatId, String? viewer) =>
-      viewer == null ? chatId : "$chatId\u0000$viewer";
-
-  /// Forget every session a room worded for a member, and no other chat's:
-  /// a rewind or a delete takes their projections with it, the next
-  /// dispatch re-filling from the thread whatever it then holds.
-  void _forgetMemberSessions(String chatId) =>
-      _sessions.removeWhere((key, _) => key.startsWith("$chatId\u0000"));
 
   @override
   Future<void> disposeChat(String chatId) async {
@@ -1703,7 +1694,6 @@ class BuiltinBackend implements AgentBackend {
     await _jobs.closeChat(chatId);
     _sessions.remove(chatId);
     _usage.remove(chatId);
-    _forgetMemberSessions(chatId);
   }
 
   @override

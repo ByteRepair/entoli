@@ -655,7 +655,14 @@ class FakeBackend implements AgentBackend {
   /// The message itself rather than fields taken off it: what the model is
   /// shown of a turn is the whole message, so a test that wants the text, the
   /// date or what a `/skill` meant asks the message for it.
-  final List<({Message prompt, List<Message> history, TurnSettings settings})>
+  final List<
+    ({
+      Message prompt,
+      String participant,
+      List<Message> history,
+      TurnSettings settings,
+    })
+  >
   prompts = [];
 
   /// What the next turn streams back. Defaults to an immediate, empty reply.
@@ -678,29 +685,43 @@ class FakeBackend implements AgentBackend {
   Stream<AgentEvent> sendPrompt(
     String chatId,
     Message prompt, {
+    required String participant,
     List<Message> history = const [],
     List<ConversationCompaction> compactions = const [],
     TurnSettings settings = const TurnSettings(),
     SteerInbox? steers,
   }) async* {
-    prompts.add((prompt: prompt, history: history, settings: settings));
+    prompts.add((
+      prompt: prompt,
+      participant: participant,
+      history: history,
+      settings: settings,
+    ));
     this.steers = steers;
     yield* Stream.fromIterable(_next());
     yield* _held();
   }
 
   /// The same for `resumeTurn`, minus the prompt it does not have.
-  final List<({List<Message> history, TurnSettings settings})> resumes = [];
+  final List<
+    ({String participant, List<Message> history, TurnSettings settings})
+  >
+  resumes = [];
 
   @override
   Stream<AgentEvent> resumeTurn(
     String chatId, {
+    required String participant,
     List<Message> history = const [],
     List<ConversationCompaction> compactions = const [],
     TurnSettings settings = const TurnSettings(),
     SteerInbox? steers,
   }) async* {
-    resumes.add((history: history, settings: settings));
+    resumes.add((
+      participant: participant,
+      history: history,
+      settings: settings,
+    ));
     this.steers = steers;
     yield* Stream.fromIterable(_next());
     yield* _held();
@@ -733,16 +754,11 @@ class FakeBackend implements AgentBackend {
     return out.stream;
   }
 
-  final List<List<Message>> resets = [];
+  /// The chats whose sessions were dropped, in order.
+  final List<String> resets = [];
 
   @override
-  Future<void> resetSession(
-    String chatId, {
-    List<Message> history = const [],
-    List<ConversationCompaction> compactions = const [],
-  }) async {
-    resets.add(history);
-  }
+  Future<void> resetSession(String chatId) async => resets.add(chatId);
 
   /// What `compact` answers. Null is a summarizer that said nothing; set a
   /// record for a scripted summary, whose `upToMessageId` is the history's

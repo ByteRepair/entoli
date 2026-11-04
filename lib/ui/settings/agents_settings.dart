@@ -112,7 +112,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
     final result = await Navigator.of(context).push<AgentEdit>(
       MaterialPageRoute(
         builder: (_) => AgentEditorPage(
-          initial: AgentDefinition.main,
+          initial: AgentDefinition.blank,
           isNew: true,
           project: widget.project,
         ),

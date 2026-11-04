@@ -75,7 +75,7 @@ class Composer extends ConsumerStatefulWidget {
   /// `message`, never its `text`.
   final ComposerController controller;
 
-  /// The main agent is speaking: Send becomes Stop and the voice button
+  /// A participant is speaking: Send becomes Stop and the voice button
   /// stands down.
   final bool agentSpeaking;
   final SendCallback onSend;

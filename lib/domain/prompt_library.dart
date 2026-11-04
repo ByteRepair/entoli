@@ -215,7 +215,7 @@ Map<String, String> agentEntriesFrom(Map<String, String> documents) => {
 };
 
 /// The agents the message asked to hand the work to, sigils off, in the order
-/// they were written — who a direct chat's main agent is told to delegate to.
+/// they were written — who the participant answering is told to delegate to.
 ///
 /// Off the record rather than the text: the mentions were resolved when the
 /// message was composed, and a name mentioned twice was recorded once.
@@ -237,9 +237,9 @@ String? nameOf(String? author) => author == null
     ? author.substring(CompletionKind.agent.trigger.length)
     : null;
 
-/// Whether the room sent [message] to the participant called [viewer]: the
-/// house for null, a member's bare name otherwise. A say addressed away from
-/// both is somebody else's mail — the fact [Message.addressees] records and
+/// Whether the room sent [message] to the participant called [viewer], a
+/// bare name — or, for null, whether it is a sub-agent's task, which no room
+/// routed. A say addressed elsewhere is somebody else's mail — the fact [Message.addressees] records and
 /// the projection words per viewer. Names are compared bare: the sigil is
 /// spelling, not identity, the same dialect [nameOf] reads in.
 ///
@@ -251,14 +251,6 @@ bool addressedTo(Message message, String? viewer) {
   final to = message.addressees;
   if (viewer == null) return to.isEmpty;
   return to.map(nameOf).contains(viewer);
-}
-
-/// The one member [text] mentions by handle, as the composer's own `_mention`
-/// reads one and [library] knows them. Null where it names none, or more than
-/// one — a multi-mention is a round, not a single address.
-String? singleAgentMention(String text, PromptLibrary library) {
-  final known = mentionsIn(text, library);
-  return known.length == 1 ? known.single : null;
 }
 
 /// The members [text] addresses, in the order it names them. A name the

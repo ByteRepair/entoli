@@ -58,7 +58,6 @@ void main() {
     bool isSpeaking = false,
     ValueChanged<String>? onTapLink,
     ValueChanged<Quote>? onReply,
-    bool entoli = false,
     AgentFace? avatar,
     ValueChanged<Reaction>? onReact,
     List<String> reactions = const [],
@@ -82,7 +81,6 @@ void main() {
         isSpeaking: isSpeaking,
         onTapLink: onTapLink,
         onReply: onReply,
-        entoli: entoli,
         onReact: onReact,
         reactions: reactions,
       ),
@@ -1744,30 +1742,25 @@ void main() {
     }
 
     // Reply hands the selection over as the markdown a copy's plain half is,
-    // with the author's handle where a member of an Omada section wrote it.
-    for (final (entoli, handle) in [(false, null), (true, "@scout")]) {
-      testWidgets("the selection menu's Reply quotes it, "
-          "${entoli ? "addressed in Omada" : "unaddressed outside it"}", (
+    // addressed to whoever wrote it.
+    testWidgets("the selection menu's Reply quotes it, addressed to its "
+        "author", (tester) async {
+      final quoted = <Quote>[];
+      await pump(
         tester,
-      ) async {
-        final quoted = <Quote>[];
-        await pump(
-          tester,
-          _message(MessageRole.assistant, [
-            const TextPart(text: "here is **bold**"),
-          ], author: "@scout"),
-          entoli: entoli,
-          onReply: quoted.add,
-        );
+        _message(MessageRole.assistant, [
+          const TextPart(text: "here is **bold**"),
+        ], author: "@scout"),
+        onReply: quoted.add,
+      );
 
-        await openMenu(tester);
-        await tester.tap(find.text("Reply"));
-        await tester.pumpAndSettle();
+      await openMenu(tester);
+      await tester.tap(find.text("Reply"));
+      await tester.pumpAndSettle();
 
-        expect(quoted, [Quote("here is **bold**", handle: handle)]);
-        expect(find.text("Reply"), findsNothing);
-      });
-    }
+      expect(quoted, [Quote("here is **bold**", handle: "@scout")]);
+      expect(find.text("Reply"), findsNothing);
+    });
 
     testWidgets("no Reply is offered without somewhere to put it", (
       tester,

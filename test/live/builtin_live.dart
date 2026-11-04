@@ -107,6 +107,7 @@ void main() {
     final thinking = StringBuffer();
     await for (final event in backend.sendPrompt(
       chat.state.id,
+      participant: "athena",
       Message(
         id: "u1",
         role: MessageRole.user,

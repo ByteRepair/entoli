@@ -290,10 +290,15 @@ reason, since `workspaceDir` answers for the layout this build has and an entry
 is about one that is gone. **An entry does nothing where what it moves is not
 there**, because it also runs over restored backups and over directories where
 the user deleted whatever it was looking for. Two things have changed the layout
-since 1.0.0, and neither is in the chain: the user's `commands/` became
-`skills/` — a private app with no released directory to carry forward, so a
-`commands/` left on disk is not read rather than migrated — and `memory/`, a
-directory created on first use rather than moved. The chain stays empty.
+since 1.0.0 without an entry: the user's `commands/` became `skills/` — a
+private app with no released directory to carry forward, so a `commands/` left
+on disk is not read rather than migrated — and `memory/`, a directory created
+on first use rather than moved. The first entry is 7.5.0's, which names the
+main agent: every `conv.jsonl` reply with no author became `@athena`'s and
+every say addressed to nobody was addressed to her (see "The room and its
+participants" in `lib/domain/room/AGENTS.md`). A change of meaning in the log
+is a migration as much as a move is, so the reader is never left holding a
+fallback for the old shape.
 
 ### Artifacts
 

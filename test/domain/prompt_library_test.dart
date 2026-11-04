@@ -85,40 +85,6 @@ void main() {
     });
   });
 
-  group("singleAgentMention", () {
-    PromptLibrary libraryOf(List<String> names) => PromptLibrary([
-      for (final name in names)
-        PromptDocument.parse(CompletionKind.agent, name, ""),
-    ]);
-
-    test("the one member mentioned is the handoff", () {
-      expect(
-        singleAgentMention("over to @reviewer now", libraryOf(["reviewer"])),
-        "reviewer",
-      );
-    });
-
-    test("a signature of a known member beside the handoff is two members", () {
-      // Scout's reply opens with his own `@scout reporting.` — a mention of a
-      // known member as far as the scan can see — beside the `@murasaki`
-      // handoff. Two known members: a round, not a handoff. The scheduler
-      // reads both as addressed, which is why the member-turn instructions
-      // teach members not to open with their own handle.
-      final text =
-          "@scout reporting. The cache directory is absent.\n\n"
-          "Over to **@murasaki**: the findings are two negative results. "
-          "Your turn follows mine.";
-      expect(
-        singleAgentMention(text, libraryOf(["scout", "murasaki"])),
-        isNull,
-      );
-    });
-
-    test("no mention names nobody", () {
-      expect(singleAgentMention("all done here", libraryOf(["scout"])), isNull);
-    });
-  });
-
   group("mentionsIn", () {
     PromptLibrary libraryOf(List<String> names) => PromptLibrary([
       for (final name in names)

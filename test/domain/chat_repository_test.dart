@@ -73,7 +73,9 @@ void main() {
     );
     final chat = await repo.createChat();
 
-    await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+    await repo
+        .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+        .toList();
 
     expect(backend.prompts.single.settings.provider, "anthropic");
     expect(backend.prompts.single.settings.model, "claude-sonnet-4");
@@ -90,7 +92,9 @@ void main() {
 
     pinChatModel(chat.state.id, provider: "ollama-cloud", model: "qwen-2.5");
 
-    await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+    await repo
+        .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+        .toList();
 
     expect(backend.prompts.single.settings.provider, "ollama-cloud");
     expect(backend.prompts.single.settings.model, "qwen-2.5");
@@ -99,13 +103,17 @@ void main() {
   test("a chat's own Thinking wins over the app's", () async {
     final repo = repoWith(AppSettings(reasoningEffort: ReasoningEffort.low));
     final chat = await savedChat(repo);
-    await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+    await repo
+        .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+        .toList();
     expect(backend.prompts.last.settings.reasoningEffort, ReasoningEffort.low);
 
     File(config.metaFile(chat.state.id)).writeAsStringSync(
       ChatMeta(reasoningEffort: ReasoningEffort.high).encode(),
     );
-    await repo.sendPrompt(chat.state.id, userMessage("again")).toList();
+    await repo
+        .sendPrompt(participant: "athena", chat.state.id, userMessage("again"))
+        .toList();
     expect(backend.prompts.last.settings.reasoningEffort, ReasoningEffort.high);
   });
 
@@ -122,7 +130,9 @@ void main() {
 
       pinChatModel(chat.state.id, model: "qwen-2.5");
 
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+      await repo
+          .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+          .toList();
 
       expect(backend.prompts.single.settings.model, "qwen-2.5");
       expect(backend.prompts.single.settings.provider, isNull);
@@ -144,7 +154,7 @@ void main() {
 
       pinChatModel(chat.state.id, provider: "ollama-cloud", model: "qwen-2.5");
 
-      await repo.resumeTurn(chat.state.id).toList();
+      await repo.resumeTurn(participant: "athena", chat.state.id).toList();
 
       expect(backend.resumes.single.settings.provider, "ollama-cloud");
       expect(backend.resumes.single.settings.model, "qwen-2.5");
@@ -207,7 +217,9 @@ void main() {
       final chat = await repo.createChat(project: "work");
       await writeChatVia(repo, chat);
 
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+      await repo
+          .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+          .toList();
 
       expect(backend.prompts.single.settings.project, "work");
     });
@@ -231,7 +243,9 @@ void main() {
       await writeChatVia(repo, chat);
 
       await repo.moveChat(chat.state.id, "work");
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+      await repo
+          .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+          .toList();
 
       expect(backend.prompts.single.settings.project, "work");
     });
@@ -258,7 +272,9 @@ void main() {
       );
       final chat = await repo.createChat(project: project);
       await writeChatVia(repo, chat);
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+      await repo
+          .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+          .toList();
       return backend.prompts.last.settings;
     }
 
@@ -337,7 +353,9 @@ void main() {
         final repo = repoWith(AppSettings());
         final on = await repo.createChat(project: "team");
         await writeChatVia(repo, on);
-        await repo.sendPrompt(on.state.id, userMessage("hi")).toList();
+        await repo
+            .sendPrompt(participant: "athena", on.state.id, userMessage("hi"))
+            .toList();
         final onSettings = backend.prompts.last.settings;
         expect(onSettings.bundledInstructions, myTeamNote);
         expect(onSettings.disabled, contains(AgentCapability.task));
@@ -345,7 +363,9 @@ void main() {
 
         final off = await repo.createChat();
         await writeChatVia(repo, off);
-        await repo.sendPrompt(off.state.id, userMessage("hi")).toList();
+        await repo
+            .sendPrompt(participant: "athena", off.state.id, userMessage("hi"))
+            .toList();
         final offSettings = backend.prompts.last.settings;
         expect(offSettings.bundledInstructions, isNull);
         expect(offSettings.disabled, isEmpty);
@@ -371,7 +391,9 @@ void main() {
         final chat = await repo.createChat(project: "team");
         await writeChatVia(repo, chat);
 
-        await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+        await repo
+            .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+            .toList();
 
         final settings = backend.prompts.single.settings;
         // The room contract is My Team's, resolved through the Omada answer,
@@ -390,7 +412,9 @@ void main() {
         final chat = await repo.createChat(project: "plain");
         await writeChatVia(repo, chat);
 
-        await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+        await repo
+            .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+            .toList();
 
         final settings = backend.prompts.single.settings;
         expect(settings.bundledInstructions, isNull);
@@ -405,7 +429,9 @@ void main() {
         final chat = await repo.createChat(project: "my-team");
         await writeChatVia(repo, chat);
 
-        await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+        await repo
+            .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+            .toList();
 
         final settings = backend.prompts.single.settings;
         expect(settings.project, "my-team");
@@ -431,7 +457,9 @@ void main() {
         final chat = await repo.createChat(project: "anonymous");
         await writeChatVia(repo, chat);
 
-        await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+        await repo
+            .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+            .toList();
 
         final settings = backend.prompts.single.settings;
         expect(settings.disabled, isEmpty);
@@ -448,7 +476,9 @@ void main() {
       );
       final chat = await repo.createChat(project: "anonymous");
 
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+      await repo
+          .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+          .toList();
 
       final settings = backend.prompts.single.settings;
       expect(settings.project, "anonymous");
@@ -483,7 +513,9 @@ void main() {
         await writeChatVia(repo, chat);
 
         await repo.moveChat(chat.state.id, "work");
-        await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+        await repo
+            .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+            .toList();
 
         final settings = backend.prompts.single.settings;
         expect(settings.project, "work");
@@ -498,7 +530,9 @@ void main() {
       final chat = await repo.createChat();
       await writeChatVia(repo, chat);
       backend.hold = Completer<void>();
-      final turn = repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+      final turn = repo
+          .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+          .toList();
       await pumpEventQueue();
 
       await repo.moveChat(chat.state.id, "work");
@@ -733,7 +767,9 @@ void main() {
     final repo = repoWith(AppSettings());
     final chat = await repo.createChat(project: "work");
     await writeChatVia(repo, chat);
-    await repo.sendPrompt(chat.state.id, userMessage("go")).toList();
+    await repo
+        .sendPrompt(participant: "athena", chat.state.id, userMessage("go"))
+        .toList();
     final policy = backend.prompts.last.settings.policy;
     expect((await policy()).permissions, isEmpty);
     expect(
@@ -1018,7 +1054,9 @@ void main() {
         }),
       );
 
-      await repo.sendPrompt(chat.state.id, userMessage("go")).toList();
+      await repo
+          .sendPrompt(participant: "athena", chat.state.id, userMessage("go"))
+          .toList();
 
       final byPattern = {
         for (final r
@@ -1052,7 +1090,13 @@ void main() {
           argumentsText: "git status",
         ),
       );
-      await repo.sendPrompt(chat.state.id, userMessage("again")).toList();
+      await repo
+          .sendPrompt(
+            participant: "athena",
+            chat.state.id,
+            userMessage("again"),
+          )
+          .toList();
 
       final rules = (await backend.prompts.last.settings.policy()).permissions;
       expect(rules.map((r) => r.pattern), contains("git status *"));

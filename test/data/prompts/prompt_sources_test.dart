@@ -458,7 +458,11 @@ void main() {
         final agents = await BundledPrompts().load(CompletionKind.agent);
 
         expect(skills.map((s) => s.name).toSet(), equals(localSkills));
-        expect(agents.map((a) => a.name).toSet(), {"explore", "general"});
+        expect(agents.map((a) => a.name).toSet(), {
+          "athena",
+          "explore",
+          "general",
+        });
       },
     );
 
@@ -476,6 +480,7 @@ void main() {
 
       expect(skills.map((s) => s.name).toSet(), equals(localSkills));
       expect(agents.map((a) => a.name).toSet(), {
+        "athena",
         "explore",
         "general",
         "esbmc-verifier",
@@ -489,7 +494,11 @@ void main() {
           project: "my-team",
         ).load(CompletionKind.agent);
 
-        expect(agents.map((a) => a.name).toSet(), {"explore", "general"});
+        expect(agents.map((a) => a.name).toSet(), {
+          "athena",
+          "explore",
+          "general",
+        });
       },
     );
 
@@ -726,6 +735,7 @@ void main() {
     final tiers = promptTiers(project: "work", config: config);
 
     for (final (name, colour) in [
+      ("athena", 0xf4f4f4),
       ("explore", 0xff6a1a),
       ("general", 0x8b5cf6),
     ]) {

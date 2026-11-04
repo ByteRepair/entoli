@@ -144,7 +144,7 @@ void main() {
       // are inherited here.
       expect(find.byType(AgentsSection), findsOneWidget);
       expect(find.text("general"), findsOneWidget);
-      expect(find.text("Bundled"), findsNWidgets(2));
+      expect(find.text("Bundled"), findsNWidgets(3));
       expect(find.byIcon(Icons.edit_outlined), findsNothing);
       expect(find.text("Add agent"), findsOneWidget);
 
@@ -196,10 +196,10 @@ void main() {
       await settleIo(tester);
       await reloadLibrary(tester, app, project: "byte-repair");
 
-      // Its own bundled agent, and the two defaults it inherits — all
+      // Its own bundled agent, and the three defaults it inherits — all
       // bundled, all inert.
       expect(find.text("esbmc-verifier"), findsOneWidget);
-      expect(find.text("Bundled"), findsNWidgets(3));
+      expect(find.text("Bundled"), findsNWidgets(4));
       expect(find.text("Inherited"), findsNothing);
       expect(find.text("Add agent"), findsNothing);
       expect(find.byIcon(Icons.edit_outlined), findsNothing);

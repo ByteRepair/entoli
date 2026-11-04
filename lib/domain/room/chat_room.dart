@@ -49,8 +49,8 @@ abstract interface class RoomHost {
   void settledDone();
 }
 
-/// A chat is a room: the user, the house, and — with Omada on — the members
-/// of the project's library. This owns everything about it that is not
+/// A chat is a room: the user and its participants — Athena alone, or with
+/// Omada on every agent of the project's library. This owns everything about it that is not
 /// Riverpod's: the turns in flight, what was said while they ran, the order
 /// of speaking, and the log they all append to. See "The room and its
 /// participants" in `lib/domain/room/AGENTS.md`.
@@ -161,7 +161,7 @@ class ChatRoom {
             });
   }
 
-  Agent _agent(String? handle) => Agent(_repo, chatId, handle);
+  Agent _agent(String handle) => Agent(_repo, chatId, handle);
 
   Roster _roster(Chat chat) => _host.roster(chat.state.project);
 
@@ -306,8 +306,8 @@ class ChatRoom {
   /// React to [messageId] with [reaction], or take it back where it is
   /// already there — the picker's one verb.
   ///
-  /// Reacting is said like anything else, to whoever wrote the message — the
-  /// main agent where nobody in particular did — and never steers: it
+  /// Reacting is said like anything else, to whoever wrote the message — Athena
+  /// where the user did — and never steers: it
   /// answers something finished, so while the room runs it waits its turn.
   ///
   /// Taking back is a record, not a deletion. A turn the reaction started
@@ -477,8 +477,7 @@ class ChatRoom {
   /// drain a finishing turn runs — read it through this one method. Relay
   /// order drops the room's part of that rule, keeping the member's: the
   /// dispatch runs whatever it may, its per-lane check leaving a say for
-  /// a busy member queued while one for an idle member — or for the idle
-  /// house — runs at once.
+  /// a busy participant queued while one for an idle one runs at once.
   void _drainSaid() {
     final chat = state.chat;
     if (chat == null) return;
@@ -519,7 +518,7 @@ class ChatRoom {
       files: files,
     );
     if (replacing != null) {
-      await _say(userMsg, replacing: replacing);
+      await _openTurn(chat: chat, prompt: userMsg, replacing: replacing);
       return;
     }
     await _schedulePrompt(chat, userMsg);
@@ -540,7 +539,7 @@ class ChatRoom {
       "/compact${arguments.isEmpty ? "" : " $arguments"}",
       project: chat.state.project,
     );
-    await _say(userMsg);
+    await _openTurn(chat: chat, prompt: userMsg);
   }
 
   /// The compact turn's body, driven from [_openTurn] by the wired check on
@@ -599,77 +598,44 @@ class ChatRoom {
     await _rethread((repo) => repo.appendCompaction(chatId, result));
   }
 
-  /// Open the turn [userMsg] starts, whether it is being composed now or was
-  /// said while the room ran and is already on the log. Where it is not on the
-  /// log yet — a fresh send — it rides in [opening]; where it is, the opening
-  /// is the reply alone and [history] ends before it, since the message is
-  /// already the last thing said. [member] is who the room has decided
-  /// answers it, where scheduling decided ahead of the prompt. No guard on
-  /// the room here: dispatching a fan-out is what puts several turns in
-  /// flight, and the verbs that need the guard carry their own.
-  Future<void> _say(
-    Message userMsg, {
-    Message? replacing,
-    String? member,
-    int generation = 0,
-  }) async {
-    final chat = state.chat;
-    if (chat == null) return;
-    final logged = replacing == null && chat.messages.contains(userMsg);
-    final at = logged
-        ? chat.messages.indexOf(userMsg)
-        : replacing == null
-        ? chat.messages.length
-        : chat.messages.indexOf(replacing);
-    if (at < 0) return;
-    // Scheduling that named the member stamps them directly; a fresh send
-    // reads the address off what composing wrote into the message.
-    final author = member != null
-        ? "${CompletionKind.agent.trigger}$member"
-        : _roster(chat).authorFor(userMsg);
-    await _openTurn(
-      chat: chat,
-      prompt: userMsg,
-      history: chat.messages.take(at).toList(),
-      opening: [
-        if (!logged) userMsg,
-        _newReply(author: author),
-      ],
-      replacing: replacing,
-      member: member,
-      generation: generation,
-    );
-  }
-
-  /// Open a turn: put the messages it starts with in the conversation and in
-  /// the log, then hand the prompt to the agent answering it.
+  /// Open a turn: put the prompt, where it is not on the log yet, and the
+  /// answering participant's empty reply in the conversation and in the log,
+  /// then hand the prompt to that participant.
   ///
-  /// [opening] is what the turn writes — the prompt and its empty reply, or the
-  /// reply alone where the prompt is already there. [history] is the
-  /// conversation the model is answering, which does not include the prompt:
-  /// `sendPrompt` adds that itself. [replacing] is the message [opening] is an
-  /// alternative to, and null when this is simply the next thing said.
-  /// [member] is who the room has decided answers it, where scheduling
-  /// decided ahead of the prompt — a dispatched item — rather than from it.
+  /// The prompt may be composed now or already on the log — said while the
+  /// room ran, or the reply a handoff answers. The history the model answers
+  /// ends before it, or before [replacing] for a prompt that stands in for
+  /// one: `sendPrompt` adds the prompt itself. [replacing] is the message the
+  /// turn is an alternative to, and null when this is simply the next thing
+  /// said. [member] is who the room has decided answers it, where
+  /// scheduling decided ahead of the prompt — a dispatched item — rather than
+  /// from it; otherwise the roster answers from the prompt.
   /// [generation] is the dispatch wave the turn belongs to, on the entry for
   /// the handoff that reads it.
   Future<void> _openTurn({
     required Chat chat,
     required Message prompt,
-    required List<Message> history,
-    required List<Message> opening,
     Message? replacing,
     String? member,
     int generation = 0,
   }) async {
+    final logged = chat.messages.contains(prompt);
+    final at = logged
+        ? chat.messages.indexOf(prompt)
+        : replacing == null
+        ? chat.messages.length
+        : chat.messages.indexOf(replacing);
+    // An edit whose message has gone since: nothing to stand beside.
+    if (at < 0) return;
+    final history = chat.messages.take(at).toList();
     final roster = _roster(chat);
     final omada = roster.omada;
+    final handle = member ?? roster.answering(prompt);
     // The routing record rides the say where it is written — a fresh send's
     // or an edit's say, stamped the one time here and the same copy logged
     // and sent; a say already on the log keeps the record the room made
     // where it landed, the way [omadaOn] is kept, since a member the library
     // lost since does not rewrite the room's past.
-    final logged = chat.messages.contains(prompt);
     final say = logged
         ? prompt
         : prompt.copyWith(
@@ -681,13 +647,11 @@ class ChatRoom {
     // flips from the last one. The implicit off a chat starts in is not a
     // section — nothing separates the first exchange from a chat that never
     // heard of Omada — so the first flip is the on-flip; the off-flip is
-    // what bounds an on-section for the label rule.
-    final openingWithMode = [
-      identical(opening.first, prompt)
-          ? say
-          : opening.first.copyWith(omadaOn: omada),
-      ...opening.sublist(1),
-    ];
+    // what bounds an on-section.
+    final reply = _newReply(author: "${CompletionKind.agent.trigger}$handle");
+    final openingWithMode = logged
+        ? [reply.copyWith(omadaOn: omada)]
+        : [say, reply];
     final updated = chat
         .withTurn(openingWithMode, replacing: replacing)
         .copyWith(state: chat.state.copyWith(updatedAt: DateTime.now()));
@@ -707,8 +671,8 @@ class ChatRoom {
     // wave still opening. Who answers is resolved once: the entry's agent —
     // what relay's busy lane reads — and the one the stream goes to are the
     // same fact.
-    final agent = _agent(member ?? roster.answering(prompt));
-    final turn = _openTurnEntry(opening.last.id, agent);
+    final agent = _agent(handle);
+    final turn = _openTurnEntry(reply.id, agent);
     turn.generation = generation;
     applyState(await _repo.saveState(updated.state));
     await turn.recorder.write(
@@ -755,7 +719,7 @@ class ChatRoom {
 
   /// The turn's reply. Always role `assistant` — the role is the render
   /// class, not the author; [Message.author] is what names them.
-  Message _newReply({String? author}) => Message(
+  Message _newReply({required String author}) => Message(
     id: _uuid.v4(),
     role: MessageRole.assistant,
     createdAt: DateTime.now(),
@@ -801,7 +765,7 @@ class ChatRoom {
     );
     // The member who wrote the reply carries it on; a fresh entry takes them
     // as its lane, which is what relay's busy check reads.
-    final agent = _agent(_roster(chat).known(nameOf(reply.author)));
+    final agent = _agent(nameOf(reply.author)!);
     // Kept open across the round: a caller awaiting [turnDone] gets one
     // completion, at the true end, not one per attempt.
     final turn = _turns[reply.id] ?? _openTurnEntry(reply.id, agent);
@@ -880,12 +844,13 @@ class ChatRoom {
     if (chat == null || state.isRunning) return;
     final prompt = _promptFor(chat, messageId);
     if (prompt == null) return;
+    final replacing = _replyFor(chat, messageId);
     await _openTurn(
       chat: chat,
       prompt: prompt,
-      history: chat.messages.take(chat.messages.indexOf(prompt)).toList(),
-      opening: [_newReply(author: _roster(chat).authorFor(prompt))],
-      replacing: _replyFor(chat, messageId),
+      replacing: replacing,
+      // Whoever wrote the reply answers again.
+      member: nameOf(replacing?.author),
     );
   }
 
@@ -1205,10 +1170,8 @@ class ChatRoom {
     ].whereType<Message>().toList();
     _handoff(reason, chat, replies);
     // Whatever the schedule may run now, runs: a queued say, a handoff just
-    // scheduled, or a member's next item behind one still queued. The
-    // handoff's own gate decides what was scheduled, not what runs — an
-    // off-Omada room's queued says and what a failure leaves queued drain
-    // through here all the same.
+    // scheduled, or a participant's next item behind one still queued — what
+    // a failure leaves queued drains through here all the same.
     await _dispatch();
   }
 
@@ -1221,9 +1184,6 @@ class ChatRoom {
   /// siblings handed off.
   void _handoff(TurnEnd? reason, Chat chat, List<Message> replies) {
     if (reason != TurnEnd.done || _disposed) return;
-    // Omada off is the room as it always was: nothing hands anything to
-    // anyone, whatever a reply's text happens to name.
-    if (!_roster(chat).omada) return;
     for (final reply in replies) {
       // The wave lands one past the turn that named it: the round's depth is
       // the finished turn's own, and the cap reads it at dispatch.
@@ -1253,28 +1213,14 @@ class ChatRoom {
     run: _run,
   );
 
-  /// Open the turn one scheduled item runs as. [member] null is the main
-  /// agent's; a handoff's prompt is the reply that names the member, already
-  /// in the conversation.
-  Future<void> _run(String? member, ScheduledItem item) async {
-    final prompt = item.userPrompt;
-    final reply = item.reply;
-    if (prompt != null) {
-      await _say(prompt, member: member, generation: item.generation);
-      return;
-    }
+  /// Open the turn one scheduled item runs as. A handoff's prompt is the
+  /// reply that names the member, already in the conversation.
+  Future<void> _run(String member, ScheduledItem item) async {
     final chat = state.chat;
-    if (chat == null || reply == null) return;
+    if (chat == null) return;
     await _openTurn(
       chat: chat,
-      prompt: reply,
-      // The conversation the member answers ends before the reply that hands
-      // to them: `sendPrompt` adds the prompt itself, and history holding it
-      // too would have the member read their mentioning reply twice.
-      history: chat.messages.take(chat.messages.indexOf(reply)).toList(),
-      // The next reply is authored by the member handed to. The stamp
-      // carries the sigil, the way every author stamp does.
-      opening: [_newReply(author: "${CompletionKind.agent.trigger}$member")],
+      prompt: (item.userPrompt ?? item.reply)!,
       member: member,
       generation: item.generation,
     );

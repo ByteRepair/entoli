@@ -207,19 +207,19 @@ abstract class ContextUsage with _$ContextUsage {
 
 extension Contexts on Chat {
   /// Each participant's context as the thread being read stands, keyed by
-  /// author, null the house: their newest reply that has one, its chat taken
-  /// from a compaction that came after it.
-  Map<String?, ContextUsage> get contexts {
+  /// author: their newest reply that has one, its chat taken from a
+  /// compaction that came after it.
+  Map<String, ContextUsage> get contexts {
     final marker = compactions.lastOrNull;
     final boundary = marker?.chatTokens == null
         ? -1
         : messages.indexWhere((m) => m.id == marker!.upToMessageId);
-    final out = <String?, ContextUsage>{};
+    final out = <String, ContextUsage>{};
     for (var i = messages.length - 1; i >= 0; i--) {
       final m = messages[i];
       final context = m.context;
       if (context == null || out.containsKey(m.author)) continue;
-      out[m.author] = i <= boundary
+      out[m.author!] = i <= boundary
           ? context.copyWith(chat: marker!.chatTokens!, reported: null)
           : context;
     }
@@ -405,15 +405,14 @@ abstract class Message with _$Message {
     /// "Commands and agents" in `lib/domain/AGENTS.md`.
     @Default({}) Map<String, String> documents,
 
-    /// The addressed member who authored this message, as keyed in
-    /// [documents]; null is the main agent, unnamed — and every message
-    /// written before this existed.
+    /// The participant who wrote this reply, sigil on, as keyed in
+    /// [documents]. Every reply has one; a user's message has none.
     String? author,
 
     /// The members the room routed this say to, sigils on as typed, in the
     /// order mentioned — the room's own record of who was being spoken to,
-    /// not a re-parse of the text. Empty is the house's mail, and every
-    /// message written before the field existed. A reply's is stamped when
+    /// not a re-parse of the text. A user's say always has at least one. A
+    /// reply's is stamped when
     /// it closes `done` (`TurnEndRecord.addressees`): the members its text
     /// names, its own author never among them.
     @Default([]) List<String> addressees,
@@ -572,9 +571,9 @@ sealed class MessagePart with _$MessagePart {
 
   /// The user reacting to the message [messageId] with [emoji]: the whole of
   /// a user message, and something said like any other, routed to whoever
-  /// wrote [messageId]. [author] is its handle where a member wrote it, null
-  /// for anything else — the main agent's, the user's own — which the main
-  /// agent answers, kept here since routing reads the reaction alone.
+  /// wrote [messageId]. [author] is its handle where a participant wrote it,
+  /// null for the user's own, which Athena answers — kept here since routing
+  /// reads the reaction alone.
   /// [excerpt] is the start of what it said: the model is never shown
   /// [messageId], so the excerpt is how it knows which message was reacted
   /// to — any of the thread's, and one a compaction summarized away too.

@@ -2,15 +2,14 @@ import "../agent_backend.dart";
 import "../chat_repository.dart";
 import "../models.dart";
 
-/// A participant that takes turns: the house where [handle] is null, a member
-/// otherwise. Each answers in a session of its own, which the backend keys by
-/// the handle; this is the room's hold on it.
+/// A participant that takes turns. Each answers in a session of its own,
+/// which the backend keys by the handle; this is the room's hold on it.
 class Agent {
   Agent(this._repo, this.chatId, this.handle);
 
   final ChatRepository _repo;
   final String chatId;
-  final String? handle;
+  final String handle;
 
   /// Answer [say]. [history] ends before it; [replaces] says the session holds
   /// a thread [say] does not continue.
@@ -29,7 +28,7 @@ class Agent {
     history: history,
     compactions: compactions,
     replaces: replaces,
-    omadaMember: handle,
+    participant: handle,
     steers: steers,
   );
 
@@ -44,7 +43,7 @@ class Agent {
     chatId,
     history: history,
     compactions: compactions,
-    omadaMember: handle,
+    participant: handle,
     steers: steers,
   );
 }
