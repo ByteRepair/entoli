@@ -412,7 +412,14 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
     return ListTile(
       dense: true,
       leading: _local
-          ? AgentPicture(name: agent.name, project: widget.project)
+          // Live, and happy at a tap: a row scrolled out of view is not
+          // painted, which stops its ticker until it is back.
+          ? AgentPicture(
+              name: agent.name,
+              project: widget.project,
+              animate: true,
+              reactToTap: true,
+            )
           : null,
       title: Text(agent.name),
       subtitle: agent.description == null

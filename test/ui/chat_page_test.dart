@@ -1237,9 +1237,13 @@ void main() {
       final chat = await seedLongChat(tester);
       await open(tester, chat.state.id);
       final end = position(tester).maxScrollExtent;
-      final held = end - 300;
-      await tester.drag(find.byType(SuperListView), Offset(0, end - held));
+      await tester.drag(find.byType(SuperListView), const Offset(0, 300));
       await tester.pumpAndSettle();
+      // Where the drag left it, not where 300 would: the drag starts on
+      // whatever the list has under its centre — an agent's avatar among
+      // them — and a gesture there takes its slop before the list moves.
+      final held = position(tester).pixels;
+      expect(held, lessThan(end));
 
       await replyArrives(tester, chat.state.id);
 
