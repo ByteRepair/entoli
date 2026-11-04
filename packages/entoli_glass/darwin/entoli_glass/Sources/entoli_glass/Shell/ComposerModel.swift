@@ -80,15 +80,18 @@ final class ComposerModel: ObservableObject {
   /// character it draws.
   private(set) var cards: [UInt16: ComposerCard] = [:]
 
-  /// The menu's agent faces by row, decoded when the menu changes rather
+  /// The menu's agent faces by row, decoded when a snapshot arrives rather
   /// than on every body.
   private(set) var pictures: [Int: Image] = [:]
 
-  private static func image(_ png: FlutterStandardTypedData) -> Image? {
+  /// The faces the menu showed last, by their PNG bytes.
+  private var faces: [Data: Image] = [:]
+
+  private static func image(_ png: Data) -> Image? {
     #if os(iOS)
-      UIImage(data: png.data).map { Image(uiImage: $0) }
+      UIImage(data: png).map { Image(uiImage: $0) }
     #else
-      NSImage(data: png.data).map { Image(nsImage: $0) }
+      NSImage(data: png).map { Image(nsImage: $0) }
     #endif
   }
 
@@ -99,12 +102,17 @@ final class ComposerModel: ObservableObject {
     // A different list starts again at its first row; the same one keeps the
     // row the arrows are on — a face arriving for a row is the same list.
     if next.menu.map(\.label) != look.menu.map(\.label) { highlighted = 0 }
-    if next.menu != look.menu {
-      pictures = Dictionary(
-        uniqueKeysWithValues: next.menu.enumerated().compactMap { row, item in
-          item.picture.flatMap(Self.image).map { (row, $0) }
-        })
-    }
+    // Each snapshot's bytes are a fresh object, so a face is known again by
+    // its bytes and decoded only the first time.
+    var decoded: [Data: Image] = [:]
+    pictures = Dictionary(
+      uniqueKeysWithValues: next.menu.enumerated().compactMap { row, item in
+        guard let png = item.picture?.data else { return nil }
+        guard let image = decoded[png] ?? faces[png] ?? Self.image(png) else { return nil }
+        decoded[png] = image
+        return (row, image)
+      })
+    faces = decoded
     if next.cards != look.cards {
       cards = Dictionary(
         next.cards.map { (UInt16(truncatingIfNeeded: $0.key), $0.value) },

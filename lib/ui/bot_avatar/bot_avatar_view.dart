@@ -11,6 +11,7 @@ import "../../domain/bot_avatar/frame.dart";
 import "../../domain/bot_avatar/pose.dart";
 import "../../domain/bot_avatar/spec.dart";
 import "../../domain/bot_avatar/volume.dart";
+import "../widgets/picture_png.dart";
 
 /// Whether the Bot Avatars below may move at all; on where nothing says. Off,
 /// every avatar is a still with no ticker — what reduce-motion gives too,
@@ -428,25 +429,22 @@ Future<Uint8List?> botAvatarPng(
   BotAvatarSpec spec, {
   required double size,
   required double pixelRatio,
-  Color? outline,
+  required Color outline,
 }) async {
   final frame = ValueNotifier(
     PreparedBotAvatar.of(spec.definition).frame(reducedMotion: true),
   );
-  final recorder = ui.PictureRecorder();
-  BotAvatarPainter(
-    frame: frame,
-    colour: Color(0xff000000 | spec.colour),
-    outline: outline,
-  ).paint(Canvas(recorder)..scale(pixelRatio), Size.square(size));
-  frame.dispose();
-  final px = (size * pixelRatio).ceil();
-  final image = await recorder.endRecording().toImage(px, px);
   try {
-    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-    return bytes?.buffer.asUint8List();
+    return await pngOf(
+      (size * pixelRatio).ceil(),
+      (canvas) => BotAvatarPainter(
+        frame: frame,
+        colour: Color(0xff000000 | spec.colour),
+        outline: outline,
+      ).paint(canvas..scale(pixelRatio), Size.square(size)),
+    );
   } finally {
-    image.dispose();
+    frame.dispose();
   }
 }
 

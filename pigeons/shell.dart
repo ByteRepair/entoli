@@ -244,6 +244,9 @@ class ComposerAttachment {
 class ComposerMenuItem {
   /// The trigger and the name, as they will be typed.
   String label;
+
+  /// Which menu it is in: an agent's row leads with its face.
+  ComposerTrigger trigger;
   String? hint;
   String? detail;
 

@@ -1,3 +1,4 @@
+import "dart:math" as math;
 import "dart:typed_data";
 import "dart:ui" as ui;
 
@@ -8,6 +9,7 @@ import "../../domain/agent_face.dart";
 import "../../domain/bot_avatar/pose.dart";
 import "../../providers.dart";
 import "../bot_avatar/bot_avatar_view.dart";
+import "picture_png.dart";
 
 /// An agent's face from one already in hand: its photo, circular; its Bot
 /// Avatar, drawn in place of the circle; or the person mark where it has
@@ -83,7 +85,7 @@ Future<Uint8List?> agentFacePng(
   AgentFace? face, {
   required double size,
   required double pixelRatio,
-  Color? outline,
+  required Color outline,
 }) async {
   switch (face) {
     case AgentBot(:final spec):
@@ -95,30 +97,36 @@ Future<Uint8List?> agentFacePng(
       );
     case AgentPhoto(:final bytes):
       final px = (size * pixelRatio).ceil();
-      final codec = await ui.instantiateImageCodec(
-        bytes,
-        targetWidth: px,
-        targetHeight: px,
+      // Decoded with its shorter side at the size drawn, and its middle
+      // square taken, as the row's `BoxFit.cover` does.
+      final codec = await ui.instantiateImageCodecWithSize(
+        await ui.ImmutableBuffer.fromUint8List(bytes),
+        getTargetSize: (w, h) => w < h
+            ? ui.TargetImageSize(width: px)
+            : ui.TargetImageSize(height: px),
       );
       final photo = (await codec.getNextFrame()).image;
       codec.dispose();
-      final recorder = ui.PictureRecorder();
-      final box = Offset.zero & Size.square(px.toDouble());
-      Canvas(recorder)
-        ..clipPath(Path()..addOval(box))
-        ..drawImageRect(
-          photo,
-          Offset.zero & Size(photo.width.toDouble(), photo.height.toDouble()),
-          box,
-          Paint()..filterQuality = FilterQuality.medium,
-        );
-      photo.dispose();
-      final image = await recorder.endRecording().toImage(px, px);
       try {
-        final png = await image.toByteData(format: ui.ImageByteFormat.png);
-        return png?.buffer.asUint8List();
+        final side = math.min(photo.width, photo.height).toDouble();
+        final box = Offset.zero & Size.square(px.toDouble());
+        return await pngOf(
+          px,
+          (canvas) => canvas
+            ..clipPath(Path()..addOval(box))
+            ..drawImageRect(
+              photo,
+              Rect.fromCenter(
+                center: Offset(photo.width / 2, photo.height / 2),
+                width: side,
+                height: side,
+              ),
+              box,
+              Paint()..filterQuality = FilterQuality.medium,
+            ),
+        );
       } finally {
-        image.dispose();
+        photo.dispose();
       }
     default:
       return null;
@@ -136,7 +144,7 @@ final agentFacePngProvider = FutureProvider.autoDispose
         String name,
         double size,
         double pixelRatio,
-        int outline,
+        Color outline,
       })
     >((ref, key) async {
       final face = await ref.watch(
@@ -146,7 +154,7 @@ final agentFacePngProvider = FutureProvider.autoDispose
         face,
         size: key.size,
         pixelRatio: key.pixelRatio,
-        outline: Color(key.outline),
+        outline: key.outline,
       );
     });
 

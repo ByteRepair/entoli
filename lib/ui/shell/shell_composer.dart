@@ -269,7 +269,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
     // Every agent's face, drawn while the composer is up so the `@` menu has
     // them as it opens; a paired device's agents have none here.
     final pixelRatio = MediaQuery.devicePixelRatioOf(context);
-    final outline = theme.colorScheme.outline.toARGB32();
+    final outline = theme.colorScheme.outline;
     final faces = {
       if (widget.config.device == null)
         for (final agent in offered[CompletionKind.agent]!)
@@ -324,6 +324,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
               for (final option in _matches)
                 ComposerMenuItem(
                   label: "${token!.kind.trigger}${option.name}",
+                  trigger: triggerOf(token.kind),
                   hint: option.argumentHint,
                   detail: option.description,
                   picture: token.kind == CompletionKind.agent

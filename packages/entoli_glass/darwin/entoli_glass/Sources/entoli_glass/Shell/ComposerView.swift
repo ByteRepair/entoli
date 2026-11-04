@@ -227,7 +227,7 @@ struct ComposerView: View {
       if let picture = model.pictures[row] {
         picture.resizable().interpolation(.high)
           .frame(width: Self.menuFace, height: Self.menuFace)
-      } else if option.label.hasPrefix("@") {
+      } else if option.trigger == .agent {
         Image(systemName: "person.crop.circle.fill")
           .resizable()
           .foregroundStyle(.secondary)
