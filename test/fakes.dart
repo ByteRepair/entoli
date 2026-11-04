@@ -259,7 +259,7 @@ Warmup Function() testWarmup({
 Message userMessage(
   String text, {
   DateTime? at,
-  Map<String, String> documents = const {},
+  List<String> references = const [],
   List<MessagePart> files = const [],
 }) => Message(
   id: "u1",
@@ -269,7 +269,7 @@ Message userMessage(
     ...files,
     MessagePart.text(text: text),
   ],
-  documents: documents,
+  references: references,
 );
 
 /// Stands in for the platform's file chooser, which no test can drive.

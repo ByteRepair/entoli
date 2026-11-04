@@ -62,6 +62,10 @@ import "templates.dart";
 /// reaches them by — every shell binds them at their host path — so the note
 /// naming a file says where to find it. Null names them alone.
 ///
+/// [library] is what a `/skill` message expands from — the skill as it reads
+/// now, the message having recorded only that it named one. Null expands
+/// nothing, which is a sub-agent's transcript: no user composed its task.
+///
 /// [compactions] are the markers on the thread [messages] walks — the last one
 /// is what the model reads instead of everything before its boundary, the
 /// earlier ones being shadows an earlier compaction left. A marker whose
@@ -76,6 +80,7 @@ Future<List<LlmMessage>> projectionOf(
   bool first = true,
   required ResourceLoader load,
   String? resourcesDir,
+  PromptLibrary? library,
   String? viewer,
   List<ConversationCompaction> compactions = const [],
 }) async {
@@ -123,7 +128,7 @@ Future<List<LlmMessage>> projectionOf(
       case MessageRole.user:
         // Taken back before its turn ran: nobody was ever told it.
         if (message.retraction == Retraction.beforeItsTurn) break;
-        final text = _userText(message, resourcesDir);
+        final text = _userText(message, resourcesDir, library);
         if (text.isEmpty) break;
         // The dress is the viewer's first mail: in [first], once. A call
         // that worded a delta or a live prompt already decided it is that
@@ -186,7 +191,9 @@ Future<List<LlmMessage>> projectionOf(
           // viewer reads what was said, not the commands behind it.
           continue;
         }
-        projected.addAll(_assistant(message, files[index], resourcesDir));
+        projected.addAll(
+          _assistant(message, files[index], resourcesDir, library),
+        );
       case MessageRole.system:
       case MessageRole.tool:
         // The system prompt is rewritten every turn, and a result is a part of
@@ -223,10 +230,18 @@ Message unloggedMessage(
 /// resource has gone is left with nothing but its name. Where [resourcesDir]
 /// is known each also says where it is, for a command, and that it is not to
 /// be written: `attachment_save` makes the copy that can be.
-String _userText(Message message, String? resourcesDir) {
+String _userText(
+  Message message,
+  String? resourcesDir,
+  PromptLibrary? library,
+) {
   final reaction = message.reaction;
   if (reaction != null) return reactionTurnText(reaction);
-  final text = expandedPrompt(message.plainText, message.documents).trim();
+  final text = expandedPrompt(
+    message.plainText,
+    message.references,
+    library,
+  ).trim();
   if (message.files.isEmpty) return text;
   final files = message.files
       .map(
@@ -285,10 +300,12 @@ Iterable<LlmMessage> assistantMessages(
   List<MessagePart> parts, {
   Map<String, LlmAttachment> files = const {},
   String? resourcesDir,
+  PromptLibrary? library,
 }) => _assistant(
   unloggedMessage(MessageRole.assistant, _noDate, parts),
   files,
   resourcesDir,
+  library,
 );
 
 /// What another participant said in a reply, worded for a different viewer:
@@ -308,6 +325,7 @@ Iterable<LlmMessage> _assistant(
   Message message,
   Map<String, LlmAttachment> files,
   String? resourcesDir,
+  PromptLibrary? library,
 ) sync* {
   // Over the whole message rather than per response: a result is paired to its
   // call by id, and one that landed in a later response than the call it
@@ -418,7 +436,7 @@ Iterable<LlmMessage> _assistant(
     }
 
     if (reasoning.isEmpty && text.isEmpty && calls.isEmpty) {
-      yield* _steered(steers, files, resourcesDir);
+      yield* _steered(steers, files, resourcesDir, library);
       continue;
     }
 
@@ -446,7 +464,7 @@ Iterable<LlmMessage> _assistant(
         attachments: images[call.id] ?? const [],
       );
     }
-    yield* _steered(steers, files, resourcesDir);
+    yield* _steered(steers, files, resourcesDir, library);
   }
 }
 
@@ -454,10 +472,14 @@ Iterable<LlmMessage> _steered(
   List<Message> steers,
   Map<String, LlmAttachment> files,
   String? resourcesDir,
+  PromptLibrary? library,
 ) => steers.map(
   (said) => LlmMessage(
     role: LlmRole.user,
-    text: steerTurnText(_userText(said, resourcesDir), at: said.createdAt),
+    text: steerTurnText(
+      _userText(said, resourcesDir, library),
+      at: said.createdAt,
+    ),
     attachments: [for (final file in said.files) ?files[file.resource]],
   ),
 );

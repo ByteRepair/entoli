@@ -42,7 +42,7 @@ file in a session of its own, and every reply names its author.
   rather than one per caller. A trigger fire naming a member is a say like
   any other: the mention in its text is what routes it.
 - **A say goes to the participants it names, or to the default route.**
-  `Roster.mentioned` reads the agents the say's documents name and keeps
+  `Roster.mentioned` reads the agents the say's references name and keeps
   the ones in the room; where it keeps none — a say naming nobody, a `!`
   command, a callback — the say is the default route's, Athena today. So
   every say is addressed to someone, and `Message.addressees` always says
@@ -87,7 +87,7 @@ is stamped on its `turnEnd` record when it closes `done` — its routing is
 only known once its text is — and the handoff schedules off that stamp, not
 a re-read of the text. A reply never addresses its own author: "hello @a, @b
 and @me" was every member rescheduling itself. It is room data, not text:
-`documents` say what the references *meant*, this says who the room sent it
+`references` say what the text *named*, this says who the room sent it
 to, and a member deleted from the library after the fact does not rewrite
 the room's past. The wording half of it is the projection's, per viewer —
 see "The room's mail is worded per viewer too" in `lib/domain/AGENTS.md` —
@@ -117,7 +117,7 @@ the next turn the plain prompt it had.
 
 **The schedule is the room's order of speaking.** `Schedule.addPrompt` and
 `addHandoff` put an item on each member's FIFO: a user prompt addressed by
-its documents, or a handoff — the reply that names them, one generation past
+its references, or a handoff — the reply that names them, one generation past
 the turn that wrote it. `Schedule.dispatch` runs what the schedule holds,
 asking the ordering's `admits` per item: **sequential** order
 dispatches one item at a time — the mention list is the schedule, and what

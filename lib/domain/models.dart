@@ -400,13 +400,14 @@ abstract class Message with _$Message {
     required DateTime createdAt,
     @Default([]) List<MessagePart> parts,
 
-    /// What this message's `/command` and `@agent` references meant when it was
-    /// sent, keyed by the reference as written — `/review`, `@researcher`. See
-    /// "Commands and agents" in `lib/domain/AGENTS.md`.
-    @Default({}) Map<String, String> documents,
+    /// The `/skill` and `@agent` this message named that the library knew
+    /// when it was sent, as written — `/review`, `@researcher`. Names, not
+    /// what they meant: a reader looks each up in the library as it is. See
+    /// "Skills and agents" in `lib/domain/AGENTS.md`.
+    @Default([]) List<String> references,
 
-    /// The participant who wrote this reply, sigil on, as keyed in
-    /// [documents]. Every reply has one; a user's message has none.
+    /// The participant who wrote this reply, sigil on, as spelled in
+    /// [references]. Every reply has one; a user's message has none.
     String? author,
 
     /// The members the room routed this say to, sigils on as typed, in the

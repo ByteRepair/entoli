@@ -29,7 +29,7 @@ class Roster {
       omada && library.find(CompletionKind.agent, name) != null;
 
   /// The participants [message] addresses, in the order it names them,
-  /// sigils off. A user's say addresses those its documents name, or
+  /// sigils off. A user's say addresses those its references name, or
   /// Athena where it names nobody in the room — a command and a callback
   /// included, which only the default route runs. A reply hands to
   /// the participants its text names, never its own author: left in, every
@@ -75,10 +75,10 @@ class Roster {
   String answering(Message prompt) => mentioned(prompt).firstOrNull ?? athena;
 
   /// The participant keys a user's say addresses, sigils on: a reaction's
-  /// author, or what composing wrote into its documents.
+  /// author, or the agents composing recorded in its references.
   static List<String> _keysOf(Message say) {
     final reaction = say.reaction;
-    if (reaction == null) return authorKeys(say.documents);
+    if (reaction == null) return authorKeys(say.references);
     return [?reaction.author];
   }
 

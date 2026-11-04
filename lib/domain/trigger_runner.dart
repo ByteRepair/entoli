@@ -172,7 +172,7 @@ class TriggerRunner implements TriggerRuns {
 
   /// The one wording of "the fire, and what set it off": the prompt (its
   /// mention first, where the trigger names a member — the composer resolves
-  /// the sigil'd reference from the documents and the room routes it like
+  /// the sigil'd reference into the message and the room routes it like
   /// any message sent), then the kind's reason in a line below. The tool's
   /// schema description names this shape, not a literal of a reason's own
   /// words.

@@ -421,6 +421,10 @@ class BuiltinAgent implements Turn {
   /// job as the parent's.
   final List<PromptDocument> skills;
 
+  /// [skills] to look a `/skill` message up in, which the projection expands
+  /// from — the same words a reload reads back.
+  late final _skillLibrary = PromptLibrary(skills);
+
   /// The room's participants, as the project's library holds them — the
   /// members an omada room's say routes to. Non-null only on an omada turn:
   /// the room contract is what names handles, and non-null is the one gate
@@ -755,6 +759,7 @@ class BuiltinAgent implements Turn {
               said.parts,
               files: _images,
               resourcesDir: attachmentsDir,
+              library: _skillLibrary,
             ),
           );
         }
@@ -862,6 +867,7 @@ class BuiltinAgent implements Turn {
         viewer: viewer,
         load: loadResource,
         resourcesDir: attachmentsDir,
+        library: _skillLibrary,
       ),
     );
   }

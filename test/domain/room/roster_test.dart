@@ -16,14 +16,13 @@ void main() {
   ]);
   Roster roster({bool omada = true}) => Roster(omada: omada, library: library);
 
-  Message said(String text, {Map<String, String> documents = const {}}) =>
-      Message(
-        id: "u",
-        role: MessageRole.user,
-        createdAt: DateTime(2026),
-        parts: [MessagePart.text(text: text)],
-        documents: documents,
-      );
+  Message said(String text, {List<String> references = const []}) => Message(
+    id: "u",
+    role: MessageRole.user,
+    createdAt: DateTime(2026),
+    parts: [MessagePart.text(text: text)],
+    references: references,
+  );
 
   Message reply(String text, {String? author}) => Message(
     id: "r",
@@ -33,18 +32,18 @@ void main() {
     author: author,
   );
 
-  test("a say addresses the members its documents name, the library knows", () {
-    final m = said(
-      "@build and @ghost, go",
-      documents: {"@build": "Do build.", "@ghost": "Boo."},
-    );
-    expect(roster().mentioned(m), ["build"]);
-    expect(roster().addressees(m), ["@build"]);
-    expect(roster().answering(m), "build");
-  });
+  test(
+    "a say addresses the members its references name, the library knows",
+    () {
+      final m = said("@build and @ghost, go", references: ["@build", "@ghost"]);
+      expect(roster().mentioned(m), ["build"]);
+      expect(roster().addressees(m), ["@build"]);
+      expect(roster().answering(m), "build");
+    },
+  );
 
   test("a direct chat holds Athena alone: every say is hers", () {
-    final m = said("@build, go", documents: {"@build": "Do build."});
+    final m = said("@build, go", references: ["@build"]);
     final direct = roster(omada: false);
     expect(direct.mentioned(m), ["athena"]);
     expect(direct.addressees(m), ["@athena"]);
@@ -54,9 +53,7 @@ void main() {
   test("a say naming no one in the room is the default route's", () {
     expect(roster().mentioned(said("hello")), ["athena"]);
     expect(
-      roster(
-        omada: true,
-      ).mentioned(said("@ghost, go", documents: {"@ghost": "Boo."})),
+      roster(omada: true).mentioned(said("@ghost, go", references: ["@ghost"])),
       ["athena"],
     );
   });
@@ -64,7 +61,7 @@ void main() {
   test("a command and a callback go to the default route, whoever they "
       "name", () {
     for (final text in ["!grep @build", "/compact @build"]) {
-      final m = said(text, documents: {"@build": "Do build."});
+      final m = said(text, references: ["@build"]);
       expect(roster().mentioned(m), ["athena"], reason: text);
       expect(roster().answering(m), "athena", reason: text);
     }
@@ -85,26 +82,22 @@ void main() {
       "the room", () {
     expect(roster().byDefault(said("hello")), isTrue);
     expect(
-      roster().byDefault(said("@ghost, go", documents: {"@ghost": "Boo."})),
+      roster().byDefault(said("@ghost, go", references: ["@ghost"])),
       isTrue,
     );
     expect(
       roster(
         omada: false,
-      ).byDefault(said("@build, go", documents: {"@build": "Do build."})),
+      ).byDefault(said("@build, go", references: ["@build"])),
       isTrue,
       reason: "in a direct chat @build is not in the room",
     );
     expect(
-      roster().byDefault(
-        said("!grep @build", documents: {"@build": "Do build."}),
-      ),
+      roster().byDefault(said("!grep @build", references: ["@build"])),
       isTrue,
     );
     expect(
-      roster().byDefault(
-        said("@build, go", documents: {"@build": "Do build."}),
-      ),
+      roster().byDefault(said("@build, go", references: ["@build"])),
       isFalse,
     );
     // A handoff was asked of whoever it names.

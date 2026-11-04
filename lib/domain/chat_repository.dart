@@ -644,7 +644,7 @@ class ChatRepository {
       ...files,
       MessagePart.text(text: text),
     ],
-    documents: promptDocuments(text, _libraryFor(project)),
+    references: promptReferences(text, _libraryFor(project)),
   );
 
   /// Save what the user attached and describe it as the parts that outlive the
