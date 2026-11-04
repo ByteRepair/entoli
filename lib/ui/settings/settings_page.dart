@@ -88,13 +88,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   /// in front; otherwise the list is what settings shows first.
   late bool _categoryShown = widget.initialCategory != null;
 
+  /// Back from a category to the list, by the bar's button or the back key.
+  void _showList() => setState(() => _categoryShown = false);
+
   @override
   Widget build(BuildContext context) {
     // A category this platform does not offer is not opened, whoever names it.
-    final initial = widget.initialCategory?.offered(ref) == false
-        ? null
-        : widget.initialCategory;
-    if (initial != null && widget.focus) {
+    if (widget.initialCategory case final initial?
+        when widget.focus && initial.offered(ref)) {
       return Scaffold(
         appBar: PageBar(title: initial.label),
         body: _categoryBody(initial),
@@ -106,14 +107,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     return SidePanelFrame(
       narrow: SidePanelNarrow.page,
       contentShown: _categoryShown,
-      onHideContent: () => setState(() => _categoryShown = false),
+      onHideContent: _showList,
       // The list is settings' own structure, so it is never hidden: nothing
-      // takes the bar's leading slot from its back button.
+      // takes the bar's leading slot from its back button. In front of the
+      // list the button is drawn whatever is under the route, since it goes
+      // back to the list rather than out of settings.
       bar: (mode) => mode == SidePanelMode.contentPage
-          ? PageBar(
-              title: category.label,
-              onBack: () => setState(() => _categoryShown = false),
-            )
+          ? PageBar(title: category.label, onBack: _showList)
           : PageBar(title: "Settings"),
       panel: _Categories(
         selected: category,

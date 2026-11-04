@@ -111,8 +111,9 @@ class _SidePanelFrameState extends State<SidePanelFrame> {
         reveal: () => switch (mode) {
           SidePanelMode.drawer => _scaffold.currentState?.openDrawer(),
           SidePanelMode.hidden => widget.onShow?.call(),
-          SidePanelMode.contentPage => widget.onHideContent?.call(),
-          SidePanelMode.docked || SidePanelMode.panelPage => null,
+          SidePanelMode.docked ||
+          SidePanelMode.panelPage ||
+          SidePanelMode.contentPage => null,
         },
         child: Scaffold(
           key: _scaffold,
@@ -138,19 +139,17 @@ class _SidePanelFrameState extends State<SidePanelFrame> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Offstage(
-                      offstage: panelPage,
-                      child: TickerMode(
-                        enabled: !panelPage,
-                        // Back from the content is to the panel rather than
-                        // out of the route.
-                        child: PopScope(
-                          canPop: mode != SidePanelMode.contentPage,
-                          onPopInvokedWithResult: (didPop, _) {
-                            if (!didPop) widget.onHideContent?.call();
-                          },
-                          child: widget.child,
-                        ),
+                    Visibility(
+                      visible: !panelPage,
+                      maintainState: true,
+                      // Back from the content is to the panel rather than
+                      // out of the route.
+                      child: PopScope(
+                        canPop: mode != SidePanelMode.contentPage,
+                        onPopInvokedWithResult: (didPop, _) {
+                          if (!didPop) widget.onHideContent?.call();
+                        },
+                        child: widget.child,
                       ),
                     ),
                     if (panelPage) widget.panel,
@@ -225,8 +224,8 @@ class SidePanel extends InheritedWidget {
 
   final SidePanelMode mode;
 
-  /// Bring the panel on screen: open the drawer, dock it again, or put the
-  /// content back behind it. Nothing where it is already on screen.
+  /// Bring the panel on screen: open the drawer, or dock it again. Nothing
+  /// where it is docked or a page, whose way back is the back key.
   final VoidCallback reveal;
 
   @override
@@ -235,9 +234,10 @@ class SidePanel extends InheritedWidget {
 
 /// The way back to a [SidePanelFrame]'s panel, for a page's bar: the menu
 /// button, opening the drawer where the window is narrow and docking the panel
-/// again where it is hidden, and nothing where it is docked. [leadingOf] is
-/// that as an `AppBar.leading`, which wants null rather than an empty widget,
-/// since an empty one still takes the leading slot's width.
+/// again where it is hidden, and nothing where it is docked or a page — a
+/// page's way back is its bar's back button. [leadingOf] is that as an
+/// `AppBar.leading`, which wants null rather than an empty widget, since an
+/// empty one still takes the leading slot's width.
 class SidePanelButton extends StatelessWidget {
   const SidePanelButton._(this.panel);
 
@@ -245,13 +245,10 @@ class SidePanelButton extends StatelessWidget {
 
   static Widget? leadingOf(BuildContext context) {
     final panel = SidePanelFrame.of(context);
-    // A page's way back is the bar's back button, which the host draws.
-    if (panel == null ||
-        !(panel.mode == SidePanelMode.drawer ||
-            panel.mode == SidePanelMode.hidden)) {
-      return null;
-    }
-    return SidePanelButton._(panel);
+    return switch (panel?.mode) {
+      SidePanelMode.drawer || SidePanelMode.hidden => SidePanelButton._(panel!),
+      _ => null,
+    };
   }
 
   @override
