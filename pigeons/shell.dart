@@ -246,6 +246,10 @@ class ComposerMenuItem {
   String label;
   String? hint;
   String? detail;
+
+  /// An agent's face as a PNG, a still drawn by Flutter; null for a skill,
+  /// and for an agent with no face to show, which the row draws as a person.
+  Uint8List? picture;
 }
 
 /// What an embed in the field draws as.

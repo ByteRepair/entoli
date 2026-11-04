@@ -9,6 +9,7 @@ import "../chat/widgets/composer.dart";
 import "../chat/widgets/composer_controller.dart";
 import "../chat/widgets/composer_embed.dart";
 import "../chat/widgets/composer_logic.dart";
+import "../widgets/agent_picture.dart";
 import "../widgets/completion_field.dart";
 import "../widgets/dialogs.dart";
 import "shell_outbox.dart";
@@ -24,6 +25,10 @@ ComposerTrigger triggerOf(CompletionKind kind) => switch (kind) {
   CompletionKind.skill => ComposerTrigger.skill,
   CompletionKind.agent => ComposerTrigger.agent,
 };
+
+/// An agent's face in the native `@` menu, in points: `ComposerView.swift`'s
+/// `menuFace`, which draws it at that size.
+const _menuFace = 22.0;
 
 /// The composer, drawn by the native shell: configured by a [Composer] that
 /// is never mounted, and its rules through the same [ComposerLogic], with no
@@ -261,6 +266,25 @@ class ShellComposerState extends ConsumerState<ShellComposer>
       for (final kind in CompletionKind.values)
         kind: ref.watch(completionsProvider((project: project, kind: kind))),
     };
+    // Every agent's face, drawn while the composer is up so the `@` menu has
+    // them as it opens; a paired device's agents have none here.
+    final pixelRatio = MediaQuery.devicePixelRatioOf(context);
+    final outline = theme.colorScheme.outline.toARGB32();
+    final faces = {
+      if (widget.config.device == null)
+        for (final agent in offered[CompletionKind.agent]!)
+          agent.name: ref
+              .watch(
+                agentFacePngProvider((
+                  project: widget.config.project,
+                  name: agent.name,
+                  size: _menuFace,
+                  pixelRatio: pixelRatio,
+                  outline: outline,
+                )),
+              )
+              .value,
+    };
     return ListenableBuilder(
       listenable: Listenable.merge([_shape, ?cwd]),
       builder: (context, _) {
@@ -302,6 +326,9 @@ class ShellComposerState extends ConsumerState<ShellComposer>
                   label: "${token!.kind.trigger}${option.name}",
                   hint: option.argumentHint,
                   detail: option.description,
+                  picture: token.kind == CompletionKind.agent
+                      ? faces[option.name]
+                      : null,
                 ),
             ],
             cwd: mode == ComposerMode.shell ? _cwd() : null,

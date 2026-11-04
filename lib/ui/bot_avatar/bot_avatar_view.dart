@@ -373,6 +373,7 @@ class _BotAvatarViewState extends State<BotAvatarView>
       painter: BotAvatarPainter(
         frame: _frame,
         colour: Color(0xff000000 | spec.colour),
+        outline: Theme.of(context).colorScheme.outline,
         onPaint: _live ? _onPaint : null,
       ),
     );
@@ -420,17 +421,59 @@ class _BotAvatarViewState extends State<BotAvatarView>
   }
 }
 
+/// One still of [spec] as PNG bytes, [size] logical pixels square at
+/// [pixelRatio], in the pose [BotAvatarView] holds as a still: for a surface
+/// Flutter does not draw, the native shell's composer menu.
+Future<Uint8List?> botAvatarPng(
+  BotAvatarSpec spec, {
+  required double size,
+  required double pixelRatio,
+  Color? outline,
+}) async {
+  final frame = ValueNotifier(
+    PreparedBotAvatar.of(spec.definition).frame(reducedMotion: true),
+  );
+  final recorder = ui.PictureRecorder();
+  BotAvatarPainter(
+    frame: frame,
+    colour: Color(0xff000000 | spec.colour),
+    outline: outline,
+  ).paint(Canvas(recorder)..scale(pixelRatio), Size.square(size));
+  frame.dispose();
+  final px = (size * pixelRatio).ceil();
+  final image = await recorder.endRecording().toImage(px, px);
+  try {
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    return bytes?.buffer.asUint8List();
+  } finally {
+    image.dispose();
+  }
+}
+
 /// Paints a [BotAvatarFrame] into its box: every cross-section in the body
 /// colour, each eye in the ink, back to front. The 0..100 box fills the
 /// canvas; a hop may draw a little past it, which is not clipped.
+///
+/// Where there is an [outline], the body's silhouette is drawn first in it,
+/// grown by a hair, and the body over it: a thin edge around the whole
+/// shape and none between its slices, so a white avatar on a white page
+/// still has a shape. Grown in the canvas's pixels rather than stroked per
+/// slice, since a slice's projection would stretch a stroke along with it.
 class BotAvatarPainter extends CustomPainter {
-  BotAvatarPainter({required this.frame, required this.colour, this.onPaint})
-    : _body = Paint()..color = colour,
-      super(repaint: frame);
+  BotAvatarPainter({
+    required this.frame,
+    required this.colour,
+    this.outline,
+    this.onPaint,
+  }) : _body = Paint()..color = colour,
+       _edge = outline == null ? null : (Paint()..color = outline),
+       super(repaint: frame);
 
   final ValueNotifier<BotAvatarFrame> frame;
   final Color colour;
+  final Color? outline;
   final Paint _body;
+  final Paint? _edge;
   static final _eyes = Paint()
     ..color = const Color(0xff000000 | BotAvatarSpec.ink);
   static final _arc = Paint()
@@ -474,21 +517,44 @@ class BotAvatarPainter extends CustomPainter {
     ..[12] = m.e
     ..[13] = m.f;
 
+  /// How far the outline stands out from the body, in logical pixels: a
+  /// hair at every size, a little less on the smallest.
+  static double _edgeWidth(Size size) =>
+      (size.shortestSide * 0.012).clamp(0.5, 1.0);
+
   @override
   void paint(Canvas canvas, Size size) {
     onPaint?.call();
     final f = frame.value;
+    if (_edge case final edge?) {
+      final grow = _edgeWidth(size);
+      canvas.saveLayer(
+        // Room for a hop past the box, which is not clipped either.
+        (Offset.zero & size).inflate(size.shortestSide * 0.25),
+        Paint()
+          ..imageFilter = ui.ImageFilter.dilate(radiusX: grow, radiusY: grow),
+      );
+      _draw(canvas, size, f, edge);
+      canvas.restore();
+    }
+    _draw(canvas, size, f, null);
+  }
+
+  /// The frame's shapes, back to front; with a [silhouette], the body alone,
+  /// all of it in that paint.
+  void _draw(Canvas canvas, Size size, BotAvatarFrame f, Paint? silhouette) {
     canvas
       ..save()
       ..scale(size.width / 100, size.height / 100)
       ..transform(_matrix(f.root));
     for (final shape in f.shapes) {
+      if (silhouette != null && shape is! SliceShape) continue;
       canvas
         ..save()
         ..transform(_matrix(shape.matrix));
       switch (shape) {
         case SliceShape(:final slice):
-          canvas.drawPath(_pathOf(slice), _body);
+          canvas.drawPath(_pathOf(slice), silhouette ?? _body);
         case EyeShapeMark(
           mark: PillMark(
             :final x,
@@ -521,5 +587,8 @@ class BotAvatarPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(BotAvatarPainter old) =>
-      old.frame != frame || old.colour != colour || old.onPaint != onPaint;
+      old.frame != frame ||
+      old.colour != colour ||
+      old.outline != outline ||
+      old.onPaint != onPaint;
 }

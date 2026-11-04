@@ -1,3 +1,6 @@
+import "dart:typed_data";
+import "dart:ui" as ui;
+
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -71,6 +74,81 @@ class AgentPictureImage extends StatelessWidget {
     };
   }
 }
+
+/// [face] as PNG bytes, [size] logical pixels square at [pixelRatio], drawn as
+/// [AgentPictureImage] draws it still — a photo in a circle, a Bot Avatar
+/// with its [outline] — or null where there is no face to draw. For a
+/// surface Flutter does not draw: the native shell's composer menu.
+Future<Uint8List?> agentFacePng(
+  AgentFace? face, {
+  required double size,
+  required double pixelRatio,
+  Color? outline,
+}) async {
+  switch (face) {
+    case AgentBot(:final spec):
+      return botAvatarPng(
+        spec,
+        size: size,
+        pixelRatio: pixelRatio,
+        outline: outline,
+      );
+    case AgentPhoto(:final bytes):
+      final px = (size * pixelRatio).ceil();
+      final codec = await ui.instantiateImageCodec(
+        bytes,
+        targetWidth: px,
+        targetHeight: px,
+      );
+      final photo = (await codec.getNextFrame()).image;
+      codec.dispose();
+      final recorder = ui.PictureRecorder();
+      final box = Offset.zero & Size.square(px.toDouble());
+      Canvas(recorder)
+        ..clipPath(Path()..addOval(box))
+        ..drawImageRect(
+          photo,
+          Offset.zero & Size(photo.width.toDouble(), photo.height.toDouble()),
+          box,
+          Paint()..filterQuality = FilterQuality.medium,
+        );
+      photo.dispose();
+      final image = await recorder.endRecording().toImage(px, px);
+      try {
+        final png = await image.toByteData(format: ui.ImageByteFormat.png);
+        return png?.buffer.asUint8List();
+      } finally {
+        image.dispose();
+      }
+    default:
+      return null;
+  }
+}
+
+/// An agent's face in a project as PNG bytes, by [agentFacePng]: held while
+/// a native composer menu could offer the agent, so the rows have their
+/// pictures by the time an `@` is typed.
+final agentFacePngProvider = FutureProvider.autoDispose
+    .family<
+      Uint8List?,
+      ({
+        String? project,
+        String name,
+        double size,
+        double pixelRatio,
+        int outline,
+      })
+    >((ref, key) async {
+      final face = await ref.watch(
+        agentPictureProvider((project: key.project, name: key.name)).future,
+      );
+      return agentFacePng(
+        face,
+        size: key.size,
+        pixelRatio: key.pixelRatio,
+        outline: Color(key.outline),
+      );
+    });
 
 /// An agent's face as the project shows it: the `<name>.avatar.json` or
 /// `<name>.png` beside the agent's `.md`, resolved over the library's tier
