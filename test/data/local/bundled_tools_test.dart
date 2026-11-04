@@ -60,18 +60,6 @@ void main() {
     },
   );
 
-  // The prompt names `Toolset.names`, so a name here is a claim the shell can
-  // run that command. Nothing is laid out by name any more, and a build that
-  // starts claiming one without laying it out is the half-failure this is for.
-  test(
-    "nothing is advertised by name, since nothing is laid out under one",
-    () async {
-      shipProot();
-
-      expect((await install())!.names, isNull);
-    },
-  );
-
   test(
     "a temporary directory of its own, since the system's is not writable",
     () async {

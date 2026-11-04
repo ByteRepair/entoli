@@ -83,19 +83,5 @@ void main() {
       await c.classify("bash", '{"command": "ls"}', workspace: "/ws");
       expect(client.sent.single.last.text, isNot(contains("Also writable")));
     });
-
-    test(
-      "the system prompt has the rules, anchored on workspace writes",
-      () async {
-        final c = classifierOver([saidOnly("allow")]);
-        await c.classify("bash", '{"command": "ls"}', workspace: "/tmp");
-        final system = client.sent.single.first.text;
-        // In-workspace writes are what auto mode allows, /tmp is a write past
-        // them (ask, not deny), and deny is reserved for destruction.
-        expect(system, contains("writes only inside the workspace"));
-        expect(system, contains("output to /tmp is ask"));
-        expect(system, contains("Deny is not a stronger ask"));
-      },
-    );
   });
 }

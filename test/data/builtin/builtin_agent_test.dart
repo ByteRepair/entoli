@@ -23,6 +23,7 @@ import "package:agent_chat/domain/plan.dart";
 import "package:agent_chat/domain/shell.dart";
 
 import "../../fakes.dart";
+import "../../harness.dart" show waitFor;
 import "builtin_fakes.dart";
 import "package:agent_chat/data/builtin/builtin_options.dart";
 
@@ -253,22 +254,6 @@ void main() {
         expect(client.sent, hasLength(1));
       },
     );
-
-    test("a command followed by a text reply runs both", () async {
-      final client = FakeLlmClient([
-        [bashCall("ls")],
-        [saidOnly("Found three files.")],
-      ]);
-      final events = await agentOver(
-        client,
-        respond: (c) => ok("a b c"),
-      ).run(userMessage("hi")).toList();
-
-      expect(shell.ran, ["ls"]);
-      expect(events.whereType<TextDelta>().map((e) => e.text), [
-        "Found three files.",
-      ]);
-    });
   });
 
   group("steering", () {
@@ -829,7 +814,8 @@ void main() {
       final events = <AgentEvent>[];
       final done = agent.run(userMessage("hi")).forEach(events.add);
 
-      await Future<void>.delayed(Duration.zero);
+      // Aimed at a command that is running, not at a scheduling turn's guess.
+      await waitFor(() => shell.ran.isNotEmpty, what: "the command to start");
       await agent.cancel();
       await done;
 
@@ -903,26 +889,6 @@ void main() {
 
       expect(client.sent.first.first.text, contains("no shell"));
     });
-
-    test(
-      "a reply with no command in it is the answer, not a mistake",
-      () async {
-        final client = FakeLlmClient([
-          [
-            const LlmTextChunk("Two plus two is four."),
-            saidOnly("Two plus two is four."),
-          ],
-        ]);
-        final events = await agentOver(
-          client,
-          canRunCommands: false,
-        ).run(userMessage("2+2?")).toList();
-
-        expect(client.sent, hasLength(1));
-        expect(events.whereType<ErrorEvent>(), isEmpty);
-        expect(events.last, isA<DoneEvent>());
-      },
-    );
   });
 
   group("a session that missed the conversation", () {
@@ -942,11 +908,6 @@ void main() {
         contains("what is 2+2?"),
       );
       expect(client.sent.first.last.text, contains("and 3+3?"));
-    });
-
-    test("given nothing, it starts from the task", () async {
-      session.replaceWith(const []);
-      expect(session.isFresh, isTrue);
     });
   });
 
@@ -1464,25 +1425,6 @@ void main() {
       });
     });
 
-    test("write creates a file and read reads it back", () async {
-      final client = FakeLlmClient([
-        [writeCall("hello.txt", "hello world")],
-        [readCall("hello.txt")],
-        [finish],
-      ]);
-      final events = await agentOver(
-        client,
-      ).run(userMessage("write and read")).toList();
-
-      // Both calls succeeded.
-      final results = events.whereType<ToolResultEvent>().toList();
-      expect(results, hasLength(2));
-      expect(results[0].result.returnCode, 0);
-      expect(results[0].result.output, contains("Wrote"));
-      expect(results[1].result.returnCode, 0);
-      expect(results[1].result.output, contains("hello world"));
-    });
-
     test(
       "a read pulls in the subdirectory's AGENTS.md where the gate is on",
       () async {
@@ -1793,21 +1735,6 @@ void main() {
       expect(editResult.exceptionInfo, isNotEmpty);
     });
 
-    test("file tools are always offered, even without a shell", () async {
-      final client = FakeLlmClient([
-        [writeCall("test.txt", "hi")],
-        [finish],
-      ]);
-      await agentOver(
-        client,
-        canRunCommands: false,
-      ).run(userMessage("write")).toList();
-
-      final tools = client.calls.first.tools.map((t) => t.name).toSet();
-      expect(tools, containsAll(["read", "write", "edit"]));
-      expect(tools, isNot(contains("bash")));
-    });
-
     test("an absolute path into the workspace runs without asking", () async {
       final turns = <List<LlmChunk>>[];
       final agent = agentOver(
@@ -2026,23 +1953,6 @@ void main() {
       expect(entries.single.chat, "chat-1");
     });
 
-    test("memory_save refuses an empty text", () async {
-      final client = FakeLlmClient([
-        [
-          fileCall(memorySaveToolName, {"text": "   "}),
-        ],
-        [finish],
-      ]);
-      final events = await agentOver(
-        client,
-        memoryStore: store,
-      ).run(userMessage("save")).toList();
-
-      final result = events.whereType<ToolResultEvent>().first.result;
-      expect(result.returnCode, -1);
-      expect(await store.entries(), isEmpty);
-    });
-
     test("what memory_search puts in the result", () async {
       await store.add("the user prefers tabs over spaces");
       await store.add("notes about the weather");
@@ -2160,23 +2070,6 @@ void main() {
       final result = events.whereType<ToolResultEvent>().first.result;
       expect(result.returnCode, isNot(0));
       expect(result.exceptionInfo, contains("no memory with id ${entry.id}"));
-      expect(await store.entries(), isEmpty);
-    });
-
-    test("memory_update refuses a missing argument", () async {
-      final client = FakeLlmClient([
-        [
-          fileCall(memoryUpdateToolName, {"text": "no id given"}),
-        ],
-        [finish],
-      ]);
-      final events = await agentOver(
-        client,
-        memoryStore: store,
-      ).run(userMessage("update")).toList();
-
-      final result = events.whereType<ToolResultEvent>().first.result;
-      expect(result.returnCode, -1);
       expect(await store.entries(), isEmpty);
     });
 

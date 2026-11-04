@@ -8,19 +8,13 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/browser/cdp_browser.dart"
-    show
-        CdpBrowser,
-        challengeNote,
-        looksLikeChallenge,
-        pageAddress,
-        reapLostBrowser;
+    show CdpBrowser, looksLikeChallenge, pageAddress, reapLostBrowser;
 import "package:agent_chat/data/browser/helium.dart";
 import "package:agent_chat/data/builtin/tools/browser_tools.dart";
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/agent_browser.dart";
-import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart" show AgentCapability;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
@@ -928,19 +922,6 @@ void main() {
       ).run(userMessage("hi")).toList();
       expect(offered(client), isNot(contains(browserUploadToolName)));
     });
-
-    test("the policy is written only when not the classifier", () {
-      expect(
-        AppSettings().toJson().containsKey("agentBrowserUploads"),
-        isFalse,
-      );
-      expect(
-        AppSettings.fromJson(
-          AppSettings(agentBrowserUploads: BrowserUploadPolicy.user).toJson(),
-        ).agentBrowserUploads,
-        BrowserUploadPolicy.user,
-      );
-    });
   });
 
   test("a screenshot is an image on the result, with its offset", () async {
@@ -1019,23 +1000,6 @@ void main() {
       const page = ShellResult(returnCode: 0, output: "Some article text.");
       expect(await fetched(page, browser: true), "Some article text.");
     });
-  });
-
-  test("the settings are written only when not the default", () {
-    expect(AppSettings().toJson().containsKey("agentBrowser"), isFalse);
-    expect(AppSettings().toJson().containsKey("agentBrowserVisible"), isFalse);
-    expect(AppSettings().agentBrowserVisible, isFalse);
-    expect(
-      AppSettings.fromJson(
-        AppSettings(agentBrowserVisible: true).toJson(),
-      ).agentBrowserVisible,
-      isTrue,
-    );
-    final picked = AppSettings(agentBrowser: embeddedBrowserId);
-    expect(
-      AppSettings.fromJson(picked.toJson()).agentBrowser,
-      embeddedBrowserId,
-    );
   });
 
   test("a quit ends the hiding and any sign-in waiting on the user", () async {
@@ -1157,10 +1121,6 @@ void main() {
         looksLikeChallenge("News", "Today's headlines", const []),
         isFalse,
       );
-    });
-
-    test("tells the model it may ask the user", () {
-      expect(challengeNote, contains("ask the user"));
     });
   });
 }

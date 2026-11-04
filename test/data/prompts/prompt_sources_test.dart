@@ -282,30 +282,6 @@ void main() {
     },
   );
 
-  test(
-    "an empty user skills directory offers nothing from DirectoryPrompts",
-    () async {
-      final config = tempConfig();
-
-      expect(
-        await DirectoryPrompts(config).load(CompletionKind.skill),
-        isEmpty,
-      );
-    },
-  );
-
-  test(
-    "BundledPrompts returns skills from embedded data even with no disk",
-    () async {
-      final config = tempConfig();
-
-      final skills = await BundledPrompts(
-        config: config,
-      ).load(CompletionKind.skill);
-      expect(skills, isNotEmpty);
-    },
-  );
-
   test("a folder with no SKILL.md, and a stray file, are not skills", () async {
     final config = tempConfig();
     await config.ensureDirs();

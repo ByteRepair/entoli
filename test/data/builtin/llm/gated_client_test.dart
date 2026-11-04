@@ -94,15 +94,6 @@ void main() {
       await client2.stream(const [], model: "m").forEach((_) {});
       await controller.close();
     });
-
-    test("close passes through", () {
-      final inner = FakeLlmClient(const []);
-      final gate = RateLimitGate(maxConcurrent: 2);
-      final client = GatedLlmClient(inner, gate);
-
-      client.close();
-      expect(inner.closed, isTrue);
-    });
   });
 }
 

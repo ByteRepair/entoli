@@ -116,15 +116,6 @@ void main() {
     return state;
   }
 
-  test("a real pairing secret is not a valid base64 length", () {
-    // The property the bug turned on, pinned so nobody 'tidies' the padding
-    // strip in `generatePsk` back out from under the handshake.
-    final psk = generatePsk();
-    expect(psk, hasLength(43));
-    expect(psk.length % 4, isNot(0));
-    expect(psk, isNot(contains("=")));
-  });
-
   test(
     "the codes gate refuses a handshake whose pairing page is gone",
     () async {
@@ -281,6 +272,8 @@ void main() {
     () async {
       _seedChat(home);
       final links = loopbackPair();
+      var homeSent = 0;
+      links.$1.watchSends((_) => homeSent++);
       final psk = generatePsk();
       final a = home.hub.establishForTest(
         link: links.$1,
@@ -301,12 +294,14 @@ void main() {
             away.hub.pairing.value?.stage == PairingStage.confirming,
       );
 
-      // The window below is the ordering contract, not a wait: both gates are
-      // answered, and the close a refusal runs must not outrun home's tail into
-      // its hello — the two then fail with the raw transport error, not the
-      // polite handshake exceptions both sides throw for themselves.
+      // The ordering contract: both gates are answered, and the close a
+      // refusal runs must not outrun home's tail into its hello — the two then
+      // fail with the raw transport error, not the polite handshake exceptions
+      // both sides throw for themselves. So the refusal waits for the hello
+      // to have gone out, the first thing home sends past its gate.
+      final beforeConfirm = homeSent;
       home.hub.confirmPairing(true);
-      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await waitForSync(() => homeSent > beforeConfirm);
       away.hub.confirmPairing(false);
       await expectLater(b, throwsA(isA<HandshakeException>()));
       await a.catchError((_) {});

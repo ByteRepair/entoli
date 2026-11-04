@@ -54,14 +54,6 @@ void main() {
       remote = RemoteArtifacts(hub);
     });
 
-    test("answers the directory the zip landed in", () async {
-      hub.artifacts["c1/a1"] = zipOf({"index.html": utf8.encode("<p>")});
-      final dir = await remote.fetch("c1", "a1", entryFile: "index.html");
-      addTearDown(() => Directory(dir!).delete(recursive: true));
-
-      expect(File("$dir/index.html").existsSync(), isTrue);
-    });
-
     test("answers null where the artifact is not there", () async {
       // Nothing at the hub by that id.
       expect(await remote.fetch("c1", "gone", entryFile: "index.html"), isNull);

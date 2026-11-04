@@ -1,5 +1,7 @@
 import "dart:async";
 
+import "package:clock/clock.dart";
+
 /// Bounds in-flight [LlmClient.stream] calls across a turn and coordinates
 /// 429 backoff so a fan-out of sub-agents doesn't each-retry-into the same
 /// rate limit.
@@ -65,7 +67,7 @@ class RateLimitGate {
     while (true) {
       final until = _pausedUntil;
       if (until == null) return;
-      final remaining = until.difference(DateTime.now());
+      final remaining = until.difference(clock.now());
       if (remaining.isNegative || remaining == Duration.zero) return;
       await Future<void>.delayed(remaining);
     }
@@ -75,7 +77,7 @@ class RateLimitGate {
   /// active pause does not advance the backoff — eight concurrent 429s are one
   /// episode, not eight.
   Duration onRateLimited() {
-    final now = DateTime.now();
+    final now = clock.now();
     _firstRateLimitAt ??= now;
     final alreadyPaused = _pausedUntil != null && now.isBefore(_pausedUntil!);
     if (alreadyPaused) return _pausedUntil!.difference(now);
@@ -95,7 +97,7 @@ class RateLimitGate {
   bool retryBudgetExhausted() {
     final first = _firstRateLimitAt;
     if (first == null) return false;
-    return DateTime.now().difference(first) > maxRetryBudget;
+    return clock.now().difference(first) > maxRetryBudget;
   }
 
   /// Reset the backoff and cooldown. Called after any successful request —

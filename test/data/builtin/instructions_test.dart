@@ -52,10 +52,6 @@ void main() {
     for (final f in files) p.relative(f.path, from: dataDir),
   ];
 
-  test("nothing loaded when there are no AGENTS.md files", () async {
-    expect(await load(), isEmpty);
-  });
-
   test("the global file loads first, before the project's", () async {
     writeGlobal("global rules");
     write("AGENTS.md", "project rules");

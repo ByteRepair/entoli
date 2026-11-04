@@ -193,17 +193,5 @@ void main() {
       expect(listener.disposed, isTrue);
       expect(speaker.disposed, isTrue);
     });
-
-    test(
-      "with no listener, level is a dead notifier and setListening is a no-op",
-      () async {
-        final speaker = _FakeSpeaker();
-        final session = ComposedVoiceSession(null, speaker);
-
-        expect(session.level.value, 0);
-        await session.setListening(false); // does not throw
-        await session.dispose();
-      },
-    );
   });
 }

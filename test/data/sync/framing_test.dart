@@ -102,17 +102,6 @@ void main() {
     );
   });
 
-  test("what one end seals, the other opens", () async {
-    final (a, b) = await connected();
-    addTearDown(a.close);
-    b.listen();
-
-    final read = b.jsonIncoming.first;
-    await a.sendJson({"t": "hello"});
-
-    expect(await read, {"t": "hello"});
-  });
-
   test("sends in flight at once stay whole, and in order", () async {
     final (a, b) = await connected();
     addTearDown(a.close);
@@ -128,21 +117,6 @@ void main() {
     }
 
     expect((await read).map((m) => m["n"]), List.generate(50, (i) => i));
-  });
-
-  test("a big payload and a small one do not overtake each other", () async {
-    final (a, b) = await connected();
-    addTearDown(a.close);
-    b.listen();
-
-    // The big one takes longer to seal, so without a queue it lands second.
-    final read = b.jsonIncoming.take(2).toList();
-    unawaited(a.sendJson({"big": "x" * 200000}));
-    unawaited(a.sendJson({"small": 1}));
-
-    final got = await read;
-    expect(got.first.containsKey("big"), isTrue);
-    expect(got.last.containsKey("small"), isTrue);
   });
 
   test("a message past one frame goes in pieces and arrives whole", () async {

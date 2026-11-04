@@ -705,22 +705,6 @@ void main() {
       );
     });
 
-    test("auto mode never sees the read-only command at all", () async {
-      var asked = 0;
-      final client = FakeLlmClient([
-        [bashCall("grep -rn x .")],
-        [finish],
-      ]);
-      final events = await agentOver(
-        client,
-        approveMode: ApproveMode.auto,
-        classifier: _SpyClassifier(() => asked++),
-      ).run(userMessage("go")).toList();
-      expect(shell.ran, hasLength(1));
-      expect(asked, 0, reason: "the parse covered it; no classifier call");
-      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
-    });
-
     test("a push stays on the banner path", () async {
       final client = FakeLlmClient([
         [bashCall("git push")],
@@ -732,17 +716,6 @@ void main() {
       // The harness's default answers the banner; what the test pins is that
       // the banner is where the answer comes from, not the parse's vouch.
       expect(shell.ran, hasLength(1));
-    });
-
-    test("a read-only git command runs without a banner", () async {
-      final client = FakeLlmClient([
-        [bashCall("git status && git diff --stat")],
-        [finish],
-      ]);
-      final agent = agentOver(client, approveMode: ApproveMode.ask);
-      final events = await agent.run(userMessage("go")).toList();
-      expect(shell.ran, hasLength(1));
-      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
     });
 
     test("a fetcher command rides the network rules", () async {

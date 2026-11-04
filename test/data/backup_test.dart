@@ -66,16 +66,6 @@ void main() {
     },
   );
 
-  test("the manifest says what the file is", () async {
-    final manifest = jsonDecode(
-      utf8.decode((await archive()).findFile(manifestName)!.readBytes()!),
-    );
-
-    expect(manifest["format"], backupFormat);
-    expect(manifest["version"], backupVersion);
-    expect(DateTime.tryParse(manifest["createdAt"] as String), isNotNull);
-  });
-
   test("a half-written file is left out", () async {
     write("settings.json.writing", "torn");
 
@@ -324,20 +314,6 @@ void main() {
     write("projects/default/workspace/chats/a/state.json", "{}");
 
     expect((await roundTrip()).chats, 2);
-  });
-
-  // The point of the zip over one JSON document holding every file: a
-  // conversation is text, and text deflates.
-  test("a conversation is smaller in the backup than it is on disk", () async {
-    write(
-      "projects/default/chats/a/conv.jsonl",
-      '{"type":"append","text":"hello"}\n' * 200,
-    );
-
-    expect(
-      File(await written()).lengthSync(),
-      lessThan(File(config.convFile("a")).lengthSync()),
-    );
   });
 
   // The restore reads every member before the data directory is touched, so

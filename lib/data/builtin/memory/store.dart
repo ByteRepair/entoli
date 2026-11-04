@@ -1,6 +1,7 @@
 import "dart:convert";
 import "dart:io";
 
+import "package:clock/clock.dart";
 import "package:path/path.dart" as p;
 import "package:uuid/uuid.dart";
 
@@ -161,7 +162,7 @@ class MemoryStore implements Memories {
     final entry = MemoryEntry(
       id: id,
       text: text.trim(),
-      at: DateTime.now().toUtc(),
+      at: clock.now().toUtc(),
       chat: chat,
     );
     await _append(_memoryRecord(entry.id, entry.text, entry.at, chat));
@@ -186,7 +187,7 @@ class MemoryStore implements Memories {
   static String _marker(String type, String id) => jsonEncode({
     "t": type,
     "id": id,
-    "at": DateTime.now().toUtc().toIso8601String(),
+    "at": clock.now().toUtc().toIso8601String(),
   });
 
   /// When the store was last tidied by a consolidation pass, for the interval
@@ -234,7 +235,7 @@ class MemoryStore implements Memories {
       final id = entry.key;
       final text = entry.value;
       if (text.trim().isEmpty) continue;
-      final when = DateTime.now().toUtc();
+      final when = clock.now().toUtc();
       if (live.containsKey(id)) {
         await _append(_memoryRecord(id, text.trim(), when, chat));
         updated++;
@@ -251,7 +252,7 @@ class MemoryStore implements Memories {
         _memoryRecord(
           const Uuid().v4(),
           text.trim(),
-          DateTime.now().toUtc(),
+          clock.now().toUtc(),
           chat,
         ),
       );

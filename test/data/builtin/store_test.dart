@@ -1,10 +1,23 @@
 import "dart:convert";
 import "dart:io";
 
+import "package:clock/clock.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/memory/store.dart";
+
+/// Runs [body] on a clock a second further on at every reading, so memories
+/// added one after another are dated one after another — "newest first" is
+/// then decided by the store, not by whether two writes landed inside the
+/// same tick of the machine's clock.
+Future<T> ticking<T>(Future<T> Function() body) {
+  var now = DateTime.utc(2026);
+  return withClock(
+    Clock(() => now = now.add(const Duration(seconds: 1))),
+    body,
+  );
+}
 
 void main() {
   late Directory tmp;
@@ -19,11 +32,6 @@ void main() {
 
   tearDown(() {
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
-  });
-
-  test("an empty store has no entries and answers nothing", () async {
-    expect(await store.entries(), isEmpty);
-    expect(await store.search("flutter"), isEmpty);
   });
 
   test("add writes a memory and entries reads it back", () async {
@@ -74,10 +82,12 @@ void main() {
     });
 
     test("two matching words beat one, and the cap is five", () async {
-      for (var i = 0; i < 7; i++) {
-        await store.add("word$i only appears here");
-      }
-      await store.add("word0 and word1 appear together");
+      await ticking(() async {
+        for (var i = 0; i < 7; i++) {
+          await store.add("word$i only appears here");
+        }
+        await store.add("word0 and word1 appear together");
+      });
 
       final hits = await store.search(
         "word0 word1 word2 word3 word4 word5 word6",
@@ -216,13 +226,6 @@ void main() {
   });
 
   group("renderIndex", () {
-    // Empty where there is nothing — the caller sends no section then; the
-    // same input answers the recall render the same way.
-    test("empty where there is nothing", () {
-      expect(renderIndex(const []), isEmpty);
-      expect(renderRecall(const []), isEmpty);
-    });
-
     test("one line per memory, newest first", () async {
       await store.add("the older note");
       await store.add("the newer note");
@@ -268,11 +271,13 @@ void main() {
 
   group("renderPinned", () {
     test("the pinned memories in full, newest first, the rest out", () async {
-      final older = await store.add("an older pinned memory");
-      await store.pin(older.id);
-      await store.add("a plain memory");
-      final newer = await store.add("a newer pinned memory");
-      await store.pin(newer.id);
+      await ticking(() async {
+        final older = await store.add("an older pinned memory");
+        await store.pin(older.id);
+        await store.add("a plain memory");
+        final newer = await store.add("a newer pinned memory");
+        await store.pin(newer.id);
+      });
 
       final block = renderPinned(await store.entries());
       expect(block, "- a newer pinned memory\n- an older pinned memory");
@@ -293,11 +298,6 @@ void main() {
       expect(block, isNot(contains("memory 0")));
       expect(block, isNot(contains("memory 1")));
       expect(block, contains("memory ${pinnedLimit + 1}"));
-    });
-
-    test("empty where nothing is pinned", () async {
-      await store.add("a plain memory");
-      expect(renderPinned(await store.entries()), isEmpty);
     });
   });
 

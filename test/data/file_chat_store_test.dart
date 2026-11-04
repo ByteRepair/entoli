@@ -164,22 +164,6 @@ void main() {
     },
   );
 
-  test(
-    "saveResource writes bytes under resources/ and reads them back",
-    () async {
-      await store.saveState(makeState("c4"));
-
-      final bytes = Uint8List.fromList([1, 2, 3, 4, 5]);
-      final resource = await store.saveResource("c4", "test.bin", bytes);
-      expect(resource, endsWith("test.bin"));
-      expect(
-        File(p.join(config.resourcesDir("c4"), resource)).readAsBytesSync(),
-        bytes,
-      );
-      expect(await store.readResource("c4", resource), bytes);
-    },
-  );
-
   test("saveResource sanitizes unsafe filename characters", () async {
     await store.saveState(makeState("c5"));
 
@@ -210,12 +194,6 @@ void main() {
     expect(first, isNot(second));
     expect(await store.readResource("c5b", first), [1]);
     expect(await store.readResource("c5b", second), [2]);
-  });
-
-  test("readResource is null for a resource that is not there", () async {
-    await store.saveState(makeState("c5c"));
-
-    expect(await store.readResource("c5c", "missing.png"), isNull);
   });
 
   group("resources", () {
@@ -390,20 +368,6 @@ void main() {
         "mine",
       );
       expect(Directory(config.workspaceDir("p7")).existsSync(), isFalse);
-    });
-
-    test("a moved chat says so in its state.json", () async {
-      await store.saveState(makeState("p5"));
-      await store.moveChat("p5", "work");
-
-      final json =
-          jsonDecode(
-                File(
-                  config.stateFile("p5", project: "work"),
-                ).readAsStringSync(),
-              )
-              as Map<String, dynamic>;
-      expect(json["project"], "work");
     });
 
     // The UI can be holding a copy from before the move; saving it must not

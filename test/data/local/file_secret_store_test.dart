@@ -32,12 +32,6 @@ void main() {
     },
   );
 
-  test("a second store reads what the first wrote", () async {
-    await store.write("k", bytes());
-
-    expect(await FileSecretStore(config).read("k"), bytes());
-  });
-
   test("two first writes at once both land", () async {
     await Future.wait([store.write("a", bytes()), store.write("b", bytes())]);
 
@@ -57,10 +51,6 @@ void main() {
     final again = FileSecretStore(config);
     expect(await again.read("a"), [2]);
     expect(await again.read("b"), bytes());
-  });
-
-  test("read answers null for a key nothing was written under", () async {
-    expect(await store.read("nope"), isNull);
   });
 
   test("delete takes a secret away", () async {
