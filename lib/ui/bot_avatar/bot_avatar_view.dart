@@ -1,9 +1,13 @@
+import "dart:async";
+import "dart:math" as math;
 import "dart:typed_data";
 import "dart:ui" as ui;
 
+import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 import "package:flutter/scheduler.dart";
 
+import "../../domain/bot_avatar/animation.dart";
 import "../../domain/bot_avatar/frame.dart";
 import "../../domain/bot_avatar/pose.dart";
 import "../../domain/bot_avatar/spec.dart";
@@ -14,14 +18,129 @@ import "../../domain/bot_avatar/volume.dart";
 const thumbnailView = ViewTurn(0.5, 0.12);
 const thumbnailGaze = Gaze(0.7, -1);
 
+/// Plays [BotAnimation]s on the [BotAvatarView] it is given to: one at a
+/// time, a new one cutting the last short. The time an animation lasts is a
+/// timer's, not the avatar's clock, so [play] completes when it should even
+/// while the avatar is off screen and drawing nothing.
+class BotAvatarController {
+  BotAvatarController({math.Random? random}) : _random = random ?? _shared;
+
+  static final _shared = math.Random();
+
+  final math.Random _random;
+  _Playing? _playing;
+  int _serial = 0;
+
+  /// What is playing, or null.
+  BotAnimation? get playing => _playing?.animation;
+
+  /// Counts plays, so a view sees a new one even of an equal animation.
+  int get serial => _serial;
+
+  /// Plays [animation] over the avatar's mood, completing when it is over
+  /// or when another play or [dispose] cuts it short.
+  Future<void> play(BotAnimation animation) {
+    _end();
+    final done = Completer<void>();
+    late final _Playing playing;
+    playing = _Playing(
+      animation,
+      done,
+      Timer(animation.duration, () {
+        if (identical(_playing, playing)) _end();
+      }),
+    );
+    _playing = playing;
+    _serial++;
+    return done.future;
+  }
+
+  /// What a tap plays: happy, and now and then a spin.
+  Future<void> react() => play(BotAnimation.tapped(_random));
+
+  void _end() {
+    final p = _playing;
+    if (p == null) return;
+    _playing = null;
+    p.timer.cancel();
+    p.done.complete();
+  }
+
+  void dispose() => _end();
+}
+
+class _Playing {
+  _Playing(this.animation, this.done, this.timer);
+  final BotAnimation animation;
+  final Completer<void> done;
+  final Timer timer;
+}
+
+/// Where the user last pointed, anywhere in the app: one global pointer
+/// route shared by every avatar that follows, held only while one does.
+/// A mouse is followed wherever it goes until it leaves the window; a touch
+/// is a place to glance at, counted by [touches] so each avatar can time
+/// its own glance.
+class _PointerWatch {
+  _PointerWatch._();
+
+  static final instance = _PointerWatch._();
+
+  int _users = 0;
+
+  /// The pointer's global position, or null where there is none to follow.
+  Offset? position;
+
+  /// [position] is a touch rather than a mouse.
+  bool touch = false;
+  int touches = 0;
+
+  void attach() {
+    if (_users++ == 0) {
+      GestureBinding.instance.pointerRouter.addGlobalRoute(_route);
+    }
+  }
+
+  void detach() {
+    if (--_users == 0) {
+      GestureBinding.instance.pointerRouter.removeGlobalRoute(_route);
+      position = null;
+    }
+  }
+
+  void _route(PointerEvent event) {
+    if (event.kind == PointerDeviceKind.mouse) {
+      if (event is PointerRemovedEvent) {
+        if (!touch) position = null;
+      } else if (event is PointerHoverEvent ||
+          event is PointerMoveEvent ||
+          event is PointerDownEvent) {
+        position = event.position;
+        touch = false;
+      }
+    } else if (event is PointerDownEvent &&
+        event.kind != PointerDeviceKind.trackpad) {
+      position = event.position;
+      touch = true;
+      touches++;
+    }
+  }
+}
+
 /// A Bot Avatar drawn with Flutter's canvas: a still, or a live one moving
 /// in its [mood] on a ticker. The volume is built once per shape and cached
 /// (see [PreparedBotAvatar]); a frame is a handful of projected polygons.
 ///
-/// Live, it can follow the pointer with its eyes and body
-/// ([followPointer]) and be turned by a drag ([turnable]). Under the
-/// platform's reduce-motion setting it holds a calm pose, as the reference
-/// does.
+/// Live, it can look toward the pointer anywhere in the window and glance
+/// at a touch ([followPointer]), be turned by a drag ([turnable]), and
+/// play [BotAnimation]s through a [controller] — a tap plays one where
+/// [reactToTap]. Under the platform's reduce-motion setting it holds a calm
+/// pose, as the reference does, and does not spin.
+///
+/// A live avatar that is not painted does no work: a tick that finds the
+/// last frame was never drawn — a row a list keeps built beyond its
+/// viewport, an offstage page — stops the ticker, and the next paint, which
+/// the undrawn frame leaves pending, starts it again.
 class BotAvatarView extends StatefulWidget {
   const BotAvatarView({
     super.key,
@@ -31,6 +150,8 @@ class BotAvatarView extends StatefulWidget {
     this.animate = true,
     this.followPointer = false,
     this.turnable = false,
+    this.reactToTap = false,
+    this.controller,
     this.view = ViewTurn.none,
     this.gaze,
     this.semanticLabel,
@@ -47,6 +168,8 @@ class BotAvatarView extends StatefulWidget {
        animate = false,
        followPointer = false,
        turnable = false,
+       reactToTap = false,
+       controller = null,
        view = thumbnailView,
        gaze = thumbnailGaze;
 
@@ -57,11 +180,18 @@ class BotAvatarView extends StatefulWidget {
   /// Moving on a ticker; false is one still frame.
   final bool animate;
 
-  /// Look toward a hovering pointer (desktop) or a touch.
+  /// Look toward the mouse wherever it is in the window, and glance at a
+  /// touch for a moment. Not while thinking: its look is its own then.
   final bool followPointer;
 
   /// A drag turns it; a double tap turns it back.
   final bool turnable;
+
+  /// A tap makes it happy for a while, and now and then spin.
+  final bool reactToTap;
+
+  /// Plays animations on it; one of its own where null.
+  final BotAvatarController? controller;
 
   /// A fixed extra turn and look, for stills.
   final ViewTurn view;
@@ -79,10 +209,30 @@ class _BotAvatarViewState extends State<BotAvatarView>
   late final Ticker _ticker = createTicker(_tick);
   final _animator = BotAnimator();
   late final ValueNotifier<BotAvatarFrame> _frame = ValueNotifier(_still());
-  Duration _elapsed = Duration.zero;
+  BotAvatarController? _ownController;
 
-  /// The look target from the pointer, −1..1, or null.
-  (double, double)? _target;
+  /// The avatar's clock: the ticker's elapsed time on top of what earlier
+  /// spells of it banked before they were stopped.
+  Duration _now = Duration.zero;
+  Duration _banked = Duration.zero;
+
+  /// The last frame set was painted; a tick that finds it was not stops the
+  /// ticker, and [_sleeping] says the next paint should start it again.
+  bool _painted = true;
+  bool _sleeping = false;
+
+  /// The play this view last saw start, and when on its clock.
+  int _seenPlay = -1;
+  Duration _playFrom = Duration.zero;
+
+  /// The touch this view last saw, and until when it looks at it.
+  int _seenTouch = 0;
+  Duration _glanceUntil = Duration.zero;
+  static const _glance = Duration(milliseconds: 2500);
+
+  bool _watching = false;
+
+  /// The turn a drag has given it.
   ViewTurn _turn = ViewTurn.none;
   Offset? _dragFrom;
   ViewTurn _turnFrom = ViewTurn.none;
@@ -90,7 +240,12 @@ class _BotAvatarViewState extends State<BotAvatarView>
   PreparedBotAvatar get _prepared =>
       PreparedBotAvatar.of(widget.spec.definition);
 
+  BotAvatarController get _controller =>
+      widget.controller ?? (_ownController ??= BotAvatarController());
+
   bool get _reduced => MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+
+  BotMood get _mood => _controller.playing?.mood ?? widget.mood;
 
   @override
   void didChangeDependencies() {
@@ -107,19 +262,58 @@ class _BotAvatarViewState extends State<BotAvatarView>
 
   @override
   void dispose() {
+    _watch(false);
+    _ownController?.dispose();
     _ticker.dispose();
     _frame.dispose();
     super.dispose();
   }
 
   void _sync() {
+    _watch(widget.animate && widget.followPointer);
     if (widget.animate) {
-      if (!_ticker.isActive) _ticker.start();
-      _frame.value = _render(_elapsed);
+      _wake();
+      // In build: no layout to place the pointer against yet.
+      _frame.value = _render(look: false);
     } else {
-      if (_ticker.isActive) _ticker.stop();
+      _sleep();
+      _sleeping = false;
       _frame.value = _still();
     }
+  }
+
+  void _watch(bool on) {
+    if (on == _watching) return;
+    _watching = on;
+    if (on) {
+      _PointerWatch.instance.attach();
+      _seenTouch = _PointerWatch.instance.touches;
+    } else {
+      _PointerWatch.instance.detach();
+    }
+  }
+
+  void _wake() {
+    _sleeping = false;
+    if (_ticker.isActive) return;
+    _painted = true;
+    _ticker.start();
+  }
+
+  void _sleep() {
+    if (!_ticker.isActive) return;
+    _banked = _now;
+    _ticker.stop();
+  }
+
+  void _onPaint() {
+    _painted = true;
+    if (!_sleeping) return;
+    _sleeping = false;
+    // Not from inside paint: the ticker starts once the frame is out.
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.animate) _wake();
+    });
   }
 
   BotAvatarFrame _still() => _prepared.frame(
@@ -130,39 +324,70 @@ class _BotAvatarViewState extends State<BotAvatarView>
   );
 
   void _tick(Duration elapsed) {
-    _elapsed = elapsed;
-    _frame.value = _render(elapsed);
+    if (!_painted) {
+      // Not drawn since the last frame: nothing on screen to move.
+      _sleep();
+      _sleeping = true;
+      return;
+    }
+    _painted = false;
+    _now = _banked + elapsed;
+    _frame.value = _render();
   }
 
-  BotAvatarFrame _render(Duration elapsed) {
-    final ms = elapsed.inMicroseconds / 1000;
+  BotAvatarFrame _render({bool look = true}) {
+    final ms = _now.inMicroseconds / 1000;
     final reduced = _reduced;
+    final controller = _controller;
+    if (controller.serial != _seenPlay) {
+      _seenPlay = controller.serial;
+      _playFrom = _now;
+    }
+    final playing = controller.playing;
+    final spin = playing == null || reduced
+        ? 0.0
+        : playing.yawAt(_now - _playFrom);
+    final mood = _mood;
     final step = _animator.step(
       now: ms,
-      mood: widget.mood,
-      target: _target,
+      mood: mood,
+      target: look && mood != BotMood.thinking ? _target() : null,
       hold: _dragFrom != null,
       reducedMotion: reduced,
     );
     return _prepared.frame(
       time: ms / 1000,
-      mood: widget.mood,
+      mood: mood,
       gaze: step.gaze ?? widget.gaze,
       blend: step.blend,
       view: ViewTurn(
-        widget.view.yaw + _turn.yaw,
+        widget.view.yaw + _turn.yaw + spin,
         widget.view.pitch + _turn.pitch,
       ),
       reducedMotion: reduced,
     );
   }
 
-  void _look(Offset local) {
+  /// Where the pointer is, as a look from this avatar's eyes, or null where
+  /// there is nothing to look at: no mouse in the window, or a touch whose
+  /// glance is over.
+  (double, double)? _target() {
+    if (!_watching) return null;
+    final watch = _PointerWatch.instance;
+    if (watch.touches != _seenTouch) {
+      _seenTouch = watch.touches;
+      _glanceUntil = _now + _glance;
+    }
+    final at = watch.position;
+    if (at == null || (watch.touch && _now >= _glanceUntil)) return null;
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) return null;
+    final local = box.globalToLocal(at);
     final eyes = widget.spec.definition.eyes;
-    final s = widget.size;
-    _target = pointerGaze(
+    final s = box.size;
+    return pointerGaze(
       (x: local.dx, y: local.dy),
-      (left: 0, top: 0, width: s, height: s),
+      (left: 0, top: 0, width: s.width, height: s.height),
       origin: (x: eyes.x / 100, y: eyes.y / 100),
     );
   }
@@ -176,6 +401,7 @@ class _BotAvatarViewState extends State<BotAvatarView>
         frame: _frame,
         colour: Color(0xff000000 | spec.colour),
         ink: Color(0xff000000 | spec.ink),
+        onPaint: widget.animate ? _onPaint : null,
       ),
     );
     final label = widget.semanticLabel ?? spec.definition.name;
@@ -183,31 +409,30 @@ class _BotAvatarViewState extends State<BotAvatarView>
         ? ExcludeSemantics(child: child)
         : Semantics(label: label, image: true, child: child);
     if (!widget.animate) return child;
-    if (widget.followPointer) {
-      child = MouseRegion(
-        onHover: (e) => _look(e.localPosition),
-        onExit: (_) => _target = null,
-        child: child,
-      );
-    }
-    if (widget.turnable) {
+    if (widget.turnable || widget.reactToTap) {
       child = GestureDetector(
-        onPanStart: (d) {
-          _dragFrom = d.localPosition;
-          _turnFrom = _turn;
-        },
-        onPanUpdate: (d) {
-          final from = _dragFrom;
-          if (from == null) return;
-          final delta = d.localPosition - from;
-          _turn = ViewTurn(
-            _turnFrom.yaw + delta.dx * 0.011,
-            (_turnFrom.pitch - delta.dy * 0.009).clamp(-0.9, 0.9),
-          );
-        },
-        onPanEnd: (_) => _dragFrom = null,
-        onPanCancel: () => _dragFrom = null,
-        onDoubleTap: () => _turn = ViewTurn.none,
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.reactToTap ? _controller.react : null,
+        onPanStart: widget.turnable
+            ? (d) {
+                _dragFrom = d.localPosition;
+                _turnFrom = _turn;
+              }
+            : null,
+        onPanUpdate: widget.turnable
+            ? (d) {
+                final from = _dragFrom;
+                if (from == null) return;
+                final delta = d.localPosition - from;
+                _turn = ViewTurn(
+                  _turnFrom.yaw + delta.dx * 0.011,
+                  (_turnFrom.pitch - delta.dy * 0.009).clamp(-0.9, 0.9),
+                );
+              }
+            : null,
+        onPanEnd: widget.turnable ? (_) => _dragFrom = null : null,
+        onPanCancel: widget.turnable ? () => _dragFrom = null : null,
+        onDoubleTap: widget.turnable ? () => _turn = ViewTurn.none : null,
         child: child,
       );
     }
@@ -223,11 +448,15 @@ class BotAvatarPainter extends CustomPainter {
     required this.frame,
     required this.colour,
     required this.ink,
+    this.onPaint,
   }) : super(repaint: frame);
 
   final ValueNotifier<BotAvatarFrame> frame;
   final Color colour;
   final Color ink;
+
+  /// Told each time a frame is drawn: a live view's proof it is on screen.
+  final VoidCallback? onPaint;
 
   /// Each cross-section's path, built the first time it is drawn: a slice
   /// belongs to a cached volume, so this lives as long as that does.
@@ -251,6 +480,7 @@ class BotAvatarPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    onPaint?.call();
     final f = frame.value;
     final body = Paint()
       ..color = colour
@@ -302,5 +532,8 @@ class BotAvatarPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(BotAvatarPainter old) =>
-      old.frame != frame || old.colour != colour || old.ink != ink;
+      old.frame != frame ||
+      old.colour != colour ||
+      old.ink != ink ||
+      old.onPaint != onPaint;
 }

@@ -71,10 +71,32 @@ and two eyes in every mood; see `test/domain/bot_avatar_test.dart`).
 ## On screen
 
 `BotAvatarView` (`lib/ui/bot_avatar/`) is a `CustomPainter` over a
-`ValueNotifier<BotAvatarFrame>`: a still, or live on a ticker. Lists draw
-stills — a ticker a row is not worth it — and the places that show one face
-animate it: the agent editor, the context page, and a member's reply while
-it is being written, which thinks. Reduce-motion holds the calm pose.
+`ValueNotifier<BotAvatarFrame>`: a still, or live on a ticker. The agents
+list draws stills; everywhere else one face is shown it is live — the agent
+editor, the context page, and every member's reply in chat, which thinks
+while it is being written and idles after. Reduce-motion holds the calm
+pose and never spins.
+
+A live avatar follows the pointer: one global pointer route
+(`_PointerWatch`), held while any avatar follows, keeps where the mouse is
+anywhere in the window — until it leaves it — and counts touches, each of
+which an avatar glances at for 2.5 s on its own clock. A thinking avatar
+does not follow; its look is its own.
+
+On top of the mood, a `BotAvatarController` plays a `BotAnimation`
+(`animation.dart`): a mood held for a while, optionally with one eased full
+turn. `play` is async, completing when the animation ends or another cuts it
+short; the end is a `Timer`'s, not the avatar's clock, so it completes off
+screen too. A tap where `reactToTap` (chat and the context page) plays
+`BotAnimation.tapped`: happy for 5 s, and spinning 15% of the time.
+
+**Off screen it does nothing.** Flutter does not stop a ticker in a row a
+list keeps built past its viewport (the cache extent), but it does skip
+painting it. So the painter reports each paint, and a tick that finds the
+last frame never drew stops the ticker; that undrawn frame leaves the paint
+pending, and the paint that happens when the row comes into view starts it
+again. The avatar's clock banks the stopped time, so the motion resumes
+where it left off rather than jumping.
 
 The editor (`BotAvatarEditorPage`) is opened from the agent editor's picture
 menu ("Use Bot Avatar" beside "Upload photo"). One `Flex` lays it out: the

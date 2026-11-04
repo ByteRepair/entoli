@@ -13,7 +13,9 @@ import "../bot_avatar/bot_avatar_view.dart";
 /// and an editor shows what it is about to write.
 ///
 /// A Bot Avatar is a still unless [animate] — a list of agents would
-/// otherwise run a ticker a row — and moves in [mood] when it is live.
+/// otherwise run a ticker a row. Live, it moves in [mood], looks toward the
+/// pointer and glances at a touch, and where [reactToTap] a tap makes it
+/// happy for a while.
 class AgentPictureImage extends StatelessWidget {
   const AgentPictureImage({
     super.key,
@@ -21,12 +23,14 @@ class AgentPictureImage extends StatelessWidget {
     this.size = 36,
     this.animate = false,
     this.mood = BotMood.idle,
+    this.reactToTap = false,
   });
 
   final AgentFace? face;
   final double size;
   final bool animate;
   final BotMood mood;
+  final bool reactToTap;
 
   @override
   Widget build(BuildContext context) {
@@ -37,6 +41,8 @@ class AgentPictureImage extends StatelessWidget {
         size: size,
         animate: animate,
         mood: mood,
+        followPointer: animate,
+        reactToTap: reactToTap,
         semanticLabel: "",
       ),
       final face => Container(
@@ -79,18 +85,25 @@ class AgentPicture extends ConsumerWidget {
     this.project,
     this.size = 36,
     this.animate = false,
+    this.reactToTap = false,
   });
 
   final String name;
   final String? project;
   final double size;
   final bool animate;
+  final bool reactToTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final face = ref
         .watch(agentPictureProvider((project: project, name: name)))
         .value;
-    return AgentPictureImage(face: face, size: size, animate: animate);
+    return AgentPictureImage(
+      face: face,
+      size: size,
+      animate: animate,
+      reactToTap: reactToTap,
+    );
   }
 }

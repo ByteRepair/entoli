@@ -157,6 +157,7 @@ class _ParticipantCard extends StatelessWidget {
                     name: nameOf(author) ?? author!,
                     project: project,
                     animate: true,
+                    reactToTap: true,
                   ),
                 const SizedBox(width: 12),
                 Expanded(

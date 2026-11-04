@@ -61,8 +61,10 @@ class MessageBubble extends ConsumerStatefulWidget {
   /// The author's face, drawn beside the name where the message names an
   /// addressed member — the page's answer is the whole gate. In hand — the
   /// page resolves it — so the bubble stays a StatelessWidget-and-State over
-  /// what it is told. A Bot Avatar thinks while the reply is being written
-  /// and stands still once it is done.
+  /// what it is told. A Bot Avatar is live: it thinks while the reply is
+  /// being written and idles once it is done, follows the pointer, and is
+  /// happy for a while when tapped. Rows the list keeps built off screen
+  /// cost nothing, since an avatar that is not painted stops its ticker.
   final AgentFace? avatar;
 
   /// The reply is in a section of the conversation where Omada is on: an
@@ -326,7 +328,8 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                             AgentPictureImage(
                               face: widget.avatar,
                               size: 18,
-                              animate: widget.isWaiting,
+                              animate: true,
+                              reactToTap: true,
                               mood: widget.isWaiting
                                   ? BotMood.thinking
                                   : BotMood.idle,
