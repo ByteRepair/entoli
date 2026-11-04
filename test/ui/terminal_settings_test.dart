@@ -13,10 +13,10 @@ import "package:agent_chat/ui/settings/settings_category.dart";
 void main() {
   late TestApp app;
 
-  // What the picker names each environment: its name and whether it enforces
-  // the sandbox settings. The tests' host enforces nothing unless told.
-  final host = "Host · ${Confinement.none.label}";
-  final alpine = "Alpine Linux · ${Confinement.guest.label}";
+  // What the picker names each environment. Whether it enforces the sandbox
+  // is the status card's alone; the tests' host enforces nothing unless told.
+  const host = "Host";
+  const alpine = "Alpine Linux";
 
   tearDown(() => app.dispose());
 
@@ -185,43 +185,43 @@ void main() {
     expect(find.byTooltip("Download"), findsNothing);
   });
 
-  group("whether the environment enforces the sandbox settings", () {
-    testWidgets("a host that implements no sandbox says the settings are not "
-        "enforced", (tester) async {
+  group("the sandbox status card", () {
+    const unsupported =
+        "This environment does not support sandboxing. Sandbox is not "
+        "enforced.";
+    const disabled =
+        "This environment supports sandboxing, but it is disabled. "
+        "Enable it in Settings > Terminal > Sandbox.";
+    const enforced = "Sandboxing is enforced.";
+
+    testWidgets("a host that implements no sandbox does not support one", (
+      tester,
+    ) async {
       app = TestApp.create(shell: LocalShell(environment: () => const {}));
       await pumpTerminal(tester);
 
-      expect(
-        find.textContaining(
-          "kept but not enforced here: nothing on this "
-          "platform implements them",
-        ),
-        findsOneWidget,
-      );
-      expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+      expect(find.text(unsupported), findsOneWidget);
     });
 
-    testWidgets("Linux's host says Landlock enforces them", (tester) async {
+    for (final confinement in [Confinement.landlock, Confinement.seatbelt]) {
+      testWidgets("${confinement.name} on the host is enforced", (
+        tester,
+      ) async {
+        app = TestApp.create(
+          shell: LocalShell(environment: () => const {}),
+          hostConfinement: confinement,
+        );
+        await pumpTerminal(tester);
+
+        expect(find.text(enforced), findsOneWidget);
+      });
+    }
+
+    testWidgets("a supporting host with the switch off says where to turn it "
+        "on, and the switch does", (tester) async {
       app = TestApp.create(
         shell: LocalShell(environment: () => const {}),
-        hostConfinement: Confinement.landlock,
-      );
-      await pumpTerminal(tester);
-
-      expect(find.text("Host · ${Confinement.landlock.label}"), findsOneWidget);
-      expect(
-        find.textContaining("Enforces your sandbox settings with Landlock"),
-        findsOneWidget,
-      );
-      expect(find.byIcon(Icons.shield_outlined), findsOneWidget);
-    });
-
-    testWidgets("Landlock switched off by the policy is a warning", (
-      tester,
-    ) async {
-      app = TestApp.create(
-        shell: LocalShell(environment: () => const {}),
-        hostConfinement: Confinement.landlock,
+        hostConfinement: Confinement.seatbelt,
       );
       await io(
         tester,
@@ -230,16 +230,22 @@ void main() {
             .setProjectSandbox(false),
       );
       await pumpTerminal(tester);
+      expect(find.text(disabled), findsOneWidget);
 
-      expect(
-        find.textContaining("switched off in Settings > General"),
-        findsOneWidget,
-      );
-      expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+      await tester.tap(find.widgetWithText(SwitchListTile, "Sandbox"));
+      await settleIo(tester);
+
+      expect(find.text(enforced), findsOneWidget);
     });
 
-    testWidgets("a picked Linux says it does not enforce them", (tester) async {
-      app = TestApp.create(proot: true, linuxes: const {"alpine"});
+    testWidgets("a picked Linux does not enforce it, whatever the host can", (
+      tester,
+    ) async {
+      app = TestApp.create(
+        proot: true,
+        linuxes: const {"alpine"},
+        hostConfinement: Confinement.landlock,
+      );
       await io(
         tester,
         () => app.container
@@ -248,10 +254,7 @@ void main() {
       );
       await pumpTerminal(tester);
 
-      expect(
-        find.textContaining("run inside the downloaded Linux"),
-        findsOneWidget,
-      );
+      expect(find.text(unsupported), findsOneWidget);
     });
   });
 }

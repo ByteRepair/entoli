@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/confinement.dart";
 import "../../domain/rootfs.dart";
 import "../../providers.dart";
+import "permissions_section.dart";
 import "rootfs_downloads.dart";
 import "../widgets/catalog.dart";
 import "../../core/formatting.dart";
@@ -32,14 +33,13 @@ class TerminalSection extends ConsumerWidget {
     final canHostALinux = available || abi == "ios";
     if (!canRun && !canHostALinux) {
       return SectionHeader(
-        "Where commands run",
+        "Driver",
         description:
             "This platform has no terminal, so the agent has no "
             "commands to run.",
       );
     }
     final installed = ref.watch(installedRootfsProvider);
-    final host = ref.watch(hostConfinementProvider);
     final selected = ref.watch(appSettingsProvider.select((s) => s.rootfsId));
     // Android is the only platform whose ABI with no proot beside it is this
     // device's build shipping without it — a fault of the APK. iOS carries no
@@ -55,7 +55,7 @@ class TerminalSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionHeader("Where commands run", description: description),
+        SectionHeader("Driver", description: description),
         // An APK built without proot staged into it is a build fault and looks
         // exactly like the feature having been removed: the catalog below is
         // drawn from the same answer, so the page would otherwise be a Terminal
@@ -77,55 +77,104 @@ class TerminalSection extends ConsumerWidget {
           // rather than a hint: the host is where commands ran before any of
           // this and where they go back to. An installed rootfs is offered
           // wherever a Linux can run at all — proot on Android, the emulator
-          // on iOS. Each says what keeps its commands in, so the choice is
-          // made knowing it.
-          none: "Host · ${host.label}",
+          // on iOS. Whether each enforces the sandbox is the status card's.
+          none: "Host",
           options: {
             for (final rootfs in rootfsCatalog)
               if ((available || abi == "ios") && installed.contains(rootfs.id))
-                rootfs.id: "${rootfs.name} · ${Confinement.guest.label}",
+                rootfs.id: rootfs.name,
           },
           value: selected,
           onPick: (id) => ref.read(appSettingsProvider.notifier).setRootfs(id),
-        ),
-        _ConfinementNote(
-          selected == null || !installed.contains(selected)
-              ? host
-              : Confinement.guest,
         ),
       ],
     );
   }
 }
 
-/// Whether the picked environment enforces the sandbox settings, under the
-/// picker. A warning where commands end up with the user's full permissions —
-/// a desktop that implements no sandbox, or Landlock switched off by the
-/// policy — since that is the case a user would otherwise assume away.
-class _ConfinementNote extends ConsumerWidget {
-  const _ConfinementNote(this.confinement);
+/// What the picked driver does about the sandbox: the environment's own
+/// answer, with nothing installed falling back to the host's.
+Confinement _pickedConfinement(WidgetRef ref) {
+  final selected = ref.watch(appSettingsProvider.select((s) => s.rootfsId));
+  final installed = ref.watch(installedRootfsProvider);
+  return selected == null || !installed.contains(selected)
+      ? ref.watch(hostConfinementProvider)
+      : Confinement.guest;
+}
 
-  final Confinement confinement;
+/// The one place the sandbox policy is shown: whether the picked driver can
+/// enforce one, and whether the switch below lets it. The switch read is the
+/// default project's, the app's answer; a project or a chat can still
+/// override it for itself.
+class SandboxStatusCard extends ConsumerWidget {
+  const SandboxStatusCard({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    // The default project's switch is the app's answer; a project can still
-    // turn it back on or off for itself.
-    final switchedOff =
-        confinement.enforcesSandbox &&
-        ref.watch(projectSettingsProvider(null).select((s) => s.sandbox)) ==
-            false;
-    final exposed = confinement == Confinement.none || switchedOff;
-    return SettingsWarningBanner(
-      icon: exposed ? Icons.warning_amber_rounded : Icons.shield_outlined,
-      color: exposed ? scheme.error : scheme.primary,
-      text: switchedOff
-          ? "Can enforce your sandbox settings with Landlock, but the sandbox "
-                "is switched off in Settings > General, so commands run with "
-                "your full user permissions. A project can turn it back on for "
-                "itself."
-          : confinement.summary,
+    final supported = _pickedConfinement(ref).enforcesSandbox;
+    final enabled =
+        ref.watch(projectSettingsProvider(null).select((s) => s.sandbox)) ??
+        true;
+    final (icon, colour, text) = !supported
+        ? (
+            Icons.warning_amber_rounded,
+            scheme.error,
+            "This environment does not support sandboxing. Sandbox is not "
+                "enforced.",
+          )
+        : !enabled
+        ? (
+            Icons.warning_amber_rounded,
+            scheme.error,
+            "This environment supports sandboxing, but it is disabled. "
+                "Enable it in Settings > Terminal > Sandbox.",
+          )
+        : (Icons.shield_outlined, scheme.primary, "Sandboxing is enforced.");
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: ListTile(
+        leading: Icon(icon, color: colour),
+        title: Text(text),
+      ),
+    );
+  }
+}
+
+/// The default project's permissions, the tier every other project inherits
+/// before its own, and the sandbox switch beside them. The project settings
+/// page edits the same file for its own project, built-ins included.
+class TerminalPermissionsSection extends ConsumerWidget {
+  const TerminalPermissionsSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(projectSettingsProvider(null));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        PermissionsSection(
+          rules: settings.permissions,
+          description:
+              "Standing rules, consulted before the classifier and "
+              "the banner. A deny outranks an ask, which outranks an allow; a "
+              "command with segments a rule does not cover still waits.",
+          onSaved: (rules) => ref
+              .read(projectSettingsProvider(null).notifier)
+              .setProjectPermissions(rules),
+        ),
+        SwitchListTile(
+          title: const Text("Sandbox"),
+          subtitle: const Text(
+            "Commands may write only to the workspaces and the directories "
+            "granted. A project can override this.",
+          ),
+          value: settings.sandbox ?? true,
+          onChanged: (value) => ref
+              .read(projectSettingsProvider(null).notifier)
+              .setProjectSandbox(value),
+        ),
+      ],
     );
   }
 }

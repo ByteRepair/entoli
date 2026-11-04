@@ -694,7 +694,7 @@ class _ProjectPermissionsPage extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: mutedParagraph(
               context,
-              "The app's own permissions (Settings > General > Agent) apply "
+              "The app's own permissions (Settings > Terminal) apply "
               "before these, in every project, without being listed here.",
             ),
           ),
@@ -721,7 +721,7 @@ class _ProjectPermissionsPage extends ConsumerWidget {
           const Divider(),
           // Each overrides the app's answer for this project's chats.
           InheritableSwitch(
-            title: "Sandbox commands (Landlock)",
+            title: "Sandbox",
             subtitle: sandboxed
                 ? null
                 : "Off: commands write wherever you can.",

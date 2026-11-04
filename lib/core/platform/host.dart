@@ -35,6 +35,7 @@ import "../../data/local/prompt_cache.dart";
 import "../../data/local/proot.dart";
 import "../../data/local/apple_fm.dart";
 import "../../data/local/landlock.dart";
+import "../../data/local/seatbelt.dart";
 import "../../data/local/shared_backup.dart";
 import "../../data/local/tree_ops.dart";
 import "../../data/local/desktop_file_handoff.dart";
@@ -177,6 +178,8 @@ ShellDriver? platformDriver({
         : null,
     sandboxHelper: Platform.isLinux && config != null
         ? LandlockSandboxHelper(cacheDir: landlockCacheDir(config))
+        : Platform.isMacOS
+        ? SeatbeltSandboxHelper()
         : null,
     // A desktop launch's inherited PATH misses what the user's profile adds
     // (`~/.local/bin`); null leaves the inherited one standing.
@@ -200,9 +203,12 @@ Future<String?> deviceAbi() =>
     Platform.isIOS ? Future.value("ios") : BundledTools.abi();
 
 /// What keeps the host shell's commands in. Linux's is the Landlock helper
-/// [hostDriver] is built with; a phone's is the OS's own app sandbox.
+/// [hostDriver] is built with, macOS's the Seatbelt one; a phone's is the
+/// OS's own app sandbox.
 Confinement hostConfinement() => Platform.isLinux
     ? Confinement.landlock
+    : Platform.isMacOS
+    ? Confinement.seatbelt
     : Platform.isAndroid || Platform.isIOS
     ? Confinement.appSandbox
     : Confinement.none;

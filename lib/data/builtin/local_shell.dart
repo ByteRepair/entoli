@@ -1085,8 +1085,7 @@ class _OneShotRun extends ShellRun {
       if (prefix == null) {
         throw const ShellUnavailable(
           "No sandbox is available on this machine "
-          "to run this command confined, so it was not run. Landlock needs "
-          "Linux 5.13 or newer and a C compiler.",
+          "to run this command confined, so it was not run.",
         );
       }
       // The helper refuses a grant to a directory that is not there, so the
