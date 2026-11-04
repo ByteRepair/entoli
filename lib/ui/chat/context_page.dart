@@ -156,6 +156,7 @@ class _ParticipantCard extends StatelessWidget {
                   AgentPicture(
                     name: nameOf(author) ?? author!,
                     project: project,
+                    animate: true,
                   ),
                 const SizedBox(width: 12),
                 Expanded(

@@ -143,6 +143,11 @@ flutter:
     - assets/fonts/OFL.txt
     - assets/fonts/PlayfairDisplay-OFL.txt
     - assets/fonts/SourceSerif4-OFL.txt
+    # Open Bot Avatar's starters and gallery, each a spec the avatar editor
+    # reads like any other, and the MIT licence the engine port and the
+    # shapes travel under, read into `LicenseRegistry` at startup.
+    - assets/bot_avatars/presets.json
+    - assets/bot_avatars/LICENSE.txt
     # Silero's voice activity detector, and its licence beside it. 644 KB, so
     # it ships rather than joining the catalog: voice mode that cannot start
     # until a second, invisible download has finished is worse to explain than

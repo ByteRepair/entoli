@@ -1,10 +1,11 @@
 import "dart:async";
-import "dart:typed_data";
 
 import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../../domain/agent_face.dart";
+import "../../../domain/bot_avatar/pose.dart" show BotMood;
 import "../../../domain/models.dart";
 import "../../../domain/quote.dart";
 import "../../../domain/reaction.dart" show Reaction;
@@ -57,11 +58,12 @@ class MessageBubble extends ConsumerStatefulWidget {
 
   final Message message;
 
-  /// The author's profile picture, drawn beside the name where the message
-  /// names an addressed member — the page's bytes are the whole gate. Bytes in
-  /// hand — the page resolves them — so the bubble stays a
-  /// StatelessWidget-and-State over what it is told.
-  final Uint8List? avatar;
+  /// The author's face, drawn beside the name where the message names an
+  /// addressed member — the page's answer is the whole gate. In hand — the
+  /// page resolves it — so the bubble stays a StatelessWidget-and-State over
+  /// what it is told. A Bot Avatar thinks while the reply is being written
+  /// and stands still once it is done.
+  final AgentFace? avatar;
 
   /// The reply is in a section of the conversation where Omada is on: an
   /// unnamed reply is the main agent's, and says so — "Entoli" — the same
@@ -321,7 +323,14 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                           // they arrive only where the label names a member,
                           // and a prompt's "You" is never one.
                           if (widget.avatar != null) ...[
-                            AgentPictureImage(bytes: widget.avatar, size: 18),
+                            AgentPictureImage(
+                              face: widget.avatar,
+                              size: 18,
+                              animate: widget.isWaiting,
+                              mood: widget.isWaiting
+                                  ? BotMood.thinking
+                                  : BotMood.idle,
+                            ),
                             const SizedBox(width: 6),
                           ],
                           Flexible(

@@ -145,7 +145,9 @@ the entry carries — `installName`, the slug for a local entry, an ext key's
 last segment for a remote one, whose remote directory is what the
 marketplace names an agent by — replace-confirm, then one
 `ReadOnlyDir.write` block writing `agentFilePath` and, where served one,
-`agentPicturePath` beside it. The picture's invalidation is the shared
+`agentPicturePath` beside it — taking away a `<name>.avatar.json` the agent
+wore before, which would otherwise stand over the new picture. The picture's
+invalidation is the shared
 `invalidateAgentPicture` (in `providers.dart`, under the provider itself):
 a global write (destination null) lands in the default project's directory
 that every project inherits from, so the whole `agentPictureProvider` family

@@ -10,6 +10,7 @@ import "../../core/log.dart";
 import "../../core/platform/platform.dart" as platform;
 import "../../data/prompts/agent_pictures.dart";
 import "../../data/prompts/skill_import.dart";
+import "../../domain/agent_face.dart";
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
 import "../../providers.dart";
@@ -320,6 +321,10 @@ class _MarketplaceEntryPreviewPageState
             await File(
               agentPicturePath(config, name, project: target),
             ).writeAsBytes(picture);
+            // The entry's picture is the face now: a Bot Avatar the agent
+            // wore before would otherwise stand over it.
+            final avatar = File(agentAvatarPath(config, name, project: target));
+            if (avatar.existsSync()) await avatar.delete();
           }
         });
     // The picture the agent page draws is its own provider's read; the
@@ -389,7 +394,12 @@ class _Body extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: [
         if (preview.picture != null) ...[
-          Center(child: AgentPictureImage(bytes: preview.picture, size: 72)),
+          Center(
+            child: AgentPictureImage(
+              face: AgentPhoto(preview.picture!),
+              size: 72,
+            ),
+          ),
           const SizedBox(height: 12),
         ],
         Text(entry.name, style: theme.textTheme.headlineSmall),

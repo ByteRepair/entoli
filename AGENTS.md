@@ -25,6 +25,9 @@ named in a cross-reference is findable from this list.
   Carrying on an interrupted turn, Starting a chat, and naming it, Skills and
   agents, Tools per agent, Resending a message, Reactions, Attachments,
   Reminders
+- `lib/domain/bot_avatar/AGENTS.md` — Bot Avatars: the spec an agent wears,
+  the presets and the user's imports, the engine ported from Open Bot Avatar,
+  and the editor
 - `lib/ui/sidebar/AGENTS.md` — The sidebar's list, Pinned chats, A chat's row
   menu
 - `lib/ui/marketplace/AGENTS.md` — The marketplace page
@@ -190,6 +193,9 @@ is the reminder's and stayed, a rename being a migration.
 linked by path and which projects switched each off — out of backups and sync,
 being this machine's paths; see "Workspace instructions" in
 `lib/data/builtin/AGENTS.md`.
+`<dataDir>/bot_avatars.json` is the Bot Avatar definitions the user imported,
+one JSON list, offered in the avatar editor beside the presets; see
+`lib/domain/bot_avatar/AGENTS.md`.
 `<dataDir>/models.json` is models.dev trimmed to what the app reads, a cache
 refetched daily — see "The model catalog" in `lib/ui/widgets/AGENTS.md`.
 Data dir: `$ENTOLI_CONFIG` if set, else `~/.config/entoli` (desktop), and

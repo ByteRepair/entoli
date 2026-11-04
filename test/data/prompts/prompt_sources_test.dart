@@ -5,6 +5,7 @@ import "package:crypto/crypto.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
+import "package:agent_chat/domain/agent_face.dart";
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/core/read_only_dirs.dart";
 import "package:agent_chat/data/local/file_modes.dart";
@@ -652,15 +653,17 @@ void main() {
       final tiers = promptTiers(project: "work", config: config);
       expect(tiers, ["default", "work"]);
 
-      expect(await readAgentPicture(config, "scout", tiers), [
+      expect(await _bytes(readAgentPicture(config, "scout", tiers)), [
         2,
         2,
       ], reason: "the project's own picture wins, as its .md does");
       expect(
-        await readAgentPicture(
-          config,
-          "scout",
-          promptTiers(project: null, config: config),
+        await _bytes(
+          readAgentPicture(
+            config,
+            "scout",
+            promptTiers(project: null, config: config),
+          ),
         ),
         [1],
       );
@@ -675,18 +678,22 @@ void main() {
       seedPicture(config, "my-team", "scout", [7]);
 
       expect(
-        await readAgentPicture(
-          config,
-          "scout",
-          promptTiers(project: "on-team", config: config),
+        await _bytes(
+          readAgentPicture(
+            config,
+            "scout",
+            promptTiers(project: "on-team", config: config),
+          ),
         ),
         [7],
       );
       expect(
-        await readAgentPicture(
-          config,
-          "scout",
-          promptTiers(project: "off-team", config: config),
+        await _bytes(
+          readAgentPicture(
+            config,
+            "scout",
+            promptTiers(project: "off-team", config: config),
+          ),
         ),
         isNull,
       );
@@ -699,7 +706,7 @@ void main() {
         await config.ensureDirs();
         final tiers = promptTiers(project: null, config: config);
 
-        expect(await readAgentPicture(config, "scout", tiers), isNull);
+        expect(await _bytes(readAgentPicture(config, "scout", tiers)), isNull);
         // A stray file with another extension is no picture — the .png alone is.
         Directory(
           config.promptsDir(CompletionKind.agent, project: null),
@@ -707,7 +714,7 @@ void main() {
         File(
           p.join(config.promptsDir(CompletionKind.agent), "scout.jpg"),
         ).writeAsBytesSync([1]);
-        expect(await readAgentPicture(config, "scout", tiers), isNull);
+        expect(await _bytes(readAgentPicture(config, "scout", tiers)), isNull);
       },
     );
   });
@@ -733,3 +740,12 @@ void main() {
     ]);
   });
 }
+
+/// The bytes of a photo face, or null where there is no face. A Bot Avatar
+/// is no photo, which these tests never seed.
+Future<List<int>?> _bytes(Future<AgentFace?> face) async =>
+    switch (await face) {
+      AgentPhoto(:final bytes) => bytes,
+      null => null,
+      AgentBot() => throw StateError("a Bot Avatar, not a photo"),
+    };

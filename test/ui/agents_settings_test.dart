@@ -7,6 +7,8 @@ import "package:agent_chat/data/prompts/agent_pictures.dart"
     show readAgentPicture;
 import "package:agent_chat/data/prompts/prompt_sources.dart" show promptTiers;
 import "package:agent_chat/domain/agent_definition.dart";
+import "package:agent_chat/domain/agent_face.dart";
+import "package:agent_chat/domain/bot_avatar/spec.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/project.dart" show localProject;
@@ -325,6 +327,50 @@ void main() {
       expect(image.readAsBytesSync(), onePixelPng);
     });
 
+    testWidgets("a Bot Avatar chosen in the editor is written as "
+        "<name>.avatar.json and takes the photo's place", (tester) async {
+      useWindow(tester, const Size(480, 1500));
+      final dir = app.config.promptsDir(CompletionKind.agent);
+      newFile("$dir/researcher.md", "---\ndescription: desc\n---\n\nBody.");
+      newFileBytes("$dir/researcher.png", onePixelPng);
+      // The presets are an asset read, which wants a real clock to land.
+      await tester.runAsync(
+        () => app.container.read(botAvatarPresetsProvider.future),
+      );
+
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+      await tester.tap(
+        find.descendant(
+          of: find.widgetWithText(ListTile, "researcher"),
+          matching: find.byIcon(Icons.edit_outlined),
+        ),
+      );
+      await settleIo(tester);
+
+      // A live avatar never comes to rest, so from here it is frames.
+      await openFaceMenu(tester);
+      await tester.tap(find.text("Use Bot Avatar"));
+      await frames(tester);
+      await tester.tap(find.bySemanticsLabel("Ghost"));
+      await frames(tester);
+      await tester.tap(find.text("Use"));
+      await frames(tester);
+      expect(
+        find.text("Ghost is set as the Bot Avatar on save."),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 15);
+
+      final spec = BotAvatarSpec.decode(
+        File("$dir/researcher.avatar.json").readAsStringSync(),
+      );
+      expect(spec?.definition.id, "ghost");
+      expect(File("$dir/researcher.png").existsSync(), isFalse);
+    });
+
     testWidgets("a pick that is not a .png is refused", (tester) async {
       final dir = app.config.promptsDir(CompletionKind.agent);
       newFile("$dir/researcher.md", "---\ndescription: desc\n---\n\nBody.");
@@ -366,13 +412,10 @@ void main() {
       // The editor shows what is on disk, with a way to take it off.
       expect(find.textContaining("is set on save"), findsNothing);
       expect(find.textContaining("No picture"), findsNothing);
-      await tester.tap(
-        find.descendant(
-          of: find.byType(ListView),
-          matching: find.byIcon(Icons.close),
-        ),
-      );
-      await tester.pump();
+      await openFaceMenu(tester);
+      await tester.tap(find.text("Remove"));
+      // A menu item runs its action once the menu has closed.
+      await settleIo(tester);
       expect(find.text("The picture is removed on save."), findsOneWidget);
 
       await tester.tap(find.text("Save"));
@@ -429,12 +472,12 @@ void main() {
 
       // The row's circle resolves the tiers and shows what was inherited.
       await tester.runAsync(() async {
-        final bytes = await readAgentPicture(
+        final face = await readAgentPicture(
           app.config,
           "researcher",
           promptTiers(project: "work", config: app.config),
         );
-        expect(bytes, onePixelPng);
+        expect((face! as AgentPhoto).bytes, onePixelPng);
       });
       await settleIo(tester);
 
@@ -544,7 +587,7 @@ void main() {
             agentPictureProvider((project: "my-team", name: "scout")).future,
           ),
         ),
-        onePixelPng,
+        isA<AgentPhoto>().having((f) => f.bytes, "bytes", onePixelPng),
       );
     });
 
@@ -594,10 +637,28 @@ Future<void> pickImage(
     testAttachment(name, mimeType: "image/png", bytes: onePixelPng),
   ];
   addTearDown(() => app.picker.scripted = const []);
-  // The picture itself is the tap target — the row the editor draws it in.
-  await tester.tap(find.byTooltip("Choose a profile picture"));
+  await openFaceMenu(tester);
+  await tester.tap(find.text("Upload photo"));
   await tester.pump();
   await settleIo(tester);
+}
+
+/// The picture itself is the tap target — it opens the menu of an upload, a
+/// Bot Avatar, and a remove where there is something to remove.
+Future<void> openFaceMenu(WidgetTester tester) async {
+  await tester.tap(find.byTooltip("Change the profile picture"));
+  await tester.pump();
+}
+
+/// Frames with real rounds between them, for a page holding a live Bot
+/// Avatar, which never settles.
+Future<void> frames(WidgetTester tester, [int n = 20]) async {
+  for (var i = 0; i < n; i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 5)),
+    );
+    await tester.pump(const Duration(milliseconds: 16));
+  }
 }
 
 /// Seeding a directory before any widget is pumped needs no runAsync; these

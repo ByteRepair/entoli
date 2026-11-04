@@ -2,6 +2,7 @@ import "dart:async";
 
 import "package:clock/clock.dart";
 import "package:flutter/foundation.dart";
+import "package:flutter/services.dart" show rootBundle;
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 import "package:http/http.dart" as http;
@@ -21,7 +22,11 @@ import "data/local/local_engine.dart";
 import "data/builtin/builtin_backend.dart";
 import "data/local/file_trigger_store.dart";
 import "data/local/linked_instructions_store.dart";
+import "data/bot_avatar_library.dart";
 import "data/prompts/agent_pictures.dart";
+import "domain/agent_face.dart";
+import "domain/bot_avatar/definition.dart";
+import "domain/bot_avatar/spec.dart";
 import "domain/app_icon.dart";
 import "domain/agent_backend.dart";
 import "domain/app_restart.dart";
@@ -1655,15 +1660,16 @@ final completionsProvider = Provider.autoDispose
           ref.watch(promptLibraryOf(spec.project)).options(spec.kind),
     );
 
-/// An agent's profile picture, or null where none is set. Named like the
-/// `.md` — `<agents dir>/<name>.png` — and resolved over the same tier walk
+/// An agent's face — its photo or its Bot Avatar — or null where it has
+/// neither. Named like the `.md` — `<agents dir>/<name>.png` and
+/// `<name>.avatar.json` — and resolved over the same tier walk
 /// the library answers mentions with, so a project's own picture wins over
 /// an inherited one. Auto-disposed like [attachmentBytesProvider]: held, an
 /// avatar on every row would keep every agent's file in memory. A page that
 /// changes one — the agents settings paths do — invalidates the family, an
 /// inherited picture being every project's to re-read after a default edit.
 final agentPictureProvider = FutureProvider.autoDispose
-    .family<Uint8List?, ({String? project, String name})>((ref, key) async {
+    .family<AgentFace?, ({String? project, String name})>((ref, key) async {
       final config = ref.watch(appConfigProvider);
       return readAgentPicture(
         config,
@@ -1682,6 +1688,44 @@ void invalidateAgentPicture(WidgetRef ref, String name, {String? project}) {
     ref.invalidate(agentPictureProvider);
   } else {
     ref.invalidate(agentPictureProvider((project: project, name: name)));
+  }
+}
+
+/// The Bot Avatars the app ships, read once from the bundle.
+final botAvatarPresetsProvider = FutureProvider<List<BotAvatarSpec>>(
+  (ref) => loadBotAvatarPresets(rootBundle),
+);
+
+/// The Bot Avatar definitions the user imported, offered in the avatar
+/// editor beside the presets. Removing one takes away nothing an agent
+/// wears: an agent's spec carries its own copy of the definition.
+final importedBotAvatarsProvider =
+    AsyncNotifierProvider<ImportedBotAvatars, List<BotAvatarDefinition>>(
+      ImportedBotAvatars.new,
+    );
+
+class ImportedBotAvatars extends AsyncNotifier<List<BotAvatarDefinition>> {
+  BotAvatarLibrary get _library =>
+      BotAvatarLibrary(ref.read(appConfigProvider).botAvatarsFile);
+
+  @override
+  Future<List<BotAvatarDefinition>> build() {
+    ref.watch(appConfigProvider);
+    return _library.load();
+  }
+
+  /// [definitions] in, each replacing an import of the same id.
+  Future<void> add(List<BotAvatarDefinition> definitions) async =>
+      _write(BotAvatarLibrary.merged(await future, definitions));
+
+  Future<void> remove(String id) async => _write([
+    for (final d in await future)
+      if (d.id != id) d,
+  ]);
+
+  Future<void> _write(List<BotAvatarDefinition> next) async {
+    state = AsyncData(next);
+    await _library.save(next);
   }
 }
 

@@ -9,6 +9,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
+import "package:agent_chat/domain/agent_face.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/models.dart";
@@ -58,7 +59,7 @@ void main() {
     ValueChanged<String>? onTapLink,
     ValueChanged<Quote>? onReply,
     bool entoli = false,
-    Uint8List? avatar,
+    AgentFace? avatar,
     ValueChanged<Reaction>? onReact,
     List<String> reactions = const [],
   }) => app.pump(
@@ -283,7 +284,11 @@ void main() {
         const TextPart(text: "Found them."),
       ], author: author);
 
-      await pump(tester, reply(author: "@researcher"), avatar: onePixelPng);
+      await pump(
+        tester,
+        reply(author: "@researcher"),
+        avatar: AgentPhoto(onePixelPng),
+      );
       expect(find.text("@researcher"), findsOneWidget);
       expect(shown(), onePixelPng);
 
