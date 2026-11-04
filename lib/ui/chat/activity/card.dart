@@ -3,6 +3,7 @@ import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
 import "../../../domain/models.dart";
 import "../../../domain/room/room_state.dart" show ChatViewState;
+import "../../widgets/page_bar.dart";
 import "../../widgets/scrolling.dart" show ScrollFollow;
 import "../widgets/code_block.dart" show codeBlockDecoration, codeBlockStyle;
 import "../widgets/message_text.dart" show StreamingCaret;
@@ -40,10 +41,11 @@ class ActivitySource extends InheritedWidget {
   bool updateShouldNotify(ActivitySource oldWidget) => false;
 }
 
-/// The drawer behind a label, opened at most of the screen. A modal route, so
-/// the back key closes it; on a wide window as wide as a reading column, not
-/// Material's 640. On the surface a dialog sits on, which is what it is drawn
-/// after.
+/// The drawer behind a label as a sheet, opened at most of the screen. A
+/// modal route, so the back key closes it; on a wide window as wide as a
+/// reading column, not Material's 640. On the surface a dialog sits on, which
+/// is what it is drawn after. Under the native shell a drawer is a page
+/// instead; see [LabelledActivity.open].
 Future<T?> showActivityCard<T>(BuildContext context, WidgetBuilder builder) =>
     showModalBottomSheet<T>(
       context: context,
@@ -58,15 +60,29 @@ Future<T?> showActivityCard<T>(BuildContext context, WidgetBuilder builder) =>
 /// A status line under a card's title: "Running · pid 4001", "Exit code 1".
 typedef ActivityStatus = ({String text, bool isError});
 
+/// One thing a drawer offers to do — Stop, Open log — beside its close
+/// button in the sheet, in the page's bar. Data rather than a widget, since
+/// a page's bar may be the window's. [run] null is offered but not on, [why]
+/// saying why where the sheet can.
+class DrawerAction {
+  const DrawerAction({required this.label, this.run, this.why});
+
+  final String label;
+  final void Function(BuildContext context)? run;
+  final String? why;
+}
+
 /// What a drawer draws, whoever is feeding it. Sections with nothing in them
 /// are left out, so a tool that returned nothing does not show an empty
 /// heading. [command] is set the way a `!` message is, under the title.
 ///
-/// It opens at most of the screen and grows to the whole of it: a drawer
-/// sized to a one-line output was a strip at the bottom of the window, and a
-/// fraction of the height left empty below a long one is a fraction of the
-/// output not read. While [live] it keeps to the end of what is arriving
-/// until the reader scrolls back.
+/// As a sheet it opens at most of the screen and grows to the whole of it: a
+/// drawer sized to a one-line output was a strip at the bottom of the window,
+/// and a fraction of the height left empty below a long one is a fraction of
+/// the output not read. As a [page] — under the native shell, whose composer
+/// a sheet would be drawn under — the title and actions are the page's bar,
+/// which is the window's. While [live] it keeps to the end of what is
+/// arriving until the reader scrolls back.
 class ActivityCard extends StatefulWidget {
   const ActivityCard({
     super.key,
@@ -79,6 +95,7 @@ class ActivityCard extends StatefulWidget {
     this.mono = false,
     this.live = false,
     this.below,
+    this.page = false,
   });
 
   final String title;
@@ -86,13 +103,16 @@ class ActivityCard extends StatefulWidget {
   final String? command;
   final ActivityStatus? status;
 
-  /// Beside the close button: what can be done to the thing shown.
-  final List<Widget> actions;
+  /// What can be done to the thing shown.
+  final List<DrawerAction> actions;
 
   final List<ActivitySection> sections;
   final bool mono;
   final bool live;
   final Widget? below;
+
+  /// Drawn as a pushed page rather than a sheet.
+  final bool page;
 
   @override
   State<ActivityCard> createState() => _ActivityCardState();
@@ -102,9 +122,12 @@ class _ActivityCardState extends State<ActivityCard> {
   final _scroll = ScrollController();
   late final _follow = ScrollFollow(_scroll);
 
-  /// How much of the screen the drawer takes before what is in it asks for
+  /// How much of the screen the sheet takes before what is in it asks for
   /// more.
   static const _openAt = 0.6;
+
+  /// A page's column on a wide window: the sheet's width.
+  static const _pageWidth = 960.0;
 
   @override
   void dispose() {
@@ -114,16 +137,45 @@ class _ActivityCardState extends State<ActivityCard> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final extra = widget.below;
-    final live = widget.live;
-    final filled = widget.sections
-        .where((s) => s.body != null && s.body!.trim().isNotEmpty)
-        .toList();
-    if (live) _follow.jumpIfFollowing();
+    if (widget.live) _follow.jumpIfFollowing();
+    return widget.page ? _page(context) : _sheet(context);
+  }
 
+  Widget _page(BuildContext context) => Scaffold(
+    appBar: PageBar(
+      title: widget.title,
+      actions: [
+        for (final action in widget.actions)
+          PageAction.text(
+            label: action.label,
+            onPressed: switch (action.run) {
+              final run? => () => run(context),
+              null => null,
+            },
+          ),
+      ],
+    ),
+    body: Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: _pageWidth),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 8, 12, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ?_status(context, spinner: true),
+              Expanded(child: _content(context, bottom: 24)),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _sheet(BuildContext context) {
+    final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
-    final status = widget.status;
     final header = Row(
       children: [
         if (widget.icon != null) ...[
@@ -138,16 +190,12 @@ class _ActivityCardState extends State<ActivityCard> {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        if (live)
+        if (widget.live)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2, color: muted),
-            ),
+            child: _spinner(muted),
           ),
-        ...widget.actions,
+        for (final action in widget.actions) _actionButton(action),
         IconButton(
           tooltip: "Close",
           icon: const Icon(Icons.close),
@@ -155,6 +203,75 @@ class _ActivityCardState extends State<ActivityCard> {
         ),
       ],
     );
+    return LayoutBuilder(
+      builder: (context, constraints) => ConstrainedBox(
+        constraints: BoxConstraints(minHeight: constraints.maxHeight * _openAt),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 12, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              header,
+              ?_status(context, spinner: false),
+              const SizedBox(height: 8),
+              Flexible(child: _content(context, bottom: 0)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _actionButton(DrawerAction action) {
+    final run = action.run;
+    final button = TextButton(
+      onPressed: run == null ? null : () => run(context),
+      child: Text(action.label),
+    );
+    final why = action.why;
+    return why == null ? button : Tooltip(message: why, child: button);
+  }
+
+  Widget _spinner(Color color) => SizedBox(
+    width: 16,
+    height: 16,
+    child: CircularProgressIndicator(strokeWidth: 2, color: color),
+  );
+
+  /// The line under the title: how the run stands, and on a page, whose bar
+  /// has no room for it, the spinner saying it is still going.
+  Widget? _status(BuildContext context, {required bool spinner}) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final status = widget.status;
+    final spin = spinner && widget.live;
+    if (status == null && !spin) return null;
+    return Row(
+      children: [
+        if (spin) ...[_spinner(muted), const SizedBox(width: 8)],
+        if (status != null)
+          Flexible(
+            child: Text(
+              status.text,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: status.isError ? theme.colorScheme.error : muted,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// The command, the sections and what goes below them, scrolled.
+  Widget _content(BuildContext context, {required double bottom}) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final extra = widget.below;
+    final live = widget.live;
+    final filled = widget.sections
+        .where((s) => s.body != null && s.body!.trim().isNotEmpty)
+        .toList();
 
     Widget body(ActivitySection section, {required bool last}) {
       final style = widget.mono
@@ -196,79 +313,47 @@ class _ActivityCardState extends State<ActivityCard> {
       );
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) => ConstrainedBox(
-        constraints: BoxConstraints(minHeight: constraints.maxHeight * _openAt),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 0, 12, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              header,
-              if (status != null)
-                Text(
-                  status.text,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: status.isError ? theme.colorScheme.error : muted,
-                  ),
-                ),
-              const SizedBox(height: 8),
-              Flexible(
-                child: NotificationListener<ScrollNotification>(
-                  onNotification: _follow.onNotification,
-                  child: SingleChildScrollView(
-                    controller: _scroll,
-                    padding: const EdgeInsets.only(right: 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SelectionArea(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (widget.command case final command?)
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                    top: 4,
-                                    bottom: 4,
-                                  ),
-                                  child: ShellCommandText(command: command),
-                                ),
-                              for (final (i, section) in filled.indexed) ...[
-                                if (section.label != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(
-                                      top: 16,
-                                      bottom: 8,
-                                    ),
-                                    child: SelectionContainer.disabled(
-                                      child: Text(
-                                        section.label!,
-                                        style: theme.textTheme.labelMedium
-                                            ?.copyWith(
-                                              color: muted,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                      ),
-                                    ),
-                                  ),
-                                body(
-                                  section,
-                                  last: extra == null && i == filled.length - 1,
-                                ),
-                              ],
-                            ],
+    return NotificationListener<ScrollNotification>(
+      onNotification: _follow.onNotification,
+      child: SingleChildScrollView(
+        controller: _scroll,
+        padding: EdgeInsets.only(right: 12, bottom: bottom),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SelectionArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (widget.command case final command?)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, bottom: 4),
+                      child: ShellCommandText(command: command),
+                    ),
+                  for (final (i, section) in filled.indexed) ...[
+                    if (section.label != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 16, bottom: 8),
+                        child: SelectionContainer.disabled(
+                          child: Text(
+                            section.label!,
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: muted,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                        ?extra,
-                      ],
+                      ),
+                    body(
+                      section,
+                      last: extra == null && i == filled.length - 1,
                     ),
-                  ),
-                ),
+                  ],
+                ],
               ),
-            ],
-          ),
+            ),
+            ?extra,
+          ],
         ),
       ),
     );

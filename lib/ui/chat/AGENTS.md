@@ -140,6 +140,17 @@ thinking block's drawer and every run's. A `bash` drawer sets the command apart 
 message is, keeps what else the call was given as its Arguments, and says
 the exit code in the status line.
 
+**Under the native shell the drawer is a page.** The composer there is the
+shell's, over the one Flutter view a sheet is drawn in, so a sheet came up
+under it. A pushed page is what the shell already steps its composer and
+turn surface aside for, and its `PageBar` is the window's title bar, so
+`LabelledActivity.open` pushes `ActivityCard` as a page while Liquid Glass is
+on: the title and actions in the window's bar, its back the way out, the
+status line and the spinner at the top of the body. A sub-agent's activity
+opened from its transcript is a page over that one. Everywhere else it stays
+the sheet — Android's idiom for this. The actions are `DrawerAction`s,
+data rather than buttons, since a page's bar may be the window's.
+
 **And it streams.** A label is the wrong thing to hold an open drawer's
 content: it is rebuilt per delta, folded into a collapsed run when its block
 closes, and gone when the list scrolls past it. So the chat page puts an

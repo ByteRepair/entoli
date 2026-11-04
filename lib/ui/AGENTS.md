@@ -439,7 +439,9 @@ nothing and placed, dismissed and read out as a popover is.
 (`app_routes.dart`), on the Navigator from `main`, says whether a page is
 pushed over the first route; the shell steps its composer and new-chat screen
 aside while one is, and its title bar becomes the page's. A dialog covers
-nothing. **A pick closes the pages
+nothing, and neither does a sheet — which is why an activity's drawer is a
+page here and a sheet only without the shell (see "Thinking and tool runs"
+in `lib/ui/chat/AGENTS.md`). **A pick closes the pages
 first**, in either shell: opening a chat, a new one or another project from
 the sidebar or the palette goes through `toConversation`, which closes each
 page the way the back key would. A page that asks before it goes is asked,
