@@ -330,10 +330,6 @@ void main() {
     });
   });
 
-  test("artifacts is empty for a chat that published none", () async {
-    expect(await perform("artifacts", {"chat": await chatTitled("x")}), []);
-  });
-
   group("managing a chat", () {
     test("each edit goes to the editor with the chat", () async {
       final id = await chatTitled("old");

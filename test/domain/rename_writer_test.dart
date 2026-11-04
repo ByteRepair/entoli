@@ -1,25 +1,31 @@
-import "package:flutter_test/flutter_test.dart";
-import "package:agent_chat/domain/documents.dart";
-
 import "dart:async";
 
+import "package:flutter_test/flutter_test.dart";
+
+import "package:agent_chat/domain/documents.dart";
+
 void main() {
-  test("overlapping writes land in the order they were asked", () async {
-    final written = <String>[];
+  test("overlapping writes run one at a time, in the order asked", () async {
+    // The first write holds until released, so the other two arrive while it
+    // runs — the overlap the queue exists for — with no timer to bet on.
+    final hold = Completer<void>();
+    final started = <String>[];
     final writer = RenameWriter((path, text) async {
-      // Long enough that a second write arrives while the first is running —
-      // the overlap the queue exists for.
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-      written.add(text);
+      started.add(text);
+      if (text == "first") await hold.future;
     });
 
-    await Future.wait([
+    final all = Future.wait([
       writer.write("settings", "first"),
       writer.write("settings", "second"),
       writer.write("settings", "third"),
     ]);
+    await pumpEventQueue();
+    expect(started, ["first"], reason: "the rest wait behind the first");
 
-    expect(written, ["first", "second", "third"]);
+    hold.complete();
+    await all;
+    expect(started, ["first", "second", "third"]);
   });
 
   test("a failed write drains its entry and does not wedge the path", () async {
@@ -49,19 +55,23 @@ void main() {
   );
 
   test("different paths do not block each other", () async {
+    final hold = Completer<void>();
     final started = <String>[];
     final writer = RenameWriter((path, text) async {
       started.add(path);
-      await Future<void>.delayed(const Duration(milliseconds: 30));
+      await hold.future;
     });
 
-    await Future.wait([
+    final both = Future.wait([
       writer.write("settings", "a"),
       writer.write("other", "b"),
     ]);
+    await pumpEventQueue();
 
-    // Both were started before either finished.
-    expect(started, hasLength(2));
+    // Both were started while neither had finished.
+    expect(started, ["settings", "other"]);
+    hold.complete();
+    await both;
   });
 
   test("paths drain once their tail finishes", () async {

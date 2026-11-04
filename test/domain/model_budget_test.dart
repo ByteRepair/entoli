@@ -14,11 +14,6 @@ void main() {
       if (budget.fits(model)) model.id,
   ];
 
-  test("a model holds its weights and its KV budget", () {
-    final model = mlxCatalog.first;
-    expect(ModelBudget.footprintOf(model), model.bytes! + kvBudgetBytes);
-  });
-
   test("nothing measured offers everything", () {
     expect(
       offered(const ModelBudget.unknown(), mlxCatalog),

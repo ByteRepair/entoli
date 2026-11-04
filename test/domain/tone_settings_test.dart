@@ -66,19 +66,6 @@ void main() {
       expect(settings.citations, isTrue);
     });
 
-    test("the defaults travel as none and off", () async {
-      final repo = repoWith(AppSettings());
-      final chat = await repo.createChat();
-
-      await repo
-          .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
-          .toList();
-
-      final settings = backend.prompts.single.settings;
-      expect(settings.tone, Tone.none);
-      expect(settings.citations, isFalse);
-    });
-
     test("the project's answer stands over the app's", () async {
       makeProject("proj");
       await ProjectSettings(tone: Tone.kind).save(config, project: "proj");

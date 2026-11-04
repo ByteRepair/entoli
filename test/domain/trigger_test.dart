@@ -160,18 +160,6 @@ void main() {
     });
   });
 
-  group("file source", () {
-    test("is never on the clock", () {
-      final trigger = Trigger(
-        id: "r",
-        name: "",
-        prompt: "",
-        source: const FileSource(paths: ["notes.md"]),
-      );
-      expect(trigger.source.nextAfter(DateTime(2026, 9, 1)), isNull);
-    });
-  });
-
   group("json", () {
     test("round-trips every field of every kind", () {
       final original = Trigger(

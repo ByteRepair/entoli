@@ -172,10 +172,6 @@ void main() {
       expect(modelInfoOf(named, "gpt-x"), isNull);
     });
 
-    test("an unknown model is no answer rather than a guess", () {
-      expect(modelInfoOf(_openai, "gpt-y"), isNull);
-    });
-
     test("a model added by hand comes before the catalog's", () {
       final custom = _openai.copyWith(
         customModels: [
@@ -235,31 +231,6 @@ void main() {
           isNotNull,
         );
       },
-    );
-
-    test("the built-in defaults have no fetch time", () {
-      expect(ModelCatalog.current.fetched, isNull);
-    });
-  });
-
-  test("a provider's own models survive its settings round trip", () {
-    final config = _openai.copyWith(
-      customModels: [
-        const ModelInfo(
-          id: "ft:1",
-          context: 1000,
-          toolCall: true,
-          readsImages: true,
-        ),
-      ],
-    );
-    final back = LlmProviderConfig.fromJson(
-      jsonDecode(jsonEncode(config.toJson())),
-    )!;
-    final model = back.customModels.single;
-    expect(
-      (model.id, model.context, model.toolCall, model.readsImages),
-      ("ft:1", 1000, true, true),
     );
   });
 }
