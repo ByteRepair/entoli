@@ -65,6 +65,8 @@ import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 import "package:agent_chat/ui/focus_follows_keyboard.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/selection.dart";
+import "package:agent_chat/ui/bot_avatar/bot_avatar_view.dart"
+    show BotAvatarMotion;
 import "package:agent_chat/ui/theme.dart";
 
 import "fakes.dart";
@@ -508,6 +510,10 @@ class TestApp {
           // As `main` attaches it: what closes the pages over the
           // conversation counts them by it.
           navigatorObservers: [container.read(appRoutesProvider)],
+          // Bot Avatars as stills, so a page holding one settles. Their own
+          // tests pump them directly to see them move.
+          builder: (context, app) =>
+              BotAvatarMotion(enabled: false, child: app!),
           home: FocusFollowsKeyboard(child: child),
         ),
       ),

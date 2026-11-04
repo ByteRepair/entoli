@@ -1627,6 +1627,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                         avatar: _avatarOf(chat, message),
                         entoli: inOmadaSection,
                         isWaiting: view.isRunning && last,
+                        latest: last,
                         waitingNotice: view.retry,
                         waitingStatus: view.status,
                         shellOutput: view.shellOutput[message.id],

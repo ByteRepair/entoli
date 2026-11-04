@@ -36,6 +36,7 @@ class MessageBubble extends ConsumerStatefulWidget {
     this.avatar,
     this.entoli = false,
     this.isWaiting = false,
+    this.latest = false,
     this.waitingNotice,
     this.waitingStatus,
     this.shellOutput,
@@ -74,6 +75,11 @@ class MessageBubble extends ConsumerStatefulWidget {
 
   /// This message is the one being generated right now.
   final bool isWaiting;
+
+  /// The newest message of the thread: its author's Bot Avatar is the one
+  /// live in the conversation, the rest drawing stills — one avatar moving
+  /// per chat rather than one per reply. A tap still wakes any of them.
+  final bool latest;
 
   /// Trouble reported while the turn is still running, e.g. a retry after a
   /// rate limit. Shown in red beside the spinner.
@@ -328,7 +334,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                             AgentPictureImage(
                               face: widget.avatar,
                               size: 18,
-                              animate: true,
+                              animate: widget.latest,
                               reactToTap: true,
                               mood: widget.isWaiting
                                   ? BotMood.thinking

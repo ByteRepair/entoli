@@ -381,11 +381,10 @@ class BotAnimator {
     required BotMood mood,
     (double, double)? target,
     bool hold = false,
-    bool reducedMotion = false,
   }) {
     final dt = _last == null ? 0.0 : (now - _last!) / 1000;
     _last = now;
-    if (!hold) _follow = _followStep(_follow, target, dt, reducedMotion);
+    if (!hold) _follow = _followStep(_follow, target, dt);
 
     final current = _mood;
     if (current != null && mood != current.mood) {
@@ -395,17 +394,14 @@ class BotAnimator {
             ? null
             : MoodBlend(current.blend!.from, moodProgress(now - _since)),
       );
-      _mood = MoodState(
-        mood,
-        reducedMotion ? null : MoodBlend(shown.settled(), 0),
-      );
+      _mood = MoodState(mood, MoodBlend(shown.settled(), 0));
       _since = now;
     }
     if (_mood == null) {
       _mood = MoodState(mood);
       _since = now;
     }
-    final t = reducedMotion ? 1.0 : moodProgress(now - _since);
+    final t = moodProgress(now - _since);
     MoodBlend? blend;
     final from = _mood!.blend;
     if (from != null && t < 1) {
@@ -433,14 +429,13 @@ class BotAnimator {
     _Follow state,
     (double, double)? target,
     double dt,
-    bool reduced,
   ) {
     const tau = 0.12, attendTau = 0.3;
     final goal = target == null
         ? _Follow.rest
         : _Follow(target.$1, target.$2, 1);
     final step = dt.clamp(0.0, 0.1);
-    double ease(double tau) => reduced ? 1 : 1 - math.exp(-step / tau);
+    double ease(double tau) => 1 - math.exp(-step / tau);
     // Losing the target relaxes the look at the unhurried rate.
     final k = ease(target != null ? tau : attendTau);
     final next = _Follow(

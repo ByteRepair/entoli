@@ -12,6 +12,26 @@ import "../../domain/bot_avatar/pose.dart";
 import "../../domain/bot_avatar/spec.dart";
 import "../../domain/bot_avatar/volume.dart";
 
+/// Whether the Bot Avatars below may move at all; on where nothing says. Off,
+/// every avatar is a still with no ticker — what reduce-motion gives too,
+/// without reaching anything but avatars. The test harness turns it off.
+class BotAvatarMotion extends InheritedWidget {
+  const BotAvatarMotion({
+    super.key,
+    required this.enabled,
+    required super.child,
+  });
+
+  final bool enabled;
+
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<BotAvatarMotion>()?.enabled ??
+      true;
+
+  @override
+  bool updateShouldNotify(BotAvatarMotion old) => old.enabled != enabled;
+}
+
 /// How a thumbnail stands: turned a little right, tipped up, looking up and
 /// right, so a grid of them faces one way. The reference editor's pose.
 const thumbnailView = ViewTurn(0.5, 0.12);
@@ -148,10 +168,6 @@ class _BotAvatarViewState extends State<BotAvatarView>
   ValueNotifier<BotAvatarFrame>? _frameOrNull;
   ValueNotifier<BotAvatarFrame> get _frame => _frameOrNull!;
 
-  /// What the last live frame was drawn from under reduced motion, where a
-  /// frame is a pure function of it: an equal one is the same picture.
-  Object? _reducedInputs;
-
   /// The avatar's clock: the ticker's elapsed time on top of what earlier
   /// spells of it banked before they were stopped.
   Duration _now = Duration.zero;
@@ -185,10 +201,16 @@ class _BotAvatarViewState extends State<BotAvatarView>
 
   BotMood get _mood => _playing?.$1.mood ?? widget.mood;
 
+  /// Moving now: asked to and motion not reduced, or a reaction playing on
+  /// a still. Under reduce-motion an avatar is always a still.
+  bool get _live => !_reduced && (widget.animate || _playing != null);
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _reduced = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    _reduced =
+        (MediaQuery.maybeDisableAnimationsOf(context) ?? false) ||
+        !BotAvatarMotion.of(context);
     _sync();
   }
 
@@ -218,14 +240,21 @@ class _BotAvatarViewState extends State<BotAvatarView>
   }
 
   void _sync() {
-    _watch(widget.animate);
-    widget.animate ? _wake() : _sleep();
-    _reducedInputs = null;
+    final live = _live;
+    _watch(live);
+    live ? _wake() : _sleep();
     // In build: no layout to place the pointer against yet.
-    final next = widget.animate ? _render(look: false)! : _still();
+    final next = live ? _render(look: false) : _still();
     final frame = _frameOrNull;
     frame == null ? _frameOrNull = ValueNotifier(next) : frame.value = next;
   }
+
+  /// A tap's reaction: live while it plays — a still woken for it, and put
+  /// back by the tick that sees it end.
+  void _react() => setState(() {
+    _playing = (BotAnimation.tapped(_random), _now);
+    _sync();
+  });
 
   void _watch(bool on) {
     if (on == _watching) return;
@@ -255,14 +284,17 @@ class _BotAvatarViewState extends State<BotAvatarView>
     if (_ticker.isActive) return;
     // Asleep. Not from inside paint: the ticker starts once the frame is out.
     SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (mounted && widget.animate) _wake();
+      if (mounted && _live) _wake();
     });
   }
 
   BotAvatarFrame _still() => _prepared.frame(
-    mood: widget.mood,
+    mood: _mood,
     reducedMotion: true,
-    view: widget.view,
+    view: ViewTurn(
+      widget.view.yaw + _turn.yaw,
+      widget.view.pitch + _turn.pitch,
+    ),
     gaze: widget.gaze,
   );
 
@@ -273,16 +305,14 @@ class _BotAvatarViewState extends State<BotAvatarView>
       return;
     }
     _now = _banked + elapsed;
-    final next = _render();
-    if (next == null) return;
     _painted = false;
-    _frame.value = next;
+    _frame.value = _render();
+    // A reaction on a still has ended: a still again.
+    if (!_live) setState(_sync);
   }
 
-  /// The frame now, or null where it would be the one on screen.
-  BotAvatarFrame? _render({bool look = true}) {
+  BotAvatarFrame _render({bool look = true}) {
     final ms = _now.inMicroseconds / 1000;
-    final reduced = _reduced;
     if (_playing case (
       final played,
       final from,
@@ -290,7 +320,7 @@ class _BotAvatarViewState extends State<BotAvatarView>
       _playing = null;
     }
     final spin = switch (_playing) {
-      (final played, final from) when !reduced => played.yawAt(_now - from),
+      (final played, final from) => played.yawAt(_now - from),
       _ => 0.0,
     };
     final mood = _mood;
@@ -299,15 +329,7 @@ class _BotAvatarViewState extends State<BotAvatarView>
       mood: mood,
       target: look && mood != BotMood.thinking ? _target() : null,
       hold: _dragFrom != null,
-      reducedMotion: reduced,
     );
-    if (reduced) {
-      // Reduced motion holds the pose still, so the frame changes only with
-      // the look, the mood or the turn.
-      final inputs = (step.gaze, mood, _turn.yaw, _turn.pitch);
-      if (inputs == _reducedInputs) return null;
-      _reducedInputs = inputs;
-    }
     return _prepared.frame(
       time: ms / 1000,
       mood: mood,
@@ -317,7 +339,6 @@ class _BotAvatarViewState extends State<BotAvatarView>
         widget.view.yaw + _turn.yaw + spin,
         widget.view.pitch + _turn.pitch,
       ),
-      reducedMotion: reduced,
     );
   }
 
@@ -352,16 +373,15 @@ class _BotAvatarViewState extends State<BotAvatarView>
       painter: BotAvatarPainter(
         frame: _frame,
         colour: Color(0xff000000 | spec.colour),
-        onPaint: widget.animate ? _onPaint : null,
+        onPaint: _live ? _onPaint : null,
       ),
     );
     final label = widget.semanticLabel ?? spec.definition.name;
     child = label.isEmpty
         ? ExcludeSemantics(child: child)
         : Semantics(label: label, image: true, child: child);
-    if (!widget.animate) return child;
-    child = RepaintBoundary(child: child);
-    if (widget.turnable) {
+    if (_live) child = RepaintBoundary(child: child);
+    if (widget.turnable && widget.animate) {
       child = GestureDetector(
         behavior: HitTestBehavior.opaque,
         onPanStart: (d) {
@@ -376,17 +396,23 @@ class _BotAvatarViewState extends State<BotAvatarView>
             _turnFrom.yaw + delta.dx * 0.011,
             (_turnFrom.pitch - delta.dy * 0.009).clamp(-0.9, 0.9),
           );
+          // A still, under reduce-motion, is redrawn turned.
+          if (!_ticker.isActive) _frame.value = _still();
         },
         onPanEnd: (_) => _dragFrom = null,
         onPanCancel: () => _dragFrom = null,
-        onDoubleTap: () => _turn = ViewTurn.none,
+        onDoubleTap: () {
+          _turn = ViewTurn.none;
+          if (!_ticker.isActive) _frame.value = _still();
+        },
         child: child,
       );
     }
-    if (widget.reactToTap) {
+    // Under reduce-motion there is no reaction to play: it stays a still.
+    if (widget.reactToTap && !_reduced) {
       child = GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => _playing = (BotAnimation.tapped(_random), _now),
+        onTap: _react,
         child: child,
       );
     }

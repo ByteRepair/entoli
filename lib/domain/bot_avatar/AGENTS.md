@@ -86,10 +86,15 @@ and two eyes in every mood; see `test/domain/bot_avatar_test.dart`).
 
 `BotAvatarView` (`lib/ui/bot_avatar/`) is a `CustomPainter` over a
 `ValueNotifier<BotAvatarFrame>`: a still, or live on a ticker. The agents
-list draws stills; everywhere else one face is shown it is live — the agent
-editor, the context page, and every member's reply in chat, which thinks
-while it is being written and idles after. Reduce-motion holds the calm
-pose and never spins.
+list draws stills, and so does a conversation, but for one: **only the
+newest message's avatar is live**, thinking while its reply is written and
+idling after. One moving avatar per chat rather than one per reply is what
+keeps a long conversation from running a ticker a bubble. Where one face is
+shown on its own — the agent editor, the context page — it is live. A tap
+on a still plays its reaction, live for as long as that lasts. **Under the
+platform's reduce-motion setting every avatar is a still**, with no ticker
+at all; a turn or a reaction redraws it, and the test harness runs that way
+so a page holding an avatar settles.
 
 A live avatar follows the pointer: one global pointer route
 (`_PointerWatch`), held while any avatar follows, keeps where the mouse is
@@ -100,9 +105,11 @@ does not follow; its look is its own.
 On top of the mood, a live avatar plays a `BotAnimation`
 (`animation.dart`): a mood held for a while, optionally with one eased full
 turn, timed on the avatar's own clock, which stands still while it is off
-screen — scrolled away mid-animation, it finishes once it is back. A tap where `reactToTap` (chat and
-the context page) plays `BotAnimation.tapped`: happy for 5 s, and spinning
-15% of the time; a second tap starts it over.
+screen — scrolled away mid-animation, it finishes once it is back. A tap where
+`reactToTap` (chat and the context page) plays `BotAnimation.tapped`: happy
+for 5 s, and spinning 15% of the time; a second tap starts it over. A tap on
+a still wakes it for the length of the reaction; under reduce-motion there is
+none to play.
 
 **Off screen it does nothing.** Flutter does not stop a ticker in a row a
 list keeps built past its viewport (the cache extent), but it does skip
