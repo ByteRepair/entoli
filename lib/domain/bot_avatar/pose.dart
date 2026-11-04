@@ -107,6 +107,11 @@ const basePitch = 0.2;
 /// How far the body turns toward a look target, and the eyes' share.
 const _lookYaw = 0.32;
 const _lookPitch = 0.18;
+
+/// Tipping down toward a target below, more than [_lookPitch]: the resting
+/// view is already tipped up, so the reference's symmetric tip barely left
+/// level when looking down. Not the reference's — it has one constant.
+const _lookPitchDown = 0.45;
 const _lookEyes = 0.7;
 
 const _tau = math.pi * 2;
@@ -311,7 +316,10 @@ Pose _moodPose(
     if (!reduced) {
       pose
         ..yaw += weight * (given.$1 * _lookYaw - baseYaw)
-        ..pitch += weight * (-given.$2 * _lookPitch - basePitch / 2);
+        ..pitch +=
+            weight *
+            (-given.$2 * (given.$2 > 0 ? _lookPitchDown : _lookPitch) -
+                basePitch / 2);
     }
   }
   if (view.yaw.isFinite && view.pitch.isFinite) {

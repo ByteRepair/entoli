@@ -155,4 +155,11 @@ void main() {
       expect(done.moving, isFalse);
     });
   });
+
+  test("looking down tips the face down as clearly as looking up lifts it", () {
+    Pose at(double y) =>
+        computePose(seed: 1, time: 1.3, mood: BotMood.idle, gaze: Gaze(0, y));
+    final ahead = at(0).pitch;
+    expect(ahead - at(1).pitch, greaterThan(at(-1).pitch - ahead));
+  });
 }

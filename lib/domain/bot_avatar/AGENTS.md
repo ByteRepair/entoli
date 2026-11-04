@@ -64,7 +64,7 @@ runs, and the slice-thinning that exists for CSS layer counts. A slice
 keeps its polygons instead of a `d` string; the painter builds one
 `ui.Path` per slice the first time it is drawn (an `Expando` on the slice).
 Arithmetic follows the reference line for line — the 32-bit hash and noise
-included — so a pose is the reference's pose; it has not been checked frame
+included — so a pose is the reference's pose, with one deliberate exception: following a target below tips the face down by 0.45 rad where the reference uses 0.18 both ways, since from the reference's tipped-up resting view that barely left level; it has not been checked frame
 for frame against the TypeScript, only for shape (every preset draws a body
 and two eyes in every mood; see `test/domain/bot_avatar_test.dart`).
 
