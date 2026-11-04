@@ -138,41 +138,45 @@ bool _isBinary(List<int> bytes) {
   }
 }
 
+/// Walks the `agents/` directory of a project: one `.md` file per agent,
+/// named by the filename without extension. [relativePath] is empty.
+List<BundledPromptFile> _collectAgents(Directory agentsRoot, String project) =>
+    _collectBySuffix(agentsRoot, project, ".md");
+
 /// The Bot Avatars a project's bundled agents wear: `<name>.avatar.json`
 /// beside `<name>.md`, the layout a user's agent keeps its face in. Each is
 /// checked against the spec here, so a face that would not draw is a build
 /// failure rather than an agent quietly shown without one.
-List<BundledPromptFile> _collectFaces(Directory agentsRoot, String project) {
-  const suffix = ".avatar.json";
+List<BundledPromptFile> _collectFaces(Directory agentsRoot, String project) =>
+    _collectBySuffix(agentsRoot, project, ".avatar.json", (name, content) {
+      if (BotAvatarSpec.decode(content) == null) {
+        throw StateError(
+          "$project/agents/$name.avatar.json is not a valid Bot Avatar spec",
+        );
+      }
+      if (!File("${agentsRoot.path}/$name.md").existsSync()) {
+        throw StateError(
+          "$project/agents/$name.avatar.json has no $name.md to belong to",
+        );
+      }
+    });
+
+/// One entry per file in [agentsRoot] ending in [suffix], named by the file
+/// name without it, each [check]ed first where one is given. As the skills'
+/// collect: the hash and the embed read one normalized text (normalizeCr).
+List<BundledPromptFile> _collectBySuffix(
+  Directory agentsRoot,
+  String project,
+  String suffix, [
+  void Function(String name, String content)? check,
+]) {
   final entries = <BundledPromptFile>[];
   for (final entity in agentsRoot.listSync()) {
     if (entity is! File || !entity.path.endsWith(suffix)) continue;
     final file = basename(entity.path);
     final name = file.substring(0, file.length - suffix.length);
     final content = normalizeCr(entity.readAsStringSync());
-    if (BotAvatarSpec.decode(content) == null) {
-      throw StateError("$project/agents/$file is not a valid Bot Avatar spec");
-    }
-    if (!File("${agentsRoot.path}/$name.md").existsSync()) {
-      throw StateError("$project/agents/$file has no $name.md to belong to");
-    }
-    entries.add(
-      BundledPromptFile(project, name, "", sha256Of(content), content),
-    );
-  }
-  return entries;
-}
-
-/// Walks the `agents/` directory of a project: one `.md` file per agent, named
-/// by the filename without extension. [relativePath] is empty.
-List<BundledPromptFile> _collectAgents(Directory agentsRoot, String project) {
-  final entries = <BundledPromptFile>[];
-  for (final entity in agentsRoot.listSync()) {
-    if (entity is! File || !entity.path.endsWith(".md")) continue;
-    final name = basename(entity.path).replaceAll(".md", "");
-    // As the skills' collect: the hash and the embed read one normalized
-    // text (normalizeCr).
-    final content = normalizeCr(entity.readAsStringSync());
+    check?.call(name, content);
     entries.add(
       BundledPromptFile(project, name, "", sha256Of(content), content),
     );

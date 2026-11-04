@@ -132,9 +132,10 @@ class _PointerWatch {
 /// (see [PreparedBotAvatar]); a frame is a handful of projected polygons.
 ///
 /// Live, it looks toward the pointer anywhere in the window and glances at
-/// a touch, can be turned by a drag ([turnable]), and
-/// play [BotAnimation]s through a [controller] — a tap plays one where
-/// [reactToTap]. Under the platform's reduce-motion setting it holds a calm
+/// a touch, can be turned by a drag ([turnable]), and plays
+/// [BotAnimation]s through a [controller] — a tap plays one where
+/// [reactToTap]. It paints on a layer of its own, so a frame repaints the
+/// avatar and not whatever it sits in. Under the platform's reduce-motion setting it holds a calm
 /// pose, as the reference does, and does not spin.
 ///
 /// A live avatar that is not painted does no work: a tick that finds the
@@ -223,9 +224,8 @@ class _BotAvatarViewState extends State<BotAvatarView>
   Duration _banked = Duration.zero;
 
   /// The last frame set was painted; a tick that finds it was not stops the
-  /// ticker, and [_sleeping] says the next paint should start it again.
+  /// ticker, and the next paint starts it again.
   bool _painted = true;
-  bool _sleeping = false;
 
   /// The play this view last saw start, and when on its clock.
   int _seenPlay = -1;
@@ -246,13 +246,16 @@ class _BotAvatarViewState extends State<BotAvatarView>
   BotAvatarController get _controller =>
       widget.controller ?? (_ownController ??= BotAvatarController());
 
-  bool get _reduced => MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+  /// The platform's reduce-motion setting, read where it can change rather
+  /// than on every tick.
+  bool _reduced = false;
 
   BotMood get _mood => _controller.playing?.mood ?? widget.mood;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _reduced = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     _sync();
   }
 
@@ -284,12 +287,7 @@ class _BotAvatarViewState extends State<BotAvatarView>
 
   void _sync() {
     _watch(widget.animate);
-    if (widget.animate) {
-      _wake();
-    } else {
-      _sleep();
-      _sleeping = false;
-    }
+    widget.animate ? _wake() : _sleep();
     _reducedInputs = null;
     // In build: no layout to place the pointer against yet.
     final next = widget.animate ? _render(look: false)! : _still();
@@ -309,7 +307,6 @@ class _BotAvatarViewState extends State<BotAvatarView>
   }
 
   void _wake() {
-    _sleeping = false;
     if (_ticker.isActive) return;
     _painted = true;
     _ticker.start();
@@ -323,9 +320,8 @@ class _BotAvatarViewState extends State<BotAvatarView>
 
   void _onPaint() {
     _painted = true;
-    if (!_sleeping) return;
-    _sleeping = false;
-    // Not from inside paint: the ticker starts once the frame is out.
+    if (_ticker.isActive) return;
+    // Asleep. Not from inside paint: the ticker starts once the frame is out.
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (mounted && widget.animate) _wake();
     });
@@ -342,7 +338,6 @@ class _BotAvatarViewState extends State<BotAvatarView>
     if (!_painted) {
       // Not drawn since the last frame: nothing on screen to move.
       _sleep();
-      _sleeping = true;
       return;
     }
     _now = _banked + elapsed;
@@ -397,7 +392,6 @@ class _BotAvatarViewState extends State<BotAvatarView>
   /// there is nothing to look at: no mouse in the window, or a touch whose
   /// glance is over.
   (double, double)? _target() {
-    if (!_watching) return null;
     final watch = _PointerWatch.instance;
     if (watch.touches != _seenTouch) {
       _seenTouch = watch.touches;
@@ -433,30 +427,33 @@ class _BotAvatarViewState extends State<BotAvatarView>
         ? ExcludeSemantics(child: child)
         : Semantics(label: label, image: true, child: child);
     if (!widget.animate) return child;
-    if (widget.turnable || widget.reactToTap) {
+    child = RepaintBoundary(child: child);
+    if (widget.turnable) {
       child = GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: widget.reactToTap ? _controller.react : null,
-        onPanStart: widget.turnable
-            ? (d) {
-                _dragFrom = d.localPosition;
-                _turnFrom = _turn;
-              }
-            : null,
-        onPanUpdate: widget.turnable
-            ? (d) {
-                final from = _dragFrom;
-                if (from == null) return;
-                final delta = d.localPosition - from;
-                _turn = ViewTurn(
-                  _turnFrom.yaw + delta.dx * 0.011,
-                  (_turnFrom.pitch - delta.dy * 0.009).clamp(-0.9, 0.9),
-                );
-              }
-            : null,
-        onPanEnd: widget.turnable ? (_) => _dragFrom = null : null,
-        onPanCancel: widget.turnable ? () => _dragFrom = null : null,
-        onDoubleTap: widget.turnable ? () => _turn = ViewTurn.none : null,
+        onPanStart: (d) {
+          _dragFrom = d.localPosition;
+          _turnFrom = _turn;
+        },
+        onPanUpdate: (d) {
+          final from = _dragFrom;
+          if (from == null) return;
+          final delta = d.localPosition - from;
+          _turn = ViewTurn(
+            _turnFrom.yaw + delta.dx * 0.011,
+            (_turnFrom.pitch - delta.dy * 0.009).clamp(-0.9, 0.9),
+          );
+        },
+        onPanEnd: (_) => _dragFrom = null,
+        onPanCancel: () => _dragFrom = null,
+        onDoubleTap: () => _turn = ViewTurn.none,
+        child: child,
+      );
+    }
+    if (widget.reactToTap) {
+      child = GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _controller.react,
         child: child,
       );
     }

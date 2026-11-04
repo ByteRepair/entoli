@@ -32,9 +32,11 @@ Future<List<BotAvatarSpec>> loadBotAvatarPresets(AssetBundle bundle) async {
     final list = jsonDecode(await bundle.loadString(asset));
     for (final (i, json) in (list as List).indexed) {
       final spec = BotAvatarSpec.fromJson(json);
-      spec == null
-          ? logFailure("bot-avatar", "preset $i of $asset is not a valid spec")
-          : specs.add(spec);
+      if (spec == null) {
+        logFailure("bot-avatar", "preset $i of $asset is not a valid spec");
+      } else {
+        specs.add(spec);
+      }
     }
   }
   return specs;

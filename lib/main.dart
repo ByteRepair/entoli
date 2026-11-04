@@ -53,6 +53,7 @@ import "ui/assistant/incoming_assistant.dart";
 import "ui/focus_follows_keyboard.dart";
 import "ui/fonts.dart";
 import "ui/link_opener.dart";
+import "ui/incoming_links.dart";
 import "ui/share/incoming_shares.dart";
 import "ui/triggers/incoming_open.dart";
 import "ui/selection.dart";
@@ -623,8 +624,10 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       home: const FocusFollowsKeyboard(
         child: IncomingAssistant(
           child: IncomingShares(
-            child: IncomingTriggerOpen(
-              child: InitialSetupGate(child: WelcomeGate(child: _Shell())),
+            child: IncomingLinks(
+              child: IncomingTriggerOpen(
+                child: InitialSetupGate(child: WelcomeGate(child: _Shell())),
+              ),
             ),
           ),
         ),

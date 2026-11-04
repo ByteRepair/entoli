@@ -314,12 +314,10 @@ Pose _moodPose(
         ..gazeY = mix(pose.gazeY, given.$2 * share);
     }
     if (!reduced) {
+      final tip = given.$2 > 0 ? _lookPitchDown : _lookPitch;
       pose
         ..yaw += weight * (given.$1 * _lookYaw - baseYaw)
-        ..pitch +=
-            weight *
-            (-given.$2 * (given.$2 > 0 ? _lookPitchDown : _lookPitch) -
-                basePitch / 2);
+        ..pitch += weight * (-given.$2 * tip - basePitch / 2);
     }
   }
   if (view.yaw.isFinite && view.pitch.isFinite) {
