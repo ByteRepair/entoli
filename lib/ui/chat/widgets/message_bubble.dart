@@ -34,7 +34,6 @@ class MessageBubble extends ConsumerStatefulWidget {
     required this.chatId,
     required this.message,
     this.avatar,
-    this.entoli = false,
     this.isWaiting = false,
     this.latest = false,
     this.waitingNotice,
@@ -67,11 +66,6 @@ class MessageBubble extends ConsumerStatefulWidget {
   /// happy for a while when tapped. Rows the list keeps built off screen
   /// cost nothing, since an avatar that is not painted stops its ticker.
   final AgentFace? avatar;
-
-  /// The reply is in a section of the conversation where Omada is on: an
-  /// unnamed reply is the main agent's, and says so — "Entoli" — the same
-  /// slot a member's name uses. Direct chats and off-sections show nothing.
-  final bool entoli;
 
   /// This message is the one being generated right now.
   final bool isWaiting;
@@ -129,8 +123,8 @@ class MessageBubble extends ConsumerStatefulWidget {
   final ValueChanged<String>? onTapLink;
 
   /// Answer a passage selected in this message: the selection menu's Reply.
-  /// The quote carries the author's handle where [entoli] says this section
-  /// is Omada's and a member wrote it, so the answer is addressed to them.
+  /// A reply's quote carries its author's handle, so the answer is
+  /// addressed to them.
   final ValueChanged<Quote>? onReply;
 
   /// React to this message with an emoji — said to whoever wrote it — or
@@ -285,10 +279,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             ? theme.colorScheme.primaryContainer
             : theme.colorScheme.surfaceContainerHighest,
       ),
-      MessageRole.assistant => (
-        widget.message.author ?? (widget.entoli ? "Entoli" : null),
-        null,
-      ),
+      MessageRole.assistant => (widget.message.author, null),
       MessageRole.tool => ("Tool", theme.colorScheme.tertiaryContainer),
       MessageRole.system => ("System", theme.colorScheme.tertiaryContainer),
     };
@@ -363,11 +354,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                     onReply: widget.onReply == null
                         ? null
                         : (text) => widget.onReply!(
-                            Quote.from(
-                              widget.message,
-                              text,
-                              omada: widget.entoli,
-                            ),
+                            Quote(text, handle: widget.message.author),
                           ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,

@@ -247,7 +247,7 @@ ways.
 **The room's mail is worded per viewer too.** A say the user addressed to a
 member is, in every other participant's session, a user-role message naming
 who it was for (`addressedUserTurnText`, off `Message.addressees` — the
-room's own routing record, stamped at dispatch, empty for the house's mail) —
+room's own routing record, stamped at dispatch) —
 the way a peer reply names who wrote it; a model cannot be asked to read a
 sigil in someone else's prose and know whose mail it is. What the addressee
 reads is verbatim, and the task dress (`_firstTask`) is the message that
@@ -255,8 +255,8 @@ opened the *viewer's* work — the first own mail — which in a direct chat is
 the conversation's opener, so the rule reduces there to today's bytes.
 A peer reply is worded the same way off its own stamped addressees —
 "addressed to you", or "addressed to @x (not to you)" — so a handoff to
-someone else does not read as work for the viewer; an unrouted reply (old
-logs, a reply naming nobody) words as it did. Only user messages are mail
+someone else does not read as work for the viewer; a reply naming nobody
+words as a plain reply. Only user messages are mail
 for the dress: `addressedTo` is false for a reply.
 
 ### One accumulation
@@ -760,8 +760,8 @@ offers has to dispatch.
 appended); a name the library does not know is left alone, because it is more
 likely a path. The `skill` tool hands the model the same body through the same
 `withArguments`, so the two routes put the same words in front of it. `@name`
-hands the work to that agent: `/` puts words in front of the main agent, `@`
-names who should do it.
+hands the work to that agent: `/` puts words in front of whoever answers,
+`@` names who should do it.
 
 **The library is read once, where the message is composed, and never again.**
 `ChatRepository.composeUserPrompt` is the only place a user's message is made,
@@ -798,16 +798,16 @@ the sub-agent runs under its file as the library has it when `task` runs. The
 mentions stay in the text and are not stripped, so what the user reads and
 what the model reads name the same agent.
 
-**In a direct chat an `@mention` is a delegation.** The main agent is told, in
-the per-turn system message, that the user wants the named agent to do the
-work, and it hands it over with `task`; the reply is still the main agent's.
-The agent's prompt is not put under the main agent's: that runs its words
-with none of its `tools:` limits and does the work in the main conversation,
-when `@` is what a user types to ask for a sub-agent. A turn with no `task` (a
-built-in project that takes it away, a device with no shell) is told nothing,
-and the mention is prose. Who speaks is the room's `Roster.answering`
-decision (see "The room and its participants" in `lib/domain/room/AGENTS.md`):
-Omada is what makes a mention promote the named member, in Omada-on projects.
+**A mention of an agent not in the room is a delegation.** The participant
+answering is told, in the per-turn system message, that the user wants the
+named agent to do the work, and hands it over with `task`; the reply is still
+theirs. The agent's prompt is not put under theirs: that runs its words with
+none of its `tools:` limits and does the work in the conversation, when `@` is
+what a user types to ask for a sub-agent. A turn with no `task` (a built-in
+project that takes it away, a device with no shell, an Omada room) is told
+nothing, and the mention is prose. Who is in the room, and so who a mention
+promotes rather than delegates to, is the room's `Roster` (see "The room and
+its participants" in `lib/domain/room/AGENTS.md`).
 
 `completions` is therefore **not** on `AgentBackend`: `completionsProvider`
 is a family keyed by project, reading the project's library directly and
@@ -822,9 +822,10 @@ in will offer.
 is an agent built over its `.md`: its instructions and its `tools:` list, the
 tool ids it is offered among the ones an agent can be granted. With no list,
 each tool's own default decides, which is what lets a tool exist for the agents
-that name it and stay out of every other prompt. The main agent is
-`AgentDefinition.main`, no file and every default, so nothing downstream asks
-whether there is an agent. `BuiltinAgent` holds one, and it is the same object
+that name it and stay out of every other prompt. Every turn has a file to run
+as — Athena's is bundled — and `AgentDefinition.blank`, no file and every
+default, is only a new agent's starting point and what a name the library
+has lost resolves to. `BuiltinAgent` holds one, and it is the same object
 whichever way the agent runs: the `task` runner and a member's turn each
 resolve it from the library and hand it over, and the offer narrows by it —
 the request's tools, the dispatch and the system prompt's tool sentences all
@@ -879,8 +880,7 @@ where in the conversation it was made.
 It is addressed to whoever wrote the message: the part carries that
 message's `author`, and `Roster` reads it where it would read a mention, so
 a member's reply is answered by that member in an Omada room and anything
-else — the main agent's reply, the user's own message, any message once
-Omada is off — by the main agent. It never steers: it answers something
+else — the user's own message, any message once Omada is off — by Athena. It never steers: it answers something
 finished, so while the room runs it waits its turn.
 
 The part carries an `excerpt` of the message too, because the model is never
@@ -1048,7 +1048,7 @@ everything after that is the room's own machinery: the composer resolves
 the reference into the message's documents, `Roster.mentioned` reads them, the
 FIFO and the author stamp follow, and the fire is generation zero — the
 user's own message analog, uncapped itself, its handoffs capped. In a
-direct chat nothing stamps; the mention rides inline as instruction
+direct chat the fire is Athena's; the mention rides inline as instruction
 material, the same rule any message the user sends takes. Validation lives
 where the library happens to be — registration and the editor — while a
 stored member later deleted is not re-checked: at fire time a name the

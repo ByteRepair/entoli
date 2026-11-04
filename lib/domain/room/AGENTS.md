@@ -14,10 +14,10 @@ The room is plain Dart, in pieces that each answer one question:
   the generation cap. No I/O; the room hands it the one call that opens a
   turn. `OmadaOrdering` carries the policy as two methods, `admits` and
   `waitsForWave`, rather than a scheduler per ordering.
-- **`Roster`** — who a message addresses. It is also the one place Omada is
-  decided for routing: a direct chat is a roster that addresses no one.
-- **`Agent`** — a participant that takes turns, the house or a member, over
-  the repository's `sendPrompt` and `resumeTurn`.
+- **`Roster`** — who is in the room and who a message addresses. It is the
+  one place routing is decided: a direct chat is a roster of one.
+- **`Agent`** — a participant that takes turns, over the repository's
+  `sendPrompt` and `resumeTurn`.
 - **`RoomHost`** — what the room needs of whoever holds it: settings read at
   each use, where its state goes, and the services around a turn (naming the
   chat, the failure notification, auto-compact). `ChatController` is the
@@ -30,96 +30,92 @@ rooms either — they share `TurnRecorder` with the room and nothing else, and
 their transcript deliberately leaves the task unlogged (see "Their own
 transcripts" in `lib/data/builtin/AGENTS.md`).
 
-The room has two participants who speak, and a third shape that never does:
+**A room is a list of participants.** A direct chat — Omada off, the
+default — holds one: Athena (`athena`, a bundled agent like any other,
+`assets/prompts/projects/default/agents/athena.md`). An Omada chat holds
+every agent the project's library has, Athena among them. Nobody is special
+to the room: every turn is a participant's, run under that participant's
+file in a session of its own, and every reply names its author.
 
-- **The user**, whose send verb is `TurnDriver.send` — every way a trigger or
-  a voice utterance speaks goes through the controller's `send` too, one path
+- **The user** speaks through `TurnDriver.send` — every way a trigger or a
+  voice utterance speaks goes through the controller's `send` too, one path
   rather than one per caller. A trigger fire naming a member is a say like
-  any other: the mention in its text is what routes it, and nothing here
-  knows the fire was a trigger.
-- **The main agent**, behind the event stream. Every turn the room
-  drives today is its turn; its reply is the anonymous voice at the end of
-  one. Sub-agents (a `task` call) are participants with a restricted reply
-  route — see "Sub-agents" in `lib/data/builtin/AGENTS.md`: their only
-  channel is the tool result to their delegator, and the main agent sends
-  the message back. They never address the room, and nothing here draws
-  them as speakers.
-- **What a participant may use is its own.** A member's turn and a
+  any other: the mention in its text is what routes it.
+- **A say goes to the participants it names, or to the default route.**
+  `Roster.mentioned` reads the agents the say's documents name and keeps
+  the ones in the room; where it keeps none — a say naming nobody, a `!`
+  command, a callback — the say is the default route's, Athena today. So
+  every say is addressed to someone, and `Message.addressees` always says
+  who.
+- **An `@mention` of an agent not in the room is a delegation.** The
+  participant answering is told the user wants that agent to do the work,
+  and hands it over with `task` — a sub-agent, headless and off the record,
+  its output readable by its delegator alone. In a direct chat that is every
+  mention but Athena's own; in an Omada chat there is none, every agent
+  being a participant, and `task` is dropped.
+- **What a participant may use is its own.** A participant's turn and a
   sub-agent's both run as the agent's `AgentDefinition`, so its `tools:` list
   holds in either role; see "Tools per agent" in `lib/domain/AGENTS.md`.
-- **An `@mention` is not a participant.** It asks the main agent to hand
-  the work to the named agent through `task`. Omada is what changes that
-  sentence, in Omada-on projects only.
 
 ### The contract between direct and Omada chats
 
-**A direct chat** — Omada off, the default, every chat that existed before
-there was a toggle — is **strictly 1:1 between the user and the main agent**.
-Every turn is the main agent's turn, whether the message addresses it or not;
-an `@mention` on the prompt, read from `Message.documents`, asks it to
-delegate to the named agent, and the reply is the main agent's, unnamed. When the
-main agent delegates, it does so through `task`: sub-agents are machinery
-inside its turn, headless and off the record, their output readable by the
-main agent alone, and the user sees only what the main agent says about it.
-Nothing stamps, nothing labels, nothing hands off. A direct chat is the
-system as it was before Omada existed, byte for byte.
+The two differ in who is in the room, and in nothing else the room decides.
+**A direct chat** is the user and Athena: every say is hers, a reply naming
+someone hands to no one (there is no one else), and a mention is a
+delegation. **An Omada chat** adds the project's agents as participants: a
+say naming members is answered by them, members hand off to each other by
+mentioning one another in a reply, chain-capped, and a participant may
+decline what it was handed with `end_turn` — never a say that reached it by
+default. **Turning Omada off ends promotion for every turn
+after it**, whatever the prompt names; what is already on the record stays —
+history is fact — and a reply is carried on, or regenerated, by whoever
+wrote it, the author it names being who runs. One the library has lost
+since runs under no file, with a log line saying so.
 
-**An Omada chat** — Omada on for the project — adds a reply route, and
-everything Omada does hangs off it: a message addressing members is answered
-by them as participants, each in a session of their own, with the author on
-the record; members hand off to each other by mentioning one another in a
-reply, chain-capped; a member declines with `end_turn`. The turn's scheduling is
-the room's `Schedule` — one FIFO per member of what they have been
-addressed to run — resolved once at dispatch, and it is gated on the toggle:
-**turning Omada off ends promotion for every turn after it**, whatever the
-prompt names. What is already on the record stays — history is fact — but
-the next send is the main agent's.
-
-**The label means a member authored the turn.** `Message.author` is stamped
-only where a member actually answered — an Omada-on turn the schedule routed
-to them — never where the main agent merely used a member's instructions.
-That is what keeps the label honest: it answers "who spoke", and the answer
-is a lie if an instruction overlay can put a name on the main agent's
-voice.
+**The label is who spoke.** `Message.author` is stamped on every reply with
+the participant the schedule routed the turn to, and nowhere else: never
+where a participant merely used another agent's instructions, which would
+put a name on a voice that was not theirs.
 
 **The routing record rides the say.** `Message.addressees` is stamped where
 the say is written — a fresh send in `_openTurn`, a say queued while the room
-ran in `_sayLater` — with who the room resolved it to, sigils on as typed,
-empty for the house's mail; old logs read empty. A reply's is stamped on its
-`turnEnd` record when it closes `done` — its routing is only known once its
-text is — and the handoff schedules off that stamp, not a re-read of the
-text. A reply never addresses its own author: "hello @a, @b and @me" was
-every member rescheduling itself. It is room data, not text:
+ran in `_sayLater` — with who the room resolved it to, sigils on. A reply's
+is stamped on its `turnEnd` record when it closes `done` — its routing is
+only known once its text is — and the handoff schedules off that stamp, not
+a re-read of the text. A reply never addresses its own author: "hello @a, @b
+and @me" was every member rescheduling itself. It is room data, not text:
 `documents` say what the references *meant*, this says who the room sent it
 to, and a member deleted from the library after the fact does not rewrite
 the room's past. The wording half of it is the projection's, per viewer —
 see "The room's mail is worded per viewer too" in `lib/domain/AGENTS.md` —
-and what makes the room's other participants' sessions current with it is
-the dispatch-time sync, **`_syncSession`** (see "The agent loop":
+and what makes each participant's session current with it is the
+dispatch-time sync, **`_syncSession`** (see "The agent loop":
 `BuiltinBackend._syncSession`): every dispatch's history is the room's
 whole thread, and a participant's session words what it has never heard,
-confirmed against the log before a word is appended — the house catching up
-with the room's member turns, and each member with the others.
+confirmed against the log before a word is appended.
+
+**Logs from before Athena had a name** were brought forward by the 7.5.0
+migration (`lib/core/migrations.dart`): every reply with no author became
+hers, every say with no addressees was addressed to her. The sync protocol
+moved to 6 in the same release, so no older build's records reach a newer
+one. Nothing reads the older shape.
 
 **The room contract is My Team's note, not a per-turn overlay.** Every Omada
 turn runs under `MyTeamProject`'s bundled note (`assets/prompts/projects/
 my-team/system/instructions.md`): the room, the handles, `end_turn`, and that
-every other member's handle in a reply is handed a turn — worded once for
-any participant, main agent or member, since both run under it. A member
-tells which one it is by the `You are @name` line `memberInstructions` opens its
-prompt with. The project's own note comes first where it ships
-one, and the user's instruction files are read on top, the way they always
-are for a user project. A project's Omada answer decides whether the note is
-there at all — a built-in's spec (`my-team` on, everything else off), a user
-project's toggle — so flipping Omada off leaves the next turn the plain
-prompt it had. The per-turn wording that used to stand here
-(`houseTurnInstructions`/`memberTurnInstructions`) is gone.
+every other participant's handle in a reply is handed a turn — worded once
+for every participant. Each tells which one it is by the `You are @name`
+line `participantInstructions` opens its prompt with. The project's own note
+comes first where it ships one, and the user's instruction files are read on
+top, the way they always are for a user project. A project's Omada answer
+decides whether the note is there at all — a built-in's spec (`my-team` on,
+everything else off), a user project's toggle — so flipping Omada off leaves
+the next turn the plain prompt it had.
 
 **The schedule is the room's order of speaking.** `Schedule.addPrompt` and
 `addHandoff` put an item on each member's FIFO: a user prompt addressed by
 its documents, or a handoff — the reply that names them, one generation past
-the turn that wrote it. The null key is the main agent, who answers what no
-member was addressed for. `Schedule.dispatch` runs what the schedule holds,
+the turn that wrote it. `Schedule.dispatch` runs what the schedule holds,
 asking the ordering's `admits` per item: **sequential** order
 dispatches one item at a time — the mention list is the schedule, and what
 follows dispatches at the settle it causes. **A member holds at most one
@@ -150,17 +146,27 @@ wave that would pass it. Under relay the finished turn's generation entry is
 spent when its handoff is scheduled — waves overlap, so a wave's cleanup
 cannot be the thing that retires the entry.
 
-**A member says nothing by calling `end_turn`, and silence is not a row.** A
-reply is a message, and a model given only messages writes one — a
+**A participant says nothing by calling `end_turn`, and silence is not a
+row.** A reply is a message, and a model given only messages writes one — a
 thank-you, an "all set" — that hands the room another turn; a text `pass`
-convention was tried first and models wrote around it. The tool (members
-only: the house answers what nobody else was asked) takes an optional
-`reason`, ends the loop without another model call, and leaves the call on
+convention was tried first and models wrote around it. The tool takes an
+optional `reason`, ends the loop without another model call, and leaves the call on
 the log. A reply that ended with it and wrote no text (`endedSilently`)
 names no one, so it hands to no one; it is not drawn (`entriesOf`) and not
 worded into any other participant's session, and it shows no running label.
 It does not clear what siblings handed off — silence is nothing said, not a
 veto.
+
+**A say nobody else was asked cannot be declined.** `end_turn` is offered
+where the turn may decline its say, which the room decides as it opens the
+turn (`Roster.byDefault`, carried to the backend as `mayDecline`): a handoff,
+or a user's say that named its answerer, may be declined — the name may have
+been incidental, and someone else is answering. A say that reached its
+answerer by default — one naming nobody in the room, a command, a callback —
+is the only answer the user will get, so the tool is not offered and silence
+is not possible. The rule is the route's, not a name's: it holds whoever the
+default route is. A resumed turn is carrying on a reply, never declining
+one, and is not offered it either.
 
 **A say is not refused: it steers, or it is queued.** See "Steering a turn"
 below for the default. A queued say — `send(queue: true)`, the outlined
@@ -181,7 +187,7 @@ check is what keeps a say for a busy member on their FIFO.
 ### Steering a turn
 
 **Send over a running turn steers it.** `_steer` hands the say to the
-running turn it addresses — the house's for an unaddressed say, a member's
+running turn it addresses — Athena's for a say naming nobody, a member's
 for a say naming that one member — through the turn's `SteerInbox`, and the
 composer shows it in a strip above the field until the turn reads it
 (`ChatViewState.steering`). It is not on the log yet. The agent takes the

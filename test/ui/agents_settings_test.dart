@@ -27,9 +27,9 @@ void main() {
   setUp(() => app = TestApp.create());
   tearDown(() => app.dispose());
 
-  // The bundled agents the default project ships: explore and general. The
+  // The bundled agents the default project ships: athena, explore and general. The
   // esbmc-verifier is byte-repair's alone, so it is not in the default library.
-  const bundledAgents = ["explore", "general"];
+  const bundledAgents = ["athena", "explore", "general"];
 
   group("the agents settings page", () {
     testWidgets("lists the bundled agents and tags them Bundled", (

@@ -44,8 +44,8 @@ void main() {
   });
 
   test("the main agent has no instructions and every default", () {
-    expect(AgentDefinition.main.instructions, "");
-    expect(AgentDefinition.main.offers("read", byDefault: true), isTrue);
+    expect(AgentDefinition.blank.instructions, "");
+    expect(AgentDefinition.blank.offers("read", byDefault: true), isTrue);
   });
 
   group("writing an agent back", () {

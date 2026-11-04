@@ -146,8 +146,10 @@ stale copy is what a held session is there to win over. A held-warm session
 with no history and a held one a wordless log cannot resolve against are both
 left as they stand; the next dispatch syncs over whatever the log says then.
 A rewind, a thread move and a compaction land on `resetSession`, which
-refills the house and clears the member sessions — their next dispatch
-refills from the full thread, the room's catch-up of last resort. A resume
+drops every session the chat holds — each participant's next dispatch
+refills from the full thread it is sent with, the room's catch-up of last
+resort. Sessions are kept per chat, one per participant who has spoken
+there. A resume
 rebuilt its session over the interrupted reply, whose wording the continuation
 carried past its covered id: the next confirm says so and fills whole once,
 warm again after it. The projection words a message out of its own records
@@ -619,7 +621,7 @@ counter leaves out, for the same reason.
 ## Sub-agents (the `task` tool)
 
 In the room's terms (see "The room and its participants" in `lib/domain/room/AGENTS.md`),
-a `task` call has the **main agent schedule delegated participant turns**: each
+a `task` call has the **answering participant schedule delegated turns**: each
 sub-agent is a participant with the full per-participant shape — its own
 `BuiltinSession`, its transcript per call id, revived through `projectionOf` —
 and what makes it sub is the reply route, enforced structurally below: its
@@ -1236,12 +1238,12 @@ Omada answer travels as `TurnSettings.omada`; the backend turns it into the
 agent's `roomParticipants`, and non-null there is the one gate the tool
 list and the dispatch share: a call where the turn holds no room finds
 `unknownTool`. Read-only and instant, like `skill` — no approval, no
-running label. An empty roster answers rather than failing: the room is in
-force however few members it defines, and "no members" is a fact worth the
-model knowing.
+running label. Athena is always on it.
 
-`end_turn` rides the same gate plus a member viewer: offered on a member's
-omada turn, never the house's. Its call sets `_ended`, and the loop stops
+`end_turn` rides the same gate plus `mayDecline`, which the room sets where
+the turn may decline its say: a handoff, or a say that named its answerer —
+never one routed by default, nor a resumed turn (see "A say nobody else was
+asked cannot be declined" in `lib/domain/room/AGENTS.md`). Its call sets `_ended`, and the loop stops
 after that batch rather than asking the model again — the follow-up step
 would be the reply the call declined to write. See "The room and its
 participants" in `lib/domain/room/AGENTS.md` for what a silent reply is.

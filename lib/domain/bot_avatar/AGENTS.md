@@ -29,7 +29,8 @@ both, and where a rung somehow holds both the avatar wins. `AgentFace`
 
 The app's own agents wear faces the same way: `<name>.avatar.json` beside
 the bundled `<name>.md` under `assets/prompts/projects/<project>/agents/`
-(explore is the orange magnifier, general a violet robot head).
+(Athena is a marble-white owl, after the owl in the main art; explore is
+the orange magnifier, general a violet robot head).
 `tool/gen_bundled_skills.dart` embeds them as `bundledAgentFaces`, refusing
 one that fails the spec or has no `.md`, and `readAgentPicture` falls back to
 one within each rung, below a face on disk there — so a user who gives

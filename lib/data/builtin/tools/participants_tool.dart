@@ -13,10 +13,12 @@ import "turn.dart";
 
 export "../../../domain/end_turn.dart" show endTurnToolName;
 
-/// A member's way to say nothing: a reply is a message, and a model given
-/// only messages writes one — a thank-you, an "all set" — that hands the
-/// room another turn. Offered on a member's Omada turn only: the house
-/// answers what nobody else was asked, so it always has something to say.
+/// A participant's way to say nothing: a reply is a message, and a model
+/// given only messages writes one — a thank-you, an "all set" — that hands
+/// the room another turn. Offered on an Omada turn that may decline its say
+/// (`ToolOffer.mayDecline`): a handoff, or a say that named this participant.
+/// Never on a say that reached them by default — nobody else was asked, and
+/// declining it would leave the user with no answer at all.
 /// The call and its result stay on the log, where the reason is the record of
 /// why; the loop stops without asking the model again, since a follow-up
 /// step would be the reply the call declined to write.
@@ -30,7 +32,7 @@ class EndTurnTool extends AgentTool {
   String get name => endTurnToolName;
 
   @override
-  bool get offered => offer.participants != null && offer.member;
+  bool get offered => offer.participants != null && offer.mayDecline;
 
   @override
   String get description =>
@@ -96,8 +98,7 @@ class ListParticipantsTool extends AgentTool {
 
 /// The roster as the tool answers it: one line per member, the handle with
 /// its sigil on and the description as written. A member with no description
-/// is the handle alone. An empty roster answers rather than failing — the
-/// room is in force however few members it defines.
+/// is the handle alone. Athena is always among them.
 ///
 /// The set is what a mention can reach — every agent in the library, the
 /// `user-invocable: false` ones included, mention resolution ignoring the
@@ -111,8 +112,5 @@ String participantsListing(Iterable<PromptDocument> members) {
         final description => "$sigil${member.name} — $description",
       },
   ];
-  return lines.isEmpty
-      ? "The room has no members: there is no one to hand work to by handle, "
-            "so every say is answered by the main agent."
-      : lines.join("\n");
+  return lines.join("\n");
 }

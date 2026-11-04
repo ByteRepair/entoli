@@ -314,11 +314,10 @@ the composer the selection as a copy's plain half reads — markdown — and
 clears the selection, the passage having gone somewhere. The composer draws
 it as a card; the message sends it as a blockquote, a blank line either side
 of it, because markdown reads a line straight after a `>` line as more of the
-quote. In an Omada section a member's reply is quoted under their handle,
-`> @scout` and an empty `>` line above the passage: the handle is an ordinary
-mention, which is what routes the answer to them (see "The contract between
-direct and Omada chats" in `lib/domain/room/AGENTS.md`), and the main agent's
-reply carries none, since nobody is to be addressed. `Quote`
+quote. A reply is quoted under its author's handle, `> @scout` and an empty
+`>` line above the passage: the handle is an ordinary mention, which is what
+routes the answer to them (see "The contract between direct and Omada chats"
+in `lib/domain/room/AGENTS.md`); the user's own message carries none. `Quote`
 (`domain/quote.dart`) is that blockquote both ways.
 
 **A card is one character of the field.** `ComposerController` hands each

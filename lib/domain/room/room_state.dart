@@ -125,7 +125,7 @@ enum RoomPhase {
   /// Nothing is running; the composer is the user's.
   open,
 
-  /// A turn is running and has not asked anything: the main agent is
+  /// A turn is running and has not asked anything: a participant is
   /// speaking, the composer shows Stop.
   agentSpeaking,
 

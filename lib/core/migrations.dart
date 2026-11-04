@@ -1,3 +1,4 @@
+import "dart:convert";
 import "dart:io";
 
 import "package:path/path.dart" as p;
@@ -25,8 +26,52 @@ class Migration {
 String migrationStamp(String dataDir) => p.join(dataDir, "version");
 
 /// The chain, oldest first: each entry moves what the one above it left, and
-/// nothing older. Empty until a release changes the layout.
-const List<Migration> migrations = [];
+/// nothing older.
+const List<Migration> migrations = [Migration("7.5.0", _athena)];
+
+/// 7.5.0: the main agent is Athena, a participant like any other. Every
+/// reply names its author and every say whom it was for, so a reply with no
+/// author is hers and a say addressed to nobody was said to her.
+Future<void> _athena(String dataDir) async {
+  final projects = Directory(p.join(dataDir, "projects"));
+  if (!projects.existsSync()) return;
+  await for (final project in projects.list()) {
+    final chats = Directory(p.join(project.path, "chats"));
+    if (!chats.existsSync()) continue;
+    await for (final chat in chats.list()) {
+      final log = File(p.join(chat.path, "conv.jsonl"));
+      if (log.existsSync()) await _athenaIn(log);
+    }
+  }
+}
+
+Future<void> _athenaIn(File log) async {
+  final lines = await log.readAsLines();
+  var changed = false;
+  for (var i = 0; i < lines.length; i++) {
+    final Object? record;
+    try {
+      record = jsonDecode(lines[i]);
+    } on FormatException {
+      // The line a kill landed in: the reader stops there, and so does this.
+      break;
+    }
+    if (record is! Map<String, dynamic> || record["runtimeType"] != "message") {
+      continue;
+    }
+    if (record["role"] == "assistant" && record["author"] == null) {
+      record["author"] = "@athena";
+    } else if (record["role"] == "user" &&
+        ((record["addressees"] as List?) ?? const []).isEmpty) {
+      record["addressees"] = ["@athena"];
+    } else {
+      continue;
+    }
+    lines[i] = jsonEncode(record);
+    changed = true;
+  }
+  if (changed) await writeThroughRename(log.path, "${lines.join("\n")}\n");
+}
 
 /// Bring [dataDir] to the end of [chain]. Called at launch and
 /// again after a restore, since a backup unpacks the layout of the build that

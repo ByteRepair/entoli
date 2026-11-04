@@ -369,22 +369,21 @@ class ChatRepository {
     List<Message> history = const [],
     List<ConversationCompaction> compactions = const [],
     bool replaces = false,
-    String? omadaMember,
+    required String participant,
+    bool mayDecline = false,
     SteerInbox? steers,
   }) async* {
     if (replaces) {
-      await _backend.resetSession(
-        chatId,
-        history: history,
-        compactions: compactions,
-      );
+      await _backend.resetSession(chatId);
     }
     yield* _backend.sendPrompt(
       chatId,
       prompt,
       history: history,
       compactions: compactions,
-      settings: await _turnSettings(chatId, omadaMember: omadaMember),
+      participant: participant,
+      mayDecline: mayDecline,
+      settings: await _turnSettings(chatId),
       steers: steers,
     );
   }
@@ -396,14 +395,15 @@ class ChatRepository {
     String chatId, {
     List<Message> history = const [],
     List<ConversationCompaction> compactions = const [],
-    String? omadaMember,
+    required String participant,
     SteerInbox? steers,
   }) async* {
     yield* _backend.resumeTurn(
       chatId,
       history: history,
       compactions: compactions,
-      settings: await _turnSettings(chatId, omadaMember: omadaMember),
+      participant: participant,
+      settings: await _turnSettings(chatId),
       steers: steers,
     );
   }
@@ -457,10 +457,7 @@ class ChatRepository {
   /// chat alone, and where the project already took it away it cannot be given
   /// it back from here. `headless` is the other: a chat nobody watches (a
   /// reminder's) drops `ask_user` and `task`, since nobody is there to answer.
-  Future<TurnSettings> _turnSettings(
-    String chatId, {
-    String? omadaMember,
-  }) async {
+  Future<TurnSettings> _turnSettings(String chatId) async {
     final meta = await loadMeta(chatId);
     final settings = _settings();
     final project = await projectOf(chatId);
@@ -521,10 +518,6 @@ class ChatRepository {
       // The project's wording answers over the app's, like the step limit.
       tone: projectSettings.tone ?? settings.tone,
       citations: projectSettings.citations ?? settings.citations,
-
-      // The answering member is the caller's fact, not the chat's — it is
-      // about the message the turn runs, not the settings it runs under.
-      omadaMember: omadaMember,
     );
   }
 
@@ -703,11 +696,7 @@ class ChatRepository {
     // A session is the conversation the model has seen, and which conversation
     // that is has just changed — markers included, since a rewind past one
     // un-applies it.
-    await _backend.resetSession(
-      chatId,
-      history: now.messages,
-      compactions: now.compactions,
-    );
+    await _backend.resetSession(chatId);
     return now;
   }
 

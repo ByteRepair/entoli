@@ -118,7 +118,9 @@ void main() {
       final repo = repoWith(AppSettings());
       final chat = await repo.createChat();
 
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+      await repo
+          .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+          .toList();
 
       final memory = backend.prompts.single.settings.memory;
       expect(memory.autoMemory, isFalse);
@@ -136,7 +138,9 @@ void main() {
       );
       final chat = await repo.createChat();
 
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+      await repo
+          .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+          .toList();
 
       final memory = backend.prompts.single.settings.memory;
       expect(memory.imports, isFalse);
@@ -151,7 +155,9 @@ void main() {
         final repo = repoWith(AppSettings(autoMemory: true));
         final chat = await repo.createChat();
 
-        await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+        await repo
+            .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+            .toList();
 
         final memory = backend.prompts.single.settings.memory;
         expect(memory.autoMemory, isTrue);
@@ -159,7 +165,13 @@ void main() {
 
         // A project without its own toggle shares the default store.
         final other = await repo.createChat(project: "proj");
-        await repo.sendPrompt(other.state.id, userMessage("hi")).toList();
+        await repo
+            .sendPrompt(
+              participant: "athena",
+              other.state.id,
+              userMessage("hi"),
+            )
+            .toList();
         expect(
           backend.prompts.last.settings.memory.memoryDir,
           config.memoryDir(),
@@ -173,7 +185,9 @@ void main() {
       final repo = repoWith(AppSettings(autoMemory: true));
       final chat = await repo.createChat(project: "proj");
 
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+      await repo
+          .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+          .toList();
 
       expect(
         backend.prompts.single.settings.memory.memoryDir,
@@ -187,7 +201,9 @@ void main() {
       final repo = repoWith(AppSettings(autoMemory: true));
       final chat = await repo.createChat(project: "proj");
 
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+      await repo
+          .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+          .toList();
 
       expect(backend.prompts.single.settings.memory, MemorySettings.off);
     });
@@ -202,7 +218,9 @@ void main() {
         final repo = repoWith(AppSettings());
         final chat = await repo.createChat(project: "proj");
 
-        await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+        await repo
+            .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+            .toList();
 
         final memory = backend.prompts.single.settings.memory;
         expect(memory.autoMemory, isFalse);
@@ -223,7 +241,9 @@ void main() {
         );
         final chat = await repo.createChat();
 
-        await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+        await repo
+            .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+            .toList();
 
         final memory = backend.prompts.single.settings.memory;
         expect(memory.recall, isFalse);
@@ -233,7 +253,13 @@ void main() {
         // Nothing named: all three ride on with the store.
         final defaults = repoWith(AppSettings(autoMemory: true));
         final other = await defaults.createChat();
-        await defaults.sendPrompt(other.state.id, userMessage("hi")).toList();
+        await defaults
+            .sendPrompt(
+              participant: "athena",
+              other.state.id,
+              userMessage("hi"),
+            )
+            .toList();
         final on = backend.prompts.last.settings.memory;
         expect(on.recall, isTrue);
         expect(on.extract, isTrue);
@@ -251,7 +277,9 @@ void main() {
       );
       final chat = await repo.createChat();
 
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+      await repo
+          .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+          .toList();
 
       final memory = backend.prompts.single.settings.memory;
       expect(memory.bgProvider, "ollama-cloud");
@@ -265,8 +293,12 @@ void main() {
         final off = await repo.createChat(meta: ChatMeta(memoryOff: true));
         final on = await repo.createChat();
 
-        await repo.sendPrompt(off.state.id, userMessage("hi")).toList();
-        await repo.sendPrompt(on.state.id, userMessage("hi")).toList();
+        await repo
+            .sendPrompt(participant: "athena", off.state.id, userMessage("hi"))
+            .toList();
+        await repo
+            .sendPrompt(participant: "athena", on.state.id, userMessage("hi"))
+            .toList();
 
         expect(backend.prompts.first.settings.memory, MemorySettings.off);
         expect(
@@ -286,7 +318,9 @@ void main() {
         meta: ChatMeta(memoryOff: true),
       );
 
-      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+      await repo
+          .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
+          .toList();
 
       expect(backend.prompts.single.settings.memory, MemorySettings.off);
     });

@@ -782,7 +782,6 @@ sealed class ConversationEntry {
 class MessageEntry extends ConversationEntry {
   const MessageEntry(
     this.message, {
-    required this.inOmadaSection,
     required this.last,
     this.reactions = const [],
   });
@@ -791,10 +790,6 @@ class MessageEntry extends ConversationEntry {
 
   /// The emoji it has been reacted with, shown in its action row.
   final List<String> reactions;
-
-  /// The reply sits in a section of the conversation where Omada is on: an
-  /// unnamed reply is the main agent's, and names itself "Entoli".
-  final bool inOmadaSection;
 
   /// The newest message of the thread, which is the one a running turn
   /// appends to — the spinner and the caret live on it.
@@ -819,9 +814,8 @@ class CompactionEntry extends ConversationEntry {
 
 /// The conversation as rows, walked off the thread in order. A turn opener
 /// carrying a mode that differs from the running one emits a [SectionEntry]
-/// first — both flips are rows, the off-flip bounding an on-section — and
-/// every message carries whether it sits in an on-section, which is what
-/// names the main agent "Entoli" there. A compaction boundary is said after
+/// first — both flips are rows, the off-flip bounding an on-section. A
+/// compaction boundary is said after
 /// the message it covers: the divider is where the summary took over. A reply
 /// that ended with `end_turn` is not a row: it is on the log, not the page.
 /// Nor is a reaction: it shows on the message it answers.
@@ -843,7 +837,6 @@ List<ConversationEntry> entriesOf(Chat chat) {
       entries.add(
         MessageEntry(
           m,
-          inOmadaSection: on,
           last: identical(m, newest),
           reactions: reactions[m.id] ?? const [],
         ),
@@ -1568,11 +1561,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     if (uri != null) ref.read(linkOpenerProvider).open(context, uri);
   }
 
-  /// The face beside an addressed member's name: the named member's photo
-  /// or Bot Avatar, where the message names one — the same condition the label
-  /// answers, so the two never disagree. Null where it names none, so the
-  /// main agent's reply draws its label alone, whatever a file in the agents
-  /// directory might hold.
+  /// The face beside a reply's author: their photo or Bot Avatar. Null for
+  /// the user's own message, which names no author.
   AgentFace? _avatarOf(Chat chat, Message message) {
     final member = nameOf(message.author);
     if (member == null) return null;
@@ -1622,12 +1612,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                     onTapLink: (href) => _openLink(context, href),
                   ),
                 ),
-                MessageEntry(
-                  :final message,
-                  :final inOmadaSection,
-                  :final last,
-                  :final reactions,
-                ) =>
+                MessageEntry(:final message, :final last, :final reactions) =>
                   KeyedSubtree(
                     key: message.role == MessageRole.user
                         ? _chapterKeys.putIfAbsent(message.id, GlobalKey.new)
@@ -1638,7 +1623,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                         chatId: widget.chatId,
                         message: message,
                         avatar: _avatarOf(chat, message),
-                        entoli: inOmadaSection,
                         isWaiting: view.isRunning && last,
                         latest: last,
                         waitingNotice: view.retry,

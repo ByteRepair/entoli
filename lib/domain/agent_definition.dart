@@ -3,8 +3,12 @@ import "dart:convert";
 import "models.dart";
 import "prompt_library.dart";
 
+/// Entoli's own agent, a bundled one like any other: the default route of
+/// every room, so a say that addresses nobody is hers.
+const athena = "athena";
+
 /// An agent: its instructions and the tools it may use, whichever way it runs
-/// — the main agent, a `task` sub-agent, or a room member. Built over the
+/// — a room's participant or a `task` sub-agent. Built over the
 /// agent's `.md` [document], which stays the source of everything this does
 /// not read, so writing it back keeps keys a newer build or a hand edit put
 /// there.
@@ -15,14 +19,14 @@ import "prompt_library.dart";
 class AgentDefinition {
   const AgentDefinition._(this.document, this.tools);
 
-  /// The agent a turn runs as when nobody else was asked for: no
-  /// instructions of its own, and every tool at its default.
-  static const main = AgentDefinition._(null, null);
+  /// No file: no instructions, and every tool at its default — a new
+  /// agent's starting point.
+  static const blank = AgentDefinition._(null, null);
 
-  /// The agent [document] is, or [main] where there is none — a name the
+  /// The agent [document] is, or [blank] where there is none — a name the
   /// library no longer holds.
   factory AgentDefinition.of(PromptDocument? document) => document == null
-      ? main
+      ? blank
       : AgentDefinition._(document, _parse(document.frontmatter[_toolsKey]));
 
   static const _toolsKey = "tools";

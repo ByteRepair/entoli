@@ -20,7 +20,7 @@ void main() {
     String prompt,
     String reply,
     ContextUsage context, {
-    String? author,
+    String author = "@athena",
   }) => [
     ChatRecord.message(id: prompt, role: MessageRole.user, createdAt: at),
     ChatRecord.message(
@@ -36,18 +36,18 @@ void main() {
     ),
   ];
 
-  Map<String?, ContextUsage> contextsOf(List<ChatRecord> records) =>
+  Map<String, ContextUsage> contextsOf(List<ChatRecord> records) =>
       chatFrom(state(), records).contexts;
 
-  test("each participant's newest reply stands, the house under null", () {
+  test("each participant's newest reply stands", () {
     final contexts = contextsOf([
       ...exchange("u1", "a1", usage(1000)),
       ...exchange("u2", "a2", usage(3000), author: "@reviewer"),
       ...exchange("u3", "a3", usage(5000)),
     ]);
 
-    expect(contexts.keys, unorderedEquals([null, "@reviewer"]));
-    expect(contexts[null]!.chat, 5000);
+    expect(contexts.keys, unorderedEquals(["@athena", "@reviewer"]));
+    expect(contexts["@athena"]!.chat, 5000);
     expect(contexts["@reviewer"]!.chat, 3000);
   });
 
@@ -58,17 +58,22 @@ void main() {
       const ChatRecord.rewind(messageId: "u2"),
     ]);
 
-    expect(contexts[null]!.chat, 1000);
+    expect(contexts["@athena"]!.chat, 1000);
   });
 
   test("a turn that never closed leaves the one before it standing", () {
     final contexts = contextsOf([
       ...exchange("u1", "a1", usage(1000)),
       ChatRecord.message(id: "u2", role: MessageRole.user, createdAt: at),
-      ChatRecord.message(id: "a2", role: MessageRole.assistant, createdAt: at),
+      ChatRecord.message(
+        id: "a2",
+        role: MessageRole.assistant,
+        createdAt: at,
+        author: "@athena",
+      ),
     ]);
 
-    expect(contexts[null]!.chat, 1000);
+    expect(contexts["@athena"]!.chat, 1000);
   });
 
   test(
@@ -83,9 +88,9 @@ void main() {
         ),
       ]);
 
-      expect(contexts[null]!.chat, 800);
-      expect(contexts[null]!.reported, isNull);
-      expect(contexts[null]!.total, 1110);
+      expect(contexts["@athena"]!.chat, 800);
+      expect(contexts["@athena"]!.reported, isNull);
+      expect(contexts["@athena"]!.total, 1110);
     },
   );
 
@@ -100,7 +105,7 @@ void main() {
       ...exchange("u2", "a2", usage(1200)),
     ]);
 
-    expect(contexts[null]!.chat, 1200);
+    expect(contexts["@athena"]!.chat, 1200);
   });
 
   test("the provider's count is the total, split by the estimate", () {

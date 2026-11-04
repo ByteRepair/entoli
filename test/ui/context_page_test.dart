@@ -40,7 +40,7 @@ void main() {
     expect(find.text("Nothing measured yet"), findsOneWidget);
   });
 
-  testWidgets("one bar per participant, the house first", (tester) async {
+  testWidgets("one bar per participant, by handle", (tester) async {
     final id = await seed(tester, [
       reply(
         "a1",
@@ -60,9 +60,9 @@ void main() {
     await app.pump(tester, ContextPage(chatId: id));
     await settleIo(tester);
 
-    final house = tester.getTopLeft(find.text("Entoli Agent"));
+    final athena = tester.getTopLeft(find.text("@athena"));
     final member = tester.getTopLeft(find.text("@reviewer"));
-    expect(house.dy, lessThan(member.dy));
+    expect(athena.dy, lessThan(member.dy));
     expect(find.text("Auto-compact 80%"), findsNWidgets(2));
     expect(
       tester.getSize(find.byTooltip("Chat: 20k tokens")).height,

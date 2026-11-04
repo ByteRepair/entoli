@@ -40,42 +40,75 @@ void main() {
     );
     expect(roster().mentioned(m), ["build"]);
     expect(roster().addressees(m), ["@build"]);
-    expect(roster().authorFor(m), "@build");
     expect(roster().answering(m), "build");
   });
 
-  test("a direct chat addresses no one and stamps nothing", () {
+  test("a direct chat holds Athena alone: every say is hers", () {
     final m = said("@build, go", documents: {"@build": "Do build."});
     final direct = roster(omada: false);
-    expect(direct.mentioned(m), isEmpty);
-    expect(direct.authorFor(m), isNull);
-    expect(direct.answering(m), isNull);
+    expect(direct.mentioned(m), ["athena"]);
+    expect(direct.addressees(m), ["@athena"]);
+    expect(direct.answering(m), "athena");
   });
 
-  test("a command and a callback address no one they name", () {
+  test("a say naming no one in the room is the default route's", () {
+    expect(roster().mentioned(said("hello")), ["athena"]);
+    expect(
+      roster(
+        omada: true,
+      ).mentioned(said("@ghost, go", documents: {"@ghost": "Boo."})),
+      ["athena"],
+    );
+  });
+
+  test("a command and a callback go to the default route, whoever they "
+      "name", () {
     for (final text in ["!grep @build", "/compact @build"]) {
       final m = said(text, documents: {"@build": "Do build."});
-      expect(roster().mentioned(m), isEmpty, reason: text);
-      expect(roster().authorFor(m), isNull, reason: text);
+      expect(roster().mentioned(m), ["athena"], reason: text);
+      expect(roster().answering(m), "athena", reason: text);
     }
   });
 
-  test("a reply hands off to who it names, never its own author", () {
+  test("a reply hands off to who it names in the room, never its own "
+      "author", () {
     final r = reply("@build, then @review, signed @review", author: "@review");
     expect(roster().mentioned(r), ["build"]);
+    expect(roster(omada: false).mentioned(r), isEmpty);
     expect(roster().answering(reply("over to @build")), "build");
-    // Two names is a round, not a single answerer.
-    expect(roster().answering(reply("@build and @review")), isNull);
+    // A reply naming nobody is answered, where something must answer it, by
+    // the default route.
+    expect(roster().answering(reply("all done")), "athena");
   });
 
-  test("a name the library lost is prose", () {
-    expect(roster().known("ghost"), isNull);
-    expect(roster().known("build"), "build");
+  test("a say reached its answerer by default only where it named no one in "
+      "the room", () {
+    expect(roster().byDefault(said("hello")), isTrue);
     expect(
-      roster(omada: false).known("build"),
-      "build",
-      reason: "a member's reply is carried on by them after the toggle",
+      roster().byDefault(said("@ghost, go", documents: {"@ghost": "Boo."})),
+      isTrue,
     );
+    expect(
+      roster(
+        omada: false,
+      ).byDefault(said("@build, go", documents: {"@build": "Do build."})),
+      isTrue,
+      reason: "in a direct chat @build is not in the room",
+    );
+    expect(
+      roster().byDefault(
+        said("!grep @build", documents: {"@build": "Do build."}),
+      ),
+      isTrue,
+    );
+    expect(
+      roster().byDefault(
+        said("@build, go", documents: {"@build": "Do build."}),
+      ),
+      isFalse,
+    );
+    // A handoff was asked of whoever it names.
+    expect(roster().byDefault(reply("over to @build")), isFalse);
   });
 
   test("a reaction addresses whoever wrote what it reacts to", () {
@@ -83,13 +116,14 @@ void main() {
         reactionTo(m, Reaction.thumbsUp, id: "x", at: DateTime(2026));
     final member = to(reply("A plan.", author: "@build"));
     expect(roster().mentioned(member), ["build"]);
-    expect(roster().authorFor(member), "@build");
     expect(roster().answering(member), "build");
-    expect(roster(omada: false).answering(member), isNull);
-    // The main agent's reply, and the user's own message, are the house's.
-    for (final m in [to(reply("Done.")), to(said("@build, go"))]) {
-      expect(roster().mentioned(m), isEmpty);
-      expect(roster().answering(m), isNull);
+    expect(roster(omada: false).answering(member), "athena");
+    // Athena's reply, and the user's own message, are Athena's to answer.
+    for (final m in [
+      to(reply("Done.", author: "@athena")),
+      to(said("@build, go")),
+    ]) {
+      expect(roster().mentioned(m), ["athena"]);
     }
   });
 }

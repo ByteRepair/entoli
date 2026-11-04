@@ -117,12 +117,19 @@ void main() {
     bool includesUserInstructions = false,
     ApproveMode approveMode = ApproveMode.never,
     List<PermissionRule> permissions = const [],
-    String? omadaMember,
+    String participant = "athena",
     bool omada = false,
   }) => backend
       .sendPrompt(
         chatId,
-        userMessage(text, at: at ?? sentAt, documents: documents, files: files),
+        participant: participant,
+        // Addressed the way the room stamps every say: to who answers it.
+        userMessage(
+          text,
+          at: at ?? sentAt,
+          documents: documents,
+          files: files,
+        ).copyWith(addressees: ["@$participant"]),
         history: history,
         settings: TurnSettings(
           model: model,
@@ -135,7 +142,6 @@ void main() {
           disabled: disabled,
           bundledInstructions: bundledInstructions,
           includesUserInstructions: includesUserInstructions,
-          omadaMember: omadaMember,
           omada: omada,
         ),
       )
@@ -149,6 +155,7 @@ void main() {
   ) => backend
       .resumeTurn(
         chatId,
+        participant: "athena",
         history: history,
         settings: const TurnSettings(
           model: "fake-model",
@@ -166,6 +173,7 @@ void main() {
     ApproveMode approveMode = ApproveMode.ask,
   }) => backend.sendPrompt(
     chatId,
+    participant: "athena",
     userMessage(text, at: sentAt),
     settings: TurnSettings(
       model: "fake-model",
@@ -290,7 +298,7 @@ void main() {
       );
     });
 
-    test("a member's turn is told its own handle", () async {
+    test("a participant's turn is told its own handle", () async {
       final library = PromptLibrary([
         PromptDocument.parse(
           CompletionKind.agent,
@@ -306,16 +314,16 @@ void main() {
         "hi",
         omada: true,
         project: "Team",
-        omadaMember: "explore",
+        participant: "explore",
       );
 
       expect(
         client.sent.first[1].text,
-        contains("You are @explore, a member of this team.\n\nYou explore."),
+        contains("You are @explore.\n\nYou explore."),
       );
     });
 
-    test("a member's turn is offered its own tools, and the main agent's "
+    test("a participant's turn is offered its own tools, and another's "
         "is not narrowed by them", () async {
       final library = PromptLibrary([
         PromptDocument.parse(
@@ -333,7 +341,7 @@ void main() {
         "hi",
         omada: true,
         project: "Team",
-        omadaMember: "explore",
+        participant: "explore",
       );
       await send(
         room,
@@ -955,6 +963,7 @@ void main() {
       await backend
           .sendPrompt(
             chatId,
+            participant: "athena",
             userMessage("hi", at: sentAt),
             settings: const TurnSettings(
               model: "fake-model",
@@ -1391,12 +1400,14 @@ void main() {
             Message(
               id: "m1",
               role: MessageRole.user,
+              addressees: const ["@athena"],
               createdAt: sentAt,
               parts: const [MessagePart.text(text: "first")],
             ),
             Message(
               id: "m2",
               role: MessageRole.assistant,
+              author: "@athena",
               createdAt: sentAt,
               parts: const [MessagePart.text(text: "done", responseId: "r1")],
             ),
@@ -1499,6 +1510,7 @@ void main() {
             Message(
               id: "m1",
               role: MessageRole.user,
+              addressees: const ["@athena"],
               createdAt: sentAt,
               parts: const [
                 MessagePart.file(
@@ -1512,6 +1524,7 @@ void main() {
             Message(
               id: "m2",
               role: MessageRole.assistant,
+              author: "@athena",
               createdAt: sentAt,
               parts: const [
                 MessagePart.shellRun(
@@ -1724,6 +1737,7 @@ void main() {
       var listedAtTheEnd = false;
       await for (final event in backend.sendPrompt(
         chatId,
+        participant: "athena",
         userMessage("hi", at: sentAt),
         settings: const TurnSettings(
           model: "fake-model",
@@ -1938,9 +1952,14 @@ void main() {
         [bashCall("rm -rf build", id: "call-2")],
         [finish],
       ], judge: _Held(judge, verdict.future));
-      Stream<AgentEvent> auto(String text) => backend.sendPrompt(
+      Stream<AgentEvent> auto(
+        String text, {
+        List<Message> history = const [],
+      }) => backend.sendPrompt(
         chatId,
+        participant: "athena",
         userMessage(text, at: sentAt),
+        history: history,
         settings: const TurnSettings(
           model: "fake-model",
           provider: "fake",
@@ -1959,8 +1978,9 @@ void main() {
       await first;
 
       // The resend: the log's thread, with the stopped call unanswered.
-      await backend.resetSession(
-        chatId,
+      await backend.resetSession(chatId);
+      final second = auto(
+        "two",
         history: [
           userMessage("one", at: sentAt),
           Message(
@@ -1978,8 +1998,7 @@ void main() {
             ],
           ),
         ],
-      );
-      final second = auto("two").toList();
+      ).toList();
       final pending = await untilPending(
         "the approval",
         () => backend.pendingApprovals(chatId),
@@ -2010,14 +2029,17 @@ void main() {
       expect(client.sent.last.last.text, contains("second"));
     });
 
-    test("resetting seeds the next turn with what was kept", () async {
+    test("a reset drops what the session held: the next turn fills from the "
+        "history it is sent with", () async {
       final backend = backendOver([
         [finish],
         [finish],
       ]);
       await send(backend, "first");
-      await backend.resetSession(
-        chatId,
+      await backend.resetSession(chatId);
+      await send(
+        backend,
+        "and 3+3?",
         history: [
           Message(
             id: "m1",
@@ -2030,10 +2052,10 @@ void main() {
             role: MessageRole.assistant,
             createdAt: sentAt,
             parts: const [MessagePart.text(text: "four")],
+            author: "@athena",
           ),
         ],
       );
-      await send(backend, "and 3+3?");
 
       final transcript = client.sent.last.map((m) => m.text).join("\n");
       expect(transcript, contains("what is 2+2?"));
@@ -2152,12 +2174,14 @@ void main() {
         Message(
           id: "m1",
           role: MessageRole.user,
+          addressees: const ["@athena"],
           createdAt: sentAt,
           parts: const [MessagePart.text(text: "count the files")],
         ),
         Message(
           id: "m2",
           role: MessageRole.assistant,
+          author: "@athena",
           createdAt: sentAt,
           parts: const [MessagePart.text(text: "looking", responseId: "r1")],
         ),
@@ -2199,8 +2223,10 @@ void main() {
       final backend = backendOver([
         [finish],
       ]);
-      await backend.resetSession(
-        chatId,
+      await backend.resetSession(chatId);
+      await send(
+        backend,
+        "again",
         history: [
           Message(
             id: "m1",
@@ -2217,7 +2243,6 @@ void main() {
           ),
         ],
       );
-      await send(backend, "again");
 
       expect(
         client.sent.first.map((m) => m.text).join(),
@@ -2246,7 +2271,7 @@ void main() {
   });
 
   group("the room's sessions", () {
-    // The room's turns: the house answering first, then a say addressed to
+    // The room's turns: Athena answering first, then a say addressed to
     // @explore with their reply - the shape everything below syncs through.
     // The constructed messages are what a turn's settle left on the log, so a
     // reply's text is the one its script said; its id comes off the text,
@@ -2258,7 +2283,7 @@ void main() {
       parts: [MessagePart.text(text: text)],
       addressees: addressees,
     );
-    Message replyBy(String text, {String? author}) => Message(
+    Message replyBy(String text, {String author = "@athena"}) => Message(
       id: "m-$text",
       role: MessageRole.assistant,
       createdAt: sentAt,
@@ -2274,13 +2299,13 @@ void main() {
           [saidOnly("done one")],
           [saidOnly("done two")],
         ]);
-        final m1 = sayFor("hello", const []);
+        final m1 = sayFor("hello", const ["@athena"]);
         final r1 = replyBy("done one");
         await send(backend, "hello");
         expect(client.sent, hasLength(1));
 
         // What the room said since: a say addressed to @explore, and their
-        // reply, neither an exchange this backend ran. The house's next
+        // reply, neither an exchange this backend ran. Athena's next
         // dispatch words them into its session before the turn opens.
         final m2 = sayFor("explore the logs, @explore", const ["@explore"]);
         final r2 = replyBy("done two", author: "@explore");
@@ -2288,7 +2313,7 @@ void main() {
           backend,
           "thanks both",
           history: [m1, r1, m2, r2],
-          omadaMember: null,
+          participant: "athena",
         );
 
         expect(
@@ -2314,10 +2339,10 @@ void main() {
         [saidOnly("done two")],
         [saidOnly("done three")],
       ]);
-      final m1 = sayFor("hello", const []);
+      final m1 = sayFor("hello", const ["@athena"]);
       final r1 = replyBy("done one");
       await send(backend, "hello");
-      final m2 = sayFor("and how are you", const []);
+      final m2 = sayFor("and how are you", const ["@athena"]);
       final r2 = replyBy("done two");
       await send(backend, "and how are you", history: [m1, r1]);
       await send(backend, "goodbye", history: [m1, r1, m2, r2]);
@@ -2341,11 +2366,11 @@ void main() {
         [saidOnly("done one")],
         [saidOnly("done two")],
       ]);
-      final m1 = sayFor("anyone home?", const []);
+      final m1 = sayFor("anyone home?", const ["@athena"]);
       final r1 = replyBy("done one");
       final m2 = sayFor("explore the logs, @explore", const ["@explore"]);
       final r2 = replyBy("done two", author: "@explore");
-      await send(backend, "house filler", history: [m1, r1]);
+      await send(backend, "athena filler", history: [m1, r1]);
 
       // The member's own first dispatch fills from the room whole: the say
       // it was addressed with is its mail, verbatim and dressed.
@@ -2353,17 +2378,17 @@ void main() {
         backend,
         "warm-up filler",
         history: [m1, r1, m2, r2],
-        omadaMember: "explore",
+        participant: "explore",
       );
       expect(transcript(), contains("The user asks:\n\nexplore the logs"));
-      // The house's reply is the house's words, labeled; the house's own
-      // greeting - the say above it - rides in the same wording.
-      expect(transcript(), contains("Message from (main agent)"));
-      expect(transcript(), contains("addressed to (main agent)"));
+      // Athena's reply is her words, labeled; the say she answered rides in
+      // the same wording.
+      expect(transcript(), contains("Message from athena"));
+      expect(transcript(), contains("addressed to @athena"));
     });
 
     test("a member's warm session catches up with the room's turns", () async {
-      // One member turn, then the room runs (a house exchange and another
+      // One member turn, then the room runs (an exchange with Athena and another
       // member's turn), then their say: the sync words the room's turns on
       // the covered end, in log order.
       final backend = backendOver([
@@ -2376,7 +2401,7 @@ void main() {
       await send(backend, "explore the logs, @explore");
       expect(client.sent, hasLength(1));
 
-      final m2 = sayFor("anyone home?", const []);
+      final m2 = sayFor("anyone home?", const ["@athena"]);
       final r2 = replyBy("done two");
       final m3 = sayFor("room talk about the diff", const ["@reviewer"]);
       final r3 = replyBy("done three", author: "@reviewer");
@@ -2387,10 +2412,10 @@ void main() {
         backend,
         "carry on, @explore",
         history: [m1, r1, m2, r2, m3, r3],
-        omadaMember: "explore",
+        participant: "explore",
       );
       expect(transcript(), contains("room talk about the diff"));
-      expect(transcript(), contains("Message from (main agent)"));
+      expect(transcript(), contains("Message from athena"));
       expect(transcript(), contains("Message from reviewer"));
       // And the turn's own prompt is the say, never worded twice.
       expect(transcript().split("carry on, @explore"), hasLength(2));
@@ -2415,16 +2440,16 @@ void main() {
           backend,
           "warm-up filler",
           history: [m1, log],
-          omadaMember: "explore",
+          participant: "explore",
         );
 
-        final bogus = sayFor("somebody else's conversation", const []);
+        final bogus = sayFor("somebody else's conversation", const ["@athena"]);
         final bogusReply = replyBy("the fake exchange");
         await send(
           backend,
           "carry on, @explore",
           history: [bogus, bogusReply, m1, log],
-          omadaMember: "explore",
+          participant: "explore",
         );
 
         expect(transcript(), contains("explore the logs"));
@@ -2476,38 +2501,38 @@ void main() {
         await backend
             .sendPrompt(
               chatId,
+              participant: "explore",
               m1,
               settings: const TurnSettings(
                 model: "fake-model",
                 provider: "fake",
                 approveMode: ApproveMode.never,
-                omadaMember: "explore",
               ),
             )
             .toList();
 
-        // The room's own turn ran between, worded only into the house's
-        // session — never this one's.
-        final m2 = sayFor("anyone home?", const []);
+        // Athena's turn ran between, worded only into her session — never
+        // this one's.
+        final m2 = sayFor("anyone home?", const ["@athena"]);
         final r2 = replyBy("done two");
         await send(
           backend,
-          "house filler",
+          "athena filler",
           history: [m1, live, m2, r2],
-          omadaMember: null,
+          participant: "athena",
         );
 
-        // And @explore's next dispatch words the house's exchange in; the tool
+        // And @explore's next dispatch words Athena's exchange in; the tool
         // call's wording confirms once, and the prompt below words nothing
         // twice.
         await send(
           backend,
           "carry on, @explore",
           history: [m1, live, m2, r2],
-          omadaMember: "explore",
+          participant: "explore",
         );
         expect(transcript(), contains("anyone home?"));
-        expect(transcript(), contains("Message from (main agent)"));
+        expect(transcript(), contains("Message from athena"));
         // And the turn's own prompt is the say, never worded twice, whether
         // directly or inside the wording of the tool turn that confirmed it.
         expect(transcript().split("grep the logs"), hasLength(2));
@@ -2813,6 +2838,7 @@ void main() {
       final turn = backend
           .sendPrompt(
             chatId,
+            participant: "athena",
             userMessage("hi", at: sentAt),
             settings: TurnSettings(
               model: "fake-model",

@@ -142,8 +142,8 @@ $recall""",
   return parts.join("\n\n");
 }
 
-/// What an `@agent` in a direct chat asks for: that agent doing the work, as a
-/// sub-agent, rather than the main agent wearing its prompt.
+/// What an `@agent` not in the room asks for: that agent doing the work, as a
+/// sub-agent, rather than the participant answering wearing its prompt.
 String _delegation(List<String> agents) {
   final named = agents.map((a) => "@$a").join(", ");
   return """
@@ -212,7 +212,7 @@ String peerTurnText(
 /// the prose alone, the way no reader of [peerTurnText] can tell who wrote a
 /// reply — so the addressee is worded into it the same way an author is. A
 /// user-role message for the same reason a peer's is; [to] names who it was
-/// for, sigils on as typed, the house as [mainAgentLabel] when nobody was.
+/// for, sigils on as typed.
 String addressedUserTurnText(
   String text, {
   required String to,
@@ -234,12 +234,11 @@ String summarizedTurnText(String summary) =>
     "context small. It follows; everything after it is the conversation "
     "itself, unchanged.\n\n<summary>\n$summary\n</summary>";
 
-/// A member's [instructions] as its turn reads them. The first line is the
-/// member's handle: the room contract tells a member not to write its own,
+/// A participant's [instructions] as its turn reads them. The first line is
+/// its handle: the room contract tells a participant not to write its own,
 /// and nothing else in the prompt says what it is.
-String memberInstructions(String member, String instructions) =>
-    "You are ${CompletionKind.agent.trigger}$member, a member of this "
-    "team.\n\n$instructions";
+String participantInstructions(String participant, String instructions) =>
+    "You are ${CompletionKind.agent.trigger}$participant.\n\n$instructions";
 
 /// A reaction, as its text: the handle of who wrote what it reacts to first,
 /// the way a mention typed to them would be, then what was reacted to. The
@@ -254,10 +253,6 @@ String reactionTurnText(ReactionPart reaction) {
       : ":\n\n${blockquoted(reaction.excerpt)}";
   return "${to}The user has responded with $emoji to the message$quoted";
 }
-
-/// What the conversation calls the main agent wherever a viewer is named and
-/// the reply carries no author — the label, not a member handle.
-const mainAgentLabel = "(main agent)";
 
 /// The current moment, put at the top of a user turn so the model can date its
 /// answer. It rides on the message rather than the system prompt on purpose: a

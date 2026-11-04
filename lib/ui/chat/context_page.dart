@@ -17,7 +17,7 @@ class ContextPage extends ConsumerWidget {
 
   final String chatId;
 
-  /// Where a member's picture is looked up.
+  /// Where a participant's picture is looked up.
   final String? project;
 
   @override
@@ -29,15 +29,7 @@ class ContextPage extends ConsumerWidget {
     final window =
         ref.watch(contextWindowProvider(chatId)).value ?? settings.totalContext;
     final threshold = settings.autoCompact ? settings.autoCompactPercent : null;
-    // The house first, the members by name.
-    final authors = contexts.keys.toList()
-      ..sort(
-        (a, b) => a == null
-            ? -1
-            : b == null
-            ? 1
-            : a.compareTo(b),
-      );
+    final authors = contexts.keys.toList()..sort();
     return Scaffold(
       appBar: PageBar(title: "Context"),
       body: contexts.isEmpty
@@ -120,8 +112,8 @@ class _ParticipantCard extends StatelessWidget {
     required this.threshold,
   });
 
-  /// The reply's author stamp, sigil on; null is the house.
-  final String? author;
+  /// The reply's author stamp, sigil on.
+  final String author;
   final String? project;
   final ContextUsage usage;
   final int window;
@@ -142,29 +134,15 @@ class _ParticipantCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                if (author == null)
-                  CircleAvatar(
-                    radius: 18,
-                    backgroundColor: theme.colorScheme.primaryContainer,
-                    child: Icon(
-                      Icons.auto_awesome,
-                      size: 18,
-                      color: theme.colorScheme.onPrimaryContainer,
-                    ),
-                  )
-                else
-                  AgentPicture(
-                    name: nameOf(author) ?? author!,
-                    project: project,
-                    animate: true,
-                    reactToTap: true,
-                  ),
+                AgentPicture(
+                  name: nameOf(author)!,
+                  project: project,
+                  animate: true,
+                  reactToTap: true,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    author ?? "Entoli Agent",
-                    style: theme.textTheme.titleMedium,
-                  ),
+                  child: Text(author, style: theme.textTheme.titleMedium),
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,

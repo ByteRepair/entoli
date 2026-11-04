@@ -173,7 +173,7 @@ class BuiltinAgent implements Turn {
   BuiltinAgent({
     required this.session,
     this.viewer,
-    this.agent = AgentDefinition.main,
+    this.agent = AgentDefinition.blank,
     required this.client,
     required this.shell,
     this.oneShot = false,
@@ -195,6 +195,7 @@ class BuiltinAgent implements Turn {
     this.project,
     this.skills = const [],
     this.roomParticipants,
+    this.mayDecline = false,
     this.webSearch,
     this.browser,
     this.seesImages = true,
@@ -230,15 +231,16 @@ class BuiltinAgent implements Turn {
     this.claimInstruction,
   });
 
-  /// Who this turn answers as: null the house, or the member's bare name the
-  /// room routed the say to — the session is worded for them, and the live
-  /// prompt's wording must match what a reload rebuilds, so the viewer rides
-  /// the agent the way the session does.
+  /// Who this turn answers as: the participant's bare name the room routed
+  /// the say to, or null for a sub-agent, which answers as no one in a room.
+  /// The session is worded for them, and the live prompt's wording must
+  /// match what a reload rebuilds, so the viewer rides the agent the way the
+  /// session does.
   final String? viewer;
 
   /// Who this turn runs as: whose instructions the prompt carries and which
-  /// of the tools [caps] leaves it is offered. The main agent's is
-  /// [AgentDefinition.main]; a sub-agent's or a member's is its file.
+  /// of the tools [caps] leaves it is offered: the participant's or the
+  /// sub-agent's file.
   final AgentDefinition agent;
 
   /// Marks an instruction file as first-reached in the conversation, as a
@@ -426,6 +428,11 @@ class BuiltinAgent implements Turn {
   /// do not address the room, and no omada turn fans out.
   final List<PromptDocument>? roomParticipants;
 
+  /// The turn may answer with `end_turn` rather than a reply: false where
+  /// the say was the participant's alone to answer — one routed to them by
+  /// default, nobody else having been asked — and on a resumed turn.
+  final bool mayDecline;
+
   /// Web search and fetch. Null where none is wired, and the tools are dropped
   /// the way `bash` is when there is no shell.
   @override
@@ -597,7 +604,7 @@ class BuiltinAgent implements Turn {
     sandboxed: gate.helper != null,
     background: backgroundJobs != null,
     participants: roomParticipants,
-    member: viewer != null,
+    mayDecline: mayDecline,
     customizing: _customizing,
     attachments: attachmentsDir != null,
     agent: agent,
@@ -687,8 +694,8 @@ class BuiltinAgent implements Turn {
   /// the task — the viewer's first own mail, decided by the caller against
   /// the history it holds, the decision a whole-span walk would make.
   ///
-  /// [mentions] are the agents the message's `@agent` mentions hand the work
-  /// to, for the main agent's turn.
+  /// [mentions] are the agents the message's `@agent` mentions name: the
+  /// ones not answering are offered as delegates where there is `task`.
   Stream<AgentEvent> run(
     Message prompt, {
     List<String> mentions = const [],
@@ -872,19 +879,23 @@ class BuiltinAgent implements Turn {
   /// them on the way out.
   void _setSystemPrompt(List<String> mentions) {
     final offer = this.offer;
-    // A member is told its handle whatever its file says; the main agent has
-    // no instructions of its own, and is the only one mentions reach — as
-    // agents to delegate to, so only where it has `task` to delegate with.
-    final own = viewer != null && agent.document != null
-        ? memberInstructions(viewer!, agent.instructions)
-        : agent.instructions.isEmpty
-        ? null
-        : agent.instructions;
+    // A participant is told its handle whatever its file says. A mention of
+    // an agent not in the room is one to delegate to, so only where there is
+    // `task` to delegate with — an Omada room holds every agent, and drops
+    // `task` with it. A sub-agent answers as no one, under its file alone.
+    final viewer = this.viewer;
     final turn = turnPrompt(
       workspace: workspace,
       projectWorkspace: projectWorkspace,
-      agentPrompt: own,
-      delegates: own == null && offer.caps.task ? mentions : const [],
+      agentPrompt: viewer == null
+          ? (agent.instructions.isEmpty ? null : agent.instructions)
+          : participantInstructions(viewer, agent.instructions),
+      delegates: offer.caps.task
+          ? [
+              for (final name in mentions)
+                if (name != viewer) name,
+            ]
+          : const [],
       instructions: renderInstructions(instructions),
       pinned: pinned,
       index: index,
