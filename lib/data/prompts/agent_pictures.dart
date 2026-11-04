@@ -7,6 +7,7 @@ import "../../core/config.dart";
 import "../../domain/agent_face.dart";
 import "../../domain/bot_avatar/spec.dart";
 import "../../domain/models.dart";
+import "bundled_skill_data.dart" show bundledAgentFaces;
 import "prompt_sources.dart";
 
 /// Where an agent called [name] keeps its picture: a `.png` beside its `.md`
@@ -61,8 +62,23 @@ Future<AgentFace?> readAgentPicture(
   List<String> tiers,
 ) async {
   for (final tier in tiers.reversed) {
-    final face = await _faceIn(config, name, tier);
+    final face =
+        await _faceIn(config, name, tier) ?? bundledAgentFace(name, tier);
     if (face != null) return face;
+  }
+  return null;
+}
+
+/// The face the app ships for its own agent called [name] in [tier]: the
+/// embedded `<name>.avatar.json` from beside the bundled `.md`. Below a face
+/// on disk in the same rung, as the bundled `.md` is below the user's.
+AgentFace? bundledAgentFace(String name, String tier) {
+  for (final file in bundledAgentFaces) {
+    if (file.name != name || file.project != tier) {
+      continue;
+    }
+    final spec = BotAvatarSpec.decode(file.content);
+    return spec == null ? null : AgentBot(spec);
   }
   return null;
 }

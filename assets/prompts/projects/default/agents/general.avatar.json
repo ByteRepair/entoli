@@ -1,0 +1,17 @@
+{
+  "definition": {
+    "version": 1,
+    "id": "general",
+    "name": "General",
+    "body": {
+      "path": "M47 6H53V16H47Z M30 16H70C80 16 86 22 86 32V68C86 78 80 84 70 84H30C20 84 14 78 14 68V32C14 22 20 16 30 16Z M6 40H14V60H6Z M86 40H94V60H86Z"
+    },
+    "eyes": {
+      "x": 50,
+      "y": 46,
+      "spacing": 16,
+      "scale": 1
+    }
+  },
+  "color": "#8b5cf6"
+}

@@ -719,6 +719,28 @@ void main() {
     );
   });
 
+  test("the bundled agents wear the faces shipped beside them, under one the "
+      "user gives them", () async {
+    final config = tempConfig();
+    await config.ensureDirs();
+    final tiers = promptTiers(project: "work", config: config);
+
+    for (final (name, colour) in [
+      ("explore", 0xff6a1a),
+      ("general", 0x8b5cf6),
+    ]) {
+      final face = await readAgentPicture(config, name, tiers);
+      expect(face, isA<AgentBot>(), reason: name);
+      expect((face as AgentBot).spec.colour, colour, reason: name);
+    }
+
+    final dir = Directory(
+      config.promptsDir(CompletionKind.agent, project: "work"),
+    )..createSync(recursive: true);
+    File(p.join(dir.path, "explore.png")).writeAsBytesSync([3]);
+    expect(await _bytes(readAgentPicture(config, "explore", tiers)), [3]);
+  });
+
   test("a project's prompt directories are every tier's, My Team's where it "
       "runs Omada", () async {
     final config = tempConfig();

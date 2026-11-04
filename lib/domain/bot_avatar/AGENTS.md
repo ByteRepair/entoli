@@ -26,6 +26,14 @@ both, and where a rung somehow holds both the avatar wins. `AgentFace`
 (`lib/domain/agent_face.dart`) is the sealed answer the reader gives —
 `AgentPhoto` or `AgentBot` — and `AgentPictureImage` draws either.
 
+The app's own agents wear faces the same way: `<name>.avatar.json` beside
+the bundled `<name>.md` under `assets/prompts/projects/<project>/agents/`
+(explore is the orange magnifier, general a violet robot head).
+`tool/gen_bundled_skills.dart` embeds them as `bundledAgentFaces`, refusing
+one that fails the spec or has no `.md`, and `readAgentPicture` falls back to
+one within each rung, below a face on disk there — so a user who gives
+explore a picture of their own sees theirs.
+
 ## The presets, and the user's
 
 The presets are `assets/bot_avatars/presets.json`: one spec per upstream
