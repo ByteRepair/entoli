@@ -28,8 +28,9 @@ const botAvatarLicenceAsset = "assets/bot_avatars/open-bot-avatar/LICENSE.txt";
 /// skipped with a line rather than taking the rest down.
 Future<List<BotAvatarSpec>> loadBotAvatarPresets(AssetBundle bundle) async {
   final specs = <BotAvatarSpec>[];
-  for (final asset in botAvatarPresetAssets) {
-    final list = jsonDecode(await bundle.loadString(asset));
+  final texts = await Future.wait(botAvatarPresetAssets.map(bundle.loadString));
+  for (final (n, asset) in botAvatarPresetAssets.indexed) {
+    final list = jsonDecode(texts[n]);
     for (final (i, json) in (list as List).indexed) {
       final spec = BotAvatarSpec.fromJson(json);
       if (spec == null) {

@@ -140,13 +140,15 @@ double noise(int seed, int n) {
   return (h & 0xffffffff) / 4294967296;
 }
 
-double _smooth(double u) {
+/// Hermite smoothstep of [u] clamped to 0..1: the ease every eased change
+/// of an avatar's motion uses.
+double smoothstep(double u) {
   final x = u.clamp(0.0, 1.0);
   return x * x * (3 - 2 * x);
 }
 
 /// Eased progress of a mood change [elapsedMs] in.
-double moodProgress(double elapsedMs) => _smooth(elapsedMs / moodMs);
+double moodProgress(double elapsedMs) => smoothstep(elapsedMs / moodMs);
 
 /// Blink closure 0..1: one per ~4.2 s slot at a seeded offset, sometimes
 /// twice.
@@ -181,7 +183,7 @@ double _blinkAt(int seed, double t) {
   }
 
   final a = target(s - 1), b = target(s);
-  final e = _smooth((t - s * slot) / 0.16);
+  final e = smoothstep((t - s * slot) / 0.16);
   return (a.$1 + (b.$1 - a.$1) * e, a.$2 + (b.$2 - a.$2) * e);
 }
 
