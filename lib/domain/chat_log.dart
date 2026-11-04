@@ -76,17 +76,17 @@ sealed class ChatRecord with _$ChatRecord {
     String? siblingOf,
     @Default(false) bool replacesSibling,
 
-    /// See [Message.documents]. On the record that opens the message rather
+    /// See [Message.references]. On the record that opens the message rather
     /// than a part of its own: it is about the message, not something in it.
-    @Default({}) Map<String, String> documents,
+    @Default([]) List<String> references,
 
-    /// See [Message.author]. About the message, like [documents].
+    /// See [Message.author]. About the message, like [references].
     String? author,
 
-    /// See [Message.addressees]. About the message, like [documents].
+    /// See [Message.addressees]. About the message, like [references].
     @Default([]) List<String> addressees,
 
-    /// See [Message.omadaOn]. About the message, like [documents].
+    /// See [Message.omadaOn]. About the message, like [references].
     bool? omadaOn,
   }) = MessageRecord;
 
@@ -271,7 +271,7 @@ Replayed replayTree(Iterable<ChatRecord> records) {
         :final createdAt,
         :final siblingOf,
         :final replacesSibling,
-        :final documents,
+        :final references,
         :final author,
         :final addressees,
         :final omadaOn,
@@ -291,7 +291,7 @@ Replayed replayTree(Iterable<ChatRecord> records) {
           id: id,
           role: role,
           createdAt: createdAt,
-          documents: documents,
+          references: references,
           author: author,
           addressees: addressees,
           omadaOn: omadaOn,
@@ -495,7 +495,7 @@ List<ChatRecord> recordsOf(
       id: message.id,
       role: message.role,
       createdAt: message.createdAt,
-      documents: message.documents,
+      references: message.references,
       author: message.author,
       addressees: message.addressees,
       omadaOn: message.omadaOn,

@@ -12,9 +12,8 @@ import "prompt_library.dart";
 /// shell bypass takes — so the places that must not route a message to a model
 /// read [wiredSkillFromText] beside [shellBypassCommand]. The enum is the
 /// closed set, which is why the match is by name alone: a build-stable name
-/// has none of the staleness hazard that made `Message.documents` necessary
-/// for `/skills`, and the reader of a turn being resent cannot ask what the
-/// frontmatter said when it ran.
+/// is answered the same by every reader, and the reader of a turn being resent
+/// cannot ask what the frontmatter said when it ran.
 enum WiredSkill { compact }
 
 /// The wired skills by name — the enum is the closed set, so this is the one

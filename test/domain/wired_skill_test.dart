@@ -4,7 +4,7 @@ import "package:agent_chat/data/prompts/bundled_skill_data.dart"
     show bundledSkillFiles;
 import "package:agent_chat/domain/models.dart" show CompletionKind;
 import "package:agent_chat/domain/prompt_library.dart"
-    show PromptDocument, PromptLibrary, promptDocuments;
+    show PromptDocument, PromptLibrary, promptReferences;
 import "package:agent_chat/domain/wired_skill.dart"
     show WiredSkill, wiredSkillFromText;
 
@@ -26,7 +26,7 @@ void main() {
       "---\nname: compact\ndescription: do compact\nmetadata:\n  invocation: \"callback\"\n---\n\nUser-facing note.\n",
     );
     final library = PromptLibrary([doc]);
-    expect(promptDocuments("/compact focus here", library), isEmpty);
+    expect(promptReferences("/compact focus here", library), isEmpty);
   });
 
   test("every bundled skill flagged callback is one the enum implements", () {

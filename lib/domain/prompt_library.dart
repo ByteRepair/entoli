@@ -159,39 +159,45 @@ final RegExp skillReference = RegExp(r"^/([^\s/]+)(?:\s+([\s\S]*))?$");
 /// dressing around a handle — `**@murasaki**` — does not stop it being one.
 final _mention = RegExp(r"(?<![\w.-])@([\w.-]+)");
 
-/// What the library says [text]'s references mean, ready to be written into the
-/// message as [Message.documents] and read back by [expandedPrompt] and
-/// [mentionedAgents] — see "Skills and agents" in `lib/domain/AGENTS.md`.
+/// The skill and agents [text] names that the library knows, as written — sigil
+/// on, `/review` and `@researcher` — ready to be recorded on the message as
+/// [Message.references] and read back by [expandedPrompt] and
+/// [mentionedAgents]. See "Skills and agents" in `lib/domain/AGENTS.md`.
 ///
-/// Keyed by the reference as written, sigil included, so a skill and an agent
-/// of the same name do not collide. A name the library does not know is left
-/// out: it is more likely a path, or prose, than a document nobody defined.
-Map<String, String> promptDocuments(String text, PromptLibrary? library) => {
+/// The names alone, not what they meant: a skill is a directory of files, so a
+/// copy of its `SKILL.md` would be a part of it out of step with the rest, and
+/// an agent's body is read off the library by whoever runs as it. A name the
+/// library does not know is left out: it is more likely a path, or prose, than
+/// a document nobody defined. A name mentioned twice is recorded once.
+List<String> promptReferences(String text, PromptLibrary? library) => {
   // A wired callback is not a thing the model is told what it meant: the
-  // turn runs code, and the skill's body is the user-facing note —
-  // expanded into the conversation it would be prose the model reads
-  // where no model is reading. The document in hand is what answers, and
-  // this is where it is in hand: the reload-staleness hazard the
-  // documents map exists for does not apply at composition time.
+  // turn runs code, and the skill's body is the user-facing note — expanded
+  // into the conversation it would be prose the model reads where no model is
+  // reading.
   if (skillReference.firstMatch(text.trim())?.group(1) case final name?)
     if (library?.find(CompletionKind.skill, name) case final document?
         when !document.isCallback)
-      "${CompletionKind.skill.trigger}$name": document.body,
-  for (final match in _mention.allMatches(text))
-    if (library?.find(CompletionKind.agent, match.group(1)!)
-        case final document?)
-      "${CompletionKind.agent.trigger}${match.group(1)}": document.body,
-};
+      "${CompletionKind.skill.trigger}$name",
+  if (library != null)
+    for (final name in mentionsIn(text, library))
+      "${CompletionKind.agent.trigger}$name",
+}.toList();
 
-/// The task the model is given: a skill's template with the arguments in it,
-/// or the message unchanged where it names no skill this one recorded.
-String expandedPrompt(String text, Map<String, String> documents) {
-  if (documents.isEmpty) return text;
+/// The task the model is given: the skill [references] recorded, as [library]
+/// holds it now, with the arguments in it — or the message unchanged where it
+/// recorded no skill, or the skill has since gone.
+String expandedPrompt(
+  String text,
+  List<String> references,
+  PromptLibrary? library,
+) {
   final match = skillReference.firstMatch(text.trim());
   if (match == null) return text;
-  final body = documents["${CompletionKind.skill.trigger}${match.group(1)}"];
-  if (body == null) return text;
-  return withArguments(body, match.group(2) ?? "");
+  final name = match.group(1)!;
+  if (!references.contains("${CompletionKind.skill.trigger}$name")) return text;
+  final document = library?.find(CompletionKind.skill, name);
+  if (document == null || document.isCallback) return text;
+  return withArguments(document.body, match.group(2) ?? "");
 }
 
 /// A template with the user's arguments in it: substituted where the template
@@ -206,28 +212,14 @@ String withArguments(String body, String arguments) {
   return arguments.isEmpty ? body : "$body\n\n$arguments";
 }
 
-/// What the message's `@agent` references meant, keyed as written. The one
-/// sweep of the agent half of a documents map, which both readers below walk.
-Map<String, String> agentEntriesFrom(Map<String, String> documents) => {
-  for (final entry in documents.entries)
-    if (entry.key.startsWith(CompletionKind.agent.trigger))
-      entry.key: entry.value,
-};
-
 /// The agents the message asked to hand the work to, sigils off, in the order
-/// they were written — who the participant answering is told to delegate to.
+/// they were written — who the participant answering is told to delegate to,
+/// and who the room routes it to.
 ///
 /// Off the record rather than the text: the mentions were resolved when the
-/// message was composed, and a name mentioned twice was recorded once.
-List<String> mentionedAgents(Map<String, String> documents) => [
-  for (final key in agentEntriesFrom(documents).keys)
-    key.substring(CompletionKind.agent.trigger.length),
-];
-
-/// The members [documents] address, in the order they were written — the
-/// agent keys as typed, sigil on. Empty where the message names no member.
-List<String> authorKeys(Map<String, String> documents) =>
-    agentEntriesFrom(documents).keys.toList();
+/// message was composed.
+List<String> mentionedAgents(List<String> references) =>
+    references.map(nameOf).nonNulls.toList();
 
 /// The member name an author stamp carries — the sigil off, the library's
 /// name for them. An unnamed stamp names nothing.

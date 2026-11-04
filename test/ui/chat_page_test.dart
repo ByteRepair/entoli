@@ -1572,7 +1572,7 @@ void main() {
           role: MessageRole.user,
           createdAt: at,
           parts: [TextPart(text: '@$member look into it')],
-          documents: {"@$member": "their prompt"},
+          references: ["@$member"],
           omadaOn: omada,
         ),
         Message(

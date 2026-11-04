@@ -1371,7 +1371,7 @@ void main() {
         await waitIdle(chat.state.id, target: app);
         // The byte-repair library resolved the mention before the move.
         expect(
-          app.backend.prompts.single.prompt.documents.keys,
+          app.backend.prompts.single.prompt.references,
           contains("@esbmc-verifier"),
         );
 
@@ -1391,7 +1391,7 @@ void main() {
         await reloaded.send("@esbmc-verifier verify src.c");
         await waitIdle(chat.state.id, target: app);
 
-        expect(app.backend.prompts.last.prompt.documents, isEmpty);
+        expect(app.backend.prompts.last.prompt.references, isEmpty);
       },
     );
 
@@ -1490,7 +1490,7 @@ void main() {
       // authored the house's voice.
       final (id, _) = await chatWithOneTurn("hello @explore, find the tests");
 
-      expect(messagesOf(id).first.documents, contains("@explore"));
+      expect(messagesOf(id).first.references, contains("@explore"));
       expect(messagesOf(id).last.author, "@athena");
       expect(app.backend.prompts.single.prompt.addressees, ["@athena"]);
     });
@@ -2357,7 +2357,7 @@ void main() {
         // was for, worded for every other participant by the projection — the
         // record on screen reads the same as the copy the backend worded.
         final say = messagesOf(id).first;
-        expect(say.documents, contains("@explore"));
+        expect(say.references, contains("@explore"));
         expect(say.addressees, ["@explore"]);
         expect(app.backend.prompts.single.prompt.addressees, ["@explore"]);
         // And the author stamp rides the reply, as the sync's covered ids

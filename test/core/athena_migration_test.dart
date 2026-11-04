@@ -87,4 +87,41 @@ void main() {
     expect(decoy.readAsStringSync(), decoyBefore);
     expect(File(migrationStamp(config.dataDir)).readAsStringSync(), "7.5.0");
   });
+
+  test("a message's documents become the references they were keyed by, "
+      "in the order written, beside what else the entry does", () async {
+    final config = tempConfig();
+    final log = seed(config.dataDir, "projects/p/chats/c1/conv.jsonl", [
+      jsonEncode({
+        "runtimeType": "message",
+        "id": "u1",
+        "role": "user",
+        "createdAt": at.toIso8601String(),
+        "documents": {
+          "/review": "Review the diff.",
+          "@explore": "You explore.",
+          "@build": "You build.",
+        },
+        "addressees": ["@explore", "@build"],
+      }),
+      jsonEncode({
+        "runtimeType": "message",
+        "id": "a1",
+        "role": "assistant",
+        "createdAt": at.toIso8601String(),
+        "documents": <String, String>{},
+      }),
+    ]);
+
+    await runMigrations(config.dataDir, fresh: false);
+
+    final lines = log.readAsLinesSync();
+    expect(lines.where((l) => l.contains("documents")), isEmpty);
+    final said = ChatRecord.fromJson(jsonDecode(lines[0])) as MessageRecord;
+    expect(said.references, ["/review", "@explore", "@build"]);
+    expect(said.addressees, ["@explore", "@build"]);
+    final reply = ChatRecord.fromJson(jsonDecode(lines[1])) as MessageRecord;
+    expect(reply.references, isEmpty);
+    expect(reply.author, "@athena");
+  });
 }

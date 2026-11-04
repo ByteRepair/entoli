@@ -178,7 +178,7 @@ class SubAgentRunner implements SubAgents {
       options: options,
       // The same skills the parent sees: a skill's workflow can be a worker's
       // job too, and the skill that drove the fan-out may need reading there.
-      skills: library?.entries(CompletionKind.skill) ?? const [],
+      library: library,
       approveMode: ApproveMode.never,
       temperature: temperature,
       reasoningEffort: reasoningEffort,

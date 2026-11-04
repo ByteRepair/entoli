@@ -693,13 +693,13 @@ void main() {
     final prompt = repo.composeUserPrompt("/review the parser");
 
     expect(prompt.plainText, "/review the parser");
-    expect(prompt.documents, {"/review": "Look at it."});
+    expect(prompt.references, ["/review"]);
   });
 
   test("a reference the library does not know records nothing", () async {
     final repo = repoWith(AppSettings());
 
-    expect(repo.composeUserPrompt("/etc/hosts is where?").documents, isEmpty);
+    expect(repo.composeUserPrompt("/etc/hosts is where?").references, isEmpty);
   });
 
   test("a resource that has gone reads back as nothing", () async {
