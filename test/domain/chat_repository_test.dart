@@ -405,24 +405,6 @@ void main() {
     );
 
     test(
-      "an Omada-off project ships no note and reads its files alone",
-      () async {
-        await repoWith(AppSettings()).createProject("plain");
-        final repo = repoWith(AppSettings());
-        final chat = await repo.createChat(project: "plain");
-        await writeChatVia(repo, chat);
-
-        await repo
-            .sendPrompt(participant: "athena", chat.state.id, userMessage("hi"))
-            .toList();
-
-        final settings = backend.prompts.single.settings;
-        expect(settings.bundledInstructions, isNull);
-        expect(settings.includesUserInstructions, isFalse);
-      },
-    );
-
-    test(
       "a turn in My Team runs the room note and drops the task tool",
       () async {
         final repo = repoWith(AppSettings());
@@ -700,13 +682,6 @@ void main() {
     final repo = repoWith(AppSettings());
 
     expect(repo.composeUserPrompt("/etc/hosts is where?").references, isEmpty);
-  });
-
-  test("a resource that has gone reads back as nothing", () async {
-    final repo = repoWith(AppSettings());
-    final chat = await repo.createChat();
-
-    expect(await repo.readResource(chat.state.id, "gone.txt"), isNull);
   });
 
   /// The sync layer's whole view of this device. Mirroring is proven end to

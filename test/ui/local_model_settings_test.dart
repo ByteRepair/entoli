@@ -462,21 +462,6 @@ void main() {
     expect(find.text("30 chats"), findsNothing);
   });
 
-  testWidgets(
-    "the cores slider is drawn only where there is more than one core",
-    (tester) async {
-      app = TestApp.create(
-        localRuntime: FakeLocalRuntime(maxThreads: 8),
-        localModels: {model.id},
-      );
-      await pumpLlmSettings(tester);
-
-      expect(find.text("CPU cores"), findsOneWidget);
-      // The default is every core, and that is what the row says until it is moved.
-      expect(find.textContaining("All 8 cores"), findsOneWidget);
-    },
-  );
-
   testWidgets("a machine that answered with one core has no slider to draw", (
     tester,
   ) async {

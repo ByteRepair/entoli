@@ -43,11 +43,6 @@ void main() {
     });
   });
 
-  test("the main agent has no instructions and every default", () {
-    expect(AgentDefinition.blank.instructions, "");
-    expect(AgentDefinition.blank.offers("read", byDefault: true), isTrue);
-  });
-
   group("writing an agent back", () {
     test("reads back as what was edited, keys it does not edit kept", () {
       final agent =

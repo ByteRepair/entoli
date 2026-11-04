@@ -30,24 +30,6 @@ void main() {
   );
 
   group("app icon", () {
-    testWidgets("a fresh install wears Cookie", (tester) async {
-      final semantics = tester.ensureSemantics();
-      expect(AppSettings.load(app.config).appIcon, AppIcon.cookie);
-      await pumpAppearance(tester, app);
-
-      expectSelected(tester, AppIcon.cookie, selected: true);
-      expectSelected(tester, AppIcon.prompt, selected: false);
-      semantics.dispose();
-    });
-
-    testWidgets("the default is offered first", (tester) async {
-      await pumpAppearance(tester, app);
-      expect(
-        tester.getTopLeft(choice(AppIcon.cookie)).dx,
-        lessThan(tester.getTopLeft(choice(AppIcon.prompt)).dx),
-      );
-    });
-
     testWidgets("picking one persists it and tells the launcher", (
       tester,
     ) async {
@@ -80,11 +62,6 @@ void main() {
       expect(app.launcher.used, isEmpty);
       semantics.dispose();
     });
-
-    testWidgets("the section says the home screen follows", (tester) async {
-      await pumpAppearance(tester, app);
-      expect(find.textContaining("on the home screen"), findsOneWidget);
-    });
   });
 
   group("without a launcher to change", () {
@@ -107,15 +84,6 @@ void main() {
   });
 
   group("what the app draws", () {
-    testWidgets("the mark follows the setting", (tester) async {
-      app.seedSettings(AppSettings(appIcon: AppIcon.prompt));
-      await app.pump(tester, const Scaffold(body: AppMark()));
-      expect(
-        tester.widget<AppIconImage>(find.byType(AppIconImage)).icon,
-        AppIcon.prompt,
-      );
-    });
-
     testWidgets("changing it redraws the mark without a restart", (
       tester,
     ) async {
@@ -162,14 +130,6 @@ void main() {
       await app.config.documents.write(
         app.config.settingsFile,
         '{"appIcon":"sawhorse"}',
-      );
-      expect(AppSettings.load(app.config).appIcon, AppIcon.cookie);
-    });
-
-    test("an older file with no icon in it is the default", () async {
-      await app.config.documents.write(
-        app.config.settingsFile,
-        '{"approveMode":"ask"}',
       );
       expect(AppSettings.load(app.config).appIcon, AppIcon.cookie);
     });

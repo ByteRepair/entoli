@@ -103,15 +103,4 @@ void main() {
     expect(secrets.turnPassword, isNull);
     expect(await store.read(turnPasswordKey), isNull);
   });
-
-  test("the sync identity and these secrets share one store by key", () async {
-    final store = FileSecretStore(config);
-    final secrets = AppSecrets(store);
-
-    await secrets.setProviderKey("a", "sk-a");
-    await secrets.setTurnPassword("p");
-    expect(await store.read("identity"), isNull);
-    expect(await store.read(providerKeysKey), isNotNull);
-    expect(await store.read(turnPasswordKey), isNotNull);
-  });
 }

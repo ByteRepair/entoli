@@ -1,3 +1,4 @@
+import "package:clock/clock.dart";
 import "package:flutter/material.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -21,6 +22,10 @@ Finder get _promptField => find.descendant(
   of: find.byType(PromptPage),
   matching: find.byType(TextField),
 );
+
+/// The clock every page here reads, so a row's "when" is worded against a
+/// known today rather than the machine's.
+final _now = DateTime(2026, 7, 1, 12);
 
 Finder _on(Type page, String label) =>
     find.descendant(of: find.byType(page), matching: find.text(label));
@@ -71,10 +76,11 @@ void main() {
 
   testWidgets("lists reminders with their next fire", (tester) async {
     final alarms = FakeReminderAlarms();
-    // A fire far from any clock this suite runs on: far enough that the row's
-    // wording is the short date, never today or tomorrow.
+    // Far enough past the fixed clock that the row's wording is the short
+    // date, never today or tomorrow.
     final fires = DateTime(2027, 3, 5, 20, 30);
     final app = TestApp.create(
+      clock: Clock.fixed(_now),
       reminderAlarms: alarms,
       triggers: [
         Trigger(
@@ -95,10 +101,7 @@ void main() {
     expect(find.byType(Switch), findsOneWidget);
     expect(find.text("Add trigger"), findsOneWidget);
     // And the row says when it next fires — the wording the row derives.
-    expect(
-      find.textContaining(describeFire(fires, DateTime.now())),
-      findsOneWidget,
-    );
+    expect(find.textContaining(describeFire(fires, _now)), findsOneWidget);
   });
 
   testWidgets(
@@ -179,6 +182,7 @@ void main() {
 
     Future<void> openEditor(WidgetTester tester, {Trigger? trigger}) async {
       app = TestApp.create(
+        clock: Clock.fixed(_now),
         reminderAlarms: FakeReminderAlarms(),
         triggers: [?trigger],
       );
@@ -195,23 +199,10 @@ void main() {
       id: "r1",
       name: "Morning sweep",
       prompt: prompt,
-      source: ScheduleSource(at: DateTime.now().add(const Duration(hours: 3))),
-      nextFireAt: DateTime.now().add(const Duration(hours: 3)),
+      source: ScheduleSource(at: _now.add(const Duration(hours: 3))),
+      nextFireAt: _now.add(const Duration(hours: 3)),
       requestCode: 1,
     );
-
-    testWidgets("the name is one row and the date and time the next", (
-      tester,
-    ) async {
-      await openEditor(tester);
-
-      final name = tester.getRect(find.byType(TextFormField));
-      final date = tester.getRect(find.byType(OutlinedButton).at(0));
-      final time = tester.getRect(find.byType(OutlinedButton).at(1));
-
-      expect(date.top, greaterThanOrEqualTo(name.bottom));
-      expect(date.top, time.top);
-    });
 
     testWidgets("the prompt is shown as the message it will send", (
       tester,

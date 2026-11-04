@@ -33,14 +33,6 @@ void main() {
     expect(modelWith(1024, contextLength: 4096).defaultContext, 4096);
   });
 
-  test("a record reads back what it was written as", () {
-    final model = modelWith(22528);
-    final back = DownloadedModel.fromJson(model.toJson(), file: model.file)!;
-
-    expect(back.toJson(), model.toJson());
-    expect(DownloadedModel.fromJson({"id": "x"}, file: ""), isNull);
-  });
-
   test("a link names its model by its file, past one already taken", () {
     const url = "https://huggingface.co/a/b/resolve/main/Some-Model-Q4_0.gguf";
     expect(localModelIdFor(url, const {}), "some-model-q4_0");

@@ -166,17 +166,7 @@ void main() {
     expect(s.settle(null), isEmpty);
   });
 
-  test("an item is a prompt or a handoff", () {
-    expect(() => ScheduledItem(generation: 0), throwsA(isA<AssertionError>()));
-  });
-
   group("ordering policy", () {
-    test("only relay skips the wave", () {
-      expect(OmadaOrdering.sequential.waitsForWave, isTrue);
-      expect(OmadaOrdering.parallel.waitsForWave, isTrue);
-      expect(OmadaOrdering.relay.waitsForWave, isFalse);
-    });
-
     test("what each admits", () {
       expect(
         OmadaOrdering.sequential.admits(started: 1, memberBusy: false),

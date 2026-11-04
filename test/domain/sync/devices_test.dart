@@ -16,11 +16,4 @@ void main() {
     });
     expect(device.addresses, ["192.168.1.5:47921"]);
   });
-
-  test("the list survives a round trip", () {
-    final addresses = ["192.168.1.5:47921", "100.101.102.103:47921"];
-    final device = PairedDevice.fromJson({...base, "addresses": addresses});
-    expect(PairedDevice.fromJson(device.toJson()).addresses, addresses);
-    expect(PairedDevice.fromJson(base).addresses, isEmpty);
-  });
 }

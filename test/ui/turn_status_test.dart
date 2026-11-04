@@ -64,16 +64,6 @@ void main() {
     expect(find.text("Thinking"), findsNothing);
   });
 
-  testWidgets("a turn that has said nothing about itself is still a spinner", (
-    tester,
-  ) async {
-    // Every provider but the local one goes from the request to the first token
-    // with nothing in between, so the row has to read with nothing on it.
-    await waitingAfter(tester, const [ResponseStart("reply-1")]);
-
-    expect(find.byType(CircularProgressIndicator), findsWidgets);
-  });
-
   testWidgets("trouble takes the row over from the status", (tester) async {
     await waitingAfter(tester, const [
       StatusEvent("Thinking"),

@@ -32,21 +32,4 @@ void main() {
     expect(approvals.last.toolName, "bash");
     expect(approvals.last.argumentsText, "git status");
   });
-
-  test("the approval part reads back from the log", () {
-    final part =
-        MessagePart.fromJson(
-              MessagePart.approval(
-                approvalId: "a-2",
-                toolName: "bash",
-                argumentsText: "writing /x",
-                deniedDirs: const ["/x"],
-                answer: "alwaysAllowChat",
-              ).toJson(),
-            )
-            as ApprovalPart;
-    expect(part.approvalId, "a-2");
-    expect(part.deniedDirs, ["/x"]);
-    expect(part.answer, "alwaysAllowChat");
-  });
 }

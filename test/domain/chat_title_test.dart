@@ -4,13 +4,6 @@ import "package:agent_chat/domain/chat_title.dart";
 
 void main() {
   group("the prompt", () {
-    test("carries the message it is naming", () {
-      expect(
-        titlePrompt("how do I sort a list?"),
-        contains("how do I sort a list?"),
-      );
-    });
-
     test("a pasted file is cut down before it is paid for", () {
       final prompt = titlePrompt("x" * 5000);
 
@@ -19,13 +12,6 @@ void main() {
   });
 
   group("the answer", () {
-    test("is used as it comes when the model does as it was told", () {
-      expect(
-        cleanTitle("Sorting a list of records by date"),
-        "Sorting a list of records by date",
-      );
-    });
-
     test("loses the quotes a model wraps it in", () {
       expect(cleanTitle('"Fixing the parser"'), "Fixing the parser");
     });

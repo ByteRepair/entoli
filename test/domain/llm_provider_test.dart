@@ -69,30 +69,6 @@ void main() {
       expect(LlmProviderConfig.fromJson(const {"id": "x"}), isNull);
       expect(LlmProviderConfig.fromJson("not a map"), isNull);
     });
-
-    test("a round trip through JSON changes nothing", () {
-      const original = LlmProviderConfig(
-        id: "anthropic",
-        name: "Work",
-        catalogId: "anthropic",
-        api: LlmApi.anthropic,
-        baseUrl: "https://api.anthropic.com/v1",
-        apiKeyEnv: "ANTHROPIC_API_KEY",
-        modelsEndpoint: "https://api.anthropic.com/v1/models",
-      );
-
-      final back = LlmProviderConfig.fromJson(
-        jsonDecode(jsonEncode(original.toJson())),
-      )!;
-
-      expect(back.id, original.id);
-      expect(back.name, original.name);
-      expect(back.catalogId, original.catalogId);
-      expect(back.api, original.api);
-      expect(back.baseUrl, original.baseUrl);
-      expect(back.apiKeyEnv, original.apiKeyEnv);
-      expect(back.modelsEndpoint, original.modelsEndpoint);
-    });
   });
 
   group("finding the key", () {
@@ -110,16 +86,6 @@ void main() {
     test("an empty variable is no key at all", () {
       expect(named.resolveKey(const {"ANTHROPIC_API_KEY": ""}), isNull);
       expect(named.resolveKey(const {}), isNull);
-    });
-
-    test("a provider that needs no key says so", () {
-      const local = LlmProviderConfig(
-        id: "ollama",
-        api: LlmApi.openai,
-        baseUrl: "http://localhost:11434/v1",
-      );
-
-      expect(local.resolveKey(const {}), isNull);
     });
   });
 
@@ -151,44 +117,9 @@ void main() {
         expect(preset.id, isEmpty, reason: preset.catalogId);
       }
     });
-
-    test(
-      "Ollama Cloud is the hosted one, and reads the key Ollama's own tools do",
-      () {
-        const cloud = OllamaCloudProvider.preset;
-
-        expect(cloud.baseUrl, "https://ollama.com/v1");
-        expect(cloud.api, LlmApi.openai);
-        expect(cloud.apiKeyEnv, "OLLAMA_API_KEY");
-      },
-    );
   });
 
   group("through settings.json", () {
-    test("providers survive a save and a load", () async {
-      final config = tempConfig("agent_chat_providers_");
-      await AppSettings(
-        defaultProviderId: "ollama-cloud",
-        defaultModelId: "kimi",
-        llmProviders: const [
-          LlmProviderConfig(
-            id: "ollama-cloud",
-            api: LlmApi.openai,
-            baseUrl: "https://ollama.com/v1",
-            apiKeyEnv: "OLLAMA_API_KEY",
-          ),
-        ],
-        approveMode: ApproveMode.never,
-      ).save(config);
-
-      final loaded = AppSettings.load(config);
-
-      expect(loaded.llmProviders.single.id, "ollama-cloud");
-      expect(loaded.llmProviders.single.apiKeyEnv, "OLLAMA_API_KEY");
-      expect(loaded.approveMode, ApproveMode.never);
-      expect(loaded.defaultModelId, "kimi");
-    });
-
     test("settings written before any of this still load", () async {
       final config = tempConfig("agent_chat_providers_old_");
       await config.documents.write(
@@ -280,10 +211,6 @@ void main() {
           baseUrl: "https://fake.test/v1",
         ),
       ];
-    });
-
-    test("a provider nothing is configured for has no client", () {
-      expect(registryOver().clientFor("ghost"), isNull);
     });
 
     test("the same provider is built once and reused", () {

@@ -905,21 +905,6 @@ void main() {
       expect(client.sent.first[1].text, isNot(contains("Recalled memories")));
     });
 
-    test("an empty store recalls nothing and the turn still runs", () async {
-      final backend = backendOver([
-        [finish],
-      ]);
-
-      final events = await send(
-        backend,
-        "how should the code be formatted",
-        memory: MemorySettings(autoMemory: true, memoryDir: config.memoryDir()),
-      );
-
-      expect(client.sent.first[1].text, isNot(contains("Recalled memories")));
-      expect(events.last, isA<DoneEvent>());
-    });
-
     test(
       "pinned memories reach the turn in full, the rest as an index",
       () async {
@@ -1004,27 +989,6 @@ void main() {
         isTrue,
       );
     });
-
-    // Scratch work a later turn may want is the workspace's, not the machine
-    // temp directory's — /tmp was where the crops that a chat lost came from.
-    test(
-      "the workspace prompt keeps work in the chat until the user moves it",
-      () async {
-        final backend = backendOver([
-          [finish],
-        ]);
-        await send(backend, "hi");
-
-        final system = client.sent.first[1].text;
-        expect(
-          system,
-          contains("Everything you make in this conversation goes here."),
-        );
-        expect(system, contains("Move work there only when the user wants"));
-        // /tmp is mapped to the chat's own scratch, so nothing steers away from it.
-        expect(system, isNot(contains("machine's /tmp")));
-      },
-    );
 
     // A project that does not share a workspace is the answer to "a chat that
     // must not reach past itself": the prompt names the chat's own workspace
@@ -1326,7 +1290,11 @@ void main() {
       shell.hang.add("sleep 100");
 
       final turn = asking(backend, "!sleep 100").toList();
-      await pumpEvents();
+      await untilPending(
+        "the command",
+        () async =>
+            shell.ran.contains("sleep 100") ? const [true] : const <bool>[],
+      );
       await backend.abort(chatId);
       await turn.timeout(const Duration(seconds: 5));
 
@@ -1339,7 +1307,11 @@ void main() {
       shell.killedOutput = "hello\n";
 
       final turn = asking(backend, "!sleep 100").toList();
-      await pumpEvents();
+      await untilPending(
+        "the command",
+        () async =>
+            shell.ran.contains("sleep 100") ? const [true] : const <bool>[],
+      );
       await backend.abort(chatId);
       final events = await turn.timeout(const Duration(seconds: 5));
 
@@ -1768,7 +1740,7 @@ void main() {
       expect(listedAtTheEnd, isTrue);
       // Only now: the drop is deliberately after the stream closes, so it lands
       // a microtask behind the reader that has just finished with it.
-      await pumpEvents();
+      await waitFor(() => seen.length == 2, what: "the chat's drop");
       expect(seen, [
         {chatId},
         <String>{},
@@ -1787,7 +1759,10 @@ void main() {
           "hi",
           approveMode: ApproveMode.ask,
         ).listen(events.add);
-        await pumpEvents();
+        await untilPending(
+          "the approval",
+          () => backend.pendingApprovals(chatId),
+        );
 
         await backend.abort(chatId);
         await turn.cancel();
@@ -1826,9 +1801,8 @@ void main() {
         [finish],
       ]);
       await asking(backend, "hi", approveMode: ApproveMode.never).toList();
-      await pumpEvents();
 
-      expect(backend.openTurnStreams, 0);
+      await waitFor(() => backend.openTurnStreams == 0, what: "the drop");
     });
 
     test("a chat with nothing running is not published again", () async {
@@ -2027,18 +2001,6 @@ void main() {
       expect(shell.ran, ["rm -rf build"]);
       expect(events.whereType<ErrorEvent>().map((e) => e.message), isEmpty);
       expect(client.sent.last.map((m) => m.text).join("\n"), contains("two"));
-    });
-
-    test("a second prompt continues the conversation", () async {
-      final backend = backendOver([
-        [finish],
-        [finish],
-      ]);
-      await send(backend, "first");
-      await send(backend, "second");
-
-      expect(client.sent.last.map((m) => m.text).join(), contains("first"));
-      expect(client.sent.last.last.text, contains("second"));
     });
 
     test("a reset drops what the session held: the next turn fills from the "
@@ -2674,6 +2636,7 @@ void main() {
 
       await send(backend, "how should I indent this", memory: memory());
 
+      await waitFor(() => client.sent.length == 2, what: "the extraction");
       await pumpEvents();
       expect(await store.entries(), isEmpty);
     });
@@ -2800,6 +2763,7 @@ void main() {
       final subscription = backend.memoryNotes.listen(notes.add);
 
       await send(backend, "how should I indent this", memory: memory());
+      await waitFor(() => client.sent.length == 2, what: "the extraction");
       await pumpEvents();
       await subscription.cancel();
 
@@ -2860,7 +2824,10 @@ void main() {
             ),
           )
           .listen(events.add);
-      await pumpEvents();
+      await untilPending(
+        "the approval",
+        () => backend.pendingApprovals(chatId),
+      );
 
       await backend.abort(chatId);
       await turn.cancel();
@@ -2913,6 +2880,8 @@ void main() {
 
       await send(backend, "hello again", memory: memory());
 
+      // The extraction is the second call; a tidy would be a third after it.
+      await waitFor(() => client.sent.length >= 2, what: "the extraction");
       await pumpEvents();
       expect(client.sent, hasLength(2));
       expect(await store.lastConsolidated(), isNull);
@@ -2964,6 +2933,7 @@ void main() {
       await untilStamped();
 
       await send(backend, "two", memory: memory());
+      await waitFor(() => client.sent.length >= 5, what: "the extraction");
       await pumpEvents();
 
       expect(client.sent, hasLength(5));

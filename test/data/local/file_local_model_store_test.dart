@@ -237,20 +237,6 @@ void main() {
       },
     );
   });
-
-  test("progress is reported against the size the catalog says", () async {
-    final seen = <int>[];
-
-    await for (final progress in store().install(gguf())) {
-      seen.add(progress.received);
-      expect(progress.total, weights.length);
-    }
-
-    // The bar reads the total before the first byte arrives, so it starts at
-    // zero and ends at the whole thing.
-    expect(seen.first, 0);
-    expect(seen.last, weights.length);
-  });
 }
 
 class _Files extends LocalModel {

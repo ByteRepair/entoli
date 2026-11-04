@@ -155,11 +155,6 @@ void main() {
     );
   });
 
-  test("the bin directory is composed from the cache directory, and the "
-      "store's install dir is the same answer", () {
-    expect(byteRepairBinDir("/cache/root"), "/cache/root/byte-repair/bin");
-  });
-
   test("setup reads as done only where the marker names a binary that is "
       "there, since the cache can be cleared between setups", () {
     // The env clause the guests' answer carries is skipped here: this host

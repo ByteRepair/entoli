@@ -5,14 +5,6 @@ import "package:flutter_test/flutter_test.dart";
 
 import "../../harness.dart";
 
-/// What the dialog answered, read back out of the snack bar it raised:
-/// "set:sk-1", "keep:-", "clear:-", "dismissed".
-String answer(WidgetTester tester) => tester
-    .widget<Text>(
-      find.descendant(of: find.byType(SnackBar), matching: find.byType(Text)),
-    )
-    .data!;
-
 void main() {
   late ProviderEdit? returned;
 

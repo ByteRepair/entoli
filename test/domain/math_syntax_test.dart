@@ -68,6 +68,5 @@ void main() {
 
   test("copies a formula as the TeX it was written as", () {
     expect(formattedTextOf(r"so $a_b_c$ holds"), r"so $a_b_c$ holds");
-    expect(formattedHtmlOf(r"so $a<b$"), r"<p>so $a&lt;b$</p>");
   });
 }

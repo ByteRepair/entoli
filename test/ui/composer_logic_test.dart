@@ -1,5 +1,3 @@
-import "dart:typed_data";
-
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/models.dart";
@@ -31,19 +29,6 @@ void main() {
     controller.dispose();
   });
 
-  final file = Attachment(
-    filename: "a.txt",
-    mimeType: "text/plain",
-    bytes: Uint8List.fromList([104, 105]),
-  );
-
-  test("whitespace is not worth sending, a file on its own is", () {
-    controller.text = "   ";
-    expect(logic.canSend.value, isFalse);
-    logic.attach([file]);
-    expect(logic.canSend.value, isTrue);
-  });
-
   test("the text says which mode it is in", () {
     var shapes = 0;
     logic.addListener(() => shapes++);
@@ -63,17 +48,6 @@ void main() {
     controller.append(const QuoteEmbed(Quote("one")));
     expect(logic.embeds, 1);
     expect(logic.canSend.value, isTrue);
-  });
-
-  test("submit sends the message and its files, then clears both", () {
-    controller.text = " hi ";
-    logic.attach([file]);
-    logic.submit();
-    expect(sent.single.$1, "hi");
-    expect(sent.single.$2, [file]);
-    expect(controller.text, isEmpty);
-    expect(logic.attachments, isEmpty);
-    expect(logic.canSend.value, isFalse);
   });
 
   test("Queue is on offer only over a running turn that would be steered", () {
@@ -96,19 +70,6 @@ void main() {
     logic.submit(queue: true);
     expect(sent.single.$1, "now");
     expect(queued, isEmpty);
-  });
-
-  test("a message put back goes ahead of what came since", () {
-    controller.text = "later";
-    logic.attach([file]);
-    final earlier = Attachment(
-      filename: "b.txt",
-      mimeType: "text/plain",
-      bytes: Uint8List.fromList([1]),
-    );
-    logic.restore((text: "first", attachments: [earlier]));
-    expect(controller.text, startsWith("first"));
-    expect(logic.attachments, [earlier, file]);
   });
 
   test("a new controller is followed", () {

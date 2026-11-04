@@ -19,6 +19,12 @@ import "room_state.dart";
 import "roster.dart";
 import "schedule.dart";
 
+/// The wait before automatic retry round [round] (from 0): 1s doubling to a
+/// 30s cap. A variable so a test can hold a round or skip its wait, since a
+/// real backoff is a bet on the clock.
+Future<void> Function(int round) retryWait = (round) =>
+    Future<void>.delayed(Duration(seconds: (1 << round).clamp(1, 30)));
+
 /// What a room needs of whoever holds it: the settings it reads at each use,
 /// where its state goes, and the services that are not the room's own —
 /// naming the chat, saying a failure out loud, compacting a grown session.
@@ -1054,7 +1060,6 @@ class ChatRoom {
       final gen = turn.retryGen;
       final round = turn.round;
       turn.round++;
-      final wait = Duration(seconds: (1 << round).clamp(1, 30));
       if (_disposed) return;
       _view = state.copyWith(
         retry: "Retrying (${turn.round}/$rounds) — ${turn.errorLine}",
@@ -1062,7 +1067,7 @@ class ChatRoom {
         questions: _withoutTurn(state.questions, turn.replyId),
         runningSubAgents: _withoutTurn(state.runningSubAgents, turn.replyId),
       );
-      await Future<void>.delayed(wait);
+      await retryWait(round);
       if (turn.retryGen != gen) {
         // A stop cut the wait short: still an ending, not a stranded entry.
         await _endTurn(turn, turn.interrupted ? null : turn.recorder.outcome);

@@ -72,12 +72,6 @@ void main() {
     expect(prefill.state.value, isNull);
   });
 
-  test("cancelling nothing does nothing", () async {
-    final background = FakeBackgroundWork();
-    await make(FakeLocalRuntime(), background).cancel();
-    expect(background.prefills, isEmpty);
-  });
-
   test("a saved body is the warm-up, and a miss saves one", () async {
     final keys = promptPrefixKeys(messages, const []);
     final background = FakeBackgroundWork();

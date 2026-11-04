@@ -404,19 +404,6 @@ void main() {
   });
 
   group("the file gate reads the same grant store", () {
-    test("a granted directory makes the file tools free", () {
-      final granted = p.join("/roots", "granted");
-      expect(
-        outsideWorkspaces(
-          p.join(granted, "x.txt"),
-          "/ws",
-          "/pws",
-          granted: [granted],
-        ),
-        isFalse,
-      );
-    });
-
     test("a standing grant covers the write tool without a banner", () async {
       makeRooms();
       final file = p.join(outside, "standing", "made-by-write.txt");

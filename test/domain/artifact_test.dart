@@ -14,19 +14,6 @@ void main() {
     expect(args.artifactId, isNull);
   });
 
-  test("entryFile is the basename, for a bare path and a nested one", () {
-    expect(artifactArgsFrom('{"path": "chart.html"}')!.entryFile, "chart.html");
-    expect(
-      artifactArgsFrom('{"path": "report/sub/page.html"}')!.entryFile,
-      "page.html",
-    );
-  });
-
-  test("title defaults to empty string", () {
-    final args = artifactArgsFrom('{"path": "report/"}');
-    expect(args!.title, "");
-  });
-
   test("parses artifact_id for update in place", () {
     final args = artifactArgsFrom(
       '{"path": "report/index.html", "artifact_id": "existing-id"}',

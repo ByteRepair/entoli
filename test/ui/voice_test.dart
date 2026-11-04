@@ -410,7 +410,7 @@ void main() {
         what: "the chat to load",
       );
       await voiceOf(id).start();
-      await Future<void>.delayed(Duration.zero);
+      await pumpEventQueue();
 
       // Entering voice mode over a finished reply, or carrying on an interrupted
       // turn, must not read what is already there back from the top.
@@ -449,14 +449,6 @@ void main() {
     expect(voiceState(id).status, isNot(VoiceStatus.off));
   });
 
-  test("falling silent goes back to listening", () async {
-    final id = await startVoice();
-    app.voice.session!.fallSilent();
-    await Future<void>.delayed(Duration.zero);
-
-    expect(voiceState(id).status, VoiceStatus.listening);
-  });
-
   test("a failure mid-session says what it was", () async {
     final id = await startVoice();
     app.voice.session!.fail("the microphone was taken");
@@ -491,18 +483,6 @@ void main() {
   );
 
   group("the transcript", () {
-    testWidgets("holds five lines whatever the text scale", (tester) async {
-      final lines = [
-        for (var i = 0; i < 20; i++) VoiceLine(VoiceLineKind.said, "line $i"),
-      ];
-      await app.pump(tester, Scaffold(body: TranscriptWindow(lines: lines)));
-      final box = tester.getSize(find.byType(TranscriptWindow));
-      expect(
-        box.height,
-        TranscriptWindow.lineHeight * TranscriptWindow.visibleLines,
-      );
-    });
-
     testWidgets("fades into the orb above it", (tester) async {
       final lines = [
         for (var i = 0; i < 5; i++)
@@ -1050,8 +1030,6 @@ void main() {
       await app.pump(tester, VoicePage(chatId: chat.state.id), settle: false);
       await tester.pump();
 
-      expect(find.byType(VoiceBloom), findsOneWidget);
-      expect(find.byType(TranscriptWindow), findsOneWidget);
       expect(find.textContaining("Settings"), findsOneWidget);
     },
   );

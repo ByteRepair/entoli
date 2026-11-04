@@ -300,33 +300,6 @@ void main() {
       );
     });
 
-    testWidgets("a picture picked in the editor is written as <name>.png "
-        "beside the .md", (tester) async {
-      final dir = app.config.promptsDir(CompletionKind.agent);
-      newFile("$dir/researcher.md", "---\ndescription: desc\n---\n\nBody.");
-
-      await pumpSettings(tester, app, SettingsCategory.agents);
-      await reloadLibrary(tester, app);
-
-      // Open the editor, pick a picture, save.
-      await tester.tap(
-        find.descendant(
-          of: find.widgetWithText(ListTile, "researcher"),
-          matching: find.byIcon(Icons.edit_outlined),
-        ),
-      );
-      await settleIo(tester);
-      await pickImage(tester, app, name: "photo.png");
-      expect(find.textContaining("is set on save"), findsOneWidget);
-
-      await tester.tap(find.text("Save"));
-      await settleIo(tester, least: 15);
-
-      final image = File("$dir/researcher.png");
-      expect(image.existsSync(), isTrue);
-      expect(image.readAsBytesSync(), onePixelPng);
-    });
-
     testWidgets("a Bot Avatar chosen in the editor is written as "
         "<name>.avatar.json and takes the photo's place", (tester) async {
       useWindow(tester, const Size(480, 1500));

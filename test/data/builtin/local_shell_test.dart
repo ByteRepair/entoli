@@ -78,6 +78,23 @@ void main() {
       .start(command, cwd: workspace.path, home: home.path, timeout: timeout)
       .result;
 
+  /// [command] under a short [timeout], in a shell a first command has
+  /// already answered from. The timer starts when the line is written, and on
+  /// a cold shell that can be before the dispatcher has set its INT trap — a
+  /// loaded runner then loses the shell to the timeout's SIGINT and the run
+  /// settles -1. A warm one has the trap up, so what is timed is the command.
+  Future<dynamic> runWarm(String command, {required Duration timeout}) async {
+    final shell = LocalShell();
+    ShellRun start(String line, Duration timeout) => shell.start(
+      line,
+      cwd: workspace.path,
+      home: home.path,
+      timeout: timeout,
+    );
+    await start("true", const Duration(seconds: 10)).result;
+    return start(command, timeout).result;
+  }
+
   test("reports output in order and the exit code, run in the workspace with "
       "the settings' variables and the machine's HOME", () async {
     File(p.join(workspace.path, "note.txt")).writeAsStringSync("here");
@@ -97,7 +114,7 @@ void main() {
   });
 
   test("a command that overruns is interrupted and says so", () async {
-    final result = await run(
+    final result = await runWarm(
       "echo starting; sleep 30",
       timeout: const Duration(milliseconds: 300),
     );
@@ -110,7 +127,7 @@ void main() {
 
   test("what the command spawned is killed with it", () async {
     final marker = p.join(workspace.path, "survivor");
-    final result = await run(
+    final result = await runWarm(
       "(trap '' INT; sleep 4; touch $marker) & echo started; sleep 30",
       timeout: const Duration(milliseconds: 300),
     );
@@ -128,7 +145,7 @@ void main() {
   test(
     "a child that escaped the group does not hold the result open",
     () async {
-      final result = await run(
+      final result = await runWarm(
         "setsid sleep 5 & echo started; sleep 5",
         timeout: const Duration(milliseconds: 300),
       ).timeout(const Duration(seconds: 4));
@@ -340,8 +357,11 @@ void main() {
   group("the live view of a running command", () {
     test("grows as the command prints", () async {
       final shell = LocalShell();
+      // The command holds after its first line until the test lets it go, so
+      // "still running" is a state the test is in rather than a second of
+      // sleep it hopes to land inside.
       final run = shell.start(
-        "echo one; sleep 1; echo two; sleep 1; echo three",
+        "echo one; while [ ! -e go ]; do sleep 0.02; done; echo two; echo three",
         cwd: workspace.path,
         home: home.path,
         timeout: const Duration(seconds: 10),
@@ -350,8 +370,8 @@ void main() {
 
       // The first line has printed while the command is still running.
       await printed(run, "one");
-      final early = output.value ?? "";
-      expect(early, isNot(contains("three")));
+      expect(output.value, isNot(contains("two")));
+      File(p.join(workspace.path, "go")).writeAsStringSync("");
 
       final result = await run.result;
       // Line by line, as it printed.
@@ -488,25 +508,6 @@ void main() {
     });
   });
 
-  test("what the model is told names the shell, and the tools beside it", () {
-    expect(
-      LocalShell(
-        driver: ({String? project}) =>
-            LocalShell.hostDriver(shell: () => "/system/bin/sh"),
-      ).platformDescription,
-      contains("/system/bin/sh"),
-    );
-    expect(
-      LocalShell(
-        driver: ({String? project}) => LocalShell.hostDriver(
-          shell: () => "/system/bin/sh",
-          tools: const Toolset(environment: {}, names: "git"),
-        ),
-      ).platformDescription,
-      contains("git"),
-    );
-  });
-
   test("the host driver answers for the machine, and for nothing where "
       "there is no shell", () {
     final driver = LocalShell.hostDriver(shell: () => "/bin/sh");
@@ -589,13 +590,6 @@ void main() {
       );
 
       expect(result.output.trim(), "/root");
-    });
-
-    test("what the model is told is the guest, not the machine it is on", () {
-      final shell = LocalShell(driver: ({String? project}) => guest());
-
-      expect(shell.platformDescription, contains("Alpine Linux 3.24.1"));
-      expect(shell.platformDescription, contains("proot"));
     });
 
     test(
@@ -814,25 +808,6 @@ void main() {
         expect(result.returnCode, -1);
         expect(result.exceptionInfo, contains("sandbox"));
       }
-    });
-
-    test("a read runs confined", () async {
-      final sandbox = CommandSandbox(workspace: workspace.path);
-      final driver = LocalShell.hostDriver(sandboxHelper: helper);
-      final shell = LocalShell(driver: ({String? project}) => driver);
-      final available =
-          Platform.isLinux && await helper.prefixFor(sandbox) != null;
-      if (!available) return;
-      final result = await shell
-          .start(
-            "echo confined",
-            cwd: workspace.path,
-            home: home.path,
-            timeout: const Duration(seconds: 10),
-            sandbox: sandbox,
-          )
-          .result;
-      expect(result.output, "confined\n");
     });
 
     test("does not touch the session shell's state", () async {

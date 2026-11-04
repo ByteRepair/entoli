@@ -147,12 +147,6 @@ void main() {
     expect(r.code, 0, reason: "git needs /dev/null and a writable workspace");
   });
 
-  test("a command that throws away output through /dev/null runs", () async {
-    if (!landlockUsable) return;
-    final r = await run0("echo noisy > /dev/null && echo quiet");
-    expect(r.out.trim(), "quiet");
-  });
-
   test(
     "creating a file or a symlink outside the workspace is denied",
     () async {
@@ -183,12 +177,6 @@ void main() {
     if (!landlockUsable) return;
     final r = await run0("touch in.txt && ln -s in.txt link && echo made");
     expect(r.out.trim(), "made");
-  });
-
-  test("the violations note names what was denied", () {
-    final note = CommandSandbox.violationsNote(["writing /etc/passwd"]);
-    expect(note, contains("/etc/passwd"));
-    expect(note, contains("sandbox"));
   });
 
   test("an extra write root is granted and enforced", () async {

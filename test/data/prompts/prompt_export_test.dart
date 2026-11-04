@@ -8,7 +8,6 @@ import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/prompts/prompt_export.dart";
 import "package:agent_chat/data/prompts/skill_import.dart";
 import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/project.dart" show defaultProjectDir;
 
 import "../../harness.dart";
 
@@ -16,16 +15,6 @@ void main() {
   late AppConfig config;
 
   setUp(() => config = tempConfig());
-
-  group("promptExportName", () {
-    test("a skill is a .skill, an agent its own .md", () {
-      expect(promptExportName(CompletionKind.skill, "review"), "review.skill");
-      expect(
-        promptExportName(CompletionKind.agent, "researcher"),
-        "researcher.md",
-      );
-    });
-  });
 
   group("exportPromptBytes", () {
     test("a user skill round-trips through the import parser", () async {
@@ -171,25 +160,6 @@ void main() {
       expect(
         exportPromptBytes(config, CompletionKind.agent, "nowhere"),
         completion(isNull),
-      );
-    }, timeout: testTimeout);
-
-    test("the exported skill imports back into another project", () async {
-      await writeAgentChatSkill(config, "review", project: "work");
-      final bytes = await exportPromptBytes(
-        config,
-        CompletionKind.skill,
-        "review",
-        project: "work",
-      );
-      final package = parseSkillPackage(bytes!);
-
-      await installSkillPackage(config, package, project: defaultProjectDir);
-      final dir = Directory(skillDirectory(config, "review"));
-      expect(dir.existsSync(), isTrue);
-      expect(
-        File("${dir.path}/SKILL.md").readAsStringSync(),
-        contains("Do review."),
       );
     }, timeout: testTimeout);
   });

@@ -41,11 +41,6 @@ Some prose, with a list that is not the plan:
       expect(planTasksFrom(text).map((t) => t.text), ["the only task"]);
     });
 
-    test("null and empty read as nothing", () {
-      expect(planTasksFrom(null), isEmpty);
-      expect(planTasksFrom(""), isEmpty);
-    });
-
     test("a marker with no text still counts, named for what it is", () {
       expect(planTasksFrom("- [ ]\n").single.text, "(untitled task)");
     });

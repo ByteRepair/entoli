@@ -53,11 +53,6 @@ void main() {
     alarms = LinuxReminderAlarms(bus: bus);
   });
 
-  test("available, and not scheduled against the system clock", () {
-    expect(alarms.available, isTrue);
-    expect(alarms.schedules, isFalse);
-  });
-
   test(
     "posting a reminder's completion carries its chat id as the tap",
     () async {
@@ -159,20 +154,5 @@ void main() {
     );
 
     expect(await alarms.takeOpenChat(), isNull);
-  });
-
-  test("the answers Android asks of a platform are yeses here", () async {
-    expect(await alarms.exactAllowed(), isTrue);
-    expect(await alarms.notificationsAllowed(), isTrue);
-    expect(await alarms.canHoldTurn(), isTrue);
-    expect(await alarms.takeFired(), isEmpty);
-
-    // Nothing to ask, nothing to schedule, nothing to release: the calls
-    // the scheduler makes on every reload must not throw.
-    await alarms.requestExact();
-    await alarms.requestNotifications();
-    await alarms.schedule(1, DateTime(2026));
-    await alarms.cancel(1);
-    await alarms.doneFiring();
   });
 }

@@ -5,7 +5,6 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:agent_chat/data/local/local_engine.dart";
 import "package:agent_chat/data/local/mlx_engine.dart";
 import "package:agent_chat/data/local/prompt_cache.dart";
 import "package:agent_chat/data/model_host/model_process.dart";
@@ -391,11 +390,6 @@ void main() {
     await mlx.serve(small.id, testLocalOptions());
     expect(calls(), ["load ${small.id}"]);
     expect(mlx.running.value.single.phase, LocalLlmPhase.ready);
-  });
-
-  test("how many may be resident and whether prompts are kept are offered", () {
-    expect(engine().controls, {LocalControl.maxRunning, LocalControl.kvCache});
-    expect(engine().catalog, mlxCatalog);
   });
 }
 

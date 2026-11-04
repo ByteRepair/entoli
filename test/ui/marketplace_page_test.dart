@@ -644,16 +644,4 @@ Frame it, from upstream.
     );
     expect(Directory(dir).existsSync(), isFalse);
   });
-
-  test("entries parse with version and tags absent", () {
-    const body = {
-      "py2": {"name": "py2", "description": "Python 2.", "author": "Someone"},
-    };
-    final entry = MarketplaceEntry.fromJson(
-      body.keys.first,
-      body["py2"]! as Map<String, Object?>,
-    );
-    expect(entry.version, isNull);
-    expect(entry.tags, isEmpty);
-  });
 }

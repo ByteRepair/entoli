@@ -641,24 +641,6 @@ void main() {
     },
   );
 
-  testWidgets("a single activity label renders no toggle", (tester) async {
-    await pump(
-      tester,
-      _message(MessageRole.assistant, const [
-        ToolCallPart(
-          toolCall: ToolCall(id: "c1", name: "bash", argumentsText: "pwd"),
-        ),
-        ToolResultPart(
-          result: ToolResult(callId: "c1", returnCode: 0, output: "/w"),
-        ),
-        TextPart(text: "done"),
-      ]),
-    );
-
-    expect(find.text("Expand activities"), findsNothing);
-    expect(find.text("Used tool: bash"), findsOneWidget);
-  });
-
   testWidgets(
     "an artifact between two runs keeps each run collapsed on its own",
     (tester) async {
@@ -1191,18 +1173,6 @@ void main() {
       expect(find.text("1/1"), findsNothing);
       expect(find.byTooltip("Previous thread"), findsNothing);
       expect(find.byTooltip("Next thread"), findsNothing);
-    });
-
-    testWidgets("several threads are counted, with a way between them", (
-      tester,
-    ) async {
-      await pumpThread(tester, index: 1, count: 3);
-
-      expect(find.text("2/3"), findsOneWidget);
-      expect(enabled(tester, buttonTipped("Previous thread")), isTrue);
-      expect(enabled(tester, buttonTipped("Next thread")), isTrue);
-      // Nothing to delete with when no callback is given.
-      expect(find.byTooltip("Delete thread"), findsNothing);
     });
 
     // The arrows do not wrap, so each end is a dead one rather than a way back

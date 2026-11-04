@@ -192,16 +192,11 @@ void main() {
       expect(await pinned(), isTrue);
 
       await chord(tester, LogicalKeyboardKey.keyP, shift: true);
-      for (
-        var i = 0;
-        i < 50 && find.text(pinnedHeading).evaluate().isNotEmpty;
-        i++
-      ) {
-        await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 5)),
-        );
-        await tester.pump();
-      }
+      await settleUntil(
+        tester,
+        () => find.text(pinnedHeading).evaluate().isEmpty,
+        what: "the pinned heading going",
+      );
       expect(await pinned(), isFalse);
     });
 

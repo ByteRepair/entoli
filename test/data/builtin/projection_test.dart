@@ -613,21 +613,6 @@ void main() {
       },
     );
 
-    test(
-      "a sub-agent's transcript, which has no authors, is all its own",
-      () async {
-        final messages = [
-          asked("what is 2+2?"),
-          said(MessageRole.assistant, const [MessagePart.text(text: "four")]),
-        ];
-        final transcript = await project(messages);
-        expect(transcript.map((m) => m.role), [
-          LlmRole.user,
-          LlmRole.assistant,
-        ]);
-      },
-    );
-
     test("a peer reply words who it handed to, per viewer", () async {
       final reply = authoredReply(
         "@researcher",

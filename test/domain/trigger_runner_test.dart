@@ -1,5 +1,6 @@
 import "dart:io";
 
+import "package:clock/clock.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/core/config.dart";
@@ -94,7 +95,7 @@ void main() {
         id: "r1",
         name: "n",
         prompt: "p",
-        source: ScheduleSource(at: DateTime.now()),
+        source: ScheduleSource(at: DateTime(2026, 8, 22, 9)),
         project: "work",
       ),
       "",
@@ -143,25 +144,29 @@ void main() {
     expect(meta.tempChatTtl, isNull);
   });
 
-  test("stamps fired before the turn runs", () async {
+  test("stamps fired, at the clock's time, before the turn runs", () async {
     final repository = repo();
-    final stamped = <Trigger>[];
     final driver = FakeTurnSender();
+    final firedAt = DateTime(2026, 8, 22, 9, 0, 3);
+    final turnsAtStamp = <int>[];
 
     final run = TriggerRunner(
       repo: repository,
       sender: driver,
       alarms: const UnavailableReminderAlarms(),
       onListChanged: (_) {},
-      onTriggerFired: (t) async => stamped.add(t),
+      onTriggerFired: (t) async {
+        expect(t.lastFiredAt, firedAt);
+        turnsAtStamp.add(driver.calls.length);
+      },
+      clock: Clock.fixed(firedAt),
     );
     await run.run(trigger(), "", const []);
 
-    // onTriggerFired is awaited before driver.send, so the stamp is in place
-    // before the turn starts — a crash mid-turn must not re-run the prompt.
-    expect(stamped.map((t) => t.id), ["r1"]);
-    expect(stamped.single.lastFiredAt, isNotNull);
-    expect(driver.calls, isNotEmpty);
+    // The stamp is in place before the turn starts — a crash mid-turn must
+    // not re-run the prompt.
+    expect(turnsAtStamp, [0]);
+    expect(driver.calls, hasLength(1));
   });
 
   test("returns the driver's outcome and snippet", () async {

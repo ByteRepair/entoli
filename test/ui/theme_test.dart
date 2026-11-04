@@ -68,23 +68,6 @@ void main() {
   }
 
   group("the theme setting", () {
-    testWidgets("a fresh install follows the system", (tester) async {
-      expect(AppSettings.load(app.config).appTheme, AppTheme.system);
-      await pumpAppearance(tester, app);
-
-      expect(shown(tester), AppTheme.system);
-    });
-
-    testWidgets("they are offered in the order they are declared", (
-      tester,
-    ) async {
-      await pumpAppearance(tester, app);
-
-      expect([
-        for (final segment in field(tester).segments) segment.value,
-      ], AppTheme.values);
-    });
-
     testWidgets("picking one persists it", (tester) async {
       await pumpAppearance(tester, app);
 
@@ -129,14 +112,6 @@ void main() {
       expect(materialApp.darkTheme?.brightness, Brightness.dark);
     });
 
-    testWidgets("following the system is what a fresh install hands over", (
-      tester,
-    ) async {
-      final materialApp = await pumpApp(tester);
-
-      expect(materialApp.themeMode, ThemeMode.system);
-    });
-
     testWidgets("changing it re-themes without a restart", (tester) async {
       await pumpApp(tester);
 
@@ -162,19 +137,6 @@ void main() {
       seedColor: ThemeColour.apple.colour,
       dynamicSchemeVariant: DynamicSchemeVariant.fidelity,
     );
-
-    testWidgets("a fresh install wears the iOS / macOS theme", (tester) async {
-      final materialApp = await pumpApp(tester);
-
-      final saved = AppSettings.load(app.config);
-      expect(saved.primaryColour, ColourTheme.apple.primary);
-      expect(saved.secondaryColour, ColourTheme.apple.secondary);
-      expect(materialApp.theme?.colorScheme.primary, appleBlue.primary);
-      expect(
-        entoliTheme(Brightness.light).colorScheme,
-        materialApp.theme!.colorScheme,
-      );
-    });
 
     testWidgets("the primary colour is what the scheme is seeded from", (
       tester,

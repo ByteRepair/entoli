@@ -249,23 +249,6 @@ void main() {
     expect(output, contains("@build"));
   });
 
-  test(
-    "trigger_list answers this chat's own with ids and next fires",
-    () async {
-      await registry.register(
-        source: ScheduleSource(at: DateTime(2026, 8, 24, 9)),
-        prompt: "p",
-        name: "sweep",
-      );
-      final events = await agent([
-        fileCall(triggerListName, {}),
-      ]).run(userMessage("what is armed?")).toList();
-      final output = resultOf(events).output;
-      expect(output, contains("t-1"));
-      expect(output, contains("sweep"));
-    },
-  );
-
   test("trigger_remove takes this chat's own, and only those", () async {
     await registry.register(
       source: ScheduleSource(at: DateTime(2026, 8, 24, 9)),

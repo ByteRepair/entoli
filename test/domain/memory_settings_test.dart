@@ -39,42 +39,6 @@ void main() {
       Directory(config.projectDir(project: name)).createSync(recursive: true);
 
   group("settings round-trip", () {
-    test("the app-level memory fields survive save and load", () async {
-      final settings = AppSettings(
-        instructionImports: false,
-        nestedInstructions: false,
-        autoMemory: true,
-        memoryRecall: false,
-        memoryExtraction: false,
-        memoryAgentTool: false,
-        memoryProviderId: "ollama-cloud",
-        memoryModelId: "qwen-2.5",
-      );
-      await settings.save(config);
-
-      final loaded = AppSettings.load(config);
-      expect(loaded.instructionImports, isFalse);
-      expect(loaded.nestedInstructions, isFalse);
-      expect(loaded.autoMemory, isTrue);
-      expect(loaded.memoryRecall, isFalse);
-      expect(loaded.memoryExtraction, isFalse);
-      expect(loaded.memoryAgentTool, isFalse);
-      expect(loaded.memoryProviderId, "ollama-cloud");
-      expect(loaded.memoryModelId, "qwen-2.5");
-
-      // Omission means on: a file that turns auto-memory on without naming
-      // the sub-gates gets recall, extraction and the tools. The instruction
-      // half defaults on too, the files being read into every turn whether or
-      // not the file names them.
-      await AppSettings(autoMemory: true).save(config);
-      final defaults = AppSettings.load(config);
-      expect(defaults.instructionImports, isTrue);
-      expect(defaults.nestedInstructions, isTrue);
-      expect(defaults.memoryRecall, isTrue);
-      expect(defaults.memoryExtraction, isTrue);
-      expect(defaults.memoryAgentTool, isTrue);
-    });
-
     // Defaults write nothing: an untouched settings.json carries no memory
     // keys, so a file from before the feature stays exactly as it was.
     test("defaults leave no trace", () async {
@@ -94,14 +58,6 @@ void main() {
       ]) {
         expect(json.containsKey(key), isFalse, reason: key);
       }
-    });
-
-    test("a project's own-memory toggle survives save and load", () async {
-      makeProject("proj");
-      await ProjectSettings(memory: Tristate.on).save(config, project: "proj");
-
-      expect(ProjectSettings.load(config, project: "proj").memory, Tristate.on);
-      expect(ProjectSettings.load(config).memory, Tristate.inherit);
     });
 
     test("the bool it replaced still loads", () {

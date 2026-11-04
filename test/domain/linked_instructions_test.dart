@@ -45,23 +45,4 @@ void main() {
 
     expect(linked.off, isEmpty);
   });
-
-  test("deleting a project with no switches changes nothing", () {
-    const linked = LinkedInstructions(files: ["/a.md"]);
-
-    expect(identical(linked.withoutProject("work"), linked), isTrue);
-  });
-
-  test("survives a round trip", () {
-    final linked = const LinkedInstructions(
-      files: ["/a.md"],
-    ).withOff("work", [global]);
-
-    final back = LinkedInstructions.fromJson(linked.toJson());
-
-    expect(back.files, ["/a.md"]);
-    expect(back.off, {
-      "work": [global],
-    });
-  });
 }

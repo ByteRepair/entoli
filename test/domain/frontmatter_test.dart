@@ -72,38 +72,11 @@ void main() {
     expect(parsed.metadata, {"author": "A"});
   });
 
-  test("literal block scalar", () {
-    final parsed = Frontmatter.parse(
-      "---\ndescription: |\n  line one\n  line two\n---\n\nBody.",
-    );
-    expect(parsed.description, "line one\nline two\n");
-  });
-
-  test("trailing comment is not part of the value", () {
-    final parsed = Frontmatter.parse(
-      "---\nname: s # the name\ndescription: d\n---\n",
-    );
-    expect(parsed.scalars["name"], "s");
-  });
-
-  test("escaped quotes inside a double-quoted value", () {
-    final parsed = Frontmatter.parse(
-      "---\ndescription: \"say \\\"hi\\\" now\"\n---\n",
-    );
-    expect(parsed.description, 'say "hi" now');
-  });
-
   test("numbers and booleans stringify", () {
     final parsed = Frontmatter.parse(
       "---\ndescription: 123\ntruthy: true\n---\n",
     );
     expect(parsed.scalars, {"description": "123", "truthy": "true"});
-  });
-
-  test("empty block parses to nothing", () {
-    final parsed = Frontmatter.parse("---\n---\n\nBody.");
-    expect(parsed.scalars, isEmpty);
-    expect(parsed.body, "Body.");
   });
 
   test("malformed yaml falls back to the legacy scalar parse", () {

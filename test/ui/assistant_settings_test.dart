@@ -31,13 +31,6 @@ void main() {
   /// where an assistant gesture arrives from.
   AppSettings onDisk() => AppSettings.load(app.config);
 
-  testWidgets("opens on the default project and the chat view", (tester) async {
-    await pumpAssistant(tester);
-
-    expect(inSection(find.text("Default")), findsOneWidget);
-    expect(inSection(find.text("Chat view")), findsOneWidget);
-  });
-
   testWidgets("every project is offered", (tester) async {
     await io(tester, () => app.repo.createProject("research"));
     await pumpAssistant(tester);

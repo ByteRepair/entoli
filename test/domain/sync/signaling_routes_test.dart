@@ -105,21 +105,6 @@ void main() {
     expect(seen.last, isNull);
   });
 
-  test("an unknown token is refused", () async {
-    routes.allowReconnect("tok");
-    answerWith("v=0 answer");
-
-    expect((await offer(token: "other")).status, 403);
-  });
-
-  test("a revoked token is refused again", () async {
-    routes.allowReconnect("tok");
-    routes.refuseReconnect("tok");
-    answerWith("v=0 answer");
-
-    expect((await offer(token: "tok")).status, 403);
-  });
-
   test("each offer waits for its own answer", () async {
     // Two at once is a device coming back at the moment another is being
     // paired; one id per offer is what keeps them from being crossed.

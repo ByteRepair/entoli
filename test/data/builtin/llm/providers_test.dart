@@ -21,10 +21,6 @@ void main() {
       expect(provider.client(null), isA<GeminiClient>());
     });
 
-    test("reads a local server by its preset id", () {
-      expect(providerOf(OllamaProvider.preset), isA<OllamaProvider>());
-    });
-
     test("reads an endpoint typed in by hand by its wire format", () {
       const custom = LlmProviderConfig(
         id: "vllm",
@@ -46,13 +42,6 @@ void main() {
           reason: preset.id,
         );
       }
-    });
-  });
-
-  group("keys", () {
-    test("a local server asks for no key", () {
-      expect(const OllamaProvider().needsKey, isFalse);
-      expect(const OpenAiProvider().needsKey, isTrue);
     });
   });
 

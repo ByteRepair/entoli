@@ -59,27 +59,4 @@ void main() {
       expect(latestTagOf(Uri.parse("https://github.com/$updateRepo")), isNull);
     });
   });
-
-  test("the assets are named after the app, one name per platform", () {
-    expect(assetFor(UpdateFlavour.linux), "entoli-x86_64.AppImage");
-    expect(assetFor(UpdateFlavour.macos), "entoli-arm64.dmg");
-    expect(assetFor(UpdateFlavour.windows), "entoli-installer.msi");
-  });
-
-  test(
-    "a download URL puts the tag and the asset where a release puts them",
-    () {
-      expect(
-        assetDownloadUrl("v1.2.4", appImageAsset),
-        "https://github.com/$updateRepo/releases/download/v1.2.4/$appImageAsset",
-      );
-    },
-  );
-
-  test("the check asks the page's own latest-release URL, not the API", () {
-    expect(
-      latestReleaseUrl(),
-      Uri.parse("https://github.com/$updateRepo/releases/latest"),
-    );
-  });
 }

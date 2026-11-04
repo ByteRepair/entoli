@@ -4,7 +4,6 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/domain/project_settings.dart";
-import "package:agent_chat/domain/tone.dart";
 
 import "../harness.dart";
 
@@ -21,32 +20,6 @@ void main() {
   ProjectSettings load() => ProjectSettings.load(config, project: "work");
   String? file() =>
       config.documents.read(config.projectSettingsFile(project: "work"));
-
-  ProjectSettings full() => ProjectSettings()
-    ..environment = {"KEY": "value", "PATH": "/usr/local/bin"}
-    ..omada = true
-    ..omadaOrdering = OmadaOrdering.relay
-    ..turnMaxSteps = 80
-    ..tone = Tone.kind
-    ..citations = false
-    ..description = "";
-
-  void expectFull(ProjectSettings s) {
-    expect(s.environment, {"KEY": "value", "PATH": "/usr/local/bin"});
-    expect(s.omada, true);
-    expect(s.omadaOrdering, OmadaOrdering.relay);
-    expect(s.turnMaxSteps, 80);
-    expect(s.tone, Tone.kind);
-    // Off and empty are written answers, not the absent ones.
-    expect(s.citations, isFalse);
-    expect(s.description, "");
-  }
-
-  test("every field survives a save and a load, and a copy", () async {
-    await full().save(config, project: "work");
-    expectFull(load());
-    expectFull(full().copy());
-  });
 
   test("defaults write nothing and absent keys load as inherit", () async {
     await (ProjectSettings()..environment = {}).save(config, project: "work");

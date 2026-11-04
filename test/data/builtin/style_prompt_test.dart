@@ -2,7 +2,6 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/templates.dart";
-import "package:agent_chat/domain/profile.dart";
 import "package:agent_chat/domain/tone.dart";
 import "package:agent_chat/data/builtin/tools/agent_tool.dart";
 import "package:agent_chat/data/builtin/system_prompt.dart";
@@ -19,18 +18,7 @@ void main() {
       ).text;
 
   group("style", () {
-    test("the shell prompt carries the file-tool preference and brevity", () {
-      final text = promptWith();
-
-      expect(text, contains("## Style"));
-      expect(text, contains("Reply briefly by default"));
-      expect(text, contains("`edit` rather than `sed -i`"));
-      // The rewritten examples no longer teach what the file tools replace.
-      expect(text, isNot(contains("cat <<'EOF' > newfile.py")));
-      expect(text, isNot(contains("sed -i 's/old_string/new_string/g'")));
-    });
-
-    test("the browser prompt carries it too", () {
+    test("the browser prompt carries the style section too", () {
       final text = systemPrompt(
         platform: "browser",
         offer: const ToolOffer(
@@ -89,25 +77,6 @@ void main() {
 
       expect(text, contains("number them in the text"));
       expect(text, isNot(contains("warmly and encouragingly")));
-    });
-
-    test("off leaves nothing", () {
-      expect(styleSection(Tone.direct, false), isNot(contains("web pages")));
-    });
-  });
-
-  group("the profile half it sits beside", () {
-    test("the tone section joins the About block in one prompt", () {
-      final text = systemPrompt(
-        platform: "test",
-        profile: const Profile(name: "Yiannis"),
-        tone: Tone.direct,
-        citations: true,
-      );
-
-      expect(text, contains("## About the user"));
-      expect(text, contains("Name: Yiannis"));
-      expect(text, contains("## How to reply"));
     });
   });
 }

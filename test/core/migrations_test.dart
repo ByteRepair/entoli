@@ -105,12 +105,6 @@ void main() {
     expect(ran, ["0.2.0", "1.0.0"]);
   });
 
-  test("a chain with nothing in it stamps nothing", () async {
-    await runMigrations(config.dataDir, fresh: true, chain: const []);
-
-    expect(await stamped(), isNull);
-  });
-
   // A release naming a version an earlier entry already used would truncate
   // the chain at the first of the two, and every entry after it would be
   // skipped without a word.

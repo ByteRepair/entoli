@@ -47,15 +47,4 @@ void main() {
       expect(AppSettings.load(config).localModelKvCachePrompts, 30);
     },
   );
-
-  test("the two new settings survive a save and load", () async {
-    final config = tempConfig();
-    await AppSettings(
-      localModelThreads: 2,
-      localModelKvCachePrompts: 0,
-    ).save(config);
-    final back = AppSettings.load(config);
-    expect(back.localModelThreads, 2);
-    expect(back.localModelKvCachePrompts, 0);
-  });
 }

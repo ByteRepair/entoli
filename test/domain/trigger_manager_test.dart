@@ -3,7 +3,6 @@ import "dart:async";
 import "package:clock/clock.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/file_watches.dart";
 import "package:agent_chat/domain/reminder_alarms.dart";
 import "package:agent_chat/domain/trigger.dart";
 import "package:agent_chat/domain/trigger_kinds.dart";
@@ -438,10 +437,10 @@ void main() {
     // See `trigger_file_kind_test.dart` for the kind in isolation; here
     // the registry — a FileKind over a fake watcher — reaches a fire
     // through the whole manager, and the fire is stamped like any other.
-    late RecordingFileWatches watches;
+    late FakeFileWatches watches;
 
     setUp(() {
-      watches = RecordingFileWatches();
+      watches = FakeFileWatches();
     });
 
     test(
@@ -528,23 +527,6 @@ void main() {
       },
     );
   });
-}
-
-/// The file system's push, for the manager's file-kind group; the file-kind
-/// tests drive their own copy in [FakeFileWatches]. Same shape, second name
-/// only because this one is in a manager test's scope.
-class RecordingFileWatches implements FileWatches {
-  final events = StreamController<FileWatchEvent>.broadcast();
-  final roots = <String>[];
-
-  @override
-  Stream<FileWatchEvent> watch(String root) {
-    roots.add(root);
-    return events.stream;
-  }
-
-  void push(String path, FileEvent kind) =>
-      events.add(FileWatchEvent(path: path, kind: kind));
 }
 
 /// A [TriggerRuns] that reports the target gone but posts as the real

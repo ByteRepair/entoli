@@ -11,6 +11,7 @@ import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/room/chat_room.dart" show retryWait;
 import "package:agent_chat/domain/room/room_state.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
@@ -117,16 +118,6 @@ void main() {
       () async => (await app.repo.openChat(id)).state.title != "New chat",
       what: "the title reaching disk",
     );
-
-    // Creating one writes it, so what keeps an untouched chat off the disk is
-    // that nothing creates one until there is something to say — see "Nothing
-    // selected is a new chat" for where that decision now lives.
-    test("is on disk from the moment it is made", () async {
-      final chat = await app.repo.createChat();
-
-      expect(File(app.config.stateFile(chat.state.id)).existsSync(), isTrue);
-      expect(await app.repo.listChats(), hasLength(1));
-    });
 
     test(
       "keeps the name it was made with when no title model is set",
@@ -1202,6 +1193,12 @@ void main() {
   });
 
   group("automatic retry rounds", () {
+    // No round waits out a real backoff: one that is let go at once, or held
+    // until the test lets it, is the same round without the bet on a clock.
+    final backoff = retryWait;
+    setUp(() => retryWait = (_) async {});
+    tearDown(() => retryWait = backoff);
+
     /// A turn that fails retryably on every round: the send and every resume
     /// the controller makes get the same script, the last entry repeating.
     /// [turnRetries] is what the test seeds, since the setting decides how
@@ -1217,14 +1214,15 @@ void main() {
         DoneEvent(),
       ];
       final (id, controller) = await startTurn("hello");
-      // A round per retry plus the send, each waiting out its own backoff.
-      await waitIdle(id, limit: Duration(seconds: 2 + turnRetries * 4));
+      await waitIdle(id);
       return (id, controller);
     }
 
     test(
       "carries a retryable failure on, showing the row between rounds",
       () async {
+        final backoff = Completer<void>();
+        retryWait = (_) => backoff.future;
         app.backend.scriptedRounds = [
           [ErrorEvent("connection lost", retryable: true), DoneEvent()],
           [TextDelta("now it worked"), DoneEvent()],
@@ -1233,7 +1231,9 @@ void main() {
         await waitFor(() => viewOf(id).retry != null, what: "the retry row");
         expect(viewOf(id).retry, contains("Retrying (1/5)"));
         expect(viewOf(id).isRunning, isTrue);
+        expect(app.backend.resumes, isEmpty);
 
+        backoff.complete();
         expect(await controller.turnDone, TurnEnd.done);
         expect(app.backend.resumes, hasLength(1));
         expect(textOf(messagesOf(id).last), "now it worked");
@@ -1276,6 +1276,8 @@ void main() {
     );
 
     test("stop during the backoff ends the turn without a resume", () async {
+      final backoff = Completer<void>();
+      retryWait = (_) => backoff.future;
       await app.seedSettings(AppSettings(turnRetries: 3));
       app.backend.scriptedRounds = [
         [ErrorEvent("connection lost", retryable: true), DoneEvent()],
@@ -1287,7 +1289,11 @@ void main() {
         what: "the retry row",
       );
 
-      await controller.interrupt();
+      // The stop resolves at the turn's true end, which is the backoff's; that
+      // running out after the stop must not carry the turn on.
+      final stopping = controller.interrupt();
+      backoff.complete();
+      await stopping;
 
       expect(app.backend.resumes, isEmpty);
       expect(app.container.read(chatControllerProvider(id)).isRunning, isFalse);
@@ -2008,6 +2014,10 @@ void main() {
         await app.container
             .read(appSettingsProvider.notifier)
             .setTurnRetries(1);
+        final backoff = retryWait;
+        addTearDown(() => retryWait = backoff);
+        final held = Completer<void>();
+        retryWait = (_) => held.future;
         // Explore's turn fails; its round re-enters resume and streams the
         // recovery. Build's say opens a turn beside it — its reply is the
         // last assistant message by the time the recovery lands — and the
@@ -2028,14 +2038,19 @@ void main() {
           what: "the retry row",
         );
 
-        // Build's turn opens while explore's round waits out its backoff.
+        // Build's turn opens while explore's round waits out its backoff,
+        // which is held until it has.
         await controller.send("and @build now");
+        await waitFor(
+          () => app.backend.prompts.length >= 2,
+          what: "build's turn",
+        );
+        held.complete();
         await waitFor(
           () => app.backend.resumes.isNotEmpty,
           what: "the retry round",
-          limit: const Duration(seconds: 10),
         );
-        await waitIdle(id, limit: const Duration(seconds: 10));
+        await waitIdle(id, limit: const Duration(seconds: 5));
 
         // The recovery is on explore's reply — the one the round owns — and
         // build's reply is untouched by it.

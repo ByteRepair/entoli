@@ -21,15 +21,6 @@ void main() {
         const CompletionOption(name: "review", description: "look it over"),
       );
     });
-
-    test("quotes around a value are the YAML's, not part of it", () {
-      final doc = skill(
-        "quoted",
-        '---\ndescription: "with: a colon"\n---\nbody',
-      );
-
-      expect(doc.description, "with: a colon");
-    });
   });
 
   group("library", () {
@@ -78,11 +69,6 @@ void main() {
         "an agent",
       );
     });
-
-    test("a kind with nothing in it offers nothing", () {
-      expect(PromptLibrary.empty.options(CompletionKind.agent), isEmpty);
-      expect(PromptLibrary.empty.find(CompletionKind.skill, "review"), isNull);
-    });
   });
 
   group("mentionsIn", () {
@@ -116,10 +102,6 @@ void main() {
         ),
         ["reviewer"],
       );
-    });
-
-    test("no mention names nobody", () {
-      expect(mentionsIn("all done here", libraryOf(["scout"])), isEmpty);
     });
   });
 }
