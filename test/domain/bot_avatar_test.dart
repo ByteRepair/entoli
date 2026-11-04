@@ -64,7 +64,11 @@ void main() {
 
   group("presets", () {
     final specs =
-        (jsonDecode(File("assets/bot_avatars/presets.json").readAsStringSync())
+        (jsonDecode(
+                  File(
+                    "assets/bot_avatars/open-bot-avatar/presets.json",
+                  ).readAsStringSync(),
+                )
                 as List)
             .map(BotAvatarSpec.fromJson)
             .toList();

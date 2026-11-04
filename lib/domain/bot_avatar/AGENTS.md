@@ -4,7 +4,7 @@ An agent's face can be a Bot Avatar instead of a photo: an object with two
 eyes, drawn live with implied volume, that idles, thinks and is happy. The
 format and the engine are [Open Bot Avatar](https://github.com/DominikScholz/open-bot-avatar)'s,
 MIT, ported to Dart here; its licence is an asset
-(`assets/bot_avatars/LICENSE.txt`) read into the licence page by
+(`assets/bot_avatars/open-bot-avatar/LICENSE.txt`) read into the licence page by
 `registerBotAvatarLicence`.
 
 ## The spec
@@ -36,7 +36,9 @@ explore a picture of their own sees theirs.
 
 ## The presets, and the user's
 
-The presets are `assets/bot_avatars/presets.json`: one spec per upstream
+Entoli's own presets are `assets/bot_avatars/presets.json`, empty for now
+and offered first. What came from upstream keeps its own directory, with
+its licence: `assets/bot_avatars/open-bot-avatar/presets.json`, one spec per upstream
 starter and gallery entry, in its upstream colour, read through
 `BotAvatarSpec.fromJson` like any other spec — a preset that fails the
 contract is skipped with a line. It was generated from the upstream repo at
@@ -114,6 +116,6 @@ no Use, a back arrow — for looking through, importing and deleting. One `Flex`
 preview over the controls on a portrait screen, beside them on a landscape
 one. Bots is the grid of presets and imports over the colour bar (palette,
 custom, reset); Import takes pasted JSON — fenced, in prose, or a list —
-through `BotAvatarImport.parse`, and points at the bundled `/bot-avatar-creator` skill — upstream's `skills/generate-avatar/references/system-prompt.md` copied verbatim, with its MIT licence beside it — for a model to design one; and an import leaves the grid by a long
+through `BotAvatarImport.parse`, and points at the `bot-avatar-creator` skill in the Entoli marketplace — an external entry for upstream's avatar design prompt — for a model to design one; and an import leaves the grid by a long
 press or right click. The moods on the preview are for looking; a spec
 carries no mood.

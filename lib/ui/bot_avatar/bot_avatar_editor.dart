@@ -14,9 +14,11 @@ import "../widgets/page_bar.dart";
 import "bot_avatar_view.dart";
 import "colour_dialog.dart";
 
-/// The spec an import is held to. The prompt a model designs one with ships
-/// as the bundled `/bot-avatar-creator` skill.
-final _spec = Uri.parse("https://github.com/DominikScholz/open-bot-avatar");
+/// The spec an import is held to. The prompt a model designs one with is the
+/// marketplace's `bot-avatar-creator` skill.
+final _spec = Uri.parse(
+  "https://dominikscholz.github.io/open-bot-avatar/#/docs",
+);
 
 /// One shape the editor offers, and where it came from.
 class BotAvatarEntry {
@@ -486,12 +488,11 @@ class _BotAvatarEditorPageState extends ConsumerState<BotAvatarEditorPage>
                 ),
                 recognizer: _specLink,
               ),
-              const TextSpan(text: " spec. Use "),
               const TextSpan(
-                text: "/bot-avatar-creator",
-                style: TextStyle(fontFamily: monoFamily),
+                text:
+                    " spec. Add the bot-avatar-creator skill from the Entoli "
+                    "marketplace to let Entoli make one for you.",
               ),
-              const TextSpan(text: " command to let Entoli make one for you."),
             ],
           ),
           style: muted,

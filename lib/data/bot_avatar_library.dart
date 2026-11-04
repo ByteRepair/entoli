@@ -1,6 +1,7 @@
-// The Bot Avatars the editor offers: the presets the app ships, each a spec
-// in `assets/bot_avatars/presets.json`, and the definitions the user imported,
-// kept in `<dataDir>/bot_avatars.json`.
+// The Bot Avatars the editor offers: the presets the app ships — Entoli's
+// own in `assets/bot_avatars/presets.json`, then Open Bot Avatar's in
+// `assets/bot_avatars/open-bot-avatar/` — and the definitions the user
+// imported, kept in `<dataDir>/bot_avatars.json`.
 import "dart:convert";
 import "dart:io";
 
@@ -11,23 +12,30 @@ import "../domain/bot_avatar/definition.dart";
 import "../domain/bot_avatar/spec.dart";
 import "../domain/documents.dart" show writeThroughRename;
 
-/// Where the presets are bundled.
-const botAvatarPresetsAsset = "assets/bot_avatars/presets.json";
+/// Where the presets are bundled, in the order the editor offers them:
+/// Entoli's own first, then the ones taken from Open Bot Avatar, which keep
+/// their own directory with the licence they came under.
+const botAvatarPresetAssets = [
+  "assets/bot_avatars/presets.json",
+  "assets/bot_avatars/open-bot-avatar/presets.json",
+];
 
-/// The upstream licence the engine and the presets travel under.
-const botAvatarLicenceAsset = "assets/bot_avatars/LICENSE.txt";
+/// The upstream licence the engine and its presets travel under.
+const botAvatarLicenceAsset = "assets/bot_avatars/open-bot-avatar/LICENSE.txt";
 
 /// The presets, read through the same spec reader an agent's avatar is: a
 /// preset is a spec like any other, and one that fails the contract is
 /// skipped with a line rather than taking the rest down.
 Future<List<BotAvatarSpec>> loadBotAvatarPresets(AssetBundle bundle) async {
-  final list = jsonDecode(await bundle.loadString(botAvatarPresetsAsset));
   final specs = <BotAvatarSpec>[];
-  for (final (i, json) in (list as List).indexed) {
-    final spec = BotAvatarSpec.fromJson(json);
-    spec == null
-        ? logFailure("bot-avatar", "preset $i is not a valid spec")
-        : specs.add(spec);
+  for (final asset in botAvatarPresetAssets) {
+    final list = jsonDecode(await bundle.loadString(asset));
+    for (final (i, json) in (list as List).indexed) {
+      final spec = BotAvatarSpec.fromJson(json);
+      spec == null
+          ? logFailure("bot-avatar", "preset $i of $asset is not a valid spec")
+          : specs.add(spec);
+    }
   }
   return specs;
 }

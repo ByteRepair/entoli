@@ -418,8 +418,8 @@ void main() {
         .toSet();
     expect(
       withLicence,
-      containsAll(["skill-creator", "bot-avatar-creator"]),
-      reason: "both carry the licence of the work they are copied from",
+      contains("skill-creator"),
+      reason: "skill-creator carries its own licence",
     );
     // The registry is write-only from here; the page reads it back through
     // the framework. What is testable is that every name it should carry is
@@ -428,13 +428,7 @@ void main() {
       final licence = bundledSkillFiles.firstWhere(
         (f) => f.name == name && f.relativePath == "LICENSE.txt",
       );
-      expect(
-        utf8.decode(licence.bytes),
-        contains(switch (name) {
-          "bot-avatar-creator" => "MIT License",
-          _ => "Apache License",
-        }),
-      );
+      expect(utf8.decode(licence.bytes), contains("Apache License"));
     }
   });
 
@@ -444,7 +438,6 @@ void main() {
     // skill is unscoped, so every project inherits the whole lot.
     const localSkills = {
       "artifact",
-      "bot-avatar-creator",
       "code-review",
       "coding",
       "compact",
