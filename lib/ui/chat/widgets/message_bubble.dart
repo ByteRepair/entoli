@@ -324,7 +324,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                           if (widget.avatar != null) ...[
                             AgentPictureImage(
                               face: widget.avatar,
-                              size: 18,
+                              size: 45,
                               animate: widget.latest,
                               reactToTap: true,
                               mood: widget.isWaiting

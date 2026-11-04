@@ -1,3 +1,7 @@
+import "dart:math" as math;
+import "dart:typed_data";
+import "dart:ui" as ui;
+
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -5,6 +9,7 @@ import "../../domain/agent_face.dart";
 import "../../domain/bot_avatar/pose.dart";
 import "../../providers.dart";
 import "../bot_avatar/bot_avatar_view.dart";
+import "picture_png.dart";
 
 /// An agent's face from one already in hand: its photo, circular; its Bot
 /// Avatar, drawn in place of the circle; or the person mark where it has
@@ -71,6 +76,87 @@ class AgentPictureImage extends StatelessWidget {
     };
   }
 }
+
+/// [face] as PNG bytes, [size] logical pixels square at [pixelRatio], drawn as
+/// [AgentPictureImage] draws it still — a photo in a circle, a Bot Avatar
+/// with its [outline] — or null where there is no face to draw. For a
+/// surface Flutter does not draw: the native shell's composer menu.
+Future<Uint8List?> agentFacePng(
+  AgentFace? face, {
+  required double size,
+  required double pixelRatio,
+  required Color outline,
+}) async {
+  switch (face) {
+    case AgentBot(:final spec):
+      return botAvatarPng(
+        spec,
+        size: size,
+        pixelRatio: pixelRatio,
+        outline: outline,
+      );
+    case AgentPhoto(:final bytes):
+      final px = (size * pixelRatio).ceil();
+      // Decoded with its shorter side at the size drawn, and its middle
+      // square taken, as the row's `BoxFit.cover` does.
+      final codec = await ui.instantiateImageCodecWithSize(
+        await ui.ImmutableBuffer.fromUint8List(bytes),
+        getTargetSize: (w, h) => w < h
+            ? ui.TargetImageSize(width: px)
+            : ui.TargetImageSize(height: px),
+      );
+      final photo = (await codec.getNextFrame()).image;
+      codec.dispose();
+      try {
+        final side = math.min(photo.width, photo.height).toDouble();
+        final box = Offset.zero & Size.square(px.toDouble());
+        return await pngOf(
+          px,
+          (canvas) => canvas
+            ..clipPath(Path()..addOval(box))
+            ..drawImageRect(
+              photo,
+              Rect.fromCenter(
+                center: Offset(photo.width / 2, photo.height / 2),
+                width: side,
+                height: side,
+              ),
+              box,
+              Paint()..filterQuality = FilterQuality.medium,
+            ),
+        );
+      } finally {
+        photo.dispose();
+      }
+    default:
+      return null;
+  }
+}
+
+/// An agent's face in a project as PNG bytes, by [agentFacePng]: held while
+/// a native composer menu could offer the agent, so the rows have their
+/// pictures by the time an `@` is typed.
+final agentFacePngProvider = FutureProvider.autoDispose
+    .family<
+      Uint8List?,
+      ({
+        String? project,
+        String name,
+        double size,
+        double pixelRatio,
+        Color outline,
+      })
+    >((ref, key) async {
+      final face = await ref.watch(
+        agentPictureProvider((project: key.project, name: key.name)).future,
+      );
+      return agentFacePng(
+        face,
+        size: key.size,
+        pixelRatio: key.pixelRatio,
+        outline: key.outline,
+      );
+    });
 
 /// An agent's face as the project shows it: the `<name>.avatar.json` or
 /// `<name>.png` beside the agent's `.md`, resolved over the library's tier

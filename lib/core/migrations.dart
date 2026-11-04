@@ -31,7 +31,9 @@ const List<Migration> migrations = [Migration("7.5.0", _athena)];
 
 /// 7.5.0: the main agent is Athena, a participant like any other. Every
 /// reply names its author and every say whom it was for, so a reply with no
-/// author is hers and a say addressed to nobody was said to her.
+/// author is hers and a say addressed to nobody was said to her. And a
+/// message records the `/skill` and `@agent` it named rather than what they
+/// meant: the `documents` map becomes `references`, its keys in order.
 Future<void> _athena(String dataDir) async {
   final projects = Directory(p.join(dataDir, "projects"));
   if (!projects.existsSync()) return;
@@ -59,14 +61,16 @@ Future<void> _athenaIn(File log) async {
     if (record is! Map<String, dynamic> || record["runtimeType"] != "message") {
       continue;
     }
-    if (record["role"] == "assistant" && record["author"] == null) {
-      record["author"] = "@athena";
-    } else if (record["role"] == "user" &&
-        ((record["addressees"] as List?) ?? const []).isEmpty) {
-      record["addressees"] = ["@athena"];
-    } else {
-      continue;
-    }
+    final authored = record["role"] == "assistant" && record["author"] == null;
+    if (authored) record["author"] = "@athena";
+    final addressed =
+        record["role"] == "user" &&
+        ((record["addressees"] as List?) ?? const []).isEmpty;
+    if (addressed) record["addressees"] = ["@athena"];
+    // What the references meant goes; the names stay, in the order written.
+    final documents = record.remove("documents");
+    if (documents is Map) record["references"] = documents.keys.toList();
+    if (!authored && !addressed && documents == null) continue;
     lines[i] = jsonEncode(record);
     changed = true;
   }

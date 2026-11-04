@@ -110,8 +110,8 @@ void main() {
   /// The message is dated [sentAt] rather than by the clock, because what the
   /// model is shown of a user turn carries the date it was sent — so a test
   /// comparing a live session against one rebuilt from a log has to date both
-  /// the same. [documents] is what the turn's `/command` and `@agent`
-  /// references meant, the way the app records them when it composes.
+  /// the same. [references] are the turn's `/skill` and `@agent` names, the
+  /// way the app records them when it composes.
   Future<List<AgentEvent>> send(
     BuiltinBackend backend,
     String text, {
@@ -122,7 +122,7 @@ void main() {
     Set<AgentCapability> disabled = const {},
     List<Message> history = const [],
     List<MessagePart> files = const [],
-    Map<String, String> documents = const {},
+    List<String> references = const [],
     DateTime? at,
     MemorySettings memory = MemorySettings.off,
     String? bundledInstructions,
@@ -139,7 +139,7 @@ void main() {
         userMessage(
           text,
           at: at ?? sentAt,
-          documents: documents,
+          references: references,
           files: files,
         ).copyWith(addressees: ["@$participant"]),
         history: history,
@@ -369,11 +369,7 @@ void main() {
         project: "Team",
         participant: "explore",
       );
-      await send(
-        room,
-        "hi @explore",
-        documents: const {"@explore": "You explore."},
-      );
+      await send(room, "hi @explore", references: const ["@explore"]);
 
       Set<String> offered(int call) => {
         for (final tool in client.calls[call].tools) tool.name,
@@ -1079,7 +1075,7 @@ void main() {
       await send(
         backend,
         "/review the parser",
-        documents: promptDocuments("/review the parser", asWritten),
+        references: promptReferences("/review the parser", asWritten),
       );
 
       expect(client.sent.first[2].text, contains("Review this:\n\nthe parser"));
@@ -1098,7 +1094,7 @@ void main() {
       await send(
         backend,
         "/commit only the tests",
-        documents: promptDocuments("/commit only the tests", asWritten),
+        references: promptReferences("/commit only the tests", asWritten),
       );
 
       expect(client.sent.first[2].text, contains("Commit what changed."));
@@ -1134,7 +1130,7 @@ void main() {
         await send(
           backend,
           "@researcher where is the parser?",
-          documents: promptDocuments(
+          references: promptReferences(
             "@researcher where is the parser?",
             asWritten,
           ),
@@ -1153,37 +1149,26 @@ void main() {
       },
     );
 
-    test(
-      "a command edited since is still the words the turn was sent with",
-      () async {
-        final asWritten = libraryWith(
-          CompletionKind.skill,
-          "review",
-          "Look hard at:\n\n\$ARGUMENTS",
-        );
-        final backend = backendOver(
-          [
-            [finish],
-          ],
-          // The library the turn is replayed against says something else
-          // entirely, and a deleted command would say nothing at all.
-          library: libraryWith(CompletionKind.skill, "review", "REWRITTEN"),
-        );
-        await send(
-          backend,
-          "/review the parser",
-          documents: promptDocuments("/review the parser", asWritten),
-        );
+    test("a command edited since reads as the library has it now", () async {
+      final asWritten = libraryWith(
+        CompletionKind.skill,
+        "review",
+        "Look hard at:\n\n\$ARGUMENTS",
+      );
+      final backend = backendOver([
+        [finish],
+      ], library: libraryWith(CompletionKind.skill, "review", "REWRITTEN"));
+      await send(
+        backend,
+        "/review the parser",
+        references: promptReferences("/review the parser", asWritten),
+      );
 
-        expect(
-          client.sent.first[2].text,
-          contains("Look hard at:\n\nthe parser"),
-        );
-        expect(client.sent.first[2].text, isNot(contains("REWRITTEN")));
-      },
-    );
+      expect(client.sent.first[2].text, contains("REWRITTEN"));
+      expect(client.sent.first[2].text, isNot(contains("Look hard at")));
+    });
 
-    test("a command deleted since still reads back", () async {
+    test("a command deleted since is left as what was typed", () async {
       final asWritten = libraryWith(
         CompletionKind.skill,
         "review",
@@ -1195,10 +1180,11 @@ void main() {
       await send(
         backend,
         "/review the parser",
-        documents: promptDocuments("/review the parser", asWritten),
+        references: promptReferences("/review the parser", asWritten),
       );
 
-      expect(client.sent.first[2].text, contains("Review this."));
+      expect(client.sent.first[2].text, contains("/review the parser"));
+      expect(client.sent.first[2].text, isNot(contains("Review this.")));
     });
 
     test(
@@ -1218,7 +1204,7 @@ void main() {
           userMessage(
             "@researcher where is the parser?",
             at: sentAt,
-            documents: promptDocuments(
+            references: promptReferences(
               "@researcher where is the parser?",
               asWritten,
             ),

@@ -244,8 +244,15 @@ class ComposerAttachment {
 class ComposerMenuItem {
   /// The trigger and the name, as they will be typed.
   String label;
+
+  /// Which menu it is in: an agent's row leads with its face.
+  ComposerTrigger trigger;
   String? hint;
   String? detail;
+
+  /// An agent's face as a PNG, a still drawn by Flutter; null for a skill,
+  /// and for an agent with no face to show, which the row draws as a person.
+  Uint8List? picture;
 }
 
 /// What an embed in the field draws as.

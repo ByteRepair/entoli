@@ -2,7 +2,7 @@ import "../agent_definition.dart" show athena;
 import "../models.dart";
 import "../reaction.dart";
 import "../prompt_library.dart"
-    show authorKeys, mentionsIn, nameOf, PromptLibrary;
+    show mentionedAgents, mentionsIn, nameOf, PromptLibrary;
 import "../shell.dart" show shellBypassCommand;
 import "../wired_skill.dart";
 
@@ -29,7 +29,7 @@ class Roster {
       omada && library.find(CompletionKind.agent, name) != null;
 
   /// The participants [message] addresses, in the order it names them,
-  /// sigils off. A user's say addresses those its documents name, or
+  /// sigils off. A user's say addresses those its references name, or
   /// Athena where it names nobody in the room — a command and a callback
   /// included, which only the default route runs. A reply hands to
   /// the participants its text names, never its own author: left in, every
@@ -59,7 +59,7 @@ class Roster {
   List<String> _named(Message say) => _notSaid(say)
       ? const []
       : [
-          for (final name in _keysOf(say).map(nameOf).whereType<String>())
+          for (final name in _namesOf(say))
             if (_inRoom(name)) name,
         ];
 
@@ -74,12 +74,12 @@ class Roster {
   /// Athena where it addresses no one — a reply naming nobody.
   String answering(Message prompt) => mentioned(prompt).firstOrNull ?? athena;
 
-  /// The participant keys a user's say addresses, sigils on: a reaction's
-  /// author, or what composing wrote into its documents.
-  static List<String> _keysOf(Message say) {
+  /// The participants a user's say addresses, sigils off: a reaction's
+  /// author, or the agents composing recorded in its references.
+  static List<String> _namesOf(Message say) {
     final reaction = say.reaction;
-    if (reaction == null) return authorKeys(say.documents);
-    return [?reaction.author];
+    if (reaction == null) return mentionedAgents(say.references);
+    return [?nameOf(reaction.author)];
   }
 
   static bool _notSaid(Message message) => isCommand(message.plainText);

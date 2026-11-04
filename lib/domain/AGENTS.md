@@ -14,8 +14,8 @@ Ten records. `message` opens one — before it holds anything, which is what the
 empty assistant message at the head of a turn is — and its `siblingOf` names
 what it is an alternative to, or nothing at all, which puts it on the end of the
 thread being read; `replacesSibling` takes that one away rather than joining it,
-and `documents` records what its `/skill` and `@agent` references stood for
-when it was written — see "Commands and agents". `part` is one part of it, at an
+and `references` records the `/skill` and `@agent` it named — see "Skills
+and agents". `part` is one part of it, at an
 index. `append` is more text
 on the end of the part at an index. `turnEnd` closes the turn and says why:
 `done`, `aborted`, or `error`. `select` says which of a message's alternatives
@@ -334,8 +334,9 @@ re-runs the message rather than a copy of its text — sends the date that turn
 was sent under. The bytes are read back through a `ResourceLoader`, and that is
 the only reason the projection is asynchronous; a file whose resource has gone is
 left named rather than failing the turn, which is what every message did before
-this read any. And what a `/skill` or an `@agent` stood for is written into the
-message when it is composed — see "Commands and agents".
+this read any. A `/skill` is the exception to reading only the log: the
+message records that it named one, and the projection expands it from the
+library as it is now — see "Skills and agents".
 
 **`resume` is the one message a turn shows the model that nobody said.**
 Carrying on an interrupted turn puts a user message in front of the model —
@@ -469,7 +470,8 @@ meant, restored under the built-in backend with the key the spec's `metadata:`
 map carries. What the callback does is the closed set in
 `lib/domain/wired_skill.dart` (`WiredSkill`), and the bundled `compact` skill
 is the one that ships. The body of a wired skill is the user's documentation,
-never sent to a model — `promptDocuments` refuses to expand one, so the
+never sent to a model — `promptReferences` does not record one and
+`expandedPrompt` refuses to expand one, so the
 conversation never gains prose pretending the model read it.
 
 **The check is the `shellBypassCommand` pattern**: one function read by every
@@ -763,13 +765,14 @@ likely a path. The `skill` tool hands the model the same body through the same
 hands the work to that agent: `/` puts words in front of whoever answers,
 `@` names who should do it.
 
-**The library is read once, where the message is composed, and never again.**
-`ChatRepository.composeUserPrompt` is the only place a user's message is made,
-and it calls `promptDocuments`: what each reference meant goes into the message
-as `documents`, keyed by the reference as written — `/review`, `@researcher`,
-sigil included, so a skill and an agent of the same name do not collide. Every
-later reading renders from that map: the turn being sent, the chat reopened
-tomorrow, a regenerate a week later.
+**What a message named is resolved once, where it is composed; what each name
+means is read off the library every time.** `ChatRepository.composeUserPrompt`
+is the only place a user's message is made, and it calls `promptReferences`:
+the skill and agents the text names that the library knows go into the message
+as `references`, as written — `/review`, `@researcher`, sigil included, so a
+skill and an agent of the same name do not collide. A name the library did not
+know is not recorded, so a path stays prose on every later reading even if a
+skill of that name turns up.
 
 It is on the repository rather than in `ChatController` because that is what
 makes it unskippable. The controller was the only sender when this landed, and a
@@ -779,20 +782,19 @@ characters the user typed. Composing a message is now the same kind of thing as
 resolving which model answers it: something the repository does for a turn, with
 nowhere else to get one.
 
-It was re-parsed against the library each time before, and that is wrong for a
-reason nothing catches. These are user-editable files, so rebuilding a year-old
-turn read whatever `skills/review/SKILL.md` says *now* — putting words in the
-model's mouth it had never seen, and quietly changing a conversation the user is
-reading beside it. A skill since deleted was worse: the turn fell back to the
-four characters the user typed, and the model was asked to carry on from a
-prompt it had never been given. Held, none of that is possible, and the message
-that carried it says so on its face.
+The names alone, not what they meant. A message used to carry a copy of each
+body, so a year-old turn read the words it was sent with. That was half right
+for an agent, whose body nothing read back — whoever runs as it is looked up in
+the library when it runs — and wrong for a skill, which is a directory of
+files: a copy of `SKILL.md` alone is a part of the skill out of step with the
+scripts and references beside it, which the model is told to run and read as
+they are now. So `/skill` is expanded at read time, by the projection, from the
+project's library as it stands (`expandedPrompt`). What that costs is said here
+rather than discovered: editing a skill rewords every turn that used it — a
+provider's prompt cache misses once — and a skill since deleted leaves the turn
+reading as the `/name` the user typed.
 
-Old logs have no `documents` and default to an empty map, which renders as the
-text alone — exactly what those turns already did. There is nothing to migrate
-and no version to bump, the same bargain `siblingOf` made.
-
-`mentionedAgents` reads the same map for the `@agent` half, which is why a
+`mentionedAgents` reads the same list for the `@agent` half, which is why a
 resumed turn is still handed to the agents its message named. Only the names:
 the sub-agent runs under its file as the library has it when `task` runs. The
 mentions stay in the text and are not stripped, so what the user reads and
@@ -1045,7 +1047,7 @@ queues on the member's FIFO. The runner puts the sigil'd mention on the
 head of the send text (`prompted(prompt, reason, member:)` — the one
 wording, the mention ahead of the prompt, the kind's reason below), and
 everything after that is the room's own machinery: the composer resolves
-the reference into the message's documents, `Roster.mentioned` reads them, the
+the reference into the message's references, `Roster.mentioned` reads them, the
 FIFO and the author stamp follow, and the fire is generation zero — the
 user's own message analog, uncapped itself, its handoffs capped. In a
 direct chat the fire is Athena's; the mention rides inline as instruction

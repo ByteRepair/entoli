@@ -48,7 +48,7 @@ void main() {
         approveMode: ApproveMode.never,
         approve: (_) async => ApprovalResponse.allow,
         answer: (request) async => request.unanswered,
-        skills: skills,
+        library: PromptLibrary(skills),
       );
 
   LlmCompletion skillCall(String name, {String? args, String id = "sk-1"}) =>
@@ -175,7 +175,7 @@ void main() {
       // routes to a skill's body; the model must read the same words either way.
       expect(
         skillPrompt(doc, "the code"),
-        expandedPrompt(text, promptDocuments(text, library)),
+        expandedPrompt(text, promptReferences(text, library), library),
       );
     });
 

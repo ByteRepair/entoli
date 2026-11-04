@@ -538,9 +538,7 @@ class BuiltinBackend implements AgentBackend {
           maxAttempts: 1,
           stepLimit: settings.turnMaxSteps,
         ),
-        skills:
-            libraryFor(settings.project)?.entries(CompletionKind.skill) ??
-            const [],
+        library: libraryFor(settings.project),
         // An Omada room's participants: the library's agents, already
         // tier-walked (the default set under My Team's under the project's
         // own). Null — a direct room, Athena alone — keeps the roster tool
@@ -646,7 +644,7 @@ class BuiltinBackend implements AgentBackend {
       // of, so they come off the message that started it.
       final said =
           prompt ?? history.lastWhereOrNull((m) => m.role == MessageRole.user);
-      final mentions = mentionedAgents(said?.documents ?? const {});
+      final mentions = mentionedAgents(said?.references ?? const []);
       final events = prompt == null
           ? agent.resume(mentions: mentions)
           : agent.run(
@@ -1036,7 +1034,8 @@ class BuiltinBackend implements AgentBackend {
   }
 
   /// [messages] of this chat as the model reads them, the attachments read
-  /// and named from its own `resources/`. The one way the backend projects,
+  /// and named from its own `resources/`, its skills from its project's
+  /// library. The one way the backend projects,
   /// so no rebuild words an attachment's note differently from another.
   Future<List<LlmMessage>> _projected(
     String chatId,
@@ -1045,17 +1044,18 @@ class BuiltinBackend implements AgentBackend {
     required String viewer,
     List<ConversationCompaction> compactions = const [],
     ResourceLoader? load,
-  }) async => projectionOf(
-    messages,
-    first: first,
-    viewer: viewer,
-    compactions: compactions,
-    load: load ?? _resourcesOf(chatId),
-    resourcesDir: config.resourcesDir(
-      chatId,
-      project: await store.projectOf(chatId),
-    ),
-  );
+  }) async {
+    final project = await store.projectOf(chatId);
+    return projectionOf(
+      messages,
+      first: first,
+      viewer: viewer,
+      compactions: compactions,
+      load: load ?? _resourcesOf(chatId),
+      resourcesDir: config.resourcesDir(chatId, project: project),
+      library: libraryFor(project),
+    );
+  }
 
   /// Carry on the sub-agents the interrupted turn left in flight. A `task`
   /// call whose result never landed is answered by reviving the sub-agent that

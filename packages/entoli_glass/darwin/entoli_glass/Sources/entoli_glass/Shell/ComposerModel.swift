@@ -1,5 +1,13 @@
 import SwiftUI
 
+#if os(iOS)
+  import Flutter
+  import UIKit
+#else
+  import AppKit
+  import FlutterMacOS
+#endif
+
 extension ComposerSnapshot {
   /// No page has a composer yet.
   static let initial = ComposerSnapshot(
@@ -72,13 +80,39 @@ final class ComposerModel: ObservableObject {
   /// character it draws.
   private(set) var cards: [UInt16: ComposerCard] = [:]
 
+  /// The menu's agent faces by row, decoded when a snapshot arrives rather
+  /// than on every body.
+  private(set) var pictures: [Int: Image] = [:]
+
+  /// The faces the menu showed last, by their PNG bytes.
+  private var faces: [Data: Image] = [:]
+
+  private static func image(_ png: Data) -> Image? {
+    #if os(iOS)
+      UIImage(data: png).map { Image(uiImage: $0) }
+    #else
+      NSImage(data: png).map { Image(nsImage: $0) }
+    #endif
+  }
+
   func apply(_ next: ComposerSnapshot) {
     guard next != look else { return }
     let restyle = next.mode != look.mode || next.dark != look.dark || next.cards != look.cards
       || next.accent != look.accent
     // A different list starts again at its first row; the same one keeps the
-    // row the arrows are on.
-    if next.menu != look.menu { highlighted = 0 }
+    // row the arrows are on — a face arriving for a row is the same list.
+    if next.menu.map(\.label) != look.menu.map(\.label) { highlighted = 0 }
+    // Each snapshot's bytes are a fresh object, so a face is known again by
+    // its bytes and decoded only the first time.
+    var decoded: [Data: Image] = [:]
+    pictures = Dictionary(
+      uniqueKeysWithValues: next.menu.enumerated().compactMap { row, item in
+        guard let png = item.picture?.data else { return nil }
+        guard let image = decoded[png] ?? faces[png] ?? Self.image(png) else { return nil }
+        decoded[png] = image
+        return (row, image)
+      })
+    faces = decoded
     if next.cards != look.cards {
       cards = Dictionary(
         next.cards.map { (UInt16(truncatingIfNeeded: $0.key), $0.value) },

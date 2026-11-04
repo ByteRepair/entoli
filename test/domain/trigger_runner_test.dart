@@ -245,7 +245,7 @@ void main() {
       await run.run(trigger(member: "researcher"), "", const []);
 
       // Sigil included, on the head of the text: the composer resolves it
-      // from the documents and the room routes it like any message sent.
+      // into the message and the room routes it like any message sent.
       expect(driver.calls.single.prompt, "@researcher\n\nCheck the builds");
     });
 
