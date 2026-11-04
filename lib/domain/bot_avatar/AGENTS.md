@@ -97,12 +97,12 @@ anywhere in the window — until it leaves it — and counts touches, each of
 which an avatar glances at for 2.5 s on its own clock. A thinking avatar
 does not follow; its look is its own.
 
-On top of the mood, a `BotAvatarController` plays a `BotAnimation`
+On top of the mood, a live avatar plays a `BotAnimation`
 (`animation.dart`): a mood held for a while, optionally with one eased full
-turn. `play` is async, completing when the animation ends or another cuts it
-short; the end is a `Timer`'s, not the avatar's clock, so it completes off
-screen too. A tap where `reactToTap` (chat and the context page) plays
-`BotAnimation.tapped`: happy for 5 s, and spinning 15% of the time.
+turn, timed on the avatar's own clock, which stands still while it is off
+screen — scrolled away mid-animation, it finishes once it is back. A tap where `reactToTap` (chat and
+the context page) plays `BotAnimation.tapped`: happy for 5 s, and spinning
+15% of the time; a second tap starts it over.
 
 **Off screen it does nothing.** Flutter does not stop a ticker in a row a
 list keeps built past its viewport (the cache extent), but it does skip

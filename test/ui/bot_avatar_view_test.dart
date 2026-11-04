@@ -2,6 +2,7 @@ import "dart:math" as math;
 
 import "package:agent_chat/domain/bot_avatar/animation.dart";
 import "package:agent_chat/domain/bot_avatar/definition.dart";
+import "package:agent_chat/domain/bot_avatar/frame.dart";
 import "package:agent_chat/domain/bot_avatar/pose.dart";
 import "package:agent_chat/domain/bot_avatar/spec.dart";
 import "package:agent_chat/ui/bot_avatar/bot_avatar_view.dart";
@@ -69,54 +70,41 @@ void main() {
     });
   });
 
-  group("BotAvatarController", () {
-    testWidgets("play completes when it is over, or when cut short", (
+  group("BotAvatarView", () {
+    testWidgets("a tap is happy for five seconds, then back to its mood", (
       tester,
     ) async {
-      final controller = BotAvatarController();
-      var first = false, second = false;
-      controller.play(BotAnimation.tapped(_Fixed(1))).then((_) => first = true);
-      await tester.pump();
-      expect(controller.playing?.mood, BotMood.happy);
+      /// Happy eyes are arcs; every other mood's are pills.
+      bool happy() {
+        final paint = tester.widget<CustomPaint>(
+          find.descendant(
+            of: find.byType(BotAvatarView),
+            matching: find.byType(CustomPaint),
+          ),
+        );
+        final frame = (paint.painter! as BotAvatarPainter).frame.value;
+        return frame.shapes.any((s) => s is EyeShapeMark && s.mark is ArcMark);
+      }
 
-      controller
-          .play(BotAnimation.tapped(_Fixed(1)))
-          .then((_) => second = true);
-      await tester.pump();
-      expect(first, isTrue, reason: "the second play cut the first short");
-      expect(second, isFalse);
-
-      await tester.pump(const Duration(seconds: 5));
-      expect(second, isTrue);
-      expect(controller.playing, isNull);
-    });
-  });
-
-  group("BotAvatarView", () {
-    testWidgets("a tap plays the happy reaction", (tester) async {
-      final controller = BotAvatarController(random: _Fixed(0.05));
       await tester.pumpWidget(
         _app(
-          Center(
-            child: BotAvatarView(
-              spec: _spec,
-              size: 48,
-              reactToTap: true,
-              controller: controller,
-            ),
-          ),
+          Center(child: BotAvatarView(spec: _spec, size: 48, reactToTap: true)),
         ),
       );
-      await tester.tap(find.byType(BotAvatarView));
       await tester.pump(const Duration(milliseconds: 16));
-      expect(controller.playing?.mood, BotMood.happy);
-      expect(controller.playing?.spin, isTrue);
+      expect(happy(), isFalse);
 
-      // Through the spin and out the other side.
-      for (var i = 0; i < 20; i++) {
-        await tester.pump(const Duration(milliseconds: 260));
+      await tester.tap(find.byType(BotAvatarView));
+      // Past the mood change's ease.
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
       }
-      expect(controller.playing, isNull);
+      expect(happy(), isTrue);
+
+      for (var i = 0; i < 25; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      expect(happy(), isFalse);
       expect(tester.takeException(), isNull);
     });
 

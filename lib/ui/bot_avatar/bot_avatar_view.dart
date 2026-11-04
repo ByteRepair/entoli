@@ -1,4 +1,3 @@
-import "dart:async";
 import "dart:math" as math;
 import "dart:typed_data";
 import "dart:ui" as ui;
@@ -17,64 +16,6 @@ import "../../domain/bot_avatar/volume.dart";
 /// right, so a grid of them faces one way. The reference editor's pose.
 const thumbnailView = ViewTurn(0.5, 0.12);
 const thumbnailGaze = Gaze(0.7, -1);
-
-/// Plays [BotAnimation]s on the [BotAvatarView] it is given to: one at a
-/// time, a new one cutting the last short. The time an animation lasts is a
-/// timer's, not the avatar's clock, so [play] completes when it should even
-/// while the avatar is off screen and drawing nothing.
-class BotAvatarController {
-  BotAvatarController({math.Random? random}) : _random = random ?? _shared;
-
-  static final _shared = math.Random();
-
-  final math.Random _random;
-  _Playing? _playing;
-  int _serial = 0;
-
-  /// What is playing, or null.
-  BotAnimation? get playing => _playing?.animation;
-
-  /// Counts plays, so a view sees a new one even of an equal animation.
-  int get serial => _serial;
-
-  /// Plays [animation] over the avatar's mood, completing when it is over
-  /// or when another play or [dispose] cuts it short.
-  Future<void> play(BotAnimation animation) {
-    _end();
-    final done = Completer<void>();
-    late final _Playing playing;
-    playing = _Playing(
-      animation,
-      done,
-      Timer(animation.duration, () {
-        if (identical(_playing, playing)) _end();
-      }),
-    );
-    _playing = playing;
-    _serial++;
-    return done.future;
-  }
-
-  /// What a tap plays: happy, and now and then a spin.
-  Future<void> react() => play(BotAnimation.tapped(_random));
-
-  void _end() {
-    final p = _playing;
-    if (p == null) return;
-    _playing = null;
-    p.timer.cancel();
-    p.done.complete();
-  }
-
-  void dispose() => _end();
-}
-
-class _Playing {
-  _Playing(this.animation, this.done, this.timer);
-  final BotAnimation animation;
-  final Completer<void> done;
-  final Timer timer;
-}
 
 /// Where the user last pointed, anywhere in the app: one global pointer
 /// route shared by every avatar that follows, held only while one does.
@@ -132,9 +73,8 @@ class _PointerWatch {
 /// (see [PreparedBotAvatar]); a frame is a handful of projected polygons.
 ///
 /// Live, it looks toward the pointer anywhere in the window and glances at
-/// a touch, can be turned by a drag ([turnable]), and plays
-/// [BotAnimation]s through a [controller] — a tap plays one where
-/// [reactToTap]. It paints on a layer of its own, so a frame repaints the
+/// a touch, can be turned by a drag ([turnable]), and where [reactToTap]
+/// a tap plays [BotAnimation.tapped] over its mood, timed on its own clock. It paints on a layer of its own, so a frame repaints the
 /// avatar and not whatever it sits in. Under the platform's reduce-motion setting it holds a calm
 /// pose, as the reference does, and does not spin.
 ///
@@ -151,7 +91,6 @@ class BotAvatarView extends StatefulWidget {
     this.animate = true,
     this.turnable = false,
     this.reactToTap = false,
-    this.controller,
     this.view = ViewTurn.none,
     this.gaze,
     this.semanticLabel,
@@ -168,7 +107,6 @@ class BotAvatarView extends StatefulWidget {
        animate = false,
        turnable = false,
        reactToTap = false,
-       controller = null,
        view = thumbnailView,
        gaze = thumbnailGaze;
 
@@ -186,9 +124,6 @@ class BotAvatarView extends StatefulWidget {
 
   /// A tap makes it happy for a while, and now and then spin.
   final bool reactToTap;
-
-  /// Plays animations on it; one of its own where null.
-  final BotAvatarController? controller;
 
   /// A fixed extra turn and look, for stills.
   final ViewTurn view;
@@ -212,7 +147,6 @@ class _BotAvatarViewState extends State<BotAvatarView>
   /// Made by the first [_sync], with the frame it would otherwise replace.
   ValueNotifier<BotAvatarFrame>? _frameOrNull;
   ValueNotifier<BotAvatarFrame> get _frame => _frameOrNull!;
-  BotAvatarController? _ownController;
 
   /// What the last live frame was drawn from under reduced motion, where a
   /// frame is a pure function of it: an equal one is the same picture.
@@ -227,9 +161,11 @@ class _BotAvatarViewState extends State<BotAvatarView>
   /// ticker, and the next paint starts it again.
   bool _painted = true;
 
-  /// The play this view last saw start, and when on its clock.
-  int _seenPlay = -1;
-  Duration _playFrom = Duration.zero;
+  static final _random = math.Random();
+
+  /// The animation a tap started, and when on [_now]'s clock; null once it
+  /// has run its length.
+  (BotAnimation, Duration)? _playing;
 
   /// The touch this view last saw, and until when it looks at it.
   int _seenTouch = 0;
@@ -243,14 +179,11 @@ class _BotAvatarViewState extends State<BotAvatarView>
   Offset? _dragFrom;
   ViewTurn _turnFrom = ViewTurn.none;
 
-  BotAvatarController get _controller =>
-      widget.controller ?? (_ownController ??= BotAvatarController());
-
   /// The platform's reduce-motion setting, read where it can change rather
   /// than on every tick.
   bool _reduced = false;
 
-  BotMood get _mood => _controller.playing?.mood ?? widget.mood;
+  BotMood get _mood => _playing?.$1.mood ?? widget.mood;
 
   @override
   void didChangeDependencies() {
@@ -279,7 +212,6 @@ class _BotAvatarViewState extends State<BotAvatarView>
   @override
   void dispose() {
     _watch(false);
-    _ownController?.dispose();
     _ticker.dispose();
     _frameOrNull?.dispose();
     super.dispose();
@@ -351,15 +283,16 @@ class _BotAvatarViewState extends State<BotAvatarView>
   BotAvatarFrame? _render({bool look = true}) {
     final ms = _now.inMicroseconds / 1000;
     final reduced = _reduced;
-    final controller = _controller;
-    if (controller.serial != _seenPlay) {
-      _seenPlay = controller.serial;
-      _playFrom = _now;
+    if (_playing case (
+      final played,
+      final from,
+    ) when _now - from >= played.duration) {
+      _playing = null;
     }
-    final playing = controller.playing;
-    final spin = playing == null || reduced
-        ? 0.0
-        : playing.yawAt(_now - _playFrom);
+    final spin = switch (_playing) {
+      (final played, final from) when !reduced => played.yawAt(_now - from),
+      _ => 0.0,
+    };
     final mood = _mood;
     final step = _animator.step(
       now: ms,
@@ -453,7 +386,7 @@ class _BotAvatarViewState extends State<BotAvatarView>
     if (widget.reactToTap) {
       child = GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: _controller.react,
+        onTap: () => _playing = (BotAnimation.tapped(_random), _now),
         child: child,
       );
     }
