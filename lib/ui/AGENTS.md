@@ -44,7 +44,9 @@ in `main` beside `IncomingShares`) reads. What a link means is
 - `entoli://new?prompt=…` — the new-chat screen with the prompt in its
   composer, **unsent**: a web page wrote it, so the user sends it. This is the
   form the agent harnesses take (`t3code://new?prompt=…`), so Open Bot
-  Avatar's "Open in" menu can name Entoli with one entry.
+  Avatar's "Open in" menu can name Entoli with one entry. The prompt waits in
+  `newChatPromptProvider` (`openNewChat(prompt:)`) only until the new-chat
+  screen takes it, so unlike the screen's own settings it never outlives one.
 - `entoli://install/skill/<slug>`, `entoli://install/agent/<slug>` — the
   marketplace's own preview page for that entry, its Install the same.
 - `entoli://install/avatar?def=…` — a Bot Avatar definition, raw or base64url

@@ -139,8 +139,9 @@ void selectProject(WidgetRef ref, ProjectRef project) {
 /// Go to the new-chat screen, with the drawer it was pressed in closed — the
 /// sidebar's button and the assistant gesture. Nothing is created: the screen
 /// makes a chat when the first thing is said in it.
-void openNewChat(BuildContext context, WidgetRef ref) {
+void openNewChat(BuildContext context, WidgetRef ref, {String? prompt}) {
   ref.read(selectedChatIdProvider.notifier).select(null);
+  if (prompt != null) ref.read(newChatPromptProvider.notifier).set(prompt);
   closeNavDrawer(context);
 }
 

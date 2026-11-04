@@ -620,7 +620,7 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       // gesture has to open a chat over it, all of which want a
       // Navigator that only exists below here; the first run is met with the
       // welcome tour (a phone's initial setup ahead of it) over the same, under
-      // whatever those two arrive with; and
+      // whatever those arrive with; and
       // the keyboard is the app's to answer for, over whichever field had it.
       home: const FocusFollowsKeyboard(
         child: IncomingAssistant(

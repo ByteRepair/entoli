@@ -1,5 +1,6 @@
 import "dart:async";
 
+import "package:app_links/app_links.dart";
 import "package:clock/clock.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/services.dart" show rootBundle;
@@ -140,6 +141,12 @@ final appRestartProvider = Provider<AppRestart>(
 final voiceProvider = Provider<Voice>((ref) => throw UnimplementedError());
 final assistantLaunchProvider = Provider<AssistantLaunch>(
   (ref) => throw UnimplementedError(),
+);
+
+/// Every `entoli://` link: the one that launched the app, then each after.
+/// A test overrides it with a stream of its own.
+final appLinksProvider = Provider<Stream<Uri>>(
+  (ref) => AppLinks().uriLinkStream,
 );
 final voiceModelStoreProvider = Provider<VoiceModelStore>(
   (ref) => throw UnimplementedError(),

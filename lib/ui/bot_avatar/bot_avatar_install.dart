@@ -5,9 +5,10 @@ import "../../domain/bot_avatar/import.dart";
 import "../../domain/bot_avatar/spec.dart";
 import "../../providers.dart";
 import "../widgets/dialogs.dart";
-import "bot_avatar_view.dart";
 import "../widgets/install_bar.dart";
 import "../widgets/page_bar.dart";
+import "bot_avatar_editor.dart";
+import "bot_avatar_view.dart";
 
 /// A Bot Avatar an `entoli://install/avatar` link carried: the bot, and
 /// Install under it. Installing is the editor's import, landing in the same
@@ -41,51 +42,50 @@ class _BotAvatarInstallPageState extends ConsumerState<BotAvatarInstallPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
+    Widget page(Widget body, [Widget? bar]) => Scaffold(
       appBar: const PageBar(title: "Install Bot Avatar"),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
-          child: switch (widget.import) {
-            BotAvatarImported(:final definitions) => Wrap(
-              spacing: 24,
-              runSpacing: 24,
-              alignment: WrapAlignment.center,
-              children: [
-                for (final d in definitions)
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    spacing: 12,
-                    children: [
-                      BotAvatarView(
-                        spec: BotAvatarSpec(
-                          definition: d,
-                          colour: BotPalette.ownColour(d.id),
-                        ),
-                        size: definitions.length == 1 ? 200 : 120,
-                        reactToTap: true,
-                      ),
-                      Text(d.name, style: theme.textTheme.titleMedium),
-                    ],
-                  ),
-              ],
-            ),
-            BotAvatarImportFailed(:final errors) => Text(
-              "This link's Bot Avatar does not fit the spec:\n"
-              "${errors.join("\n")}",
-              style: TextStyle(color: theme.colorScheme.error),
-            ),
-          },
+          child: body,
         ),
       ),
-      bottomNavigationBar: switch (widget.import) {
-        final BotAvatarImported imported => InstallBar(
-          installing: _installing,
-          label: "Install",
-          onPressed: () => _install(imported),
-        ),
-        BotAvatarImportFailed() => null,
-      },
+      bottomNavigationBar: bar,
+    );
+    final imported = widget.import;
+    if (imported is BotAvatarImportFailed) {
+      return page(BotAvatarImportNotes(imported));
+    }
+    final definitions = (imported as BotAvatarImported).definitions;
+    return page(
+      Wrap(
+        spacing: 24,
+        runSpacing: 24,
+        alignment: WrapAlignment.center,
+        children: [
+          for (final d in definitions)
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              spacing: 12,
+              children: [
+                BotAvatarView(
+                  spec: BotAvatarSpec(
+                    definition: d,
+                    colour: BotPalette.ownColour(d.id),
+                  ),
+                  size: definitions.length == 1 ? 200 : 120,
+                  reactToTap: true,
+                ),
+                Text(d.name, style: theme.textTheme.titleMedium),
+              ],
+            ),
+        ],
+      ),
+      InstallBar(
+        installing: _installing,
+        label: "Install",
+        onPressed: () => _install(imported),
+      ),
     );
   }
 }

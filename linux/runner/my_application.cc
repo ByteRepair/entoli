@@ -159,11 +159,10 @@ MyApplication* my_application_new() {
   // copy, so only a release is unique.
 #ifdef NDEBUG
   const GApplicationFlags flags = static_cast<GApplicationFlags>(
-      G_APPLICATION_HANDLES_COMMAND_LINE | G_APPLICATION_HANDLES_OPEN);
+      G_APPLICATION_HANDLES_COMMAND_LINE);
 #else
   const GApplicationFlags flags = static_cast<GApplicationFlags>(
-      G_APPLICATION_NON_UNIQUE | G_APPLICATION_HANDLES_COMMAND_LINE |
-      G_APPLICATION_HANDLES_OPEN);
+      G_APPLICATION_NON_UNIQUE | G_APPLICATION_HANDLES_COMMAND_LINE);
 #endif
   return MY_APPLICATION(g_object_new(my_application_get_type(),
                                      "application-id", APPLICATION_ID, "flags",

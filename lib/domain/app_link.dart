@@ -30,10 +30,9 @@ sealed class AppLink {
         if (def == null) return null;
         return AvatarLink(BotAvatarImport.parse(_unbase64(def)));
       // A remote entry's slug has a `/` in it, so the rest of the path is it.
-      case ("install", [final kind, _, ...]):
-        final k = CompletionKind.values.where((k) => k.name == kind);
-        final slug = segments.skip(1).join("/");
-        return k.isEmpty ? null : InstallLink(k.single, slug);
+      case ("install", [final kind, ...final rest]) when rest.isNotEmpty:
+        final k = CompletionKind.values.asNameMap()[kind];
+        return k == null ? null : InstallLink(k, rest.join("/"));
     }
     return null;
   }
