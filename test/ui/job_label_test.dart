@@ -27,7 +27,7 @@ void main() {
     addTearDown(app.dispose);
     final chatId = await io(tester, () async {
       final chat = await app.repo.createChat();
-      final at = DateTime.now();
+      final at = DateTime(2026);
       await app.repo.append(chat.state.id, [
         ...recordsOf([
           Message(

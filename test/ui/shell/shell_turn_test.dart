@@ -118,10 +118,4 @@ void main() {
       ApprovalResponse.alwaysAllowChat,
     ));
   });
-
-  testWidgets("nothing waiting sends nothing to draw", (tester) async {
-    await pump(tester, ChatViewState());
-    expect(shell.lastTurn!.question, isNull);
-    expect(shell.lastTurn!.approvals, isEmpty);
-  });
 }

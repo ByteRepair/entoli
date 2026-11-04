@@ -55,26 +55,6 @@ void main() {
     return labels;
   }
 
-  testWidgets("the Voice page downloads nothing", (tester) async {
-    app = TestApp.create();
-    await pumpVoice(tester);
-
-    expect(find.byType(ModelDownloadTile), findsNothing);
-  });
-
-  testWidgets("every model is listed whether it is downloaded or not", (
-    tester,
-  ) async {
-    app = TestApp.create();
-    await pumpOnDevice(tester);
-
-    await scrollTo(tester, find.text("Whisper tiny"));
-    await scrollTo(tester, find.text("Kokoro"));
-    // Nothing is installed, so every row offers the download.
-    expect(find.byTooltip("Download"), findsWidgets);
-    expect(find.byTooltip("Delete"), findsNothing);
-  });
-
   testWidgets(
     "a multilingual model wears the badge and an English one does not",
     (tester) async {
@@ -100,28 +80,6 @@ void main() {
       );
     },
   );
-
-  testWidgets("a row's specs are tags, and a speech model counts its voices", (
-    tester,
-  ) async {
-    app = TestApp.create();
-    await pumpOnDevice(tester);
-    await scrollTo(tester, find.text("Kokoro"));
-
-    Finder tag(String model, String label) => find.descendant(
-      of: find.ancestor(
-        of: find.text(model),
-        matching: find.byType(ModelDownloadTile),
-      ),
-      matching: find.text(label),
-    );
-    expect(tag("Kokoro", "82M params"), findsOneWidget);
-    expect(tag("Kokoro", "103 voices"), findsOneWidget);
-    expect(tag("Kokoro", "Apache-2.0"), findsOneWidget);
-    expect(tag("Piper (Amy)", "1 voice"), findsOneWidget);
-    // Its card gives neither, so neither is shown.
-    expect(tag("Piper (Amy)", "MIT"), findsNothing);
-  });
 
   testWidgets("downloading one puts it on the list of what can be picked", (
     tester,

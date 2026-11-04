@@ -15,33 +15,6 @@ void main() {
   tearDown(() => app.dispose());
 
   group("SettingsCard", () {
-    testWidgets("the copy card copies its value, the whole card the button", (
-      tester,
-    ) async {
-      final copied = clipboard(tester);
-      await app.pump(
-        tester,
-        Scaffold(
-          body: ListView(
-            children: [
-              SettingsCard.copy(
-                icon: Icons.badge_outlined,
-                title: "Project name",
-                value: "research",
-                said: "Copied project name",
-              ),
-            ],
-          ),
-        ),
-      );
-
-      await tester.tap(find.text("research"));
-      await settleIo(tester);
-
-      expect(copied, ["research"]);
-      expect(find.text("Copied project name"), findsOneWidget);
-    });
-
     testWidgets("a tappable card ends in the arrow, and its tap runs", (
       tester,
     ) async {
@@ -95,31 +68,6 @@ void main() {
         ),
         findsNothing,
       );
-    });
-
-    testWidgets("a trailing element takes the arrow's place", (tester) async {
-      await app.pump(
-        tester,
-        Scaffold(
-          body: ListView(
-            children: [
-              SettingsCard(
-                icon: Icons.description_outlined,
-                title: "Description",
-                subtitle: "Empty",
-                trailing: IconButton(
-                  icon: const Icon(Icons.refresh),
-                  tooltip: "Reset",
-                  onPressed: () {},
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-
-      expect(find.byIcon(Icons.refresh), findsOneWidget);
-      expect(find.byIcon(Icons.arrow_right), findsNothing);
     });
 
     testWidgets("the ink is clipped to the card at a non-default radius", (

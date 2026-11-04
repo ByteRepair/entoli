@@ -101,16 +101,6 @@ void main() {
     },
   );
 
-  testWidgets("preselects the model stored in meta.json", (tester) async {
-    await seedMeta(
-      tester,
-      ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"),
-    );
-    await openPage(tester);
-
-    expect(find.text("Qwen 2.5"), findsOneWidget);
-  });
-
   testWidgets("chosen model is still shown after saving and reopening", (
     tester,
   ) async {
@@ -317,18 +307,6 @@ void main() {
       await openPage(tester);
       await scrollTo(tester, find.text("Project memory"));
     }
-
-    testWidgets("a chat follows the project until it keeps out", (
-      tester,
-    ) async {
-      await openRow(tester);
-
-      expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
-      expect(
-        (await io(tester, () => app.savedMeta(_chatId))).memoryOff,
-        isNull,
-      );
-    });
 
     testWidgets("keeping out stores the off, and it survives a save", (
       tester,

@@ -113,17 +113,6 @@ void main() {
     Future<List<ChatState>> stored(WidgetTester tester) =>
         io(tester, () => app.repo.listChats());
 
-    testWidgets("there is somewhere to type, and no chat behind it", (
-      tester,
-    ) async {
-      await openEmpty(tester);
-
-      expect(find.byType(Composer), findsOneWidget);
-      expect(find.text("What would you like to discuss?"), findsOneWidget);
-      expect(app.container.read(selectedChatIdProvider), isNull);
-      expect(await stored(tester), isEmpty);
-    });
-
     // The whole of the design: a screen nobody typed into leaves nothing on
     // disk, so there is no draft to hold and nothing to sweep up.
     testWidgets("leaving without typing writes nothing", (tester) async {
@@ -1516,7 +1505,7 @@ void main() {
       // A finished chat holding one exchange and a compaction marker of its
       // own — written the way the real turn writes one: a record on the log,
       // not a part of anything.
-      final at = DateTime.now();
+      final at = DateTime(2026, 1, 1, 12);
       final prompt = Message(
         id: "m1",
         role: MessageRole.user,

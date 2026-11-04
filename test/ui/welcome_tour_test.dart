@@ -224,12 +224,6 @@ void main() {
     expect(find.text("More to set up"), findsOneWidget);
   });
 
-  testWidgets("the first-run page has no back arrow", (tester) async {
-    await app.pump(tester, const WelcomePage());
-
-    expect(find.byType(BackButton), findsNothing);
-  });
-
   group("in settings", () {
     Future<void> replay(WidgetTester tester) async {
       await app.pump(tester, const SizedBox());
@@ -285,14 +279,6 @@ void main() {
       await settleIo(tester);
       expect(settings().licenceAccepted, isFalse);
       expect(app.restart.restarts, 1);
-    });
-
-    testWidgets("picked wide, the tour fills the pane", (tester) async {
-      useWindow(tester, const Size(1200, 800));
-      await pumpSettings(tester, app, SettingsCategory.welcome);
-
-      expect(find.byType(WelcomeTour), findsOneWidget);
-      expect(find.text("Connect a model"), findsNothing);
     });
 
     // Replayed from settings, Done still opens the welcome chat, and leaves

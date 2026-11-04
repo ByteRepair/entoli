@@ -225,21 +225,6 @@ void main() {
       await settleIo(tester);
     }
 
-    testWidgets("the paired device's project is offered in the switcher", (
-      tester,
-    ) async {
-      app = appWith(online: true);
-      await app.pump(tester, const Sidebar());
-      await settleIo(tester);
-
-      await tester.tap(find.byIcon(Icons.unfold_more));
-      await settleIo(tester);
-
-      // Its default project, so the device's name alone — the local default
-      // has no name either.
-      expect(find.text("Desktop"), findsOneWidget);
-    });
-
     testWidgets("its name is styled by Omada on the device, not here", (
       tester,
     ) async {

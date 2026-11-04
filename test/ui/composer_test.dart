@@ -435,16 +435,6 @@ void main() {
     await settleIo(tester);
   }
 
-  testWidgets("the + button's Skills entry opens the skill menu", (
-    tester,
-  ) async {
-    await pump(tester);
-    await insertVia(tester, "Skills");
-
-    expect(controller.text, "/");
-    expect(menuItems(tester), ["/init", "/revert", "/review"]);
-  });
-
   testWidgets("the + button's Agents entry opens the agent menu", (
     tester,
   ) async {

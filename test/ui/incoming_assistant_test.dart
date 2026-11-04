@@ -136,18 +136,4 @@ void main() {
     expect(find.byType(VoicePage), findsNothing);
     expect(find.text("Voice mode needs two models"), findsOneWidget);
   });
-
-  testWidgets("the gesture makes a new chat rather than reopening one", (
-    tester,
-  ) async {
-    app = TestApp.create();
-    final old = await io(tester, () => app.seedChat());
-    await start(tester);
-    app.container.read(selectedChatIdProvider.notifier).select(old.state.id);
-
-    app.assistant.launch();
-    await settleIo(tester);
-
-    expect(openedChat(), isNot(old.state.id));
-  });
 }

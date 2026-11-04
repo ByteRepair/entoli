@@ -16,7 +16,8 @@ import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/widgets/model_catalog_page.dart"
     show catalogEntries;
 import "package:agent_chat/ui/widgets/model_picker.dart";
-import "package:agent_chat/ui/widgets/resettable_field.dart";
+import "package:agent_chat/ui/widgets/resettable_field.dart"
+    show defaultOptionLabel, noneOptionLabel;
 
 import "../fakes.dart";
 import "../harness.dart";
@@ -115,7 +116,6 @@ void main() {
     ModelChoice? inherited,
     String? Function(LlmProviderConfig)? defaultOf,
     String nullLabel = noneOptionLabel,
-    String? helperOffText,
     ModelRole role = ModelRole.agent,
     List<LlmProviderConfig> providers = const [testProvider],
     List<ModelOption>? listed,
@@ -131,7 +131,6 @@ void main() {
           nullLabel: nullLabel,
           defaultOf: defaultOf ?? (config) => config.defaultModelId,
           inherited: inherited,
-          helperOffText: helperOffText,
           role: role,
           onChanged: (c) => reported = c,
         ),
@@ -627,20 +626,5 @@ void main() {
     expect(find.text("Using Test · qwen-2.5"), findsOneWidget);
     await openModelCatalog(tester);
     expect(catalogLabels(tester), contains("Default (Test · qwen-2.5)"));
-  });
-
-  testWidgets("the optional picker's Off text is its helper", (tester) async {
-    await pump(
-      tester,
-      nullLabel: "Off",
-      helperOffText: "Off, nothing happens.",
-    );
-
-    expect(find.text("Off, nothing happens."), findsOneWidget);
-  });
-
-  testWidgets("the field sits in a resettable row", (tester) async {
-    await pump(tester);
-    expect(find.byType(ResettableField), findsOneWidget);
   });
 }

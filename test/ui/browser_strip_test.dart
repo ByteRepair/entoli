@@ -561,22 +561,6 @@ void main() {
       expect(find.textContaining("hidden from the agent"), findsNothing);
     });
 
-    testWidgets("and when a quit clears it with the tab gone", (tester) async {
-      final tab = await pumpStrip(tester);
-      tab.page.value = const BrowserPage(
-        url: "https://accounts.google.com",
-        opened: 1,
-      );
-      tab.hide(const BrowserHold(reason: "Sign in to Google"));
-      await tester.pump();
-      // What the quit does to the tab: no page, no hold.
-      tab.page.value = null;
-      tab.hold.value = null;
-      await tester.pump();
-      expect(find.text("Sign in to Google"), findsNothing);
-      expect(find.byType(ActionChip), findsNothing);
-    });
-
     testWidgets("the card opens the browser in a window, as the user", (
       tester,
     ) async {

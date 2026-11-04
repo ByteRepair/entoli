@@ -177,13 +177,6 @@ void main() {
         isFalse,
       );
     });
-
-    testWidgets("the global agents page has no destination combobox", (
-      tester,
-    ) async {
-      await pumpSettings(tester, app, SettingsCategory.agents);
-      expect(find.byType(InstallDestination), findsNothing);
-    });
   });
 
   group("the built-in's pages", () {

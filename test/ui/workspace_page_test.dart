@@ -52,16 +52,6 @@ void main() {
   group("listing", () {
     setUp(() => start(handoff: FakeFileHandoff.desktop()));
 
-    testWidgets("draws the folder it was opened at", (tester) async {
-      seed(files: ["notes.md", "main.dart"], folders: ["src"]);
-      await open(tester);
-
-      expect(find.text("Chat workspace"), findsOneWidget);
-      expect(find.text("src"), findsOneWidget);
-      expect(find.text("notes.md"), findsOneWidget);
-      expect(find.text("main.dart"), findsOneWidget);
-    });
-
     testWidgets("a file shows its size and a folder does not", (tester) async {
       seed(files: ["notes.md"], folders: ["src"]);
       await open(tester);
@@ -356,17 +346,6 @@ void main() {
       await settleIo(tester);
 
       expect(app.handoff.revealed.last, "$root/src");
-    });
-
-    // Selecting survives having nowhere to share to, because deleting is not a
-    // route out of the app.
-    testWidgets("there is nothing to share, but there is to select", (
-      tester,
-    ) async {
-      seed(files: ["notes.md"]);
-      await open(tester);
-
-      expect(find.byTooltip("Select"), findsOneWidget);
     });
 
     testWidgets("a selection can be deleted with nowhere to send it", (

@@ -81,7 +81,9 @@ void main() {
     await open(tester);
     expect(
       find.byWidgetPredicate((w) => w is BotAvatarView && !w.animate),
-      findsNWidgets(22),
+      findsNWidgets(
+        app.container.read(botAvatarPresetsProvider).requireValue.length,
+      ),
     );
 
     await tester.tap(find.bySemanticsLabel("Ghost"));

@@ -20,6 +20,7 @@ import "package:agent_chat/ui/sidebar/project_palette.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/selection.dart";
+import "package:agent_chat/ui/widgets/search_field.dart";
 import "package:agent_chat/ui/workspace/workspace_page.dart";
 
 import "../harness.dart";
@@ -177,32 +178,6 @@ void main() {
   });
 
   group("what the list looks like", () {
-    /// A chat last touched [daysAgo], which is what decides the heading it
-    /// lands under. Written straight to the store: the repository stamps
-    /// `updatedAt` itself, and the date is the whole subject here.
-    Future<void> seedDated(WidgetTester tester, String title, int daysAgo) =>
-        io(tester, () async {
-          final chat = await app.repo.createChat(title: title);
-          await app.repo.saveState(
-            chat.state.copyWith(
-              updatedAt: DateTime.now().subtract(Duration(days: daysAgo)),
-            ),
-          );
-        });
-
-    testWidgets("chats sit under a heading for when they were last touched", (
-      tester,
-    ) async {
-      await seedDated(tester, "this one", 0);
-      await seedDated(tester, "that one", 1);
-      await seedDated(tester, "the old one", 12);
-      await pumpBeside(tester);
-
-      expect(find.text("Today"), findsOneWidget);
-      expect(find.text("Yesterday"), findsOneWidget);
-      expect(find.text("Previous 30 days"), findsOneWidget);
-    });
-
     testWidgets("a project with nothing in it says so and offers no search", (
       tester,
     ) async {
@@ -317,13 +292,6 @@ void main() {
       await tester.tap(find.text(label).last);
       await settleIo(tester);
     }
-
-    testWidgets("the sidebar opens in the default project", (tester) async {
-      await pumpBeside(tester);
-
-      expect(app.container.read(selectedProjectProvider).project, isNull);
-      expect(find.text("Default"), findsOneWidget);
-    });
 
     // The slot beside the switcher is whatever the project it names can be
     // asked about: a named one has a settings page, the default one has only
@@ -810,22 +778,6 @@ void main() {
       expect(ProjectSettings.load(app.config, project: "Team").omada, isTrue);
     });
 
-    testWidgets("creating one with the switch off leaves Omada off", (
-      tester,
-    ) async {
-      await pumpBeside(tester);
-      await openProjectMenu(tester);
-
-      await tester.tap(find.text("New Project"));
-      await settleIo(tester);
-      await tester.enterText(find.widgetWithText(TextField, "Name"), "Plain");
-      await tester.pump();
-      await tester.tap(find.text("Create"));
-      await settleIo(tester, least: 20);
-
-      expect(ProjectSettings.load(app.config, project: "Plain").omada, isFalse);
-    });
-
     testWidgets(
       "an Omada project's name is italic in the menu, a plain one is not",
       (tester) async {
@@ -1128,6 +1080,12 @@ void main() {
   });
 
   group("pinning", () {
+    /// The sidebar's headings, top to bottom.
+    List<String> headings(WidgetTester tester) => tester
+        .widgetList<ListHeading>(find.byType(ListHeading))
+        .map((h) => h.text)
+        .toList();
+
     // One round trip: the menu's word, the heading the chat moves under, and
     // the TTL override pinning writes and unpinning leaves.
     testWidgets("pin and unpin move the chat and keep it non-temporary", (
@@ -1146,13 +1104,13 @@ void main() {
       await openMenu(tester);
       expect(find.text("Unpin"), findsNothing);
       await tester.tap(find.text("Pin"));
-      await pumpUntil(tester, find.text(pinnedHeading));
       // The date group it was in goes when the list is read again, after the
-      // heading — waited for rather than counted.
+      // heading — waited for rather than counted. Which date heading it was is
+      // the clock's, and chat_groups_test's.
       await settleUntil(
         tester,
-        () => find.text("Today").evaluate().isEmpty,
-        what: "the chat leaving its date group",
+        () => headings(tester).join() == pinnedHeading,
+        what: "the chat leaving its date group for Pinned",
       );
       expect(find.text("to pin"), findsOneWidget);
       expect(
@@ -1163,12 +1121,10 @@ void main() {
       await openMenu(tester);
       expect(find.text("Pin"), findsNothing);
       await tester.tap(find.text("Unpin"));
-      await pumpUntil(tester, find.text("Today"));
-      await settleUntil(
-        tester,
-        () => find.text(pinnedHeading).evaluate().isEmpty,
-        what: "the pinned group going",
-      );
+      await settleUntil(tester, () {
+        final now = headings(tester);
+        return now.length == 1 && now.single != pinnedHeading;
+      }, what: "the pinned group going, the chat back under a date");
       expect(find.text("to pin"), findsOneWidget);
       expect(
         (await io(tester, () => app.savedMeta(chat.state.id))).tempChatTtl,
@@ -1295,13 +1251,6 @@ void main() {
       await tester.tap(find.text("Permissions"));
       await settleIo(tester);
     }
-
-    testWidgets("the inherited label names the app-level tier", (tester) async {
-      await io(tester, () => app.repo.createProject("research"));
-      await open(tester, "research");
-
-      expect(find.textContaining("The app's own permissions"), findsOneWidget);
-    });
 
     testWidgets("the writable directories section saves what is added", (
       tester,

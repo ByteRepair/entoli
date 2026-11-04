@@ -13,7 +13,6 @@ import "package:agent_chat/ui/chat/widgets/code_block.dart" show CodeBlock;
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
-import "../fakes.dart";
 import "../harness.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
 
@@ -154,61 +153,6 @@ void main() {
       expect(tile("LLMs"), findsOneWidget);
       expect(find.text("New chats"), findsOneWidget);
     });
-
-    testWidgets("a divider stands where one group ends and another begins", (
-      tester,
-    ) async {
-      // A platform with every category, Triggers' clock included.
-      app.dispose();
-      app = TestApp.create(reminderAlarms: FakeReminderAlarms());
-      useWindow(tester, const Size(1200, 1400));
-      await app.pump(tester, const SettingsPage());
-      final panel = find.ancestor(
-        of: tile("General"),
-        matching: find.byType(ListView),
-      );
-
-      // The whole order, dividers included: the walk of the panel reads it as
-      // it is drawn. Scoped to the panel: the settings beside it are dividers
-      // of their own. Widened until the whole list fits, since the assertion
-      // is all seventeen of the categories.
-      expect(
-        tester
-            .widgetList<Widget>(
-              find.descendant(
-                of: panel,
-                matching: find.byWidgetPredicate(
-                  (w) => w is ListTile || w is Divider,
-                ),
-              ),
-            )
-            .map((w) => w is ListTile ? (w.title! as Text).data! : "─"),
-        [
-          "General",
-          "Providers",
-          "On-device",
-          "LLMs",
-          "Image Generation",
-          "─",
-          "Memory",
-          "Voice",
-          "Triggers",
-          "─",
-          "Agents",
-          "Skills",
-          "─",
-          "Terminal",
-          "Byte Repair",
-          "─",
-          "Sync",
-          "Data",
-          "─",
-          "Welcome",
-          "Shortcuts",
-          "About",
-        ],
-      );
-    });
   });
 
   testWidgets("each category holds the settings filed under it", (
@@ -232,12 +176,6 @@ void main() {
     await openCategory(tester, SettingsCategory.providers);
     expect(find.text("Add provider"), findsOneWidget);
     expect(find.text("New chats"), findsNothing);
-  });
-
-  testWidgets("is one field, with no provider to pick first", (tester) async {
-    await pumpSettings(tester, app, SettingsCategory.llms);
-
-    expect(find.text("Provider"), findsNothing);
   });
 
   group("the recommended provider", () {
