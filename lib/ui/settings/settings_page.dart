@@ -32,7 +32,6 @@ import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/editable_row.dart";
 import "../widgets/environment_section.dart";
-import "permissions_section.dart";
 import "../../core/formatting.dart";
 import "../widgets/side_panel_frame.dart";
 import "../widgets/provider_dialog.dart";
@@ -161,6 +160,9 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
   // the catalog under it is the rest of the page.
   SettingsCategory.terminal => const [
     TerminalSection(),
+    SandboxStatusCard(),
+    Divider(),
+    TerminalPermissionsSection(),
     // Draws its own divider, since a build with no proot in it has no
     // catalog to put under one.
     RootfsCatalogSection(),
@@ -667,7 +669,8 @@ class _IconChoice extends StatelessWidget {
   );
 }
 
-/// The endpoints the agent calls and how it gates commands.
+/// The endpoints the agent calls and how it gates commands. The rules and
+/// the sandbox are Terminal's, beside what they govern.
 class _AgentSection extends ConsumerWidget {
   const _AgentSection();
 
@@ -733,51 +736,6 @@ class _AgentSection extends ConsumerWidget {
                 .read(appSettingsProvider.notifier)
                 .setClassifierModel(choice),
           ),
-        ),
-        Divider(),
-        const _DefaultPermissionsSection(),
-      ],
-    );
-  }
-}
-
-/// The default project's permissions, which is what General holds: the tier
-/// every other project inherits before its own. The project settings page
-/// edits the same file for its own project, built-ins included.
-class _DefaultPermissionsSection extends ConsumerWidget {
-  const _DefaultPermissionsSection();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(projectSettingsProvider(null));
-    final sandboxed = settings.sandbox ?? true;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        PermissionsSection(
-          rules: settings.permissions,
-          description:
-              "Standing rules, consulted before the classifier and "
-              "the banner. A deny outranks an ask, which outranks an allow; a "
-              "command with segments a rule does not cover still waits.",
-          onSaved: (rules) => ref
-              .read(projectSettingsProvider(null).notifier)
-              .setProjectPermissions(rules),
-        ),
-        SwitchListTile(
-          title: const Text("Sandbox commands (Landlock)"),
-          subtitle: Text(
-            sandboxed
-                ? "Commands on this machine may write only to the workspaces "
-                      "and the directories granted. Linux only; a Linux guest "
-                      "is its own sandbox. A project can override this."
-                : "Off: commands on this machine write wherever you can. A "
-                      "project can override this.",
-          ),
-          value: sandboxed,
-          onChanged: (value) => ref
-              .read(projectSettingsProvider(null).notifier)
-              .setProjectSandbox(value),
         ),
       ],
     );

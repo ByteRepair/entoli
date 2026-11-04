@@ -430,14 +430,21 @@ does not.** The rules, their sandbox half and the switch below are set
 globally and per project whatever runs the commands, and they stay set when
 the environment changes. The approval half is the app's own gate and holds
 everywhere, the classifier with it; the sandbox half is the driver's to
-enforce, and only Linux's host driver can (its `sandboxHelper`) — a phone
-needs none, its app sandbox being the OS's. Every environment declares which
-it is as a `Confinement` (`lib/domain/confinement.dart`), and the Terminal
-page names it on each option and explains the picked one. A new enforcer is
-a new `SandboxHelper` and a `Confinement` that says so — not a change to the
-rules.
+enforce, and two host drivers can (their `sandboxHelper`): Linux's under
+Landlock (`lib/data/local/landlock.dart`) and macOS's under Seatbelt's
+`sandbox-exec` (`lib/data/local/seatbelt.dart`) — a phone needs none, its app
+sandbox being the OS's. Both are the same ruleset, read everywhere and write
+only the grant, and neither changes a live one: every confined command is its
+own subshell with a profile built from that command's `CommandSandbox`, which
+is how a grant made mid-chat reaches the next command. Seatbelt matches the
+path the kernel resolved, so its helper resolves symlinks (`/tmp`, `/var`)
+before granting, and passes the paths as `-D` parameters so no directory name
+is ever SBPL source. Every environment declares which it is as a
+`Confinement` (`lib/domain/confinement.dart`), and the Terminal page's status
+card says whether the picked one enforces. A new enforcer is a new
+`SandboxHelper` and a `Confinement` that says so — not a change to the rules.
 
-Landlock itself is a setting, `sandbox` in `project.json` and in a chat's
+The sandbox itself is a setting, `sandbox` in `project.json` and in a chat's
 `meta.json`: the default project's is the app's answer, a project's own
 overrides it, a chat's own overrides that, and unset is on.
 Off, the gate's sandbox is null for the whole turn and its sub-agents, which

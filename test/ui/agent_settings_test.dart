@@ -491,7 +491,7 @@ void main() {
         ];
       await io(tester, () => settings.save(app.config, project: null));
       app.container.invalidate(projectSettingsProvider(null));
-      await pumpSettings(tester, app, SettingsCategory.llms);
+      await pumpSettings(tester, app, SettingsCategory.terminal);
       await scrollTo(tester, find.text("Permissions"));
 
       expect(find.text("Shell commands (bash): git *"), findsOneWidget);
@@ -503,7 +503,7 @@ void main() {
     testWidgets("a rule can set the sandbox and leave asking to the mode", (
       tester,
     ) async {
-      await pumpSettings(tester, app, SettingsCategory.llms);
+      await pumpSettings(tester, app, SettingsCategory.terminal);
       await scrollTo(tester, find.text("Add rule"));
       await tester.tap(find.text("Add rule"));
       await tester.pumpAndSettle();

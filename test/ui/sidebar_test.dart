@@ -1275,13 +1275,11 @@ void main() {
       expect(find.text("Add rule"), findsOneWidget);
     });
 
-    testWidgets("the Landlock switch overrides the app default", (
-      tester,
-    ) async {
+    testWidgets("the sandbox switch overrides the app default", (tester) async {
       await io(tester, () => app.repo.createProject("research"));
       await open(tester, "research");
 
-      final row = find.text("Sandbox commands (Landlock)");
+      final row = find.text("Sandbox");
       await tester.scrollUntilVisible(
         row,
         200,

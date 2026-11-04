@@ -423,7 +423,7 @@ class _SandboxField extends ConsumerWidget {
         ref.watch(projectSettingsProvider(null)).sandbox ??
         true;
     return InheritableSwitch(
-      title: "Sandbox commands (Landlock)",
+      title: "Sandbox",
       subtitle: (value ?? inherited)
           ? null
           : "Off: this chat's commands write wherever you can.",

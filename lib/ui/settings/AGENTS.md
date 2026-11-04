@@ -113,7 +113,14 @@ notes), so the row's own story is one line: newer release, downloaded and put
 in place of this build. **Terminal** is where commands run —
 Android itself, or a Linux downloaded from the catalog under it; a category of
 its own for the reason Voice is one, and drawn on every platform, where it says
-that installing one is Android's. **On-device** is the model that answers
+that installing one is Android's. Its sections are the **Driver** picker, a
+**status card**, and the default project's **Permissions** with the Sandbox
+switch under them — moved there from LLMs, beside what they govern. The card
+is the one place the sandbox policy is shown: the picker's options name the
+environment and nothing more, and the switches elsewhere say only "Sandbox".
+It reads two things, the picked driver's `Confinement` and the default
+project's switch, and says one of three sentences — no support, supported but
+off, enforced. **On-device** is the model that answers
 without a network — the pick, what it runs on, and the catalog it is downloaded
 from; beside Terminal rather than under LLMs, since it is a machine question
 rather than a question about models, and a model loaded there appears under LLMs

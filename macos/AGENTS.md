@@ -13,10 +13,14 @@ app itself asks with an open panel first. Sandbox or not is therefore the
 decision the rest follows, and it came out unsandboxed, which is also what
 every agent that ships runs on a Mac does: the app is not sandboxed; the
 permissions are the app's own approvals; the OS-level isolation anyone has is
-a per-command child sandbox built by the helper. If this platform ever grows
-the third, macOS's answer is Seatbelt (`/usr/bin/sandbox-exec` with a profile
-the helper writes), which is the exact slot `platformDriver` already keeps for
-Linux's Landlock helper.
+a per-command child sandbox built by the helper. That third is Seatbelt:
+`SeatbeltSandboxHelper` (`lib/data/local/seatbelt.dart`) prefixes each confined
+command with `/usr/bin/sandbox-exec` and a profile of the turn's grant, in the
+slot `platformDriver` keeps for Linux's Landlock helper. `sandbox-exec` is
+deprecated and still works; it is probed once, and where it will not apply a
+profile a confined command is not run. A Mac App Store build, being under App
+Sandbox, could not apply a second profile, and would be `appSandbox` the way
+the phones are.
 
 ## The entitlements
 
