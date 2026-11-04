@@ -1,5 +1,6 @@
 import "dart:async";
 
+import "package:fake_async/fake_async.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_backend.dart";
@@ -52,6 +53,34 @@ class _Host implements RoomHost {
 }
 
 void main() {
+  group("the retry backoff", () {
+    test("runs its doubling wait out when nothing stops it", () {
+      fakeAsync((async) {
+        var waited = false;
+        retryWait(2, Completer<void>().future).then((_) => waited = true);
+        async.elapse(const Duration(milliseconds: 3999));
+        expect(waited, isFalse);
+        async.elapse(const Duration(milliseconds: 1));
+        expect(waited, isTrue);
+      });
+    });
+
+    test("ends the moment the turn is stopped, its timer with it", () {
+      fakeAsync((async) {
+        final stopped = Completer<void>();
+        var waited = false;
+        retryWait(10, stopped.future).then((_) => waited = true);
+        async.elapse(const Duration(seconds: 1));
+
+        stopped.complete();
+        async.flushMicrotasks();
+
+        expect(waited, isTrue);
+        expect(async.pendingTimers, isEmpty);
+      });
+    });
+  });
+
   late TestApp app;
 
   setUp(() => app = TestApp.create());

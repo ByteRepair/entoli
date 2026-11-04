@@ -20,10 +20,25 @@ import "roster.dart";
 import "schedule.dart";
 
 /// The wait before automatic retry round [round] (from 0): 1s doubling to a
-/// 30s cap. A variable so a test can hold a round or skip its wait, since a
-/// real backoff is a bet on the clock.
-Future<void> Function(int round) retryWait = (round) =>
-    Future<void>.delayed(Duration(seconds: (1 << round).clamp(1, 30)));
+/// 30s cap, cut short when [stopped] completes — the user pressing stop — so
+/// no timer outlives the turn it was for. A variable so a test can hold a
+/// round or skip its wait, since a real backoff is a bet on the clock. The
+/// room races it against the stop as well, so a wait that ignores [stopped]
+/// still cannot hold a stop.
+Future<void> Function(int round, Future<void> stopped) retryWait = _backoff;
+
+Future<void> _backoff(int round, Future<void> stopped) {
+  final waited = Completer<void>();
+  final timer = Timer(
+    Duration(seconds: (1 << round).clamp(1, 30)),
+    waited.complete,
+  );
+  stopped.whenComplete(() {
+    timer.cancel();
+    if (!waited.isCompleted) waited.complete();
+  });
+  return waited.future;
+}
 
 /// What a room needs of whoever holds it: the settings it reads at each use,
 /// where its state goes, and the services that are not the room's own —
@@ -1052,8 +1067,8 @@ class ChatRoom {
     // A retryable failure is a blip the turn is carried on from, not an
     // outcome to report: the round waits out its backoff and re-enters the
     // same resume the user's Continue button takes. The wait holds nothing —
-    // the user pressing stop has to reach it first, which is what the
-    // generation is for. The turn's completer stays open across rounds, so a
+    // the user pressing stop ends it at once, which is what [stopped] is
+    // for. The turn's completer stays open across rounds, so a
     // caller awaiting [turnDone] — the reminder runner, voice — gets one
     // completion, at the true end. The entry stays in the table across the
     // rounds — a retry re-opens this entry's recorder, not a fresh one whose
@@ -1062,7 +1077,6 @@ class ChatRoom {
         turn.retryable &&
         turn.round < _host.turnRetries) {
       final rounds = _host.turnRetries;
-      final gen = turn.retryGen;
       final round = turn.round;
       turn.round++;
       if (_disposed) return;
@@ -1072,8 +1086,13 @@ class ChatRoom {
         questions: _withoutTurn(state.questions, turn.replyId),
         runningSubAgents: _withoutTurn(state.runningSubAgents, turn.replyId),
       );
-      await retryWait(round);
-      if (turn.retryGen != gen) {
+      // The stop is what ends the wait, not something it waits out: this
+      // branch is the turn's `finishing`, which the stop awaits.
+      await Future.any([
+        retryWait(round, turn.stopped.future),
+        turn.stopped.future,
+      ]);
+      if (turn.stopped.isCompleted) {
         // A stop cut the wait short: still an ending, not a stranded entry.
         await _endTurn(turn, turn.interrupted ? null : turn.recorder.outcome);
         return;
@@ -1277,7 +1296,7 @@ class ChatRoom {
     final turns = List.of(_turns.values);
     if (turns.isEmpty) return;
     for (final turn in turns) {
-      turn.retryGen++;
+      if (!turn.stopped.isCompleted) turn.stopped.complete();
       mark(turn);
     }
     await _repo.abort(chatId);
@@ -1371,9 +1390,10 @@ class _RunningTurn {
   /// second reach awaits.
   Future<void>? finishing;
 
-  /// Bumped by abort and interrupt so a pending retry cannot fire after the
-  /// user pressed stop — this turn's generation, not the room's.
-  int retryGen = 0;
+  /// Completed by abort and interrupt: it ends a retry backoff in progress,
+  /// and a backoff that ran out on its own reads it so the round is not
+  /// carried on after the user pressed stop.
+  final Completer<void> stopped = Completer<void>();
 
   /// Whether the turn's last failure can be carried on from, and the line for
   /// the retry row and the failure notification.
