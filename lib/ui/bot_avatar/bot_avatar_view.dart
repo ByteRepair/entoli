@@ -38,6 +38,14 @@ class BotAvatarMotion extends InheritedWidget {
 const thumbnailView = ViewTurn(0.5, 0.12);
 const thumbnailGaze = Gaze(0.7, -1);
 
+/// Where an idle still looks when nothing gives it a look: down and to the
+/// right, so a face at rest reads as reading the page beside it rather than
+/// staring out of it. Thinking keeps its own look; happy eyes are arcs.
+const stillGaze = Gaze(0.7, 0.7);
+
+Gaze? _stillGaze(BotMood mood, Gaze? given) =>
+    given ?? (mood == BotMood.idle ? stillGaze : null);
+
 /// Where the user last pointed, anywhere in the app: one global pointer
 /// route shared by every avatar that follows, held only while one does.
 /// A mouse is followed wherever it goes until it leaves the window; a touch
@@ -296,7 +304,7 @@ class _BotAvatarViewState extends State<BotAvatarView>
       widget.view.yaw + _turn.yaw,
       widget.view.pitch + _turn.pitch,
     ),
-    gaze: widget.gaze,
+    gaze: _stillGaze(_mood, widget.gaze),
   );
 
   void _tick(Duration elapsed) {
@@ -432,7 +440,9 @@ Future<Uint8List?> botAvatarPng(
   required Color outline,
 }) async {
   final frame = ValueNotifier(
-    PreparedBotAvatar.of(spec.definition).frame(reducedMotion: true),
+    PreparedBotAvatar.of(
+      spec.definition,
+    ).frame(reducedMotion: true, gaze: stillGaze),
   );
   try {
     return await pngOf(

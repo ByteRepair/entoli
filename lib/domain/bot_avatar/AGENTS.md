@@ -98,6 +98,12 @@ platform's reduce-motion setting every avatar is a still**, with no ticker
 at all; a turn or a reaction redraws it, and the test harness runs that way
 so a page holding an avatar settles.
 
+**A still looks down and to the right** (`stillGaze`) unless it is given a
+look of its own: the eyes alone, the body held, since a still is drawn with
+reduced motion. That is an idle still — thinking keeps its own look and
+happy eyes are arcs with nowhere to point — and the PNG stills of the `@`
+menu too. A live avatar wanders and follows as before.
+
 **Every avatar has a hair of outline**, in the theme's `outline` colour, so
 a pale one on a pale page — Athena's white owl on the chat's background —
 still has a shape. The painter draws the body's silhouette first, in that
