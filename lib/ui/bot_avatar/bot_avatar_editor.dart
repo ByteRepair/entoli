@@ -1,3 +1,4 @@
+import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -13,11 +14,9 @@ import "../widgets/page_bar.dart";
 import "bot_avatar_view.dart";
 import "colour_dialog.dart";
 
-/// Where the reference keeps the prompt a model designs an avatar with.
-final _designPrompt = Uri.parse(
-  "https://github.com/DominikScholz/open-bot-avatar/blob/main/skills/"
-  "generate-avatar/references/system-prompt.md",
-);
+/// The spec an import is held to. The prompt a model designs one with ships
+/// as the bundled `/bot-avatar-creator` skill.
+final _spec = Uri.parse("https://github.com/DominikScholz/open-bot-avatar");
 
 /// One shape the editor offers, and where it came from.
 class BotAvatarEntry {
@@ -70,6 +69,8 @@ class _BotAvatarEditorPageState extends ConsumerState<BotAvatarEditorPage>
     with SingleTickerProviderStateMixin {
   late final _tabs = TabController(length: 2, vsync: this);
   final _paste = TextEditingController();
+  late final _specLink = TapGestureRecognizer()
+    ..onTap = () => ref.read(linkOpenerProvider).open(context, _spec);
 
   /// The chosen entry's key; null takes the first entry there is.
   String? _selected;
@@ -93,6 +94,7 @@ class _BotAvatarEditorPageState extends ConsumerState<BotAvatarEditorPage>
   void dispose() {
     _tabs.dispose();
     _paste.dispose();
+    _specLink.dispose();
     super.dispose();
   }
 
@@ -460,21 +462,27 @@ class _BotAvatarEditorPageState extends ConsumerState<BotAvatarEditorPage>
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text(
-          "Paste an Open Bot Avatar definition — one SVG path and where the "
-          "eyes sit — to add it to the Bots tab. Ask any model to design one "
-          "with the Open Bot Avatar prompt and paste its reply as it is: a "
-          "code fence or prose around the JSON is fine.",
-          style: muted,
-        ),
-        Align(
-          alignment: AlignmentDirectional.centerStart,
-          child: TextButton.icon(
-            icon: const Icon(Icons.open_in_new, size: 18),
-            label: const Text("The design prompt"),
-            onPressed: () =>
-                ref.read(linkOpenerProvider).open(context, _designPrompt),
+        Text.rich(
+          TextSpan(
+            children: [
+              const TextSpan(text: "Import new looks using the "),
+              TextSpan(
+                text: "Open Bot Avatar",
+                style: TextStyle(
+                  color: theme.colorScheme.primary,
+                  decoration: TextDecoration.underline,
+                ),
+                recognizer: _specLink,
+              ),
+              const TextSpan(text: " spec. Use "),
+              const TextSpan(
+                text: "/bot-avatar-creator",
+                style: TextStyle(fontFamily: monoFamily),
+              ),
+              const TextSpan(text: " command to let Entoli make one for you."),
+            ],
           ),
+          style: muted,
         ),
         const SizedBox(height: 8),
         TextField(

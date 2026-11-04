@@ -163,8 +163,9 @@ submodule pinned at a release tag and imports its entries into `data/skills/`
 there (see the marketplace repo's notes). What a release ships is the fork's
 decision — its `RELEASE_EXCLUDED` and `tool/release.sh` — and the marketplace
 imports it; the app bundles none of it, the Skills tab serves those entries
-internally, and the user installs what they want. The one locally written
-skill carrying a licence files it in its own directory, and a skill's licence
+internally, and the user installs what they want. A locally written
+skill carrying a licence — skill-creator's Apache, bot-avatar-creator's MIT —
+files it in its own directory, and a skill's licence
 is registered per skill for the licence page (see "What the app is" in
 `lib/ui/settings/AGENTS.md`); a file that is not text at all — a font, an
 archive — is embedded base64 beside its text siblings

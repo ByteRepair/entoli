@@ -111,6 +111,6 @@ menu ("Use Bot Avatar" beside "Upload photo"). One `Flex` lays it out: the
 preview over the controls on a portrait screen, beside them on a landscape
 one. Bots is the grid of presets and imports over the colour bar (palette,
 custom, reset); Import takes pasted JSON — fenced, in prose, or a list —
-through `BotAvatarImport.parse`, and an import leaves the grid by a long
+through `BotAvatarImport.parse`, and points at the bundled `/bot-avatar-creator` skill — upstream's `skills/generate-avatar/references/system-prompt.md` copied verbatim, with its MIT licence beside it — for a model to design one; and an import leaves the grid by a long
 press or right click. The moods on the preview are for looking; a spec
 carries no mood.
