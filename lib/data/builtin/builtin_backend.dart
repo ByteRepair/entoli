@@ -193,6 +193,7 @@ class BuiltinBackend implements AgentBackend {
     String chatId,
     Message prompt, {
     required String participant,
+    bool mayDecline = false,
     List<Message> history = const [],
     List<ConversationCompaction> compactions = const [],
     TurnSettings settings = const TurnSettings(),
@@ -201,6 +202,7 @@ class BuiltinBackend implements AgentBackend {
     chatId,
     prompt,
     participant: participant,
+    mayDecline: mayDecline,
     history: history,
     compactions: compactions,
     settings: settings,
@@ -227,11 +229,13 @@ class BuiltinBackend implements AgentBackend {
 
   /// The stream is returned rather than yielded, so the caller is listening
   /// before the turn starts: closing a controller nobody listens to never
-  /// completes.
+  /// completes. A resumed turn is never [mayDecline]: it is carrying on a
+  /// reply, not choosing whether to give one.
   Stream<AgentEvent> _start(
     String chatId,
     Message? prompt, {
     required String participant,
+    bool mayDecline = false,
     List<Message> history = const [],
     List<ConversationCompaction> compactions = const [],
     required TurnSettings settings,
@@ -246,6 +250,7 @@ class BuiltinBackend implements AgentBackend {
         prompt,
         controller,
         participant: participant,
+        mayDecline: mayDecline,
         history: history,
         compactions: compactions,
         settings: settings,
@@ -264,6 +269,7 @@ class BuiltinBackend implements AgentBackend {
     Message? prompt,
     StreamController<AgentEvent> controller, {
     required String participant,
+    required bool mayDecline,
     List<Message> history = const [],
     List<ConversationCompaction> compactions = const [],
     required TurnSettings settings,
@@ -508,6 +514,7 @@ class BuiltinBackend implements AgentBackend {
         session: session,
         viewer: participant,
         agent: AgentDefinition.of(file),
+        mayDecline: mayDecline,
         loadResource: _resourcesOf(chatId),
         steers: steers,
         client: gatedClient,

@@ -712,6 +712,8 @@ class ChatRoom {
         history: history,
         compactions: chat.compactions,
         replaces: replacing != null,
+        // A say nobody else was asked is the answerer's to answer.
+        mayDecline: !roster.byDefault(prompt),
         steers: turn.steers,
       ),
     );

@@ -99,6 +99,7 @@ class ToolOffer {
     this.sandboxed = false,
     this.background = false,
     this.participants,
+    this.mayDecline = false,
     this.customizing = false,
     this.attachments = false,
     this.agent = AgentDefinition.blank,
@@ -142,6 +143,10 @@ class ToolOffer {
 
   /// The room's members, on an Omada turn; null on any other.
   final List<PromptDocument>? participants;
+
+  /// The turn may decline its say with `end_turn` — see
+  /// `BuiltinAgent.mayDecline`.
+  final bool mayDecline;
 
   /// The session loaded the customization skill.
   final bool customizing;

@@ -12,7 +12,8 @@ class Agent {
   final String handle;
 
   /// Answer [say]. [history] ends before it; [replaces] says the session holds
-  /// a thread [say] does not continue.
+  /// a thread [say] does not continue; [mayDecline] says the participant may
+  /// answer it with `end_turn` rather than a reply.
   ///
   /// Pre: no other turn of this agent runs in the room.
   /// Post: the stream closes when the turn is over.
@@ -21,6 +22,7 @@ class Agent {
     required List<Message> history,
     required List<ConversationCompaction> compactions,
     bool replaces = false,
+    required bool mayDecline,
     SteerInbox? steers,
   }) => _repo.sendPrompt(
     chatId,
@@ -29,6 +31,7 @@ class Agent {
     compactions: compactions,
     replaces: replaces,
     participant: handle,
+    mayDecline: mayDecline,
     steers: steers,
   );
 

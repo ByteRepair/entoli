@@ -659,6 +659,7 @@ class FakeBackend implements AgentBackend {
     ({
       Message prompt,
       String participant,
+      bool mayDecline,
       List<Message> history,
       TurnSettings settings,
     })
@@ -686,6 +687,7 @@ class FakeBackend implements AgentBackend {
     String chatId,
     Message prompt, {
     required String participant,
+    bool mayDecline = false,
     List<Message> history = const [],
     List<ConversationCompaction> compactions = const [],
     TurnSettings settings = const TurnSettings(),
@@ -694,6 +696,7 @@ class FakeBackend implements AgentBackend {
     prompts.add((
       prompt: prompt,
       participant: participant,
+      mayDecline: mayDecline,
       history: history,
       settings: settings,
     ));

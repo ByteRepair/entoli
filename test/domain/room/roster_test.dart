@@ -81,6 +81,36 @@ void main() {
     expect(roster().answering(reply("all done")), "athena");
   });
 
+  test("a say reached its answerer by default only where it named no one in "
+      "the room", () {
+    expect(roster().byDefault(said("hello")), isTrue);
+    expect(
+      roster().byDefault(said("@ghost, go", documents: {"@ghost": "Boo."})),
+      isTrue,
+    );
+    expect(
+      roster(
+        omada: false,
+      ).byDefault(said("@build, go", documents: {"@build": "Do build."})),
+      isTrue,
+      reason: "in a direct chat @build is not in the room",
+    );
+    expect(
+      roster().byDefault(
+        said("!grep @build", documents: {"@build": "Do build."}),
+      ),
+      isTrue,
+    );
+    expect(
+      roster().byDefault(
+        said("@build, go", documents: {"@build": "Do build."}),
+      ),
+      isFalse,
+    );
+    // A handoff was asked of whoever it names.
+    expect(roster().byDefault(reply("over to @build")), isFalse);
+  });
+
   test("a reaction addresses whoever wrote what it reacts to", () {
     Message to(Message m) =>
         reactionTo(m, Reaction.thumbsUp, id: "x", at: DateTime(2026));

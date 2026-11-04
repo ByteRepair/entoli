@@ -195,6 +195,7 @@ class BuiltinAgent implements Turn {
     this.project,
     this.skills = const [],
     this.roomParticipants,
+    this.mayDecline = false,
     this.webSearch,
     this.browser,
     this.seesImages = true,
@@ -427,6 +428,11 @@ class BuiltinAgent implements Turn {
   /// do not address the room, and no omada turn fans out.
   final List<PromptDocument>? roomParticipants;
 
+  /// The turn may answer with `end_turn` rather than a reply: false where
+  /// the say was the participant's alone to answer — one routed to them by
+  /// default, nobody else having been asked — and on a resumed turn.
+  final bool mayDecline;
+
   /// Web search and fetch. Null where none is wired, and the tools are dropped
   /// the way `bash` is when there is no shell.
   @override
@@ -598,6 +604,7 @@ class BuiltinAgent implements Turn {
     sandboxed: gate.helper != null,
     background: backgroundJobs != null,
     participants: roomParticipants,
+    mayDecline: mayDecline,
     customizing: _customizing,
     attachments: attachmentsDir != null,
     agent: agent,

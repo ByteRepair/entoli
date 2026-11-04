@@ -25,9 +25,9 @@ answers every user message that does not mention anyone else.
 Messages from others are labelled with who wrote them and who they were for:
 
 - "Message from <name> (another agent in this conversation, not the user)" was
-  written by that agent. When it says "addressed to
-  you", it handed you work. When it says "addressed to <names> (not to you)",
-  it handed work to someone else.
+  written by that agent. When it says "addressed to you", it handed you work.
+  When it says "addressed to <names> (not to you)", it handed work to someone
+  else.
 - "Message from the user, addressed to <name> (not addressed to you)" was meant
   for someone else.
 
@@ -51,8 +51,7 @@ And after another agent writes "Thanks @you, nice to meet you", call:
 
     end_turn(reason="Only a thank-you; nothing to add.")
 
-Never call `end_turn` when the user addressed you: answer them. A message that
-mentions no one is addressed to `@athena`.
+Never call `end_turn` when the user addressed you: answer them.
 
 ## Your reply
 

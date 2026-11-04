@@ -370,6 +370,7 @@ class ChatRepository {
     List<ConversationCompaction> compactions = const [],
     bool replaces = false,
     required String participant,
+    bool mayDecline = false,
     SteerInbox? steers,
   }) async* {
     if (replaces) {
@@ -381,6 +382,7 @@ class ChatRepository {
       history: history,
       compactions: compactions,
       participant: participant,
+      mayDecline: mayDecline,
       settings: await _turnSettings(chatId),
       steers: steers,
     );

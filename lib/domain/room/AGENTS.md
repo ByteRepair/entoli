@@ -64,8 +64,9 @@ The two differ in who is in the room, and in nothing else the room decides.
 someone hands to no one (there is no one else), and a mention is a
 delegation. **An Omada chat** adds the project's agents as participants: a
 say naming members is answered by them, members hand off to each other by
-mentioning one another in a reply, chain-capped, and any participant may
-decline with `end_turn`. **Turning Omada off ends promotion for every turn
+mentioning one another in a reply, chain-capped, and a participant may
+decline what it was handed with `end_turn` — never a say that reached it by
+default. **Turning Omada off ends promotion for every turn
 after it**, whatever the prompt names; what is already on the record stays —
 history is fact — and a reply is carried on, or regenerated, by whoever
 wrote it, the author it names being who runs. One the library has lost
@@ -148,15 +149,24 @@ cannot be the thing that retires the entry.
 **A participant says nothing by calling `end_turn`, and silence is not a
 row.** A reply is a message, and a model given only messages writes one — a
 thank-you, an "all set" — that hands the room another turn; a text `pass`
-convention was tried first and models wrote around it. The tool (every
-participant of an Omada room; the note tells them never to use it on a say
-addressed to them, which a say naming nobody is, to Athena) takes an optional
-`reason`, ends the loop without another model call, and leaves the call on
+convention was tried first and models wrote around it. The tool takes an
+optional `reason`, ends the loop without another model call, and leaves the call on
 the log. A reply that ended with it and wrote no text (`endedSilently`)
 names no one, so it hands to no one; it is not drawn (`entriesOf`) and not
 worded into any other participant's session, and it shows no running label.
 It does not clear what siblings handed off — silence is nothing said, not a
 veto.
+
+**A say nobody else was asked cannot be declined.** `end_turn` is offered
+where the turn may decline its say, which the room decides as it opens the
+turn (`Roster.byDefault`, carried to the backend as `mayDecline`): a handoff,
+or a user's say that named its answerer, may be declined — the name may have
+been incidental, and someone else is answering. A say that reached its
+answerer by default — one naming nobody in the room, a command, a callback —
+is the only answer the user will get, so the tool is not offered and silence
+is not possible. The rule is the route's, not a name's: it holds whoever the
+default route is. A resumed turn is carrying on a reply, never declining
+one, and is not offered it either.
 
 **A say is not refused: it steers, or it is queued.** See "Steering a turn"
 below for the default. A queued say — `send(queue: true)`, the outlined

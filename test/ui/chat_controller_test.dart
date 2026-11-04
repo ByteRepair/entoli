@@ -1553,6 +1553,30 @@ void main() {
       expect(messages.last.author, "@explore");
     });
 
+    test("a say nobody else was asked may not be declined; a named say and a "
+        "handoff may", () async {
+      await _inTeam(app);
+      app.backend.scriptedRounds = [
+        const [TextDelta("over to @explore"), DoneEvent()],
+        const [TextDelta("found them"), DoneEvent()],
+        const [TextDelta("sure"), DoneEvent()],
+      ];
+      final (id, controller) = await startTurn(
+        "hello @build, look at the tests",
+        project: "team",
+      );
+      await waitFor(() => app.backend.prompts.length >= 2, what: "the handoff");
+      await waitIdle(id);
+      await controller.send("thanks, all done");
+      await waitIdle(id);
+
+      final sent = app.backend.prompts;
+      expect(
+        [for (final p in sent) (p.participant, p.mayDecline)],
+        [("build", true), ("explore", true), ("athena", false)],
+      );
+    });
+
     test("a reply naming its own author hands off to nobody", () async {
       await _inTeam(app);
       app.backend.scriptedRounds = [

@@ -34,6 +34,7 @@ void main() {
     ApproveMode approveMode = ApproveMode.never,
     List<ToolApproval>? asked,
     String? viewer,
+    bool mayDecline = true,
   }) => BuiltinAgent(
     session: session,
     client: client,
@@ -50,6 +51,7 @@ void main() {
     answer: (request) async => request.unanswered,
     roomParticipants: members,
     viewer: viewer,
+    mayDecline: mayDecline,
   );
 
   final finish = saidOnly("done");
@@ -161,11 +163,11 @@ void main() {
   });
 
   group("end_turn", () {
-    test("is offered in an Omada room, Athena's turn included, and not in a "
-        "direct one", () async {
+    test("is offered in an Omada room where the turn may decline its say, "
+        "and nowhere else", () async {
       Future<List<String>> offered(
         List<PromptDocument>? members, {
-        String? viewer,
+        bool mayDecline = true,
       }) async {
         final client = FakeLlmClient([
           [finish],
@@ -173,18 +175,20 @@ void main() {
         await agentWith(
           client,
           members,
-          viewer: viewer,
+          viewer: "athena",
+          mayDecline: mayDecline,
         ).run(userMessage("hi")).toList();
         return client.calls.first.tools.map((t) => t.name).toList();
       }
 
       final room = [memberDoc("explore"), memberDoc("athena")];
-      expect(await offered(room, viewer: "explore"), contains(endTurnToolName));
-      expect(await offered(room, viewer: "athena"), contains(endTurnToolName));
+      expect(await offered(room), contains(endTurnToolName));
+      // A say routed to her by default is hers to answer, room or no room.
       expect(
-        await offered(null, viewer: "athena"),
+        await offered(room, mayDecline: false),
         isNot(contains(endTurnToolName)),
       );
+      expect(await offered(null), isNot(contains(endTurnToolName)));
     });
 
     test("ends the turn without asking the model again", () async {

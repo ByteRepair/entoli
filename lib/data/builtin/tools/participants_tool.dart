@@ -15,9 +15,10 @@ export "../../../domain/end_turn.dart" show endTurnToolName;
 
 /// A participant's way to say nothing: a reply is a message, and a model
 /// given only messages writes one — a thank-you, an "all set" — that hands
-/// the room another turn. Offered on every Omada turn; the room note keeps a
-/// participant from declining a say addressed to them, which a say naming
-/// nobody is, to Athena.
+/// the room another turn. Offered on an Omada turn that may decline its say
+/// (`ToolOffer.mayDecline`): a handoff, or a say that named this participant.
+/// Never on a say that reached them by default — nobody else was asked, and
+/// declining it would leave the user with no answer at all.
 /// The call and its result stay on the log, where the reason is the record of
 /// why; the loop stops without asking the model again, since a follow-up
 /// step would be the reply the call declined to write.
@@ -31,7 +32,7 @@ class EndTurnTool extends AgentTool {
   String get name => endTurnToolName;
 
   @override
-  bool get offered => offer.participants != null;
+  bool get offered => offer.participants != null && offer.mayDecline;
 
   @override
   String get description =>

@@ -43,13 +43,25 @@ class Roster {
           if (name != author && _inRoom(name)) name,
       ];
     }
-    if (_notSaid(message)) return const [athena];
-    final named = [
-      for (final name in _keysOf(message).map(nameOf).whereType<String>())
-        if (_inRoom(name)) name,
-    ];
+    final named = _named(message);
     return named.isEmpty ? const [athena] : named;
   }
+
+  /// Whether [prompt] reached its answerer only by the default route: a
+  /// user's say naming no one in the room, a command or a callback
+  /// included. Nobody else was asked, so its answerer may not decline it —
+  /// declining would leave the user with no answer at all.
+  bool byDefault(Message prompt) =>
+      prompt.role == MessageRole.user && _named(prompt).isEmpty;
+
+  /// The participants a user's say names, in order: none for a command or a
+  /// callback, which addresses no one it names.
+  List<String> _named(Message say) => _notSaid(say)
+      ? const []
+      : [
+          for (final name in _keysOf(say).map(nameOf).whereType<String>())
+            if (_inRoom(name)) name,
+        ];
 
   /// The routing record a say carries, `Message.addressees`: [mentioned],
   /// sigils on — the dialect author stamps and the projection read.

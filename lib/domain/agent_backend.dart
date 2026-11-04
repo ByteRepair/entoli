@@ -613,12 +613,15 @@ abstract class AgentBackend {
   /// named rather than passed. See "The projection" in `lib/domain/AGENTS.md`.
   ///
   /// [participant] answers it, under their own file and in a session of
-  /// their own. [steers] is what the user says to the turn while it runs,
-  /// read at each step boundary.
+  /// their own. [mayDecline] offers it `end_turn`, in a room that has one —
+  /// never where the say was the participant's alone to answer. [steers] is
+  /// what the user says to the turn while it runs, read at each step
+  /// boundary.
   Stream<AgentEvent> sendPrompt(
     String chatId,
     Message prompt, {
     required String participant,
+    bool mayDecline,
     List<Message> history,
     List<ConversationCompaction> compactions,
     TurnSettings settings,

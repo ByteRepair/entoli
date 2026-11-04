@@ -1240,9 +1240,10 @@ list and the dispatch share: a call where the turn holds no room finds
 `unknownTool`. Read-only and instant, like `skill` — no approval, no
 running label. Athena is always on it.
 
-`end_turn` rides the same gate: offered on every participant's Omada turn,
-Athena's included — the note keeps any of them from declining a say
-addressed to them, and a say naming nobody is addressed to her. Its call sets `_ended`, and the loop stops
+`end_turn` rides the same gate plus `mayDecline`, which the room sets where
+the turn may decline its say: a handoff, or a say that named its answerer —
+never one routed by default, nor a resumed turn (see "A say nobody else was
+asked cannot be declined" in `lib/domain/room/AGENTS.md`). Its call sets `_ended`, and the loop stops
 after that batch rather than asking the model again — the follow-up step
 would be the reply the call declined to write. See "The room and its
 participants" in `lib/domain/room/AGENTS.md` for what a silent reply is.
