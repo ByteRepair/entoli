@@ -72,7 +72,7 @@ named in a cross-reference is findable from this list.
   speak, Taking turns
 - `lib/ui/workspace/AGENTS.md` — The workspace explorer
 - `lib/ui/share/AGENTS.md` — Sharing to Entoli
-- `lib/ui/AGENTS.md` — Opening a link, The theme, What the settings page can
+- `lib/ui/AGENTS.md` — Opening a link, Links into Entoli, The theme, What the settings page can
   change about it, The keyboard and the caret, The app's commands, The menu
   bar, Liquid Glass (the native shell on iOS and macOS: the bridge, the
   layout, voice mode and the glow, where the platforms differ)

@@ -53,6 +53,7 @@ import "ui/assistant/incoming_assistant.dart";
 import "ui/focus_follows_keyboard.dart";
 import "ui/fonts.dart";
 import "ui/link_opener.dart";
+import "ui/incoming_links.dart";
 import "ui/share/incoming_shares.dart";
 import "ui/triggers/incoming_open.dart";
 import "ui/selection.dart";
@@ -613,18 +614,21 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       builder: ref.watch(liquidGlassProvider).on
           ? (context, child) => ShellInsets(child: child!)
           : null,
-      // All four wrapped rather than folded into the shell: what another app
-      // shared has to be offered a workspace over whatever is on screen and the
-      // assistant gesture has to open a chat over it, both of which want a
+      // All wrapped rather than folded into the shell: what another app
+      // shared has to be offered a workspace over whatever is on screen, an
+      // entoli:// link has to open what it names over it and the assistant
+      // gesture has to open a chat over it, all of which want a
       // Navigator that only exists below here; the first run is met with the
       // welcome tour (a phone's initial setup ahead of it) over the same, under
-      // whatever those two arrive with; and
+      // whatever those arrive with; and
       // the keyboard is the app's to answer for, over whichever field had it.
       home: const FocusFollowsKeyboard(
         child: IncomingAssistant(
           child: IncomingShares(
-            child: IncomingTriggerOpen(
-              child: InitialSetupGate(child: WelcomeGate(child: _Shell())),
+            child: IncomingLinks(
+              child: IncomingTriggerOpen(
+                child: InitialSetupGate(child: WelcomeGate(child: _Shell())),
+              ),
             ),
           ),
         ),

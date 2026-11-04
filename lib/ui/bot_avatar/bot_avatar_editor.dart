@@ -485,8 +485,32 @@ class _BotAvatarEditorPageState extends ConsumerState<BotAvatarEditorPage>
             ),
           ],
         ),
-        if (result case BotAvatarImportFailed(:final errors, :final hints)) ...[
+        if (result != null) ...[
           const SizedBox(height: 16),
+          BotAvatarImportNotes(result),
+        ],
+      ],
+    );
+  }
+}
+
+/// What an import said: a failure's errors in the error colour and its hints,
+/// then the reader's notes. The editor's Import tab and the install page.
+class BotAvatarImportNotes extends StatelessWidget {
+  const BotAvatarImportNotes(this.result, {super.key});
+
+  final BotAvatarImport result;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (result case BotAvatarImportFailed(:final errors, :final hints)) ...[
           for (final e in errors)
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
@@ -500,7 +524,7 @@ class _BotAvatarEditorPageState extends ConsumerState<BotAvatarEditorPage>
           const SizedBox(height: 8),
           for (final h in hints) Text("• $h", style: muted),
         ],
-        if (result != null && result.notes.isNotEmpty) ...[
+        if (result.notes.isNotEmpty) ...[
           const SizedBox(height: 8),
           for (final n in result.notes) Text(n, style: muted),
         ],

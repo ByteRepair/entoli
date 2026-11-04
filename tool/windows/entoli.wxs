@@ -73,5 +73,25 @@
             KeyPath="yes" />
       </Component>
     </StandardDirectory>
+
+    <!-- entoli:// links open Entoli, which app_links reads from the command
+         line (or hands to the running window). -->
+    <Component
+        Id="UrlScheme"
+        Directory="INSTALLFOLDER"
+        Guid="{6B0E2C1A-4F5D-4C8E-9B3A-2D7E1F8A5C40}">
+      <RegistryKey Root="HKLM" Key="Software\Classes\entoli">
+        <RegistryValue Type="string" Value="URL:Entoli" KeyPath="yes" />
+        <RegistryValue Name="URL Protocol" Type="string" Value="" />
+        <RegistryValue
+            Key="DefaultIcon"
+            Type="string"
+            Value="&quot;[INSTALLFOLDER]entoli.exe&quot;,0" />
+        <RegistryValue
+            Key="shell\open\command"
+            Type="string"
+            Value="&quot;[INSTALLFOLDER]entoli.exe&quot; &quot;%1&quot;" />
+      </RegistryKey>
+    </Component>
   </Package>
 </Wix>

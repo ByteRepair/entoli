@@ -11,6 +11,7 @@ import "../../core/platform/platform.dart" as platform;
 import "../../data/prompts/agent_pictures.dart";
 import "../../data/prompts/skill_import.dart";
 import "../../domain/agent_face.dart";
+import "../../domain/app_link.dart" show SharedEntryLink;
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
 import "../../providers.dart";
@@ -74,6 +75,59 @@ class EntryPreview {
   };
 }
 
+/// A skill or agent an `entoli://install/<kind>?def=…` link carried, as the
+/// preview page shows it: parsed by the same intake the marketplace's go
+/// through, its own SKILL.md or prompt body standing in for a README so what
+/// is being installed is on screen. A link that did not arrive whole is a
+/// page saying so, with nothing to install.
+(MarketplaceEntry, EntryPreview) sharedEntry(SharedEntryLink link) {
+  final kind = link.kind;
+  MarketplaceEntry entry(String name, String? description) => MarketplaceEntry(
+    slug: name,
+    name: name,
+    description: description ?? "",
+    author: "",
+  );
+  final shared = entry(link.name ?? "Shared ${kind.name}", null);
+  final bytes = link.bytes;
+  if (bytes == null) {
+    return (
+      shared,
+      const EntryPreview(
+        packageProblem:
+            "This link is incomplete — it was cut short on its way here, so "
+            "there is nothing to install. Ask for it again, or for the file.",
+      ),
+    );
+  }
+  switch (kind) {
+    case CompletionKind.skill:
+      try {
+        final package = parseSkillPackage(bytes);
+        return (
+          entry(package.name, package.description),
+          EntryPreview(package: package, readme: package.body),
+        );
+      } catch (e) {
+        return (shared, EntryPreview(packageProblem: "$e"));
+      }
+    case CompletionKind.agent:
+      final source = utf8.decode(bytes, allowMalformed: true);
+      final prompt = PromptDocument.parse(kind, "", source);
+      final name = link.name ?? prompt.frontmatter["name"];
+      if (name == null) {
+        return (
+          shared,
+          const EntryPreview(packageProblem: "The link names no agent."),
+        );
+      }
+      return (
+        entry(name, prompt.description),
+        EntryPreview(prompt: prompt, promptSource: source, readme: prompt.body),
+      );
+  }
+}
+
 /// One entry of the marketplace, previewed and installed. Pushed from the
 /// list's row, which already holds [entry] — the page is about what the index
 /// could not carry. Installing lands through the same doors the settings
@@ -85,10 +139,14 @@ class MarketplaceEntryPreviewPage extends ConsumerStatefulWidget {
     super.key,
     required this.kind,
     required this.entry,
+    this.preview,
   });
 
   final CompletionKind kind;
   final MarketplaceEntry entry;
+
+  /// The entry already in hand — a shared link's — so nothing is fetched.
+  final EntryPreview? preview;
 
   @override
   ConsumerState<MarketplaceEntryPreviewPage> createState() =>
@@ -111,7 +169,8 @@ class _MarketplaceEntryPreviewPageState
   @override
   void initState() {
     super.initState();
-    _load();
+    _preview = widget.preview;
+    if (_preview == null) _load();
   }
 
   Future<void> _load() async {

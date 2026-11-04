@@ -30,6 +30,51 @@ asks it where the artifact landed and says the device-away line where the
 answer is null. The null is also the shape of "no sync running", which is
 what keeps every sync-unaware caller on the local paths unchanged.
 
+## Links into Entoli
+
+Entoli registers the `entoli://` scheme on every platform — Android's
+`VIEW` filter (on `MainActivity` and the `PromptIcon` alias, for the reason
+the share filter is on both), `CFBundleURLTypes` in both Apple `Info.plist`s,
+`x-scheme-handler/entoli` in the Linux desktop entry, and
+`HKLM\Software\Classes\entoli` in the MSI. `app_links` delivers them, the
+launching one and every one after, on one stream that `IncomingLinks` (wrapped
+in `main` beside `IncomingShares`) reads. What a link means is
+`AppLink.parse` (`lib/domain/app_link.dart`), and nothing else reads one:
+
+- `entoli://new?prompt=…` — the new-chat screen with the prompt in its
+  composer, **unsent**: a web page wrote it, so the user sends it. This is the
+  form the agent harnesses take (`t3code://new?prompt=…`), so Open Bot
+  Avatar's "Open in" menu can name Entoli with one entry. The prompt waits in
+  `newChatPromptProvider` (`openNewChat(prompt:)`) only until the new-chat
+  screen takes it, so unlike the screen's own settings it never outlives one.
+- `entoli://install/marketplace/entoli/<skill|agent>/<slug>` — the
+  marketplace's own preview page for that entry, its Install the same. The
+  `entoli` segment names the marketplace, so another can be added without a
+  new form.
+- `entoli://install/<skill|agent>?def=…` — the entry carried whole, base64url:
+  a skill's `.skill` zip, or an agent's PROMPT.md gzipped with `name=` beside
+  it, since an agent's name is its file's and not in it. A skills or agents
+  settings row's **Copy install link** makes one (`AppLink.share`, over the
+  bytes Export would save), and refuses one past `appLinkMaxLength` —
+  Windows' command line, about 32K characters, is the tightest hand-over —
+  so a skill too big to share says so to the sharer instead. The same preview
+  page opens with nothing fetched (`sharedEntry`), the SKILL.md or prompt
+  body in the README's place, since a link from anyone is untrusted text and
+  the user installs only what they have seen. **A link cut short is caught
+  where it is read**, because a chat app that truncates a long link hands
+  over something that still looks like one: a gzip ends in its CRC and
+  length and a zip in its end record, and `AppLink.parse` checks both, so a
+  cut link opens the page saying it is incomplete with no Install. That is
+  why an agent is always gzipped — plain text cannot say it all arrived.
+- `entoli://install/avatar?def=…` — a Bot Avatar definition, raw or base64url
+  JSON (Open Bot Avatar's own `def`), on `BotAvatarInstallPage`: the bot and
+  Install, landing in the editor's library.
+
+The desktops are single-instance for it: Linux's runner lets GLib emit
+`command-line` (`G_APPLICATION_HANDLES_COMMAND_LINE`), here or in the running
+copy, which is where `app_links` reads the link; Windows' `wWinMain` hands a
+link to a running window (`SendAppLinkToInstance`) and exits.
+
 ## The theme
 
 One palette, seeded by default from the iOS / macOS theme (Apple's systemBlue

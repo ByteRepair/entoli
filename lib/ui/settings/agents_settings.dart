@@ -25,6 +25,7 @@ import "../widgets/add_button_row.dart";
 import "../widgets/agent_picture.dart";
 import "../widgets/anchored_menu.dart";
 import "../widgets/busy.dart";
+import "copy_install_link.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/discard_guard.dart";
 import "../widgets/prompt_field.dart";
@@ -449,6 +450,20 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
             ),
             true => const SizedBox.shrink(),
           },
+          if (_local)
+            IconButton(
+              icon: const Icon(Icons.link),
+              tooltip: "Copy install link for ${agent.name}",
+              onPressed: () => _guard(
+                () => copyInstallLink(
+                  context,
+                  ref.read(appConfigProvider),
+                  CompletionKind.agent,
+                  agent.name,
+                  project: widget.project,
+                ),
+              ),
+            ),
           if (_local)
             IconButton(
               icon: const Icon(Icons.download),

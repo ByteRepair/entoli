@@ -2,7 +2,8 @@
 Type=Application
 Name=Entoli
 Comment=Client-side ChatGPT-style chat UI with a built-in coding agent
-Exec=agent_chat
+Exec=agent_chat %u
+MimeType=x-scheme-handler/entoli;
 StartupWMClass=io.byterepair.entoli
 Icon=io.byterepair.entoli
 Categories=Development;
