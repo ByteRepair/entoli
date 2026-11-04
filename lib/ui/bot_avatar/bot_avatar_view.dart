@@ -235,7 +235,7 @@ class _BotAvatarViewState extends State<BotAvatarView>
   void dispose() {
     _watch(false);
     _ticker.dispose();
-    _frameOrNull?.dispose();
+    _frame.dispose();
     super.dispose();
   }
 
@@ -438,6 +438,10 @@ class BotAvatarPainter extends CustomPainter {
     ..style = PaintingStyle.stroke
     ..strokeCap = StrokeCap.round;
 
+  /// One path every happy eye is drawn into: an arc's bend moves every
+  /// frame, so there is nothing to keep, and the recording copies it.
+  static final _arcPath = ui.Path();
+
   /// Told each time a frame is drawn: a live view's proof it is on screen.
   final VoidCallback? onPaint;
 
@@ -503,7 +507,8 @@ class BotAvatarPainter extends CustomPainter {
           );
         case EyeShapeMark(mark: final ArcMark arc):
           canvas.drawPath(
-            ui.Path()
+            _arcPath
+              ..reset()
               ..moveTo(arc.x0, arc.y)
               ..quadraticBezierTo(arc.cx, arc.cy, arc.x1, arc.y),
             _arc..strokeWidth = arc.strokeWidth,
