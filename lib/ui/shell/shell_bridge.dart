@@ -140,16 +140,14 @@ class _WindowPublisher extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(appSettingsProvider.select((s) => s.appTheme));
     final shown = ref.watch(sidebarShownProvider);
-    final routes = ref.watch(appRoutesProvider);
-    return ListenableBuilder(
-      listenable: Listenable.merge([routes.covered, routes.sheeted]),
-      builder: (context, _) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: ref.watch(appRoutesProvider).covered,
+      builder: (context, covered, _) {
         ref
             .read(shellOutboxProvider)
             .window(
               WindowSnapshot(
-                covered: routes.covered.value,
-                sheeted: routes.sheeted.value,
+                covered: covered,
                 sidebarShown: shown,
                 dark: theme == AppTheme.system ? null : theme == AppTheme.dark,
               ),

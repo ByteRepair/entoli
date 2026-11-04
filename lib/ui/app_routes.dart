@@ -17,18 +17,11 @@ class AppRoutes extends NavigatorObserver {
   /// nothing: it draws over the page under it.
   final ValueNotifier<bool> covered = ValueNotifier(false);
 
-  /// A sheet risen over the conversation, which the native shell's composer
-  /// must not stand over.
-  final ValueNotifier<bool> sheeted = ValueNotifier(false);
-
   /// Told of every change to [depth].
   final ValueNotifier<int> _depth = ValueNotifier(0);
 
   void _changed() {
     covered.value = _stack.skip(1).any((route) => route is PageRoute);
-    sheeted.value = _stack
-        .skip(1)
-        .any((route) => route is ModalBottomSheetRoute);
     _depth.value = _stack.length;
   }
 

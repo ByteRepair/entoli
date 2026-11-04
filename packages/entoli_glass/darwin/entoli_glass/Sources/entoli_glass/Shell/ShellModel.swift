@@ -134,7 +134,7 @@ extension Color {
 }
 
 extension WindowSnapshot {
-  static let initial = WindowSnapshot(covered: false, sheeted: false, sidebarShown: true)
+  static let initial = WindowSnapshot(covered: false, sidebarShown: true)
 
   var colorScheme: ColorScheme? { dark.map { $0 ? .dark : .light } }
 }

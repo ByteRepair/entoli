@@ -439,12 +439,9 @@ nothing and placed, dismissed and read out as a popover is.
 (`app_routes.dart`), on the Navigator from `main`, says whether a page is
 pushed over the first route; the shell steps its composer and new-chat screen
 aside while one is, and its title bar becomes the page's. A dialog covers
-nothing. **A sheet stands the composer aside.** An activity's drawer is a
-bottom sheet, meant to be over the composer, and there is one Flutter view and
-it is under the composer, so it cannot be. `AppRoutes.sheeted` says one is up
-and the shell fades the composer and the turn surface out until it goes —
-the sheet covers where they were anyway — keeping their room, so the insets
-Dart is told, and the conversation under the scrim, do not move. **A pick closes the pages
+nothing, and neither does a sheet — which is why an activity's drawer is a
+page here and a sheet only without the shell (see "Thinking and tool runs"
+in `lib/ui/chat/AGENTS.md`). **A pick closes the pages
 first**, in either shell: opening a chat, a new one or another project from
 the sidebar or the palette goes through `toConversation`, which closes each
 page the way the back key would. A page that asks before it goes is asked,

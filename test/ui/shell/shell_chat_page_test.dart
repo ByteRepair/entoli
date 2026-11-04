@@ -10,6 +10,7 @@ import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/shell/shell_new_chat.dart";
 import "package:agent_chat/ui/widgets/liquid_glass.dart";
+import "package:agent_chat/ui/widgets/page_bar.dart";
 
 import "../../harness.dart";
 import "fake_native_shell.dart";
@@ -154,5 +155,76 @@ void main() {
     await settleIo(tester);
     final list = tester.element(find.byType(SuperListView));
     expect(TooltipTheme.of(list).preferBelow, isFalse);
+  });
+
+  group("an activity's drawer", () {
+    /// A chat whose reply ran [commands], one call each, each answered.
+    Future<void> openRuns(WidgetTester tester, List<String> commands) =>
+        io(tester, () async {
+          final chat = await app.repo.createChat(title: "runs");
+          await app.writeChat(
+            chat.copyWith(
+              messages: [
+                Message(
+                  id: "m0",
+                  role: MessageRole.user,
+                  createdAt: DateTime(2026),
+                  parts: const [TextPart(text: "go")],
+                ),
+                Message(
+                  id: "m1",
+                  role: MessageRole.assistant,
+                  createdAt: DateTime(2026, 1, 1, 0, 1),
+                  parts: [
+                    for (final (i, command) in commands.indexed) ...[
+                      MessagePart.toolCall(
+                        toolCall: ToolCall(
+                          id: "c$i",
+                          name: "bash",
+                          argumentsJson: '{"command":"$command"}',
+                        ),
+                      ),
+                      MessagePart.toolResult(
+                        result: ToolResult(
+                          callId: "c$i",
+                          returnCode: 0,
+                          output: "out of $command",
+                        ),
+                      ),
+                    ],
+                    const TextPart(text: "done"),
+                  ],
+                ),
+              ],
+            ),
+          );
+          app.container
+              .read(selectedChatIdProvider.notifier)
+              .select(chat.state.id);
+        });
+
+    testWidgets("is a page the composer steps aside for, not a sheet under "
+        "it", (tester) async {
+      await openRuns(tester, ["ls"]);
+      await pump(tester);
+      await settleIo(tester);
+      await tester.tap(find.text("Used tool: bash"));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BottomSheet), findsNothing);
+      final output = find.text("out of ls");
+      expect(output, findsOneWidget);
+      // A page is what the window's chrome steps aside for.
+      expect(ModalRoute.of(tester.element(output)), isA<PageRoute<void>>());
+      // Its bar is the page's: the window's under the shell, which `main`
+      // turns on above the Navigator rather than here around the page.
+      final bar = tester.widget<PageBar>(find.byType(PageBar));
+      expect(bar.title, "bash");
+
+      // The window's back, which the shell sends as the bar's.
+      Navigator.of(tester.element(output)).pop();
+      await tester.pumpAndSettle();
+      expect(find.text("out of ls"), findsNothing);
+    });
   });
 }

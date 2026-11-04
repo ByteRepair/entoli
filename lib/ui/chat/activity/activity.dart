@@ -3,6 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
 import "../../../domain/models.dart";
+import "../../widgets/liquid_glass.dart" show liquidGlassProvider;
 import "card.dart";
 import "label.dart";
 
@@ -69,7 +70,8 @@ abstract class LabelledActivity extends Activity {
   @override
   Widget build(Run run) => RunLabel(activity: this, run: run);
 
-  /// Opens [run]'s drawer. It follows the run's message through [source], or
+  /// Opens [run]'s drawer: a sheet, or a page under the native shell. It
+  /// follows the run's message through [source], or
   /// the [ActivitySource] above [context]; with neither it shows the run as
   /// it was opened.
   Future<void> open(
@@ -78,10 +80,19 @@ abstract class LabelledActivity extends Activity {
     ProviderListenable<LiveMessage>? source,
   }) {
     final from = source ?? ActivitySource.of(context);
-    return showActivityCard<void>(
+    // Under the native shell a page, not a sheet: the composer is the
+    // shell's, over the Flutter view a sheet is drawn in, and a page is what
+    // it steps aside for — the page's bar then the window's, with its back.
+    final page = ProviderScope.containerOf(
       context,
-      (_) => _RunCard(activity: this, run: run, source: from),
-    );
+      listen: false,
+    ).read(liquidGlassProvider).on;
+    Widget card(BuildContext _) =>
+        _RunCard(activity: this, run: run, source: from, page: page);
+    if (page) {
+      return Navigator.of(context).push(MaterialPageRoute<void>(builder: card));
+    }
+    return showActivityCard<void>(context, card);
   }
 }
 
@@ -188,7 +199,7 @@ class RunDrawer {
   final String? command;
   final ActivityStatus? status;
   final List<ActivitySection> sections;
-  final List<Widget> actions;
+  final List<DrawerAction> actions;
   final bool mono;
 
   /// Still arriving though the run is not [Run.going] here, as a job's log is.
@@ -221,11 +232,13 @@ class _RunCard extends ConsumerWidget {
     required this.activity,
     required this.run,
     required this.source,
+    required this.page,
   });
 
   final LabelledActivity activity;
   final Run run;
   final ProviderListenable<LiveMessage>? source;
+  final bool page;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -245,6 +258,7 @@ class _RunCard extends ConsumerWidget {
       mono: shown.mono,
       live: shown.live || now.going,
       below: shown.below,
+      page: page,
     );
   }
 }

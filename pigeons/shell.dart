@@ -25,21 +25,9 @@ import "package:pigeon/pigeon.dart";
 /// is shown, and which appearance the app wears, which may not be the
 /// system's.
 class WindowSnapshot {
-  WindowSnapshot({
-    required this.covered,
-    this.sheeted = false,
-    required this.sidebarShown,
-    this.dark,
-  });
-
   /// A page is pushed over the conversation: Settings, a chat's settings, a
   /// drawer's page. A dialog is not; it draws over the Flutter view alone.
   bool covered;
-
-  /// A sheet has risen over the conversation: an activity's drawer. It is
-  /// meant to be over the composer too, which the Flutter view is under, so
-  /// the composer stands aside while it is up, keeping its room.
-  bool sheeted;
   bool sidebarShown;
 
   /// Whether the app is dark; null for the system's appearance.

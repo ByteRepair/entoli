@@ -14,7 +14,7 @@ import "../../widgets/dialogs.dart" show catchAndSay;
 import "../../widgets/text_file_page.dart";
 import "../mirror_controller.dart" show chatViewProvider;
 import "../activity/activity.dart";
-import "../activity/card.dart" show ActivityStatus;
+import "../activity/card.dart" show ActivityStatus, DrawerAction;
 import "../activity/tool_run.dart" show toolRunView;
 import "../widgets/running_pill.dart" show RunningThing;
 import "tool_ui.dart";
@@ -97,7 +97,18 @@ class JobActivity extends LabelledActivity {
               text: "Running${job.pid == null ? "" : " · pid ${job.pid}"}",
               isError: false,
             ),
-            actions: [_StopJob(chatId: run.chatId, jobId: job.id)],
+            actions: [
+              DrawerAction(
+                label: "Stop",
+                run: (context) => catchAndSay(
+                  context,
+                  () => ref
+                      .read(agentBackendProvider)
+                      .jobsOf(run.chatId)
+                      .stop(job.id),
+                ),
+              ),
+            ],
             mono: true,
             live: true,
             sections: [
@@ -126,12 +137,12 @@ class JobActivity extends LabelledActivity {
       icon: Icons.terminal,
       label: "Background job ${status.text.toLowerCase()}: $line",
       isError: status.isError,
-      drawer: (_) => RunDrawer(
+      drawer: (ref) => RunDrawer(
         title: title,
         command: command,
         status: status,
         // A mirror's workspace, and the log in it, is the other device's.
-        actions: [if (!mirrored) _OpenLog(chatId: run.chatId, callId: callId)],
+        actions: [if (!mirrored) _openLog(ref, run.chatId, callId)],
         mono: true,
         sections: [(label: "Output", body: end?.tail, isError: false)],
       ),
@@ -172,71 +183,31 @@ final jobLogProvider = StreamProvider.autoDispose
           ref.watch(agentBackendProvider).jobsOf(of.chatId).log(of.job),
     );
 
-class _StopJob extends ConsumerWidget {
-  const _StopJob({required this.chatId, required this.jobId});
-
-  final String chatId;
-  final int jobId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) => TextButton(
-    onPressed: () => catchAndSay(
-      context,
-      () => ref.read(agentBackendProvider).jobsOf(chatId).stop(jobId),
-    ),
-    child: const Text("Stop"),
-  );
-}
-
 /// Opens a job's whole log in the file viewer, while the workspace still has
 /// it.
-class _OpenLog extends ConsumerStatefulWidget {
-  const _OpenLog({required this.chatId, required this.callId});
-
-  final String chatId;
-  final String callId;
-
-  @override
-  ConsumerState<_OpenLog> createState() => _OpenLogState();
-}
-
-class _OpenLogState extends ConsumerState<_OpenLog> {
-  late final String _path = p.join(
+DrawerAction _openLog(WidgetRef ref, String chatId, String callId) {
+  final path = p.join(
     ref
         .read(appConfigProvider)
         .workspaceDir(
-          widget.chatId,
-          project: ref
-              .read(chatViewProvider(widget.chatId))
-              .chat
-              ?.state
-              .project,
+          chatId,
+          project: ref.read(chatViewProvider(chatId)).chat?.state.project,
         ),
-    backgroundLog(widget.callId),
+    backgroundLog(callId),
   );
-  // Once: the sheet rebuilds as the keyboard or the window moves.
-  late final bool _there = File(_path).existsSync();
-
-  @override
-  Widget build(BuildContext context) {
-    final button = TextButton(
-      onPressed: !_there
-          ? null
-          : () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => TextFilePage(
-                  path: _path,
-                  name: p.basename(_path),
-                  popsBinary: false,
-                ),
-              ),
-            ),
-      child: const Text("Open log"),
-    );
-    if (_there) return button;
-    return Tooltip(
-      message: "The log is no longer in the workspace",
-      child: button,
+  if (!File(path).existsSync()) {
+    return const DrawerAction(
+      label: "Open log",
+      why: "The log is no longer in the workspace",
     );
   }
+  return DrawerAction(
+    label: "Open log",
+    run: (context) => Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            TextFilePage(path: path, name: p.basename(path), popsBinary: false),
+      ),
+    ),
+  );
 }
