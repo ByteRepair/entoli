@@ -193,7 +193,7 @@ class BuiltinAgent implements Turn {
     this.caps = AgentCapabilities.full,
     this.sharedWorkspace = true,
     this.project,
-    this.skills = const [],
+    this.library,
     this.roomParticipants,
     this.mayDecline = false,
     this.webSearch,
@@ -415,15 +415,16 @@ class BuiltinAgent implements Turn {
   @override
   final String? project;
 
+  /// The project's library, the one a reload projects with, so a `/skill`
+  /// message expands to the same words live as read back.
+  final PromptLibrary? library;
+
   /// The whole skill library, both invocation halves of it. The system prompt
   /// lists the model-invocable ones, the `skill` tool refuses the rest, and a
   /// sub-agent gets the same list — a skill's workflow is as much a worker's
   /// job as the parent's.
-  final List<PromptDocument> skills;
-
-  /// [skills] to look a `/skill` message up in, which the projection expands
-  /// from — the same words a reload reads back.
-  late final _skillLibrary = PromptLibrary(skills);
+  late final List<PromptDocument> skills =
+      library?.entries(CompletionKind.skill) ?? const [];
 
   /// The room's participants, as the project's library holds them — the
   /// members an omada room's say routes to. Non-null only on an omada turn:
@@ -759,7 +760,7 @@ class BuiltinAgent implements Turn {
               said.parts,
               files: _images,
               resourcesDir: attachmentsDir,
-              library: _skillLibrary,
+              library: library,
             ),
           );
         }
@@ -867,7 +868,7 @@ class BuiltinAgent implements Turn {
         viewer: viewer,
         load: loadResource,
         resourcesDir: attachmentsDir,
-        library: _skillLibrary,
+        library: library,
       ),
     );
   }

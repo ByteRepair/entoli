@@ -178,9 +178,9 @@ List<String> promptReferences(String text, PromptLibrary? library) => {
     if (library?.find(CompletionKind.skill, name) case final document?
         when !document.isCallback)
       "${CompletionKind.skill.trigger}$name",
-  for (final match in _mention.allMatches(text))
-    if (library?.find(CompletionKind.agent, match.group(1)!) != null)
-      "${CompletionKind.agent.trigger}${match.group(1)}",
+  if (library != null)
+    for (final name in mentionsIn(text, library))
+      "${CompletionKind.agent.trigger}$name",
 }.toList();
 
 /// The task the model is given: the skill [references] recorded, as [library]
@@ -212,22 +212,14 @@ String withArguments(String body, String arguments) {
   return arguments.isEmpty ? body : "$body\n\n$arguments";
 }
 
-/// The members [references] address, in the order they were written — the
-/// agent references as typed, sigil on. Empty where the message names no
-/// member.
-List<String> authorKeys(List<String> references) => [
-  for (final reference in references)
-    if (reference.startsWith(CompletionKind.agent.trigger)) reference,
-];
-
 /// The agents the message asked to hand the work to, sigils off, in the order
-/// they were written — who the participant answering is told to delegate to.
+/// they were written — who the participant answering is told to delegate to,
+/// and who the room routes it to.
 ///
 /// Off the record rather than the text: the mentions were resolved when the
 /// message was composed.
-List<String> mentionedAgents(List<String> references) => [
-  for (final key in authorKeys(references)) nameOf(key)!,
-];
+List<String> mentionedAgents(List<String> references) =>
+    references.map(nameOf).nonNulls.toList();
 
 /// The member name an author stamp carries — the sigil off, the library's
 /// name for them. An unnamed stamp names nothing.

@@ -83,14 +83,14 @@ void main() {
         approveMode: ApproveMode.never,
         approve: (_) async => ApprovalResponse.allow,
         answer: (request) async => request.unanswered,
-        skills: [
+        library: PromptLibrary([
           PromptDocument(
             kind: CompletionKind.skill,
             name: customizationSkill,
             frontmatter: const {"description": "d"},
             body: "b",
           ),
-        ],
+        ]),
         editSettings: (change) async => change(settings),
       ).run(userMessage("set me up")).toList();
 

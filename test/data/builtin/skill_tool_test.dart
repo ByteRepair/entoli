@@ -48,7 +48,7 @@ void main() {
         approveMode: ApproveMode.never,
         approve: (_) async => ApprovalResponse.allow,
         answer: (request) async => request.unanswered,
-        skills: skills,
+        library: PromptLibrary(skills),
       );
 
   LlmCompletion skillCall(String name, {String? args, String id = "sk-1"}) =>

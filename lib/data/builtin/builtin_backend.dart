@@ -538,9 +538,7 @@ class BuiltinBackend implements AgentBackend {
           maxAttempts: 1,
           stepLimit: settings.turnMaxSteps,
         ),
-        skills:
-            libraryFor(settings.project)?.entries(CompletionKind.skill) ??
-            const [],
+        library: libraryFor(settings.project),
         // An Omada room's participants: the library's agents, already
         // tier-walked (the default set under My Team's under the project's
         // own). Null — a direct room, Athena alone — keeps the roster tool
