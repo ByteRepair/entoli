@@ -314,6 +314,21 @@ class BuiltinBackend implements AgentBackend {
         return;
       }
 
+      // A turn runs as its participant's file, as the library stands now.
+      // The roster routes only to agents the library holds, so a file that is
+      // missing went since the turn was asked for — a member deleted while
+      // their turn was queued, or a reply carried on after its agent was
+      // deleted. Nobody else can answer as them.
+      final file = libraryFor(project)?.find(CompletionKind.agent, participant);
+      if (file == null) {
+        _fail(
+          controller,
+          "@$participant no longer exists. Regenerate the reply to have it "
+          "answered again.",
+        );
+        return;
+      }
+
       await config.ensureChatDirs(chatId, project: project);
       await config.ensureProjectDirs(project: project);
       // A chat from before attachments were read-only, or one whose files a
@@ -500,16 +515,6 @@ class BuiltinBackend implements AgentBackend {
         viewer: participant,
         compactions: compactions,
       );
-      // A turn runs as its participant's file, as the library stands now.
-      // One the library has lost since its turn was scheduled — a member
-      // deleted mid-round, a reply carried on after its agent went — runs
-      // under no file at all, and says so.
-      final file = libraryFor(
-        settings.project,
-      )?.find(CompletionKind.agent, participant);
-      if (file == null) {
-        logFailure("turn", "no agent file for @$participant in $chatId");
-      }
       final agent = BuiltinAgent(
         session: session,
         viewer: participant,

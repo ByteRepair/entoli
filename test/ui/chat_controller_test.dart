@@ -1527,6 +1527,24 @@ void main() {
       },
     );
 
+    test("regenerating a reply whose agent was deleted is answered as the "
+        "prompt routes now: by Athena", () async {
+      await _inTeam(app);
+      final (id, controller) = await chatWithOneTurn(
+        "hello @build",
+        project: "team",
+      );
+      expect(messagesOf(id).last.author, "@build");
+
+      // The library read from its real sources has no `build`: deleted.
+      await app.container.read(promptLibraryProvider("team").notifier).reload();
+      await controller.regenerate(messagesOf(id).last.id);
+      await waitIdle(id);
+
+      expect(app.backend.prompts.last.participant, "athena");
+      expect(messagesOf(id).last.author, "@athena");
+    });
+
     test("a reply naming another member hands the next turn to them", () async {
       await _inTeam(app);
       app.backend.scriptedRounds = [

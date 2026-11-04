@@ -846,13 +846,13 @@ class ChatRoom {
     if (chat == null || state.isRunning) return;
     final prompt = _promptFor(chat, messageId);
     if (prompt == null) return;
-    final replacing = _replyFor(chat, messageId);
+    // Answered again as it would be now: by whoever the prompt routes to —
+    // the same agent while it is still in the room, the default route where
+    // it was deleted or Omada went off since.
     await _openTurn(
       chat: chat,
       prompt: prompt,
-      replacing: replacing,
-      // Whoever wrote the reply answers again.
-      member: nameOf(replacing?.author),
+      replacing: _replyFor(chat, messageId),
     );
   }
 

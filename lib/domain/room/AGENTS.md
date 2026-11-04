@@ -68,9 +68,12 @@ mentioning one another in a reply, chain-capped, and a participant may
 decline what it was handed with `end_turn` — never a say that reached it by
 default. **Turning Omada off ends promotion for every turn
 after it**, whatever the prompt names; what is already on the record stays —
-history is fact — and a reply is carried on, or regenerated, by whoever
-wrote it, the author it names being who runs. One the library has lost
-since runs under no file, with a log line saying so.
+history is fact. A regenerate answers the prompt again as it would be
+routed now: by the agent it named while that agent is still in the room, by
+the default route where it was deleted or Omada went off since. A reply is
+carried on only by whoever wrote it, since carrying on appends to their
+reply; one whose agent was deleted fails, saying so, and regenerating it is
+the way on.
 
 **The label is who spoke.** `Message.author` is stamped on every reply with
 the participant the schedule routed the turn to, and nowhere else: never

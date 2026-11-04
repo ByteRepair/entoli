@@ -89,7 +89,19 @@ void main() {
         lookupKey: (_) => null,
       ),
     );
-    if (library != null) backend.setLibrary(null, library);
+    // Athena, the default route, is in every library the app builds; a test
+    // with no library of its own gets the default project's bundled agents.
+    backend.setLibrary(
+      null,
+      PromptLibrary([
+        for (final name in [
+          "athena",
+          if (library == null) ...["explore", "general"],
+        ])
+          PromptDocument.parse(CompletionKind.agent, name, "You help."),
+        for (final kind in CompletionKind.values) ...?library?.entries(kind),
+      ]),
+    );
     return backend;
   }
 
@@ -296,6 +308,20 @@ void main() {
         client.calls.first.tools.map((t) => t.name),
         isNot(contains(listParticipantsToolName)),
       );
+    });
+
+    test("a turn for an agent the library no longer holds fails, and says "
+        "why", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      final events = await send(backend, "carry on", participant: "ghost");
+
+      expect(
+        events.whereType<ErrorEvent>().single.message,
+        contains("@ghost no longer exists"),
+      );
+      expect(client.calls, isEmpty);
     });
 
     test("a participant's turn is told its own handle", () async {
