@@ -6,6 +6,7 @@ import "../../domain/models.dart";
 import "../../domain/project.dart" show ProjectRef;
 import "../../domain/shell.dart";
 import "../../providers.dart";
+import "agent_picture.dart";
 import "page_bar.dart";
 import "text_input.dart";
 
@@ -426,6 +427,17 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
           child: LayoutBuilder(
             builder: (context, box) => Row(
               children: [
+                // An agent leads with its face, still: one ticker a row
+                // would be a menu that never settles. A paired device's
+                // agents are its own, with no face here to show.
+                if (kind == CompletionKind.agent && widget.device == null) ...[
+                  AgentPicture(
+                    name: option.name,
+                    project: widget.project,
+                    size: 26,
+                  ),
+                  const SizedBox(width: 10),
+                ],
                 ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: box.maxWidth * 0.7),
                   child: Row(

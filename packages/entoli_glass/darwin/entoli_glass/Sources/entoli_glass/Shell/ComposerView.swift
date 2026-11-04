@@ -17,6 +17,10 @@ struct ComposerView: View {
   private static let rowHeight: CGFloat = 36
   private static let visibleRows = 5
 
+  /// An agent's face in a menu row: the size Dart draws it at, `_menuFace`
+  /// in `shell_composer.dart`.
+  private static let menuFace: CGFloat = 22
+
   /// A button's side, which the field's single line is held to as well, so
   /// the row is level.
   static let control: CGFloat = 40
@@ -218,6 +222,17 @@ struct ComposerView: View {
 
   private func menuRow(_ option: ComposerMenuItem, at row: Int) -> some View {
     HStack(spacing: 8) {
+      // An agent leads with its face, a still Flutter drew; one with none
+      // is the person the Flutter row draws.
+      if let picture = model.pictures[row] {
+        picture.resizable().interpolation(.high)
+          .frame(width: Self.menuFace, height: Self.menuFace)
+      } else if option.trigger == .agent {
+        Image(systemName: "person.crop.circle.fill")
+          .resizable()
+          .foregroundStyle(.secondary)
+          .frame(width: Self.menuFace, height: Self.menuFace)
+      }
       Text(option.label).fontWeight(.semibold).lineLimit(1)
       if let hint = option.hint {
         Text(hint).italic().foregroundStyle(.secondary).lineLimit(1)

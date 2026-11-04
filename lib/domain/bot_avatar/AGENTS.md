@@ -98,6 +98,22 @@ platform's reduce-motion setting every avatar is a still**, with no ticker
 at all; a turn or a reaction redraws it, and the test harness runs that way
 so a page holding an avatar settles.
 
+**Every avatar has a hair of outline**, in the theme's `outline` colour, so
+a pale one on a pale page — Athena's white owl on the chat's background —
+still has a shape. The painter draws the body's silhouette first, in that
+colour, into a layer whose `ImageFilter.dilate` grows it by half to one
+logical pixel, and the body over it: one edge round the whole shape, none
+between its slices (an evenOdd hole, Athena's beak, gets one too). Grown in
+pixels rather than stroked per slice, since a slice's projection is a
+squash that would stretch a stroke with it.
+
+The `@` menu leads each agent's row with its face, a still (`AgentPicture`
+in `CompletionField`). The native shell's menu is SwiftUI, so Flutter draws
+those stills to PNG (`agentFacePng`, a photo circled, a Bot Avatar by
+`botAvatarPng`) and they ride on `ComposerMenuItem.picture`, drawn while the
+composer is up so a menu has them as it opens. A paired device's agents are
+its own, with no face here, so neither menu draws one for them.
+
 A live avatar follows the pointer: one global pointer route
 (`_PointerWatch`), held while any avatar follows, keeps where the mouse is
 anywhere in the window — until it leaves it — and counts touches, each of
