@@ -30,6 +30,32 @@ asks it where the artifact landed and says the device-away line where the
 answer is null. The null is also the shape of "no sync running", which is
 what keeps every sync-unaware caller on the local paths unchanged.
 
+## Links into Entoli
+
+Entoli registers the `entoli://` scheme on every platform — Android's
+`VIEW` filter (on `MainActivity` and the `PromptIcon` alias, for the reason
+the share filter is on both), `CFBundleURLTypes` in both Apple `Info.plist`s,
+`x-scheme-handler/entoli` in the Linux desktop entry, and
+`HKLM\Software\Classes\entoli` in the MSI. `app_links` delivers them, the
+launching one and every one after, on one stream that `IncomingLinks` (wrapped
+in `main` beside `IncomingShares`) reads. What a link means is
+`AppLink.parse` (`lib/domain/app_link.dart`), and nothing else reads one:
+
+- `entoli://new?prompt=…` — the new-chat screen with the prompt in its
+  composer, **unsent**: a web page wrote it, so the user sends it. This is the
+  form the agent harnesses take (`t3code://new?prompt=…`), so Open Bot
+  Avatar's "Open in" menu can name Entoli with one entry.
+- `entoli://install/skill/<slug>`, `entoli://install/agent/<slug>` — the
+  marketplace's own preview page for that entry, its Install the same.
+- `entoli://install/avatar?def=…` — a Bot Avatar definition, raw or base64url
+  JSON (Open Bot Avatar's own `def`), on `BotAvatarInstallPage`: the bot and
+  Install, landing in the editor's library.
+
+The desktops are single-instance for it: Linux's runner lets GLib emit
+`command-line` (`G_APPLICATION_HANDLES_COMMAND_LINE`), here or in the running
+copy, which is where `app_links` reads the link; Windows' `wWinMain` hands a
+link to a running window (`SendAppLinkToInstance`) and exits.
+
 ## The theme
 
 One palette, seeded by default from the iOS / macOS theme (Apple's systemBlue

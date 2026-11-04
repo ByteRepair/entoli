@@ -306,6 +306,19 @@ class _NewChatState extends ConsumerState<_NewChat> {
   bool _starting = false;
 
   @override
+  void initState() {
+    super.initState();
+    ref.listenManual(newChatPromptProvider, (_, prompt) {
+      if (prompt == null) return;
+      _controller.message = prompt;
+      // Cleared after the frame: a provider is not written while one builds.
+      Future(() {
+        if (mounted) ref.read(newChatPromptProvider.notifier).set(null);
+      });
+    }, fireImmediately: true);
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     super.dispose();

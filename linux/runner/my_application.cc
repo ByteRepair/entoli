@@ -107,7 +107,9 @@ static gboolean my_application_local_command_line(GApplication* application,
   g_application_activate(application);
   *exit_status = 0;
 
-  return TRUE;
+  // FALSE lets GLib's own handler go on to emit command-line, here or in the
+  // running instance, which is where app_links reads an entoli:// link.
+  return FALSE;
 }
 
 // Implements GApplication::startup.
@@ -156,10 +158,12 @@ MyApplication* my_application_new() {
   // A debug build has its own data directory and runs beside an installed
   // copy, so only a release is unique.
 #ifdef NDEBUG
-  // G_APPLICATION_DEFAULT_FLAGS is GLib 2.74; its older name warns past it.
-  const GApplicationFlags flags = static_cast<GApplicationFlags>(0);
+  const GApplicationFlags flags = static_cast<GApplicationFlags>(
+      G_APPLICATION_HANDLES_COMMAND_LINE | G_APPLICATION_HANDLES_OPEN);
 #else
-  const GApplicationFlags flags = G_APPLICATION_NON_UNIQUE;
+  const GApplicationFlags flags = static_cast<GApplicationFlags>(
+      G_APPLICATION_NON_UNIQUE | G_APPLICATION_HANDLES_COMMAND_LINE |
+      G_APPLICATION_HANDLES_OPEN);
 #endif
   return MY_APPLICATION(g_object_new(my_application_get_type(),
                                      "application-id", APPLICATION_ID, "flags",
