@@ -8,6 +8,7 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../widgets/anchored_menu.dart";
 import "../../../core/log.dart";
 import "../../../domain/agent_browser.dart";
 import "../../../providers.dart";
@@ -562,22 +563,13 @@ class _BrowserCardState extends State<BrowserCard> {
   /// would offer for editing, against the user's clipboard. Chrome draws its
   /// menu nowhere a hidden browser or the screencast could show it.
   Future<void> _menu(Offset global) async {
-    final overlay =
-        Overlay.of(context).context.findRenderObject()! as RenderBox;
-    final choice = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromRect(
-        global & Size.zero,
-        Offset.zero & overlay.size,
-      ),
-      items: const [
-        PopupMenuItem(value: "cut", child: Text("Cut")),
-        PopupMenuItem(value: "copy", child: Text("Copy")),
-        PopupMenuItem(value: "paste", child: Text("Paste")),
-        PopupMenuDivider(),
-        PopupMenuItem(value: "selectAll", child: Text("Select all")),
-      ],
-    );
+    final choice = await showMenuAt<String>(context, global, const [
+      PopupMenuItem(value: "cut", child: Text("Cut")),
+      PopupMenuItem(value: "copy", child: Text("Copy")),
+      PopupMenuItem(value: "paste", child: Text("Paste")),
+      PopupMenuDivider(),
+      PopupMenuItem(value: "selectAll", child: Text("Select all")),
+    ]);
     if (!mounted || choice == null) return;
     _focus.requestFocus();
     switch (choice) {

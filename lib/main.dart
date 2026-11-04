@@ -35,6 +35,7 @@ import "domain/project.dart" show everyProject;
 import "domain/prompt_library.dart";
 import "domain/sync/identity.dart";
 import "providers.dart";
+import "ui/bot_avatar/licence.dart";
 import "ui/chat/activity/activities.dart" show ChatActivities;
 import "ui/chat/activity/activity.dart" show activityCatalogProvider;
 import "ui/chat/remote_turns.dart";
@@ -76,6 +77,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   installMenuChannel();
   registerBundledFontLicences();
+  registerBotAvatarLicence();
   registerBundledSkillLicences();
   registerAppLicence();
   platform.registerVoiceLicences();

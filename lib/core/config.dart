@@ -24,14 +24,17 @@ const instructionBlockHeader = "Workspace instructions are shown below";
 ///   `<dataDir>/settings.json`
 ///   `<dataDir>/reminders.json`
 ///   `<dataDir>/instruction_files.json`
+///   `<dataDir>/bot_avatars.json`
 ///   `<dataDir>/projects/<project>/`
 ///     `project.json`
 ///     `chats/<chat-id>/` — state.json, conv.jsonl, meta.json, resources/,
 ///        artifacts/, subagents/
 ///     `workspace/`, holding `chats/<chat-id>/`
-///     `agents/*.md`, `skills/<name>/`, `skills-bundled/<name>/`
+///     `agents/*.md` (each with an optional `<name>.png` or
+///        `<name>.avatar.json` beside it), `skills/<name>/`,
+///        `skills-bundled/<name>/`
 ///
-/// Every path but the first three is a project's, and every project is a
+/// Every path but the first four is a project's, and every project is a
 /// directory under `projects/` — the default one included, under the name
 /// `defaultProjectDir`. The default project holds the base skills and agents
 /// every other project inherits; another project's own `agents/` and `skills/`
@@ -245,6 +248,11 @@ class AppConfig {
   List<String> get machineLocalFiles => [linkedInstructionsFile];
 
   String get settingsFile => p.join(dataDir, "settings.json");
+
+  /// The Bot Avatars the user imported, one JSON list of definitions: the
+  /// shapes the avatar editor offers beside the presets. App-wide, since an
+  /// agent of any project may wear one.
+  String get botAvatarsFile => p.join(dataDir, "bot_avatars.json");
 
   /// models.dev, trimmed: see `ModelCatalog`. A cache, fetched again when
   /// it is a day old, so nothing is lost when it is.

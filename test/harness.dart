@@ -65,6 +65,8 @@ import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 import "package:agent_chat/ui/focus_follows_keyboard.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/selection.dart";
+import "package:agent_chat/ui/bot_avatar/bot_avatar_view.dart"
+    show BotAvatarMotion;
 import "package:agent_chat/ui/theme.dart";
 
 import "fakes.dart";
@@ -508,6 +510,10 @@ class TestApp {
           // As `main` attaches it: what closes the pages over the
           // conversation counts them by it.
           navigatorObservers: [container.read(appRoutesProvider)],
+          // Bot Avatars as stills, so a page holding one settles. Their own
+          // tests pump them directly to see them move.
+          builder: (context, app) =>
+              BotAvatarMotion(enabled: false, child: app!),
           home: FocusFollowsKeyboard(child: child),
         ),
       ),
@@ -644,6 +650,18 @@ Future<void> settleIo(
     await tester.pump(const Duration(milliseconds: 16));
   }
   await tester.pumpAndSettle();
+}
+
+/// [settleIo]'s rounds without the settle, for a page holding something that
+/// never comes to rest — a live Bot Avatar: real rounds for the I/O, then a
+/// frame, [n] times.
+Future<void> frames(WidgetTester tester, [int n = 20]) async {
+  for (var i = 0; i < n; i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 5)),
+    );
+    await tester.pump(const Duration(milliseconds: 16));
+  }
 }
 
 /// Pump until [done] holds, letting real file I/O run between frames, then

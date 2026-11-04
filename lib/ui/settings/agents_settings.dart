@@ -1,6 +1,5 @@
 import "dart:convert";
 import "dart:io";
-import "dart:typed_data";
 
 import "package:file_selector/file_selector.dart";
 import "package:flutter/foundation.dart" show setEquals;
@@ -15,12 +14,16 @@ import "../../data/prompts/agent_pictures.dart";
 import "../../data/prompts/prompt_export.dart";
 import "../../data/prompts/skill_import.dart";
 import "../../domain/agent_definition.dart";
+import "../../domain/agent_face.dart";
+import "../../domain/bot_avatar/spec.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart" show promptsDirUserWritable;
 import "../../domain/prompt_library.dart";
 import "../../providers.dart";
+import "../bot_avatar/bot_avatar_editor.dart";
 import "../widgets/add_button_row.dart";
 import "../widgets/agent_picture.dart";
+import "../widgets/anchored_menu.dart";
 import "../widgets/busy.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/discard_guard.dart";
@@ -121,15 +124,16 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
 
   Future<void> _edit(PromptDocument agent) async {
     final config = ref.read(appConfigProvider);
-    // This project's own picture, not the tiers' answer: the editor edits
-    // the level it writes. A picture inherited from the default project's
-    // directory shows on the rows but not here — picking one sets this
-    // project's, and a remove takes this project's away, where "removed on
-    // save" would otherwise leave the inherited one on screen.
-    final file = File(
-      agentPicturePath(config, agent.name, project: widget.project),
+    // This project's own face, not the tiers' answer: the editor edits the
+    // level it writes. A face inherited from the default project's directory
+    // shows on the rows but not here — choosing one sets this project's, and
+    // a remove takes this project's away, where "removed on save" would
+    // otherwise leave the inherited one on screen.
+    final face = await readOwnAgentFace(
+      config,
+      agent.name,
+      project: widget.project,
     );
-    final bytes = file.existsSync() ? await file.readAsBytes() : null;
     if (!mounted) return;
     final result = await Navigator.of(context).push<AgentEdit>(
       MaterialPageRoute(
@@ -137,7 +141,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
           initial: AgentDefinition.of(agent),
           isNew: false,
           project: widget.project,
-          initialPicture: bytes,
+          initialFace: face,
         ),
       ),
     );
@@ -165,25 +169,24 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
       edit.agent.toSource(),
       "Saved $name.",
       removes: previous,
-      picture: edit.picture,
-      removePicture: edit.removePicture,
+      face: edit.face,
     );
   }
 
   /// The one write an agent page makes — editor save or import alike — with
   /// the library reload and directory rescan that land it on the list.
   /// [removes] names the file a rename takes away, written over first so a
-  /// failure halfway leaves the agent where it was. [picture] writes a
-  /// `<name>.png` beside the `.md`, and moves the old name's with a rename —
-  /// the picture follows the agent; [removePicture] takes it away. The create
-  /// is load-bearing: `writeAsString` does not make parents.
+  /// failure halfway leaves the agent where it was. [face] is what the agent
+  /// looks like now, null for none: an agent written over another — an
+  /// import, a replace — does not keep the face of the one it replaced, and
+  /// a rename takes the old name's face away. The create is load-bearing:
+  /// `writeAsString` does not make parents.
   Future<void> _write(
     String name,
     String source,
     String said, {
     String? removes,
-    Uint8List? picture,
-    bool removePicture = false,
+    AgentFace? face,
   }) => _guard(() async {
     final config = ref.read(appConfigProvider);
     final renames = removes != null && removes != name;
@@ -200,26 +203,18 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
               agentFilePath(config, removes, project: widget.project),
             ).delete();
           }
-          final image = File(
-            agentPicturePath(config, name, project: widget.project),
-          );
-          if (removePicture) {
-            if (image.existsSync()) await image.delete();
-          } else if (picture != null) {
-            await image.writeAsBytes(picture);
-          } else if (renames) {
-            // A rename: the old picture moves with the agent, standing over
-            // it where both were set — rename over an existing file is fine.
-            final oldImage = File(
-              agentPicturePath(config, removes, project: widget.project),
+          if (renames) {
+            await writeAgentFace(
+              config,
+              removes,
+              null,
+              project: widget.project,
             );
-            if (oldImage.existsSync()) await oldImage.rename(image.path);
           }
+          await writeAgentFace(config, name, face, project: widget.project);
         });
     await _reload(widget.project);
     await _scan();
-    _invalidatePicture(name);
-    if (renames) _invalidatePicture(removes);
     _say(said);
   });
 
@@ -243,14 +238,15 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
             await File(
               agentFilePath(config, agent.name, project: widget.project),
             ).delete();
-            final image = File(
-              agentPicturePath(config, agent.name, project: widget.project),
+            await writeAgentFace(
+              config,
+              agent.name,
+              null,
+              project: widget.project,
             );
-            if (image.existsSync()) await image.delete();
           });
       await _reload(widget.project);
       await _scan();
-      _invalidatePicture(agent.name);
       _say("Removed ${agent.name}.");
     });
   }
@@ -308,12 +304,6 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
       ? reloadAllPromptLibraries(ref)
       : ref.read(promptLibraryProvider(target).notifier).reload();
 
-  /// The picture rows re-read after a write, a rename or a remove — also the
-  /// old name's on a rename, its file having moved with the agent. The
-  /// whole-family rule for a global write is the shared helper's.
-  void _invalidatePicture(String name) =>
-      invalidateAgentPicture(ref, name, project: widget.project);
-
   Future<void> _export(PromptDocument agent) => _guard(
     () => exportAndSave(
       ref.read(appConfigProvider),
@@ -369,22 +359,36 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
             ],
           ),
         ),
-        if (_writable)
+        // The avatar library is this device's, so a remote device's list
+        // has no way to it.
+        if (_local)
           AddButtonRow(
             child: ValueListenableBuilder(
               valueListenable: _busy,
-              builder: (context, busy, _) => Row(
+              builder: (context, busy, _) => Wrap(
                 spacing: 12,
+                runSpacing: 8,
                 children: [
+                  if (_writable) ...[
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.add),
+                      label: const Text("Add agent"),
+                      onPressed: busy ? null : _add,
+                    ),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.upload_file),
+                      label: const Text("Import agent"),
+                      onPressed: busy ? null : _import,
+                    ),
+                  ],
                   OutlinedButton.icon(
-                    icon: const Icon(Icons.add),
-                    label: const Text("Add agent"),
-                    onPressed: busy ? null : _add,
-                  ),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.upload_file),
-                    label: const Text("Import agent"),
-                    onPressed: busy ? null : _import,
+                    icon: const Icon(Icons.smart_toy_outlined),
+                    label: const Text("View Bot Avatars"),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const BotAvatarEditorPage.browse(),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -465,17 +469,10 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
 }
 
 /// What the editor page hands back on save: the [agent] as edited, whose
-/// source is what the file becomes. [picture] is a freshly picked
-/// image, written as the agent's picture; [removePicture] takes it away on
-/// save. Exactly one of the two is set — an edit removed it (null bytes, true)
-/// or replaced it (bytes, false) — and neither is when the picture was left
-/// alone, so a save without an edit to it keeps whatever the agent already
-/// had — and a rename moves what it had under the old name.
-typedef AgentEdit = ({
-  AgentDefinition agent,
-  Uint8List? picture,
-  bool removePicture,
-});
+/// source is what the file becomes, and the [face] it now has — a photo, a
+/// Bot Avatar, or none. The editor opened on the agent's own face, so an
+/// untouched one goes back as it was.
+typedef AgentEdit = ({AgentDefinition agent, AgentFace? face});
 
 /// Write an agent's system prompt. The name is the file name, so editing it
 /// renames the file — the section takes the old one away when the new one is
@@ -484,11 +481,13 @@ typedef AgentEdit = ({
 /// which is why a rename onto a name another agent holds is refused here. The
 /// body is a `PromptField`, the trigger's prompt's: shown as it is set, and
 /// written on a page of its own where `/skills` and `@agents` complete; an
-/// agent's prompt is dispatched through the same library. The picture rides
-/// the same save: picked bytes are written as `<name>.png` beside the `.md`,
-/// a remove takes it away, and a save touching neither leaves what is there — a rename moves it, and a rename
-/// with a fresh pick or a remove replaces or takes the old one rather than
-/// leaving it behind. The tools are switches over the registry's grantable
+/// agent's prompt is dispatched through the same library. The face rides the
+/// same save: a tap on it offers a photo upload or a Bot Avatar (the
+/// avatar editor), and a remove where there is one. Whichever is chosen is
+/// written beside the `.md` — `<name>.png` or `<name>.avatar.json` — the
+/// other taken away; a save touching neither leaves what is there, a rename
+/// moves it, and a rename with a fresh choice or a remove replaces or takes
+/// the old one rather than leaving it behind. The tools are switches over the registry's grantable
 /// ones, grouped as the tools group themselves.
 class AgentEditorPage extends ConsumerStatefulWidget {
   const AgentEditorPage({
@@ -496,7 +495,7 @@ class AgentEditorPage extends ConsumerStatefulWidget {
     required this.initial,
     required this.isNew,
     this.project,
-    this.initialPicture,
+    this.initialFace,
   });
 
   /// The agent as the page opens on it; its keys the page does not edit are
@@ -510,9 +509,9 @@ class AgentEditorPage extends ConsumerStatefulWidget {
   /// the way it is everywhere a project is named.
   final String? project;
 
-  /// The picture the agent already has, read by the section before the page
-  /// opens — shown until a pick or a remove changes what save will do.
-  final Uint8List? initialPicture;
+  /// The face the agent already has, read by the section before the page
+  /// opens — shown until a choice or a remove changes what save will do.
+  final AgentFace? initialFace;
 
   @override
   ConsumerState<AgentEditorPage> createState() => _AgentEditorPageState();
@@ -547,17 +546,17 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
       };
   late final Set<String> _tools = {..._initialTools};
 
-  /// What the picture row shows: what the agent had, what a pick brought in,
-  /// or nothing after a remove. Touched with [_picture] null is "removed on
+  /// What the face row shows: what the agent had, what a choice brought in,
+  /// or nothing after a remove. Touched with [_face] null is "removed on
   /// save"; untouched is "leave it alone" altogether — two fields cover the
-  /// four states. Seeded in [initState], an initializer cannot read `widget`.
-  Uint8List? _picture;
-  bool _pictureTouched = false;
+  /// states. Seeded in [initState], an initializer cannot read `widget`.
+  AgentFace? _face;
+  bool _faceTouched = false;
 
   @override
   void initState() {
     super.initState();
-    _picture = widget.initialPicture;
+    _face = widget.initialFace;
   }
 
   @override
@@ -572,14 +571,30 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
       _description.text != widget.initial.description ||
       _body != widget.initial.instructions ||
       !setEquals(_tools, _initialTools) ||
-      _pictureTouched;
+      _faceTouched;
 
-  /// What a pick or a remove records: the touched flag is the save's answer,
-  /// the bytes only what the row shows and what goes back where a pick made.
-  void _pick(Uint8List? bytes) => setState(() {
-    _picture = bytes;
-    _pictureTouched = true;
+  /// What a choice or a remove records: the touched flag is the save's
+  /// answer, the face only what the row shows and what goes back.
+  void _pick(AgentFace? face) => setState(() {
+    _face = face;
+    _faceTouched = true;
   });
+
+  /// The avatar editor, on the Bot Avatar the agent wears where it wears one.
+  /// What it hands back lives only in this page until Save.
+  Future<void> _chooseBot() async {
+    final spec = await Navigator.of(context).push<BotAvatarSpec>(
+      MaterialPageRoute(
+        builder: (_) => BotAvatarEditorPage(
+          initial: switch (_face) {
+            AgentBot(:final spec) => spec,
+            _ => null,
+          },
+        ),
+      ),
+    );
+    if (spec != null && mounted) _pick(AgentBot(spec));
+  }
 
   /// The picture chooser. The image a pick brings in lives only in this page
   /// until Save: nothing is written by choosing, the way nothing else here is.
@@ -595,7 +610,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
       }
       return;
     }
-    _pick(attachment.bytes);
+    _pick(AgentPhoto(attachment.bytes));
   }
 
   Future<void> _save() async {
@@ -638,13 +653,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                 ..._tools.difference(_known),
               },
       ),
-      // Only what was touched: untouched bytes going back would have the
-      // section rewrite the same picture over the new name on a rename —
-      // over what moving the old one there already put. Touched and null
-      // together is "remove on save", and the pair is never both empty and
-      // set.
-      picture: _pictureTouched ? _picture : null,
-      removePicture: _pictureTouched && _picture == null,
+      face: _face,
     ));
   }
 
@@ -705,6 +714,72 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
     ];
   }
 
+  /// The face, which is also the button that changes it: a tap opens a menu
+  /// of an uploaded photo or a Bot Avatar, and a remove where there is
+  /// something to remove.
+  Widget _faceRow() {
+    final face = _face;
+    return Row(
+      children: [
+        Builder(
+          builder: (button) => Tooltip(
+            message: "Change the profile picture",
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: () async {
+                PopupMenuItem<VoidCallback> item(
+                  IconData icon,
+                  String label,
+                  VoidCallback action,
+                ) => PopupMenuItem(
+                  value: action,
+                  child: ListTile(leading: Icon(icon), title: Text(label)),
+                );
+                final action = await showAnchoredMenu(button, [
+                  item(Icons.upload_outlined, "Upload photo", _pickPicture),
+                  item(
+                    Icons.smart_toy_outlined,
+                    face is AgentBot ? "Edit Bot Avatar" : "Use Bot Avatar",
+                    _chooseBot,
+                  ),
+                  if (face != null)
+                    item(Icons.close, "Remove", () => _pick(null)),
+                ]);
+                if (button.mounted) action?.call();
+              },
+              child: AgentPictureImage(face: face, size: 64, animate: true),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            // What the face is now, in the editor's own words — and what
+            // save will do about it, where it does anything.
+            !_faceTouched
+                ? switch (face) {
+                    null =>
+                      "No picture. Tap the circle to upload a photo or "
+                          "choose a Bot Avatar, shown beside the agent's "
+                          "name in the list and in chat.",
+                    AgentPhoto() => "The agent's picture.",
+                    AgentBot(:final spec) =>
+                      "The agent's Bot Avatar, ${spec.definition.name}.",
+                  }
+                : switch (face) {
+                    null => "The picture is removed on save.",
+                    AgentPhoto() => "A new picture is set on save.",
+                    AgentBot(:final spec) =>
+                      "${spec.definition.name} is set as the Bot Avatar "
+                          "on save.",
+                  },
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return DiscardGuard(
@@ -720,47 +795,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             children: [
-              Row(
-                children: [
-                  // The face of the picker as well as the picture itself: with
-                  // nothing set it is the person mark, a tap on the picture
-                  // opens the chooser, and a remove appears where there is
-                  // something to remove.
-                  GestureDetector(
-                    onTap: _pickPicture,
-                    child: Tooltip(
-                      message: "Choose a profile picture",
-                      child: AgentPictureImage(bytes: _picture, size: 64),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      // What the circle is now, in the editor's own words —
-                      // and what save will do about it, where it does
-                      // anything. Untouched says what is there, plainly.
-                      !_pictureTouched
-                          ? _picture == null
-                                ? "No picture. A PNG picked here is shown beside "
-                                      "the agent's name in the list and in chat."
-                                : "The agent's picture."
-                          : _picture == null
-                          ? "The picture is removed on save."
-                          : "A new picture is set on save.",
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                  // There, where there is something to remove — a pick, or a
-                  // picture the agent already had — and not after: removing
-                  // empties it, and clearing what is already gone is noise.
-                  if (_picture != null)
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      tooltip: "Remove the picture",
-                      onPressed: () => _pick(null),
-                    ),
-                ],
-              ),
+              _faceRow(),
               const SizedBox(height: 12),
               TextField(
                 controller: _name,

@@ -10,6 +10,7 @@ import "../../core/log.dart";
 import "../../core/platform/platform.dart" as platform;
 import "../../data/prompts/agent_pictures.dart";
 import "../../data/prompts/skill_import.dart";
+import "../../domain/agent_face.dart";
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
 import "../../providers.dart";
@@ -316,15 +317,15 @@ class _MarketplaceEntryPreviewPageState
           final file = File(agentFilePath(config, name, project: target));
           await file.create(recursive: true);
           await file.writeAsString(source);
-          if (picture != null) {
-            await File(
-              agentPicturePath(config, name, project: target),
-            ).writeAsBytes(picture);
-          }
+          // The entry's picture is the face now, or none: the agent it
+          // replaces does not keep its own.
+          await writeAgentFace(
+            config,
+            name,
+            picture == null ? null : AgentPhoto(picture),
+            project: target,
+          );
         });
-    // The picture the agent page draws is its own provider's read; the
-    // null-destination case is the whole family, whose rule is written there.
-    invalidateAgentPicture(ref, name, project: _destination);
     await reloadAllPromptLibraries(ref);
     return name;
   }
@@ -389,7 +390,12 @@ class _Body extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: [
         if (preview.picture != null) ...[
-          Center(child: AgentPictureImage(bytes: preview.picture, size: 72)),
+          Center(
+            child: AgentPictureImage(
+              face: AgentPhoto(preview.picture!),
+              size: 72,
+            ),
+          ),
           const SizedBox(height: 12),
         ],
         Text(entry.name, style: theme.textTheme.headlineSmall),

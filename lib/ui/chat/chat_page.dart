@@ -1,6 +1,5 @@
 import "dart:async";
 import "dart:math" as math;
-import "dart:typed_data";
 
 import "package:flutter/foundation.dart" show listEquals;
 import "package:collection/collection.dart" show IterableExtension;
@@ -13,6 +12,7 @@ import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 import "package:super_sliver_list/super_sliver_list.dart";
 
 import "../../domain/agent_backend.dart";
+import "../../domain/agent_face.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/end_turn.dart";
 import "../../domain/models.dart";
@@ -1555,12 +1555,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     if (uri != null) ref.read(linkOpenerProvider).open(context, uri);
   }
 
-  /// The bytes of the picture beside an addressed member's name: the named
-  /// member's, where the message names one — the same condition the label
+  /// The face beside an addressed member's name: the named member's photo
+  /// or Bot Avatar, where the message names one — the same condition the label
   /// answers, so the two never disagree. Null where it names none, so the
   /// main agent's reply draws its label alone, whatever a file in the agents
   /// directory might hold.
-  Uint8List? _avatarOf(Chat chat, Message message) {
+  AgentFace? _avatarOf(Chat chat, Message message) {
     final member = nameOf(message.author);
     if (member == null) return null;
     return ref
@@ -1627,6 +1627,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                         avatar: _avatarOf(chat, message),
                         entoli: inOmadaSection,
                         isWaiting: view.isRunning && last,
+                        latest: last,
                         waitingNotice: view.retry,
                         waitingStatus: view.status,
                         shellOutput: view.shellOutput[message.id],
