@@ -13,9 +13,10 @@ A definition is geometry only — one SVG path in a 0..100 box and where the
 eye pair sits — held to the upstream contract (`docs/avatar-contract.md`,
 version 1) by `BotAvatarDefinition.validate`, which is the only way to get a
 `BotAvatarDefinition`: a held one is normalised, its path rebuilt from
-numbers. `BotAvatarSpec` is what an agent wears: a definition plus the
-colours, `{"definition": …, "color": "#rrggbb"}` with an optional
-`eyeColor`. The definition rides inside the spec rather than by id, so an
+numbers, and it carries the analysis of its path validating it made, so
+nothing parses it twice. `BotAvatarSpec` is what an agent wears: a definition
+plus its colour, `{"definition": …, "color": "#rrggbb"}`; the eyes are the
+reference's near-black ink. The definition rides inside the spec rather than by id, so an
 agent keeps its shape when the import it came from is deleted, and a spec
 copied to another device needs nothing else.
 
@@ -66,13 +67,16 @@ The files map one to one onto upstream's `packages/core/src`:
   animator (`motion.ts`, `mood.ts`, `follow.ts`, `animator.ts`).
 - `frame.dart` — `avatarFrame` from `render.ts`: one frame as projected
   slices and eyes, back to front. `PreparedBotAvatar` caches the volume by
-  geometry and depth, since building it is the expensive part.
+  definition, since building it is the expensive part; a part keeps only
+  what a frame draws, its height field staying with the build.
 
 What is not ported: the SVG and CSS-3D renderers (Flutter paints the frame
 itself), the seam and face-room checks only the upstream strict validator
-runs, and the slice-thinning that exists for CSS layer counts. A slice
+runs, the slice-thinning that exists for CSS layer counts, and the `depth`
+option — every avatar is drawn at the reference's natural depth. A slice
 keeps its polygons instead of a `d` string; the painter builds one
-`ui.Path` per slice the first time it is drawn (an `Expando` on the slice).
+`ui.Path` per set of loops the first time it is drawn (an `Expando` on the
+loops, which a level's front and back copies share).
 Arithmetic follows the reference line for line — the 32-bit hash and noise
 included — so a pose is the reference's pose, with one deliberate exception: following a target below tips the face down by 0.45 rad where the reference uses 0.18 both ways, since from the reference's tipped-up resting view that barely left level; it has not been checked frame
 for frame against the TypeScript, only for shape (every preset draws a body

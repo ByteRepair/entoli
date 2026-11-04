@@ -140,10 +140,8 @@ double noise(int seed, int n) {
   return (h & 0xffffffff) / 4294967296;
 }
 
-double _clamp(double v, double lo, double hi) => math.min(hi, math.max(lo, v));
-
 double _smooth(double u) {
-  final x = _clamp(u, 0, 1);
+  final x = u.clamp(0.0, 1.0);
   return x * x * (3 - 2 * x);
 }
 
@@ -156,15 +154,15 @@ double _blinkAt(int seed, double t) {
   const slot = 4.2, dur = 0.19;
   final s0 = (t / slot).floor();
   var closure = 0.0;
-  for (final s in [s0 - 1, s0]) {
+  void blinkFrom(double b) {
+    final u = (t - b) / dur;
+    if (u > 0 && u < 1) closure = math.max(closure, math.sin(math.pi * u));
+  }
+
+  for (var s = s0 - 1; s <= s0; s++) {
     final start = s * slot + 0.5 + noise(seed, s * 2) * 2.9;
-    final starts = noise(seed, s * 2 + 1) > 0.8
-        ? [start, start + 0.34]
-        : [start];
-    for (final b in starts) {
-      final u = (t - b) / dur;
-      if (u > 0 && u < 1) closure = math.max(closure, math.sin(math.pi * u));
-    }
+    blinkFrom(start);
+    if (noise(seed, s * 2 + 1) > 0.8) blinkFrom(start + 0.34);
   }
   return closure;
 }
@@ -190,7 +188,7 @@ double _blinkAt(int seed, double t) {
 /// The pose part way from [a] to [b]. A change of eye shape swaps halfway,
 /// inside a blink.
 Pose blendPoses(Pose a, Pose b, double t) {
-  final k = _clamp(t, 0, 1);
+  final k = t.clamp(0.0, 1.0);
   double mix(double x, double y) => x + (y - x) * k;
   final pose = Pose(
     yaw: mix(a.yaw, b.yaw),
@@ -250,10 +248,10 @@ Pose _moodPose(
   double wave(double period, [double phase = 0]) =>
       reduced ? 0 : math.sin(_tau * t / period + phase);
   final given = gaze != null && gaze.x.isFinite && gaze.y.isFinite
-      ? (_clamp(gaze.x, -1, 1), _clamp(gaze.y, -1, 1))
+      ? (gaze.x.clamp(-1.0, 1.0), gaze.y.clamp(-1.0, 1.0))
       : null;
   final weight = given != null
-      ? (gaze!.weight.isFinite ? _clamp(gaze.weight, 0, 1) : 1.0)
+      ? (gaze!.weight.isFinite ? gaze.weight.clamp(0.0, 1.0) : 1.0)
       : 0.0;
   // While it attends to a target the body holds its aim.
   final sway = 1 - 0.7 * weight;
@@ -264,7 +262,9 @@ Pose _moodPose(
       const period = 0.92;
       final p = reduced ? 0.5 : ((t % period) + period) % period / period;
       final air = 4 * p * (1 - p);
-      final land = reduced ? 0.0 : _clamp(1 - math.min(p, 1 - p) / 0.12, 0, 1);
+      final land = reduced
+          ? 0.0
+          : (1 - math.min(p, 1 - p) / 0.12).clamp(0.0, 1.0);
       final moving = reduced ? 0.0 : 1.0;
       pose
         ..lift = reduced ? 0 : -3.2 * air
@@ -363,12 +363,9 @@ double _tanh(double x) {
 
 /// What an [BotAnimator] step hands the renderer for one frame.
 class AnimatorStep {
-  const AnimatorStep(this.gaze, this.blend, this.moving);
+  const AnimatorStep(this.gaze, this.blend);
   final Gaze? gaze;
   final MoodBlend? blend;
-
-  /// Still easing toward where it is going.
-  final bool moving;
 }
 
 /// The state a live avatar keeps between frames: the eased look toward a
@@ -390,12 +387,7 @@ class BotAnimator {
   }) {
     final dt = _last == null ? 0.0 : (now - _last!) / 1000;
     _last = now;
-    var moving = false;
-    if (!hold) {
-      final (next, still) = _followStep(_follow, target, dt, reducedMotion);
-      _follow = next;
-      moving = still;
-    }
+    if (!hold) _follow = _followStep(_follow, target, dt, reducedMotion);
 
     final current = _mood;
     if (current != null && mood != current.mood) {
@@ -423,7 +415,7 @@ class BotAnimator {
     } else {
       _mood = MoodState(_mood!.mood);
     }
-    return AnimatorStep(_gaze(_follow), blend, moving || blend != null);
+    return AnimatorStep(_gaze(_follow), blend);
   }
 
   /// Back to rest with no mood history, as for a new shape.
@@ -434,11 +426,12 @@ class BotAnimator {
   }
 
   static Gaze? _gaze(_Follow s) {
-    final a = _clamp(s.attention, 0, 1);
+    final a = s.attention.clamp(0.0, 1.0);
     return a > 0 ? Gaze(s.x, s.y, a * a * (3 - 2 * a)) : null;
   }
 
-  static (_Follow, bool) _followStep(
+  /// One easing step toward [target], landing on it once within a hair.
+  static _Follow _followStep(
     _Follow state,
     (double, double)? target,
     double dt,
@@ -448,7 +441,7 @@ class BotAnimator {
     final goal = target == null
         ? _Follow.rest
         : _Follow(target.$1, target.$2, 1);
-    final step = _clamp(dt, 0, 0.1);
+    final step = dt.clamp(0.0, 0.1);
     double ease(double tau) => reduced ? 1 : 1 - math.exp(-step / tau);
     // Losing the target relaxes the look at the unhurried rate.
     final k = ease(target != null ? tau : attendTau);
@@ -461,6 +454,6 @@ class BotAnimator {
         (goal.x - next.x).abs() > 0.002 ||
         (goal.y - next.y).abs() > 0.002 ||
         (goal.attention - next.attention).abs() > 0.002;
-    return (moving ? next : goal, moving);
+    return moving ? next : goal;
   }
 }

@@ -8,7 +8,9 @@ the `Default`-plus-reset pairing,
 `LabelledField` (a field under its caption) and
 `InheritableDropdown` over both (whose first entry stores null and names what
 null resolves to), the `promptForText` / `promptForPair` / `confirm` /
-`pickProject` dialogs and `copyToClipboard` beside them, `showAnchoredMenu`,
+`pickProject` dialogs and `copyToClipboard` beside them, `showAnchoredMenu`
+and `showMenuAt`, `Choice` (a swatch, corner or icon to pick, with the one
+selected ring),
 `NavDrawer` and `navBreakpoint`, `SidePanelFrame` (below), `ActionIcon`, `AttachmentChip` /
 `AttachmentStrip`, `EmptyPane`, `Nothing`, `TempChatTtlField`, `TristateToggle`,
 `CompletionField`, `PromptField` (below), `DiscardGuard`, `SearchField`,
@@ -194,7 +196,8 @@ back means over a menu. `PopupMenuButton` gets this right by pushing a route, an
 this is the same push without having to be the button — the project switcher and
 the add-provider row keep the buttons they had. It takes the button's own
 context, so both callers reach for a `Builder`: their build context is the whole
-section, and a menu anchored to that hangs off the wrong edge.
+section, and a menu anchored to that hangs off the wrong edge. `showMenuAt` is
+the same route at a point — where a right click or a held finger landed.
 
 Streamed deltas are coalesced into one state update per frame: per-token updates
 made the reply's text quadratic and rebuilt every visible bubble thousands of

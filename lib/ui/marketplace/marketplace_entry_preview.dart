@@ -317,19 +317,15 @@ class _MarketplaceEntryPreviewPageState
           final file = File(agentFilePath(config, name, project: target));
           await file.create(recursive: true);
           await file.writeAsString(source);
-          if (picture != null) {
-            await File(
-              agentPicturePath(config, name, project: target),
-            ).writeAsBytes(picture);
-            // The entry's picture is the face now: a Bot Avatar the agent
-            // wore before would otherwise stand over it.
-            final avatar = File(agentAvatarPath(config, name, project: target));
-            if (avatar.existsSync()) await avatar.delete();
-          }
+          // The entry's picture is the face now, or none: the agent it
+          // replaces does not keep its own.
+          await writeAgentFace(
+            config,
+            name,
+            picture == null ? null : AgentPhoto(picture),
+            project: target,
+          );
         });
-    // The picture the agent page draws is its own provider's read; the
-    // null-destination case is the whole family, whose rule is written there.
-    invalidateAgentPicture(ref, name, project: _destination);
     await reloadAllPromptLibraries(ref);
     return name;
   }

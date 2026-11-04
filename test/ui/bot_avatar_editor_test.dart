@@ -25,17 +25,6 @@ Here is your avatar:
 ```
 """;
 
-/// The editor's preview never stops moving, so nothing here settles: real
-/// rounds for the asset and file reads, then frames.
-Future<void> frames(WidgetTester tester, [int n = 12]) async {
-  for (var i = 0; i < n; i++) {
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 5)),
-    );
-    await tester.pump(const Duration(milliseconds: 16));
-  }
-}
-
 void main() {
   late TestApp app;
 

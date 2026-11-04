@@ -41,7 +41,6 @@ class AgentPictureImage extends StatelessWidget {
         size: size,
         animate: animate,
         mood: mood,
-        followPointer: animate,
         reactToTap: reactToTap,
         semanticLabel: "",
       ),

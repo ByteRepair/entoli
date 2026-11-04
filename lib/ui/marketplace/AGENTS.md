@@ -144,15 +144,11 @@ a listing not naming the file answers it without a request): UTF-8 decode,
 the entry carries — `installName`, the slug for a local entry, an ext key's
 last segment for a remote one, whose remote directory is what the
 marketplace names an agent by — replace-confirm, then one
-`ReadOnlyDir.write` block writing `agentFilePath` and, where served one,
-`agentPicturePath` beside it — taking away a `<name>.avatar.json` the agent
-wore before, which would otherwise stand over the new picture. The picture's
-invalidation is the shared
-`invalidateAgentPicture` (in `providers.dart`, under the provider itself):
-a global write (destination null) lands in the default project's directory
-that every project inherits from, so the whole `agentPictureProvider` family
-is invalidated — the same answer a global agents page's write gives; a named
-destination takes its own entry down.
+`ReadOnlyDir.write` block writing `agentFilePath` and the face through
+`writeAgentFace` — the entry's picture where it serves one, none where it
+does not, so an agent installed over another does not keep the face of the
+one it replaced. The library reload after it is what refreshes the face:
+`agentPictureProvider` watches the project's library.
 
 The destination is `InstallDestination` at the body's end, `Global` default —
 the same widget the skill-install preview page carries, so every install

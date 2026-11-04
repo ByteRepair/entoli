@@ -4,6 +4,7 @@
 import "dart:convert";
 
 import "definition.dart";
+import "pose.dart" show hashString;
 
 /// The body colours the reference picker offers, in its order.
 abstract final class BotPalette {
@@ -43,11 +44,7 @@ abstract final class BotPalette {
       for (final s in all)
         if (s != white && s != gray) s.rgb,
     ];
-    var hash = 0;
-    for (final c in id.runes) {
-      hash = (hash * 31 + c) & 0xffffffff;
-    }
-    return bright[hash % bright.length];
+    return bright[hashString(id) % bright.length];
   }
 
   /// The name of [rgb] where it is on the palette.
@@ -85,29 +82,15 @@ String hexColour(int rgb) =>
 
 /// A Bot Avatar as an agent wears it.
 class BotAvatarSpec {
-  const BotAvatarSpec({
-    required this.definition,
-    required this.colour,
-    this.eyeColour,
-  });
+  const BotAvatarSpec({required this.definition, required this.colour});
 
   final BotAvatarDefinition definition;
 
   /// The body colour, 0xRRGGBB.
   final int colour;
 
-  /// The eye ink, 0xRRGGBB; null is the reference's near-black.
-  final int? eyeColour;
-
-  static const defaultEyeColour = 0x151515;
-
-  int get ink => eyeColour ?? defaultEyeColour;
-
-  BotAvatarSpec withColour(int colour) => BotAvatarSpec(
-    definition: definition,
-    colour: colour,
-    eyeColour: eyeColour,
-  );
+  /// The eyes' ink, 0xRRGGBB: the reference's near-black.
+  static const ink = 0x151515;
 
   /// A spec from its JSON — `{"definition": …, "color": "#rrggbb"}` — or
   /// null where the definition fails the contract or the JSON is not one.
@@ -120,7 +103,6 @@ class BotAvatarSpec {
     return BotAvatarSpec(
       definition: result.definition,
       colour: parseHexColour(json["color"]) ?? BotPalette.signature.rgb,
-      eyeColour: parseHexColour(json["eyeColor"]),
     );
   }
 
@@ -136,7 +118,6 @@ class BotAvatarSpec {
   Map<String, Object> toJson() => {
     "definition": definition.toJson(),
     "color": hexColour(colour),
-    if (eyeColour != null) "eyeColor": hexColour(eyeColour!),
   };
 
   String encode() => const JsonEncoder.withIndent("  ").convert(toJson());
@@ -145,9 +126,8 @@ class BotAvatarSpec {
   bool operator ==(Object other) =>
       other is BotAvatarSpec &&
       other.definition == definition &&
-      other.colour == colour &&
-      other.eyeColour == eyeColour;
+      other.colour == colour;
 
   @override
-  int get hashCode => Object.hash(definition, colour, eyeColour);
+  int get hashCode => Object.hash(definition, colour);
 }

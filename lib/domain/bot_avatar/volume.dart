@@ -58,26 +58,21 @@ class VolumeSlice {
   );
 }
 
+/// One part as a frame draws it: its slices and the point its depth is
+/// measured at. What built it — the polygons, the height field — stays with
+/// the build, so a cached volume holds only what is drawn.
 class VolumePart {
   const VolumePart({
     required this.kind,
-    required this.polys,
-    required this.bounds,
     required this.center,
     required this.zSlices,
     required this.xSlices,
-    required this.height,
   });
 
   final PartKind kind;
-  final List<Poly> polys;
-  final Bounds bounds;
   final Pt center;
   final List<VolumeSlice> zSlices;
   final List<VolumeSlice> xSlices;
-
-  /// The front surface's height at a point, 0 outside the part.
-  final double Function(double x, double y) height;
 }
 
 typedef Vec3 = (double, double, double);
@@ -108,12 +103,8 @@ class Volume {
   /// edge): an eye is hidden once any of them turns away.
   final (List<Vec3>, List<Vec3>) eyeNormals;
 
-  /// Build the volume of [def]. [volume] scales every depth, 0 being flat.
-  factory Volume.build(
-    BotAvatarDefinition def, {
-    double volume = 1,
-    BodyAnalysis? body,
-  }) => _build(def, volume, body ?? BodyAnalysis.of(def.path));
+  /// Build the volume of [def], at the reference's natural depth.
+  factory Volume.build(BotAvatarDefinition def) => _build(def);
 }
 
 /// The deepest an inflated part may be, box units.
@@ -148,18 +139,6 @@ double _segDist(
   return math.sqrt(ex * ex + ey * ey);
 }
 
-/// The distance from a point to the nearest edge.
-double edgeDistance(List<Poly> polys, double x, double y) {
-  var best = double.infinity;
-  for (final poly in polys) {
-    for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-      final d = _segDist(x, y, poly[j].$1, poly[j].$2, poly[i].$1, poly[i].$2);
-      if (d < best) best = d;
-    }
-  }
-  return best;
-}
-
 /// An inflated part's front surface, [dist] units inside the outline.
 double _surfaceZ(double depth, double rxy, double rz, double dist) {
   final half = depth / 2;
@@ -170,10 +149,10 @@ double _surfaceZ(double depth, double rxy, double rz, double dist) {
 
 /// As deep as the part is thick, but a tall slender part up to 2.4 times,
 /// so it reads as a disc.
-double _partDepth(double thickness, Bounds b, double volume) {
+double _partDepth(double thickness, Bounds b) {
   final long = math.max(b.width, b.height);
   final raw = 0.8 * math.max(thickness, math.min(0.4 * long, 2.4 * thickness));
-  return math.min(maxPartDepth, math.max(3, raw)) * volume;
+  return math.min(maxPartDepth, math.max(3, raw));
 }
 
 /// Sorted crossings of y = s (rows) or x = s with the polygons.
@@ -332,6 +311,7 @@ class _EdgeIndex {
 
 _Grid _sampleGrid(
   List<Poly> polys,
+  _EdgeIndex index,
   Bounds b,
   double step,
   double Function(double x, double y, double sd) height,
@@ -341,7 +321,6 @@ _Grid _sampleGrid(
   final nx = ((b.width + 2 * pad) / step).ceil() + 1;
   final ny = ((b.height + 2 * pad) / step).ceil() + 1;
   final sd = Float64List(nx * ny), h = Float64List(nx * ny);
-  final index = _EdgeIndex(polys, b);
   final xs = [for (var i = 0; i < nx; i++) x0 + i * step];
   final inside = Uint8List(nx);
   for (var j = 0; j < ny; j++) {
@@ -553,7 +532,8 @@ List<double> _levels(double flat, double round, int steps) => [
     flat + round * math.sin(k / steps * (math.pi / 2)),
 ];
 
-Volume _build(BotAvatarDefinition def, double volume, BodyAnalysis body) {
+Volume _build(BotAvatarDefinition def) {
+  final body = def.body;
   final outlines = [
     for (final s in body.subpaths)
       if (!s.hole) s,
@@ -562,10 +542,12 @@ Volume _build(BotAvatarDefinition def, double volume, BodyAnalysis body) {
     for (final s in body.subpaths)
       if (s.hole) s,
   ];
-  final v = volume.isFinite ? math.max(0.0, volume) : 1.0;
   final xAxis = _revolveAxis(body);
 
   final parts = <VolumePart>[];
+  // Each part's front surface, a height at a point and 0 outside it: where
+  // the eyes sit is read off them once the parts are built.
+  final heights = <double Function(double x, double y)>[];
   for (final o in outlines) {
     final cuts = [
       for (final h in holes)
@@ -573,6 +555,7 @@ Volume _build(BotAvatarDefinition def, double volume, BodyAnalysis body) {
     ];
     final polys = [...o.polys, for (final h in cuts) ...h.polys];
     final b = boundsOf(o.polys);
+    final index = _EdgeIndex(polys, b);
     final center = b.center;
     final minDim = math.min(b.width, b.height);
     final step = math.max(0.25, math.min(0.45, minDim / 24));
@@ -592,9 +575,15 @@ Volume _build(BotAvatarDefinition def, double volume, BodyAnalysis body) {
     double depth, rz = 0;
     double Function(double x, double y, double sd) heightOf;
     if (kind == PartKind.inflate || profile == null) {
-      final coarse = _sampleGrid(polys, b, math.max(step, 0.6), (_, _, _) => 0);
+      final coarse = _sampleGrid(
+        polys,
+        index,
+        b,
+        math.max(step, 0.6),
+        (_, _, _) => 0,
+      );
       final thickness = 2 * coarse.sd.fold<double>(0, math.max);
-      depth = _partDepth(thickness, b, v);
+      depth = _partDepth(thickness, b);
       final rxy = math.min(thickness / 2, depth / 2) * 0.9;
       rz = depth / 2 * 0.85;
       final d = depth, r = rz;
@@ -603,29 +592,20 @@ Volume _build(BotAvatarDefinition def, double volume, BodyAnalysis body) {
       final p = profile;
       final axis = kind == PartKind.revolveX ? xAxis! : center.$1;
       final radius = p.r.fold<double>(0, math.max);
-      depth = 2 * radius * v;
+      depth = 2 * radius;
       heightOf = kind == PartKind.revolveX
-          ? (x, y, _) =>
-                v *
-                math.sqrt(
-                  math.max(
-                    0,
-                    math.pow(p.radiusAt(x), 2) - (y - axis) * (y - axis),
-                  ),
-                )
-          : (x, y, _) =>
-                v *
-                math.sqrt(
-                  math.max(
-                    0,
-                    math.pow(p.radiusAt(y), 2) - (x - axis) * (x - axis),
-                  ),
-                );
+          ? (x, y, _) => math.sqrt(
+              math.max(0, math.pow(p.radiusAt(x), 2) - (y - axis) * (y - axis)),
+            )
+          : (x, y, _) => math.sqrt(
+              math.max(0, math.pow(p.radiusAt(y), 2) - (x - axis) * (x - axis)),
+            );
     }
     final inflate = kind == PartKind.inflate;
     double height(double x, double y) => isInside(polys, x, y)
-        ? heightOf(x, y, inflate ? edgeDistance(polys, x, y) : 0)
+        ? heightOf(x, y, inflate ? index.distance(x, y) : 0)
         : 0;
+    heights.add(height);
 
     final zSlices = <VolumeSlice>[
       VolumeSlice(
@@ -639,7 +619,7 @@ Volume _build(BotAvatarDefinition def, double volume, BodyAnalysis body) {
     final xSlices = <VolumeSlice>[];
     final half = depth / 2;
     if (half > 0.05) {
-      final g = _sampleGrid(polys, b, step, heightOf);
+      final g = _sampleGrid(polys, index, b, step, heightOf);
       final steps = inflate
           ? (rz / 0.8).round().clamp(4, 14)
           : (half / 1.1).round().clamp(5, 18);
@@ -656,7 +636,7 @@ Volume _build(BotAvatarDefinition def, double volume, BodyAnalysis body) {
         for (final loop in loops) {
           for (final (x, y) in loop) {
             if (k++ % 3 == 0) {
-              inset = math.min(inset, edgeDistance(polys, x, y));
+              inset = math.min(inset, index.distance(x, y));
             }
           }
         }
@@ -721,12 +701,9 @@ Volume _build(BotAvatarDefinition def, double volume, BodyAnalysis body) {
     parts.add(
       VolumePart(
         kind: kind,
-        polys: polys,
-        bounds: b,
         center: center,
         zSlices: zSlices,
         xSlices: xSlices,
-        height: height,
       ),
     );
   }
@@ -738,7 +715,7 @@ Volume _build(BotAvatarDefinition def, double volume, BodyAnalysis body) {
   var eyePart = 0;
   var bestZ = double.negativeInfinity;
   for (var i = 0; i < parts.length; i++) {
-    final zs = [for (final (x, y) in centers) parts[i].height(x, y)];
+    final zs = [for (final (x, y) in centers) heights[i](x, y)];
     if (zs.any((z) => z <= 0)) continue;
     final z = math.min(zs[0], zs[1]);
     if (z > bestZ) {
@@ -746,7 +723,7 @@ Volume _build(BotAvatarDefinition def, double volume, BodyAnalysis body) {
       eyePart = i;
     }
   }
-  final host = parts.isEmpty ? null : parts[eyePart];
+  final host = parts.isEmpty ? null : heights[eyePart];
   // A flat eye plane sits at the highest surface under the eye and its gaze
   // travel, so the body never cuts it.
   final w = eyeW * eyeScale / 2 + gazeX * eyeScale;
@@ -755,7 +732,7 @@ Volume _build(BotAvatarDefinition def, double volume, BodyAnalysis body) {
     var top = 0.0;
     for (final fx in const [-1.0, -0.5, 0.0, 0.5, 1.0]) {
       for (final fy in const [-1.0, -0.5, 0.0, 0.5, 1.0]) {
-        top = math.max(top, host?.height(c.$1 + fx * w, c.$2 + fy * hh) ?? 0);
+        top = math.max(top, host?.call(c.$1 + fx * w, c.$2 + fy * hh) ?? 0);
       }
     }
     return top;
@@ -764,8 +741,8 @@ Volume _build(BotAvatarDefinition def, double volume, BodyAnalysis body) {
   Vec3 normal(double x, double y) {
     if (host == null) return (0, 0, 1);
     const e = 0.75;
-    final gx = (host.height(x + e, y) - host.height(x - e, y)) / (2 * e);
-    final gy = (host.height(x, y + e) - host.height(x, y - e)) / (2 * e);
+    final gx = (host(x + e, y) - host(x - e, y)) / (2 * e);
+    final gy = (host(x, y + e) - host(x, y - e)) / (2 * e);
     final n = math.sqrt(gx * gx + gy * gy + 1);
     return (-gx / n, -gy / n, 1 / n);
   }

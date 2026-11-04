@@ -126,7 +126,7 @@ void main() {
       Widget at({required bool hidden}) => _app(
         Offstage(
           offstage: hidden,
-          child: BotAvatarView(spec: _spec, size: 48, followPointer: true),
+          child: BotAvatarView(spec: _spec, size: 48),
         ),
       );
       await tester.pumpWidget(at(hidden: false));
@@ -180,7 +180,7 @@ void main() {
         _app(
           Align(
             alignment: Alignment.topLeft,
-            child: BotAvatarView(spec: _spec, size: 48, followPointer: true),
+            child: BotAvatarView(spec: _spec, size: 48),
           ),
         ),
       );

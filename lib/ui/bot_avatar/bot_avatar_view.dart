@@ -131,8 +131,8 @@ class _PointerWatch {
 /// in its [mood] on a ticker. The volume is built once per shape and cached
 /// (see [PreparedBotAvatar]); a frame is a handful of projected polygons.
 ///
-/// Live, it can look toward the pointer anywhere in the window and glance
-/// at a touch ([followPointer]), be turned by a drag ([turnable]), and
+/// Live, it looks toward the pointer anywhere in the window and glances at
+/// a touch, can be turned by a drag ([turnable]), and
 /// play [BotAnimation]s through a [controller] — a tap plays one where
 /// [reactToTap]. Under the platform's reduce-motion setting it holds a calm
 /// pose, as the reference does, and does not spin.
@@ -148,7 +148,6 @@ class BotAvatarView extends StatefulWidget {
     this.size = 36,
     this.mood = BotMood.idle,
     this.animate = true,
-    this.followPointer = false,
     this.turnable = false,
     this.reactToTap = false,
     this.controller,
@@ -166,7 +165,6 @@ class BotAvatarView extends StatefulWidget {
     this.semanticLabel,
   }) : mood = BotMood.idle,
        animate = false,
-       followPointer = false,
        turnable = false,
        reactToTap = false,
        controller = null,
@@ -177,12 +175,10 @@ class BotAvatarView extends StatefulWidget {
   final double size;
   final BotMood mood;
 
-  /// Moving on a ticker; false is one still frame.
+  /// Moving on a ticker, looking toward the mouse wherever it is in the
+  /// window and glancing at a touch for a moment — not while thinking, its
+  /// look being its own then. False is one still frame.
   final bool animate;
-
-  /// Look toward the mouse wherever it is in the window, and glance at a
-  /// touch for a moment. Not while thinking: its look is its own then.
-  final bool followPointer;
 
   /// A drag turns it; a double tap turns it back.
   final bool turnable;
@@ -208,8 +204,18 @@ class _BotAvatarViewState extends State<BotAvatarView>
     with SingleTickerProviderStateMixin {
   late final Ticker _ticker = createTicker(_tick);
   final _animator = BotAnimator();
-  late final ValueNotifier<BotAvatarFrame> _frame = ValueNotifier(_still());
+  late PreparedBotAvatar _prepared = PreparedBotAvatar.of(
+    widget.spec.definition,
+  );
+
+  /// Made by the first [_sync], with the frame it would otherwise replace.
+  ValueNotifier<BotAvatarFrame>? _frameOrNull;
+  ValueNotifier<BotAvatarFrame> get _frame => _frameOrNull!;
   BotAvatarController? _ownController;
+
+  /// What the last live frame was drawn from under reduced motion, where a
+  /// frame is a pure function of it: an equal one is the same picture.
+  Object? _reducedInputs;
 
   /// The avatar's clock: the ticker's elapsed time on top of what earlier
   /// spells of it banked before they were stopped.
@@ -237,9 +243,6 @@ class _BotAvatarViewState extends State<BotAvatarView>
   Offset? _dragFrom;
   ViewTurn _turnFrom = ViewTurn.none;
 
-  PreparedBotAvatar get _prepared =>
-      PreparedBotAvatar.of(widget.spec.definition);
-
   BotAvatarController get _controller =>
       widget.controller ?? (_ownController ??= BotAvatarController());
 
@@ -256,7 +259,17 @@ class _BotAvatarViewState extends State<BotAvatarView>
   @override
   void didUpdateWidget(BotAvatarView old) {
     super.didUpdateWidget(old);
-    if (old.spec.definition != widget.spec.definition) _animator.reset();
+    if (old.spec.definition != widget.spec.definition) {
+      _prepared = PreparedBotAvatar.of(widget.spec.definition);
+      _animator.reset();
+    } else if (old.mood == widget.mood &&
+        old.animate == widget.animate &&
+        old.view == widget.view &&
+        old.gaze == widget.gaze) {
+      // A parent rebuilding over the same avatar — a streamed reply, a tap
+      // beside it in a grid — changes nothing it draws.
+      return;
+    }
     _sync();
   }
 
@@ -265,21 +278,23 @@ class _BotAvatarViewState extends State<BotAvatarView>
     _watch(false);
     _ownController?.dispose();
     _ticker.dispose();
-    _frame.dispose();
+    _frameOrNull?.dispose();
     super.dispose();
   }
 
   void _sync() {
-    _watch(widget.animate && widget.followPointer);
+    _watch(widget.animate);
     if (widget.animate) {
       _wake();
-      // In build: no layout to place the pointer against yet.
-      _frame.value = _render(look: false);
     } else {
       _sleep();
       _sleeping = false;
-      _frame.value = _still();
     }
+    _reducedInputs = null;
+    // In build: no layout to place the pointer against yet.
+    final next = widget.animate ? _render(look: false)! : _still();
+    final frame = _frameOrNull;
+    frame == null ? _frameOrNull = ValueNotifier(next) : frame.value = next;
   }
 
   void _watch(bool on) {
@@ -330,12 +345,15 @@ class _BotAvatarViewState extends State<BotAvatarView>
       _sleeping = true;
       return;
     }
-    _painted = false;
     _now = _banked + elapsed;
-    _frame.value = _render();
+    final next = _render();
+    if (next == null) return;
+    _painted = false;
+    _frame.value = next;
   }
 
-  BotAvatarFrame _render({bool look = true}) {
+  /// The frame now, or null where it would be the one on screen.
+  BotAvatarFrame? _render({bool look = true}) {
     final ms = _now.inMicroseconds / 1000;
     final reduced = _reduced;
     final controller = _controller;
@@ -355,6 +373,13 @@ class _BotAvatarViewState extends State<BotAvatarView>
       hold: _dragFrom != null,
       reducedMotion: reduced,
     );
+    if (reduced) {
+      // Reduced motion holds the pose still, so the frame changes only with
+      // the look, the mood or the turn.
+      final inputs = (step.gaze, mood, _turn.yaw, _turn.pitch);
+      if (inputs == _reducedInputs) return null;
+      _reducedInputs = inputs;
+    }
     return _prepared.frame(
       time: ms / 1000,
       mood: mood,
@@ -400,7 +425,6 @@ class _BotAvatarViewState extends State<BotAvatarView>
       painter: BotAvatarPainter(
         frame: _frame,
         colour: Color(0xff000000 | spec.colour),
-        ink: Color(0xff000000 | spec.ink),
         onPaint: widget.animate ? _onPaint : null,
       ),
     );
@@ -444,25 +468,30 @@ class _BotAvatarViewState extends State<BotAvatarView>
 /// colour, each eye in the ink, back to front. The 0..100 box fills the
 /// canvas; a hop may draw a little past it, which is not clipped.
 class BotAvatarPainter extends CustomPainter {
-  BotAvatarPainter({
-    required this.frame,
-    required this.colour,
-    required this.ink,
-    this.onPaint,
-  }) : super(repaint: frame);
+  BotAvatarPainter({required this.frame, required this.colour, this.onPaint})
+    : _body = Paint()..color = colour,
+      super(repaint: frame);
 
   final ValueNotifier<BotAvatarFrame> frame;
   final Color colour;
-  final Color ink;
+  final Paint _body;
+  static final _eyes = Paint()
+    ..color = const Color(0xff000000 | BotAvatarSpec.ink);
+  static final _arc = Paint()
+    ..color = const Color(0xff000000 | BotAvatarSpec.ink)
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round;
 
   /// Told each time a frame is drawn: a live view's proof it is on screen.
   final VoidCallback? onPaint;
 
-  /// Each cross-section's path, built the first time it is drawn: a slice
-  /// belongs to a cached volume, so this lives as long as that does.
+  /// Each cross-section's path, built the first time it is drawn and held
+  /// by its loops: a level's front and back copies share theirs, and so one
+  /// path; the loops belong to a cached volume, so this lives as long as that
+  /// does.
   static final _paths = Expando<ui.Path>("bot-avatar-slice");
 
-  static ui.Path _pathOf(VolumeSlice slice) => _paths[slice] ??= () {
+  static ui.Path _pathOf(VolumeSlice slice) => _paths[slice.loops] ??= () {
     final path = ui.Path()
       ..fillType = slice.evenOdd ? PathFillType.evenOdd : PathFillType.nonZero;
     for (final loop in slice.loops) {
@@ -471,21 +500,24 @@ class BotAvatarPainter extends CustomPainter {
     return path;
   }();
 
-  static Float64List _matrix(Affine m) => Float64List.fromList([
-    m.a, m.b, 0, 0, //
-    m.c, m.d, 0, 0, //
-    0, 0, 1, 0, //
-    m.e, m.f, 0, 1, //
-  ]);
+  /// One 4×4 the affines are written into: `Canvas.transform` copies it,
+  /// so a frame's hundred slices need no matrix of their own.
+  static final _scratch = Float64List(16)
+    ..[10] = 1
+    ..[15] = 1;
+
+  static Float64List _matrix(Affine m) => _scratch
+    ..[0] = m.a
+    ..[1] = m.b
+    ..[4] = m.c
+    ..[5] = m.d
+    ..[12] = m.e
+    ..[13] = m.f;
 
   @override
   void paint(Canvas canvas, Size size) {
     onPaint?.call();
     final f = frame.value;
-    final body = Paint()
-      ..color = colour
-      ..isAntiAlias = true;
-    final eyes = Paint()..color = ink;
     canvas
       ..save()
       ..scale(size.width / 100, size.height / 100)
@@ -496,7 +528,7 @@ class BotAvatarPainter extends CustomPainter {
         ..transform(_matrix(shape.matrix));
       switch (shape) {
         case SliceShape(:final slice):
-          canvas.drawPath(_pathOf(slice), body);
+          canvas.drawPath(_pathOf(slice), _body);
         case EyeShapeMark(
           mark: PillMark(
             :final x,
@@ -511,18 +543,14 @@ class BotAvatarPainter extends CustomPainter {
               Rect.fromLTWH(x, y, width, height),
               Radius.circular(radius),
             ),
-            eyes,
+            _eyes,
           );
         case EyeShapeMark(mark: final ArcMark arc):
           canvas.drawPath(
             ui.Path()
               ..moveTo(arc.x0, arc.y)
               ..quadraticBezierTo(arc.cx, arc.cy, arc.x1, arc.y),
-            Paint()
-              ..color = ink
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = arc.strokeWidth
-              ..strokeCap = StrokeCap.round,
+            _arc..strokeWidth = arc.strokeWidth,
           );
       }
       canvas.restore();
@@ -532,8 +560,5 @@ class BotAvatarPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(BotAvatarPainter old) =>
-      old.frame != frame ||
-      old.colour != colour ||
-      old.ink != ink ||
-      old.onPaint != onPaint;
+      old.frame != frame || old.colour != colour || old.onPaint != onPaint;
 }

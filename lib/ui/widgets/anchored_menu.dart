@@ -26,6 +26,25 @@ Future<T?> showAnchoredMenu<T>(
   );
 }
 
+/// A menu at [global], where a right click or a held finger landed, offered
+/// as a route for the reasons [showAnchoredMenu] is one.
+Future<T?> showMenuAt<T>(
+  BuildContext context,
+  Offset global,
+  List<PopupMenuEntry<T>> items,
+) {
+  final overlay =
+      Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+  return showMenu<T>(
+    context: context,
+    position: RelativeRect.fromRect(
+      overlay.globalToLocal(global) & Size.zero,
+      Offset.zero & overlay.size,
+    ),
+    items: items,
+  );
+}
+
 /// Where the widget [context] belongs to is, in the navigator's overlay, and
 /// how big that overlay is: what both anchored popups place themselves by.
 (Rect, Size) _anchorOf(BuildContext context) {

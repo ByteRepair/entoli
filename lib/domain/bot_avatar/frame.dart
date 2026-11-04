@@ -80,10 +80,6 @@ class BotAvatarFrame {
   final List<FrameShape> shapes;
 }
 
-/// The `depth` the reference calls natural.
-const defaultDepth = 6.0;
-const _maxDepth = 14.0;
-
 /// How far the eyes sit above the surface, so the body's planes never
 /// touch them.
 const _eyeLift = 1.5;
@@ -140,37 +136,28 @@ class _View {
 }
 
 /// A validated definition with its volume built, ready to draw any frame
-/// of. Building the volume is the expensive part, so instances are cached
-/// by geometry and depth.
+/// of. Building the volume is the expensive part, so instances are cached by
+/// definition, the most recent kept.
 class PreparedBotAvatar {
-  PreparedBotAvatar._(this.definition, this.volume, BodyAnalysis body)
+  PreparedBotAvatar._(this.definition, this.volume)
     : _range = gazeRange(
-        body.polys,
+        definition.body.polys,
         definition.eyes.withScale(volume.eyeScale),
       ),
       _seed = hashString(definition.id);
 
-  /// [definition] prepared at [depth], 0 flat to 14, 6 natural.
-  factory PreparedBotAvatar.of(
-    BotAvatarDefinition definition, {
-    double depth = defaultDepth,
-  }) {
-    final d = (depth.isFinite ? depth : defaultDepth).clamp(0, _maxDepth);
-    final rounded = (d * 2).round() / 2;
-    final key = "${definition.geometryKey}|$rounded";
-    final hit = _cache.remove(key);
-    if (hit != null) return _cache[key] = hit;
-    final body = BodyAnalysis.of(definition.path);
-    final prepared = PreparedBotAvatar._(
-      definition,
-      Volume.build(definition, volume: rounded / defaultDepth, body: body),
-      body,
-    );
+  /// [definition] prepared, from the cache where it is there.
+  factory PreparedBotAvatar.of(BotAvatarDefinition definition) {
+    final hit = _cache.remove(definition);
+    if (hit != null) return _cache[definition] = hit;
     if (_cache.length >= 64) _cache.remove(_cache.keys.first);
-    return _cache[key] = prepared;
+    return _cache[definition] = PreparedBotAvatar._(
+      definition,
+      Volume.build(definition),
+    );
   }
 
-  static final _cache = <String, PreparedBotAvatar>{};
+  static final _cache = <BotAvatarDefinition, PreparedBotAvatar>{};
 
   final BotAvatarDefinition definition;
   final Volume volume;

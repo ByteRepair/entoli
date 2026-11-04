@@ -1,3 +1,4 @@
+import "package:collection/collection.dart";
 import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
@@ -9,6 +10,8 @@ import "../../domain/bot_avatar/pose.dart";
 import "../../domain/bot_avatar/spec.dart";
 import "../../providers.dart";
 import "../fonts.dart";
+import "../widgets/anchored_menu.dart";
+import "../widgets/choice.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/page_bar.dart";
 import "bot_avatar_view.dart";
@@ -31,9 +34,6 @@ class BotAvatarEntry {
   final int ownColour;
 
   final BotAvatarSource source;
-
-  /// Tells entries apart: an import may share a preset's id.
-  String get key => "${source.name}:${definition.id}";
 }
 
 enum BotAvatarSource {
@@ -85,23 +85,16 @@ class _BotAvatarEditorPageState extends ConsumerState<BotAvatarEditorPage>
   late final _specLink = TapGestureRecognizer()
     ..onTap = () => ref.read(linkOpenerProvider).open(context, _spec);
 
-  /// The chosen entry's key; null takes the first entry there is.
-  String? _selected;
+  /// The chosen shape; null takes the first entry there is. The page opens
+  /// on what the agent wears, coloured as it was.
+  late BotAvatarDefinition? _selected = widget.initial?.definition;
 
-  /// Colours picked this visit, by entry key.
-  final _colours = <String, int>{};
+  /// Colours picked this visit, by shape.
+  late final _colours = <BotAvatarDefinition, int>{
+    if (widget.initial case final initial?) initial.definition: initial.colour,
+  };
   var _mood = BotMood.idle;
   BotAvatarImport? _import;
-
-  @override
-  void initState() {
-    super.initState();
-    final initial = widget.initial;
-    if (initial != null) {
-      // Selected wherever it turns out to be; coloured as it was.
-      _selected = "?:${initial.definition.id}";
-    }
-  }
 
   @override
   void dispose() {
@@ -135,61 +128,41 @@ class _BotAvatarEditorPageState extends ConsumerState<BotAvatarEditorPage>
     return entries;
   }
 
-  /// The selected entry: by key, or — for the one the page opened on — by
-  /// its definition, which is what an agent's spec carries.
-  BotAvatarEntry? _current(List<BotAvatarEntry> entries) {
-    if (entries.isEmpty) return null;
-    final initial = widget.initial;
-    if (_selected == "?:${initial?.definition.id}" && initial != null) {
-      final match = entries.firstWhere(
-        (e) => e.definition == initial.definition,
-        orElse: () => entries.first,
-      );
-      _selected = match.key;
-      _colours.putIfAbsent(match.key, () => initial.colour);
-    }
-    return entries.firstWhere(
-      (e) => e.key == _selected,
-      orElse: () => entries.first,
-    );
-  }
+  BotAvatarEntry? _current(List<BotAvatarEntry> entries) =>
+      entries.firstWhereOrNull((e) => e.definition == _selected) ??
+      entries.firstOrNull;
 
-  int _colourOf(BotAvatarEntry entry) => _colours[entry.key] ?? entry.ownColour;
+  int _colourOf(BotAvatarEntry entry) =>
+      _colours[entry.definition] ?? entry.ownColour;
 
   BotAvatarSpec _specOf(BotAvatarEntry entry) =>
       BotAvatarSpec(definition: entry.definition, colour: _colourOf(entry));
 
   Future<void> _pickCustom(BotAvatarEntry entry) async {
     final rgb = await showBotColourDialog(context, _colourOf(entry));
-    if (rgb != null && mounted) setState(() => _colours[entry.key] = rgb);
+    if (rgb != null && mounted) {
+      setState(() => _colours[entry.definition] = rgb);
+    }
   }
 
   Future<void> _menu(BotAvatarEntry entry, Offset at) async {
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    final choice = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromRect(
-        at & const Size(1, 1),
-        Offset.zero & overlay.size,
-      ),
-      items: [
-        PopupMenuItem(
-          value: "delete",
-          child: ListTile(
-            leading: const Icon(Icons.delete_outline),
-            title: Text("Delete ${entry.definition.name}"),
-          ),
+    final choice = await showMenuAt(context, at, [
+      PopupMenuItem(
+        value: "delete",
+        child: ListTile(
+          leading: const Icon(Icons.delete_outline),
+          title: Text("Delete ${entry.definition.name}"),
         ),
-      ],
-    );
+      ),
+    ]);
     if (choice != "delete" || !mounted) return;
     await ref
         .read(importedBotAvatarsProvider.notifier)
         .remove(entry.definition.id);
     if (!mounted) return;
     setState(() {
-      if (_selected == entry.key) _selected = null;
-      _colours.remove(entry.key);
+      if (_selected == entry.definition) _selected = null;
+      _colours.remove(entry.definition);
     });
     say(context, "Deleted ${entry.definition.name}.");
   }
@@ -202,8 +175,8 @@ class _BotAvatarEditorPageState extends ConsumerState<BotAvatarEditorPage>
     if (!mounted) return;
     final last = result.definitions.last;
     setState(() {
-      _selected = "${BotAvatarSource.imported.name}:${last.id}";
-      _colours.remove(_selected);
+      _selected = last;
+      _colours.remove(last);
       _paste.clear();
     });
     _tabs.animateTo(0);
@@ -273,11 +246,10 @@ class _BotAvatarEditorPageState extends ConsumerState<BotAvatarEditorPage>
             child: LayoutBuilder(
               builder: (context, box) => Center(
                 child: BotAvatarView(
-                  key: ValueKey(current.key),
+                  key: ValueKey(current.definition),
                   spec: _specOf(current),
                   size: (box.biggest.shortestSide * 0.85).clamp(48, 420),
                   mood: _mood,
-                  followPointer: true,
                   turnable: true,
                 ),
               ),
@@ -333,7 +305,7 @@ class _BotAvatarEditorPageState extends ConsumerState<BotAvatarEditorPage>
             crossAxisSpacing: 8,
             children: [
               for (final entry in entries)
-                _cell(entry, selected: entry.key == current?.key),
+                _cell(entry, selected: entry.definition == current?.definition),
             ],
           ),
         ),
@@ -369,7 +341,7 @@ class _BotAvatarEditorPageState extends ConsumerState<BotAvatarEditorPage>
           ),
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
-            onTap: () => setState(() => _selected = entry.key),
+            onTap: () => setState(() => _selected = entry.definition),
             child: Padding(
               padding: const EdgeInsets.all(6),
               child: FittedBox(
@@ -386,42 +358,10 @@ class _BotAvatarEditorPageState extends ConsumerState<BotAvatarEditorPage>
   }
 
   Widget _swatches(BotAvatarEntry current) {
-    final theme = Theme.of(context);
     final colour = _colourOf(current);
     final own = current.ownColour;
     final ownName = BotPalette.nameOf(own) ?? hexColour(own);
     final custom = BotPalette.nameOf(colour) == null;
-    Widget dot({
-      required String tip,
-      required VoidCallback? onTap,
-      required bool on,
-      Color? fill,
-      Gradient? gradient,
-      Widget? child,
-    }) => Tooltip(
-      message: tip,
-      child: InkResponse(
-        onTap: onTap,
-        radius: 20,
-        child: Container(
-          width: 30,
-          height: 30,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: fill,
-            gradient: gradient,
-            border: Border.all(
-              color: on
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.outlineVariant,
-              width: on ? 3 : 1,
-            ),
-          ),
-          child: child,
-        ),
-      ),
-    );
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Wrap(
@@ -430,15 +370,19 @@ class _BotAvatarEditorPageState extends ConsumerState<BotAvatarEditorPage>
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           for (final s in BotPalette.all)
-            dot(
-              tip: s.rgb == own ? "${s.name} (default)" : s.name,
-              on: colour == s.rgb,
+            Choice(
+              tooltip: s.rgb == own ? "${s.name} (default)" : s.name,
+              label: s.name,
+              selected: colour == s.rgb,
               fill: Color(0xff000000 | s.rgb),
-              onTap: () => setState(() => _colours[current.key] = s.rgb),
+              width: 30,
+              height: 30,
+              onTap: () => setState(() => _colours[current.definition] = s.rgb),
             ),
-          dot(
-            tip: custom ? "Custom ${hexColour(colour)}" : "Custom colour",
-            on: custom,
+          Choice(
+            tooltip: custom ? "Custom ${hexColour(colour)}" : "Custom colour",
+            label: "Custom colour",
+            selected: custom,
             fill: custom ? Color(0xff000000 | colour) : null,
             gradient: custom
                 ? null
@@ -453,6 +397,8 @@ class _BotAvatarEditorPageState extends ConsumerState<BotAvatarEditorPage>
                       Colors.red,
                     ],
                   ),
+            width: 30,
+            height: 30,
             onTap: () => _pickCustom(current),
           ),
           IconButton(
@@ -460,7 +406,7 @@ class _BotAvatarEditorPageState extends ConsumerState<BotAvatarEditorPage>
             tooltip: "Reset to its own colour, $ownName",
             onPressed: colour == own
                 ? null
-                : () => setState(() => _colours.remove(current.key)),
+                : () => setState(() => _colours.remove(current.definition)),
           ),
         ],
       ),

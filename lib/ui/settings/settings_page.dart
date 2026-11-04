@@ -24,6 +24,7 @@ import "../../providers.dart";
 import "../chat/activity/format.dart";
 import "../selection.dart";
 import "../theme.dart";
+import "../widgets/choice.dart";
 import "../widgets/add_button_row.dart";
 import "../widgets/busy.dart";
 import "../widgets/liquid_glass.dart";
@@ -551,7 +552,7 @@ class _ColourChoice extends StatelessWidget {
   Widget build(BuildContext context) {
     final a = colour.colour;
     final b = (second ?? colour).colour;
-    return _Choice(
+    return Choice(
       tooltip: label,
       label: label,
       selected: selected,
@@ -602,7 +603,7 @@ class _CornerChoice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pixels = "${corner.radius.round()}";
-    return _Choice(
+    return Choice(
       tooltip: pixels,
       label: pixels,
       selected: selected,
@@ -611,75 +612,6 @@ class _CornerChoice extends StatelessWidget {
       fill: selected ? Theme.of(context).colorScheme.secondaryContainer : null,
       width: 44,
       height: 44,
-    );
-  }
-}
-
-/// One of a row of things to pick: a swatch, a corner, an app icon. A [corners]
-/// of null is a circle. The ring the selected one wears is here rather than at
-/// each of the three, which is what keeps them the same ring.
-class _Choice extends StatelessWidget {
-  const _Choice({
-    required this.tooltip,
-    required this.selected,
-    required this.onTap,
-    this.label,
-    this.corners,
-    this.fill,
-    this.gradient,
-    this.width,
-    this.height,
-    this.padding,
-    this.child,
-  });
-
-  final String tooltip;
-  final bool selected;
-  final VoidCallback onTap;
-
-  /// What a reader is told, where the choice draws no text of its own.
-  final String? label;
-  final BorderRadius? corners;
-  final Color? fill;
-
-  /// Painted over [fill] where given.
-  final Gradient? gradient;
-  final double? width;
-  final double? height;
-  final EdgeInsets? padding;
-  final Widget? child;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Semantics(
-      selected: selected,
-      button: true,
-      label: label,
-      child: Tooltip(
-        message: tooltip,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: corners,
-          customBorder: corners == null ? const CircleBorder() : null,
-          child: Container(
-            width: width,
-            height: height,
-            padding: padding,
-            decoration: BoxDecoration(
-              color: fill,
-              gradient: gradient,
-              shape: corners == null ? BoxShape.circle : BoxShape.rectangle,
-              borderRadius: corners,
-              border: Border.all(
-                color: selected ? scheme.primary : scheme.outlineVariant,
-                width: selected ? 2 : 1,
-              ),
-            ),
-            child: child,
-          ),
-        ),
-      ),
     );
   }
 }
@@ -759,7 +691,7 @@ class _IconChoice extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => _Choice(
+  Widget build(BuildContext context) => Choice(
     tooltip: icon.description,
     selected: selected,
     onTap: onTap,

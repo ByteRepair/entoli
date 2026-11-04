@@ -29,20 +29,36 @@ String agentAvatarPath(AppConfig config, String name, {String? project}) =>
       "$name.avatar.json",
     );
 
-/// Both of an agent's face files, the order a write, a move or a delete walks.
-List<String> agentFacePaths(AppConfig config, String name, {String? project}) =>
-    [
-      agentPicturePath(config, name, project: project),
-      agentAvatarPath(config, name, project: project),
-    ];
-
-/// The face [project]'s own directory holds for [name], and no other tier's:
-/// what the editor edits, since it writes this level alone.
-Future<AgentFace?> readOwnAgentFace(
+/// Make [face] the face [project]'s own directory holds for [name], or take
+/// it away where null. One face at a time: whichever is written, the other
+/// file goes. The caller holds the directory's `ReadOnlyDir.write`, which
+/// the agent's `.md` rides too.
+Future<void> writeAgentFace(
   AppConfig config,
-  String name, {
+  String name,
+  AgentFace? face, {
   String? project,
-}) => _faceIn(config, name, project);
+}) async {
+  for (final path in [
+    agentPicturePath(config, name, project: project),
+    agentAvatarPath(config, name, project: project),
+  ]) {
+    final file = File(path);
+    if (file.existsSync()) await file.delete();
+  }
+  switch (face) {
+    case AgentPhoto(:final bytes):
+      await File(
+        agentPicturePath(config, name, project: project),
+      ).writeAsBytes(bytes);
+    case AgentBot(:final spec):
+      await File(
+        agentAvatarPath(config, name, project: project),
+      ).writeAsString(spec.encode());
+    case null:
+      break;
+  }
+}
 
 /// The face the library's tiers show for an agent called [name]: the first
 /// [tiers] rung that holds one, walked from the top — the list carries the
@@ -63,31 +79,30 @@ Future<AgentFace?> readAgentPicture(
 ) async {
   for (final tier in tiers.reversed) {
     final face =
-        await _faceIn(config, name, tier) ?? bundledAgentFace(name, tier);
+        await readOwnAgentFace(config, name, project: tier) ??
+        _bundledFaces[(project: tier, name: name)];
     if (face != null) return face;
   }
   return null;
 }
 
-/// The face the app ships for its own agent called [name] in [tier]: the
-/// embedded `<name>.avatar.json` from beside the bundled `.md`. Below a face
-/// on disk in the same rung, as the bundled `.md` is below the user's.
-AgentFace? bundledAgentFace(String name, String tier) {
-  for (final file in bundledAgentFaces) {
-    if (file.name != name || file.project != tier) {
-      continue;
-    }
-    final spec = BotAvatarSpec.decode(file.content);
-    return spec == null ? null : AgentBot(spec);
-  }
-  return null;
-}
+/// The faces the app ships for its own agents, by rung and name: the
+/// embedded `<name>.avatar.json` from beside each bundled `.md`, decoded
+/// once — the generator has already held each to the spec. Below a face on
+/// disk in the same rung, as the bundled `.md` is below the user's.
+final _bundledFaces = {
+  for (final file in bundledAgentFaces)
+    if (BotAvatarSpec.decode(file.content) case final spec?)
+      (project: file.project, name: file.name): AgentBot(spec),
+};
 
-Future<AgentFace?> _faceIn(
+/// The face [project]'s own directory holds for [name], and no other tier's:
+/// what the editor edits, since it writes this level alone.
+Future<AgentFace?> readOwnAgentFace(
   AppConfig config,
-  String name,
+  String name, {
   String? project,
-) async {
+}) async {
   final avatar = File(agentAvatarPath(config, name, project: project));
   if (avatar.existsSync()) {
     try {

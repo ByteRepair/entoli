@@ -10,7 +10,7 @@ import "package:flutter/services.dart" show AssetBundle;
 import "../core/log.dart";
 import "../domain/bot_avatar/definition.dart";
 import "../domain/bot_avatar/spec.dart";
-import "../domain/documents.dart" show writeThroughRename;
+import "../domain/documents.dart" show RenameWriter;
 
 /// Where the presets are bundled, in the order the editor offers them:
 /// Entoli's own first, then the ones taken from Open Bot Avatar, which keep
@@ -42,11 +42,15 @@ Future<List<BotAvatarSpec>> loadBotAvatarPresets(AssetBundle bundle) async {
 
 /// The user's imported definitions, read from and written to [path]. Kept in
 /// the order they came in; an import whose id is already there replaces it,
-/// the id being what the editor tells two apart.
+/// the id being what the editor tells two apart. A change is a read, an edit
+/// and a write in one queue, the way `LinkedInstructionsStore`'s is: two
+/// quick imports would otherwise each write back what the other had not seen.
 class BotAvatarLibrary {
   BotAvatarLibrary(this.path);
 
   final String path;
+  final _writer = RenameWriter();
+  Future<void> _queue = Future.value();
 
   Future<List<BotAvatarDefinition>> load() async {
     final file = File(path);
@@ -62,31 +66,47 @@ class BotAvatarLibrary {
             definition,
       ];
     } on Object catch (e) {
-      logFailure("bot-avatar", "cannot read the imported avatars: $e");
+      logFailure("bot-avatar", "cannot read the imported avatars", e);
       return const [];
     }
   }
 
-  Future<void> save(List<BotAvatarDefinition> definitions) async {
-    await File(path).parent.create(recursive: true);
-    await writeThroughRename(
-      path,
-      const JsonEncoder.withIndent(
-        "  ",
-      ).convert([for (final d in definitions) d.toJson()]),
-    );
-  }
-
-  /// [current] with [added] in, each replacing one of the same id.
-  static List<BotAvatarDefinition> merged(
-    List<BotAvatarDefinition> current,
-    List<BotAvatarDefinition> added,
-  ) {
-    final ids = {for (final d in added) d.id};
+  /// [definitions] in, each replacing an import of the same id. What the
+  /// library holds after.
+  Future<List<BotAvatarDefinition>> add(
+    List<BotAvatarDefinition> definitions,
+  ) => _update((current) {
+    final ids = {for (final d in definitions) d.id};
     return [
       for (final d in current)
         if (!ids.contains(d.id)) d,
-      ...added,
+      ...definitions,
     ];
+  });
+
+  /// The import [id] out. What the library holds after.
+  Future<List<BotAvatarDefinition>> remove(String id) => _update(
+    (current) => [
+      for (final d in current)
+        if (d.id != id) d,
+    ],
+  );
+
+  Future<List<BotAvatarDefinition>> _update(
+    List<BotAvatarDefinition> Function(List<BotAvatarDefinition>) change,
+  ) {
+    final next = _queue.then((_) async {
+      final updated = change(await load());
+      await File(path).parent.create(recursive: true);
+      await _writer.write(
+        path,
+        const JsonEncoder.withIndent(
+          "  ",
+        ).convert([for (final d in updated) d.toJson()]),
+      );
+      return updated;
+    });
+    _queue = next.then<void>((_) {}).catchError((_) {});
+    return next;
   }
 }

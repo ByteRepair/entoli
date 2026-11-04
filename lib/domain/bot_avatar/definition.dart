@@ -88,6 +88,7 @@ class BotAvatarDefinition {
     required this.name,
     required this.path,
     required this.eyes,
+    required this.body,
   });
 
   static const version = 1;
@@ -102,6 +103,11 @@ class BotAvatarDefinition {
   final String path;
 
   final BotAvatarEyes eyes;
+
+  /// [path] taken apart, as validating it already had to: carried so the
+  /// renderer does not parse and raster the same path again. Not part of
+  /// equality, being [path]'s to say.
+  final BodyAnalysis body;
 
   /// The definition JSON the contract describes, or the reasons it is not
   /// one. Unknown keys are refused, the way the reference validator does.
@@ -241,6 +247,7 @@ class BotAvatarDefinition {
         name: name,
         path: normalized,
         eyes: eyes,
+        body: analysis!,
       ),
     );
   }
@@ -255,10 +262,6 @@ class BotAvatarDefinition {
   };
 
   /// What makes two definitions draw the same: everything but the name.
-  String get geometryKey =>
-      "$id|$path|${eyes.x},${eyes.y},"
-      "${eyes.spacing},${eyes.scale}";
-
   @override
   bool operator ==(Object other) =>
       other is BotAvatarDefinition &&
@@ -300,17 +303,15 @@ String _r1(double n) {
 /// fills.
 class BodySubpath {
   const BodySubpath({
-    required this.d,
     required this.polys,
     required this.hole,
     required this.probe,
   });
 
-  final String d;
   final List<Poly> polys;
   final bool hole;
 
-  /// A point inside the subpath's own fill — for a hole, inside the cut.
+  /// For a hole, a point inside the cut: which outline it cuts.
   final Pt? probe;
 }
 
@@ -334,7 +335,7 @@ class BodyAnalysis {
       if (own.isEmpty) continue;
       final ob = boundsOf(own);
       var inside = 0.0, cut = 0.0;
-      Pt? probe, cutProbe;
+      Pt? cutProbe;
       // Small subpaths (buttons, sockets) want a fine grid.
       final step = ob.width * ob.height < 900 ? 0.5 : 1.0;
       final alone = own.length == polys.length;
@@ -349,7 +350,6 @@ class BodyAnalysis {
         for (var k = 0; k < xs.length; k++) {
           if (mine[k] == 0) continue;
           inside++;
-          probe ??= (xs[k], y);
           if (!alone && all[k] == 0) {
             cut++;
             cutProbe ??= (xs[k], y);
@@ -359,12 +359,7 @@ class BodyAnalysis {
       // A subpath mostly empty under the whole fill rule is a cut-out.
       final hole = inside > 0 && cut / inside > 0.6;
       subpaths.add(
-        BodySubpath(
-          d: serializePath(sub),
-          polys: own,
-          hole: hole,
-          probe: hole ? cutProbe : probe,
-        ),
+        BodySubpath(polys: own, hole: hole, probe: hole ? cutProbe : null),
       );
     }
     return BodyAnalysis._(

@@ -1665,11 +1665,12 @@ final completionsProvider = Provider.autoDispose
 /// `<name>.avatar.json` — and resolved over the same tier walk
 /// the library answers mentions with, so a project's own picture wins over
 /// an inherited one. Auto-disposed like [attachmentBytesProvider]: held, an
-/// avatar on every row would keep every agent's file in memory. A page that
-/// changes one — the agents settings paths do — invalidates the family, an
-/// inherited picture being every project's to re-read after a default edit.
+/// avatar on every row would keep every agent's file in memory. It watches
+/// the project's library, so every write that reloads the library — every
+/// one that touches an agent does — re-reads the face with it.
 final agentPictureProvider = FutureProvider.autoDispose
     .family<AgentFace?, ({String? project, String name})>((ref, key) async {
+      ref.watch(promptLibraryProvider(key.project));
       final config = ref.watch(appConfigProvider);
       return readAgentPicture(
         config,
@@ -1677,19 +1678,6 @@ final agentPictureProvider = FutureProvider.autoDispose
         promptTiers(project: key.project, config: config),
       );
     });
-
-/// Take the picture a write touched back down. A global write (null
-/// [project]) lands in the default project's directory that every project
-/// inherits pictures from, so the whole family goes; a project's is read
-/// there and nowhere else. The agents settings paths and a marketplace
-/// agent install both call it.
-void invalidateAgentPicture(WidgetRef ref, String name, {String? project}) {
-  if (project == null) {
-    ref.invalidate(agentPictureProvider);
-  } else {
-    ref.invalidate(agentPictureProvider((project: project, name: name)));
-  }
-}
 
 /// The Bot Avatars the app ships, read once from the bundle.
 final botAvatarPresetsProvider = FutureProvider<List<BotAvatarSpec>>(
@@ -1705,28 +1693,20 @@ final importedBotAvatarsProvider =
     );
 
 class ImportedBotAvatars extends AsyncNotifier<List<BotAvatarDefinition>> {
-  BotAvatarLibrary get _library =>
-      BotAvatarLibrary(ref.read(appConfigProvider).botAvatarsFile);
+  late BotAvatarLibrary _library;
 
   @override
   Future<List<BotAvatarDefinition>> build() {
-    ref.watch(appConfigProvider);
+    _library = BotAvatarLibrary(ref.watch(appConfigProvider).botAvatarsFile);
     return _library.load();
   }
 
   /// [definitions] in, each replacing an import of the same id.
   Future<void> add(List<BotAvatarDefinition> definitions) async =>
-      _write(BotAvatarLibrary.merged(await future, definitions));
+      state = AsyncData(await _library.add(definitions));
 
-  Future<void> remove(String id) async => _write([
-    for (final d in await future)
-      if (d.id != id) d,
-  ]);
-
-  Future<void> _write(List<BotAvatarDefinition> next) async {
-    state = AsyncData(next);
-    await _library.save(next);
-  }
+  Future<void> remove(String id) async =>
+      state = AsyncData(await _library.remove(id));
 }
 
 /// A project's own settings, loaded off `project.json`. Null is the default

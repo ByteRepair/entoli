@@ -150,13 +150,11 @@ void main() {
   group("animator", () {
     test("a mood change eases in and then settles", () {
       final animator = BotAnimator();
-      expect(animator.step(now: 0, mood: BotMood.idle).moving, isFalse);
+      expect(animator.step(now: 0, mood: BotMood.idle).blend, isNull);
       final mid = animator.step(now: 100, mood: BotMood.happy);
       expect(mid.blend, isNotNull);
-      expect(mid.moving, isTrue);
       final done = animator.step(now: 100 + moodMs + 1, mood: BotMood.happy);
       expect(done.blend, isNull);
-      expect(done.moving, isFalse);
     });
   });
 

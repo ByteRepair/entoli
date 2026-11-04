@@ -646,6 +646,18 @@ Future<void> settleIo(
   await tester.pumpAndSettle();
 }
 
+/// [settleIo]'s rounds without the settle, for a page holding something that
+/// never comes to rest — a live Bot Avatar: real rounds for the I/O, then a
+/// frame, [n] times.
+Future<void> frames(WidgetTester tester, [int n = 20]) async {
+  for (var i = 0; i < n; i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 5)),
+    );
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+}
+
 /// Pump until [done] holds, letting real file I/O run between frames, then
 /// settle. For a tap whose effect lands on disk: [settleIo]'s rounds are a
 /// guess at how long the I/O takes, and a loaded CI machine outlasts it. Bound

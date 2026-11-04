@@ -23,6 +23,7 @@ import "../../providers.dart";
 import "../bot_avatar/bot_avatar_editor.dart";
 import "../widgets/add_button_row.dart";
 import "../widgets/agent_picture.dart";
+import "../widgets/anchored_menu.dart";
 import "../widgets/busy.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/discard_guard.dart";
@@ -169,26 +170,23 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
       "Saved $name.",
       removes: previous,
       face: edit.face,
-      faceChanged: edit.faceChanged,
     );
   }
 
   /// The one write an agent page makes — editor save or import alike — with
   /// the library reload and directory rescan that land it on the list.
   /// [removes] names the file a rename takes away, written over first so a
-  /// failure halfway leaves the agent where it was. Where [faceChanged],
-  /// [face] is what the agent looks like now — a `<name>.png` or a
-  /// `<name>.avatar.json` beside the `.md`, the other of the two taken away,
-  /// or neither where it is null; otherwise the faces it had move with a
-  /// rename. The create is load-bearing: `writeAsString` does not make
-  /// parents.
+  /// failure halfway leaves the agent where it was. [face] is what the agent
+  /// looks like now, null for none: an agent written over another — an
+  /// import, a replace — does not keep the face of the one it replaced, and
+  /// a rename takes the old name's face away. The create is load-bearing:
+  /// `writeAsString` does not make parents.
   Future<void> _write(
     String name,
     String source,
     String said, {
     String? removes,
     AgentFace? face,
-    bool faceChanged = false,
   }) => _guard(() async {
     final config = ref.read(appConfigProvider);
     final renames = removes != null && removes != name;
@@ -205,48 +203,18 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
               agentFilePath(config, removes, project: widget.project),
             ).delete();
           }
-          final faces = agentFacePaths(config, name, project: widget.project);
-          if (faceChanged) {
-            // One face at a time: whichever is written, the other goes, and
-            // a rename's old ones with it rather than left behind.
-            for (final path in [
-              ...faces,
-              if (renames)
-                ...agentFacePaths(config, removes, project: widget.project),
-            ]) {
-              final file = File(path);
-              if (file.existsSync()) await file.delete();
-            }
-            switch (face) {
-              case AgentPhoto(:final bytes):
-                await File(
-                  agentPicturePath(config, name, project: widget.project),
-                ).writeAsBytes(bytes);
-              case AgentBot(:final spec):
-                await File(
-                  agentAvatarPath(config, name, project: widget.project),
-                ).writeAsString(spec.encode());
-              case null:
-                break;
-            }
-          } else if (renames) {
-            // A rename: the old face moves with the agent, standing over it
-            // where both were set — rename over an existing file is fine.
-            final old = agentFacePaths(
+          if (renames) {
+            await writeAgentFace(
               config,
               removes,
+              null,
               project: widget.project,
             );
-            for (final (i, path) in old.indexed) {
-              final file = File(path);
-              if (file.existsSync()) await file.rename(faces[i]);
-            }
           }
+          await writeAgentFace(config, name, face, project: widget.project);
         });
     await _reload(widget.project);
     await _scan();
-    _invalidatePicture(name);
-    if (renames) _invalidatePicture(removes);
     _say(said);
   });
 
@@ -270,18 +238,15 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
             await File(
               agentFilePath(config, agent.name, project: widget.project),
             ).delete();
-            for (final path in agentFacePaths(
+            await writeAgentFace(
               config,
               agent.name,
+              null,
               project: widget.project,
-            )) {
-              final file = File(path);
-              if (file.existsSync()) await file.delete();
-            }
+            );
           });
       await _reload(widget.project);
       await _scan();
-      _invalidatePicture(agent.name);
       _say("Removed ${agent.name}.");
     });
   }
@@ -338,12 +303,6 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
   Future<void> _reload(String? target) => target == null
       ? reloadAllPromptLibraries(ref)
       : ref.read(promptLibraryProvider(target).notifier).reload();
-
-  /// The picture rows re-read after a write, a rename or a remove — also the
-  /// old name's on a rename, its file having moved with the agent. The
-  /// whole-family rule for a global write is the shared helper's.
-  void _invalidatePicture(String name) =>
-      invalidateAgentPicture(ref, name, project: widget.project);
 
   Future<void> _export(PromptDocument agent) => _guard(
     () => exportAndSave(
@@ -510,15 +469,10 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
 }
 
 /// What the editor page hands back on save: the [agent] as edited, whose
-/// source is what the file becomes. Where [faceChanged], [face] is the face
-/// the agent now has — a photo, a Bot Avatar, or none at all; where not, the
-/// face was left alone, so a save without an edit to it keeps whatever the
-/// agent already had — and a rename moves what it had under the old name.
-typedef AgentEdit = ({
-  AgentDefinition agent,
-  AgentFace? face,
-  bool faceChanged,
-});
+/// source is what the file becomes, and the [face] it now has — a photo, a
+/// Bot Avatar, or none. The editor opened on the agent's own face, so an
+/// untouched one goes back as it was.
+typedef AgentEdit = ({AgentDefinition agent, AgentFace? face});
 
 /// Write an agent's system prompt. The name is the file name, so editing it
 /// renames the file — the section takes the old one away when the new one is
@@ -699,12 +653,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                 ..._tools.difference(_known),
               },
       ),
-      // Only what was touched: an untouched face going back would have the
-      // section rewrite the same one over the new name on a rename — over
-      // what moving the old one there already put. Touched and null
-      // together is "remove on save".
-      face: _faceTouched ? _face : null,
-      faceChanged: _faceTouched,
+      face: _face,
     ));
   }
 
@@ -772,32 +721,32 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
     final face = _face;
     return Row(
       children: [
-        MenuAnchor(
-          menuChildren: [
-            MenuItemButton(
-              leadingIcon: const Icon(Icons.upload_outlined),
-              onPressed: _pickPicture,
-              child: const Text("Upload photo"),
-            ),
-            MenuItemButton(
-              leadingIcon: const Icon(Icons.smart_toy_outlined),
-              onPressed: _chooseBot,
-              child: Text(
-                face is AgentBot ? "Edit Bot Avatar" : "Use Bot Avatar",
-              ),
-            ),
-            if (face != null)
-              MenuItemButton(
-                leadingIcon: const Icon(Icons.close),
-                onPressed: () => _pick(null),
-                child: const Text("Remove"),
-              ),
-          ],
-          builder: (context, menu, _) => Tooltip(
+        Builder(
+          builder: (button) => Tooltip(
             message: "Change the profile picture",
             child: InkWell(
               customBorder: const CircleBorder(),
-              onTap: () => menu.isOpen ? menu.close() : menu.open(),
+              onTap: () async {
+                PopupMenuItem<VoidCallback> item(
+                  IconData icon,
+                  String label,
+                  VoidCallback action,
+                ) => PopupMenuItem(
+                  value: action,
+                  child: ListTile(leading: Icon(icon), title: Text(label)),
+                );
+                final action = await showAnchoredMenu(button, [
+                  item(Icons.upload_outlined, "Upload photo", _pickPicture),
+                  item(
+                    Icons.smart_toy_outlined,
+                    face is AgentBot ? "Edit Bot Avatar" : "Use Bot Avatar",
+                    _chooseBot,
+                  ),
+                  if (face != null)
+                    item(Icons.close, "Remove", () => _pick(null)),
+                ]);
+                if (button.mounted) action?.call();
+              },
               child: AgentPictureImage(face: face, size: 64, animate: true),
             ),
           ),

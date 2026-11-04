@@ -663,18 +663,9 @@ Future<void> pickImage(
 /// Bot Avatar, and a remove where there is something to remove.
 Future<void> openFaceMenu(WidgetTester tester) async {
   await tester.tap(find.byTooltip("Change the profile picture"));
+  // The menu is a route: its entries take a tap once it has come in.
   await tester.pump();
-}
-
-/// Frames with real rounds between them, for a page holding a live Bot
-/// Avatar, which never settles.
-Future<void> frames(WidgetTester tester, [int n = 20]) async {
-  for (var i = 0; i < n; i++) {
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 5)),
-    );
-    await tester.pump(const Duration(milliseconds: 16));
-  }
+  await tester.pump(const Duration(milliseconds: 400));
 }
 
 /// Seeding a directory before any widget is pumped needs no runAsync; these
