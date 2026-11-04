@@ -1,3 +1,5 @@
+import "dart:async";
+
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/models.dart";
@@ -100,28 +102,41 @@ void main() {
     () async {
       final s = Schedule()..addPrompt(["a"], _msg("p1"));
       final ran = <String>[];
+      final opening = Completer<void>();
       Future<void> run(String? member, ScheduledItem item) async {
         ran.add(item.userPrompt!.id);
-        if (ran.length == 1) {
-          s.addPrompt(["b"], _msg("p2"));
-          // Re-entered while the first pass is still running its item.
-          await s.dispatch(
-            ordering: () => OmadaOrdering.sequential,
-            cap: () => 10,
-            busy: () => {},
-            run: run,
-          );
-          expect(ran, ["p1"], reason: "the re-entry ran nothing itself");
-        }
+        // The first item's turn is still opening when the say lands.
+        if (ran.length == 1) await opening.future;
       }
 
-      await s.dispatch(
+      final first = s.dispatch(
         ordering: () => OmadaOrdering.sequential,
         cap: () => 10,
         busy: () => {},
         run: run,
       );
+      // A say landing mid-pass, from outside it, as the room's do.
+      s.addPrompt(["b"], _msg("p2"));
+      List<String>? answered;
+      final second = s
+          .dispatch(
+            ordering: () => OmadaOrdering.sequential,
+            cap: () => 10,
+            busy: () => {},
+            run: run,
+          )
+          .then((_) => answered = List.of(ran));
+      await pumpEventQueue();
+      expect(ran, ["p1"], reason: "the re-entry ran nothing beside the pass");
+      expect(answered, isNull, reason: "its pass has not run yet");
+
+      opening.complete();
+      await Future.wait([first, second]);
       expect(ran, ["p1", "p2"]);
+      expect(answered, [
+        "p1",
+        "p2",
+      ], reason: "the re-entry completes once the pass it asked for has run");
     },
   );
 
@@ -134,11 +149,15 @@ void main() {
       if (ran.length == 1) {
         ordering = OmadaOrdering.parallel;
         s.addPrompt(["c"], _msg("p2"));
-        await s.dispatch(
-          ordering: () => ordering,
-          cap: () => 10,
-          busy: () => {},
-          run: run,
+        // Asked for mid-pass and not awaited here: [run] awaiting a dispatch
+        // would be waiting on the pass it is part of.
+        unawaited(
+          s.dispatch(
+            ordering: () => ordering,
+            cap: () => 10,
+            busy: () => {},
+            run: run,
+          ),
         );
       }
     }

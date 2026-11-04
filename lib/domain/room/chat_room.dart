@@ -453,9 +453,11 @@ class ChatRoom {
     return say;
   }
 
+  /// Completes once the room has decided about [say]: its turn has opened,
+  /// or it waits in the schedule for the turn it is behind.
   Future<void> _sayLater(Message say) async {
     await _land([say]);
-    if (state.chat != null) _drainSaid();
+    if (state.chat != null) await _drainSaid();
   }
 
   /// Put [says] on the log and on screen, after whatever is there, left to
@@ -484,7 +486,10 @@ class ChatRoom {
   /// order drops the room's part of that rule, keeping the member's: the
   /// dispatch runs whatever it may, its per-lane check leaving a say for
   /// a busy participant queued while one for an idle one runs at once.
-  void _drainSaid() {
+  ///
+  /// Completes when the dispatch it asked for has run — at once where the
+  /// wave holds what it scheduled.
+  Future<void> _drainSaid() async {
     final chat = state.chat;
     if (chat == null) return;
     while (_said.isNotEmpty) {
@@ -495,7 +500,7 @@ class ChatRoom {
       _schedule.addPrompt([for (final a in said.addressees) ?nameOf(a)], said);
     }
     if (_turns.isNotEmpty && _ordering.waitsForWave) return;
-    unawaited(_dispatch());
+    await _dispatch();
   }
 
   /// Say [text] and run the turn it starts. [files] are already under the
@@ -1138,7 +1143,9 @@ class ChatRoom {
     // way anything else does, so a mention in one runs through the ordering
     // like a handoff's does. Handoffs read the room only once the schedule
     // holds nothing — the user's own words dispatch ahead of the agents'.
-    _drainSaid();
+    // Not awaited: the settle below asks for its own pass, which this one's
+    // completion would only have it wait for.
+    unawaited(_drainSaid());
     // The context this turn left behind is the one thing that grows without
     // being said, and the host decides whether to compact it. Here, where the
     // turn is over and the session is settled — the summarizer cannot run
