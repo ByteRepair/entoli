@@ -102,14 +102,25 @@ void main() {
     await pump(tester);
     final id = chat.state.id;
 
+    // Each edit writes the chat and then re-reads the list off disk, which is
+    // real I/O no fixed count of rounds outlasts on a loaded runner: wait for
+    // what the snapshot is meant to say, not for the tree to look idle.
     await run(tester, (s) => s.pin(id, true));
-    expect(last().groups.first.heading, "Pinned");
+    await settleUntil(
+      tester,
+      () => last().groups.first.heading == "Pinned",
+      what: "the Pinned heading",
+    );
 
     await run(tester, (s) => s.rename(id, "renamed"));
-    expect(titles(), ["renamed"]);
+    await settleUntil(
+      tester,
+      () => titles().join() == "renamed",
+      what: "the new title",
+    );
 
     await run(tester, (s) => s.delete(id));
-    expect(titles(), isEmpty);
+    await settleUntil(tester, () => titles().isEmpty, what: "the row gone");
   });
 
   testWidgets("a name no project can have is refused with a reason", (
