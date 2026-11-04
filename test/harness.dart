@@ -507,7 +507,13 @@ class TestApp {
       UncontrolledProviderScope(
         container: container,
         child: MaterialApp(
-          theme: entoliTheme(brightness),
+          // A plain ripple rather than Material 3's InkSparkle, which a test
+          // host (Android by default) paints as a fragment shader the CPU
+          // rasterizes: every tap was tens of milliseconds a frame for as long
+          // as the sparkle ran, seconds a test, and no assertion looks at it.
+          theme: entoliTheme(
+            brightness,
+          ).copyWith(splashFactory: InkRipple.splashFactory),
           onGenerateRoute: appRoute,
           // As `main` attaches it: what closes the pages over the
           // conversation counts them by it.

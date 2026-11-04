@@ -357,8 +357,11 @@ void main() {
   group("the live view of a running command", () {
     test("grows as the command prints", () async {
       final shell = LocalShell();
+      // The command holds after its first line until the test lets it go, so
+      // "still running" is a state the test is in rather than a second of
+      // sleep it hopes to land inside.
       final run = shell.start(
-        "echo one; sleep 1; echo two; sleep 1; echo three",
+        "echo one; while [ ! -e go ]; do sleep 0.02; done; echo two; echo three",
         cwd: workspace.path,
         home: home.path,
         timeout: const Duration(seconds: 10),
@@ -367,8 +370,8 @@ void main() {
 
       // The first line has printed while the command is still running.
       await printed(run, "one");
-      final early = output.value ?? "";
-      expect(early, isNot(contains("three")));
+      expect(output.value, isNot(contains("two")));
+      File(p.join(workspace.path, "go")).writeAsStringSync("");
 
       final result = await run.result;
       // Line by line, as it printed.

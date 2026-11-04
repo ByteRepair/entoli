@@ -566,6 +566,8 @@ void main() {
         projectWorkspace: "/tmp/project",
         model: "fake-model",
         library: libraryWithGeneral(),
+        // The count of attempts is the subject, not the 1s/2s/4s between.
+        options: const BuiltinOptions(retryBackoff: Duration.zero),
       );
       final agent = BuiltinAgent(
         session: session,
