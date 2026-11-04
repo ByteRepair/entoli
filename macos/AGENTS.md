@@ -181,6 +181,29 @@ seconds, not the minutes a turn can take, so Ask with Wait for Reply is a
 foreground affair there; with it off the turn is left running, and the
 completion notification says when it ends.
 
+An ad-hoc signed build — what `flutter build macos` makes on its own — lists
+every action in Shortcuts and runs none: `linkd` identifies the app by its
+team id and, finding none, never connects (`Unable to get teamId` in the
+system log, then `openApplicationAndConnect failed`), running or not. The
+release's Developer ID signature carries one; a local build tried against
+Shortcuts wants signing with a team identity first.
+
+## Closing the window during a turn
+
+The agent runs in the app's own process, so the window's close — which quits
+the app, its one window being its last — would kill a turn under way. While
+one runs (`BackgroundWork.running`, which `TurnHold` in
+`MainFlutterWindow.swift` answers on `agent_chat/background`), the red button
+and Close Window hide the app instead, and the Dock says it is running in the
+background; clicking the icon unhides it. When the last turn ends and nobody
+has shown the app since, the close goes through and the app quits. Cmd-H is
+an ordinary hide, and Cmd-Q quits at once, turn or no turn.
+
+The same hold disables automatic and sudden termination: a Shortcuts action
+launches the app hidden in the background, and once the action returns —
+Ask without Wait for Reply returns at once — `linkd` lets go of it and asks
+for it to be ended if appropriate, which a running turn makes it not.
+
 ## Waking for a trigger
 
 **The model the pieces below implement:** `reminders.json` is the only truth,

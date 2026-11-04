@@ -48,7 +48,7 @@ named in a cross-reference is findable from this list.
 - `ios/AGENTS.md` — The icon, Export compliance, Privacy declarations, Why no host shell, The iSH driver, The rootfs, The native shell, The menu bar,
   The workspace inside the guest, Shortcuts
 - `macos/AGENTS.md` — Why no sandbox, The entitlements, What a command runs on,
-  The menu bar, The native shell, Shortcuts,
+  The menu bar, The native shell, Shortcuts, Closing the window during a turn,
   What is absent, and honestly so, Voice mode, The icon, The DMG, Tests on
   this host
 - `macos/Runner/entoli.icon/AGENTS.md` — the app icon's Icon Composer package:
