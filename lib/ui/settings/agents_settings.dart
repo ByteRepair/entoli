@@ -400,22 +400,36 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
             ],
           ),
         ),
-        if (_writable)
+        // The avatar library is this device's, so a remote device's list
+        // has no way to it.
+        if (_local)
           AddButtonRow(
             child: ValueListenableBuilder(
               valueListenable: _busy,
-              builder: (context, busy, _) => Row(
+              builder: (context, busy, _) => Wrap(
                 spacing: 12,
+                runSpacing: 8,
                 children: [
+                  if (_writable) ...[
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.add),
+                      label: const Text("Add agent"),
+                      onPressed: busy ? null : _add,
+                    ),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.upload_file),
+                      label: const Text("Import agent"),
+                      onPressed: busy ? null : _import,
+                    ),
+                  ],
                   OutlinedButton.icon(
-                    icon: const Icon(Icons.add),
-                    label: const Text("Add agent"),
-                    onPressed: busy ? null : _add,
-                  ),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.upload_file),
-                    label: const Text("Import agent"),
-                    onPressed: busy ? null : _import,
+                    icon: const Icon(Icons.smart_toy_outlined),
+                    label: const Text("View Bot Avatars"),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const BotAvatarEditorPage.browse(),
+                      ),
+                    ),
                   ),
                 ],
               ),

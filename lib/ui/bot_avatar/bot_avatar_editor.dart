@@ -53,12 +53,23 @@ enum BotAvatarSource {
 /// definition a model wrote is pasted in. An import joins the Bots tab and
 /// leaves it by a long press or a right click.
 ///
-/// Pops the [BotAvatarSpec] chosen, or null where the page was closed.
+/// Choosing, it pops the [BotAvatarSpec] chosen, or null where the page was
+/// closed. [BotAvatarEditorPage.browse] is the same page with nothing to
+/// choose for — opened from the agents list to look through the avatars and
+/// import or delete them — so it has no Use and goes back rather than
+/// closing.
 class BotAvatarEditorPage extends ConsumerStatefulWidget {
-  const BotAvatarEditorPage({super.key, this.initial});
+  const BotAvatarEditorPage({super.key, this.initial}) : choosing = true;
+
+  const BotAvatarEditorPage.browse({super.key})
+    : initial = null,
+      choosing = false;
 
   /// What the agent wears now, selected as the page opens.
   final BotAvatarSpec? initial;
+
+  /// For an agent: Use pops the one chosen.
+  final bool choosing;
 
   @override
   ConsumerState<BotAvatarEditorPage> createState() =>
@@ -208,16 +219,17 @@ class _BotAvatarEditorPageState extends ConsumerState<BotAvatarEditorPage>
     final current = _current(entries);
     return Scaffold(
       appBar: PageBar(
-        title: "Bot Avatar",
-        leading: PageLeading.close,
+        title: widget.choosing ? "Bot Avatar" : "Bot Avatars",
+        leading: widget.choosing ? PageLeading.close : PageLeading.back,
         actions: [
-          PageAction.text(
-            label: "Use",
-            prominent: true,
-            onPressed: current == null
-                ? null
-                : () => Navigator.of(context).pop(_specOf(current)),
-          ),
+          if (widget.choosing)
+            PageAction.text(
+              label: "Use",
+              prominent: true,
+              onPressed: current == null
+                  ? null
+                  : () => Navigator.of(context).pop(_specOf(current)),
+            ),
         ],
       ),
       body: SafeArea(

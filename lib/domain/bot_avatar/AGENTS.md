@@ -107,7 +107,10 @@ again. The avatar's clock banks the stopped time, so the motion resumes
 where it left off rather than jumping.
 
 The editor (`BotAvatarEditorPage`) is opened from the agent editor's picture
-menu ("Use Bot Avatar" beside "Upload photo"). One `Flex` lays it out: the
+menu ("Use Bot Avatar" beside "Upload photo"), where Use pops the one
+chosen; and from "View Bot Avatars" under the agents list as
+`BotAvatarEditorPage.browse`, the same page with nothing to choose for —
+no Use, a back arrow — for looking through, importing and deleting. One `Flex` lays it out: the
 preview over the controls on a portrait screen, beside them on a landscape
 one. Bots is the grid of presets and imports over the colour bar (palette,
 custom, reset); Import takes pasted JSON — fenced, in prose, or a list —

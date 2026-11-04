@@ -371,6 +371,22 @@ void main() {
       expect(File("$dir/researcher.png").existsSync(), isFalse);
     });
 
+    testWidgets("View Bot Avatars opens the avatars to look through, with "
+        "nothing to use one for", (tester) async {
+      useWindow(tester, const Size(480, 1500));
+      await tester.runAsync(
+        () => app.container.read(botAvatarPresetsProvider.future),
+      );
+      await pumpSettings(tester, app, SettingsCategory.agents);
+      await reloadLibrary(tester, app);
+
+      await tester.tap(find.text("View Bot Avatars"));
+      await frames(tester);
+      expect(find.text("Bot Avatars"), findsOneWidget);
+      expect(find.bySemanticsLabel("Ghost"), findsWidgets);
+      expect(find.text("Use"), findsNothing);
+    });
+
     testWidgets("a pick that is not a .png is refused", (tester) async {
       final dir = app.config.promptsDir(CompletionKind.agent);
       newFile("$dir/researcher.md", "---\ndescription: desc\n---\n\nBody.");
