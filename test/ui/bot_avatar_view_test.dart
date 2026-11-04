@@ -52,21 +52,14 @@ void main() {
     });
 
     test("a spin is one full turn that ends where it began", () {
-      const spin = BotAnimation(
-        mood: BotMood.happy,
-        duration: Duration(seconds: 5),
-        spin: true,
-      );
-      final mid =
-          BotAnimation.spinStart +
-          Duration(microseconds: BotAnimation.spinLength.inMicroseconds ~/ 2);
+      final spin = BotAnimation.tapped(_Fixed(0.1));
+      final calm = BotAnimation.tapped(_Fixed(0.5));
+      // Half way through the spin: 350 ms in, then half of 900.
+      const mid = Duration(milliseconds: 800);
       expect(spin.yawAt(Duration.zero), 0);
       expect(spin.yawAt(mid), closeTo(math.pi, 1e-9));
       expect(spin.yawAt(const Duration(seconds: 3)), 0);
-      expect(
-        BotAnimation(mood: BotMood.happy, duration: spin.duration).yawAt(mid),
-        0,
-      );
+      expect(calm.yawAt(mid), 0);
     });
   });
 
