@@ -59,6 +59,15 @@ class _IncomingLinksState extends ConsumerState<IncomingLinks> {
       case NewChatLink(:final prompt):
         navigator.popUntil((r) => r.isFirst);
         openNewChat(context, ref, prompt: prompt);
+      case SharedEntryLink(:final kind, :final bytes):
+        final (entry, preview) = sharedEntry(kind, bytes);
+        push(
+          MarketplaceEntryPreviewPage(
+            kind: kind,
+            entry: entry,
+            preview: preview,
+          ),
+        );
       case AvatarLink(:final import):
         push(BotAvatarInstallPage(import: import));
       case InstallLink(:final kind, :final slug):

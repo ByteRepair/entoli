@@ -47,8 +47,18 @@ in `main` beside `IncomingShares`) reads. What a link means is
   Avatar's "Open in" menu can name Entoli with one entry. The prompt waits in
   `newChatPromptProvider` (`openNewChat(prompt:)`) only until the new-chat
   screen takes it, so unlike the screen's own settings it never outlives one.
-- `entoli://install/skill/<slug>`, `entoli://install/agent/<slug>` — the
-  marketplace's own preview page for that entry, its Install the same.
+- `entoli://install/marketplace/entoli/<skill|agent>/<slug>` — the
+  marketplace's own preview page for that entry, its Install the same. The
+  `entoli` segment names the marketplace, so another can be added without a
+  new form.
+- `entoli://install/<skill|agent>?def=…` — the entry carried whole, base64url:
+  a skill's `.skill` zip, an agent's PROMPT.md (gzipped or not, told apart by
+  gzip's magic). The same preview page opens with nothing fetched
+  (`sharedEntry`), the SKILL.md or prompt body in the README's place, since a
+  link from anyone is untrusted text and the user installs only what they
+  have seen. An agent installs under its frontmatter `name`. Windows' command
+  line (about 32K characters) is the tightest limit a link meets, so a skill
+  with more than a few small text files does not fit.
 - `entoli://install/avatar?def=…` — a Bot Avatar definition, raw or base64url
   JSON (Open Bot Avatar's own `def`), on `BotAvatarInstallPage`: the bot and
   Install, landing in the editor's library.

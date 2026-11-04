@@ -1,4 +1,5 @@
 import "dart:convert";
+import "dart:io" show gzip;
 
 import "package:agent_chat/domain/app_link.dart";
 import "package:agent_chat/domain/bot_avatar/import.dart";
@@ -19,10 +20,22 @@ void main() {
   });
 
   test("a marketplace link names its kind and slug, slashes and all", () {
-    final skill = _parse("entoli://install/skill/pdf")! as InstallLink;
+    const at = "entoli://install/marketplace/entoli";
+    final skill = _parse("$at/skill/pdf")! as InstallLink;
     expect((skill.kind, skill.slug), (CompletionKind.skill, "pdf"));
-    final agent = _parse("entoli://install/agent/owner/reviewer")!;
+    final agent = _parse("$at/agent/owner/reviewer")!;
     expect((agent as InstallLink).slug, "owner/reviewer");
+  });
+
+  test("a shared entry carries its bytes, gzipped or not", () {
+    final prompt = utf8.encode("---\nname: diary\n---\nKeep a diary.");
+    for (final bytes in [prompt, gzip.encode(prompt)]) {
+      final def = base64Url.encode(bytes).replaceAll("=", "");
+      final link =
+          _parse("entoli://install/agent?def=$def")! as SharedEntryLink;
+      expect(link.kind, CompletionKind.agent);
+      expect(link.bytes, prompt);
+    }
   });
 
   test("an avatar link takes raw or base64url JSON", () {
@@ -42,6 +55,9 @@ void main() {
       "entoli://install/avatar",
       "entoli://install/widget/x",
       "entoli://install/skill",
+      "entoli://install/skill?def=%%%",
+      "entoli://install/skill/pdf",
+      "entoli://install/marketplace/other/skill/pdf",
       "entoli://delete",
     ]) {
       expect(_parse(s), isNull, reason: s);

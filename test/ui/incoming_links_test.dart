@@ -1,11 +1,16 @@
 import "dart:async";
+import "dart:convert";
+import "dart:io";
 
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/incoming_links.dart";
 import "package:agent_chat/ui/selection.dart";
+
+import "package:path/path.dart" as p;
 
 import "../harness.dart";
 
@@ -53,6 +58,23 @@ void main() {
       importedBotAvatarsProvider.future,
     );
     expect(installed.map((d) => d.id), ["box"]);
+  });
+
+  testWidgets("a shared agent link shows the prompt and installs it", (
+    tester,
+  ) async {
+    const prompt =
+        "---\nname: diary\ndescription: Keeps a diary.\n---\nWrite it down.";
+    final def = base64Url.encode(gzip.encode(utf8.encode(prompt)));
+    await open(tester, "entoli://install/agent?def=$def");
+
+    expect(find.text("diary"), findsOneWidget);
+    expect(find.text("Write it down."), findsOneWidget);
+    await tester.tap(find.text("Install agent"));
+    await settleIo(tester, least: 20, tries: 80);
+
+    final agentsDir = app.config.promptsDir(CompletionKind.agent);
+    expect(File(p.join(agentsDir, "diary.md")).readAsStringSync(), prompt);
   });
 
   testWidgets("a new-chat link leaves its prompt for the new chat", (
