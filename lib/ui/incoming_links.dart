@@ -59,8 +59,11 @@ class _IncomingLinksState extends ConsumerState<IncomingLinks> {
       case NewChatLink(:final prompt):
         navigator.popUntil((r) => r.isFirst);
         openNewChat(context, ref, prompt: prompt);
-      case SharedEntryLink(:final kind, :final bytes):
-        final (entry, preview) = sharedEntry(kind, bytes);
+      case SharedEntryLink(:final kind):
+        final (entry, preview) = sharedEntry(link);
+        if (link.bytes == null) {
+          logFailure("links", "a shared ${kind.name} link arrived cut short");
+        }
         push(
           MarketplaceEntryPreviewPage(
             kind: kind,

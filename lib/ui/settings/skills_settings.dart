@@ -18,6 +18,7 @@ import "../../providers.dart";
 import "../skills/skill_view.dart";
 import "../widgets/add_button_row.dart";
 import "../widgets/busy.dart";
+import "copy_install_link.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/install_destination.dart";
 import "../widgets/section_header.dart";
@@ -359,6 +360,20 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
                 Icons.warning_amber_rounded,
                 size: 20,
                 color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          if (_local)
+            IconButton(
+              icon: const Icon(Icons.link),
+              tooltip: "Copy install link for ${skill.name}",
+              onPressed: () => _guard(
+                () => copyInstallLink(
+                  context,
+                  ref.read(appConfigProvider),
+                  CompletionKind.skill,
+                  skill.name,
+                  project: widget.project,
+                ),
               ),
             ),
           if (_local)

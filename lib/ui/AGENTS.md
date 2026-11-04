@@ -52,13 +52,20 @@ in `main` beside `IncomingShares`) reads. What a link means is
   `entoli` segment names the marketplace, so another can be added without a
   new form.
 - `entoli://install/<skill|agent>?def=…` — the entry carried whole, base64url:
-  a skill's `.skill` zip, an agent's PROMPT.md (gzipped or not, told apart by
-  gzip's magic). The same preview page opens with nothing fetched
-  (`sharedEntry`), the SKILL.md or prompt body in the README's place, since a
-  link from anyone is untrusted text and the user installs only what they
-  have seen. An agent installs under its frontmatter `name`. Windows' command
-  line (about 32K characters) is the tightest limit a link meets, so a skill
-  with more than a few small text files does not fit.
+  a skill's `.skill` zip, or an agent's PROMPT.md gzipped with `name=` beside
+  it, since an agent's name is its file's and not in it. A skills or agents
+  settings row's **Copy install link** makes one (`AppLink.share`, over the
+  bytes Export would save), and refuses one past `appLinkMaxLength` —
+  Windows' command line, about 32K characters, is the tightest hand-over —
+  so a skill too big to share says so to the sharer instead. The same preview
+  page opens with nothing fetched (`sharedEntry`), the SKILL.md or prompt
+  body in the README's place, since a link from anyone is untrusted text and
+  the user installs only what they have seen. **A link cut short is caught
+  where it is read**, because a chat app that truncates a long link hands
+  over something that still looks like one: a gzip ends in its CRC and
+  length and a zip in its end record, and `AppLink.parse` checks both, so a
+  cut link opens the page saying it is incomplete with no Install. That is
+  why an agent is always gzipped — plain text cannot say it all arrived.
 - `entoli://install/avatar?def=…` — a Bot Avatar definition, raw or base64url
   JSON (Open Bot Avatar's own `def`), on `BotAvatarInstallPage`: the bot and
   Install, landing in the editor's library.

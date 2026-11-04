@@ -11,6 +11,7 @@ import "../../core/platform/platform.dart" as platform;
 import "../../data/prompts/agent_pictures.dart";
 import "../../data/prompts/skill_import.dart";
 import "../../domain/agent_face.dart";
+import "../../domain/app_link.dart" show SharedEntryLink;
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
 import "../../providers.dart";
@@ -75,19 +76,30 @@ class EntryPreview {
 }
 
 /// A skill or agent an `entoli://install/<kind>?def=…` link carried, as the
-/// preview page shows it: [bytes] parsed by the same intake the marketplace's
-/// go through, its own SKILL.md or prompt body standing in for a README so
-/// what is being installed is on screen.
-(MarketplaceEntry, EntryPreview) sharedEntry(
-  CompletionKind kind,
-  Uint8List bytes,
-) {
+/// preview page shows it: parsed by the same intake the marketplace's go
+/// through, its own SKILL.md or prompt body standing in for a README so what
+/// is being installed is on screen. A link that did not arrive whole is a
+/// page saying so, with nothing to install.
+(MarketplaceEntry, EntryPreview) sharedEntry(SharedEntryLink link) {
+  final kind = link.kind;
   MarketplaceEntry entry(String name, String? description) => MarketplaceEntry(
     slug: name,
     name: name,
     description: description ?? "",
     author: "",
   );
+  final shared = entry(link.name ?? "Shared ${kind.name}", null);
+  final bytes = link.bytes;
+  if (bytes == null) {
+    return (
+      shared,
+      const EntryPreview(
+        packageProblem:
+            "This link is incomplete — it was cut short on its way here, so "
+            "there is nothing to install. Ask for it again, or for the file.",
+      ),
+    );
+  }
   switch (kind) {
     case CompletionKind.skill:
       try {
@@ -97,19 +109,16 @@ class EntryPreview {
           EntryPreview(package: package, readme: package.body),
         );
       } catch (e) {
-        return (
-          entry("Shared skill", null),
-          EntryPreview(packageProblem: "$e"),
-        );
+        return (shared, EntryPreview(packageProblem: "$e"));
       }
     case CompletionKind.agent:
       final source = utf8.decode(bytes, allowMalformed: true);
       final prompt = PromptDocument.parse(kind, "", source);
-      final name = prompt.frontmatter["name"];
+      final name = link.name ?? prompt.frontmatter["name"];
       if (name == null) {
         return (
-          entry("Shared agent", null),
-          const EntryPreview(packageProblem: "The agent has no name."),
+          shared,
+          const EntryPreview(packageProblem: "The link names no agent."),
         );
       }
       return (

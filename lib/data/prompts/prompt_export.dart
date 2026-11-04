@@ -9,6 +9,7 @@ import "../../core/config.dart";
 import "../../data/prompts/bundled_skill_data.dart"
     show bundledSkillFiles, bundledAgentFiles;
 import "../../data/zip.dart" show archiveOf;
+import "../../domain/app_link.dart" show AppLink;
 import "../../domain/backup_handoff.dart";
 import "../../domain/bundled_prompt_file.dart"
     show bundledPromptFileOf, bundledPromptFilesOf;
@@ -85,6 +86,21 @@ Future<void> exportAndSave(
     promptExportName(kind, name),
     (path) => File(path).writeAsBytes(bytes),
   );
+}
+
+/// The `entoli://` link that carries the entry an Export would save, for a
+/// friend to install with nothing else. Throws where no source holds it.
+Future<String> installLinkOf(
+  AppConfig config,
+  CompletionKind kind,
+  String name, {
+  String? project,
+}) async {
+  final bytes = await exportPromptBytes(config, kind, name, project: project);
+  if (bytes == null) {
+    throw const SkillImportException("its file could not be read");
+  }
+  return AppLink.share(kind, name, bytes);
 }
 
 /// The skill's files as they sit inside its own directory, resolved the way

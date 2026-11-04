@@ -1,7 +1,8 @@
 import "dart:convert";
-import "dart:io" show gzip;
+import "dart:typed_data";
 
 import "package:agent_chat/domain/app_link.dart";
+import "package:archive/archive.dart";
 import "package:agent_chat/domain/bot_avatar/import.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -27,15 +28,43 @@ void main() {
     expect((agent as InstallLink).slug, "owner/reviewer");
   });
 
-  test("a shared entry carries its bytes, gzipped or not", () {
-    final prompt = utf8.encode("---\nname: diary\n---\nKeep a diary.");
-    for (final bytes in [prompt, gzip.encode(prompt)]) {
-      final def = base64Url.encode(bytes).replaceAll("=", "");
-      final link =
-          _parse("entoli://install/agent?def=$def")! as SharedEntryLink;
-      expect(link.kind, CompletionKind.agent);
-      expect(link.bytes, prompt);
+  final prompt = utf8.encode("---\ndescription: d\n---\nKeep a diary.");
+  final skill = Uint8List.fromList(
+    ZipEncoder().encode(
+      Archive()..addFile(
+        ArchiveFile.bytes("s/SKILL.md", utf8.encode("---\nname: s\n---\nx")),
+      ),
+    ),
+  );
+
+  test("a shared entry comes back as it was shared", () {
+    final agent =
+        _parse(AppLink.share(CompletionKind.agent, "diary", prompt))!
+            as SharedEntryLink;
+    expect((agent.kind, agent.name), (CompletionKind.agent, "diary"));
+    expect(agent.bytes, prompt);
+    final shared =
+        _parse(AppLink.share(CompletionKind.skill, "s", skill))!
+            as SharedEntryLink;
+    expect(shared.bytes, skill);
+  });
+
+  test("a shared entry cut short anywhere carries nothing", () {
+    for (final (kind, bytes) in [
+      (CompletionKind.agent, prompt),
+      (CompletionKind.skill, skill),
+    ]) {
+      final link = AppLink.share(kind, "x", bytes);
+      final start = link.indexOf("def=") + 5;
+      for (var end = start; end < link.length; end++) {
+        final cut = _parse(link.substring(0, end))! as SharedEntryLink;
+        expect(cut.bytes, isNull, reason: "$kind cut at $end");
+      }
     }
+    // Plain text says nothing about whether it all arrived, so it is refused.
+    final plain = base64Url.encode(prompt);
+    final link = _parse("entoli://install/agent?name=x&def=$plain")!;
+    expect((link as SharedEntryLink).bytes, isNull);
   });
 
   test("an avatar link takes raw or base64url JSON", () {
@@ -55,7 +84,6 @@ void main() {
       "entoli://install/avatar",
       "entoli://install/widget/x",
       "entoli://install/skill",
-      "entoli://install/skill?def=%%%",
       "entoli://install/skill/pdf",
       "entoli://install/marketplace/other/skill/pdf",
       "entoli://delete",

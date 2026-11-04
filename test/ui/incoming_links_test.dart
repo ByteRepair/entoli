@@ -5,6 +5,7 @@ import "dart:io";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/app_link.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/incoming_links.dart";
@@ -63,10 +64,13 @@ void main() {
   testWidgets("a shared agent link shows the prompt and installs it", (
     tester,
   ) async {
-    const prompt =
-        "---\nname: diary\ndescription: Keeps a diary.\n---\nWrite it down.";
-    final def = base64Url.encode(gzip.encode(utf8.encode(prompt)));
-    await open(tester, "entoli://install/agent?def=$def");
+    const prompt = "---\ndescription: Keeps a diary.\n---\nWrite it down.";
+    final link = AppLink.share(
+      CompletionKind.agent,
+      "diary",
+      utf8.encode(prompt),
+    );
+    await open(tester, link);
 
     expect(find.text("diary"), findsOneWidget);
     expect(find.text("Write it down."), findsOneWidget);
@@ -75,6 +79,20 @@ void main() {
 
     final agentsDir = app.config.promptsDir(CompletionKind.agent);
     expect(File(p.join(agentsDir, "diary.md")).readAsStringSync(), prompt);
+  });
+
+  testWidgets("a shared link cut short says so and offers no install", (
+    tester,
+  ) async {
+    final link = AppLink.share(
+      CompletionKind.agent,
+      "diary",
+      utf8.encode("---\ndescription: d\n---\nWrite it down."),
+    );
+    await open(tester, link.substring(0, link.length - 6));
+
+    expect(find.textContaining("This link is incomplete"), findsOneWidget);
+    expect(find.text("Install agent"), findsNothing);
   });
 
   testWidgets("a new-chat link leaves its prompt for the new chat", (
