@@ -1196,7 +1196,7 @@ void main() {
     // No round waits out a real backoff: one that is let go at once, or held
     // until the test lets it, is the same round without the bet on a clock.
     final backoff = retryWait;
-    setUp(() => retryWait = (_) async {});
+    setUp(() => retryWait = (_, _) async {});
     tearDown(() => retryWait = backoff);
 
     /// A turn that fails retryably on every round: the send and every resume
@@ -1222,7 +1222,7 @@ void main() {
       "carries a retryable failure on, showing the row between rounds",
       () async {
         final backoff = Completer<void>();
-        retryWait = (_) => backoff.future;
+        retryWait = (_, _) => backoff.future;
         app.backend.scriptedRounds = [
           [ErrorEvent("connection lost", retryable: true), DoneEvent()],
           [TextDelta("now it worked"), DoneEvent()],
@@ -1277,7 +1277,7 @@ void main() {
 
     test("stop during the backoff ends the turn without a resume", () async {
       final backoff = Completer<void>();
-      retryWait = (_) => backoff.future;
+      retryWait = (_, _) => backoff.future;
       await app.seedSettings(AppSettings(turnRetries: 3));
       app.backend.scriptedRounds = [
         [ErrorEvent("connection lost", retryable: true), DoneEvent()],
@@ -1289,12 +1289,38 @@ void main() {
         what: "the retry row",
       );
 
-      // The stop resolves at the turn's true end, which is the backoff's; that
-      // running out after the stop must not carry the turn on.
-      final stopping = controller.interrupt();
-      backoff.complete();
-      await stopping;
+      // The backoff is never let go: the stop alone has to end the turn, not
+      // wait out whatever is left of it.
+      await controller.interrupt();
 
+      expect(app.backend.resumes, isEmpty);
+      final view = app.container.read(chatControllerProvider(id));
+      expect(view.isRunning, isFalse);
+      expect(view.retry, isNull);
+
+      // A wait that runs out after the stop does not carry the turn on.
+      backoff.complete();
+      await pumpEventQueue();
+      expect(app.backend.resumes, isEmpty);
+    });
+
+    test("abort during the backoff ends the turn there and then", () async {
+      retryWait = (_, _) => Completer<void>().future;
+      await app.seedSettings(AppSettings(turnRetries: 3));
+      app.backend.scriptedRounds = [
+        [ErrorEvent("connection lost", retryable: true), DoneEvent()],
+        [DoneEvent()],
+      ];
+      final (id, controller) = await startTurn("hello");
+      await waitFor(
+        () => app.container.read(chatControllerProvider(id)).retry != null,
+        what: "the retry row",
+      );
+
+      final done = controller.turnDone!;
+      await controller.abort();
+
+      expect(await done, TurnEnd.aborted);
       expect(app.backend.resumes, isEmpty);
       expect(app.container.read(chatControllerProvider(id)).isRunning, isFalse);
     });
@@ -2017,7 +2043,7 @@ void main() {
         final backoff = retryWait;
         addTearDown(() => retryWait = backoff);
         final held = Completer<void>();
-        retryWait = (_) => held.future;
+        retryWait = (_, _) => held.future;
         // Explore's turn fails; its round re-enters resume and streams the
         // recovery. Build's say opens a turn beside it — its reply is the
         // last assistant message by the time the recovery lands — and the
