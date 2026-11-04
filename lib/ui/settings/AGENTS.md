@@ -34,7 +34,8 @@ edited from its settings page, and a name set there wins over one set in
 rewrite themselves under the new name on the next save.
 
 The settings page is fifteen categories, picked from a panel beside it or, below
-`navBreakpoint`, from a page of their own. The order is the `SettingsCategory`
+`navBreakpoint`, from a page of their own (see "Narrow, the categories are the
+page" below). The order is the `SettingsCategory`
 enum's, which is also where the groupings live: a `dividerAbove` on the enum
 says a group ends before that category, and the list draws a `Divider` ahead of
 the tile — one source of truth for both. The six drawn groups: **General,
@@ -321,21 +322,26 @@ own `LICENSE.txt`, named after the skill and read from the embedded data —
 the skill is redistributed, which is what a licence like skill-creator's
 Apache asks.
 
-**Narrow, the categories are the page rather than its drawer**, and each one is
-pushed over the list. That is the one place this and the chat page differ about
-what a panel becomes, and the difference is what is underneath: the sidebar
-opens over a conversation, which is what the user came for, while a drawer here
-opened over General with the other two categories behind a hamburger — the
-structure of the page, reachable only by knowing it was there. As a page it is
-the first thing settings shows. Two levels also means leaving a category is the
-back gesture, so nothing takes the bar's leading slot and the `Close settings`
-action that stood in for the back arrow goes with the drawer.
+**Narrow, the categories are the page rather than its drawer.** The page is a
+`SidePanelFrame` like the chat's, with `SidePanelNarrow.page` where the chat
+has `drawer`: below `navBreakpoint` the list is the whole window and a picked
+category is drawn in front of it, left by the bar's back button or the back
+key. That is the one place this and the chat page differ about what a panel
+becomes, and the difference is what is underneath: the sidebar opens over a
+conversation, which is what the user came for, while a drawer here opened over
+General with the other categories behind a hamburger — the structure of the
+page, reachable only by knowing it was there. So settings opens on the list,
+with no menu button anywhere; the bar's leading slot is always a back button,
+out of settings from the list and to the list from a category.
 
-`_sectionsOf` is what both layouts draw, so a category is the same list of
-sections whether it is beside the panel or on a `_CategoryPage`. The page keeps
-`_category` in either layout, and a `_CategoryPage` pops itself once the window
-is wide: widening puts the category the user was reading beside the panel rather
-than under a full-screen copy of itself.
+General is selected until something else is picked, so a wide window has it
+beside the list and a narrow one has it highlighted there. `_categoryBody` is
+what both layouts draw, at the same place in the frame's tree, so crossing
+the breakpoint keeps the category and whatever it holds: `_category` is the
+pick and `_categoryShown` whether it is in front of the list when narrow,
+kept at either width, so narrowing after a pick lands on that category and
+widening puts it beside the list. A named `initialCategory` opens in front of
+the list; with `focus` it is the whole page and nothing else.
 
 ## Backing it all up
 

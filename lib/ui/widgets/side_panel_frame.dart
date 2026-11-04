@@ -12,12 +12,34 @@ enum SidePanelMode {
 
   /// The content's drawer, in a window too narrow to dock it.
   drawer,
+
+  /// The whole window, in a window too narrow to dock it, with the content
+  /// behind it until something in the panel opens it.
+  panelPage,
+
+  /// The content as the whole window, in front of the panel, which it is
+  /// left for by the back key or [SidePanelFrame.onHideContent].
+  contentPage,
+}
+
+/// What a [SidePanelFrame]'s panel becomes in a window too narrow to dock it.
+enum SidePanelNarrow {
+  /// A drawer over the content, which is what is on screen: the chat's
+  /// sidebar, over the conversation the user came for.
+  drawer,
+
+  /// A page of its own, with the content pushed over it and back returning
+  /// to it: settings' categories, which are the structure of the page and
+  /// should not sit behind a menu button.
+  page,
 }
 
 /// A navigation panel beside [child] where the window is at least
-/// [breakpoint] wide and [shown] says so, and [child]'s drawer where it is
-/// narrower. [child] is at the same place in the tree in every mode, so going
-/// from one to another — a resize, a toggle — keeps whatever state it holds.
+/// [breakpoint] wide and [shown] says so, and, where it is narrower, what
+/// [narrow] says: [child]'s drawer, or a page of its own that [child] is
+/// opened over while [contentShown]. [child] is at the same place in the tree
+/// in every mode, so going from one to another — a resize, a toggle — keeps
+/// whatever state it holds.
 ///
 /// [shown] is the host's to keep, and [onShow] the way the frame's own button
 /// asks it to dock the panel again; the frame keeps only its drawer. What is
@@ -32,6 +54,10 @@ class SidePanelFrame extends StatefulWidget {
     this.onShow,
     this.panelWidth = navPanelWidth,
     this.breakpoint = navBreakpoint,
+    this.narrow = SidePanelNarrow.drawer,
+    this.contentShown = false,
+    this.onHideContent,
+    this.bar,
   });
 
   final Widget panel;
@@ -40,6 +66,20 @@ class SidePanelFrame extends StatefulWidget {
   final VoidCallback? onShow;
   final double panelWidth;
   final double breakpoint;
+  final SidePanelNarrow narrow;
+
+  /// With [SidePanelNarrow.page], whether [child] is in front of the panel
+  /// in a narrow window. Like [shown], the host's to keep; it means nothing
+  /// where the panel is docked.
+  final bool contentShown;
+
+  /// What the back key runs while [child] is in front of the panel — the
+  /// host putting [contentShown] back to false.
+  final VoidCallback? onHideContent;
+
+  /// The frame's own bar, over the panel and [child] alike, built for the
+  /// mode the frame is in: a page whose title says what is in front.
+  final PreferredSizeWidget Function(SidePanelMode mode)? bar;
 
   /// The frame [context] is below, or null where there is none — content
   /// drawn on its own, which then has no panel to reveal.
@@ -56,36 +96,67 @@ class _SidePanelFrameState extends State<SidePanelFrame> {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final mode = constraints.maxWidth < widget.breakpoint
-          ? SidePanelMode.drawer
-          : widget.shown
-          ? SidePanelMode.docked
-          : SidePanelMode.hidden;
+      final wide = constraints.maxWidth >= widget.breakpoint;
+      final mode = wide
+          ? (widget.shown ? SidePanelMode.docked : SidePanelMode.hidden)
+          : switch (widget.narrow) {
+              SidePanelNarrow.drawer => SidePanelMode.drawer,
+              SidePanelNarrow.page when widget.contentShown =>
+                SidePanelMode.contentPage,
+              SidePanelNarrow.page => SidePanelMode.panelPage,
+            };
+      final panelPage = mode == SidePanelMode.panelPage;
       return SidePanel._(
         mode: mode,
         reveal: () => switch (mode) {
           SidePanelMode.drawer => _scaffold.currentState?.openDrawer(),
           SidePanelMode.hidden => widget.onShow?.call(),
-          SidePanelMode.docked => null,
+          SidePanelMode.contentPage => widget.onHideContent?.call(),
+          SidePanelMode.docked || SidePanelMode.panelPage => null,
         },
         child: Scaffold(
           key: _scaffold,
+          appBar: widget.bar?.call(mode),
           drawer: mode == SidePanelMode.drawer
               ? NavDrawer(child: widget.panel)
               : null,
           body: Row(
             children: [
-              // Not there at all as a drawer: a window crossing the
-              // breakpoint is not the user asking to see it go.
-              if (mode != SidePanelMode.drawer)
+              // Not there at all narrow: a window crossing the breakpoint is
+              // not the user asking to see it go.
+              if (wide)
                 _DockedPanel(
                   open: mode == SidePanelMode.docked,
                   width: widget.panelWidth,
                   child: widget.panel,
                 ),
               // Keyed, so the panel coming and going before it does not
-              // rebuild it from nothing.
-              Expanded(key: const ValueKey("content"), child: widget.child),
+              // rebuild it from nothing. The content stays under the panel
+              // as a page, offstage, for the same reason.
+              Expanded(
+                key: const ValueKey("content"),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Offstage(
+                      offstage: panelPage,
+                      child: TickerMode(
+                        enabled: !panelPage,
+                        // Back from the content is to the panel rather than
+                        // out of the route.
+                        child: PopScope(
+                          canPop: mode != SidePanelMode.contentPage,
+                          onPopInvokedWithResult: (didPop, _) {
+                            if (!didPop) widget.onHideContent?.call();
+                          },
+                          child: widget.child,
+                        ),
+                      ),
+                    ),
+                    if (panelPage) widget.panel,
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -154,8 +225,8 @@ class SidePanel extends InheritedWidget {
 
   final SidePanelMode mode;
 
-  /// Bring the panel on screen: open the drawer, or dock it again. Nothing
-  /// where it is already docked.
+  /// Bring the panel on screen: open the drawer, dock it again, or put the
+  /// content back behind it. Nothing where it is already on screen.
   final VoidCallback reveal;
 
   @override
@@ -174,7 +245,12 @@ class SidePanelButton extends StatelessWidget {
 
   static Widget? leadingOf(BuildContext context) {
     final panel = SidePanelFrame.of(context);
-    if (panel == null || panel.mode == SidePanelMode.docked) return null;
+    // A page's way back is the bar's back button, which the host draws.
+    if (panel == null ||
+        !(panel.mode == SidePanelMode.drawer ||
+            panel.mode == SidePanelMode.hidden)) {
+      return null;
+    }
     return SidePanelButton._(panel);
   }
 

@@ -333,8 +333,8 @@ both settings pages, since it owns every rule about the provider/model pair and
 they only say where the values come from.
 
 `openCategory` is the settings page's sidebar. A test window is narrower than
-`navBreakpoint`, so a category there is a page pushed over the list rather than
-a panel's selection — the helper goes back first when the bar is not the list's,
+`navBreakpoint`, so a category there is drawn in front of the list rather than
+beside it — the helper goes back first when the bar is not the list's,
 which is what lets the same call work at either size. Every category needs it
 now, General included: narrow, the page opens on the list and nothing else.
 `pumpSettings` is that plus the pump, and it takes the category rather than

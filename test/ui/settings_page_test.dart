@@ -49,6 +49,11 @@ void main() {
       // The list is what settings opens on, and there is no hamburger because
       // there is no drawer to open. Data is near the bottom, below the fold of
       // a test window — proof the list scrolls as well as shows.
+      // General is what is selected until something else is picked.
+      expect(
+        tester.widget<ListTile>(find.widgetWithText(ListTile, "General")),
+        isA<ListTile>().having((t) => t.selected, "selected", isTrue),
+      );
       await scrollTo(tester, tile("Data"));
       expect(tile("Data"), findsOneWidget);
       expect(find.byIcon(Icons.menu), findsNothing);
@@ -56,9 +61,8 @@ void main() {
       expect(find.text("Appearance"), findsNothing);
     });
 
-    // Opened for a category, narrow as well as wide: the category is the page
-    // itself, nothing behind it, so back leaves settings rather than a list
-    // the link skipped.
+    // Opened for a category on a narrow window: the category is in front of
+    // the list, the way a pick from it would have left it.
     testWidgets(
       "initialCategory opens the category directly on a narrow window",
       (tester) async {
@@ -152,6 +156,28 @@ void main() {
 
       expect(tile("LLMs"), findsOneWidget);
       expect(find.text("New chats"), findsOneWidget);
+    });
+
+    testWidgets("narrowing keeps the category picked beside the list", (
+      tester,
+    ) async {
+      useWindow(tester, const Size(1200, 800));
+      await app.pump(tester, const SettingsPage());
+
+      await tester.tap(tile("LLMs"));
+      await settleIo(tester);
+
+      tester.view.physicalSize = const Size(800, 600);
+      await settleIo(tester);
+
+      expect(find.text("New chats"), findsOneWidget);
+      expect(find.widgetWithText(AppBar, "LLMs"), findsOneWidget);
+
+      // The bar's back button is the list's way back, as the key is.
+      await tester.tap(find.byType(BackButton));
+      await settleIo(tester);
+      expect(find.widgetWithText(AppBar, "Settings"), findsOneWidget);
+      expect(find.text("New chats"), findsNothing);
     });
   });
 
