@@ -118,15 +118,6 @@
                 <action android:name="android.intent.action.ASSIST"/>
                 <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
-            <!-- entoli:// links, read by IncomingLinks (app_links): a new chat
-                 with a prompt, or something to install. On the alias below as
-                 well, for the reason the share filter is. -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-                <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="entoli"/>
-            </intent-filter>
         </activity>
 
         <!-- The non-default icon, enabled by MainActivity.kt when the user picks
@@ -152,12 +143,6 @@
             <intent-filter>
                 <action android:name="android.intent.action.ASSIST"/>
                 <category android:name="android.intent.category.DEFAULT"/>
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-                <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="entoli"/>
             </intent-filter>
         </activity-alias>
         <!-- dataSync rather than one of the named types: what a turn is doing

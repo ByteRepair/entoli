@@ -67,19 +67,6 @@ final selectedChatIdProvider = NotifierProvider<SelectedChatId, String?>(
   SelectedChatId.new,
 );
 
-/// Text an `entoli://new` link put in the new-chat composer, unsent: the
-/// screen takes it and clears it. Null is nothing waiting.
-class NewChatPrompt extends Notifier<String?> {
-  @override
-  String? build() => null;
-
-  void set(String? prompt) => state = prompt;
-}
-
-final newChatPromptProvider = NotifierProvider<NewChatPrompt, String?>(
-  NewChatPrompt.new,
-);
-
 /// Which project the sidebar is showing, on whichever device, and where a new
 /// chat goes. This device's default project is what the app opens in.
 class SelectedProject extends Notifier<ProjectRef> {
