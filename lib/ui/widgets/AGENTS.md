@@ -45,8 +45,13 @@ marketplace's and the project palette's — and `ListHeading` the caption a list
 groups sit under. Two were copies of the sidebar's, one had drifted.
 
 `SidePanelFrame` is a navigation panel beside a page where the window is wide
-enough and the panel shown, and the page's drawer where it is narrow — the
-shell's sidebar is one. The page is at the same place in the tree in every
+enough and the panel shown, and, where it is narrow, what its `narrow` says:
+the page's drawer (`SidePanelNarrow.drawer`, the shell's sidebar) or a page of
+its own with the content opened in front of it while the host's
+`contentShown` says so (`SidePanelNarrow.page`, settings' categories), back
+returning to it through `onHideContent`. A `bar` builder gives the frame's
+Scaffold a bar for the mode it is in, which is how settings titles a category
+in front of the list. The page is at the same place in the tree in every
 mode, so a toggle or a resize keeps whatever it holds; that is the frame's
 whole reason over a `Row` here and a drawer there, which rebuilt the page
 each time the window crossed the breakpoint. Whether the panel is shown is
@@ -54,7 +59,8 @@ the host's to keep — `shown`, and `onShow` for the frame's own button — so a
 menu command and the button drive the same state. A page below reads where
 the panel is with `SidePanelFrame.of` and puts `SidePanelButton.leadingOf`
 in its bar: the menu button, opening the drawer narrow and docking the panel
-again where it is hidden, and nothing where it is docked. The panel slides in
+again where it is hidden, and nothing where it is docked or a page — a page's
+way back is its bar's back button. The panel slides in
 and out, pushing the page over. One Scaffold holds the drawer — the
 frame's — so a page under it carries none of its own.
 

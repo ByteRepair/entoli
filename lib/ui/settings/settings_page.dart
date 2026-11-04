@@ -34,7 +34,7 @@ import "../widgets/editable_row.dart";
 import "../widgets/environment_section.dart";
 import "permissions_section.dart";
 import "../../core/formatting.dart";
-import "../widgets/nav_drawer.dart";
+import "../widgets/side_panel_frame.dart";
 import "../widgets/provider_dialog.dart";
 import "../widgets/model_picker.dart";
 import "../widgets/resettable_field.dart";
@@ -77,91 +77,53 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
+  /// General until something else is picked, so a wide window always has a
+  /// category beside the list and a narrow one has it highlighted there.
   late SettingsCategory _category =
       widget.initialCategory ?? SettingsCategory.general;
 
-  /// The state is kept where the category is a page of its own too, so that a
-  /// window widened while one is open lands on it rather than on General.
-  void _open(SettingsCategory category, {required bool push}) {
-    setState(() => _category = category);
-    if (push) {
-      Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => _CategoryPage(category)));
-    }
-  }
+  /// Whether the category is in front of the list in a narrow window. Kept
+  /// whatever the width, so a window narrowed after a pick lands on what the
+  /// user was reading rather than back on the list. A named category opens
+  /// in front; otherwise the list is what settings shows first.
+  late bool _categoryShown = widget.initialCategory != null;
+
+  /// Back from a category to the list, by the bar's button or the back key.
+  void _showList() => setState(() => _categoryShown = false);
 
   @override
   Widget build(BuildContext context) {
-    // The page is the whole window, so its width is the window's — no
-    // `LayoutBuilder`, which would run the Scaffold's build during layout.
-    final wide = MediaQuery.sizeOf(context).width >= navBreakpoint;
     // A category this platform does not offer is not opened, whoever names it.
-    final initial = widget.initialCategory?.offered(ref) == false
-        ? null
-        : widget.initialCategory;
+    if (widget.initialCategory case final initial?
+        when widget.focus && initial.offered(ref)) {
+      return Scaffold(
+        appBar: PageBar(title: initial.label),
+        body: _categoryBody(initial),
+      );
+    }
     final category = _category.offered(ref)
         ? _category
         : SettingsCategory.general;
-    // One rule, not two: a named category is the whole page unless the window
-    // is wide enough for the panel and nobody asked to focus. Narrow has no
-    // panel for a preselected category to sit beside, so there it is the page
-    // whatever the caller asked for.
-    final fullPage = initial != null && (widget.focus || !wide);
-    if (fullPage) {
-      return _categoryScaffold(initial);
-    }
-    final categories = _Categories(
-      // Nothing is selected where the list is the whole page: a category there
-      // is somewhere to go rather than what is showing beside it.
-      selected: wide ? category : null,
-      onSelect: (category) => _open(category, push: !wide),
-    );
-    final bar = PageBar(title: "Settings");
-
-    if (!wide) {
-      return Scaffold(appBar: bar, body: categories);
-    }
-    return Scaffold(
-      appBar: bar,
-      body: Row(
-        children: [
-          SizedBox(width: navPanelWidth, child: categories),
-          const VerticalDivider(width: 1),
-          Expanded(child: _categoryBody(category, key: ValueKey(category))),
-        ],
+    return SidePanelFrame(
+      narrow: SidePanelNarrow.page,
+      contentShown: _categoryShown,
+      onHideContent: _showList,
+      // The list is settings' own structure, so it is never hidden: nothing
+      // takes the bar's leading slot from its back button. In front of the
+      // list the button is drawn whatever is under the route, since it goes
+      // back to the list rather than out of settings.
+      bar: (mode) => mode == SidePanelMode.contentPage
+          ? PageBar(title: category.label, onBack: _showList)
+          : PageBar(title: "Settings"),
+      panel: _Categories(
+        selected: category,
+        onSelect: (picked) => setState(() {
+          _category = picked;
+          _categoryShown = true;
+        }),
       ),
+      child: _categoryBody(category, key: ValueKey(category)),
     );
-  }
-}
-
-/// A category as the whole page: the bar holds nothing but its name, and
-/// leaving it is the back gesture.
-Scaffold _categoryScaffold(SettingsCategory category) => Scaffold(
-  appBar: PageBar(title: category.label),
-  body: _categoryBody(category),
-);
-
-/// One category as a page over the list, which is what a narrow window gets in
-/// place of the panel. Leaving it is the back gesture, so the bar holds nothing
-/// but the name of what is on it.
-class _CategoryPage extends StatelessWidget {
-  const _CategoryPage(this.category);
-
-  final SettingsCategory category;
-
-  @override
-  Widget build(BuildContext context) {
-    // Widened, the page behind is already showing this category beside its
-    // panel, and two of it is one too many.
-    if (MediaQuery.sizeOf(context).width >= navBreakpoint) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (context.mounted && (ModalRoute.of(context)?.isCurrent ?? false)) {
-          Navigator.of(context).pop();
-        }
-      });
-    }
-    return _categoryScaffold(category);
   }
 }
 
@@ -259,12 +221,12 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
 };
 
 /// The categories as a list: beside the page where there is room for one, and
-/// the page itself where there is not. Material, not Scaffold, since the page
-/// owns that.
+/// the page itself where there is not. Material, not Scaffold, since the
+/// frame owns that.
 class _Categories extends ConsumerWidget {
   const _Categories({required this.selected, required this.onSelect});
 
-  final SettingsCategory? selected;
+  final SettingsCategory selected;
   final ValueChanged<SettingsCategory> onSelect;
 
   @override
@@ -279,9 +241,6 @@ class _Categories extends ConsumerWidget {
                 selected: category == selected,
                 leading: Icon(category.icon),
                 title: Text(category.label),
-                trailing: selected == null
-                    ? const Icon(Icons.chevron_right)
-                    : null,
                 onTap: () => onSelect(category),
               ),
             ],
