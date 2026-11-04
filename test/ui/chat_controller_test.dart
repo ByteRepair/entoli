@@ -2090,17 +2090,16 @@ void main() {
             .where((m) => textOf(m) == "again @explore, one more thing")
             .single;
 
-        // No second turn opens while the first still has the floor.
-        final end = DateTime.now().add(const Duration(milliseconds: 500));
-        while (DateTime.now().isBefore(end)) {
-          expect(
-            app.backend.prompts,
-            hasLength(1),
-            reason:
-                "a say for a busy member must queue, not spawn a parallel turn",
-          );
-          await Future<void>.delayed(const Duration(milliseconds: 50));
-        }
+        // The send returns once the room has decided, and a turn it opened
+        // would have its reply on the chat by then: there is none, so the say
+        // is queued rather than a parallel turn.
+        expect(
+          chat.messages.where((m) => m.role == MessageRole.assistant),
+          hasLength(1),
+          reason:
+              "a say for a busy member must queue, not spawn a parallel turn",
+        );
+        expect(app.backend.prompts, hasLength(1));
 
         // The settle runs it: the same member's turn, on the message the log
         // already holds.
@@ -2135,16 +2134,18 @@ void main() {
 
       await controller.send("one more thing", queue: true);
 
-      // No second turn opens while the first still has the floor.
-      final end = DateTime.now().add(const Duration(milliseconds: 500));
-      while (DateTime.now().isBefore(end)) {
-        expect(
-          app.backend.prompts,
-          hasLength(1),
-          reason: "a say to a busy room must queue, not spawn a turn",
-        );
-        await Future<void>.delayed(const Duration(milliseconds: 50));
-      }
+      // The send returns once the room has decided, and a turn it opened
+      // would have its reply on the chat by then: there is none.
+      expect(
+        app.container
+            .read(chatControllerProvider(id))
+            .chat!
+            .messages
+            .where((m) => m.role == MessageRole.assistant),
+        hasLength(1),
+        reason: "a say to a busy room must queue, not spawn a turn",
+      );
+      expect(app.backend.prompts, hasLength(1));
 
       // The settle runs it: the main agent's turn, on the message the log
       // already holds.

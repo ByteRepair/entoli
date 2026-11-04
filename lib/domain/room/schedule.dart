@@ -1,3 +1,5 @@
+import "dart:async";
+
 import "../models.dart";
 import "../project_settings.dart" show OmadaOrdering;
 
@@ -40,7 +42,9 @@ class Schedule {
   /// that reads it — the turn entries are gone from the table by then.
   final Map<String, int> _finished = {};
 
-  bool _dispatching = false;
+  /// The dispatch running now, completed once it and every pass asked of it
+  /// meanwhile have run.
+  Completer<void>? _dispatching;
   bool _dispatchPending = false;
 
   bool get isEmpty => _queues.values.every((q) => q.isEmpty);
@@ -98,7 +102,10 @@ class Schedule {
   /// settle re-entering while the turn runs finds the schedule behind it and
   /// not the item running. Re-entering is real — a say landing mid-[run]
   /// reads the same queue — so a second call asks for a pass rather than
-  /// running one beside it.
+  /// running one beside it, and completes when that pass has run. Whoever
+  /// awaits a dispatch has its answer: what it may run has opened, and what
+  /// it may not is still queued. [run] must not itself await a dispatch,
+  /// which would be waiting on the pass it is part of.
   ///
   /// [ordering] and [cap] are read at each pass, so a settings edit reaches
   /// the pass a re-entering dispatch asks for.
@@ -111,11 +118,12 @@ class Schedule {
     required Set<String> Function() busy,
     required Future<void> Function(String member, ScheduledItem item) run,
   }) async {
-    if (_dispatching) {
+    final running = _dispatching;
+    if (running != null) {
       _dispatchPending = true;
-      return;
+      return running.future;
     }
-    _dispatching = true;
+    final done = _dispatching = Completer<void>();
     try {
       await _pass(ordering(), cap(), busy, run);
       while (_dispatchPending) {
@@ -123,7 +131,11 @@ class Schedule {
         await _pass(ordering(), cap(), busy, run);
       }
     } finally {
-      _dispatching = false;
+      // Cleared in the same step as the last check of the flag, so a call
+      // landing after it starts a dispatch of its own rather than waiting on
+      // one that will not run its pass.
+      _dispatching = null;
+      done.complete();
     }
   }
 
