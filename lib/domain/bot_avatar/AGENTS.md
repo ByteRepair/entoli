@@ -87,8 +87,9 @@ and two eyes in every mood; see `test/domain/bot_avatar_test.dart`).
 
 `BotAvatarView` (`lib/ui/bot_avatar/`) is a `CustomPainter` over a
 `ValueNotifier<BotAvatarFrame>`: a still, or live on a ticker. The agents
-list draws stills, and so does a conversation, but for one: **only the
-newest message's avatar is live**, thinking while its reply is written and
+list in Settings draws every row live, leaning on the off-screen rule below
+to keep only the rows in view moving. A conversation draws stills but for
+one: **only the newest message's avatar is live**, thinking while its reply is written and
 idling after. One moving avatar per chat rather than one per reply is what
 keeps a long conversation from running a ticker a bubble. Where one face is
 shown on its own — the agent editor, the context page — it is live. A tap
@@ -107,7 +108,7 @@ On top of the mood, a live avatar plays a `BotAnimation`
 (`animation.dart`): a mood held for a while, optionally with one eased full
 turn, timed on the avatar's own clock, which stands still while it is off
 screen — scrolled away mid-animation, it finishes once it is back. A tap where
-`reactToTap` (chat and the context page) plays `BotAnimation.tapped`: happy
+`reactToTap` (chat, the context page and the agents list) plays `BotAnimation.tapped`: happy
 for 5 s, and spinning 15% of the time; a second tap starts it over. A tap on
 a still wakes it for the length of the reaction; under reduce-motion there is
 none to play.
