@@ -28,10 +28,17 @@ void main() {
         baseUrl: "http://gpu.local:8000/v1",
       );
       expect(providerOf(custom).runtimeType, OpenAiCompatibleProvider);
+      expect(providerOf(custom).client(null), isNot(isA<ReportsUsage>()));
       expect(
         providerOf(custom.copyWith(api: LlmApi.anthropic)).runtimeType,
         AnthropicCompatibleProvider,
       );
+    });
+
+    test("OpenAI uses its usage-reporting client", () {
+      final provider = providerOf(OpenAiProvider.preset);
+      expect(provider, isA<OpenAiProvider>());
+      expect(provider.client(null), isA<ReportsUsage>());
     });
 
     test("every preset is read back as itself", () {

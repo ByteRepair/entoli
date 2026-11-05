@@ -6,6 +6,7 @@ import "package:http/testing.dart";
 
 import "package:agent_chat/data/builtin/llm/groq_client.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:agent_chat/data/builtin/llm/openai_usage_client.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart";
 import "package:agent_chat/domain/provider_usage.dart";
 import "package:agent_chat/ui/settings/provider_usage_view.dart";
@@ -15,6 +16,76 @@ import "sse.dart";
 void main() {
   // A Wednesday, mid-month, in UTC.
   final now = DateTime.utc(2026, 11, 4, 15, 30);
+
+  group("OpenAI", () {
+    test("reads documented request, token, and project token limits", () {
+      expect(
+        OpenAiUsageClient.usageOfHeaders({
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-remaining-requests": "420",
+          "x-ratelimit-reset-requests": "1m30s",
+          "X-RateLimit-Limit-Tokens": "30000",
+          "X-RateLimit-Remaining-Tokens": "24000",
+          "x-ratelimit-limit-project-tokens": "100000",
+          "x-ratelimit-remaining-project-tokens": "90000",
+        }, now),
+        [
+          UsageWindow(
+            label: "Requests",
+            used: 80,
+            max: 500,
+            unit: UsageUnit.requests,
+            resetsAt: now.add(const Duration(minutes: 1, seconds: 30)),
+          ),
+          const UsageWindow(
+            label: "Tokens",
+            used: 6000,
+            max: 30000,
+            unit: UsageUnit.tokens,
+          ),
+          const UsageWindow(
+            label: "Project tokens",
+            used: 10000,
+            max: 100000,
+            unit: UsageUnit.tokens,
+          ),
+        ],
+      );
+    });
+
+    test("retains the latest reply's reported limits", () async {
+      final client = OpenAiUsageClient(
+        baseUrl: Uri.parse("https://api.openai.com/v1"),
+        httpClient: MockClient.streaming(
+          (_, _) async => sseResponse(
+            const ["[DONE]"],
+            headers: {
+              "x-ratelimit-limit-requests": "500",
+              "x-ratelimit-remaining-requests": "499",
+            },
+          ),
+        ),
+      );
+      expect(client.reportedUsage, isEmpty);
+      await client.stream(const [], model: "gpt-test").toList();
+      expect(client.reportedUsage.single.used, 1);
+    });
+
+    test("ignores missing, invalid, and inconsistent header pairs", () {
+      expect(
+        OpenAiUsageClient.usageOfHeaders({
+          "x-ratelimit-limit-requests": "not a number",
+          "x-ratelimit-remaining-requests": "3",
+          "x-ratelimit-limit-tokens": "10",
+          "x-ratelimit-remaining-tokens": "-1",
+        }, now),
+        isEmpty,
+      );
+      expect(OpenAiUsageClient.usageOfHeaders(const {}, now), isEmpty);
+      expect(OpenAiUsageClient.durationOf("1m90s"), isNull);
+      expect(OpenAiUsageClient.durationOf("soon"), isNull);
+    });
+  });
 
   group("OpenRouter", () {
     Map<String, dynamic> key({num? limit, num? remaining, String? reset}) => {
@@ -274,6 +345,18 @@ void main() {
           now,
         ),
         "Weekly: 12% used",
+      );
+      expect(
+        describeUsage(
+          const UsageWindow(
+            label: "Tokens",
+            used: 1200,
+            max: 5000,
+            unit: UsageUnit.tokens,
+          ),
+          now,
+        ),
+        "Tokens: 1200 of 5000 tokens",
       );
       expect(
         describeUsage(
