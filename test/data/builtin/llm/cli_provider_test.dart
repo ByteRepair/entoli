@@ -221,6 +221,8 @@ void main() {
 
     setUp(() {
       dir = Directory.systemTemp.createTempSync("fake-claude-");
+      ClaudeCliProvider.cacheRoot = p.join(dir.path, "cache");
+      addTearDown(() => ClaudeCliProvider.cacheRoot = null);
       log = p.join(dir.path, "args.json");
       final script = p.join(dir.path, "claude");
       final fake = p.absolute(
@@ -294,6 +296,21 @@ void main() {
         expect(args, containsAllInOrder(["--allowedTools", "mcp__entoli"]));
         expect(args, containsAllInOrder(["--effort", "low"]));
         expect(args, contains("--system-prompt-file"));
+        // Every session runs in the one folder in the cache, never a fresh
+        // one, and its own files sit apart from it.
+        final work = p.join(dir.path, "cache", "claude-cli", "work");
+        expect(
+          File("$log.cwd").readAsStringSync(),
+          Directory(work).resolveSymbolicLinksSync(),
+        );
+        final systemFile = args[args.indexOf("--system-prompt-file") + 1];
+        expect(
+          p.isWithin(
+            p.join(dir.path, "cache", "claude-cli", "sessions"),
+            systemFile,
+          ),
+          isTrue,
+        );
         client.close();
       },
       timeout: const Timeout(Duration(seconds: 60)),

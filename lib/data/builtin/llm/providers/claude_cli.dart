@@ -39,6 +39,19 @@ class ClaudeCliProvider extends CliProvider {
   @override
   bool get takesPdfs => true;
 
+  /// Where `claude`'s sessions keep what they run with, set once by `main` to
+  /// a folder in the app's cache. Null — a test, a build that never set it —
+  /// is one fixed folder under the system's temp.
+  static String? cacheRoot;
+
+  /// [cacheRoot]'s `claude-cli/`, or the temp fallback.
+  Directory get workRoot => Directory(
+    p.join(
+      cacheRoot ?? p.join(Directory.systemTemp.path, "entoli"),
+      "claude-cli",
+    ),
+  );
+
   /// Claude Desktop's own `claude`, newest version first. It keeps each under
   /// `claude-code/<version>/<build>/`, replacing the directory on an update,
   /// so the path is found when asked rather than stored. Run outside a
@@ -120,13 +133,16 @@ class ClaudeCliProvider extends CliProvider {
 
 /// One `claude -p --input-format stream-json --output-format stream-json`.
 class ClaudeCliSession extends CliSession {
-  ClaudeCliSession._(super.spec, this._dir);
+  ClaudeCliSession._(super.spec, this._dir, this._root);
 
   /// How long a closing session is given to go on its own, once stdin is
   /// closed, and then again after a SIGTERM.
   static const _grace = Duration(seconds: 3);
 
   final Directory _dir;
+
+  /// [ClaudeCliProvider.workRoot]: its `work/` is where every session runs.
+  final Directory _root;
   Process? _process;
   McpToolBridge? _bridge;
 
@@ -157,10 +173,13 @@ class ClaudeCliSession extends CliSession {
     CliSessionSpec spec,
   ) async {
     final executable = provider.executable();
-    // Its working directory too: an empty one, so no project's CLAUDE.md or
-    // settings are picked up from wherever the app was launched.
-    final dir = await Directory.systemTemp.createTemp("entoli-claude-");
-    final session = ClaudeCliSession._(spec, dir);
+    // The files it is handed go in a folder of the session's own, which
+    // goes with it.
+    final root = provider.workRoot;
+    final sessions = Directory(p.join(root.path, "sessions"));
+    await sessions.create(recursive: true);
+    final dir = await sessions.createTemp();
+    final session = ClaudeCliSession._(spec, dir, root);
     try {
       await session._launch(provider, executable);
     } catch (e) {
@@ -220,7 +239,13 @@ class ClaudeCliSession extends CliSession {
     final process = await Process.start(
       executable,
       args,
-      workingDirectory: _dir.path,
+      // One folder for every session, and empty: no project's CLAUDE.md or
+      // settings are picked up from it, and what the CLI keeps per working
+      // directory — its cache's MCP logs, its project entry — is kept once
+      // rather than once per session.
+      workingDirectory: (await Directory(
+        p.join(_root.path, "work"),
+      ).create(recursive: true)).path,
       environment: {
         // A tool can wait on an approval for as long as the user takes.
         "MCP_TOOL_TIMEOUT": "${const Duration(days: 1).inMilliseconds}",

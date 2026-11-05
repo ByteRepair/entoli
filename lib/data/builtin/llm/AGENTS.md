@@ -166,8 +166,12 @@ four, and `close` takes every one down. What a session *is* belongs to the
 subclass, through `start`.
 
 `ClaudeCliProvider`'s session is one `claude -p` in stream-json on both
-sides, run in an empty temp directory so no project's `CLAUDE.md` is picked
-up, with `--tools ""` (Claude's own tools off), `--permission-mode dontAsk`
+sides, run in one empty folder every session shares —
+`<cache>/claude-cli/work/`, the cache `main` hands `ClaudeCliProvider` — so
+no project's `CLAUDE.md` is picked up and what the CLI keeps per working
+directory (its cache's MCP logs, its project entry in `~/.claude.json`) is
+kept once rather than once per session; the files a session is handed sit
+in `claude-cli/sessions/<id>/`, which goes with it. It runs with `--tools ""` (Claude's own tools off), `--permission-mode dontAsk`
 over an allow list of Entoli's server alone — `--tools ""` leaves
 `EndConversation` while MCP tools are present, and this refuses it and
 anything else that slips through rather than asking — `--strict-mcp-config`,

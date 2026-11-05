@@ -10,7 +10,10 @@ import "dart:io";
 
 Future<void> main(List<String> args) async {
   final log = Platform.environment["FAKE_CLAUDE_LOG"];
-  if (log != null) File(log).writeAsStringSync(jsonEncode(args));
+  if (log != null) {
+    File(log).writeAsStringSync(jsonEncode(args));
+    File("$log.cwd").writeAsStringSync(Directory.current.path);
+  }
   final config =
       jsonDecode(
             File(args[args.indexOf("--mcp-config") + 1]).readAsStringSync(),
