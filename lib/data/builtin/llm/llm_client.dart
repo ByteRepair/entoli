@@ -78,6 +78,9 @@ class LlmAttachment {
   /// dozens of times.
   late final String base64 = base64Encode(bytes);
 
+  /// The file as a `data:` URL, the way an image is inlined into a request.
+  String get dataUrl => "data:$mimeType;base64,$base64";
+
   late final String asText = utf8.decode(bytes, allowMalformed: true);
 
   /// By field, as [LlmToolCall]'s — the bytes read back from the same file

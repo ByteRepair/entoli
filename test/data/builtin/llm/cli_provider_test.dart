@@ -69,6 +69,12 @@ class _ScriptedProvider extends CliProvider {
   String get defaultCommand => "scripted";
 
   @override
+  String get account => "";
+
+  @override
+  String get workFolder => "scripted";
+
+  @override
   List<ModelInfo> get knownModels => const [];
 
   @override
@@ -81,6 +87,18 @@ class _ScriptedProvider extends CliProvider {
 
 const _system = LlmMessage(role: LlmRole.system, text: "be brief");
 const _ask = LlmMessage(role: LlmRole.user, text: "hi");
+const _useEcho = LlmMessage(role: LlmRole.user, text: "use echo");
+
+/// One step of a CLI session's turn: [messages] sent with [tool] offered.
+Future<LlmCompletion> _step(
+  LlmClient client,
+  List<LlmMessage> messages, {
+  required String model,
+  required LlmTool tool,
+}) => client
+    .stream(messages, model: model, tools: [tool], reasoningEffort: "minimal")
+    .last
+    .then((chunk) => chunk as LlmCompletion);
 
 Future<LlmCompletion> _call(
   LlmClient client,
@@ -130,6 +148,9 @@ class _FakeProcess implements CliProcess {
   void exit(int code) {
     if (!_exit.isCompleted) _exit.complete(code);
   }
+
+  /// One line printed as it is.
+  void say(Map<String, dynamic> line) => _stdout.add(jsonEncode(line));
 
   void _event(Map<String, dynamic> event) => _stdout.add(
     jsonEncode({
@@ -378,7 +399,7 @@ void main() {
 
     setUp(() {
       dir = Directory.systemTemp.createTempSync("claude-cli-");
-      ClaudeCliProvider.cacheRoot = p.join(dir.path, "cache");
+      CliProvider.cacheRoot = p.join(dir.path, "cache");
       final exe = File(p.join(dir.path, "claude"))..createSync();
       launch = _FakeLaunch();
       bridge = _FakeBridge();
@@ -395,23 +416,15 @@ void main() {
       );
     });
     tearDown(() {
-      ClaudeCliProvider.cacheRoot = null;
+      CliProvider.cacheRoot = null;
       dir.deleteSync(recursive: true);
     });
 
     const tool = LlmTool(name: "echo", description: "says it", schema: {});
-    const ask = LlmMessage(role: LlmRole.user, text: "use echo");
+    const ask = _useEcho;
 
     Future<LlmCompletion> step(LlmClient client, List<LlmMessage> messages) =>
-        client
-            .stream(
-              messages,
-              model: "sonnet",
-              tools: [tool],
-              reasoningEffort: "minimal",
-            )
-            .last
-            .then((chunk) => chunk as LlmCompletion);
+        _step(client, messages, model: "sonnet", tool: tool);
 
     test(
       "runs Entoli's tool through the held call and carries on in one process",
@@ -551,6 +564,288 @@ void main() {
     });
   });
 
+  group("a Codex CLI session", () {
+    late Directory dir;
+    late _FakeLaunch launch;
+    late CliProvider provider;
+
+    setUp(() {
+      dir = Directory.systemTemp.createTempSync("codex-cli-");
+      CliProvider.cacheRoot = p.join(dir.path, "cache");
+      final exe = File(p.join(dir.path, "codex"))..createSync();
+      // The user's own Codex config, as the ChatGPT app leaves it.
+      final home = Directory(p.join(dir.path, "codex-home"))..createSync();
+      File(p.join(home.path, "config.toml")).writeAsStringSync(
+        '[mcp_servers.node_repl]\ncommand = "node_repl"\n'
+        "[mcp_servers.node_repl.env]\n",
+      );
+      launch = _FakeLaunch();
+      provider = CodexCliProvider.over(
+        LlmProviderConfig(
+          id: "x",
+          api: LlmApi.codexCli,
+          baseUrl: "",
+          command: exe.path,
+          env: {"CODEX_HOME": home.path},
+        ),
+        launch: launch.call,
+      );
+    });
+    tearDown(() {
+      CliProvider.cacheRoot = null;
+      dir.deleteSync(recursive: true);
+    });
+
+    const tool = LlmTool(
+      name: "echo",
+      description: "says it",
+      schema: {"type": "object"},
+    );
+    const ask = _useEcho;
+
+    Future<LlmCompletion> step(LlmClient client, List<LlmMessage> messages) =>
+        _step(client, messages, model: "gpt-6-luna", tool: tool);
+
+    /// The next request the session sent, which must be [method].
+    Future<Map<String, dynamic>> request(
+      _FakeProcess process,
+      String method,
+    ) async {
+      final sent = await process.sent.next;
+      expect(sent["method"], method);
+      return sent;
+    }
+
+    /// Codex as far as an open thread: answers the handshake, and hands back
+    /// the thread's start.
+    Future<(_FakeProcess, Map<String, dynamic>)> opened() async {
+      final process = await launch.started.next;
+      final init = await request(process, "initialize");
+      process.say({"id": init["id"], "result": {}});
+      await request(process, "initialized");
+      final start = await request(process, "thread/start");
+      process.say({
+        "id": start["id"],
+        "result": {
+          "thread": {"id": "th"},
+        },
+      });
+      return (process, start["params"] as Map<String, dynamic>);
+    }
+
+    /// Answers `turn/start`, handing back its params.
+    Future<Map<String, dynamic>> turn(_FakeProcess process) async {
+      final start = await request(process, "turn/start");
+      process.say({
+        "id": start["id"],
+        "result": {
+          "turn": {"id": "t"},
+        },
+      });
+      return start["params"] as Map<String, dynamic>;
+    }
+
+    void delta(_FakeProcess process, String text) => process.say({
+      "method": "item/agentMessage/delta",
+      "params": {"delta": text},
+    });
+
+    void call(_FakeProcess process, int request, String id, String text) =>
+        process.say({
+          "id": request,
+          "method": "item/tool/call",
+          "params": {
+            "callId": id,
+            "tool": "echo",
+            "arguments": {"text": text},
+          },
+        });
+
+    void completed(_FakeProcess process, [Map<String, dynamic>? error]) =>
+        process.say({
+          "method": "turn/completed",
+          "params": {
+            "turn": {
+              "status": error == null ? "completed" : "failed",
+              "error": error,
+            },
+          },
+        });
+
+    LlmMessage result(String id, String text) =>
+        LlmMessage(role: LlmRole.tool, toolCallId: id, text: text);
+
+    test(
+      "runs Entoli's tools as the thread's own and carries on in one process",
+      () async {
+        final client = provider.client(null);
+
+        final firstStep = step(client, [_system, ask]);
+        final (process, thread) = await opened();
+        expect(thread["model"], "gpt-6-luna");
+        expect(thread["baseInstructions"], "be brief");
+        expect(thread["ephemeral"], isTrue);
+        expect(thread["environments"], isEmpty);
+        expect(thread["dynamicTools"], [
+          {
+            "type": "function",
+            "name": "echo",
+            "description": "says it",
+            "inputSchema": {"type": "object"},
+          },
+        ]);
+        final first = await turn(process);
+        expect(first["threadId"], "th");
+        expect(first["effort"], "low");
+        expect(first["input"], [
+          {"type": "text", "text": "use echo"},
+        ]);
+
+        // Two calls made together are one reply.
+        delta(process, "calling");
+        call(process, 7, "c1", "a");
+        call(process, 8, "c2", "b");
+        final calls = await firstStep;
+        expect(calls.finishReason, "tool_use");
+        expect(calls.message.text, "calling");
+        expect(
+          [for (final c in calls.message.toolCalls) (c.id, c.argumentsJson)],
+          [("c1", '{"text":"a"}'), ("c2", '{"text":"b"}')],
+        );
+
+        // The next step's results answer the requests Codex is waiting on.
+        final history = [_system, ask, calls.message];
+        final secondStep = step(client, [
+          ...history,
+          result("c2", "two"),
+          result("c1", "one"),
+        ]);
+        final answers = {
+          for (var i = 0; i < 2; i++)
+            await process.sent.next.then(
+              (a) => (a["id"], a["result"]["contentItems"][0]["text"]),
+            ),
+        };
+        expect(answers, {(7, "one"), (8, "two")});
+        delta(process, "echo said one and two");
+        process.say({
+          "method": "thread/tokenUsage/updated",
+          "params": {
+            "tokenUsage": {
+              "last": {
+                "inputTokens": 100,
+                "cachedInputTokens": 60,
+                "outputTokens": 5,
+              },
+            },
+          },
+        });
+        completed(process);
+        final second = await secondStep;
+        expect(second.finishReason, "stop");
+        expect(second.message.text, "echo said one and two");
+        expect(
+          (second.usage?.inputTokens, second.usage?.cacheReadTokens),
+          (40, 60),
+        );
+
+        const again = LlmMessage(role: LlmRole.user, text: "and now");
+        final thirdStep = step(client, [
+          ...history,
+          result("c2", "two"),
+          result("c1", "one"),
+          second.message,
+          again,
+        ]);
+        expect((await turn(process))["input"], [
+          {"type": "text", "text": "and now"},
+        ]);
+        delta(process, "hello again");
+        completed(process);
+        expect((await thirdStep).message.text, "hello again");
+        expect(launch.calls, 1);
+
+        // Codex's own tools are off, the user's MCP servers among them, and
+        // every session runs in the one folder in the cache.
+        final args = process.arguments;
+        expect(args.first, "app-server");
+        expect(args, containsAllInOrder(["-c", "features.shell_tool=false"]));
+        expect(args, containsAllInOrder(["-c", 'web_search="disabled"']));
+        expect(
+          args,
+          containsAllInOrder(["-c", "mcp_servers.node_repl.enabled=false"]),
+        );
+        expect(
+          process.workingDirectory,
+          p.join(dir.path, "cache", "codex-cli", "work"),
+        );
+
+        client.close();
+        await process.inputClosed;
+      },
+    );
+
+    test("a call that comes after its reply goes out with the next", () async {
+      final client = provider.client(null);
+      final firstStep = step(client, [_system, ask]);
+      final (process, _) = await opened();
+      await turn(process);
+      call(process, 7, "c1", "a");
+      final first = await firstStep;
+      expect([for (final c in first.message.toolCalls) c.id], ["c1"]);
+
+      // Codex made a second call while the loop was running the first.
+      call(process, 8, "c2", "b");
+      final second = await step(client, [
+        _system,
+        ask,
+        first.message,
+        result("c1", "one"),
+      ]);
+      expect((await process.sent.next)["id"], 7);
+      expect(second.finishReason, "tool_use");
+      expect([for (final c in second.message.toolCalls) c.id], ["c2"]);
+      expect(launch.calls, 1);
+      client.close();
+    });
+
+    test("an account that is not signed in says so", () async {
+      final client = provider.client(null);
+      final pending = step(client, [_system, ask]);
+      final (process, _) = await opened();
+      await turn(process);
+      completed(process, {
+        "message": "unexpected status 401 Unauthorized",
+        "codexErrorInfo": {
+          "httpConnectionFailed": {"httpStatusCode": 401},
+        },
+      });
+      await expectLater(
+        pending,
+        throwsA(
+          isA<LlmException>().having(
+            (e) => e.message,
+            "message",
+            contains("not signed in"),
+          ),
+        ),
+      );
+      client.close();
+    });
+
+    test("names the MCP servers a config declares, each once", () {
+      expect(
+        CodexCliProvider.mcpServersIn(
+          "[mcp_servers.node_repl]\n"
+          "[mcp_servers.node_repl.env]\n"
+          '[mcp_servers."my server"]\n'
+          "[plugins.x]\n",
+        ),
+        ["node_repl", "my server"],
+      );
+    });
+  });
+
   group("the provider", () {
     test("is read from an entry by its API, whatever else it says", () {
       final provider = providerOf(
@@ -564,6 +859,11 @@ void main() {
       expect(provider, isA<ClaudeCliProvider>());
       expect(provider.needsKey, isFalse);
       expect((provider as CliProvider).command, "claude");
+      final codex = providerOf(
+        const LlmProviderConfig(id: "x", api: LlmApi.codexCli, baseUrl: ""),
+      );
+      expect(codex, isA<CodexCliProvider>());
+      expect((codex as CliProvider).command, "codex");
     });
 
     test("offers the CLI's model aliases beside the user's own, on a desktop "
