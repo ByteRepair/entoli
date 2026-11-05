@@ -133,7 +133,7 @@ class LlmRegistry {
   /// and the client its turns run over. Nothing where it cannot say: one that
   /// will not answer gets a line, since an endpoint that changed shape is
   /// otherwise indistinguishable from one with nothing to report.
-  Future<List<UsageWindow>> usageOf(LlmProvider provider) async {
+  Future<List<ProviderUsage>> usageOf(LlmProvider provider) async {
     try {
       return await provider
           .usage(clientOf(provider), resolveKeyFor(provider.config))

@@ -1144,7 +1144,7 @@ final keyCheckProvider = Provider<KeyCheck>(
 /// on the replies its cached client has seen. Auto-disposed, so the Providers
 /// section asks again each time it is shown.
 final providerUsageProvider = FutureProvider.autoDispose
-    .family<List<UsageWindow>, String>((ref, id) async {
+    .family<List<ProviderUsage>, String>((ref, id) async {
       final backend = ref.watch(agentBackendProvider);
       if (backend is! BuiltinBackend) return const [];
       final provider = backend.registry.providerFor(id);

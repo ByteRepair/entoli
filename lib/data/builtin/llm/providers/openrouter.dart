@@ -39,7 +39,7 @@ class OpenRouterProvider extends OpenAiCompatibleProvider {
   /// says how much of the cap is left and which period it resets over. A key
   /// with no cap has no allowance to show.
   @override
-  Future<List<UsageWindow>> usage(
+  Future<List<ProviderUsage>> usage(
     LlmClient client,
     String? apiKey, {
     http.Client? httpClient,
@@ -53,7 +53,10 @@ class OpenRouterProvider extends OpenAiCompatibleProvider {
   }
 
   /// [json], `/key`'s answer, as the cap it describes at [now].
-  static List<UsageWindow> usageOfKey(Map<String, dynamic> json, DateTime now) {
+  static List<ProviderUsage> usageOfKey(
+    Map<String, dynamic> json,
+    DateTime now,
+  ) {
     final data = json["data"];
     if (data is! Map<String, dynamic>) return const [];
     final limit = (data["limit"] as num?)?.toDouble();

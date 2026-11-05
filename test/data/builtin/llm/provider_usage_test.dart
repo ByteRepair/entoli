@@ -92,7 +92,7 @@ void main() {
       );
       expect(asked.single.url.toString(), "https://openrouter.ai/api/v1/key");
       expect(asked.single.headers["authorization"], "Bearer sk-test");
-      expect(usage.single.used, 6);
+      expect((usage.single as UsageWindow).used, 6);
     });
 
     test("an endpoint that answers otherwise is a failure, not nothing", () {
@@ -108,43 +108,84 @@ void main() {
   });
 
   group("Ollama Cloud", () {
-    test("the session and weekly allowances are shares", () {
+    test("the plan's credits are an allowance, bought ones a balance", () {
       expect(
         OllamaCloudProvider.usageOf({
-          "limits": {
-            "session": {"usage": 0.37},
-            "weekly": {"usage": 0.12},
+          "included": {
+            "balance_usd": 72.5,
+            "allowance_usd": 100,
+            "period": {
+              "from": "2026-10-15T09:30:00Z",
+              "until": "2026-11-15T09:30:00Z",
+            },
           },
+          "purchased": {"balance_usd": 25},
+        }),
+        [
+          UsageWindow(
+            label: "Monthly credits",
+            used: 27.5,
+            max: 100,
+            unit: UsageUnit.usd,
+            resetsAt: DateTime.utc(2026, 11, 15, 9, 30),
+          ),
+          const CreditBalance(label: "Purchased credits", usd: 25),
+        ],
+      );
+    });
+
+    test("no bought credits is no balance row", () {
+      expect(
+        OllamaCloudProvider.usageOf({
+          "included": {"balance_usd": 60, "allowance_usd": 60},
+          "purchased": {"balance_usd": 0},
         }),
         const [
           UsageWindow(
-            label: "Session",
-            used: 0.37,
-            max: 1,
-            unit: UsageUnit.share,
-          ),
-          UsageWindow(
-            label: "Weekly",
-            used: 0.12,
-            max: 1,
-            unit: UsageUnit.share,
+            label: "Monthly credits",
+            used: 0,
+            max: 60,
+            unit: UsageUnit.usd,
           ),
         ],
       );
     });
 
-    test("an answer with no limits in it is nothing to show", () {
+    test("a plan from before credits gives its session and weekly limits", () {
       expect(
         OllamaCloudProvider.usageOf({
-          "requests": [
-            {"model": "glm-5.3-flash", "request_count": 12},
-          ],
+          "included": {
+            "session": {
+              "remaining_percent": 75,
+              "resets_at": "2026-10-01T07:00:00Z",
+            },
+            "weekly": {
+              "remaining_percent": 40,
+              "resets_at": "2026-10-05T00:00:00Z",
+            },
+          },
+          "purchased": {"balance_usd": 0},
         }),
-        isEmpty,
+        [
+          UsageWindow(
+            label: "Session",
+            used: 0.25,
+            max: 1,
+            unit: UsageUnit.share,
+            resetsAt: DateTime.utc(2026, 10, 1, 7),
+          ),
+          UsageWindow(
+            label: "Weekly",
+            used: 0.6,
+            max: 1,
+            unit: UsageUnit.share,
+            resetsAt: DateTime.utc(2026, 10, 5),
+          ),
+        ],
       );
     });
 
-    test("asks ollama.com's /api/usage, not under /v1", () async {
+    test("asks ollama.com's /api/balance, not under /v1", () async {
       final asked = <Uri>[];
       await const OllamaCloudProvider().usage(
         const OllamaCloudProvider().client(null),
@@ -154,7 +195,7 @@ void main() {
           return http.Response("{}", 200);
         }),
       );
-      expect(asked.single.toString(), "https://ollama.com/api/usage");
+      expect(asked.single.toString(), "https://ollama.com/api/balance");
     });
   });
 
@@ -212,7 +253,7 @@ void main() {
       const groq = GroqProvider();
       expect(await groq.usage(client, null), isEmpty);
       await client.stream(const [], model: "openai/gpt-oss-20b").toList();
-      expect((await groq.usage(client, null)).single.used, 1);
+      expect(((await groq.usage(client, null)).single as UsageWindow).used, 1);
     });
   });
 
@@ -255,6 +296,13 @@ void main() {
           now,
         ),
         "Daily requests: 30 of 14400 requests · resets in 1 hour",
+      );
+      expect(
+        describeUsage(
+          const CreditBalance(label: "Purchased credits", usd: 25),
+          now,
+        ),
+        r"Purchased credits: $25.00 left",
       );
     });
   });

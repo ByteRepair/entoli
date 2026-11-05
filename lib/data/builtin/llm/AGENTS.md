@@ -124,15 +124,18 @@ built against a raw client (tests), where the per-agent retry path governs.
 
 ## How much of an allowance is spent
 
-`LlmProvider.usage` answers it, as a list of `UsageWindow`s
-(`lib/domain/provider_usage.dart`): a label in the provider's own period, what
-is `used` of a `max`, the unit the two are counted in, and when it starts
-again where the provider says. `used` is always what is gone — a provider
-that reports what is left is converted where it is read — and a max rather
-than a percentage, because what a provider counts is not always a share: a
-dollar cap is a number of dollars. The default is nothing, which is what
-most providers have to say; the Providers section in Settings draws a bar per
-window under the row and nothing at all for an empty list.
+`LlmProvider.usage` answers it, as a list of `ProviderUsage`s
+(`lib/domain/provider_usage.dart`), of two kinds. A `UsageWindow` is an
+allowance: a label in the provider's own period, what is `used` of a `max`,
+the unit the two are counted in, and when it starts again where the provider
+says. `used` is always what is gone — a provider that reports what is left is
+converted where it is read — and a max rather than a percentage, because what
+a provider counts is not always a share: a dollar cap is a number of dollars.
+A `CreditBalance` is money with no allowance behind it, credits bought rather
+than granted, so it is what is left and nothing to measure it against. The
+default is nothing, which is what most providers have to say; the Providers
+section in Settings draws a line per entry under the row, a bar under each
+window, and nothing at all for an empty list.
 
 **Only where the answer is the provider's to keep stable.** Three say it:
 
@@ -146,16 +149,18 @@ window under the row and nothing at all for an empty list.
   the client turns run over, the registry's cached one under the turn's
   wrappers. Nothing until a reply has arrived; the tokens pair is per minute,
   a pace rather than an allowance, and is left out.
-- **Ollama Cloud** — the exception to the rule, kept because it was asked
-  for: `ollama.com/api/usage` is what Ollama's own settings page reads and is
-  not documented. It has answered with `limits.session` and `limits.weekly`
-  as fractions, and since October 2026 with request counts and no `limits`,
-  which reads as nothing rather than a failure.
+- **Ollama Cloud** — `ollama.com/api/balance`, documented (outside the `/v1`
+  the chat endpoint is under): the plan's included credits, an allowance in
+  dollars that resets at the end of its monthly period, and the purchased
+  credits as a balance, left out at zero since most accounts never buy any.
+  A plan from before credits answers with its session and weekly limits as
+  percentages remaining in the included credits' place, which become shares.
+  `/api/usage` is not it: that is the request history, and the session and
+  weekly fractions it once carried went in October 2026.
 
 Z.ai's coding-plan quota, Claude CLI's `rate_limit_event` and Codex's
-`account/rateLimits/read` exist and are left out for the reason Ollama's
-endpoint is suspect: none is documented, and each has changed shape within a
-year. Anthropic's and OpenAI's APIs have nothing a normal key can ask; their
+`account/rateLimits/read` exist and are left out: none is documented, and
+each has changed shape within a year. Anthropic's and OpenAI's APIs have nothing a normal key can ask; their
 usage reports want an admin key and cover the whole organisation.
 
 `LlmRegistry.usageOf` asks with the resolved key and a ten-second bound. An

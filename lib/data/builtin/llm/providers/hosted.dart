@@ -36,7 +36,7 @@ class GroqProvider extends OpenAiCompatibleProvider {
 
   /// What the last reply said: Groq says it on nothing else.
   @override
-  Future<List<UsageWindow>> usage(
+  Future<List<ProviderUsage>> usage(
     LlmClient client,
     String? apiKey, {
     http.Client? httpClient,
@@ -96,39 +96,63 @@ class OllamaCloudProvider extends OpenAiCompatibleProvider
     keyUrl: "https://ollama.com/settings/keys",
   );
 
-  /// `/api/usage`, the endpoint ollama.com's own settings page reads. Not
-  /// documented: it has answered with a `limits` object holding the session
-  /// and weekly allowances as fractions, and since October 2026 without it,
-  /// which is nothing to show rather than a failure.
+  /// `/api/balance`, documented: the plan's monthly credits and what was
+  /// bought on top of them, both in dollars. A plan from before credits
+  /// answers with its session and weekly limits in their place.
   @override
-  Future<List<UsageWindow>> usage(
+  Future<List<ProviderUsage>> usage(
     LlmClient client,
     String? apiKey, {
     http.Client? httpClient,
   }) async => usageOf(
     await LlmProvider.getJson(
-      baseUrl.resolve("/api/usage"),
+      baseUrl.resolve("/api/balance"),
       headers: authOf(apiKey),
       httpClient: httpClient,
     ),
   );
 
-  /// [json], `/api/usage`'s answer, as the allowances it names.
-  static List<UsageWindow> usageOf(Map<String, dynamic> json) {
-    final limits = json["limits"];
-    if (limits is! Map<String, dynamic>) return const [];
+  /// [json], `/api/balance`'s answer, as what it says is spent and left. The
+  /// included credits are an allowance; the purchased ones are a balance with
+  /// none, left out when there are none, since most accounts never buy any.
+  static List<ProviderUsage> usageOf(Map<String, dynamic> json) {
+    final included = json["included"];
+    final purchased = json["purchased"];
     return [
-      for (final (key, label) in const [
-        ("session", "Session"),
-        ("weekly", "Weekly"),
-      ])
-        if (limits[key] case {"usage": final num used})
-          UsageWindow(
-            label: label,
-            used: used.toDouble(),
-            max: 1,
-            unit: UsageUnit.share,
-          ),
+      if (included case {
+        "balance_usd": final num left,
+        "allowance_usd": final num allowance,
+      })
+        UsageWindow(
+          label: "Monthly credits",
+          used: (allowance - left).toDouble(),
+          max: allowance.toDouble(),
+          unit: UsageUnit.usd,
+          resetsAt: switch (included) {
+            {"period": {"until": final String until}} => DateTime.tryParse(
+              until,
+            ),
+            _ => null,
+          },
+        )
+      else if (included is Map<String, dynamic>)
+        for (final (key, label) in const [
+          ("session", "Session"),
+          ("weekly", "Weekly"),
+        ])
+          if (included[key] case {"remaining_percent": final num remaining})
+            UsageWindow(
+              label: label,
+              used: (100 - remaining) / 100,
+              max: 1,
+              unit: UsageUnit.share,
+              resetsAt: switch (included[key]) {
+                {"resets_at": final String at} => DateTime.tryParse(at),
+                _ => null,
+              },
+            ),
+      if (purchased case {"balance_usd": final num left} when left > 0)
+        CreditBalance(label: "Purchased credits", usd: left.toDouble()),
     ];
   }
 }

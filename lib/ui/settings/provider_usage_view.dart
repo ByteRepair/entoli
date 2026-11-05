@@ -17,27 +17,30 @@ class ProviderUsageView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final windows =
+    final usages =
         ref.watch(providerUsageProvider(providerId)).value ?? const [];
-    if (windows.isEmpty) return const SizedBox.shrink();
+    if (usages.isEmpty) return const SizedBox.shrink();
     final now = clock.now();
     return Padding(
       padding: const EdgeInsets.only(top: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final w in windows)
+          for (final usage in usages)
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(describeUsage(w, now)),
-                  const SizedBox(height: 2),
-                  LinearProgressIndicator(
-                    value: w.fraction,
-                    semanticsLabel: w.label,
-                  ),
+                  Text(describeUsage(usage, now)),
+                  // A balance has nothing to measure it against, so no bar.
+                  if (usage is UsageWindow) ...[
+                    const SizedBox(height: 2),
+                    LinearProgressIndicator(
+                      value: usage.fraction,
+                      semanticsLabel: usage.label,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -47,9 +50,15 @@ class ProviderUsageView extends ConsumerWidget {
   }
 }
 
-/// [window] as one line, at [now]: what is spent of what, and when it starts
-/// again where the provider says.
-String describeUsage(UsageWindow window, DateTime now) {
+/// [usage] as one line, at [now]: what is spent of what and when it starts
+/// again where the provider says, or what is left of a balance.
+String describeUsage(ProviderUsage usage, DateTime now) => switch (usage) {
+  CreditBalance(:final label, :final usd) =>
+    "$label: \$${usd.toStringAsFixed(2)} left",
+  final UsageWindow window => _describeWindow(window, now),
+};
+
+String _describeWindow(UsageWindow window, DateTime now) {
   final amount = switch (window.unit) {
     UsageUnit.share => "${(window.fraction * 100).round()}% used",
     UsageUnit.usd =>

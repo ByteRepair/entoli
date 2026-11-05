@@ -81,7 +81,7 @@ abstract class LlmProvider {
   /// the provider says. Nothing for one that does not, which is most of them.
   /// [client] is the one turns run over, for a provider that says it only on
   /// its replies. Throws where it could not be asked.
-  Future<List<UsageWindow>> usage(
+  Future<List<ProviderUsage>> usage(
     LlmClient client,
     String? apiKey, {
     http.Client? httpClient,
