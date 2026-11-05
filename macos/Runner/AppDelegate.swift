@@ -10,7 +10,7 @@ class AppDelegate: FlutterAppDelegate {
   static let wake = ProcessInfo.processInfo.arguments.contains("entoli-wake")
 
   /// Someone has looked at the app since it last went unwatched — a wake
-  /// launch starts unwatched, and so does a close that hid a turn. Set by
+  /// launch starts unwatched, and so does a close during a turn. Set by
   /// `MainFlutterWindow`'s activation watcher, the one signal for both.
   static var watched = !wake
 
@@ -54,7 +54,27 @@ class AppDelegate: FlutterAppDelegate {
     }
   }
 
+  /// The last window closing quits the app, unless a turn is running: then
+  /// the app stays, windowless — the Dock says it is running in the
+  /// background — and goes unwatched, so the turn's end quits it unless
+  /// someone comes back first. Asked here rather than of the window's close,
+  /// since the native shell closes the window without `performClose`.
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+    guard TurnHold.isRunning else { return true }
+    Self.watched = false
+    return false
+  }
+
+  /// The Dock icon, or opening the app again, brings back the window a
+  /// close during a turn left closed.
+  override func applicationShouldHandleReopen(
+    _ sender: NSApplication, hasVisibleWindows flag: Bool
+  ) -> Bool {
+    if !flag {
+      for window in sender.windows where window is MainFlutterWindow {
+        window.makeKeyAndOrderFront(nil)
+      }
+    }
     return true
   }
 

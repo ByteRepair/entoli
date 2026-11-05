@@ -53,40 +53,32 @@ class MainFlutterWindow: NSWindow {
       self.orderOut(nil)
       NSApp.hide(nil)
     }
-    // An activation is the user's — a wake's launch and a close's hide never
-    // activate — so it makes the session watched (`AppDelegate.watched`),
-    // and a wake's first one also unhides the app and shows the window. An
-    // observer rather than a delegate override, so no delegate the framework
-    // forwards through is displaced.
+    // An activation is the user's — a wake's launch and a close during a
+    // turn never activate — so it makes the session watched
+    // (`AppDelegate.watched`), unhides the app and shows the window if a wake
+    // kept it back or a close took it away; a minimized one stays in the
+    // Dock. An observer rather than a delegate override, so no delegate the
+    // framework forwards through is displaced.
     NotificationCenter.default.addObserver(
       forName: NSApplication.didBecomeActiveNotification, object: nil,
       queue: .main
     ) { _ in
       AppDelegate.watched = true
-      guard AppDelegate.wake else { return }
       NSApp.unhide(nil)
       for window in NSApplication.shared.windows
-      where window is MainFlutterWindow && !window.isVisible {
+      where window is MainFlutterWindow && !window.isVisible && !window.isMiniaturized {
         window.makeKeyAndOrderFront(nil)
       }
     }
 
     super.awakeFromNib()
   }
-
-  /// The red button and Close Window, while a turn runs, hide the app rather
-  /// than close its one window — which would quit it, and the turn with it.
-  /// See `TurnHold`.
-  override func performClose(_ sender: Any?) {
-    guard TurnHold.isRunning else { return super.performClose(sender) }
-    AppDelegate.watched = false
-    NSApp.hide(nil)
-  }
 }
 
 /// Answers `running` on `agent_chat/background`, the channel Android's
-/// foreground services answer: while a turn runs, a close hides the app and
-/// macOS may not end it. In this file rather than its own so the Xcode project
+/// foreground services answer: while a turn runs, closing the window does not
+/// quit the app (`AppDelegate.applicationShouldTerminateAfterLastWindowClosed`)
+/// and macOS may not end it. In this file rather than its own so the Xcode project
 /// needs no new entry. See "Closing the window during a turn" in
 /// macos/AGENTS.md.
 enum TurnHold {
