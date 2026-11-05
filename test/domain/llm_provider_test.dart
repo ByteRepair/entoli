@@ -69,6 +69,37 @@ void main() {
       expect(LlmProviderConfig.fromJson(const {"id": "x"}), isNull);
       expect(LlmProviderConfig.fromJson("not a map"), isNull);
     });
+    test("a CLI entry is its program and environment, with no URL", () {
+      const written = LlmProviderConfig(
+        id: "c",
+        name: "Claude",
+        api: LlmApi.claudeCli,
+        baseUrl: "",
+        command: "/opt/claude",
+        env: {"CLAUDE_CONFIG_DIR": "/tmp/c"},
+      );
+      final read = LlmProviderConfig.fromJson(
+        jsonDecode(jsonEncode(written.toJson())),
+      );
+
+      expect(read!.api, LlmApi.claudeCli);
+      expect(read.command, "/opt/claude");
+      expect(read.env, {"CLAUDE_CONFIG_DIR": "/tmp/c"});
+      // An HTTP entry with no URL is still half-written.
+      expect(
+        LlmProviderConfig.fromJson(const {"id": "x", "api": "anthropic"}),
+        isNull,
+      );
+    });
+
+    test("an API this build does not know reads as OpenAI's", () {
+      final read = LlmProviderConfig.fromJson(const {
+        "id": "x",
+        "api": "from-the-future",
+        "baseUrl": "https://x.test/v1",
+      });
+      expect(read!.api, LlmApi.openai);
+    });
   });
 
   group("finding the key", () {

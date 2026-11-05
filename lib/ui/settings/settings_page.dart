@@ -1045,6 +1045,7 @@ class _ProvidersEditor extends ConsumerWidget {
         : hasKey
         ? "Connected"
         : "Needs a key";
+    if (provider is CliProvider) return "${provider.command} · $status";
     return provider.terms == null ? "${config.baseUrl} · $status" : status;
   }
 }

@@ -34,8 +34,8 @@ named in a cross-reference is findable from this list.
 - `lib/data/builtin/AGENTS.md` — The agent loop, Tools, Running the commands, Background
   jobs, Running a command yourself, Approvals, Questions, Sub-agents, Their own transcripts,
    Carrying one on, Web search, The browser, Images, Skills, The plan, Memory
-- `lib/data/builtin/llm/AGENTS.md` — Reaching a provider, Errors, and how long
-  the UI waits
+- `lib/data/builtin/llm/AGENTS.md` — Reaching a provider, A program in the
+  model's place (the CLI providers), Errors, and how long the UI waits
 - `lib/data/sync/AGENTS.md` — The threat model, the handshake, the framing
   layer, three rendezvous transports, the SyncHub, mirroring a chat, driving a
   turn from the other end, what the Sync page can do about a

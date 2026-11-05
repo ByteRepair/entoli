@@ -14,6 +14,7 @@ import "core/platform/platform.dart" as platform;
 import "core/platform/system_palette.dart";
 import "core/tls.dart";
 import "data/backup.dart" show recoverRestore;
+import "data/builtin/llm/providers/cli.dart" show CliProvider;
 import "data/builtin/llm/providers/provider.dart" show LlmProvider;
 import "data/local/mlx_engine.dart" show mlxChannel;
 import "data/local/file_trigger_store.dart";
@@ -224,6 +225,9 @@ class AppSession {
     final voiceModels = platform.createVoiceModelStore(cache);
     final voice = platform.createVoice(voiceModels, cache);
     final apple = await appleFm;
+    // A CLI provider's program is found on the PATH the user's shell has,
+    // as a command is.
+    CliProvider.loginPath = await loginPath;
     final backend = platform.createBackend(
       config,
       libraries,

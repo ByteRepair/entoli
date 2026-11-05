@@ -1,3 +1,5 @@
+import "dart:convert";
+
 import "../../../core/log.dart";
 import "../../../domain/llm_provider.dart";
 import "../../../domain/model_capability.dart";
@@ -75,9 +77,12 @@ class LlmRegistry {
     // on-device endpoint is the one this never rebuilds: its URL is empty and
     // stays empty, because the client behind it is a pool that routes per model
     // and outlives any one server's port.
+    // A CLI's program and environment are its URL: an edit to either is a
+    // client of a different program.
     return _clients.of(
       config.id,
-      "${config.api.name}|${config.baseUrl}|$key",
+      "${config.api.name}|${config.baseUrl}|$key|${config.command}|"
+      "${jsonEncode(config.env)}",
       () => provider.client(key),
     );
   }

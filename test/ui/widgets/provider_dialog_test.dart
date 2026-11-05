@@ -1,5 +1,6 @@
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/ui/widgets/provider_dialog.dart";
+import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
@@ -151,4 +152,38 @@ void main() {
     );
     expect(keyField.controller!.text, isEmpty);
   });
+
+  testWidgets(
+    "Claude CLI asks for a program and an environment, not a URL or a key",
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      await pumpDialog(tester);
+      await tester.enterText(find.byType(TextField).at(0), "Claude");
+      await tester.tap(find.text("OpenAI-compatible"));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text("Claude CLI").last);
+      await tester.pumpAndSettle();
+
+      expect(find.text("Base URL"), findsNothing);
+      expect(find.text("API key"), findsNothing);
+      await tester.enterText(
+        find.widgetWithText(TextField, "Executable"),
+        "/opt/bin/claude",
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, "Environment"),
+        "A=1\n\nB = two=2\nnot a pair",
+      );
+      await tester.tap(find.text("Save"));
+      await tester.pumpAndSettle();
+
+      final config = returned!.config;
+      expect(config.api, LlmApi.claudeCli);
+      expect(config.command, "/opt/bin/claude");
+      expect(config.env, {"A": "1", "B": "two=2"});
+      expect(config.defaultModelId, "sonnet");
+      expect(returned!.setKey, isNull);
+    },
+  );
 }

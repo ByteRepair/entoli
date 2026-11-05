@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../core/platform/form_factor.dart";
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/llm_provider.dart";
 import "../../providers.dart";
@@ -68,9 +69,12 @@ class _PresetPicker extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.tune),
                 title: const Text("Custom…"),
-                subtitle: const Text(
-                  "Any OpenAI- or Anthropic-compatible "
-                  "endpoint, by URL.",
+                subtitle: Text(
+                  isDesktop
+                      ? "Any OpenAI- or Anthropic-compatible endpoint, by "
+                            "URL, or Claude CLI on this computer."
+                      : "Any OpenAI- or Anthropic-compatible "
+                            "endpoint, by URL.",
                 ),
                 onTap: () => Navigator.pop(context, (preset: null)),
               ),

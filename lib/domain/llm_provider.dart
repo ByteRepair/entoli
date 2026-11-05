@@ -2,7 +2,22 @@ import "model_info.dart";
 
 /// Which wire format a provider speaks. Everything that copied OpenAI's
 /// `/chat/completions` is [openai]; Anthropic's `/messages` is its own.
-enum LlmApi { openai, anthropic }
+/// [claudeCli] is no wire at all: another harness's command-line program,
+/// run on this machine, answers in the model's place.
+enum LlmApi {
+  openai,
+  anthropic,
+  claudeCli;
+
+  /// Whether it is a program run here rather than an endpoint reached over
+  /// HTTP: what it is configured with is an executable and an environment,
+  /// not a base URL and a key.
+  bool get isCli => this == claudeCli;
+
+  /// [name] read back, null for one this build does not know.
+  static LlmApi? byName(Object? name) =>
+      values.where((api) => api.name == name).firstOrNull;
+}
 
 /// An endpoint the agent can call, as the user configured it. Held in
 /// `settings.json` rather than guessed from environment variables: the same
@@ -21,6 +36,8 @@ class LlmProviderConfig {
     this.defaultModelId,
     this.defaultLightModelId,
     this.customModels = const [],
+    this.command,
+    this.env = const {},
   });
 
   /// What the settings, the secret store and every chat name it by: a UUID,
@@ -61,6 +78,14 @@ class LlmProviderConfig {
   /// a fine-tune, a private deployment. Ahead of the catalog's on a clash.
   final List<ModelInfo> customModels;
 
+  /// The program a CLI provider runs: a path, or a bare name looked up on
+  /// `PATH`. Null runs the provider's own default name. Unread by an HTTP one.
+  final String? command;
+
+  /// Variables a CLI provider's program runs with, over the app's own
+  /// environment. Unread by an HTTP one.
+  final Map<String, String> env;
+
   String get displayName => name ?? id;
 
   /// [lookup] reads the app's own environment and whatever settings adds, so a
@@ -96,6 +121,8 @@ class LlmProviderConfig {
     String? defaultModelId,
     String? defaultLightModelId,
     List<ModelInfo>? customModels,
+    String? command,
+    Map<String, String>? env,
   }) => LlmProviderConfig(
     id: id ?? this.id,
     api: api ?? this.api,
@@ -107,6 +134,8 @@ class LlmProviderConfig {
     defaultModelId: defaultModelId ?? this.defaultModelId,
     defaultLightModelId: defaultLightModelId ?? this.defaultLightModelId,
     customModels: customModels ?? this.customModels,
+    command: command ?? this.command,
+    env: env ?? this.env,
   );
 
   Map<String, dynamic> toJson() => {
@@ -121,24 +150,33 @@ class LlmProviderConfig {
     if (defaultLightModelId != null) "defaultLightModelId": defaultLightModelId,
     if (customModels.isNotEmpty)
       "customModels": {for (final m in customModels) m.id: m.toJson()},
+    if (command != null) "command": command,
+    if (env.isNotEmpty) "env": env,
   };
 
-  /// Null for anything that does not name an id and a base URL: a half-written
-  /// entry is worse than a missing one, because it fails at the first prompt.
+  /// Null for anything that does not name an id and, unless it is a CLI, a
+  /// base URL: a half-written entry is worse than a missing one, because it
+  /// fails at the first prompt. An API this build does not know is read as
+  /// OpenAI's, as an entry from before the field had more than two values.
   static LlmProviderConfig? fromJson(Object? value) {
     if (value is! Map) return null;
     final id = value["id"];
-    final baseUrl = value["baseUrl"];
-    if (id is! String || id.isEmpty || baseUrl is! String || baseUrl.isEmpty) {
+    final api = LlmApi.byName(value["api"]) ?? LlmApi.openai;
+    final baseUrl = value["baseUrl"] ?? (api.isCli ? "" : null);
+    if (id is! String ||
+        id.isEmpty ||
+        baseUrl is! String ||
+        (baseUrl.isEmpty && !api.isCli)) {
       return null;
     }
+    final env = value["env"];
     final custom = value["customModels"];
     // An entry with no name was written by 7.0.0 or older, whose id was its
     // name and its models.dev id both.
     final named = value.containsKey("name");
     return LlmProviderConfig(
       id: id,
-      api: value["api"] == "anthropic" ? LlmApi.anthropic : LlmApi.openai,
+      api: api,
       baseUrl: baseUrl,
       name: (named ? value["name"] : value["label"]) as String?,
       catalogId: named ? value["catalogId"] as String? : id,
@@ -153,6 +191,12 @@ class LlmProviderConfig {
           for (final MapEntry(:key, :value) in custom.entries)
             if (key is String && value is Map) ModelInfo.fromJson(key, value),
       ],
+      command: value["command"] as String?,
+      env: {
+        if (env is Map)
+          for (final MapEntry(:key, :value) in env.entries)
+            if (key is String && value is String) key: value,
+      },
     );
   }
 }

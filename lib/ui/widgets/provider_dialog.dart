@@ -1,13 +1,17 @@
+import "package:file_selector/file_selector.dart";
 import "package:flutter/material.dart";
 
 import "../../core/log.dart";
+import "../../core/platform/form_factor.dart";
 import "../../data/builtin/llm/llm_client.dart" show LlmException;
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/llm_provider.dart";
 
 /// Add or edit one endpoint the agent can call. A preset opens on the key
 /// alone, in plain words, with its technical fields folded under Advanced;
-/// a custom endpoint opens on all of them. The name is asked of both, and
+/// a custom endpoint opens on all of them. Which technical fields those are
+/// is the API's: an HTTP one is a base URL and a key, a CLI one a program
+/// and the environment it runs with. The name is asked of both, and
 /// Save waits until it is one [nameTaken] says no other provider has. Returns null if
 /// dismissed, or if the base URL was left blank — a half-written provider
 /// fails at the first prompt rather than here. The key decision rides beside
@@ -89,6 +93,15 @@ class _ProviderDialogState extends State<_ProviderDialog> {
     text: widget.initial?.modelsEndpoint ?? "",
   );
   late var _api = widget.initial?.api ?? LlmApi.openai;
+  late final _command = TextEditingController(
+    text: widget.initial?.command ?? "",
+  );
+  late final _env = TextEditingController(
+    text: [
+      for (final MapEntry(:key, :value) in (widget.initial?.env ?? {}).entries)
+        "$key=$value",
+    ].join("\n"),
+  );
 
   /// Non-null for a provider with a class of its own, which opens on the key
   /// alone; a custom endpoint is nothing but the technical fields, so it opens
@@ -117,6 +130,8 @@ class _ProviderDialogState extends State<_ProviderDialog> {
     _baseUrl.dispose();
     _apiKey.dispose();
     _modelsEndpoint.dispose();
+    _command.dispose();
+    _env.dispose();
     super.dispose();
   }
 
@@ -137,6 +152,28 @@ class _ProviderDialogState extends State<_ProviderDialog> {
   bool get _nameOk => _name.text.trim().isNotEmpty && !_nameTaken;
 
   ProviderEdit? _submit() {
+    if (_api.isCli) {
+      final command = _command.text.trim();
+      return ProviderEdit(
+        LlmProviderConfig(
+          id: widget.initial?.id ?? "",
+          api: _api,
+          baseUrl: "",
+          name: _name.text.trim(),
+          defaultModelId:
+              widget.initial?.defaultModelId ??
+              ClaudeCliProvider.preset.defaultModelId,
+          defaultLightModelId:
+              widget.initial?.defaultLightModelId ??
+              ClaudeCliProvider.preset.defaultLightModelId,
+          customModels: widget.initial?.customModels ?? const [],
+          command: command.isEmpty ? null : command,
+          env: envFromLines(_env.text),
+        ),
+        // A program holds its own sign-in; whatever was stored stays put.
+        null,
+      );
+    }
     final baseUrl = _baseUrl.text.trim();
     final modelsEndpoint = _modelsEndpoint.text.trim();
     final catalogId = _catalogId.text.trim();
@@ -304,7 +341,7 @@ class _ProviderDialogState extends State<_ProviderDialog> {
                 ),
               ],
               if (_advanced) ..._technical(hasStoredKey),
-              if (hasStoredKey) ...[
+              if (hasStoredKey && !_api.isCli) ...[
                 const SizedBox(height: 8),
                 TextButton(
                   onPressed: () => setState(() {
@@ -339,22 +376,79 @@ class _ProviderDialogState extends State<_ProviderDialog> {
   /// The whole entry, in the terms the endpoint itself uses. A preset's key
   /// field is above it, under its plain name, unless the preset is local — a
   /// local server can sit behind a key, so it is offered here.
-  List<Widget> _technical(bool hasStoredKey) {
-    return [
-      DropdownButtonFormField<LlmApi>(
-        initialValue: _api,
-        isExpanded: true,
-        decoration: const InputDecoration(labelText: "API"),
-        items: const [
-          DropdownMenuItem(
-            value: LlmApi.openai,
-            child: Text("OpenAI-compatible"),
+  List<Widget> _technical(bool hasStoredKey) => [
+    DropdownButtonFormField<LlmApi>(
+      initialValue: _api,
+      isExpanded: true,
+      decoration: const InputDecoration(labelText: "API"),
+      items: [
+        const DropdownMenuItem(
+          value: LlmApi.openai,
+          child: Text("OpenAI-compatible"),
+        ),
+        const DropdownMenuItem(
+          value: LlmApi.anthropic,
+          child: Text("Anthropic"),
+        ),
+        // A program run here, which a phone cannot do; an entry synced onto
+        // one still shows what it is.
+        if (isDesktop || _api.isCli)
+          const DropdownMenuItem(
+            value: LlmApi.claudeCli,
+            child: Text("Claude CLI"),
           ),
-          DropdownMenuItem(value: LlmApi.anthropic, child: Text("Anthropic")),
-        ],
-        onChanged: (value) => setState(() => _api = value ?? LlmApi.openai),
+      ],
+      onChanged: (value) => setState(() => _api = value ?? LlmApi.openai),
+    ),
+    const SizedBox(height: 16),
+    ...(_api.isCli ? _cliFields() : _httpFields(hasStoredKey)),
+  ];
+
+  /// What a program run here is configured with: which program, and what
+  /// it runs under. No key: it holds its own sign-in.
+  List<Widget> _cliFields() => [
+    Text(
+      "Runs Claude CLI on this computer, signed in as it already is. "
+      "Its own tools are off; it uses Entoli's.",
+      style: Theme.of(context).textTheme.bodySmall,
+    ),
+    const SizedBox(height: 16),
+    TextField(
+      controller: _command,
+      decoration: InputDecoration(
+        labelText: "Executable",
+        hintText: "claude",
+        helperText: "Empty runs claude from PATH",
+        suffixIcon: IconButton(
+          tooltip: "Choose a file",
+          icon: const Icon(Icons.folder_open),
+          onPressed: _chooseExecutable,
+        ),
       ),
-      const SizedBox(height: 16),
+    ),
+    const SizedBox(height: 16),
+    TextField(
+      controller: _env,
+      minLines: 2,
+      maxLines: 6,
+      decoration: const InputDecoration(
+        labelText: "Environment",
+        hintText: "NAME=value",
+        helperText: "One NAME=value per line, over the app's own environment",
+        helperMaxLines: 2,
+      ),
+    ),
+  ];
+
+  Future<void> _chooseExecutable() async {
+    final file = await openFile(confirmButtonText: "Use this program");
+    if (file == null || !mounted) return;
+    setState(() => _command.text = file.path);
+  }
+
+  /// What an endpoint reached over HTTP is configured with.
+  List<Widget> _httpFields(bool hasStoredKey) {
+    return [
       TextField(
         controller: _baseUrl,
         decoration: const InputDecoration(
@@ -407,3 +501,11 @@ class _ProviderDialogState extends State<_ProviderDialog> {
     ];
   }
 }
+
+/// [text]'s `NAME=value` lines as a map: blank lines and ones with no name
+/// dropped, the value everything after the first `=`, a later line winning.
+Map<String, String> envFromLines(String text) => {
+  for (final line in text.split("\n"))
+    if (line.indexOf("=") case final at when at > 0)
+      line.substring(0, at).trim(): line.substring(at + 1).trim(),
+};

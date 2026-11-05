@@ -288,6 +288,13 @@ suite, and the well-known one the LAN rendezvous uses in earnest is already
 taken whenever an Entoli happens to be running there — which is how this was
 found.
 
+The one exception is `cli_provider_test.dart`, and it binds only port 0:
+`McpToolBridge` is a loopback MCP server whose held request *is* the
+contract, and its session test runs a fake `claude`
+(`fixtures/fake_claude.dart`, through `dart` on `PATH`) that dials it the
+way the real one does. An ephemeral port is nobody's, so it collides with
+nothing an Entoli has open.
+
 What that costs is the socket adapters, and it is worth being plain about:
 **neither `SignalingServer` nor `RelayServer` is covered by anything.** The
 LAN one is the port it binds and its fallback to an ephemeral one, and the

@@ -89,22 +89,7 @@ class AnthropicClient implements LlmClient {
       },
     );
 
-    final blocks = <int, _Block>{};
-    String? stopReason;
-    int? inputTokens, cacheRead, cacheWrite, outputTokens;
-
-    // The usage fields accumulate across the frames that carry them: a frame
-    // naming a field keeps what an earlier one said about the rest.
-    void readUsage(Map<String, dynamic>? usage) {
-      if (usage == null) return;
-      inputTokens = (usage["input_tokens"] as num?)?.toInt() ?? inputTokens;
-      cacheRead =
-          (usage["cache_read_input_tokens"] as num?)?.toInt() ?? cacheRead;
-      cacheWrite =
-          (usage["cache_creation_input_tokens"] as num?)?.toInt() ?? cacheWrite;
-      outputTokens = (usage["output_tokens"] as num?)?.toInt() ?? outputTokens;
-    }
-
+    final reader = AnthropicEventReader();
     await for (final payload in decodeSse(response.stream)) {
       final Map<String, dynamic> event;
       try {
@@ -112,119 +97,9 @@ class AnthropicClient implements LlmClient {
       } catch (_) {
         continue;
       }
-      final index = (event["index"] as num?)?.toInt() ?? 0;
-
-      switch (event["type"]) {
-        case "error":
-          final error = event["error"];
-          throw LlmException(
-            error is Map ? "${error["message"] ?? error}" : "$error",
-          );
-
-        case "content_block_start":
-          final block =
-              event["content_block"] as Map<String, dynamic>? ?? const {};
-          blocks[index] = _Block(
-            type: block["type"] as String? ?? "text",
-            id: block["id"] as String?,
-            name: block["name"] as String?,
-          );
-          final text = block["text"];
-          if (text is String && text.isNotEmpty) {
-            blocks[index]!.body.write(text);
-            yield LlmTextChunk(text);
-          }
-
-        case "content_block_delta":
-          final delta = event["delta"] as Map<String, dynamic>? ?? const {};
-          final block = blocks.putIfAbsent(index, () => _Block(type: "text"));
-          switch (delta["type"]) {
-            case "text_delta":
-              final text = delta["text"] as String? ?? "";
-              block.body.write(text);
-              if (text.isNotEmpty) yield LlmTextChunk(text);
-            case "thinking_delta":
-              final text = delta["thinking"] as String? ?? "";
-              block.body.write(text);
-              if (text.isNotEmpty) yield LlmReasoningChunk(text);
-            case "signature_delta":
-              block.signature =
-                  (block.signature ?? "") +
-                  (delta["signature"] as String? ?? "");
-            case "input_json_delta":
-              block.body.write(delta["partial_json"] as String? ?? "");
-          }
-
-        case "content_block_stop":
-          // The signature is complete here, which is still before the reply
-          // starts — so the thinking block can be closed holding it.
-          final block = blocks[index];
-          if (block != null &&
-              block.type == "thinking" &&
-              block.signature != null) {
-            yield LlmReasoningSignature(block.signature!);
-          }
-
-        case "message_start":
-          // The usage object arrives here and again — larger — on
-          // message_delta; both are read, the latter winning.
-          readUsage(
-            (event["message"] as Map<String, dynamic>?)?["usage"]
-                as Map<String, dynamic>?,
-          );
-
-        case "message_delta":
-          final delta = event["delta"] as Map<String, dynamic>? ?? const {};
-          stopReason = delta["stop_reason"] as String? ?? stopReason;
-          readUsage(event["usage"] as Map<String, dynamic>?);
-      }
+      yield* Stream.fromIterable(reader.read(event));
     }
-
-    final ordered = blocks.keys.toList()..sort();
-    final text = StringBuffer();
-    final reasoning = StringBuffer();
-    String? signature;
-    final calls = <LlmToolCall>[];
-    for (final index in ordered) {
-      final block = blocks[index]!;
-      switch (block.type) {
-        case "text":
-          text.write(block.body);
-        case "thinking":
-          reasoning.write(block.body);
-          signature ??= block.signature;
-        case "tool_use":
-          calls.add(
-            LlmToolCall(
-              id: block.id ?? "toolu_$index",
-              name: block.name ?? "",
-              // An empty input streams no deltas at all, so the buffer is bare.
-              argumentsJson: block.body.isEmpty ? "{}" : block.body.toString(),
-            ),
-          );
-      }
-    }
-
-    yield LlmCompletion(
-      // `max_tokens` is what the OpenAI shape calls `length`; the agent reads
-      // one name for "it was cut off before it could call a tool".
-      finishReason: stopReason == "max_tokens" ? "length" : stopReason,
-      usage: inputTokens == null && outputTokens == null
-          ? null
-          : LlmUsage(
-              inputTokens: inputTokens ?? 0,
-              outputTokens: outputTokens ?? 0,
-              cacheReadTokens: cacheRead ?? 0,
-              cacheWriteTokens: cacheWrite ?? 0,
-            ),
-      message: LlmMessage(
-        role: LlmRole.assistant,
-        text: text.toString(),
-        reasoning: reasoning.isEmpty ? null : reasoning.toString(),
-        reasoningSignature: signature,
-        toolCalls: calls,
-      ),
-    );
+    yield reader.completion();
   }
 
   /// Tool results are user turns here, and a turn holding tool_use blocks must
@@ -237,7 +112,7 @@ class AnthropicClient implements LlmClient {
       final role = message.role == LlmRole.assistant ? "assistant" : "user";
       final blocks = message.role == LlmRole.assistant
           ? _assistantBlocks(message)
-          : _userBlocks(message);
+          : userBlocks(message);
       if (blocks.isEmpty) continue;
       if (encoded.isNotEmpty && encoded.last["role"] == role) {
         (encoded.last["content"] as List).addAll(blocks);
@@ -267,7 +142,9 @@ class AnthropicClient implements LlmClient {
       },
   ];
 
-  List<Map<String, dynamic>> _userBlocks(LlmMessage message) {
+  /// [message], a user or tool turn, as the content blocks Anthropic takes.
+  /// Claude CLI's stream-json input carries the same blocks.
+  static List<Map<String, dynamic>> userBlocks(LlmMessage message) {
     if (message.role == LlmRole.tool) {
       final files = message.attachments.where((a) => a.isBlock);
       return [
@@ -293,7 +170,7 @@ class AnthropicClient implements LlmClient {
     ];
   }
 
-  Map<String, dynamic> _block(LlmAttachment file) => {
+  static Map<String, dynamic> _block(LlmAttachment file) => {
     "type": file.isPdf ? "document" : "image",
     "source": {
       "type": "base64",
@@ -312,6 +189,148 @@ class AnthropicClient implements LlmClient {
     } catch (_) {
       return {};
     }
+  }
+}
+
+/// Anthropic's stream events folded into chunks and, at the end, the whole
+/// reply. Its own class because Claude CLI's partial messages are these same
+/// events, one JSON line each rather than one SSE frame each.
+class AnthropicEventReader {
+  final _blocks = <int, _Block>{};
+  String? _stopReason;
+  int? _inputTokens, _cacheRead, _cacheWrite, _outputTokens;
+
+  /// What the stop said, once `message_delta` has said it.
+  String? get stopReason => _stopReason;
+
+  // The usage fields accumulate across the frames that carry them: a frame
+  // naming a field keeps what an earlier one said about the rest.
+  void _readUsage(Map<String, dynamic>? usage) {
+    if (usage == null) return;
+    _inputTokens = (usage["input_tokens"] as num?)?.toInt() ?? _inputTokens;
+    _cacheRead =
+        (usage["cache_read_input_tokens"] as num?)?.toInt() ?? _cacheRead;
+    _cacheWrite =
+        (usage["cache_creation_input_tokens"] as num?)?.toInt() ?? _cacheWrite;
+    _outputTokens = (usage["output_tokens"] as num?)?.toInt() ?? _outputTokens;
+  }
+
+  /// The chunks [event] says. Throws an [LlmException] for an `error` event.
+  Iterable<LlmChunk> read(Map<String, dynamic> event) sync* {
+    final index = (event["index"] as num?)?.toInt() ?? 0;
+
+    switch (event["type"]) {
+      case "error":
+        final error = event["error"];
+        throw LlmException(
+          error is Map ? "${error["message"] ?? error}" : "$error",
+        );
+
+      case "content_block_start":
+        final block =
+            event["content_block"] as Map<String, dynamic>? ?? const {};
+        _blocks[index] = _Block(
+          type: block["type"] as String? ?? "text",
+          id: block["id"] as String?,
+          name: block["name"] as String?,
+        );
+        final text = block["text"];
+        if (text is String && text.isNotEmpty) {
+          _blocks[index]!.body.write(text);
+          yield LlmTextChunk(text);
+        }
+
+      case "content_block_delta":
+        final delta = event["delta"] as Map<String, dynamic>? ?? const {};
+        final block = _blocks.putIfAbsent(index, () => _Block(type: "text"));
+        switch (delta["type"]) {
+          case "text_delta":
+            final text = delta["text"] as String? ?? "";
+            block.body.write(text);
+            if (text.isNotEmpty) yield LlmTextChunk(text);
+          case "thinking_delta":
+            final text = delta["thinking"] as String? ?? "";
+            block.body.write(text);
+            if (text.isNotEmpty) yield LlmReasoningChunk(text);
+          case "signature_delta":
+            block.signature =
+                (block.signature ?? "") + (delta["signature"] as String? ?? "");
+          case "input_json_delta":
+            block.body.write(delta["partial_json"] as String? ?? "");
+        }
+
+      case "content_block_stop":
+        // The signature is complete here, which is still before the reply
+        // starts — so the thinking block can be closed holding it.
+        final block = _blocks[index];
+        if (block != null &&
+            block.type == "thinking" &&
+            block.signature != null) {
+          yield LlmReasoningSignature(block.signature!);
+        }
+
+      case "message_start":
+        // The usage object arrives here and again — larger — on
+        // message_delta; both are read, the latter winning.
+        _readUsage(
+          (event["message"] as Map<String, dynamic>?)?["usage"]
+              as Map<String, dynamic>?,
+        );
+
+      case "message_delta":
+        final delta = event["delta"] as Map<String, dynamic>? ?? const {};
+        _stopReason = delta["stop_reason"] as String? ?? _stopReason;
+        _readUsage(event["usage"] as Map<String, dynamic>?);
+    }
+  }
+
+  /// The reply the events so far make up.
+  LlmCompletion completion() {
+    final ordered = _blocks.keys.toList()..sort();
+    final text = StringBuffer();
+    final reasoning = StringBuffer();
+    String? signature;
+    final calls = <LlmToolCall>[];
+    for (final index in ordered) {
+      final block = _blocks[index]!;
+      switch (block.type) {
+        case "text":
+          text.write(block.body);
+        case "thinking":
+          reasoning.write(block.body);
+          signature ??= block.signature;
+        case "tool_use":
+          calls.add(
+            LlmToolCall(
+              id: block.id ?? "toolu_$index",
+              name: block.name ?? "",
+              // An empty input streams no deltas at all, so the buffer is bare.
+              argumentsJson: block.body.isEmpty ? "{}" : block.body.toString(),
+            ),
+          );
+      }
+    }
+
+    return LlmCompletion(
+      // `max_tokens` is what the OpenAI shape calls `length`; the agent reads
+      // one name for "it was cut off before it could call a tool".
+      finishReason: _stopReason == "max_tokens" ? "length" : _stopReason,
+      usage: _inputTokens == null && _outputTokens == null
+          ? null
+          : LlmUsage(
+              inputTokens: _inputTokens ?? 0,
+              outputTokens: _outputTokens ?? 0,
+              cacheReadTokens: _cacheRead ?? 0,
+              cacheWriteTokens: _cacheWrite ?? 0,
+            ),
+      message: LlmMessage(
+        role: LlmRole.assistant,
+        text: text.toString(),
+        reasoning: reasoning.isEmpty ? null : reasoning.toString(),
+        reasoningSignature: signature,
+        toolCalls: calls,
+      ),
+    );
   }
 }
 
