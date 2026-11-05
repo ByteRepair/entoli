@@ -45,6 +45,7 @@ import "byte_repair_settings.dart";
 import "llm_settings.dart";
 import "running_models.dart";
 import "local_model_settings.dart";
+import "provider_usage_view.dart";
 import "memory_settings.dart";
 import "on_device_catalog.dart";
 import "privacy_policy_page.dart";
@@ -1000,6 +1001,7 @@ class _ProvidersEditor extends ConsumerWidget {
               title: "Edit ${provider.displayName}",
             ),
             onRemove: () => _remove(ref, provider),
+            detail: ProviderUsageView(provider.id),
           ),
         AddButtonRow(
           child: OutlinedButton.icon(

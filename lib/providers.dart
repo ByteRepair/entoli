@@ -61,6 +61,7 @@ import "data/prompts/prompt_sources.dart" show promptTiers;
 import "domain/permission.dart";
 import "domain/profile.dart";
 import "domain/project_settings.dart";
+import "domain/provider_usage.dart";
 import "domain/project.dart"
     show ProjectRef, emptyChatQuestionFor, everyProject;
 import "domain/prompt_library.dart";
@@ -1137,6 +1138,18 @@ final keyCheckProvider = Provider<KeyCheck>(
   (ref) =>
       (config, apiKey) => providerOf(config).checkKey(apiKey),
 );
+
+/// How much of each allowance the configured provider [id] has spent, where
+/// it says: asked of the backend's registry, since one provider says it only
+/// on the replies its cached client has seen. Auto-disposed, so the Providers
+/// section asks again each time it is shown.
+final providerUsageProvider = FutureProvider.autoDispose
+    .family<List<UsageWindow>, String>((ref, id) async {
+      final backend = ref.watch(agentBackendProvider);
+      if (backend is! BuiltinBackend) return const [];
+      final provider = backend.registry.providerFor(id);
+      return provider == null ? const [] : backend.registry.usageOf(provider);
+    });
 
 /// The process environment, where a provider's named key is looked for after
 /// the settings' own.

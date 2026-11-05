@@ -1,4 +1,9 @@
+import "package:http/http.dart" as http;
+
 import "../../../../domain/llm_provider.dart";
+import "../../../../domain/provider_usage.dart";
+import "../groq_client.dart";
+import "../llm_client.dart";
 import "provider.dart";
 
 /// The hosted providers that differ from the OpenAI shape by nothing but who
@@ -24,6 +29,18 @@ class GroqProvider extends OpenAiCompatibleProvider {
     policy: "https://groq.com/privacy-policy",
     keyUrl: "https://console.groq.com/keys",
   );
+
+  @override
+  GroqClient client(String? apiKey) =>
+      GroqClient(baseUrl: baseUrl, apiKey: apiKey);
+
+  /// What the last reply said: Groq says it on nothing else.
+  @override
+  Future<List<UsageWindow>> usage(
+    LlmClient client,
+    String? apiKey, {
+    http.Client? httpClient,
+  }) async => client is GroqClient ? client.usage : const [];
 }
 
 // shortcut: not known to keep a model list behind the key; its light default
@@ -78,4 +95,40 @@ class OllamaCloudProvider extends OpenAiCompatibleProvider
     policy: "https://ollama.com/privacy",
     keyUrl: "https://ollama.com/settings/keys",
   );
+
+  /// `/api/usage`, the endpoint ollama.com's own settings page reads. Not
+  /// documented: it has answered with a `limits` object holding the session
+  /// and weekly allowances as fractions, and since October 2026 without it,
+  /// which is nothing to show rather than a failure.
+  @override
+  Future<List<UsageWindow>> usage(
+    LlmClient client,
+    String? apiKey, {
+    http.Client? httpClient,
+  }) async => usageOf(
+    await LlmProvider.getJson(
+      baseUrl.resolve("/api/usage"),
+      headers: authOf(apiKey),
+      httpClient: httpClient,
+    ),
+  );
+
+  /// [json], `/api/usage`'s answer, as the allowances it names.
+  static List<UsageWindow> usageOf(Map<String, dynamic> json) {
+    final limits = json["limits"];
+    if (limits is! Map<String, dynamic>) return const [];
+    return [
+      for (final (key, label) in const [
+        ("session", "Session"),
+        ("weekly", "Weekly"),
+      ])
+        if (limits[key] case {"usage": final num used})
+          UsageWindow(
+            label: label,
+            used: used.toDouble(),
+            max: 1,
+            unit: UsageUnit.share,
+          ),
+    ];
+  }
 }

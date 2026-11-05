@@ -4,6 +4,7 @@ import "../../../core/log.dart";
 import "../../../domain/llm_provider.dart";
 import "../../../domain/model_capability.dart";
 import "../../../domain/models.dart";
+import "../../../domain/provider_usage.dart";
 import "hosted_models.dart";
 import "llm_client.dart";
 import "providers/provider.dart";
@@ -124,6 +125,21 @@ class LlmRegistry {
           .timeout(const Duration(seconds: 10), onTimeout: () => const []);
     } catch (e) {
       logFailure("llm", "listing ${provider.id}'s models failed", e);
+      return const [];
+    }
+  }
+
+  /// How much of its allowances [provider] says is spent, asked with the key
+  /// and the client its turns run over. Nothing where it cannot say: one that
+  /// will not answer gets a line, since an endpoint that changed shape is
+  /// otherwise indistinguishable from one with nothing to report.
+  Future<List<UsageWindow>> usageOf(LlmProvider provider) async {
+    try {
+      return await provider
+          .usage(clientOf(provider), resolveKeyFor(provider.config))
+          .timeout(const Duration(seconds: 10), onTimeout: () => const []);
+    } catch (e) {
+      logFailure("llm", "reading ${provider.id}'s usage failed", e);
       return const [];
     }
   }
