@@ -32,8 +32,11 @@ not a quit app, so what #486 put on master cannot show it. Only a separate proce
 2. **One protocol for the local client and for sync.** The local client is a
    peer of its server the way another device is today.
 3. **One "start server" interface.** By default it starts a sub-process.
-   macOS starts a background item (`SMAppService`), the one model that earns
-   the gray dot. iOS cannot spawn a process, so it starts the server in-process.
+   iOS cannot spawn a process, so it starts the server in-process. macOS was
+   to start a background item (`SMAppService`) for the gray dot. Revised: macOS
+   starts a child too, to avoid the registration notification, and the
+   background item is built only if stage 5a shows a child does not get the
+   dot.
 4. **The server is the only writer of `<dataDir>`**, `conv.jsonl` included.
    Triggers and sync are server-side.
 5. **One client at a time.** No multi-client coordination.
@@ -96,15 +99,29 @@ end without a model.
 | `BackgroundWork` holds (Android foreground services) | Nothing |
 | Shortcuts' `ChatIntents` and its rules | `IntentBridge`, forwarding each action to the server |
 | — | Clipboard, link opening, app icon, Liquid Glass shell, keyboard, menu bar |
-| — | Voice mode: the microphone, recognition, speech and the speaker |
+| — | Voice mode: the microphone, recognition, speech, the speaker, and the voice models they load |
 
 **Inputs stay in the client.** The client is a dumb UI that drives the server,
 and what the user does to drive it is the client's: typing, picking files,
 pasting, and talking. Voice mode is an input, so it runs in the client whole.
 What it hears becomes the same prompt the composer sends, and what it reads
-out is a reply the client was already sent. The server never sees audio. The
-voice models are data the server downloads and keeps; how the client gets
-them is an open question.
+out is a reply the client was already sent. The server never sees audio.
+
+**Seen from sync, voice belongs to the device the user is talking to.** Today
+a mirror drives a turn on the chat's home device by sending text, and voice
+does the same: a client on one device, following a chat whose home is
+another, hears the user, recognizes the words where it is, and sends the text
+like a typed prompt. Nothing about the voice connection is synced: no audio,
+no session, no state of the listener. The same holds for the local client, to
+which its own server is just the nearer home device.
+
+So **the client loads the voice models itself.** They are the input's, as a
+keyboard's dictionary is, not the user's data: the client downloads them into
+its own cache, keeps them there, and loads them from there. That is the one
+thing a client keeps on disk, and it is a cache: deleting it costs a
+download, never anything the user made. On macOS the voice engines run in a
+model host the client starts, as the app does today, and the server's MLX
+models in one the server starts.
 
 ### Where the code goes
 
@@ -149,7 +166,7 @@ What differs per platform is only where that engine lives:
 | Linux | A child process: the same executable with `--server` | `SubprocessServerLauncher` |
 | Windows | A child process: the same `.exe` with `--server` | `SubprocessServerLauncher` |
 | Android | An app component in its own process (`android:process=":server"`), a service holding a `FlutterEngine` | `AndroidServerLauncher`, a subclass of the sub-process launcher in kind: a separate process, started by an explicit intent |
-| macOS | `Contents/Helpers/Entoli Server.app`, a background item registered with `SMAppService` | `BackgroundItemServerLauncher` |
+| macOS | A child process: the same executable with `--server` | `SubprocessServerLauncher` (a background item only if stage 5a needs one) |
 | iOS | A second `FlutterEngine` in the app's own process, on its own isolate | `InProcessServerLauncher` |
 
 Android has no `fork` worth the name for an app, so "sub-process" there means
@@ -362,9 +379,9 @@ connection (TN3127), and for a Unix socket the same requirement checked against
 the peer's audit token (`LOCAL_PEERTOKEN`, then `SecCode`). The requirement is
 Entoli's team identifier and bundle identifiers. Where the client starts the
 server, the key travels in the environment as on every other platform, and the
-signature check is added to it. Where launchd starts the server, there is no
-environment to hand a key through, and the signature check alone is the
-gate. No keychain item: a keychain item has no expiry and no way to delete
+signature check is added to it. A server a trigger's launchd job starts has
+no client to hand it a key: it makes its own and writes the key file, and the
+signature check is the gate either way. No keychain item: a keychain item has no expiry and no way to delete
 itself, so a crash would leave one behind.
 
 ## Starting the server
@@ -383,13 +400,16 @@ abstract interface class ServerLauncher {
   job.
 - **`AndroidServerLauncher`**. Starts the `:server` process's service with an
   explicit intent, which a non-exported service accepts only from this app.
-- **`BackgroundItemServerLauncher`** (macOS). Registers
+- **macOS uses the default.** The Runner binary with `--server` branches in
+  `AppDelegate.main` before AppKit loads a nib, as the model host does, so
+  the child has no window, menu or Dock icon. It is spawned with `setsid`
+  so that it outlives the client.
+- **`BackgroundItemServerLauncher`** (macOS), only if stage 5a shows that a
+  child does not get the gray dot. It registers
   `Contents/Library/LaunchAgents/io.byterepair.entoli.server.plist` with
-  `SMAppService.agent(plistName:)`, whose `BundleProgram` is the
-  `Entoli Server.app` helper, and starts it. The helper is built as the model
-  host's is: a copy of the Runner binary with its own `Info.plist`
-  (`io.byterepair.entoli.server`, `LSBackgroundOnly`), branching in
-  `AppDelegate.main` before AppKit loads a nib.
+  `SMAppService.agent(plistName:)` and starts it. That costs a "Background
+  Items Added" notification, a Login Items entry and possibly an approval,
+  which is why it is not the first choice.
 - **`InProcessServerLauncher`** (iOS). Starts a second `FlutterEngine` on
   `serverMain` in this process and connects to it.
 
@@ -449,12 +469,21 @@ What changes in `lib/data/sync/`:
 ### macOS
 
 - **The gray dot.** Quitting with Cmd-Q or closing the window while a turn
-  runs leaves `Entoli Server.app` running as a registered background item until
-  the turn ends. That is the case the Dock marks. Stage 5a proves it on macOS
-  27 before anything else on this platform is built.
+  runs leaves the server, the app's own child, running until the turn ends.
+  Apple's article says the Dock marks an app whose spawned processes outlive
+  its quit. Stage 5a proves it on macOS 27 before anything else on this
+  platform is built.
+- **Two notifications, one of them avoided.** macOS 27 posts a notification
+  the first time an app keeps running in the background after a quit. It
+  comes with the dot, once per app, and cannot be avoided. Registering an
+  `SMAppService` agent would add a second, "Background Items Added", with a
+  Login Items entry and possibly an approval. A child avoids that one.
+  Claude Code's CLI and Gemini's CLI register nothing either: they are
+  terminal processes and stop when the terminal closes.
 - **It follows Apple's rule.** Apple asks every app to end its background work
-  when it quits, "or make it possible for a person to do so", and names an
-  `SMAppService` launch agent as the way to run work past a quit. The Dock's
+  when it quits, "or make it possible for a person to do so". For a process
+  that runs past a quit it says to "consider" an `SMAppService` launch agent;
+  the child is chosen over it for the notification above. The Dock's
   gray dot carries a "Stop Running in Background" item, which is that control,
   so Entoli adds none of its own. A menu bar progress item would be the other
   control Apple suggests, but an app with a visible menu bar icon is outside
@@ -467,21 +496,19 @@ What changes in `lib/data/sync/`:
   stops it several times, macOS offers to block the app's background activity
   for good, which is the next case.
 - **Background activity switched off.** The user can switch Entoli's background
-  activity off in Login Items & Extensions, and Apple says to test the app in
-  that state. The agent then will not run, and `SMAppService.status` says so.
-  The launcher falls back to `SubprocessServerLauncher`: the server runs as the
-  client's child, and quitting the client ends a running turn, interrupted,
-  as on master before #485.
+  activity off in System Settings, and Apple says to test the app in that
+  state. macOS then ends the server when the client quits, and a running turn
+  is left interrupted, as on master before #485. Stage 5a checks that this is
+  what happens to a child.
 - **The window is just a window.** `applicationShouldTerminateAfterLastWindowClosed`
   is true again and nothing overrides it.
-- **Triggers wake the server, not the app.** Each launchd job's line becomes a
-  `launchctl kickstart` of the server's label, or a connect to its socket if
-  the agent is socket-activated. A wake no longer opens a hidden app, hides its
-  window in `awakeFromNib`, checks for a second instance or quits when its
-  fires drain. The server runs the catch-up as it would on any start, and
-  leaves under the rule above. The per-trigger jobs stay, because an
-  `SMAppService` plist is sealed inside the bundle and cannot carry each
-  trigger's calendar.
+- **Triggers wake the server, not the app.** Each launchd job's line spawns
+  the bundle's binary with `--server` instead of the wake argument, detached,
+  as it spawns the app today. A wake no longer opens a hidden app, hides its
+  window in `awakeFromNib` or quits when its fires drain. A server already
+  answering on the socket takes the place of the wake-time single-instance
+  check: the new one finds it and exits. The server runs the catch-up as it
+  would on any start, and leaves under the rule above.
 - **The model host stays a separate process.** `Entoli Models.app` is an
   external MLX server, and it crashing must not affect Entoli. That holds
   whether the window or the server is what talks to it, so it does not fold
@@ -542,7 +569,8 @@ have. Add the import-graph rules for `lib/server/`. Replace `ValueListenable` in
 `domain/`. No protocol change, no process change.
 
 **Inside every stage: no client state on disk, and no paths.** The client
-keeps nothing on disk of its own. Window size, the last open chat and every
+keeps nothing on disk of its own but the voice models' cache (see "Inputs stay
+in the client"). Window size, the last open chat and every
 other preference are the server's to store, sent and written over the
 protocol. An artifact, a backup or an attachment reaches the client as bytes
 from the server, never as a path to open, on the same machine as on another.
@@ -575,22 +603,20 @@ version check. iOS stays in-process for good. The Android foreground services
 move to the server process here, and the UI's sticky engine goes.
 
 **Stage 5a: prove the gray dot.** A small test build, before anything else
-on macOS is built: an `SMAppService` agent registered from the app bundle,
-the app quit while the agent keeps running, and macOS 27's "Running in
-Background" dot checked in the Dock. It also records the approval prompt the
-user sees on first registration, and that Stop Running in Background ends
-the agent. It also checks whether the dot goes once the agent has exited:
-a developer forum thread (developer.apple.com/forums/thread/832557) reports
-the dot staying after Cmd-Q with no process running, and asks whether
-registered launchd jobs cause it. Entoli's per-trigger launchd jobs are
-exactly that, so the build registers one and checks the dot with the server
-gone. Stage 5b goes ahead only if the dot shows while the agent runs and goes
-when it exits. If it does not, the macOS launcher is redesigned before any of
-5b is written.
+on macOS is built: the app spawns a detached child, the app is quit while the
+child keeps running, and macOS 27's "Running in Background" dot is checked in
+the Dock. It records which notifications appear, checks that Stop Running in
+Background ends the child, and checks what happens to it with Entoli's
+background activity switched off. It also checks that the dot goes once the
+child has exited: a developer forum thread
+(developer.apple.com/forums/thread/832557) reports the dot staying after
+Cmd-Q with no process running, and asks whether registered launchd jobs cause
+it. Entoli's per-trigger launchd jobs are exactly that, so the build registers
+one and checks the dot with the child gone. If a child gets no dot, the same
+test is run with an `SMAppService` agent, and 5b builds whichever showed it.
 
-**Stage 5b: macOS's background item.** `Entoli Server.app`,
-`BackgroundItemServerLauncher`, triggers retargeted to the server, and the
-retirements below.
+**Stage 5b: macOS's server.** The macOS launcher, triggers retargeted to the
+server, and the retirements below.
 
 **Stage 6: the thread view.** The server sends the thread being read rather
 than records. The Dart client moves to it, and drops `replayTree` from its
@@ -650,30 +676,7 @@ whether a turn is live.
 
 ## Open questions
 
-1. **How macOS starts the server, and the notifications.** Two notifications
-   are in play, and only one is avoidable.
-   - **The first-time background notification is not avoidable.** On macOS 27
-     the first time any app keeps running in the background after it quits,
-     macOS posts a notification, and Apple's article ties it to the gray dot.
-     The dot cannot be had without it. It appears once per app.
-   - **The `SMAppService` notification is avoidable.** Registering a launch
-     agent posts "Background Items Added", lists Entoli under Login Items, and
-     can leave it waiting for approval. That is the cost of decision 3's
-     background item, on top of the first.
-   - **Claude Code's CLI and Gemini's CLI register nothing.** Both are processes
-     in a terminal and stop when it closes, so they show no dot and post no
-     notification. They have no answer to running on after a quit.
-   - **The simpler option is a detached child on macOS too.** The client spawns
-     the server itself, as on Linux, with `setsid` so it outlives the client.
-     That needs no registration and no approval, and the key travels in the
-     environment. Apple's article says to "consider" `SMAppService` for a
-     process that runs after the app terminates, and says a spawned process
-     outliving its app gets the Dock indicator. Whether it shows the dot on
-     macOS 27 is what stage 5a would test first, and `SMAppService` would be
-     built only if it does not. Should macOS drop the background item for the
-     default launcher, subject to that test?
-2. **Voice models.** Voice runs in the client, so the client needs the model
-   files the server downloads and keeps. Should the server stream them into
-   the client's cache once, or may the client load them in place from the
-   server's directory, read-only? The second is a path, which the no-paths
-   rule otherwise refuses.
+None left. Every question this document raised has been answered by the user,
+and the answers are written into the sections above. Stage 5a's test build is
+the one place a result can still change the design: whether macOS's server is
+a child or a background item.
