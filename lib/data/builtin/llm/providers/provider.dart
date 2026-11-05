@@ -101,6 +101,11 @@ abstract class LlmProvider {
     ];
   }
 
+  /// What the app knows of [modelId] here: [modelInfoOf] — the provider's own
+  /// models, then models.dev — unless a class knows of models neither lists.
+  /// Null where nothing is known, which is the global context guess.
+  ModelInfo? modelInfo(String? modelId) => modelInfoOf(config, modelId);
+
   /// [id] as each thing it can do here, which is what its API answers: chat,
   /// unless a class says more. One this provider does not describe — a pick
   /// made before the catalog arrived, a model only its own list names — is

@@ -166,6 +166,13 @@ abstract class CliProvider extends LlmProvider with KeyFree {
     return [...own.values, ...knownModels.where((m) => !own.containsKey(m.id))];
   }
 
+  /// The program's models are in no catalog, so the window a chat on one
+  /// reports is [knownModels]'s.
+  @override
+  ModelInfo? modelInfo(String? modelId) =>
+      super.modelInfo(modelId) ??
+      knownModels.where((m) => m.id == modelId).firstOrNull;
+
   @override
   List<Model> serve(String id, ModelInfo? info, ModelHost host) => supported
       ? super.serve(

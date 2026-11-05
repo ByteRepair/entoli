@@ -11,6 +11,9 @@ import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/builtin/builtin_backend.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/llm_registry.dart";
+import "package:agent_chat/data/builtin/llm/providers/claude_cli.dart";
+import "package:agent_chat/data/builtin/llm/providers/codex_cli.dart";
+import "package:agent_chat/data/builtin/llm/providers/provider.dart";
 import "package:agent_chat/data/builtin/memory/instructions.dart"
     show InstructionFile, renderInstructions;
 import "package:agent_chat/data/builtin/memory/store.dart";
@@ -62,6 +65,7 @@ void main() {
     PromptLibrary? library,
     BuiltinOptions options = const BuiltinOptions(),
     LlmClient? judge,
+    List<LlmProvider> endpoints = const [],
   }) {
     client = FakeLlmClient(turns);
     shell = FakeShell(respond ?? okEmpty);
@@ -84,6 +88,7 @@ void main() {
               ),
               (_, _) => judge,
             ),
+          ...endpoints,
         ],
         lookupEnv: (_) => null,
         lookupKey: (_) => null,
@@ -2582,6 +2587,32 @@ void main() {
           label: "fake · fake-model",
         ),
       ]);
+    });
+
+    // Neither program's models are in models.dev, so the window is what
+    // the provider declares rather than the global 128k guess.
+    test("a CLI provider's window is the one it declares", () {
+      final backend = backendOver(
+        [],
+        endpoints: [
+          ClaudeCliProvider(ClaudeCliProvider.preset.copyWith(id: "claude")),
+          CodexCliProvider(CodexCliProvider.preset.copyWith(id: "codex")),
+        ],
+      );
+
+      expect(
+        backend.contextWindowOf((providerId: "claude", modelId: "opus")),
+        200000,
+      );
+      expect(
+        backend.contextWindowOf((providerId: "codex", modelId: "gpt-6-luna")),
+        272000,
+      );
+      // The provider's default, where the chat names no model.
+      expect(
+        backend.contextWindowOf((providerId: "claude", modelId: null)),
+        200000,
+      );
     });
 
     test("shutting down closes the clients it opened", () async {
