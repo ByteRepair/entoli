@@ -11,6 +11,7 @@ class EditableRow extends StatelessWidget {
     required this.removeLabel,
     required this.onTap,
     required this.onRemove,
+    this.detail,
   });
 
   final String title;
@@ -19,11 +20,20 @@ class EditableRow extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onRemove;
 
+  /// Drawn under the subtitle, for what one kind of entry has to say beyond
+  /// a line — a provider's allowances.
+  final Widget? detail;
+
   @override
   Widget build(BuildContext context) => ListTile(
     dense: true,
     title: Text(title),
-    subtitle: Text(subtitle),
+    subtitle: detail == null
+        ? Text(subtitle)
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [Text(subtitle), detail!],
+          ),
     onTap: onTap,
     trailing: IconButton(
       icon: const Icon(Icons.close),

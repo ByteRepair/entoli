@@ -4,6 +4,7 @@ import "../../../core/log.dart";
 import "../../../domain/llm_provider.dart";
 import "../../../domain/model_capability.dart";
 import "../../../domain/models.dart";
+import "../../../domain/provider_usage.dart";
 import "hosted_models.dart";
 import "llm_client.dart";
 import "providers/provider.dart";
@@ -81,11 +82,14 @@ class LlmRegistry {
     // client of a different program.
     return _clients.of(
       config.id,
-      "${config.api.name}|${config.baseUrl}|$key|${config.command}|"
-      "${jsonEncode(config.env)}",
+      _signatureOf(config, key),
       () => provider.client(key),
     );
   }
+
+  String _signatureOf(LlmProviderConfig config, String? key) =>
+      "${config.api.name}|${config.baseUrl}|$key|${config.command}|"
+      "${jsonEncode(config.env)}";
 
   /// One order, decided once: the stored key, then the named environment
   /// variable. The registry builds clients from exactly this, so an edited
@@ -126,6 +130,31 @@ class LlmRegistry {
       logFailure("llm", "listing ${provider.id}'s models failed", e);
       return const [];
     }
+  }
+
+  /// How much of its allowances [provider] says is spent: asked of the
+  /// provider with its key, or, where it has nothing to ask, what the client
+  /// its turns ran over heard on their replies. No client is built to ask —
+  /// one that has run no turn has heard nothing. A provider that will not
+  /// answer gets a line, since an endpoint that changed shape is otherwise
+  /// indistinguishable from one with nothing to report.
+  Future<List<ProviderUsage>> usageOf(LlmProvider provider) async {
+    final config = provider.config;
+    final key = resolveKeyFor(config);
+    try {
+      final asked = await provider
+          .usage(key)
+          .timeout(const Duration(seconds: 10), onTimeout: () => const []);
+      if (asked.isNotEmpty) return asked;
+    } catch (e) {
+      logFailure("llm", "reading ${provider.id}'s usage failed", e);
+      return const [];
+    }
+    final client = _clients.peek(config.id, _signatureOf(config, key));
+    return switch (client) {
+      final ReportsUsage reports => reports.reportedUsage,
+      _ => const [],
+    };
   }
 
   void close() => _clients.close();

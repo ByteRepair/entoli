@@ -62,6 +62,11 @@ class OpenAiClient implements LlmClient {
   @protected
   String? get unsignedCallSignature => null;
 
+  /// The headers a reply arrived with, for a host that says something on
+  /// them worth keeping — Groq's allowances. Called before the body is read.
+  @protected
+  void responded(Map<String, String> headers) {}
+
   @override
   Stream<LlmChunk> stream(
     List<LlmMessage> messages, {
@@ -92,6 +97,7 @@ class OpenAiClient implements LlmClient {
         "reasoning_effort": ?reasoningEffort,
       },
     ).onError<LlmException>((e, _) => throw refused(e));
+    responded(response.headers);
 
     final text = StringBuffer();
     final reasoning = StringBuffer();

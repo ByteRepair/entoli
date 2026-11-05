@@ -6,7 +6,11 @@ import "package:http/http.dart" as http;
 /// An event-stream response carrying [frames], each one already in the shape
 /// the provider sends: a map is encoded as JSON, a string goes out as it is
 /// (which is how `[DONE]` and a malformed frame are written).
-http.StreamedResponse sseResponse(List<Object> frames, {int status = 200}) {
+http.StreamedResponse sseResponse(
+  List<Object> frames, {
+  int status = 200,
+  Map<String, String> headers = const {},
+}) {
   final body = StringBuffer();
   for (final frame in frames) {
     body.write("data: ${frame is String ? frame : jsonEncode(frame)}\n\n");
@@ -15,7 +19,7 @@ http.StreamedResponse sseResponse(List<Object> frames, {int status = 200}) {
   return http.StreamedResponse(
     Stream.value(bytes),
     status,
-    headers: const {"content-type": "text/event-stream"},
+    headers: {"content-type": "text/event-stream", ...headers},
   );
 }
 

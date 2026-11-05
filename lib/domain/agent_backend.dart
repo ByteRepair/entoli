@@ -10,6 +10,7 @@ import "../domain/chat_log.dart";
 import "../domain/model_capability.dart";
 import "../domain/models.dart";
 import "../domain/permission.dart";
+import "../domain/provider_usage.dart";
 import "../domain/profile.dart";
 import "../domain/sub_agent_log.dart";
 import "../domain/tone.dart";
@@ -562,6 +563,11 @@ abstract class AgentBackend {
   /// default. Null where nothing is known, which is the app-wide guess's
   /// business at the caller.
   int? contextWindowOf(ModelChoice choice) => null;
+
+  /// How much of each allowance the configured provider [providerId] has
+  /// spent, where it says. Nothing where it cannot, which is most of them.
+  Future<List<ProviderUsage>> providerUsage(String providerId) async =>
+      const [];
 
   /// One question, answered in one call: no tools, no session, nothing kept.
   /// A model of null resolves to the provider's light default — the title

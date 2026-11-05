@@ -122,6 +122,60 @@ gate is distinct from `maxConcurrentSubAgents` (8), which bounds long-lived
 agent parallelism — one sub-agent makes up to `stepLimit` calls. Null for agents
 built against a raw client (tests), where the per-agent retry path governs.
 
+## How much of an allowance is spent
+
+`LlmProvider.usage` answers it, as a list of `ProviderUsage`s
+(`lib/domain/provider_usage.dart`), of two kinds. A `UsageWindow` is an
+allowance: a label in the provider's own period, what is `used` of a `max`,
+the unit the two are counted in, and when it starts again where the provider
+says. `used` is always what is gone — a provider that reports what is left is
+converted where it is read — and a max rather than a percentage, because what
+a provider counts is not always a share: a dollar cap is a number of dollars.
+A `CreditBalance` is money with no allowance behind it, credits bought rather
+than granted, so it is what is left and nothing to measure it against. The
+default is nothing, which is what most providers have to say; the Providers
+section in Settings draws a line per entry under the row, a bar under each
+window, and nothing at all for an empty list.
+
+**Only where the answer is the provider's to keep stable.** Three say it:
+
+- **OpenRouter** — `/key`, documented: the key's spending cap, what is left of
+  it and whether it resets daily, weekly or monthly. Its periods are UTC's, so
+  the reset is computed; a key with no cap has nothing to show.
+- **Groq** — no endpoint, but every reply carries documented
+  `x-ratelimit-*` headers. `OpenAiClient.responded` hands a reply's headers to
+  a subclass, and `GroqClient` keeps the requests-per-day pair from the last
+  one as a `ReportsUsage` — a client that learns usage from its replies rather
+  than a provider that asks. Nothing until a reply has arrived; the tokens pair
+  is per minute, a pace rather than an allowance, and is left out.
+- **Ollama Cloud** — `ollama.com/api/balance`, documented (outside the `/v1`
+  the chat endpoint is under): the plan's included credits, an allowance in
+  dollars that resets at the end of its monthly period, and the purchased
+  credits as a balance, left out at zero since most accounts never buy any.
+  A plan from before credits answers with its session and weekly limits as
+  percentages remaining in the included credits' place, which become shares.
+  `/api/usage` is not it: that is the request history, and the session and
+  weekly fractions it once carried went in October 2026.
+
+Z.ai's coding-plan quota, Claude CLI's `rate_limit_event` and Codex's
+`account/rateLimits/read` exist and are left out: none is documented, and
+each has changed shape within a year. Anthropic's and OpenAI's APIs have nothing a normal key can ask; their
+usage reports want an admin key and cover the whole organisation.
+
+`LlmRegistry.usageOf` asks the provider with the resolved key, bounded at ten
+seconds, and where it has nothing to ask reads the client its turns already
+run over, if that client `ReportsUsage` — never one built to ask, since a
+client that has run no turn has heard nothing. An endpoint that answers
+anything but a 200 holding an object throws (through `sendChecked`, so the
+provider's own reason comes with it), and the registry gives it a
+`logFailure` line and shows nothing — a usage endpoint that changed under us
+is otherwise indistinguishable from one with nothing to say. The UI asks
+through `AgentBackend.providerUsage`, the seam a fake backend answers in
+tests; `providerUsageProvider` asks again when the section comes back to a
+provider a minute or more after it last asked, which keeps Ollama's ten
+balance requests a minute out of reach of someone moving between settings
+categories.
+
 ## A program in the model's place
 
 `CliProvider` (`providers/cli.dart`) is the third kind beside the two wire

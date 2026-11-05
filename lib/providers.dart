@@ -61,6 +61,7 @@ import "data/prompts/prompt_sources.dart" show promptTiers;
 import "domain/permission.dart";
 import "domain/profile.dart";
 import "domain/project_settings.dart";
+import "domain/provider_usage.dart";
 import "domain/project.dart"
     show ProjectRef, emptyChatQuestionFor, everyProject;
 import "domain/prompt_library.dart";
@@ -1137,6 +1138,21 @@ final keyCheckProvider = Provider<KeyCheck>(
   (ref) =>
       (config, apiKey) => providerOf(config).checkKey(apiKey),
 );
+
+/// How much of each allowance the configured provider [id] has spent, where
+/// it says. Asked again when the Providers section comes back to it a minute
+/// or more after it last asked, and not before, so moving between settings
+/// categories does not spend Ollama's ten balance requests a minute.
+final providerUsageProvider =
+    FutureProvider.family<List<ProviderUsage>, String>((ref, id) {
+      final asked = clock.now();
+      ref.onResume(() {
+        if (clock.now().difference(asked) >= const Duration(minutes: 1)) {
+          ref.invalidateSelf();
+        }
+      });
+      return ref.watch(agentBackendProvider).providerUsage(id);
+    });
 
 /// The process environment, where a provider's named key is looked for after
 /// the settings' own.

@@ -24,6 +24,7 @@ import "../../domain/local_model.dart" show isTitleOnlyModel;
 import "../../domain/model_capability.dart";
 import "../../domain/models.dart";
 import "../../domain/model_registry.dart";
+import "../../domain/provider_usage.dart";
 import "../../domain/permission.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
@@ -1728,6 +1729,12 @@ class BuiltinBackend implements AgentBackend {
       endpoint.config,
       choice.modelId ?? LlmProviderConfig.chatDefaultOf(endpoint.config),
     )?.context;
+  }
+
+  @override
+  Future<List<ProviderUsage>> providerUsage(String providerId) async {
+    final provider = registry.providerFor(providerId);
+    return provider == null ? const [] : registry.usageOf(provider);
   }
 
   @override

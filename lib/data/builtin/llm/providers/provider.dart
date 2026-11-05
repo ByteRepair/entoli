@@ -6,6 +6,7 @@ import "../../../../core/tls.dart";
 import "../../../../domain/llm_provider.dart";
 import "../../../../domain/model_capability.dart";
 import "../../../../domain/model_registry.dart";
+import "../../../../domain/provider_usage.dart";
 import "../hosted_models.dart";
 import "../http_stream.dart";
 import "../llm_client.dart";
@@ -76,6 +77,15 @@ abstract class LlmProvider {
   /// could not be asked, which is not a no.
   Future<bool> checkKey(String apiKey, {http.Client? httpClient});
 
+  /// How much of each allowance the account behind [apiKey] has spent, where
+  /// the provider has somewhere to ask. Nothing for one that does not, which
+  /// is most of them; one that says it only on its replies has a client that
+  /// [ReportsUsage] instead. Throws where it could not be asked.
+  Future<List<ProviderUsage>> usage(
+    String? apiKey, {
+    http.Client? httpClient,
+  }) async => const [];
+
   /// Every model it offers: its own, then models.dev's entry for it less what
   /// it has retired.
   List<ModelInfo> models(ModelCatalog catalog) {
@@ -133,6 +143,30 @@ abstract class LlmProvider {
       }
       if (rejecting.contains(status)) return false;
       throw LlmException("Could not check the key", statusCode: status);
+    } finally {
+      if (httpClient == null) client.close();
+    }
+  }
+
+  /// The JSON object at [url], asked with [headers]. Throws on anything but
+  /// a 200 with an object in it, since a usage endpoint that answers
+  /// otherwise has changed under us and saying nothing would hide it.
+  static Future<Map<String, dynamic>> getJson(
+    Uri url, {
+    required Map<String, String> headers,
+    http.Client? httpClient,
+  }) async {
+    final client = httpClient ?? tlsClient();
+    try {
+      final response = await sendChecked(
+        client,
+        http.Request("GET", url)..headers.addAll(headers),
+      );
+      final json = jsonDecode(await response.stream.bytesToString());
+      if (json is! Map<String, dynamic>) {
+        throw LlmException("$url answered something other than an object");
+      }
+      return json;
     } finally {
       if (httpClient == null) client.close();
     }

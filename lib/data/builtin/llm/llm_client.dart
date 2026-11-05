@@ -3,6 +3,8 @@ import "dart:typed_data";
 
 import "package:collection/collection.dart";
 
+import "../../../domain/provider_usage.dart";
+
 /// The conversation as a provider sees it. Deliberately not `Message` from the
 /// domain: that is what Entoli persists, this is what goes over the wire,
 /// and the two diverge (a tool result is a message here, a part there).
@@ -296,6 +298,14 @@ abstract class LlmClient {
   void close();
 }
 
+/// A client that learns how much of an allowance is spent from the replies it
+/// receives, where its provider has nothing to ask. Read by the registry off
+/// the client turns already run over, never one built to ask.
+abstract interface class ReportsUsage {
+  /// What the last reply said. Empty before one.
+  List<ProviderUsage> get reportedUsage;
+}
+
 /// Clients kept by name, rebuilt when what they were built from changes.
 ///
 /// `LlmRegistry` holds one, keyed by provider id over the API shape, URL and
@@ -316,6 +326,13 @@ class LlmClientCache {
     final client = build();
     _entries[name] = (signature: signature, client: client);
     return client;
+  }
+
+  /// The client already built under [name] for [signature], without building
+  /// one.
+  LlmClient? peek(String name, String signature) {
+    final cached = _entries[name];
+    return cached?.signature == signature ? cached!.client : null;
   }
 
   void close() {

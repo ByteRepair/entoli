@@ -21,6 +21,8 @@ it one the controller dispatches. `test/fakes.dart` holds `FakeBackend`, whose
 `FakeBackend.compact` is scripted with `scriptedSummary` (null is a
 summarizer that said nothing) and recorded in `compactionCalls`;
 `usageHolder` is what `usageFor` answers, the auto-compact threshold's input.
+`providerUsageHolder` is what `providerUsage` answers per provider id, the
+allowances the Providers section draws.
 
 `FakeAssistantLaunch` is the assistant gesture, and its two halves are the two
 routes a launch takes: `pending` is one Kotlin noticed before Dart was
