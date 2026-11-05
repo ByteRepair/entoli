@@ -140,6 +140,45 @@ void main() {
       expect(tile("Providers"), findsOneWidget);
     });
 
+    // Half way through the push both pages are drawn, the list going out
+    // under the category, as a route pushed over it would; the way back is
+    // the same in reverse.
+    testWidgets("a narrow window pushes the category over the list", (
+      tester,
+    ) async {
+      await app.pump(tester, const SettingsPage());
+
+      await tester.tap(tile("General"));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tile("General"), findsOneWidget);
+      expect(find.text("Appearance"), findsOneWidget);
+      await settleIo(tester);
+      expect(tile("General"), findsNothing);
+
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tile("General"), findsOneWidget);
+      expect(find.text("Appearance"), findsOneWidget);
+      await settleIo(tester);
+      expect(find.text("Appearance"), findsNothing);
+    });
+
+    testWidgets("a wide window switches category with no transition", (
+      tester,
+    ) async {
+      useWindow(tester, const Size(1200, 800));
+      await app.pump(tester, const SettingsPage());
+
+      await tester.tap(tile("LLMs"));
+      await tester.pump();
+
+      // The frame the tap lands in, with no transition's frames after it.
+      expect(find.text("New chats"), findsOneWidget);
+      expect(find.text("Appearance"), findsNothing);
+    });
+
     testWidgets("widening puts the open category beside the list", (
       tester,
     ) async {
