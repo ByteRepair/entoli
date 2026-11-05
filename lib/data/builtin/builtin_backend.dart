@@ -1307,17 +1307,24 @@ class BuiltinBackend implements AgentBackend {
         "User: $said\n\n"
         "Assistant: $replyText\n\n"
         "${existing.isEmpty ? "" : "Memories already kept about this project:\n$existing\n\n"}"
-        "Maintain the memory: from the exchange, keep the facts that would "
-        "still be true and useful in a later conversation — a preference the "
-        "user stated, a decision that was made, a fact learned about a "
-        "codebase, an account, or the user. One fact per entry, each in one or "
-        "two sentences, written so it makes sense without this exchange. Never "
-        "include secrets, keys, or credentials, and never include what a file "
-        "would say. Reply with JSON only: {\"memories\": [\"...\"], "
+        "Decide whether this exchange holds anything worth knowing in a "
+        "later, unrelated conversation. Most exchanges hold nothing, and then "
+        "every key is empty. Keep only what will still be true months from "
+        "now: a preference or way of working the user stated, a lasting fact "
+        "about the user, or a constraint or decision about a project that its "
+        "files and history would not show. Never keep the progress of the task "
+        "at hand — what was done, built, tested, committed, pushed, merged or "
+        "planned, a branch, commit, pull request or file name, a test result; "
+        "never what the code, a file or a repository's history already says; "
+        "never news, prices or other facts about the world that will date; "
+        "never something the user only mentioned in passing; never secrets, "
+        "keys or credentials. Never repeat a memory that is already kept: "
+        "leave it alone, or correct it through replaces. One fact per entry, "
+        "each in one or two sentences, written so it makes sense without this "
+        "exchange. Reply with JSON only: {\"memories\": [\"...\"], "
         "\"replaces\": {\"<id>\": \"...\"}, \"delete\": [\"<id>\"]}, where "
         "memories is a new fact, replaces corrects one of the ones above by "
-        "its id, and delete spends one the exchange contradicts or supersedes. "
-        "Any key may be an empty list where there is nothing to do.";
+        "its id, and delete spends one the exchange contradicts or supersedes.";
     try {
       final answer =
           await _oneCompletion(target, [
@@ -1382,14 +1389,17 @@ class BuiltinBackend implements AgentBackend {
           "Tidy these memories. Merge two entries that say the same thing by "
           "rewriting one with the merged wording and spending the other; spend "
           "an entry that is plainly superseded or contradicted by a newer one; "
-          "and leave everything else exactly as it is. Only what is listed "
-          "decides: never delete or change an entry on a guess, and where two "
-          "entries could be read either way, keep both. Reply with JSON only: "
-          "{\"memories\": [...], \"replaces\": {\"<id>\": \"...\"}, "
-          "\"delete\": [\"<id>]}, where replaces rewrites an entry by its id, "
-          "delete spends one, and memories is empty unless the merge leaves "
-          "behind a fact none of the entries held. If nothing is wrong, all "
-          "three empty.";
+          "spend an entry that only records the progress of a task — what was "
+          "done, committed, pushed, merged or tested, a branch or pull request "
+          "— since that is over by the time it is read; and leave everything "
+          "else exactly as it is. Only what is listed decides: never delete or "
+          "change an entry on a guess, and where two entries could be read "
+          "either way, keep both. Reply with JSON only: {\"memories\": [...], "
+          "\"replaces\": {\"<id>\": \"...\"}, \"delete\": [\"<id>\"]}, where "
+          "replaces rewrites an entry by its id, delete spends one, and "
+          "memories is empty unless the merge leaves behind a fact none of the "
+          "entries held; never list an entry above in it again. If nothing is "
+          "wrong, all three empty.";
       try {
         final answer =
             await _oneCompletion(target, [

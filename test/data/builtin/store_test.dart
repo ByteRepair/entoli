@@ -210,6 +210,52 @@ void main() {
       expect(entries.single.id, isNot("no-such-id"));
     });
 
+    test("a batch that answers with the store lands as nothing", () async {
+      // The shape a model shown the store sends back: each kept memory
+      // spent, rewritten to the text it already has, and added again.
+      final first = await store.add("The user prefers concise answers.");
+      final second = await store.add("the user works on formal verification");
+      final result = await store.maintain(
+        delete: [first.id, second.id],
+        replaces: {first.id: first.text, second.id: second.text},
+        add: [
+          "the user prefers concise answers",
+          "The user works on formal verification.",
+          "The user works on  formal verification",
+        ],
+      );
+
+      expect(result, (added: 0, updated: 0, deleted: 0));
+      final entries = await store.entries();
+      expect(entries.map((e) => e.id).toSet(), {first.id, second.id});
+      expect(entries.map((e) => e.text).toSet(), {first.text, second.text});
+    });
+
+    test(
+      "a replacement of an id the batch spends does not bring it back",
+      () async {
+        final stale = await store.add("the branch is feat/usage");
+        final result = await store.maintain(
+          delete: [stale.id],
+          replaces: {stale.id: "the branch is feat/usage, now merged"},
+        );
+
+        expect(result, (added: 0, updated: 0, deleted: 1));
+        expect(await store.entries(), isEmpty);
+      },
+    );
+
+    test("a fact added twice in one batch is kept once", () async {
+      final result = await store.maintain(
+        add: ["The user is in Manchester.", "the user is in manchester"],
+        replaces: {"no-such-id": "The user is in Manchester"},
+      );
+
+      expect(result, (added: 1, updated: 0, deleted: 0));
+      // The replacement is read first, so its wording is the one kept.
+      expect((await store.entries()).single.text, "The user is in Manchester");
+    });
+
     test(
       "empty texts are skipped and an empty batch changes nothing",
       () async {

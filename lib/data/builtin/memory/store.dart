@@ -216,6 +216,15 @@ class MemoryStore implements Memories {
   /// operation on an id that is not there is ignored, and a replacement of a
   /// missing id lands as a new memory rather than a record with a made-up id,
   /// so a model that misremembers a name costs nothing. Returns what landed.
+  ///
+  /// A model shown the store tends to answer with the store: every kept
+  /// memory back as a new one, an id both spent and rewritten. So the batch
+  /// is read as a whole before anything is written. A new memory that says
+  /// what a kept one already says lands as nothing — and where that kept one
+  /// was being spent in the same batch, the spend is taken back, the fact
+  /// staying under the id it had. A replacement of an id the batch spends is
+  /// dropped rather than bringing it back, and one that leaves the text as it
+  /// was writes nothing.
   Future<({int added, int updated, int deleted})> maintain({
     List<String>? delete,
     Map<String, String>? replaces,
@@ -223,41 +232,61 @@ class MemoryStore implements Memories {
     String? chat,
   }) async {
     final live = {for (final entry in await entries()) entry.id: entry};
-    var added = 0;
-    var updated = 0;
-    var deleted = 0;
-    for (final id in delete ?? const <String>[]) {
-      if (!live.containsKey(id)) continue;
-      await _append(_marker("d", id));
-      deleted++;
+    final spent = {
+      for (final id in delete ?? const <String>[])
+        if (live.containsKey(id)) id,
+    };
+    // Which kept memory each fact already is, for the adds to be read
+    // against: the first is enough, a store with duplicates in it being one
+    // a consolidation pass will merge.
+    final kept = <String, String>{};
+    for (final entry in live.values) {
+      kept.putIfAbsent(sameFact(entry.text), () => entry.id);
     }
+    final rewrites = <String, String>{};
+    final fresh = <String>[];
+    void addFact(String text) {
+      final key = sameFact(text);
+      final id = kept[key];
+      if (id != null) {
+        spent.remove(id);
+        return;
+      }
+      kept[key] = "";
+      fresh.add(text);
+    }
+
     for (final entry in (replaces ?? const <String, String>{}).entries) {
-      final id = entry.key;
-      final text = entry.value;
-      if (text.trim().isEmpty) continue;
-      final when = clock.now().toUtc();
-      if (live.containsKey(id)) {
-        await _append(_memoryRecord(id, text.trim(), when, chat));
-        updated++;
-      } else {
-        await _append(
-          _memoryRecord(const Uuid().v4(), text.trim(), when, chat),
-        );
-        added++;
+      final text = entry.value.trim();
+      if (text.isEmpty) continue;
+      final current = live[entry.key];
+      if (current == null) {
+        addFact(text);
+      } else if (!spent.contains(entry.key) && current.text != text) {
+        rewrites[entry.key] = text;
       }
     }
     for (final text in add ?? const <String>[]) {
-      if (text.trim().isEmpty) continue;
-      await _append(
-        _memoryRecord(
-          const Uuid().v4(),
-          text.trim(),
-          clock.now().toUtc(),
-          chat,
-        ),
-      );
-      added++;
+      if (text.trim().isNotEmpty) addFact(text.trim());
     }
+    // An add taking a spend back runs after the replaces have been read, so
+    // a rewrite dropped for that spend is one the batch did not mean.
+    for (final id in spent) {
+      await _append(_marker("d", id));
+    }
+    for (final entry in rewrites.entries) {
+      await _append(
+        _memoryRecord(entry.key, entry.value, clock.now().toUtc(), chat),
+      );
+    }
+    for (final text in fresh) {
+      await _append(
+        _memoryRecord(const Uuid().v4(), text, clock.now().toUtc(), chat),
+      );
+    }
+    final added = fresh.length;
+    final updated = rewrites.length;
+    final deleted = spent.length;
     if (added + updated + deleted > 0) await _rebuildIndex();
     return (added: added, updated: updated, deleted: deleted);
   }
@@ -452,6 +481,15 @@ List<String> tokenize(String text) {
   }
   return words;
 }
+
+/// What two memories are compared by when the store asks whether a new one
+/// is already kept: the words alone, lowercased, so a restatement that only
+/// differs in case, spacing or punctuation is the same fact. A rewording is
+/// not — that is a consolidation pass's to merge, not a string compare's.
+String sameFact(String text) => RegExp(
+  r"[\p{L}\p{N}]+",
+  unicode: true,
+).allMatches(text.toLowerCase()).map((match) => match.group(0)).join(" ");
 
 /// The memories as a block of prompt text, newest first, one line each with
 /// the caps applied. This is the always-loaded half of the store: what is not
