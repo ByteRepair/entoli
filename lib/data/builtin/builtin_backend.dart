@@ -308,8 +308,9 @@ class BuiltinBackend implements AgentBackend {
               ? "The Apple on-device model only names chats: its context "
                     "is too small for the agent. Pick another model for "
                     "this chat."
-              : "'${settings.provider}' is not configured. Add it in "
-                    "Settings, or pick another model.",
+              // Removed from Settings, or never here (a chat mirrored from
+              // another device): the id is all that is left to name it by.
+              : missingProviderMessage(settings.model, settings.provider!),
         );
         return;
       }
@@ -1817,3 +1818,9 @@ typedef _Target = ({
   bool images,
   bool pdfs,
 });
+
+/// What a turn says when the provider its model names is not configured
+/// here: the model, and the provider's id, which is all that is left of it.
+String missingProviderMessage(String? model, String providerId) =>
+    "The ${model ?? "Default"} provider (id: '$providerId') is not found. "
+    "Please pick another model.";

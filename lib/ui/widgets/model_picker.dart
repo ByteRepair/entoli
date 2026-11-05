@@ -71,10 +71,22 @@ class ModelPicker extends ConsumerWidget {
     final providers = ref.watch(
       appSettingsProvider.select((s) => s.llmProviders),
     );
-    final listed =
-        ref.watch(sortedModelsProvider).value ?? const <ModelOption>[];
+    final models = ref.watch(sortedModelsProvider);
+    final listed = models.value ?? const <ModelOption>[];
     final serving = ref.watch(modelProvidersProvider);
     final none = choice.providerId == null && choice.modelId == null;
+    // A provider named and not here — removed from Settings, or a device's
+    // model this one has not got. Said, in the turn error's words, rather
+    // than read as the null entry: a turn on it fails, and the field must
+    // not claim it would run on something else.
+    // Only once the list is in, so a field opened before it is not briefly
+    // an error.
+    final missing =
+        !role.voice &&
+        models.hasValue &&
+        choice.providerId != null &&
+        !serving.any((p) => p.id == choice.providerId) &&
+        !listed.any((m) => m.providerId == choice.providerId);
     final nullEntry = inherited == null
         ? nullLabel
         : "$nullLabel (${_name(providers, listed, inherited!)})";
@@ -109,10 +121,17 @@ class ModelPicker extends ConsumerWidget {
                 ? helperOffText ?? _inheritedHelper(providers, listed)
                 : null,
             helperMaxLines: 3,
+            errorText: missing
+                ? "Its provider (id: '${choice.providerId}') is not found. "
+                      "Please pick another model."
+                : null,
+            errorMaxLines: 2,
             suffixIcon: const Icon(Icons.chevron_right),
           ),
           child: Text(
-            _label(providers, listed, serving),
+            missing
+                ? "Provider not found · ${choice.modelId ?? "Default"}"
+                : _label(providers, listed, serving),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -128,9 +147,9 @@ class ModelPicker extends ConsumerWidget {
       ? null
       : "Using ${_name(providers, listed, inherited!)}";
 
-  /// What the field reads as. A Default whose provider is gone, or names no
-  /// default, has nothing to resolve to and reads as the null entry, whose
-  /// helper names what it inherits; a model
+  /// What the field reads as, for a provider still there: a Default that
+  /// names no model has nothing to resolve to and reads as the null entry,
+  /// whose helper names what it inherits; a model
   /// is named by what the catalog calls it, its id where nothing does.
   String _label(
     List<LlmProviderConfig> providers,

@@ -396,13 +396,14 @@ void main() {
       expect(client.sent.first[1].text, isNot(contains(myTeamNote!)));
     });
 
-    test("a provider that is not configured is named", () async {
+    test("a provider that is not configured is named by its id", () async {
       final backend = backendOver([]);
       final events = await send(backend, "hi", provider: "ghost");
 
       expect(
         events.whereType<ErrorEvent>().single.message,
-        contains("'ghost' is not configured"),
+        "The fake-model provider (id: 'ghost') is not found. "
+        "Please pick another model.",
       );
     });
 
