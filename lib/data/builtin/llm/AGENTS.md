@@ -210,6 +210,19 @@ of its `CLAUDE*`, `ANTHROPIC_*` or `MCP_*` ones then, since they would make
 its `claude` a child of that session: its id, its account email, its proxy
 for the API.
 
+Neither program's models are in models.dev, so what the app knows of one —
+its context window above all — is the subclass's `knownModels`: each a
+`ModelInfo` with its `context` (200k for Claude's aliases, 272k for Codex's),
+the user's own `customModels` first. A provider answers for one model
+through `LlmProvider.modelInfo`, which is `modelInfoOf` unless a class knows
+of models no catalog lists, and `CliProvider` falls back to `knownModels`
+there. The backend asks an endpoint it holds rather than `modelInfoOf`
+directly — `contextWindowOf`, which the context page and auto-compaction
+read, and `_resolveModel`'s image and PDF gate — so a chat on either program
+reports the window it has rather than the 128k guess. The pickers, which hold
+a config and no endpoint, still ask `modelInfoOf`, which only costs them a
+display name.
+
 **The split is interface against lifecycle.** `CliProvider` owns what every
 such program shares: finding it, its environment, and `CliClient` — the
 `LlmClient` that pools `CliSession`s. The loop resends the whole

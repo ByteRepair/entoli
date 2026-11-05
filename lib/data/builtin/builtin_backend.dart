@@ -1560,7 +1560,7 @@ class BuiltinBackend implements AgentBackend {
     if (modelId == null || modelId.isEmpty) return null;
     if (!title && isTitleOnlyModel(provider, modelId)) return null;
     final client = registry.clientOf(endpoint);
-    final info = modelInfoOf(config, modelId);
+    final info = endpoint.modelInfo(modelId);
     // Here rather than at each request: everything that asks the model
     // resolves it through this, the compaction's one-shot read included.
     // Unknown passes images through: a model only the endpoint lists is
@@ -1735,10 +1735,11 @@ class BuiltinBackend implements AgentBackend {
     final provider = choice.providerId;
     final endpoint = provider == null ? null : registry.providerFor(provider);
     if (endpoint == null) return null;
-    return modelInfoOf(
-      endpoint.config,
-      choice.modelId ?? LlmProviderConfig.chatDefaultOf(endpoint.config),
-    )?.context;
+    return endpoint
+        .modelInfo(
+          choice.modelId ?? LlmProviderConfig.chatDefaultOf(endpoint.config),
+        )
+        ?.context;
   }
 
   @override
