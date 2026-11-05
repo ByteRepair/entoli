@@ -125,9 +125,9 @@ built against a raw client (tests), where the per-agent retry path governs.
 ## A program in the model's place
 
 `CliProvider` (`providers/cli.dart`) is the third kind beside the two wire
-formats: another harness's command-line program — Claude CLI today, Codex
-the obvious next — answering Entoli's turns under the user's own sign-in.
-Its config is `LlmApi.claudeCli` with a `command` (a path, or a bare name
+formats: another harness's command-line program — Claude CLI and Codex
+CLI — answering Entoli's turns under the user's own sign-in.
+Its config is `LlmApi.claudeCli` or `LlmApi.codexCli` with a `command` (a path, or a bare name
 looked up on `PATH`, null for the subclass's `defaultCommand`) and an `env`
 laid over the app's own environment; `baseUrl` is empty and no key is asked
 for (`KeyFree`). `providerOf` reads it by API before anything else, so a
@@ -163,11 +163,15 @@ did not live through. A session is parked the moment its completion is
 read, so a consumer that stops on the reply does not take it down; one
 stopped part-way is closed. Parked sessions go after ten minutes or past
 four, and `close` takes every one down. What a session *is* belongs to the
-subclass, through `start`.
+subclass, through `start`. Both programs' sessions are a
+`CliProcessSession`: one process speaking JSON a line at a time, whose
+lifecycle — the exchange in progress, held calls against new input, the
+end, the exit and the close — is written once there; a subclass says what
+a line means and how input and results are written.
 
 `ClaudeCliProvider`'s session is one `claude -p` in stream-json on both
 sides, run in one empty folder every session shares —
-`<cache>/claude-cli/work/`, the cache `main` hands `ClaudeCliProvider` — so
+`<cache>/claude-cli/work/`, the cache `main` hands `CliProvider` — so
 no project's `CLAUDE.md` is picked up and what the CLI keeps per working
 directory (its cache's MCP logs, its project entry in `~/.claude.json`) is
 kept once rather than once per session; the files a session is handed sit
@@ -205,7 +209,40 @@ JSON-RPC request in and its answer out, and `McpToolBridge` is that behind
 a socket — the token check and the HTTP translation, which no test covers,
 since no test binds a port. The session's tests run over a fake process
 and a bridge with no socket under it, playing the CLI by printing its
-stream events and calling the routes.
+stream events and calling the routes. `CodexCliProvider.over` takes the
+`LaunchCli` alone, and its tests play the app-server over the same fake
+process, line by line.
+
+**Codex CLI is a server rather than a pipe of messages.**
+`CodexCliProvider`'s session is one `codex app-server`, Codex's JSON-RPC
+over stdio, holding one ephemeral thread run in `<cache>/codex-cli/work/`:
+Entoli's system prompt is the thread's `baseInstructions`, each new user
+message a `turn/start`, and the reply streams back as item notifications.
+Entoli's tools are the thread's dynamic tools, so no MCP bridge is needed:
+Codex calls one with an `item/tool/call` request carrying the call's id,
+and waits for the response. A reply ends where calls arrive. Those
+read with the same output are one reply (the hand-out waits one
+event-loop turn, `Timer.run`, not a duration), and one that arrives after
+its reply went out is the next reply. That is the one rule that also
+covers code mode, where a model such as `gpt-6-luna` runs a script in
+Codex's own `exec` tool and calls Entoli's tools from inside it, so the
+model's response never names them. Code mode cannot be switched off: with
+its host disabled, those models' `exec` calls fail.
+
+What is switched off is by `-c` (`argumentsFor`): Codex's feature
+flags by `features.<name>=false`, since `--disable` refuses a name a later
+release has dropped where config only warns; web search; the
+request-user-input tool; the bundled skills; and `notify`, which the ChatGPT
+app points at a program of its own. The thread has no environments and a
+read-only sandbox, which leaves `apply_patch` offered but unable to write.
+MCP servers in the user's `config.toml` (the ChatGPT app adds a
+`node_repl`) are switched off one by one by name (`userMcpServers`):
+overriding the table with an empty one keeps every server. Any request
+other than a tool call — an approval, a question — is answered with an
+error, there being nobody to ask. The program a default name falls back to
+is the ChatGPT app's copy. The models offered are what a ChatGPT account
+was offered when this was written, and depend on the plan; the user adds
+any other as the provider's own.
 
 ## Errors, and how long the UI waits
 

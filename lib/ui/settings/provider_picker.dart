@@ -66,11 +66,12 @@ class _PresetPicker extends ConsumerWidget {
                     ),
                   // A program run here, which only a desktop can do.
                   if (heading == _onThisMachine && isDesktop)
-                    _ClaudeCliTile(
-                      onTap: () => Navigator.pop(context, (
-                        preset: ClaudeCliProvider.preset,
-                      )),
-                    ),
+                    for (final cli in cliProviderPresets)
+                      _CliTile(
+                        cli,
+                        onTap: () =>
+                            Navigator.pop(context, (preset: cli.config)),
+                      ),
                 ],
               const Divider(),
               ListTile(
@@ -98,12 +99,12 @@ class _PresetPicker extends ConsumerWidget {
 
 const _onThisMachine = "On this machine";
 
-/// Claude CLI beside the local servers. Not a [_PresetTile]: it has no terms
-/// of its own to tag, its prompts going wherever the user's Claude account
-/// sends them.
-class _ClaudeCliTile extends StatelessWidget {
-  const _ClaudeCliTile({required this.onTap});
+/// A CLI beside the local servers. Not a [_PresetTile]: it has no terms of
+/// its own to tag, its prompts going wherever the user's account sends them.
+class _CliTile extends StatelessWidget {
+  const _CliTile(this.cli, {required this.onTap});
 
+  final CliProvider cli;
   final VoidCallback onTap;
 
   @override
@@ -115,13 +116,13 @@ class _ClaudeCliTile extends StatelessWidget {
         foregroundColor: colors.onSecondaryContainer,
         child: const Icon(Icons.terminal),
       ),
-      title: const Text("Claude CLI"),
-      subtitle: const Column(
+      title: Text(cli.config.displayName),
+      subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(ClaudeCliProvider.about),
-          SizedBox(height: 6),
-          _Tag(Icons.account_circle_outlined, "Uses your Claude account"),
+          Text(cli.about),
+          const SizedBox(height: 6),
+          _Tag(Icons.account_circle_outlined, cli.account),
         ],
       ),
       isThreeLine: true,

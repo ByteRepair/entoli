@@ -149,6 +149,7 @@ class _ProviderDialogState extends State<_ProviderDialog> {
   ProviderEdit? _submit() {
     if (_api.isCli) {
       final command = _command.text.trim();
+      final preset = cliPresetOf(_api).config;
       return ProviderEdit(
         LlmProviderConfig(
           id: widget.initial?.id ?? "",
@@ -156,11 +157,9 @@ class _ProviderDialogState extends State<_ProviderDialog> {
           baseUrl: "",
           name: _name.text.trim(),
           defaultModelId:
-              widget.initial?.defaultModelId ??
-              ClaudeCliProvider.preset.defaultModelId,
+              widget.initial?.defaultModelId ?? preset.defaultModelId,
           defaultLightModelId:
-              widget.initial?.defaultLightModelId ??
-              ClaudeCliProvider.preset.defaultLightModelId,
+              widget.initial?.defaultLightModelId ?? preset.defaultLightModelId,
           customModels: widget.initial?.customModels ?? const [],
           command: command.isEmpty ? null : command,
           env: _env,
@@ -387,11 +386,12 @@ class _ProviderDialogState extends State<_ProviderDialog> {
         ),
         // A program run here, which a phone cannot do; an entry synced onto
         // one still shows what it is.
-        if (isDesktop || _api.isCli)
-          const DropdownMenuItem(
-            value: LlmApi.claudeCli,
-            child: Text("Claude CLI"),
-          ),
+        for (final cli in cliProviderPresets)
+          if (isDesktop || _api == cli.config.api)
+            DropdownMenuItem(
+              value: cli.config.api,
+              child: Text(cli.config.displayName),
+            ),
       ],
       onChanged: (value) => setState(() => _api = value ?? LlmApi.openai),
     ),
@@ -401,29 +401,32 @@ class _ProviderDialogState extends State<_ProviderDialog> {
 
   /// What a program run here is configured with: which program, and what
   /// it runs under. No key: it holds its own sign-in.
-  List<Widget> _cliFields() => [
-    Text(ClaudeCliProvider.about, style: Theme.of(context).textTheme.bodySmall),
-    const SizedBox(height: 16),
-    TextField(
-      controller: _command,
-      decoration: InputDecoration(
-        labelText: "Executable",
-        hintText: "claude",
-        helperText: "Empty runs claude from PATH",
-        suffixIcon: IconButton(
-          tooltip: "Choose a file",
-          icon: const Icon(Icons.folder_open),
-          onPressed: _chooseExecutable,
+  List<Widget> _cliFields() {
+    final cli = cliPresetOf(_api);
+    return [
+      Text(cli.about, style: Theme.of(context).textTheme.bodySmall),
+      const SizedBox(height: 16),
+      TextField(
+        controller: _command,
+        decoration: InputDecoration(
+          labelText: "Executable",
+          hintText: cli.defaultCommand,
+          helperText: "Empty runs ${cli.defaultCommand} from PATH",
+          suffixIcon: IconButton(
+            tooltip: "Choose a file",
+            icon: const Icon(Icons.folder_open),
+            onPressed: _chooseExecutable,
+          ),
         ),
       ),
-    ),
-    const SizedBox(height: 16),
-    EnvironmentSection(
-      env: _env,
-      description: "What the program runs with, over the app's own.",
-      onSaved: (next) async => setState(() => _env = next),
-    ),
-  ];
+      const SizedBox(height: 16),
+      EnvironmentSection(
+        env: _env,
+        description: "What the program runs with, over the app's own.",
+        onSaved: (next) async => setState(() => _env = next),
+      ),
+    ];
+  }
 
   Future<void> _chooseExecutable() async {
     final file = await openFile(confirmButtonText: "Use this program");

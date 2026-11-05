@@ -366,7 +366,7 @@ class OpenAiClient implements LlmClient {
         }
       : {
           "type": "image_url",
-          "image_url": {"url": "data:${file.mimeType};base64,${file.base64}"},
+          "image_url": {"url": file.dataUrl},
         };
 
   Map<String, dynamic> _encodeMessage(LlmMessage message) {
