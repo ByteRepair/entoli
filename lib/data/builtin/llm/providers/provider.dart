@@ -78,11 +78,10 @@ abstract class LlmProvider {
   Future<bool> checkKey(String apiKey, {http.Client? httpClient});
 
   /// How much of each allowance the account behind [apiKey] has spent, where
-  /// the provider says. Nothing for one that does not, which is most of them.
-  /// [client] is the one turns run over, for a provider that says it only on
-  /// its replies. Throws where it could not be asked.
+  /// the provider has somewhere to ask. Nothing for one that does not, which
+  /// is most of them; one that says it only on its replies has a client that
+  /// [ReportsUsage] instead. Throws where it could not be asked.
   Future<List<ProviderUsage>> usage(
-    LlmClient client,
     String? apiKey, {
     http.Client? httpClient,
   }) async => const [];
@@ -159,18 +158,11 @@ abstract class LlmProvider {
   }) async {
     final client = httpClient ?? tlsClient();
     try {
-      final response = await sendOrUnreachable(
+      final response = await sendChecked(
         client,
         http.Request("GET", url)..headers.addAll(headers),
       );
-      final body = await response.stream.bytesToString();
-      if (response.statusCode != 200) {
-        throw LlmException(
-          "$url answered ${response.statusCode}",
-          statusCode: response.statusCode,
-        );
-      }
-      final json = jsonDecode(body);
+      final json = jsonDecode(await response.stream.bytesToString());
       if (json is! Map<String, dynamic>) {
         throw LlmException("$url answered something other than an object");
       }

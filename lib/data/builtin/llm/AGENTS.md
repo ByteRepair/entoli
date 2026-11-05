@@ -144,11 +144,10 @@ window, and nothing at all for an empty list.
   the reset is computed; a key with no cap has nothing to show.
 - **Groq** — no endpoint, but every reply carries documented
   `x-ratelimit-*` headers. `OpenAiClient.responded` hands a reply's headers to
-  a subclass, `GroqClient` keeps the requests-per-day pair from the last one,
-  and the provider reads it off the client — which is why `usage` is handed
-  the client turns run over, the registry's cached one under the turn's
-  wrappers. Nothing until a reply has arrived; the tokens pair is per minute,
-  a pace rather than an allowance, and is left out.
+  a subclass, and `GroqClient` keeps the requests-per-day pair from the last
+  one as a `ReportsUsage` — a client that learns usage from its replies rather
+  than a provider that asks. Nothing until a reply has arrived; the tokens pair
+  is per minute, a pace rather than an allowance, and is left out.
 - **Ollama Cloud** — `ollama.com/api/balance`, documented (outside the `/v1`
   the chat endpoint is under): the plan's included credits, an allowance in
   dollars that resets at the end of its monthly period, and the purchased
@@ -163,12 +162,19 @@ Z.ai's coding-plan quota, Claude CLI's `rate_limit_event` and Codex's
 each has changed shape within a year. Anthropic's and OpenAI's APIs have nothing a normal key can ask; their
 usage reports want an admin key and cover the whole organisation.
 
-`LlmRegistry.usageOf` asks with the resolved key and a ten-second bound. An
-endpoint that answers anything but a 200 holding an object throws, and the
-registry gives it a `logFailure` line and shows nothing — a usage endpoint
-that changed under us is otherwise indistinguishable from one with nothing to
-say. `providerUsageProvider` is auto-disposed, so the section asks again each
-time it is shown.
+`LlmRegistry.usageOf` asks the provider with the resolved key, bounded at ten
+seconds, and where it has nothing to ask reads the client its turns already
+run over, if that client `ReportsUsage` — never one built to ask, since a
+client that has run no turn has heard nothing. An endpoint that answers
+anything but a 200 holding an object throws (through `sendChecked`, so the
+provider's own reason comes with it), and the registry gives it a
+`logFailure` line and shows nothing — a usage endpoint that changed under us
+is otherwise indistinguishable from one with nothing to say. The UI asks
+through `AgentBackend.providerUsage`, the seam a fake backend answers in
+tests; `providerUsageProvider` asks again when the section comes back to a
+provider a minute or more after it last asked, which keeps Ollama's ten
+balance requests a minute out of reach of someone moving between settings
+categories.
 
 ## A program in the model's place
 

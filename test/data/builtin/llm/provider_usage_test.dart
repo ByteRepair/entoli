@@ -46,17 +46,11 @@ void main() {
     });
 
     test("a weekly cap resets on the next Monday, a daily one at midnight", () {
-      expect(
-        OpenRouterProvider.nextReset("weekly", now),
-        DateTime.utc(2026, 11, 9),
-      );
-      expect(
-        OpenRouterProvider.nextReset("daily", now),
-        DateTime.utc(2026, 11, 5),
-      );
+      expect(OpenRouterPeriod.weekly.nextAfter(now), DateTime.utc(2026, 11, 9));
+      expect(OpenRouterPeriod.daily.nextAfter(now), DateTime.utc(2026, 11, 5));
       // A Monday itself waits a whole week rather than none.
       expect(
-        OpenRouterProvider.nextReset("weekly", DateTime.utc(2026, 11, 9, 1)),
+        OpenRouterPeriod.weekly.nextAfter(DateTime.utc(2026, 11, 9, 1)),
         DateTime.utc(2026, 11, 16),
       );
     });
@@ -80,7 +74,6 @@ void main() {
     test("asks /key with the key", () async {
       final asked = <http.Request>[];
       final usage = await const OpenRouterProvider().usage(
-        const OpenRouterProvider().client(null),
         "sk-test",
         httpClient: MockClient((request) async {
           asked.add(request);
@@ -98,7 +91,6 @@ void main() {
     test("an endpoint that answers otherwise is a failure, not nothing", () {
       expect(
         const OpenRouterProvider().usage(
-          const OpenRouterProvider().client(null),
           "sk-test",
           httpClient: MockClient((_) async => http.Response("nope", 500)),
         ),
@@ -188,7 +180,6 @@ void main() {
     test("asks ollama.com's /api/balance, not under /v1", () async {
       final asked = <Uri>[];
       await const OllamaCloudProvider().usage(
-        const OllamaCloudProvider().client(null),
         "key",
         httpClient: MockClient((request) async {
           asked.add(request.url);
@@ -237,7 +228,7 @@ void main() {
       expect(GroqClient.usageOfHeaders(const {}, now), isEmpty);
     });
 
-    test("the provider reports what its client's last reply said", () async {
+    test("the client reports what its last reply said", () async {
       final client = GroqClient(
         baseUrl: Uri.parse("https://api.groq.com/openai/v1"),
         httpClient: MockClient.streaming(
@@ -250,10 +241,10 @@ void main() {
           ),
         ),
       );
-      const groq = GroqProvider();
-      expect(await groq.usage(client, null), isEmpty);
+      expect(client.reportedUsage, isEmpty);
       await client.stream(const [], model: "openai/gpt-oss-20b").toList();
-      expect(((await groq.usage(client, null)).single as UsageWindow).used, 1);
+      expect(client.reportedUsage.single.used, 1);
+      expect(const GroqProvider().client(null), isA<ReportsUsage>());
     });
   });
 

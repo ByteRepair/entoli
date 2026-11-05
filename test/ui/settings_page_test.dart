@@ -8,6 +8,8 @@ import "package:path/path.dart" as p;
 
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
+import "package:agent_chat/domain/llm_provider.dart";
+import "package:agent_chat/domain/provider_usage.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/widgets/code_block.dart" show CodeBlock;
 import "package:agent_chat/ui/settings/settings_page.dart";
@@ -241,6 +243,36 @@ void main() {
     await openCategory(tester, SettingsCategory.providers);
     expect(find.text("Add provider"), findsOneWidget);
     expect(find.text("New chats"), findsNothing);
+  });
+
+  // An allowance is a line and a bar; a balance has nothing to measure it
+  // against, so it is a line alone.
+  testWidgets("a provider's usage is drawn under its row", (tester) async {
+    const ollama = LlmProviderConfig(
+      id: otherProvider,
+      api: LlmApi.openai,
+      baseUrl: "https://ollama.com/v1",
+    );
+    await io(tester, () => app.seedProviders([ollama]));
+    app.backend.providerUsageHolder[otherProvider] = const [
+      UsageWindow(
+        label: "Monthly credits",
+        used: 27.5,
+        max: 100,
+        unit: UsageUnit.usd,
+      ),
+      CreditBalance(label: "Purchased credits", usd: 25),
+    ];
+    await pumpSettings(tester, app, SettingsCategory.providers);
+
+    expect(find.text(r"Monthly credits: $27.50 of $100.00"), findsOneWidget);
+    expect(find.text(r"Purchased credits: $25.00 left"), findsOneWidget);
+    expect(
+      tester.widget<LinearProgressIndicator>(
+        find.byType(LinearProgressIndicator),
+      ),
+      isA<LinearProgressIndicator>().having((b) => b.value, "value", 0.275),
+    );
   });
 
   group("the recommended provider", () {

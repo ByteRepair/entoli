@@ -70,13 +70,6 @@ String _describeWindow(UsageWindow window, DateTime now) {
   final resets = window.resetsAt;
   return [
     "${window.label}: $amount",
-    if (resets != null) "resets ${_until(resets.difference(now))}",
+    if (resets != null) "resets ${formatUntil(resets.difference(now))}",
   ].join(" · ");
-}
-
-String _until(Duration left) {
-  if (left.inMinutes < 1) return "now";
-  if (left.inHours < 1) return "in ${plural(left.inMinutes, "minute")}";
-  if (left.inDays < 1) return "in ${plural(left.inHours, "hour")}";
-  return "in ${plural(left.inDays, "day")}";
 }

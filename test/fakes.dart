@@ -40,6 +40,7 @@ import "package:agent_chat/domain/model_registry.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/room/room_state.dart";
 import "package:agent_chat/domain/prompt_library.dart";
+import "package:agent_chat/domain/provider_usage.dart";
 import "package:agent_chat/domain/file_watches.dart";
 import "package:agent_chat/domain/reminder_alarms.dart";
 import "package:agent_chat/domain/trigger.dart";
@@ -800,6 +801,13 @@ class FakeBackend implements AgentBackend {
 
   /// What `contextWindowOf` answers, keyed by model id.
   final Map<String?, int> windowHolder = {};
+
+  @override
+  Future<List<ProviderUsage>> providerUsage(String providerId) async =>
+      providerUsageHolder[providerId] ?? const [];
+
+  /// What `providerUsage` answers, keyed by provider id.
+  final Map<String, List<ProviderUsage>> providerUsageHolder = {};
 
   @override
   Future<void> shutdown() async {}

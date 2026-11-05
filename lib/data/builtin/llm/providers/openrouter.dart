@@ -4,7 +4,6 @@ import "package:http/http.dart" as http;
 import "../../../../domain/llm_provider.dart";
 import "../../../../domain/provider_usage.dart";
 import "../http_stream.dart";
-import "../llm_client.dart";
 import "provider.dart";
 
 class OpenRouterProvider extends OpenAiCompatibleProvider {
@@ -40,7 +39,6 @@ class OpenRouterProvider extends OpenAiCompatibleProvider {
   /// with no cap has no allowance to show.
   @override
   Future<List<ProviderUsage>> usage(
-    LlmClient client,
     String? apiKey, {
     http.Client? httpClient,
   }) async {
@@ -62,34 +60,39 @@ class OpenRouterProvider extends OpenAiCompatibleProvider {
     final limit = (data["limit"] as num?)?.toDouble();
     if (limit == null) return const [];
     final remaining = (data["limit_remaining"] as num?)?.toDouble() ?? limit;
-    final reset = data["limit_reset"];
+    final period = OpenRouterPeriod.values.asNameMap()[data["limit_reset"]];
     return [
       UsageWindow(
-        label: switch (reset) {
-          "daily" => "Daily",
-          "weekly" => "Weekly",
-          "monthly" => "Monthly",
-          _ => "Credit limit",
-        },
+        label: period?.label ?? "Credit limit",
         used: limit - remaining,
         max: limit,
         unit: UsageUnit.usd,
-        resetsAt: reset is String ? nextReset(reset, now) : null,
+        resetsAt: period?.nextAfter(now),
       ),
     ];
   }
+}
 
-  /// When a cap that resets every [period] starts again after [now]. Its
-  /// periods are UTC's: a day from midnight, a week from Monday, a month from
-  /// the first.
-  static DateTime? nextReset(String period, DateTime now) {
+/// A period OpenRouter resets a key's cap over, by the name `limit_reset`
+/// gives it. Its periods are UTC's: a day from midnight, a week from Monday,
+/// a month from the first.
+enum OpenRouterPeriod {
+  daily("Daily"),
+  weekly("Weekly"),
+  monthly("Monthly");
+
+  const OpenRouterPeriod(this.label);
+
+  final String label;
+
+  /// When a cap over this period starts again after [now].
+  DateTime nextAfter(DateTime now) {
     final utc = now.toUtc();
     final midnight = DateTime.utc(utc.year, utc.month, utc.day);
-    return switch (period) {
-      "daily" => midnight.add(const Duration(days: 1)),
-      "weekly" => midnight.add(Duration(days: 8 - utc.weekday)),
-      "monthly" => DateTime.utc(utc.year, utc.month + 1),
-      _ => null,
+    return switch (this) {
+      daily => midnight.add(const Duration(days: 1)),
+      weekly => midnight.add(Duration(days: 8 - utc.weekday)),
+      monthly => DateTime.utc(utc.year, utc.month + 1),
     };
   }
 }

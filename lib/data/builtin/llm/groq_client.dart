@@ -1,17 +1,19 @@
 import "package:clock/clock.dart";
 
 import "../../../domain/provider_usage.dart";
+import "llm_client.dart";
 import "openai_client.dart";
 
 /// Groq through its OpenAI surface, keeping what its replies say of the
 /// account's allowance. Groq has no endpoint that says it; every reply
 /// carries it in documented `x-ratelimit-*` headers instead, so the last
 /// reply's are what there is to show.
-class GroqClient extends OpenAiClient {
+class GroqClient extends OpenAiClient implements ReportsUsage {
   GroqClient({required super.baseUrl, super.apiKey, super.httpClient});
 
   /// The daily request allowance as of the last reply. Empty before one.
-  List<UsageWindow> get usage => _usage;
+  @override
+  List<UsageWindow> get reportedUsage => _usage;
   List<UsageWindow> _usage = const [];
 
   @override

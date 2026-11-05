@@ -1140,15 +1140,18 @@ final keyCheckProvider = Provider<KeyCheck>(
 );
 
 /// How much of each allowance the configured provider [id] has spent, where
-/// it says: asked of the backend's registry, since one provider says it only
-/// on the replies its cached client has seen. Auto-disposed, so the Providers
-/// section asks again each time it is shown.
-final providerUsageProvider = FutureProvider.autoDispose
-    .family<List<ProviderUsage>, String>((ref, id) async {
-      final backend = ref.watch(agentBackendProvider);
-      if (backend is! BuiltinBackend) return const [];
-      final provider = backend.registry.providerFor(id);
-      return provider == null ? const [] : backend.registry.usageOf(provider);
+/// it says. Asked again when the Providers section comes back to it a minute
+/// or more after it last asked, and not before, so moving between settings
+/// categories does not spend Ollama's ten balance requests a minute.
+final providerUsageProvider =
+    FutureProvider.family<List<ProviderUsage>, String>((ref, id) {
+      final asked = clock.now();
+      ref.onResume(() {
+        if (clock.now().difference(asked) >= const Duration(minutes: 1)) {
+          ref.invalidateSelf();
+        }
+      });
+      return ref.watch(agentBackendProvider).providerUsage(id);
     });
 
 /// The process environment, where a provider's named key is looked for after

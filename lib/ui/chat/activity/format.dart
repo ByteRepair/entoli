@@ -31,5 +31,14 @@ String formatRemaining(Duration remaining) {
   return "${plural(remaining.inDays, "day")} left";
 }
 
+/// "in 23 minutes", "in 5 hours", "in 3 days" — how long before something
+/// starts again. Coarse like [formatAge]; "now" under a minute.
+String formatUntil(Duration left) {
+  if (left.inMinutes < 1) return "now";
+  if (left.inHours < 1) return "in ${plural(left.inMinutes, "minute")}";
+  if (left.inDays < 1) return "in ${plural(left.inHours, "hour")}";
+  return "in ${plural(left.inDays, "day")}";
+}
+
 /// "1 chat", "3 chats". Public because three files past this one say it.
 String plural(int count, String unit) => "$count $unit${count == 1 ? "" : "s"}";
