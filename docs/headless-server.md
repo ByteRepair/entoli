@@ -96,8 +96,15 @@ end without a model.
 | `BackgroundWork` holds (Android foreground services) | Nothing |
 | Shortcuts' `ChatIntents` and its rules | `IntentBridge`, forwarding each action to the server |
 | — | Clipboard, link opening, app icon, Liquid Glass shell, keyboard, menu bar |
+| — | Voice mode: the microphone, recognition, speech and the speaker |
 
-Voice is the one row this document does not settle; see the open questions.
+**Inputs stay in the client.** The client is a dumb UI that drives the server,
+and what the user does to drive it is the client's: typing, picking files,
+pasting, and talking. Voice mode is an input, so it runs in the client whole.
+What it hears becomes the same prompt the composer sends, and what it reads
+out is a reply the client was already sent. The server never sees audio. The
+voice models are data the server downloads and keeps; how the client gets
+them is an open question.
 
 ### Where the code goes
 
@@ -155,8 +162,8 @@ engine may not cover. The Linux embedder's headless engine still links GTK, and
 whether it starts with no display is untested. The server's closure staying
 free of Flutter (above) is what keeps a pure-Dart Linux server open as a later
 step: on Linux the plugins the server needs are a D-Bus keyring
-(`freedesktop_secret`, pure Dart), `dart:io` and processes. It is an open
-question, not a stage.
+(`freedesktop_secret`, pure Dart), `dart:io` and processes. It is out of scope
+for now.
 
 ## The protocol
 
@@ -261,9 +268,10 @@ Why:
   Swift's generated `oneof` is an `enum` and its `switch` is exhaustive too.
 - **Evolution is defined.** Field numbers and unknown-field preservation say
   what an older reader does with a newer message. Today any change bumps
-  `protocolVersion` and both devices must update together; protobuf makes it
-  possible to relax that later, though this design does not (see the open
-  questions).
+  `protocolVersion` and both devices must update together. That stays: the
+  protocol version matters only to sync, and sync keeps its strict check. The
+  local client and its server are one build, so between them the build id is
+  the only check (see "Versions").
 - **It frames nothing itself**, which is right here: the framing is already
   sync's, and stays.
 - **Custom options carry the roles.** `option (entoli.roles) = …` on each
@@ -321,7 +329,7 @@ Per platform:
 | macOS | Unix socket | A 0700 directory under `~/Library/Caches/<bundle id>/` |
 | Android | Unix socket | The app's private files directory, which both processes share by uid |
 | iOS | Unix socket within the one process | The app container. An isolate port pair is the fallback if a socket in-process proves troublesome; the session above is the same either way |
-| Windows | Loopback TCP on an ephemeral port, unless `dart:io`'s `AF_UNIX` support on Windows holds up | The port is written beside the key |
+| Windows | Unix socket. `dart:io` supports `AF_UNIX` stream sockets on Windows from Dart 3.11, and the repo is on 3.12. Loopback TCP only if the Windows CI job shows otherwise | A directory under `%LOCALAPPDATA%\entoli\run\` that only this user can read |
 | Paired device | WebRTC data channel, unchanged | LAN, relay, manual |
 
 **The socket is also the single-instance lock.** A client starting finds a
@@ -347,11 +355,17 @@ process or a stale socket path re-bound by someone else. It does not protect
 against the user's own unsandboxed processes. Nothing local can, as the model
 host already accepts.
 
-On macOS launchd starts the server, not the client, so there is no environment
-to hand the key through. The client writes the key file before it registers or
-kickstarts the agent, and the server reads it at start. Checking the
-connecting peer's code signature through its audit token (same team identifier)
-is the macOS-native addition, and is worth having. See the open questions.
+**On macOS the check is the peer's code signature, as Apple recommends.**
+Apple's answer to "is this connection from my own app" is a code-signing
+requirement on the connection: `setCodeSigningRequirement` on an XPC
+connection (TN3127), and for a Unix socket the same requirement checked against
+the peer's audit token (`LOCAL_PEERTOKEN`, then `SecCode`). The requirement is
+Entoli's team identifier and bundle identifiers. Where the client starts the
+server, the key travels in the environment as on every other platform, and the
+signature check is added to it. Where launchd starts the server, there is no
+environment to hand a key through, and the signature check alone is the
+gate. No keychain item: a keychain item has no expiry and no way to delete
+itself, so a crash would leave one behind.
 
 ## Starting the server
 
@@ -401,8 +415,9 @@ supersedes the first, which is sent `superseded` and closed. A relaunched
 client takes over from a stuck one rather than being locked out by it.
 
 **Versions.** The client and server ship in one bundle, so they normally
-match. After a self-update the running server is the old build and the new
-client meets it. `clientHello` carries the build id. On a mismatch the client
+match, and nothing between them is versioned but the build. After a
+self-update the running server is the old build and the new client meets
+it. `clientHello` carries the build id. On a mismatch the client
 asks the server to quit once idle, says it is finishing a turn while it waits,
 and starts the new server when it has gone. The two never talk across builds.
 
@@ -526,6 +541,14 @@ Each stage ships alone and leaves the app working on every platform.
 have. Add the import-graph rules for `lib/server/`. Replace `ValueListenable` in
 `domain/`. No protocol change, no process change.
 
+**Inside every stage: no client state on disk, and no paths.** The client
+keeps nothing on disk of its own. Window size, the last open chat and every
+other preference are the server's to store, sent and written over the
+protocol. An artifact, a backup or an attachment reaches the client as bytes
+from the server, never as a path to open, on the same machine as on another.
+The client may hold bytes in a temporary directory while it shows them, as a
+mirror already does with `unzipRemoteArtifact`.
+
 **Stage 1: the schema.** Write the `.proto` files for every `SyncMessage` arm,
 records and states as JSON wrappers. Add `protoc` to `tool/prepare.sh` and CI.
 Port `SyncHub` to the generated `Envelope` and bump `protocolVersion`. Sync
@@ -627,33 +650,30 @@ whether a turn is live.
 
 ## Open questions
 
-1. **What did the earlier refactor session decide?** Its conclusions were not
-   found. Anything it settled about the cut line, the schema or the staging
-   should override this document where they differ.
-2. **The secret on macOS.** launchd starts the server, so no environment
-   carries the key. Is a 0600 key file beside the socket, plus a code-signature
-   check of the connecting peer, an acceptable reading of decision 6? Or should
-   it be a keychain item shared by the app and the helper?
-3. **Registration approval on macOS.** `SMAppService` registration can leave the
-   item waiting for approval in Login Items, with a system notification on
-   first registration. Register at first launch, or at the first turn that
-   would be left running?
-4. **Voice.** Should the microphone and speaker stay in the client, as the
-   user's presence at the device, with recognition and speech in the server and
-   audio frames over the protocol? Or should voice run wholly in the server?
-   Android's system engines want an activity's context, which argues for the
-   client there.
-5. **A pure-Dart server on Linux** for truly headless use on a machine with no
-   display. Worth a later stage, or out of scope?
-6. **Protocol tolerance.** Protobuf could let an older peer ignore a newer arm,
-   relaxing "both devices update together". Keep the strict version check, or
-   relax it for arms marked optional?
-7. **Client-side state.** Is the client allowed any file of its own, for
-   window size or the last open chat? Or does all of it live in the server's
-   settings, leaving the client with nothing on disk?
-8. **Same-host shortcuts.** May a local client open an artifact, a backup or an
-    attachment by a path the server hands it, rather than receiving the bytes?
-    That is faster, but a Swift client on another machine could not, and it
-    would make "local" and "remote" differ again.
-9. **Windows transport.** Loopback TCP, or `AF_UNIX` if `dart:io` supports it
-    there? This is a spike, not a preference.
+1. **How macOS starts the server, and the notifications.** Two notifications
+   are in play, and only one is avoidable.
+   - **The first-time background notification is not avoidable.** On macOS 27
+     the first time any app keeps running in the background after it quits,
+     macOS posts a notification, and Apple's article ties it to the gray dot.
+     The dot cannot be had without it. It appears once per app.
+   - **The `SMAppService` notification is avoidable.** Registering a launch
+     agent posts "Background Items Added", lists Entoli under Login Items, and
+     can leave it waiting for approval. That is the cost of decision 3's
+     background item, on top of the first.
+   - **Claude Code's CLI and Gemini's CLI register nothing.** Both are processes
+     in a terminal and stop when it closes, so they show no dot and post no
+     notification. They have no answer to running on after a quit.
+   - **The simpler option is a detached child on macOS too.** The client spawns
+     the server itself, as on Linux, with `setsid` so it outlives the client.
+     That needs no registration and no approval, and the key travels in the
+     environment. Apple's article says to "consider" `SMAppService` for a
+     process that runs after the app terminates, and says a spawned process
+     outliving its app gets the Dock indicator. Whether it shows the dot on
+     macOS 27 is what stage 5a would test first, and `SMAppService` would be
+     built only if it does not. Should macOS drop the background item for the
+     default launcher, subject to that test?
+2. **Voice models.** Voice runs in the client, so the client needs the model
+   files the server downloads and keeps. Should the server stream them into
+   the client's cache once, or may the client load them in place from the
+   server's directory, read-only? The second is a path, which the no-paths
+   rule otherwise refuses.
