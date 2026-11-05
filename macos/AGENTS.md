@@ -193,15 +193,19 @@ Shortcuts wants signing with a team identity first.
 The agent runs in the app's own process, so the window's close — which quits
 the app, its one window being its last — would kill a turn under way. While
 one runs (`BackgroundWork.running`, which `TurnHold` in
-`MainFlutterWindow.swift` answers on `agent_chat/background`), the red button
-and Close Window hide the app instead, and the Dock says it is running in the
-background; clicking the icon brings it back. Cmd-H is an ordinary hide, and
-Cmd-Q quits at once, turn or no turn.
+`MainFlutterWindow.swift` answers on `agent_chat/background`),
+`applicationShouldTerminateAfterLastWindowClosed` says no: the window closes,
+the app stays, and the Dock says it is running in the background. Clicking
+the icon (`applicationShouldHandleReopen`) or any activation brings the
+window back. The decision is the delegate's rather than the window's close
+because the native shell's close button closes the window without
+`performClose`, which an override there never saw. Cmd-H is an ordinary
+hide, and Cmd-Q quits at once, turn or no turn.
 
 **One rule ends a session nobody is watching**, `AppDelegate.quitIfUnwatched`:
 nobody has activated the app since it went unwatched (`watched`), no turn is
 running, and a wake's own work has drained (`wakePending`). A wake launch
-starts unwatched and a close that hid a turn makes it so; an activation, the
+starts unwatched and a close during a turn makes it so; an activation, the
 one signal for both, makes it watched again. The end of the last turn and
 `doneFiring` each ask, so neither quits under the other's work — a wake's
 drain no longer ends a Shortcuts turn started in the same session. A
