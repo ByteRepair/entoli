@@ -617,6 +617,26 @@ void main() {
     expect(find.text("line 0"), findsNothing);
   });
 
+  // The chapter rail needs 936 wide beside a 760 column; both widths here
+  // lay the column out at 760, so no row is a different height after.
+  testWidgets("a resize across the rail's width keeps the scroll position", (
+    tester,
+  ) async {
+    useWindow(tester, const Size(1400, 900));
+    final chat = await seedLongChat(tester);
+    await open(tester, chat.state.id);
+
+    await tester.drag(find.byType(SuperListView), const Offset(0, 400));
+    await tester.pumpAndSettle();
+    final read = position(tester).pixels;
+    expect(read, lessThan(position(tester).maxScrollExtent));
+
+    tester.view.physicalSize = const Size(900, 900);
+    await tester.pumpAndSettle();
+
+    expect(position(tester).pixels, read);
+  });
+
   testWidgets("the bar names the chat wherever the list is scrolled to", (
     tester,
   ) async {

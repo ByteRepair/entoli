@@ -64,6 +64,15 @@ way back is its bar's back button. The panel slides in
 and out, pushing the page over. One Scaffold holds the drawer — the
 frame's — so a page under it carries none of its own.
 
+As pages, the content is pushed over the panel and popped off it by the
+theme's own page transition — `pageTransitionsTheme.buildTransitions`, handed
+the route the frame is on and run for that route's durations — so it moves as
+any page pushed on this platform does, Cupertino's slide on the Apples and the
+fade forwards or zoom elsewhere. Not a nested Navigator: a category pushes its
+editors with `Navigator.of`, and they belong over the whole window, not inside
+the frame. Docked, a pick switches the content at once, and a resize across
+the breakpoint jumps to where the pages are rather than sliding there.
+
 `scrolling.dart` is the shared scroll rule, and it is two things. `nearBottom`
 asks whether the view is close enough to the end to count as reading the
 latest — the slack is the caller's, since a conversation and a five-line
