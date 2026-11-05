@@ -390,8 +390,11 @@ a finished turn, or the sync keep-alive. Those end with the server, as they end
 with the app today when it quits. File-watch triggers fire only while the
 server runs, which is what they do today while the app runs.
 
-What Cmd-Q does to a running turn is not settled yet; see open question 2.
-Either way, the background lasts no longer than the turn.
+**Cmd-Q quits the client and leaves a running turn going.** The server
+finishes the turn in the background and leaves a few seconds after it ends,
+which is what Apple asks of a process with no UI ("Managing ongoing background
+processes in your Mac"). Closing the last window does the same. Neither keeps
+anything in the background once the turn is over.
 
 **One client at a time** is decided at the server: a second `clientHello`
 supersedes the first, which is sent `superseded` and closed. A relaunched
@@ -430,11 +433,30 @@ What changes in `lib/data/sync/`:
 
 ### macOS
 
-- **The gray dot.** The client gone while a turn runs, with the window closed
-  or by Cmd-Q depending on open question 2, leaves `Entoli Server.app` running
-  as a registered background item until the turn ends. That is the case the
-  Dock marks. Stage 5a proves it on macOS 27 before anything else on this
-  platform is built.
+- **The gray dot.** Quitting with Cmd-Q or closing the window while a turn
+  runs leaves `Entoli Server.app` running as a registered background item until
+  the turn ends. That is the case the Dock marks. Stage 5a proves it on macOS
+  27 before anything else on this platform is built.
+- **It follows Apple's rule.** Apple asks every app to end its background work
+  when it quits, "or make it possible for a person to do so", and names an
+  `SMAppService` launch agent as the way to run work past a quit. The Dock's
+  gray dot carries a "Stop Running in Background" item, which is that control,
+  so Entoli adds none of its own. A menu bar progress item would be the other
+  control Apple suggests, but an app with a visible menu bar icon is outside
+  the background rules, which would most likely mean no dot.
+- **Stopped from the Dock, the turn is interrupted, not aborted.** "Stop
+  Running in Background" ends the server's processes. The turn's log is left
+  with no `turnEnd`, so the next client to open the chat offers Continue, as
+  after any kill. The server does not try to write `aborted` on the way out:
+  nobody chose to end the turn itself, only its running unseen. If the user
+  stops it several times, macOS offers to block the app's background activity
+  for good, which is the next case.
+- **Background activity switched off.** The user can switch Entoli's background
+  activity off in Login Items & Extensions, and Apple says to test the app in
+  that state. The agent then will not run, and `SMAppService.status` says so.
+  The launcher falls back to `SubprocessServerLauncher`: the server runs as the
+  client's child, and quitting the client ends a running turn, interrupted,
+  as on master before #485.
 - **The window is just a window.** `applicationShouldTerminateAfterLastWindowClosed`
   is true again and nothing overrides it.
 - **Triggers wake the server, not the app.** Each launchd job's line becomes a
@@ -533,8 +555,15 @@ move to the server process here, and the UI's sticky engine goes.
 on macOS is built: an `SMAppService` agent registered from the app bundle,
 the app quit while the agent keeps running, and macOS 27's "Running in
 Background" dot checked in the Dock. It also records the approval prompt the
-user sees on first registration. Stage 5b goes ahead only if the dot shows. If
-it does not, the macOS launcher is redesigned before any of 5b is written.
+user sees on first registration, and that Stop Running in Background ends
+the agent. It also checks whether the dot goes once the agent has exited:
+a developer forum thread (developer.apple.com/forums/thread/832557) reports
+the dot staying after Cmd-Q with no process running, and asks whether
+registered launchd jobs cause it. Entoli's per-trigger launchd jobs are
+exactly that, so the build registers one and checks the dot with the server
+gone. Stage 5b goes ahead only if the dot shows while the agent runs and goes
+when it exits. If it does not, the macOS launcher is redesigned before any of
+5b is written.
 
 **Stage 5b: macOS's background item.** `Entoli Server.app`,
 `BackgroundItemServerLauncher`, triggers retargeted to the server, and the
@@ -601,36 +630,30 @@ whether a turn is live.
 1. **What did the earlier refactor session decide?** Its conclusions were not
    found. Anything it settled about the cut line, the schema or the staging
    should override this document where they differ.
-2. **Cmd-Q with a turn running.** The answer so far was: "No, this shouldn't
-   happen, it runs in the background only while a turn exists." The second half
-   is now the exit rule above. The first half can be read two ways. Does Cmd-Q
-   still end the running turn, as it does on master, so only closing the window
-   leaves a turn in the background? Or does Cmd-Q quit the client and leave the
-   turn running in the background until it ends?
-3. **The secret on macOS.** launchd starts the server, so no environment
+2. **The secret on macOS.** launchd starts the server, so no environment
    carries the key. Is a 0600 key file beside the socket, plus a code-signature
    check of the connecting peer, an acceptable reading of decision 6? Or should
    it be a keychain item shared by the app and the helper?
-4. **Registration approval on macOS.** `SMAppService` registration can leave the
+3. **Registration approval on macOS.** `SMAppService` registration can leave the
    item waiting for approval in Login Items, with a system notification on
    first registration. Register at first launch, or at the first turn that
    would be left running?
-5. **Voice.** Should the microphone and speaker stay in the client, as the
+4. **Voice.** Should the microphone and speaker stay in the client, as the
    user's presence at the device, with recognition and speech in the server and
    audio frames over the protocol? Or should voice run wholly in the server?
    Android's system engines want an activity's context, which argues for the
    client there.
-6. **A pure-Dart server on Linux** for truly headless use on a machine with no
+5. **A pure-Dart server on Linux** for truly headless use on a machine with no
    display. Worth a later stage, or out of scope?
-7. **Protocol tolerance.** Protobuf could let an older peer ignore a newer arm,
+6. **Protocol tolerance.** Protobuf could let an older peer ignore a newer arm,
    relaxing "both devices update together". Keep the strict version check, or
    relax it for arms marked optional?
-8. **Client-side state.** Is the client allowed any file of its own, for
+7. **Client-side state.** Is the client allowed any file of its own, for
    window size or the last open chat? Or does all of it live in the server's
    settings, leaving the client with nothing on disk?
-9. **Same-host shortcuts.** May a local client open an artifact, a backup or an
+8. **Same-host shortcuts.** May a local client open an artifact, a backup or an
     attachment by a path the server hands it, rather than receiving the bytes?
     That is faster, but a Swift client on another machine could not, and it
     would make "local" and "remote" differ again.
-10. **Windows transport.** Loopback TCP, or `AF_UNIX` if `dart:io` supports it
+9. **Windows transport.** Loopback TCP, or `AF_UNIX` if `dart:io` supports it
     there? This is a spike, not a preference.
