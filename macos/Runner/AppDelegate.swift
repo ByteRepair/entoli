@@ -55,21 +55,23 @@ class AppDelegate: FlutterAppDelegate {
   }
 
   /// The last window closing quits the app, unless a turn is running: then
-  /// the app stays, windowless — the Dock says it is running in the
-  /// background — and goes unwatched, so the turn's end quits it unless
-  /// someone comes back first. Asked here rather than of the window's close,
-  /// since the native shell closes the window without `performClose`.
+  /// the app stays, windowless, leaves the Dock for the menu bar
+  /// (`BackgroundPresence`) and goes unwatched, so the turn's end quits it
+  /// unless someone comes back first. Asked here rather than of the window's
+  /// close, since the native shell closes the window without `performClose`.
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     guard TurnHold.isRunning else { return true }
     Self.watched = false
+    BackgroundPresence.enter()
     return false
   }
 
-  /// The Dock icon, or opening the app again, brings back the window a
-  /// close during a turn left closed.
+  /// Opening the app again brings back the window a close during a turn
+  /// left closed, and the Dock icon with it.
   override func applicationShouldHandleReopen(
     _ sender: NSApplication, hasVisibleWindows flag: Bool
   ) -> Bool {
+    BackgroundPresence.leave()
     if !flag {
       for window in sender.windows where window is MainFlutterWindow {
         window.makeKeyAndOrderFront(nil)

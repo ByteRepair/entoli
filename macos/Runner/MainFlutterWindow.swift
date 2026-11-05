@@ -64,6 +64,7 @@ class MainFlutterWindow: NSWindow {
       queue: .main
     ) { _ in
       AppDelegate.watched = true
+      BackgroundPresence.leave()
       NSApp.unhide(nil)
       for window in NSApplication.shared.windows
       where window is MainFlutterWindow && !window.isVisible && !window.isMiniaturized {
@@ -104,6 +105,66 @@ enum TurnHold {
       ProcessInfo.processInfo.enableAutomaticTermination(reason)
       ProcessInfo.processInfo.enableSuddenTermination()
       AppDelegate.quitIfUnwatched()
+    }
+  }
+}
+
+/// Where Entoli is while a close during a turn has left it windowless: out of
+/// the Dock (the accessory activation policy) and in the menu bar, as an item
+/// saying a turn is running, with Show Entoli and Quit Entoli under it. The
+/// turn goes on in this process; an activation, a reopen or Show Entoli puts
+/// the app back in the Dock and the window back on screen. The process quits
+/// when the turn ends unless someone came back (`AppDelegate.quitIfUnwatched`),
+/// taking the item with it. In this file rather than its own so the Xcode
+/// project needs no new entry. See "Closing the window during a turn" in
+/// macos/AGENTS.md.
+enum BackgroundPresence {
+  private static var item: NSStatusItem?
+  private static let actions = Actions()
+
+  static func enter() {
+    guard item == nil else { return }
+    NSApp.setActivationPolicy(.accessory)
+    let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    item.button?.image = NSImage(
+      systemSymbolName: "ellipsis.bubble", accessibilityDescription: "Entoli")
+    item.button?.toolTip = "Entoli is running a turn"
+    let menu = NSMenu()
+    let status = NSMenuItem(title: "A turn is running", action: nil, keyEquivalent: "")
+    status.isEnabled = false
+    menu.addItem(status)
+    menu.addItem(.separator())
+    let show = NSMenuItem(
+      title: "Show Entoli", action: #selector(Actions.show), keyEquivalent: "")
+    show.target = actions
+    menu.addItem(show)
+    let quit = NSMenuItem(
+      title: "Quit Entoli", action: #selector(Actions.quit), keyEquivalent: "")
+    quit.target = actions
+    menu.addItem(quit)
+    item.menu = menu
+    self.item = item
+  }
+
+  static func leave() {
+    guard let item else { return }
+    NSStatusBar.system.removeStatusItem(item)
+    self.item = nil
+    NSApp.setActivationPolicy(.regular)
+  }
+
+  private final class Actions: NSObject {
+    @objc func show() {
+      BackgroundPresence.leave()
+      NSApp.activate(ignoringOtherApps: true)
+      for window in NSApplication.shared.windows
+      where window is MainFlutterWindow && !window.isMiniaturized {
+        window.makeKeyAndOrderFront(nil)
+      }
+    }
+
+    @objc func quit() {
+      NSApp.terminate(nil)
     }
   }
 }

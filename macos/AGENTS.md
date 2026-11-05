@@ -195,12 +195,24 @@ the app, its one window being its last — would kill a turn under way. While
 one runs (`BackgroundWork.running`, which `TurnHold` in
 `MainFlutterWindow.swift` answers on `agent_chat/background`),
 `applicationShouldTerminateAfterLastWindowClosed` says no: the window closes,
-the app stays, and the Dock says it is running in the background. Clicking
-the icon (`applicationShouldHandleReopen`) or any activation brings the
-window back. The decision is the delegate's rather than the window's close
-because the native shell's close button closes the window without
-`performClose`, which an override there never saw. Cmd-H is an ordinary
-hide, and Cmd-Q quits at once, turn or no turn.
+the app stays, and it moves from the Dock to the menu bar
+(`BackgroundPresence`): the accessory activation policy takes the Dock icon
+away, and a menu bar item says a turn is running, with Show Entoli and Quit
+Entoli under it. Show Entoli, opening the app again
+(`applicationShouldHandleReopen`) or any activation puts the Dock icon back
+and brings the window back. The decision is the delegate's rather than the
+window's close because the native shell's close button closes the window
+without `performClose`, which an override there never saw. Cmd-H is an
+ordinary hide, and Cmd-Q quits at once, turn or no turn, as Quit Entoli does.
+
+**Not the "Running in Background" dot.** macOS 27's gray dot marks an app that
+has quit while a process it started keeps running, and no public API sets it.
+Apple's "Managing ongoing background processes in your Mac" says an app that
+switches to the accessory policy "disappears from the Dock and doesn't show
+the indicator", and that the system still posts its background notification.
+The menu bar item is the presence Apple's guidance asks for instead: a way to
+see that work goes on and to stop it. The dot would need the turn to run in a
+process of its own; the design for that is ByteRepair/entoli#489, parked.
 
 **One rule ends a session nobody is watching**, `AppDelegate.quitIfUnwatched`:
 nobody has activated the app since it went unwatched (`watched`), no turn is
