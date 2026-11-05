@@ -6,8 +6,8 @@ import "../../domain/background_work.dart";
 import "../log.dart";
 
 /// Android's foreground services, on the other end of `agent_chat/background`
-/// and implemented by `ForegroundWork.kt` and the services beside it. The
-/// macOS Runner answers `running` alone, as `TurnHold`. Not
+/// and implemented by `ForegroundWork.kt` and the services beside it (and
+/// `running` by the macOS Runner's `TurnHold`). Not
 /// behind the conditional import, for the same reason `LauncherAliases` is not:
 /// a `MethodChannel` compiles on every platform, and one with nothing answering
 /// it throws `MissingPluginException` — which is the no-op every other platform

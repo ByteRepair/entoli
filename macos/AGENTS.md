@@ -196,7 +196,7 @@ one runs (`BackgroundWork.running`, which `TurnHold` in
 `MainFlutterWindow.swift` answers on `agent_chat/background`), the red button
 and Close Window hide the app instead, and the Dock says it is running in the
 background; clicking the icon unhides it. When the last turn ends and nobody
-has shown the app since, the close goes through and the app quits. Cmd-H is
+has activated the app since, the close goes through and the app quits. Cmd-H is
 an ordinary hide, and Cmd-Q quits at once, turn or no turn.
 
 The same hold disables automatic and sudden termination: a Shortcuts action

@@ -82,45 +82,40 @@ class MainFlutterWindow: NSWindow {
   }
 }
 
-/// What a running turn holds the app open against, on the other end of
-/// `agent_chat/background` — the channel Android's foreground services answer,
-/// of which only `running` means anything here. While a turn runs, closing
-/// the window hides the app (`MainFlutterWindow.performClose`) and macOS is
-/// told not to end it on its own — a Shortcuts action that launched it in the
-/// background lets go of it before its turn is done. A close that hid it is
-/// finished when the last turn ends, unless the user came back first. Cmd-Q
-/// is not held: a quit is the user's to make. In this file rather than its own
-/// so the Xcode project needs no new entry. See "Closing the window during a
-/// turn" in macos/AGENTS.md.
+/// Answers `running` on `agent_chat/background`, the channel Android's
+/// foreground services answer: while a turn runs, a close hides the app and
+/// macOS may not end it. In this file rather than its own so the Xcode project
+/// needs no new entry. See "Closing the window during a turn" in
+/// macos/AGENTS.md.
 enum TurnHold {
-  private static var turns = 0
+  private(set) static var isRunning = false
 
-  /// The window was closed while a turn ran, and nobody has shown the app
-  /// since: when the turns end, the close goes through.
+  /// The window was closed while a turn ran, and nobody has activated the app
+  /// since — the signal the wake path reads too: when the turns end, the close
+  /// goes through.
   static var closedWhileRunning = false
-
-  static var isRunning: Bool { turns > 0 }
 
   static func register(with messenger: FlutterBinaryMessenger) {
     FlutterMethodChannel(name: "agent_chat/background", binaryMessenger: messenger)
       .setMethodCallHandler { call, result in
         guard call.method == "running" else { return result(FlutterMethodNotImplemented) }
-        update((call.arguments as? NSNumber)?.intValue ?? 0)
+        update(running: ((call.arguments as? NSNumber)?.intValue ?? 0) > 0)
         result(nil)
       }
     NotificationCenter.default.addObserver(
-      forName: NSApplication.didUnhideNotification, object: nil, queue: .main
+      forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
     ) { _ in closedWhileRunning = false }
   }
 
-  private static func update(_ count: Int) {
-    let was = isRunning
-    turns = count
-    if isRunning && !was {
-      ProcessInfo.processInfo.disableAutomaticTermination("A turn is running")
+  private static func update(running: Bool) {
+    guard running != isRunning else { return }
+    isRunning = running
+    let reason = "A turn is running"
+    if running {
+      ProcessInfo.processInfo.disableAutomaticTermination(reason)
       ProcessInfo.processInfo.disableSuddenTermination()
-    } else if !isRunning && was {
-      ProcessInfo.processInfo.enableAutomaticTermination("A turn is running")
+    } else {
+      ProcessInfo.processInfo.enableAutomaticTermination(reason)
       ProcessInfo.processInfo.enableSuddenTermination()
       if closedWhileRunning { NSApp.terminate(nil) }
     }
