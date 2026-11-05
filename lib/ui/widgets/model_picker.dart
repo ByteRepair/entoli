@@ -122,16 +122,13 @@ class ModelPicker extends ConsumerWidget {
                 : null,
             helperMaxLines: 3,
             errorText: missing
-                ? "Its provider (id: '${choice.providerId}') is not found. "
-                      "Please pick another model."
+                ? missingProviderMessage(choice.modelId, choice.providerId!)
                 : null,
             errorMaxLines: 2,
             suffixIcon: const Icon(Icons.chevron_right),
           ),
           child: Text(
-            missing
-                ? "Provider not found · ${choice.modelId ?? "Default"}"
-                : _label(providers, listed, serving),
+            missing ? "Select New Model" : _label(providers, listed, serving),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),

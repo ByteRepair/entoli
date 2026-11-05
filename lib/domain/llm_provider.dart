@@ -244,3 +244,10 @@ class PresetTerms {
   /// The provider's own page for making a key, null where none is needed.
   final String? keyUrl;
 }
+
+/// What a model choice whose provider is not configured here says, in the
+/// turn's error and under the picker alike: the model, and the provider's
+/// id, which is all that is left of it.
+String missingProviderMessage(String? model, String providerId) =>
+    "The ${model ?? "Default"} provider (id: '$providerId') is not found. "
+    "Please pick another model.";

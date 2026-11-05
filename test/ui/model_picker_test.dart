@@ -470,10 +470,10 @@ void main() {
   testWidgets("a model whose provider is not found says so", (tester) async {
     await pump(tester, choice: (providerId: "removed-id", modelId: "sonnet"));
 
-    expect(fieldText(tester), "Provider not found · sonnet");
+    expect(fieldText(tester), "Select New Model");
     expect(
       find.text(
-        "Its provider (id: 'removed-id') is not found. "
+        "The sonnet provider (id: 'removed-id') is not found. "
         "Please pick another model.",
       ),
       findsOneWidget,
@@ -483,7 +483,14 @@ void main() {
   testWidgets("a missing provider's Default says so too", (tester) async {
     await pump(tester, choice: (providerId: "removed-id", modelId: null));
 
-    expect(fieldText(tester), "Provider not found · Default");
+    expect(fieldText(tester), "Select New Model");
+    expect(
+      find.text(
+        "The Default provider (id: 'removed-id') is not found. "
+        "Please pick another model.",
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets("a model added by hand is stored on its provider and offered", (

@@ -1818,9 +1818,3 @@ typedef _Target = ({
   bool images,
   bool pdfs,
 });
-
-/// What a turn says when the provider its model names is not configured
-/// here: the model, and the provider's id, which is all that is left of it.
-String missingProviderMessage(String? model, String providerId) =>
-    "The ${model ?? "Default"} provider (id: '$providerId') is not found. "
-    "Please pick another model.";
