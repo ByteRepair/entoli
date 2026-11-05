@@ -170,19 +170,22 @@ class _ReadableColumn extends StatelessWidget {
               ),
             );
             final margin = (constraints.maxWidth - _readableWidth) / 2;
-            if (side == null || margin < sideWidth + _sideGap * 2) {
-              return column;
-            }
+            final fits = side != null && margin >= sideWidth + _sideGap * 2;
+            // The column is in the stack whether or not the rail is beside
+            // it: a window resized across the width the rail needs would
+            // otherwise build the conversation anew, its scroll back at the
+            // top.
             return Stack(
               children: [
                 Positioned.fill(child: column),
-                Positioned(
-                  top: 0,
-                  bottom: 0,
-                  left: constraints.maxWidth - margin + _sideGap,
-                  width: sideWidth,
-                  child: side!,
-                ),
+                if (fits)
+                  Positioned(
+                    top: 0,
+                    bottom: 0,
+                    left: constraints.maxWidth - margin + _sideGap,
+                    width: sideWidth,
+                    child: side!,
+                  ),
               ],
             );
           },
