@@ -149,6 +149,7 @@ class _ProviderDialogState extends State<_ProviderDialog> {
   ProviderEdit? _submit() {
     if (_api.isCli) {
       final command = _command.text.trim();
+      final preset = cliPresetOf(_api).config;
       return ProviderEdit(
         LlmProviderConfig(
           id: widget.initial?.id ?? "",
@@ -156,11 +157,9 @@ class _ProviderDialogState extends State<_ProviderDialog> {
           baseUrl: "",
           name: _name.text.trim(),
           defaultModelId:
-              widget.initial?.defaultModelId ??
-              cliPresetOf(_api).config.defaultModelId,
+              widget.initial?.defaultModelId ?? preset.defaultModelId,
           defaultLightModelId:
-              widget.initial?.defaultLightModelId ??
-              cliPresetOf(_api).config.defaultLightModelId,
+              widget.initial?.defaultLightModelId ?? preset.defaultLightModelId,
           customModels: widget.initial?.customModels ?? const [],
           command: command.isEmpty ? null : command,
           env: _env,

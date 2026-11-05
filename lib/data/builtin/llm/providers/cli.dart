@@ -3,6 +3,7 @@ import "dart:convert";
 import "dart:io";
 
 import "package:collection/collection.dart";
+import "package:flutter/foundation.dart" show mustCallSuper, protected;
 import "package:path/path.dart" as p;
 
 import "../../../../core/log.dart";
@@ -24,7 +25,10 @@ import "provider.dart";
 /// What a session *is* — a process per call, a long-lived one fed over stdin,
 /// a server it talks to — is the subclass's, through [start].
 abstract class CliProvider extends LlmProvider with KeyFree {
-  const CliProvider(super.config, [super.terms]);
+  const CliProvider(super.config, {this.launch = launchProcess});
+
+  /// How a session starts the program: [launchProcess], or a test's fake.
+  final LaunchCli launch;
 
   /// The login shell's `PATH`, set once by `main` when it has been captured:
   /// a desktop launch inherits a `PATH` that misses what the user's profile
@@ -42,7 +46,9 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   String get defaultCommand;
 
   /// What it is, in the words the provider list and dialog show.
-  String get about;
+  String get about =>
+      "Runs ${config.displayName} on this computer, signed in as it already "
+      "is. Its own tools are off; it uses Entoli's.";
 
   /// Whose account its prompts go to, for the provider list's tag.
   String get account;
@@ -228,6 +234,194 @@ abstract class CliSession {
   /// Ends the program, gracefully where it will go, by force where it will
   /// not, and frees what it held. Safe to call twice.
   Future<void> close();
+}
+
+/// A [CliSession] over one process that speaks JSON a line at a time, which
+/// is what every program's session shares: the exchange in progress, the
+/// output read, how a session ends and how it says it died. What a line
+/// means and how input is written is the subclass's, through [line],
+/// [begin] and [answer].
+abstract class CliProcessSession extends CliSession {
+  CliProcessSession(super.spec, this.name);
+
+  /// The program, as a failure names it: "Codex CLI".
+  final String name;
+
+  CliProcess? _process;
+  var _alive = true;
+  var _fresh = true;
+  StreamController<LlmChunk>? _current;
+  final _stderr = StderrTail();
+
+  /// Set once [close] has begun: nothing more is written, and an exit is
+  /// expected rather than a failure.
+  @protected
+  var closing = false;
+
+  @override
+  bool get alive => _alive;
+
+  /// The exchange in progress, null between them.
+  @protected
+  StreamController<LlmChunk>? get current => _current;
+
+  /// The ids of the calls the last reply made that still wait on results.
+  @protected
+  List<String> get held;
+
+  /// Whether [rest], with nothing held, is input the program takes now.
+  @protected
+  bool takes(List<LlmMessage> rest) => rest.every(fromUser);
+
+  @override
+  bool accepts(List<LlmMessage> rest) {
+    if (!alive || _current != null || rest.isEmpty) return false;
+    if (_fresh) return true;
+    final ids = held;
+    return ids.isNotEmpty ? answersAll(rest, ids) : takes(rest);
+  }
+
+  @override
+  Stream<LlmChunk> exchange(List<LlmMessage> rest) {
+    final out = StreamController<LlmChunk>();
+    if (!accepts(rest)) {
+      out
+        ..addError(const LlmException("The CLI session cannot take this"))
+        ..close();
+      return out.stream;
+    }
+    _current = out;
+    _fresh = false;
+    // Results answer the calls the program holds, which is what lets it
+    // carry on to its next reply; anything else is new input.
+    held.isNotEmpty ? answer(rest) : begin(rest);
+    return out.stream;
+  }
+
+  /// Feeds [rest], input from the user's side, to the program.
+  @protected
+  void begin(List<LlmMessage> rest);
+
+  /// Answers the held calls with [results], one for each.
+  @protected
+  void answer(List<LlmMessage> results);
+
+  /// Starts the program and reads it: each line of its output that is a JSON
+  /// object goes to [line].
+  @protected
+  Future<void> run(
+    CliProvider provider,
+    String executable,
+    List<String> arguments, {
+    required String workingDirectory,
+    required Map<String, String> environment,
+  }) async {
+    final process = await provider.launch(
+      executable,
+      arguments,
+      workingDirectory: workingDirectory,
+      environment: environment,
+    );
+    _process = process;
+    process.lines.listen(_read, onError: (Object e) => fail("$e"));
+    process.errors.listen(_stderr.add);
+    unawaited(process.exitCode.then(_exited));
+  }
+
+  void _read(String text) {
+    if (text.trim().isEmpty) return;
+    final Object? message;
+    try {
+      message = jsonDecode(text);
+    } on FormatException {
+      return;
+    }
+    if (message is Map<String, dynamic>) line(message);
+  }
+
+  /// One message of the program's output.
+  @protected
+  void line(Map<String, dynamic> message);
+
+  /// Writes [message] to the program, unless it is closing.
+  @protected
+  void write(Map<String, dynamic> message) {
+    if (closing) return;
+    _process?.writeLine(jsonEncode(message));
+  }
+
+  /// Output that came with no exchange to take it: the program went on
+  /// without Entoli's loop, and what it holds is no longer the conversation
+  /// the loop has.
+  @protected
+  void strayed() => _alive = false;
+
+  /// Ends the exchange in progress, if any, with [last] or [error]. It is
+  /// detached first, so nothing that follows reaches it.
+  @protected
+  @mustCallSuper
+  void end({LlmChunk? last, Object? error}) {
+    final out = _current;
+    _current = null;
+    if (out == null) return;
+    if (error != null) out.addError(error);
+    if (last != null) out.add(last);
+    unawaited(out.close());
+  }
+
+  @protected
+  void fail(String reason) {
+    _alive = false;
+    end(error: LlmException(reason));
+  }
+
+  void _exited(int code) {
+    _alive = false;
+    final said = _stderr.toString();
+    final reason = said.isEmpty
+        ? "$name exited ($code)"
+        : "$name exited ($code): $said";
+    gone(reason);
+    if (closing) return;
+    logFailure("llm", "$name exited with $code");
+    fail(reason);
+  }
+
+  /// The program has gone, for [reason]: whatever waits on it is failed.
+  @protected
+  void gone(String reason) {}
+
+  @override
+  Future<void> close() async {
+    if (closing) return;
+    closing = true;
+    _alive = false;
+    end();
+    final process = _process;
+    if (process != null) await stopProcess(process, name);
+    await release();
+  }
+
+  /// Frees what the subclass holds beyond the process, once it has stopped.
+  @protected
+  Future<void> release() async {}
+}
+
+/// [session], made ready by [open]. A failure on the way closes it and is an
+/// [LlmException] saying the program would not start.
+Future<S> opened<S extends CliProcessSession>(
+  CliProvider provider,
+  S session,
+  Future<void> Function() open,
+) async {
+  try {
+    await open();
+  } catch (e) {
+    await session.close();
+    if (e is LlmException) rethrow;
+    throw LlmException("Could not start ${provider.command}: $e");
+  }
+  return session;
 }
 
 /// An [LlmClient] over a [CliProvider]'s sessions. The agent loop resends the

@@ -69,9 +69,6 @@ class _ScriptedProvider extends CliProvider {
   String get defaultCommand => "scripted";
 
   @override
-  String get about => "";
-
-  @override
   String get account => "";
 
   @override
@@ -90,6 +87,18 @@ class _ScriptedProvider extends CliProvider {
 
 const _system = LlmMessage(role: LlmRole.system, text: "be brief");
 const _ask = LlmMessage(role: LlmRole.user, text: "hi");
+const _useEcho = LlmMessage(role: LlmRole.user, text: "use echo");
+
+/// One step of a CLI session's turn: [messages] sent with [tool] offered.
+Future<LlmCompletion> _step(
+  LlmClient client,
+  List<LlmMessage> messages, {
+  required String model,
+  required LlmTool tool,
+}) => client
+    .stream(messages, model: model, tools: [tool], reasoningEffort: "minimal")
+    .last
+    .then((chunk) => chunk as LlmCompletion);
 
 Future<LlmCompletion> _call(
   LlmClient client,
@@ -412,18 +421,10 @@ void main() {
     });
 
     const tool = LlmTool(name: "echo", description: "says it", schema: {});
-    const ask = LlmMessage(role: LlmRole.user, text: "use echo");
+    const ask = _useEcho;
 
     Future<LlmCompletion> step(LlmClient client, List<LlmMessage> messages) =>
-        client
-            .stream(
-              messages,
-              model: "sonnet",
-              tools: [tool],
-              reasoningEffort: "minimal",
-            )
-            .last
-            .then((chunk) => chunk as LlmCompletion);
+        _step(client, messages, model: "sonnet", tool: tool);
 
     test(
       "runs Entoli's tool through the held call and carries on in one process",
@@ -600,18 +601,10 @@ void main() {
       description: "says it",
       schema: {"type": "object"},
     );
-    const ask = LlmMessage(role: LlmRole.user, text: "use echo");
+    const ask = _useEcho;
 
     Future<LlmCompletion> step(LlmClient client, List<LlmMessage> messages) =>
-        client
-            .stream(
-              messages,
-              model: "gpt-6-luna",
-              tools: [tool],
-              reasoningEffort: "minimal",
-            )
-            .last
-            .then((chunk) => chunk as LlmCompletion);
+        _step(client, messages, model: "gpt-6-luna", tool: tool);
 
     /// The next request the session sent, which must be [method].
     Future<Map<String, dynamic>> request(

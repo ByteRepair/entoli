@@ -40,15 +40,17 @@ const _kinds = <LlmProvider Function([LlmProviderConfig])>[
 /// can be added by hand.
 final llmProviderPresets = [for (final kind in _kinds) kind()];
 
+/// The program each CLI [LlmApi] runs.
+final _cliKinds = <LlmApi, CliProvider Function([LlmProviderConfig])>{
+  LlmApi.claudeCli: ClaudeCliProvider.new,
+  LlmApi.codexCli: CodexCliProvider.new,
+};
+
 /// The programs that can answer in a model's place, offered on a desktop.
-const cliProviderPresets = <CliProvider>[
-  ClaudeCliProvider(),
-  CodexCliProvider(),
-];
+final cliProviderPresets = [for (final kind in _cliKinds.values) kind()];
 
 /// The preset of the program [api] runs.
-CliProvider cliPresetOf(LlmApi api) =>
-    cliProviderPresets.firstWhere((p) => p.config.api == api);
+CliProvider cliPresetOf(LlmApi api) => _cliKinds[api]!();
 
 /// The class [config] is read as. By host first, since a provider's quirks are
 /// its server's and an entry renamed by hand still reaches them; then by
@@ -60,8 +62,7 @@ LlmProvider providerOf(LlmProviderConfig config) {
   return switch (config.api) {
     LlmApi.anthropic => AnthropicCompatibleProvider(config),
     LlmApi.openai => OpenAiCompatibleProvider(config),
-    LlmApi.claudeCli => ClaudeCliProvider(config),
-    LlmApi.codexCli => CodexCliProvider(config),
+    final cli => _cliKinds[cli]!(config),
   };
 }
 

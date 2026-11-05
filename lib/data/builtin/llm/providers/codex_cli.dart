@@ -26,10 +26,7 @@ class CodexCliProvider extends CliProvider {
 
   /// With the process given rather than real: what a test runs a session
   /// over.
-  const CodexCliProvider.over(super.config, {this.launch = launchProcess});
-
-  /// How a session starts `codex`.
-  final LaunchCli launch;
+  const CodexCliProvider.over(super.config, {super.launch});
 
   static const preset = LlmProviderConfig(
     name: "Codex CLI",
@@ -41,11 +38,6 @@ class CodexCliProvider extends CliProvider {
 
   @override
   String get defaultCommand => "codex";
-
-  @override
-  String get about =>
-      "Runs Codex CLI on this computer, signed in as it already is. "
-      "Its own tools are off; it uses Entoli's.";
 
   @override
   String get account => "Uses your ChatGPT account";
@@ -89,35 +81,46 @@ class CodexCliProvider extends CliProvider {
       ),
   ];
 
-  /// Where Codex keeps its config: `CODEX_HOME`, or `~/.codex`.
-  String? get codexHome {
-    final env = environment;
-    final home = env["HOME"] ?? env["USERPROFILE"];
+  /// Where Codex keeps its config, under [env]: `CODEX_HOME`, or
+  /// `~/.codex`. `USERPROFILE` first, as Windows' own home is.
+  static String? codexHomeIn(Map<String, String> env) {
+    final home = env["USERPROFILE"] ?? env["HOME"];
     return env["CODEX_HOME"] ?? (home == null ? null : p.join(home, ".codex"));
   }
 
   /// The MCP servers the user's own Codex config declares, which a session
-  /// switches off by name: an override cannot empty the table.
-  List<String> userMcpServers() {
-    final home = codexHome;
+  /// switches off by name: an override cannot empty the table. Read per
+  /// session, so an edit to it is picked up by the next.
+  static Future<List<String>> userMcpServers(Map<String, String> env) async {
+    final home = codexHomeIn(env);
     if (home == null) return const [];
-    final file = File(p.join(home, "config.toml"));
     try {
-      return file.existsSync() ? mcpServersIn(file.readAsStringSync()) : [];
+      return mcpServersIn(
+        await File(p.join(home, "config.toml")).readAsString(),
+      );
+    } on PathNotFoundException {
+      return const [];
     } on FileSystemException catch (e) {
       logFailure("llm", "reading Codex's config failed", e);
       return const [];
     }
   }
 
+  /// A TOML bare key: what a table name may be without quotes.
+  static const _bareKey = "[A-Za-z0-9_-]+";
+
   /// The names of the `[mcp_servers.<name>]` tables in [toml], each once.
   static List<String> mcpServersIn(String toml) => {
     for (final m in RegExp(
-      r'^\s*\[\s*mcp_servers\.(?:"([^"]+)"|([A-Za-z0-9_-]+))',
+      '^\\s*\\[\\s*mcp_servers\\.(?:"([^"]+)"|($_bareKey))',
       multiLine: true,
     ).allMatches(toml))
       (m[1] ?? m[2])!,
   }.toList();
+
+  /// [name] as a TOML key: bare where it may be, quoted where not.
+  static String _tomlKey(String name) =>
+      RegExp("^$_bareKey\$").hasMatch(name) ? name : jsonEncode(name);
 
   /// Codex's features that are tools of its own or reach past Entoli: each
   /// switched off. By config rather than `--disable`, which refuses a name
@@ -153,7 +156,7 @@ class CodexCliProvider extends CliProvider {
       // The ChatGPT app sets a program of its own to run at every turn's end.
       "notify=[]",
       for (final name in mcpServers)
-        "mcp_servers.${RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(name) ? name : jsonEncode(name)}.enabled=false",
+        "mcp_servers.${_tomlKey(name)}.enabled=false",
     ]) ...["-c", setting],
   ];
 
@@ -169,21 +172,13 @@ class CodexCliProvider extends CliProvider {
 /// model whose tools are called from a script it runs (Codex's code mode)
 /// calls them the same way. Calls that arrive together are one reply; one
 /// that arrives after its reply was handed on goes out with the next.
-class CodexCliSession extends CliSession {
-  CodexCliSession._(super.spec, this._process);
+class CodexCliSession extends CliProcessSession {
+  CodexCliSession._(CliSessionSpec spec) : super(spec, "Codex CLI");
 
-  final CliProcess _process;
   late final String _thread;
-
-  var _alive = true;
-  var _closing = false;
-  var _fresh = true;
 
   /// Whether a Codex turn is open: from `turn/start` to `turn/completed`.
   var _turnOpen = false;
-
-  /// The exchange in progress, null between them.
-  StreamController<LlmChunk>? _current;
 
   /// What the exchange in progress has said so far.
   final _text = StringBuffer();
@@ -192,52 +187,44 @@ class CodexCliSession extends CliSession {
 
   /// Calls Codex made that no reply has carried yet.
   final _queued = <_Call>[];
-  var _handing = false;
 
-  /// Calls handed to the loop, by call id, waiting on its results.
-  final _reported = <String, _Call>{};
+  /// The requests of calls handed to the loop, by call id, waiting on its
+  /// results.
+  final _reported = <String, Object>{};
 
   var _nextId = 0;
   final _waiting = <int, Completer<Object?>>{};
-  final _stderr = StderrTail();
 
   static Future<CodexCliSession> start(
     CodexCliProvider provider,
     CliSessionSpec spec,
   ) async {
     final executable = provider.executable();
-    final CliProcess process;
-    try {
-      process = await provider.launch(
+    final env = provider.environment;
+    final cwd = await provider.workDirectory();
+    final arguments = CodexCliProvider.argumentsFor(
+      await CodexCliProvider.userMcpServers(env),
+    );
+    final session = CodexCliSession._(spec);
+    return opened(provider, session, () async {
+      await session.run(
+        provider,
         executable,
-        CodexCliProvider.argumentsFor(provider.userMcpServers()),
-        workingDirectory: await provider.workDirectory(),
-        environment: provider.environment,
+        arguments,
+        workingDirectory: cwd,
+        environment: env,
       );
-    } catch (e) {
-      throw LlmException("Could not start ${provider.command}: $e");
-    }
-    final session = CodexCliSession._(spec, process);
-    try {
-      await session._open(await provider.workDirectory());
-    } catch (e) {
-      await session.close();
-      if (e is LlmException) rethrow;
-      throw LlmException("Could not start ${provider.command}: $e");
-    }
-    return session;
+      await session._open(cwd);
+    });
   }
 
   Future<void> _open(String cwd) async {
-    _process.lines.listen(_line, onError: (Object e) => _fail("$e"));
-    _process.errors.listen(_stderr.add);
-    unawaited(_process.exitCode.then(_exited));
     await _request("initialize", {
       "clientInfo": {"name": "entoli", "title": "Entoli", "version": "1"},
       // Dynamic tools are an experimental field.
       "capabilities": {"experimentalApi": true},
     });
-    _write({"method": "initialized"});
+    write({"method": "initialized"});
     final started = await _request("thread/start", {
       "model": spec.model,
       "cwd": cwd,
@@ -261,49 +248,32 @@ class CodexCliSession extends CliSession {
   }
 
   @override
-  bool get alive => _alive;
+  List<String> get held => [..._reported.keys];
 
   @override
-  bool accepts(List<LlmMessage> rest) {
-    if (!alive || _current != null || rest.isEmpty) return false;
-    if (_fresh) return true;
-    if (_reported.isNotEmpty) return answersAll(rest, [..._reported.keys]);
-    return !_turnOpen && rest.every(fromUser);
+  bool takes(List<LlmMessage> rest) => !_turnOpen && super.takes(rest);
+
+  @override
+  void answer(List<LlmMessage> results) {
+    for (final result in results) {
+      _respond(_reported.remove(result.toolCallId)!, _resultOf(result));
+    }
+    _handOutSoon();
   }
 
   @override
-  Stream<LlmChunk> exchange(List<LlmMessage> rest) {
-    final out = StreamController<LlmChunk>();
-    if (!accepts(rest)) {
-      out
-        ..addError(const LlmException("The CLI session cannot take this"))
-        ..close();
-      return out.stream;
-    }
-    _current = out;
-    _fresh = false;
-    if (_reported.isNotEmpty) {
-      // The results Codex's held calls are waiting on. Answering them is
-      // what lets it carry on to its next reply.
-      for (final result in rest) {
-        final call = _reported.remove(result.toolCallId)!;
-        _respond(call.request, _resultOf(result));
-      }
-      _handOutSoon();
-    } else {
-      _turnOpen = true;
-      _request("turn/start", {
-        "threadId": _thread,
-        "input": _input(rest),
-        "effort": ?effortOf(spec.reasoningEffort),
-        "summary": "auto",
-      }).catchError((Object e) {
-        _turnOpen = false;
-        _end(error: e);
-        return null;
-      });
-    }
-    return out.stream;
+  void begin(List<LlmMessage> rest) {
+    _turnOpen = true;
+    _request("turn/start", {
+      "threadId": _thread,
+      "input": _input(rest),
+      "effort": ?effortOf(spec.reasoningEffort),
+      "summary": "auto",
+    }).catchError((Object e) {
+      _turnOpen = false;
+      end(error: e);
+      return null;
+    });
   }
 
   /// [rest] as a turn's input. A fresh session handed a history is told it
@@ -317,7 +287,7 @@ class CodexCliSession extends CliSession {
         text(inlineText(message)),
         for (final file in message.attachments)
           if (file.isImage)
-            {"type": "image", "url": _dataUrl(file)}
+            {"type": "image", "url": file.dataUrl}
           else if (file.isBlock)
             text("(attached: ${file.filename}, ${file.mimeType})"),
       ],
@@ -330,22 +300,13 @@ class CodexCliSession extends CliSession {
     "contentItems": [
       {"type": "inputText", "text": inlineText(result)},
       for (final file in result.attachments)
-        if (file.isImage) {"type": "inputImage", "imageUrl": _dataUrl(file)},
+        if (file.isImage) {"type": "inputImage", "imageUrl": file.dataUrl},
     ],
     "success": true,
   };
 
-  static String _dataUrl(LlmAttachment file) =>
-      "data:${file.mimeType};base64,${file.base64}";
-
-  void _line(String line) {
-    if (line.trim().isEmpty) return;
-    final Map<String, dynamic> message;
-    try {
-      message = jsonDecode(line) as Map<String, dynamic>;
-    } catch (_) {
-      return;
-    }
+  @override
+  void line(Map<String, dynamic> message) {
     final method = message["method"] as String?;
     final id = message["id"];
     final params = message["params"];
@@ -376,7 +337,7 @@ class CodexCliSession extends CliSession {
   /// else — an approval, a question — is refused, there being nobody to ask.
   void _asked(Object id, String method, Map<String, dynamic> params) {
     if (method != "item/tool/call") {
-      _write({
+      write({
         "id": id,
         "error": {"code": -32601, "message": "Entoli does not answer $method"},
       });
@@ -427,11 +388,8 @@ class CodexCliSession extends CliSession {
   /// that is not is Codex going on without Entoli's loop, and what it holds
   /// is no longer the conversation the loop has.
   void _say(StringBuffer said, String delta, LlmChunk Function(String) chunk) {
-    final out = _current;
-    if (out == null) {
-      _alive = false;
-      return;
-    }
+    final out = current;
+    if (out == null) return strayed();
     said.write(delta);
     out.add(chunk(delta));
   }
@@ -439,14 +397,17 @@ class CodexCliSession extends CliSession {
   void _turnCompleted(Map<dynamic, dynamic> turn) {
     _turnOpen = false;
     // A turn that ended leaves nothing waiting on its calls.
-    for (final call in [..._queued, ..._reported.values]) {
-      _respond(call.request, _failed);
+    for (final request in [
+      for (final c in _queued) c.request,
+      ..._reported.values,
+    ]) {
+      _respond(request, _failed);
     }
     _queued.clear();
     _reported.clear();
     final status = turn["status"];
     if (status == "completed") {
-      _end(
+      end(
         last: LlmCompletion(
           finishReason: "stop",
           usage: _usage,
@@ -459,7 +420,7 @@ class CodexCliSession extends CliSession {
     final unauthorized =
         error is Map &&
         jsonEncode(error["codexErrorInfo"]).contains('"httpStatusCode":401');
-    _end(
+    end(
       error: LlmException(
         unauthorized
             ? "Codex CLI is not signed in. Run `codex login`, or sign in in "
@@ -474,17 +435,15 @@ class CodexCliSession extends CliSession {
   /// Hands out the calls that have arrived, once whatever else arrived with
   /// them has been read: calls made together are one reply.
   void _handOutSoon() {
-    if (_handing || _current == null) return;
-    _handing = true;
+    if (current == null) return;
     Timer.run(() {
-      _handing = false;
-      if (_current == null || _queued.isEmpty) return;
+      if (current == null || _queued.isEmpty) return;
       final calls = [..._queued];
       _queued.clear();
       for (final call in calls) {
-        _reported[call.id] = call;
+        _reported[call.id] = call.request;
       }
-      _end(
+      end(
         last: LlmCompletion(
           finishReason: "tool_use",
           usage: _usage,
@@ -516,66 +475,32 @@ class CodexCliSession extends CliSession {
   };
 
   Future<Object?> _request(String method, Map<String, dynamic> params) {
-    if (!_alive) return Future.error(const LlmException("Codex CLI is gone"));
+    if (!alive) return Future.error(const LlmException("Codex CLI is gone"));
     final id = ++_nextId;
     final done = Completer<Object?>();
     _waiting[id] = done;
-    _write({"id": id, "method": method, "params": params});
+    write({"id": id, "method": method, "params": params});
     return done.future;
   }
 
   void _respond(Object id, Map<String, dynamic> result) =>
-      _write({"id": id, "result": result});
+      write({"id": id, "result": result});
 
-  void _write(Map<String, dynamic> message) {
-    if (_closing) return;
-    _process.writeLine(jsonEncode(message));
-  }
-
-  void _fail(String reason) {
-    _alive = false;
-    _end(error: LlmException(reason));
-  }
-
-  /// Ends the exchange in progress, if any, with [last] or [error]. It is
-  /// detached first, so nothing that follows reaches it.
-  void _end({LlmChunk? last, Object? error}) {
-    final out = _current;
-    _current = null;
+  /// Clears what the exchange has said, with it.
+  @override
+  void end({LlmChunk? last, Object? error}) {
     _text.clear();
     _reasoning.clear();
     _usage = null;
-    if (out == null) return;
-    if (error != null) out.addError(error);
-    if (last != null) out.add(last);
-    unawaited(out.close());
+    super.end(last: last, error: error);
   }
 
-  void _exited(int code) {
-    _alive = false;
-    final said = _stderr.toString();
-    final reason = said.isEmpty
-        ? "Codex CLI exited ($code)"
-        : "Codex CLI exited ($code): $said";
+  @override
+  void gone(String reason) {
     for (final waiting in _waiting.values) {
       waiting.completeError(LlmException(reason));
     }
     _waiting.clear();
-    if (_closing) return;
-    logFailure("llm", "codex exited with $code");
-    _fail(reason);
-  }
-
-  @override
-  Future<void> close() async {
-    if (_closing) return;
-    _alive = false;
-    final out = _current;
-    _current = null;
-    await out?.close();
-    // Ephemeral: the thread goes with the process, and nothing else is kept.
-    _closing = true;
-    await stopProcess(_process, "codex");
   }
 }
 

@@ -163,7 +163,11 @@ did not live through. A session is parked the moment its completion is
 read, so a consumer that stops on the reply does not take it down; one
 stopped part-way is closed. Parked sessions go after ten minutes or past
 four, and `close` takes every one down. What a session *is* belongs to the
-subclass, through `start`.
+subclass, through `start`. Both programs' sessions are a
+`CliProcessSession`: one process speaking JSON a line at a time, whose
+lifecycle — the exchange in progress, held calls against new input, the
+end, the exit and the close — is written once there; a subclass says what
+a line means and how input and results are written.
 
 `ClaudeCliProvider`'s session is one `claude -p` in stream-json on both
 sides, run in one empty folder every session shares —

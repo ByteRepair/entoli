@@ -7,13 +7,15 @@ import "model_info.dart";
 enum LlmApi {
   openai,
   anthropic,
-  claudeCli,
-  codexCli;
+  claudeCli(isCli: true),
+  codexCli(isCli: true);
+
+  const LlmApi({this.isCli = false});
 
   /// Whether it is a program run here rather than an endpoint reached over
   /// HTTP: what it is configured with is an executable and an environment,
   /// not a base URL and a key.
-  bool get isCli => this == claudeCli || this == codexCli;
+  final bool isCli;
 }
 
 /// An endpoint the agent can call, as the user configured it. Held in
