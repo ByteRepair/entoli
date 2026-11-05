@@ -19,7 +19,7 @@ extension RemindersPlugin {
 
   /// Where every launchctl call and plist write runs, in the order asked: a
   /// call blocks on launchctl, and the main thread is the UI's.
-  private static let launchd = DispatchQueue(label: "io.byterepair.entoli.launchd")
+  static let launchd = DispatchQueue(label: "io.byterepair.entoli.launchd")
 
   /// The calls only this platform answers; false for one it does not know.
   func handlePlatform(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) -> Bool {
@@ -217,19 +217,12 @@ extension RemindersPlugin {
   }
 
   /// A wake session's work has drained; a launch nobody came to look at stops
-  /// being an app and quits, the next fire's job being launchd's. The quit
-  /// waits behind the launchd queue, so no rewrite is cut between its bootout
-  /// and its bootstrap, and a short delay lets the reply reach Dart before
-  /// the process goes. A session someone activated keeps living, from there
-  /// an ordinary one.
+  /// being an app and quits, the next fire's job being launchd's — once no
+  /// turn runs either (`AppDelegate.quitIfUnwatched`). A session someone
+  /// activated keeps living, from there an ordinary one.
   private func doneFiring(_ result: @escaping FlutterResult) {
-    if AppDelegate.wake && !AppDelegate.userShowedUp {
-      Self.launchd.async {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-          NSApp.terminate(nil)
-        }
-      }
-    }
+    AppDelegate.wakePending = false
+    AppDelegate.quitIfUnwatched()
     result(nil)
   }
 

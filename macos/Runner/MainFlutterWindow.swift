@@ -48,24 +48,26 @@ class MainFlutterWindow: NSWindow {
     // launchd job started the process, and hiding is the application's own —
     // `orderOut` alone loses to AppKit's visible-at-launch ordering, which
     // re-fronts the window after this method returns, so the whole app hides
-    // instead (the -j launch flag this replaces never ran an engine). The
-    // first activation hereafter is the user's, which unhides the app,
-    // shows the window, and stops the session being a wake — an observer
-    // rather than a delegate override, so no delegate the framework
-    // forwards through is displaced.
+    // instead (the -j launch flag this replaces never ran an engine).
     if AppDelegate.wake {
       self.orderOut(nil)
       NSApp.hide(nil)
-      NotificationCenter.default.addObserver(
-        forName: NSApplication.didBecomeActiveNotification, object: nil,
-        queue: .main
-      ) { _ in
-        AppDelegate.userShowedUp = true
-        NSApp.unhide(nil)
-        for window in NSApplication.shared.windows
-        where window is MainFlutterWindow && !window.isVisible {
-          window.makeKeyAndOrderFront(nil)
-        }
+    }
+    // An activation is the user's — a wake's launch and a close's hide never
+    // activate — so it makes the session watched (`AppDelegate.watched`),
+    // and a wake's first one also unhides the app and shows the window. An
+    // observer rather than a delegate override, so no delegate the framework
+    // forwards through is displaced.
+    NotificationCenter.default.addObserver(
+      forName: NSApplication.didBecomeActiveNotification, object: nil,
+      queue: .main
+    ) { _ in
+      AppDelegate.watched = true
+      guard AppDelegate.wake else { return }
+      NSApp.unhide(nil)
+      for window in NSApplication.shared.windows
+      where window is MainFlutterWindow && !window.isVisible {
+        window.makeKeyAndOrderFront(nil)
       }
     }
 
@@ -77,7 +79,7 @@ class MainFlutterWindow: NSWindow {
   /// See `TurnHold`.
   override func performClose(_ sender: Any?) {
     guard TurnHold.isRunning else { return super.performClose(sender) }
-    TurnHold.closedWhileRunning = true
+    AppDelegate.watched = false
     NSApp.hide(nil)
   }
 }
@@ -90,11 +92,6 @@ class MainFlutterWindow: NSWindow {
 enum TurnHold {
   private(set) static var isRunning = false
 
-  /// The window was closed while a turn ran, and nobody has activated the app
-  /// since — the signal the wake path reads too: when the turns end, the close
-  /// goes through.
-  static var closedWhileRunning = false
-
   static func register(with messenger: FlutterBinaryMessenger) {
     FlutterMethodChannel(name: "agent_chat/background", binaryMessenger: messenger)
       .setMethodCallHandler { call, result in
@@ -102,9 +99,6 @@ enum TurnHold {
         update(running: ((call.arguments as? NSNumber)?.intValue ?? 0) > 0)
         result(nil)
       }
-    NotificationCenter.default.addObserver(
-      forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
-    ) { _ in closedWhileRunning = false }
   }
 
   private static func update(running: Bool) {
@@ -117,7 +111,7 @@ enum TurnHold {
     } else {
       ProcessInfo.processInfo.enableAutomaticTermination(reason)
       ProcessInfo.processInfo.enableSuddenTermination()
-      if closedWhileRunning { NSApp.terminate(nil) }
+      AppDelegate.quitIfUnwatched()
     }
   }
 }
