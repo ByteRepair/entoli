@@ -290,6 +290,8 @@ void main() {
             .cast<String>();
         expect(args, containsAllInOrder(["--model", "sonnet"]));
         expect(args, containsAllInOrder(["--tools", ""]));
+        expect(args, containsAllInOrder(["--permission-mode", "dontAsk"]));
+        expect(args, containsAllInOrder(["--allowedTools", "mcp__entoli"]));
         expect(args, containsAllInOrder(["--effort", "low"]));
         expect(args, contains("--system-prompt-file"));
         client.close();

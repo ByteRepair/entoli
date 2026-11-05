@@ -155,7 +155,10 @@ subclass, through `start`.
 
 `ClaudeCliProvider`'s session is one `claude -p` in stream-json on both
 sides, run in an empty temp directory so no project's `CLAUDE.md` is picked
-up, with `--tools ""` (Claude's own tools off), `--strict-mcp-config`,
+up, with `--tools ""` (Claude's own tools off), `--permission-mode dontAsk`
+over an allow list of Entoli's server alone — `--tools ""` leaves
+`EndConversation` while MCP tools are present, and this refuses it and
+anything else that slips through rather than asking — `--strict-mcp-config`,
 `--no-session-persistence`, the system prompt by `--system-prompt-file`
 (argv has a length limit and the prompt can pass it) and `--effort` from
 the loop's word. Its `--include-partial-messages` lines are Anthropic's

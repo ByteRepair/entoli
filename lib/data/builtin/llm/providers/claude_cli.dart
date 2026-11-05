@@ -154,6 +154,11 @@ class ClaudeCliSession extends CliSession {
         "--allowedTools",
         "mcp__${McpToolBridge.serverName}",
       ],
+      // Anything not allowed above is refused rather than asked about: a
+      // built-in `--tools ""` leaves behind (EndConversation, while MCP tools
+      // are present) cannot run, and there is nobody to ask anyway.
+      "--permission-mode",
+      "dontAsk",
       "--no-session-persistence",
       "--disable-slash-commands",
       if (spec.system.isNotEmpty) ...["--system-prompt-file", system.path],
