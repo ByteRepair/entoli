@@ -9,9 +9,10 @@ The questions it could not settle are at the end.
 ## Why
 
 The agent runs in the window's process, so whatever ends the window ends the
-turn. Every platform has grown its own way around that. macOS hides the app
-instead of closing it (`TurnHold`, `AppDelegate.quitIfUnwatched`, #485 and
-#486), and runs wake sessions as a hidden app that quits itself once its fires
+turn. Every platform has grown its own way around that. On master, macOS
+hides the app instead of closing it while a turn runs (`TurnHold`, and
+`AppDelegate.quitIfUnwatched` ending the session once nobody is watching, from
+#485 and #486), and runs wake sessions as a hidden app that quits itself once its fires
 drain. Android holds a foreground service and caches a `FlutterEngine` so the
 isolate survives its activity. Each answer is correct, and each is a special
 case of one missing fact: nothing runs the work except the thing that draws it.
@@ -19,7 +20,7 @@ case of one missing fact: nothing runs the work except the thing that draws it.
 The thing that forces the question is macOS 27's "Running in Background" gray
 Dock dot (Apple support article 125671). It appears only when an app is quit
 and something it owns keeps running. No public API sets it. A hidden app is
-not a quit app, so #486 cannot show it. Only a separate process can.
+not a quit app, so what #486 put on master cannot show it. Only a separate process can.
 
 ## The decisions this is built around
 
@@ -380,21 +381,17 @@ abstract interface class ServerLauncher {
 
 ### When the server ends
 
-The server stays up while any of these hold, and leaves a grace period after
-the last of them, as the model host waits five minutes:
+**The server runs in the background only while a turn exists.** While a
+client is connected the server is up, as the app is today while its window is
+open. With no client connected it stays only while a turn is running, a
+trigger's fire included, and leaves when the last one ends. Nothing else keeps
+it in the background: not a download, a browser tab, a background job left by
+a finished turn, or the sync keep-alive. Those end with the server, as they end
+with the app today when it quits. File-watch triggers fire only while the
+server runs, which is what they do today while the app runs.
 
-- a client is connected;
-- a turn is running, or a background job;
-- a download, a voice session, or a browser tab is open;
-- the sync keep-alive is on and a device is connected;
-- a trigger's fire is being run.
-
-File-watch triggers fire only while the server runs, which is what they do
-today while the app runs.
-
-Quitting the client does not stop a running turn. That is the point on macOS,
-where it is what shows the gray dot. It is also a change of meaning for Cmd-Q,
-which today ends a turn; see the open questions.
+What Cmd-Q does to a running turn is not settled yet; see open question 2.
+Either way, the background lasts no longer than the turn.
 
 **One client at a time** is decided at the server: a second `clientHello`
 supersedes the first, which is sent `superseded` and closed. A relaunched
@@ -433,10 +430,11 @@ What changes in `lib/data/sync/`:
 
 ### macOS
 
-- **The gray dot.** Quitting Entoli with a turn running leaves
-  `Entoli Server.app` running as a registered background item, which is the
-  case the Dock marks. This has to be proven on macOS 27 before anything else
-  on this platform is built (stage 5's first step).
+- **The gray dot.** The client gone while a turn runs, with the window closed
+  or by Cmd-Q depending on open question 2, leaves `Entoli Server.app` running
+  as a registered background item until the turn ends. That is the case the
+  Dock marks. Stage 5a proves it on macOS 27 before anything else on this
+  platform is built.
 - **The window is just a window.** `applicationShouldTerminateAfterLastWindowClosed`
   is true again and nothing overrides it.
 - **Triggers wake the server, not the app.** Each launchd job's line becomes a
@@ -447,12 +445,11 @@ What changes in `lib/data/sync/`:
   leaves under the rule above. The per-trigger jobs stay, because an
   `SMAppService` plist is sealed inside the bundle and cannot carry each
   trigger's calendar.
-- **The model host can fold into the server.** `Entoli Models.app` exists to
-  keep MLX's GPU work out of the process that draws the window. The server is
-  already out of it. Running the models in the server (`InAppModelProcess`)
-  retires a helper bundle, its build phase and its socket, at the cost of a
-  long model load holding the server's process rather than a disposable one.
-  An open question.
+- **The model host stays a separate process.** `Entoli Models.app` is an
+  external MLX server, and it crashing must not affect Entoli. That holds
+  whether the window or the server is what talks to it, so it does not fold
+  into the server. The server starts it and holds its leases where the app
+  does today, through `HelperModelProcess`, unchanged.
 - **Shortcuts.** App Intents are in the app bundle and launch the client. The
   client forwards each action to the server over the protocol. Once an action
   returns, `linkd` may end the client, and a turn it started keeps running in
@@ -532,11 +529,16 @@ in `lib/data/`.
 version check. iOS stays in-process for good. The Android foreground services
 move to the server process here, and the UI's sticky engine goes.
 
-**Stage 5: macOS's background item.** First a spike: a registered agent, the
-app quit, the gray dot on macOS 27, and the approval prompt the user sees on
-first registration. Then `Entoli Server.app`, `BackgroundItemServerLauncher`,
-triggers retargeted to the server, and the retirements below. Folding the
-model host in is a separate PR after it, if chosen.
+**Stage 5a: prove the gray dot.** A small test build, before anything else
+on macOS is built: an `SMAppService` agent registered from the app bundle,
+the app quit while the agent keeps running, and macOS 27's "Running in
+Background" dot checked in the Dock. It also records the approval prompt the
+user sees on first registration. Stage 5b goes ahead only if the dot shows. If
+it does not, the macOS launcher is redesigned before any of 5b is written.
+
+**Stage 5b: macOS's background item.** `Entoli Server.app`,
+`BackgroundItemServerLauncher`, triggers retargeted to the server, and the
+retirements below.
 
 **Stage 6: the thread view.** The server sends the thread being read rather
 than records. The Dart client moves to it, and drops `replayTree` from its
@@ -553,8 +555,6 @@ macOS:
 - `wakePending`, `doneFiring`'s quit, the hide in `awakeFromNib`, the
   wake-time single-instance check and `ENTOLI_WAKE`.
 - Disabling sudden and automatic termination for a Shortcuts turn.
-- If folded: `Entoli Models.app`, `tool/macos/embed-model-host.sh`,
-  `HelperModelProcess` and its socket.
 - The "Closing the window during a turn" section of `macos/AGENTS.md`, most of
   "A wake is not an opening", and "Why `doneFiring` quits".
 
@@ -571,7 +571,8 @@ Everywhere:
 - The split in every page between a local provider and a remote one. One
   remote provider is left.
 
-What it does **not** retire: `AgentBackend` and `FakeBackend`, the sync
+What it does **not** retire: `Entoli Models.app` and `HelperModelProcess`,
+`AgentBackend` and `FakeBackend`, the sync
 handshake and framing, the launchd trigger jobs, Android's foreground services
 (they move), and the "Carrying on an interrupted turn" invariant. That invariant
 was that a turn cannot outlive the process running it, and it now reads "the
@@ -600,9 +601,12 @@ whether a turn is live.
 1. **What did the earlier refactor session decide?** Its conclusions were not
    found. Anything it settled about the cut line, the schema or the staging
    should override this document where they differ.
-2. **Cmd-Q with a turn running.** Should quitting the client let the turn carry
-   on in the background, which is the gray dot, or ask, or offer "Quit and stop
-   turns" beside it?
+2. **Cmd-Q with a turn running.** The answer so far was: "No, this shouldn't
+   happen, it runs in the background only while a turn exists." The second half
+   is now the exit rule above. The first half can be read two ways. Does Cmd-Q
+   still end the running turn, as it does on master, so only closing the window
+   leaves a turn in the background? Or does Cmd-Q quit the client and leave the
+   turn running in the background until it ends?
 3. **The secret on macOS.** launchd starts the server, so no environment
    carries the key. Is a 0600 key file beside the socket, plus a code-signature
    check of the connecting peer, an acceptable reading of decision 6? Or should
@@ -611,24 +615,22 @@ whether a turn is live.
    item waiting for approval in Login Items, with a system notification on
    first registration. Register at first launch, or at the first turn that
    would be left running?
-5. **Fold the model host into the server on macOS?** Fewer bundles and sockets,
-   against a long MLX load or crash taking the server's process with it.
-6. **Voice.** Should the microphone and speaker stay in the client, as the
+5. **Voice.** Should the microphone and speaker stay in the client, as the
    user's presence at the device, with recognition and speech in the server and
    audio frames over the protocol? Or should voice run wholly in the server?
    Android's system engines want an activity's context, which argues for the
    client there.
-7. **A pure-Dart server on Linux** for truly headless use on a machine with no
+6. **A pure-Dart server on Linux** for truly headless use on a machine with no
    display. Worth a later stage, or out of scope?
-8. **Protocol tolerance.** Protobuf could let an older peer ignore a newer arm,
+7. **Protocol tolerance.** Protobuf could let an older peer ignore a newer arm,
    relaxing "both devices update together". Keep the strict version check, or
    relax it for arms marked optional?
-9. **Client-side state.** Is the client allowed any file of its own, for
+8. **Client-side state.** Is the client allowed any file of its own, for
    window size or the last open chat? Or does all of it live in the server's
    settings, leaving the client with nothing on disk?
-10. **Same-host shortcuts.** May a local client open an artifact, a backup or an
+9. **Same-host shortcuts.** May a local client open an artifact, a backup or an
     attachment by a path the server hands it, rather than receiving the bytes?
     That is faster, but a Swift client on another machine could not, and it
     would make "local" and "remote" differ again.
-11. **Windows transport.** Loopback TCP, or `AF_UNIX` if `dart:io` supports it
+10. **Windows transport.** Loopback TCP, or `AF_UNIX` if `dart:io` supports it
     there? This is a spike, not a preference.
