@@ -134,7 +134,12 @@ for (`KeyFree`). `providerOf` reads it by API before anything else, so a
 CLI entry is never mistaken for the endpoint its catalog id names. The
 program is found on the login shell's `PATH` (`CliProvider.loginPath`, set
 by `main` from the same capture the shell uses), since a desktop launch
-inherits one that misses `~/.local/bin`. A phone runs no programs, so there
+inherits one that misses `~/.local/bin`. A default name found nowhere on
+it falls back to a copy another app ships (`bundledCopies`): on macOS,
+Claude Desktop keeps its own `claude` under
+`~/Library/Application Support/Claude/claude-code/<version>/<build>/`,
+replaced on each update, so the newest is looked up per session rather than
+stored — run outside a Desktop session it signs in as any `claude` does. A phone runs no programs, so there
 it offers no models, and the dialog offers the API only on a desktop.
 What of the app's own environment reaches the program is the subclass's
 (`inherits`): an Entoli started from inside a Claude Code session — a

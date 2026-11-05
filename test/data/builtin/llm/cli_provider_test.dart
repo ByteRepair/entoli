@@ -375,6 +375,29 @@ void main() {
       expect(provider.inheritedFrom(own), own);
     });
 
+    test("finds Claude Desktop's copies, newest version first", () {
+      final root = Directory.systemTemp.createTempSync("desktop-claude-");
+      addTearDown(() => root.deleteSync(recursive: true));
+      String copy(String version, String build) {
+        final exe = p.join(
+          root.path,
+          version,
+          build,
+          "claude.app",
+          "Contents",
+          "MacOS",
+          "claude",
+        );
+        File(exe).createSync(recursive: true);
+        return exe;
+      }
+
+      final older = copy("2.1.9", "a");
+      final newer = copy("2.1.317", "b");
+      expect(ClaudeCliProvider.desktopCopiesIn(root.path), [newer, older]);
+      expect(ClaudeCliProvider.desktopCopiesIn(p.join(root.path, "none")), []);
+    });
+
     test("finds a bare name on the environment's PATH", () {
       final dir = Directory.systemTemp.createTempSync("cli-path-");
       addTearDown(() => dir.deleteSync(recursive: true));

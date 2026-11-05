@@ -39,6 +39,43 @@ class ClaudeCliProvider extends CliProvider {
   @override
   bool get takesPdfs => true;
 
+  /// Claude Desktop's own `claude`, newest version first. It keeps each under
+  /// `claude-code/<version>/<build>/`, replacing the directory on an update,
+  /// so the path is found when asked rather than stored. Run outside a
+  /// Desktop session, it signs in the way a `claude` installed on its own
+  /// does. Only macOS's location is known.
+  @override
+  List<String> get bundledCopies {
+    final home = Platform.environment["HOME"];
+    if (!Platform.isMacOS || home == null) return const [];
+    return desktopCopiesIn(
+      p.join(home, "Library", "Application Support", "Claude", "claude-code"),
+    );
+  }
+
+  /// The executables under [root], `<version>/<build>/claude.app/...`, by
+  /// version, newest first.
+  static List<String> desktopCopiesIn(String root) {
+    final dir = Directory(root);
+    if (!dir.existsSync()) return const [];
+    List<int> version(String path) => [
+      for (final part in p.basename(path).split(".")) int.tryParse(part) ?? -1,
+    ];
+    final versions = dir.listSync().whereType<Directory>().toList()
+      ..sort((a, b) {
+        final x = version(a.path), y = version(b.path);
+        for (var i = 0; i < x.length && i < y.length; i++) {
+          if (x[i] != y[i]) return y[i].compareTo(x[i]);
+        }
+        return y.length.compareTo(x.length);
+      });
+    return [
+      for (final v in versions)
+        for (final build in v.listSync().whereType<Directory>())
+          p.join(build.path, "claude.app", "Contents", "MacOS", "claude"),
+    ];
+  }
+
   /// Everything a running Claude Code session gave this app, where it was
   /// started from inside one — a Claude Code terminal, a Claude Desktop
   /// session — and nothing of it otherwise. `CLAUDECODE` is how a session

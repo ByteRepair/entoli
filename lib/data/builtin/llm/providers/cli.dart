@@ -66,9 +66,21 @@ abstract class CliProvider extends LlmProvider with KeyFree {
       if (inherits(key, inherited)) key: value,
   };
 
+  /// Where the program may be when [command] was left to its default and
+  /// `PATH` has none: a copy another app ships, which may move with that
+  /// app's updates. None unless a subclass knows of one.
+  List<String> get bundledCopies => const [];
+
   /// [command] as a path to run, or null where there is none: a path is taken
-  /// as it is, a bare name is looked for on [environment]'s `PATH`.
-  String? locate() {
+  /// as it is, a bare name is looked for on [environment]'s `PATH`, and the
+  /// default name, found nowhere there, is the first of [bundledCopies].
+  String? locate() =>
+      _onPath() ??
+      (config.command?.trim().isNotEmpty == true
+          ? null
+          : bundledCopies.where((path) => File(path).existsSync()).firstOrNull);
+
+  String? _onPath() {
     final name = command;
     final windows = Platform.isWindows;
     bool runnable(String path) => File(path).existsSync();
@@ -96,8 +108,8 @@ abstract class CliProvider extends LlmProvider with KeyFree {
       (throw LlmException(
         p.isAbsolute(command)
             ? "$command does not exist"
-            : "$command was not found on PATH. Install it, or set its path "
-                  "in the provider's settings.",
+            : "$command was not found on PATH${bundledCopies.isEmpty ? "" : " or in Claude Desktop"}. "
+                  "Install it, or set its path in the provider's settings.",
       ));
 
   /// A session of the program for [spec], started and ready for its first
