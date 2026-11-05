@@ -42,7 +42,6 @@ final llmProviderPresets = [for (final kind in _kinds) kind()];
 /// models.dev id, which is what a local server has; then by the wire format
 /// alone. A CLI is its program, whatever else the entry says.
 LlmProvider providerOf(LlmProviderConfig config) {
-  if (config.api == LlmApi.claudeCli) return ClaudeCliProvider(config);
   final kind = _kindOf(config);
   if (kind != null) return kind(config);
   return switch (config.api) {
@@ -54,12 +53,14 @@ LlmProvider providerOf(LlmProviderConfig config) {
 
 /// The preset [config] is an entry of, whatever it is called; null for an
 /// endpoint typed in by hand.
-LlmProvider? presetOf(LlmProviderConfig config) =>
-    config.api.isCli ? null : _kindOf(config)?.call();
+LlmProvider? presetOf(LlmProviderConfig config) => _kindOf(config)?.call();
 
+/// A preset's class, which a CLI never has: its entry is its program.
 LlmProvider Function([LlmProviderConfig])? _kindOf(LlmProviderConfig config) =>
-    _byHost[Uri.tryParse(config.baseUrl)?.host] ??
-    _byCatalogId[config.catalogId];
+    config.api.isCli
+    ? null
+    : _byHost[Uri.tryParse(config.baseUrl)?.host] ??
+          _byCatalogId[config.catalogId];
 
 /// A local server's host is anybody's, so it is read by models.dev id alone.
 final _byHost = {

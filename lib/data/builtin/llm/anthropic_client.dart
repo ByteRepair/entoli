@@ -97,7 +97,9 @@ class AnthropicClient implements LlmClient {
       } catch (_) {
         continue;
       }
-      yield* Stream.fromIterable(reader.read(event));
+      for (final chunk in reader.read(event)) {
+        yield chunk;
+      }
     }
     yield reader.completion();
   }
@@ -199,9 +201,6 @@ class AnthropicEventReader {
   final _blocks = <int, _Block>{};
   String? _stopReason;
   int? _inputTokens, _cacheRead, _cacheWrite, _outputTokens;
-
-  /// What the stop said, once `message_delta` has said it.
-  String? get stopReason => _stopReason;
 
   // The usage fields accumulate across the frames that carry them: a frame
   // naming a field keeps what an earlier one said about the rest.

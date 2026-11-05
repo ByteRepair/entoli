@@ -8,6 +8,7 @@ import "package:path/path.dart" as p;
 import "../../../../core/log.dart";
 import "../../../../domain/llm_provider.dart";
 import "../../../../domain/model_info.dart";
+import "../../../../domain/tool_arg.dart";
 import "../anthropic_client.dart";
 import "../llm_client.dart";
 import "../mcp_tool_bridge.dart";
@@ -58,6 +59,11 @@ class ClaudeCliProvider extends CliProvider {
   /// a folder in the app's cache. Null — a test, a build that never set it —
   /// is one fixed folder under the system's temp.
   static String? cacheRoot;
+
+  /// What it is, in the words the provider list and dialog show.
+  static const about =
+      "Runs Claude CLI on this computer, signed in as it already is. "
+      "Its own tools are off; it uses Entoli's.";
 
   /// [cacheRoot]'s `claude-cli/`, or the temp fallback.
   Directory get workRoot => Directory(
@@ -148,16 +154,13 @@ class ClaudeCliProvider extends CliProvider {
 
 /// One `claude -p --input-format stream-json --output-format stream-json`.
 class ClaudeCliSession extends CliSession {
-  ClaudeCliSession._(super.spec, this._dir, this._root);
+  ClaudeCliSession._(super.spec, this._dir);
 
   /// How long a closing session is given to go on its own, once stdin is
   /// closed, and then again after a SIGTERM.
   static const _grace = Duration(seconds: 3);
 
   final Directory _dir;
-
-  /// [ClaudeCliProvider.workRoot]: its `work/` is where every session runs.
-  final Directory _root;
   CliProcess? _process;
   ToolBridge? _bridge;
 
@@ -190,11 +193,10 @@ class ClaudeCliSession extends CliSession {
     final executable = provider.executable();
     // The files it is handed go in a folder of the session's own, which
     // goes with it.
-    final root = provider.workRoot;
-    final sessions = Directory(p.join(root.path, "sessions"));
+    final sessions = Directory(p.join(provider.workRoot.path, "sessions"));
     await sessions.create(recursive: true);
     final dir = await sessions.createTemp();
-    final session = ClaudeCliSession._(spec, dir, root);
+    final session = ClaudeCliSession._(spec, dir);
     try {
       await session._launch(provider, executable);
     } catch (e) {
@@ -259,7 +261,7 @@ class ClaudeCliSession extends CliSession {
       // directory — its cache's MCP logs, its project entry — is kept once
       // rather than once per session.
       workingDirectory: (await Directory(
-        p.join(_root.path, "work"),
+        p.join(provider.workRoot.path, "work"),
       ).create(recursive: true)).path,
       environment: {
         // A tool can wait on an approval for as long as the user takes.
@@ -284,14 +286,13 @@ class ClaudeCliSession extends CliSession {
 
   /// The loop's effort word as one the CLI takes.
   static String? _effortOf(String? effort) => switch (effort) {
-    null => null,
     "minimal" => "low",
     "low" || "medium" || "high" || "xhigh" || "max" => effort,
     _ => null,
   };
 
   @override
-  bool get alive => _alive && !_closing;
+  bool get alive => _alive;
 
   @override
   bool accepts(List<LlmMessage> rest) {
@@ -305,10 +306,13 @@ class ClaudeCliSession extends CliSession {
             {for (final u in _uses) u.id},
           );
     }
-    return rest.every(
-      (m) => m.role == LlmRole.user || m.role == LlmRole.system,
-    );
+    return rest.every(_fromUser);
   }
+
+  /// A message the CLI is sent as user content: what follows a reply, rather
+  /// than a reply or its results.
+  static bool _fromUser(LlmMessage m) =>
+      m.role == LlmRole.user || m.role == LlmRole.system;
 
   @override
   Stream<LlmChunk> exchange(List<LlmMessage> rest) {
@@ -337,12 +341,9 @@ class ClaudeCliSession extends CliSession {
   /// [rest] as one user message's content. A fresh session handed a history
   /// is told it as a transcript, with the trailing user turns as themselves.
   List<Map<String, dynamic>> _firstContent(List<LlmMessage> rest) {
-    final tail = rest.reversed
-        .takeWhile((m) => m.role == LlmRole.user || m.role == LlmRole.system)
-        .toList()
-        .reversed
-        .toList();
-    final history = rest.sublist(0, rest.length - tail.length);
+    final cut = rest.lastIndexWhere((m) => !_fromUser(m)) + 1;
+    final history = rest.sublist(0, cut);
+    final tail = rest.sublist(cut);
     return [
       if (history.isNotEmpty) {"type": "text", "text": transcriptOf(history)},
       for (final message in tail) ...AnthropicClient.userBlocks(message),
@@ -388,8 +389,7 @@ class ClaudeCliSession extends CliSession {
           _fail("Claude CLI could not reach Entoli's tools");
         }
       case "result":
-        final out = _current;
-        if (out == null) return;
+        if (_current == null) return;
         // A turn that ended with no reply streamed — an API error the CLI
         // reports in its own words, a limit it hit.
         final errors = event["errors"];
@@ -398,20 +398,14 @@ class ClaudeCliSession extends CliSession {
             (errors is List ? errors.join("\n") : null) ??
             "${event["subtype"]}";
         if (event["is_error"] == true || event["subtype"] != "success") {
-          _current = null;
-          out
-            ..addError(LlmException(said))
-            ..close();
+          _end(error: LlmException(said));
         } else {
-          _current = null;
-          out
-            ..add(
-              LlmCompletion(
-                message: LlmMessage(role: LlmRole.assistant, text: said),
-                finishReason: "stop",
-              ),
-            )
-            ..close();
+          _end(
+            last: LlmCompletion(
+              message: LlmMessage(role: LlmRole.assistant, text: said),
+              finishReason: "stop",
+            ),
+          );
         }
     }
   }
@@ -432,10 +426,7 @@ class ClaudeCliSession extends CliSession {
         out.add(chunk);
       }
     } on LlmException catch (e) {
-      _current = null;
-      out
-        ..addError(e)
-        ..close();
+      _end(error: e);
       return;
     }
     if (event["type"] != "message_stop") return;
@@ -454,36 +445,37 @@ class ClaudeCliSession extends CliSession {
     if (done.finishReason == "tool_use") {
       for (final call in calls) {
         _uses.add(
-          _ToolUse(call.id, call.name, decodedArguments(call.argumentsJson)),
+          _ToolUse(
+            call.id,
+            call.name,
+            decodeArgs(call.argumentsJson) ?? const <String, dynamic>{},
+          ),
         );
       }
       final orphans = [..._orphans];
       _orphans.clear();
       orphans.forEach(_held);
     }
-    _current = null;
-    out
-      ..add(
-        LlmCompletion(
-          finishReason: done.finishReason,
-          usage: done.usage,
-          message: LlmMessage(
-            role: LlmRole.assistant,
-            text: done.message.text,
-            reasoning: done.message.reasoning,
-            reasoningSignature: done.message.reasoningSignature,
-            toolCalls: calls,
-          ),
+    _end(
+      last: LlmCompletion(
+        finishReason: done.finishReason,
+        usage: done.usage,
+        message: LlmMessage(
+          role: LlmRole.assistant,
+          text: done.message.text,
+          reasoning: done.message.reasoning,
+          reasoningSignature: done.message.reasoningSignature,
+          toolCalls: calls,
         ),
-      )
-      ..close();
+      ),
+    );
   }
 
   /// A call from the CLI, paired with the reply's tool use it is for: by name
   /// and input where one matches, else the first of its name still unpaired.
   void _held(HeldToolCall call) {
     if (!alive) {
-      call.fail("Entoli stopped this turn");
+      call.fail(HeldToolCall.stopped);
       return;
     }
     final open = _uses.where((u) => u.call == null);
@@ -517,12 +509,19 @@ class ClaudeCliSession extends CliSession {
   }
 
   void _fail(String reason) {
+    _alive = false;
+    _end(error: LlmException(reason));
+  }
+
+  /// Ends the exchange in progress, if any, with [last] or [error]. It is
+  /// detached first, so nothing that follows reaches it.
+  void _end({LlmChunk? last, Object? error}) {
     final out = _current;
     _current = null;
-    _alive = false;
-    out
-      ?..addError(LlmException(reason))
-      ..close();
+    if (out == null) return;
+    if (error != null) out.addError(error);
+    if (last != null) out.add(last);
+    unawaited(out.close());
   }
 
   void _exited(int code) {
@@ -546,10 +545,10 @@ class ClaudeCliSession extends CliSession {
     _current = null;
     await out?.close();
     for (final use in _uses) {
-      use.call?.fail("Entoli stopped this turn");
+      use.call?.fail(HeldToolCall.stopped);
     }
     for (final call in _orphans) {
-      call.fail("Entoli stopped this turn");
+      call.fail(HeldToolCall.stopped);
     }
     _uses.clear();
     _orphans.clear();

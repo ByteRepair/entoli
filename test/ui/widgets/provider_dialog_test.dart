@@ -171,10 +171,20 @@ void main() {
         find.widgetWithText(TextField, "Executable"),
         "/opt/bin/claude",
       );
-      await tester.enterText(
-        find.widgetWithText(TextField, "Environment"),
-        "A=1\n\nB = two=2\nnot a pair",
-      );
+      for (final (name, value) in [("A", "1"), ("B", "two=2")]) {
+        await tester.ensureVisible(find.text("Add variable"));
+        await tester.tap(find.text("Add variable"));
+        await tester.pumpAndSettle();
+        // The variable's dialog, over the provider's, which has a Name too.
+        await tester.enterText(
+          find.widgetWithText(TextField, "Name").last,
+          name,
+        );
+        await tester.enterText(find.widgetWithText(TextField, "Value"), value);
+        await tester.tap(find.text("Save").last);
+        await tester.pumpAndSettle();
+      }
+      expect(find.text("two=2"), findsNothing, reason: "values are masked");
       await tester.tap(find.text("Save"));
       await tester.pumpAndSettle();
 

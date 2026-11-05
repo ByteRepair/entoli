@@ -6,6 +6,7 @@ import "../../core/platform/form_factor.dart";
 import "../../data/builtin/llm/llm_client.dart" show LlmException;
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/llm_provider.dart";
+import "environment_section.dart";
 
 /// Add or edit one endpoint the agent can call. A preset opens on the key
 /// alone, in plain words, with its technical fields folded under Advanced;
@@ -96,12 +97,7 @@ class _ProviderDialogState extends State<_ProviderDialog> {
   late final _command = TextEditingController(
     text: widget.initial?.command ?? "",
   );
-  late final _env = TextEditingController(
-    text: [
-      for (final MapEntry(:key, :value) in (widget.initial?.env ?? {}).entries)
-        "$key=$value",
-    ].join("\n"),
-  );
+  late var _env = {...?widget.initial?.env};
 
   /// Non-null for a provider with a class of its own, which opens on the key
   /// alone; a custom endpoint is nothing but the technical fields, so it opens
@@ -131,7 +127,6 @@ class _ProviderDialogState extends State<_ProviderDialog> {
     _apiKey.dispose();
     _modelsEndpoint.dispose();
     _command.dispose();
-    _env.dispose();
     super.dispose();
   }
 
@@ -168,7 +163,7 @@ class _ProviderDialogState extends State<_ProviderDialog> {
               ClaudeCliProvider.preset.defaultLightModelId,
           customModels: widget.initial?.customModels ?? const [],
           command: command.isEmpty ? null : command,
-          env: envFromLines(_env.text),
+          env: _env,
         ),
         // A program holds its own sign-in; whatever was stored stays put.
         null,
@@ -407,11 +402,7 @@ class _ProviderDialogState extends State<_ProviderDialog> {
   /// What a program run here is configured with: which program, and what
   /// it runs under. No key: it holds its own sign-in.
   List<Widget> _cliFields() => [
-    Text(
-      "Runs Claude CLI on this computer, signed in as it already is. "
-      "Its own tools are off; it uses Entoli's.",
-      style: Theme.of(context).textTheme.bodySmall,
-    ),
+    Text(ClaudeCliProvider.about, style: Theme.of(context).textTheme.bodySmall),
     const SizedBox(height: 16),
     TextField(
       controller: _command,
@@ -427,16 +418,10 @@ class _ProviderDialogState extends State<_ProviderDialog> {
       ),
     ),
     const SizedBox(height: 16),
-    TextField(
-      controller: _env,
-      minLines: 2,
-      maxLines: 6,
-      decoration: const InputDecoration(
-        labelText: "Environment",
-        hintText: "NAME=value",
-        helperText: "One NAME=value per line, over the app's own environment",
-        helperMaxLines: 2,
-      ),
+    EnvironmentSection(
+      env: _env,
+      description: "What the program runs with, over the app's own.",
+      onSaved: (next) async => setState(() => _env = next),
     ),
   ];
 
@@ -501,11 +486,3 @@ class _ProviderDialogState extends State<_ProviderDialog> {
     ];
   }
 }
-
-/// [text]'s `NAME=value` lines as a map: blank lines and ones with no name
-/// dropped, the value everything after the first `=`, a later line winning.
-Map<String, String> envFromLines(String text) => {
-  for (final line in text.split("\n"))
-    if (line.indexOf("=") case final at when at > 0)
-      line.substring(0, at).trim(): line.substring(at + 1).trim(),
-};

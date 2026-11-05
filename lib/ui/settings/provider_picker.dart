@@ -119,10 +119,7 @@ class _ClaudeCliTile extends StatelessWidget {
       subtitle: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            "Claude Code on this computer, signed in as it already is. "
-            "Its own tools are off; Entoli's are used.",
-          ),
+          Text(ClaudeCliProvider.about),
           SizedBox(height: 6),
           _Tag(Icons.account_circle_outlined, "Uses your Claude account"),
         ],

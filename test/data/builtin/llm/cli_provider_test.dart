@@ -7,6 +7,7 @@ import "package:agent_chat/data/builtin/llm/mcp_tool_bridge.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/model_registry.dart";
+import "package:flutter/foundation.dart";
 import "package:path/path.dart" as p;
 import "package:flutter_test/flutter_test.dart";
 
@@ -565,7 +566,10 @@ void main() {
       expect((provider as CliProvider).command, "claude");
     });
 
-    test("offers the CLI's model aliases beside the user's own", () {
+    test("offers the CLI's model aliases beside the user's own, on a desktop "
+        "alone", () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
       final provider = ClaudeCliProvider(
         const LlmProviderConfig(
           id: "c",
@@ -577,6 +581,10 @@ void main() {
       final ids = [for (final m in provider.models(ModelCatalog.current)) m.id];
       expect(ids.first, "claude-opus-5");
       expect(ids, containsAll(["opus", "sonnet", "haiku"]));
+
+      // A CLI entry synced onto a phone has no program to run there.
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      expect(provider.models(ModelCatalog.current), isEmpty);
     });
 
     test("leaves a parent Claude Code session's variables behind", () {

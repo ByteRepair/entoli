@@ -13,10 +13,6 @@ enum LlmApi {
   /// HTTP: what it is configured with is an executable and an environment,
   /// not a base URL and a key.
   bool get isCli => this == claudeCli;
-
-  /// [name] read back, null for one this build does not know.
-  static LlmApi? byName(Object? name) =>
-      values.where((api) => api.name == name).firstOrNull;
 }
 
 /// An endpoint the agent can call, as the user configured it. Held in
@@ -161,7 +157,7 @@ class LlmProviderConfig {
   static LlmProviderConfig? fromJson(Object? value) {
     if (value is! Map) return null;
     final id = value["id"];
-    final api = LlmApi.byName(value["api"]) ?? LlmApi.openai;
+    final api = LlmApi.values.asNameMap()[value["api"]] ?? LlmApi.openai;
     final baseUrl = value["baseUrl"] ?? (api.isCli ? "" : null);
     if (id is! String ||
         id.isEmpty ||

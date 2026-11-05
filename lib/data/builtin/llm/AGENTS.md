@@ -153,7 +153,7 @@ for the API.
 such program shares: finding it, its environment, and `CliClient` — the
 `LlmClient` that pools `CliSession`s. The loop resends the whole
 conversation each step; the client finds the parked session whose `seen`
-conversation the new one extends (by `CliClient.sameMessage`: role and ids,
+conversation the new one extends (by `CliClient.markOf`: role and ids,
 text where there are no ids, since the loop keeps its own reasoning), with
 the same `CliSessionSpec` — model, leading system text, tools, effort,
 which a program is told once on its command line — and feeds it only the

@@ -6,6 +6,7 @@ import "package:collection/collection.dart";
 import "package:path/path.dart" as p;
 
 import "../../../../core/log.dart";
+import "../../../../core/platform/form_factor.dart";
 import "../../../../domain/model_capability.dart";
 import "../../../../domain/model_registry.dart";
 import "../hosted_models.dart";
@@ -40,13 +41,15 @@ abstract class CliProvider extends LlmProvider with KeyFree {
 
   /// Whether this platform can run a program at all. A phone cannot, so a
   /// CLI entry synced onto one offers nothing rather than failing per turn.
-  bool get supported =>
-      Platform.isLinux || Platform.isMacOS || Platform.isWindows;
+  bool get supported => isDesktop;
 
-  String get command {
+  /// The program the config names, or null where it leaves it to the default.
+  String? get _named {
     final named = config.command?.trim();
-    return named == null || named.isEmpty ? defaultCommand : named;
+    return named == null || named.isEmpty ? null : named;
   }
+
+  String get command => _named ?? defaultCommand;
 
   /// What of the app's own environment [name] is passed on as. All of it,
   /// unless a subclass knows of variables that belong to something else.
@@ -76,7 +79,7 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   /// default name, found nowhere there, is the first of [bundledCopies].
   String? locate() =>
       _onPath() ??
-      (config.command?.trim().isNotEmpty == true
+      (_named != null
           ? null
           : bundledCopies.where((path) => File(path).existsSync()).firstOrNull);
 
@@ -140,7 +143,7 @@ abstract class CliProvider extends LlmProvider with KeyFree {
 /// its command line, rather than per message. A call that differs in any of
 /// it needs a session of its own.
 class CliSessionSpec {
-  const CliSessionSpec({
+  CliSessionSpec({
     required this.model,
     required this.system,
     required this.tools,
@@ -156,7 +159,7 @@ class CliSessionSpec {
 
   /// The tools as one string, compared by value: each step builds its
   /// definitions afresh, so two equal schemas are seldom the same map.
-  String get toolsKey => jsonEncode([
+  late final toolsKey = jsonEncode([
     for (final t in tools) [t.name, t.description, t.schema],
   ]);
 
@@ -252,7 +255,7 @@ class CliClient implements LlmClient {
         if (chunk is LlmCompletion && session.alive) {
           // Parked before it is handed on: a consumer that stops listening
           // once it has the reply must not take the session down with it.
-          _park(session, [...conversation, chunk.message]);
+          _park(session, [...conversation.map(markOf), markOf(chunk.message)]);
           parked = true;
         }
         yield chunk;
@@ -275,11 +278,9 @@ class CliClient implements LlmClient {
           seen.length >= conversation.length) {
         continue;
       }
-      var continues = true;
-      for (var i = 0; i < seen.length && continues; i++) {
-        continues = sameMessage(seen[i], conversation[i]);
+      if (!seen.indexed.every((e) => e.$2 == markOf(conversation[e.$1]))) {
+        continue;
       }
-      if (!continues) continue;
       final rest = conversation.sublist(seen.length);
       if (!parked.session.accepts(rest)) continue;
       _idle.remove(parked);
@@ -289,7 +290,7 @@ class CliClient implements LlmClient {
     return (null, 0);
   }
 
-  void _park(CliSession session, List<LlmMessage> seen) {
+  void _park(CliSession session, List<MessageMark> seen) {
     late final _Parked parked;
     parked = _Parked(
       session,
@@ -327,28 +328,35 @@ class CliClient implements LlmClient {
     }
   }
 
-  /// Whether [a], which a session saw, is [b] as the loop sends it back. Not
-  /// by every field: the loop keeps what it was given, but the reasoning it
-  /// keeps is its own and the text may be trimmed, so the ids decide where
-  /// there are any.
-  static bool sameMessage(LlmMessage a, LlmMessage b) {
-    if (a.role != b.role || a.toolCallId != b.toolCallId) return false;
-    if (a.role == LlmRole.assistant) {
-      return const ListEquality<String>().equals(
-            [for (final c in a.toolCalls) c.id],
-            [for (final c in b.toolCalls) c.id],
-          ) &&
-          a.text.trim() == b.text.trim();
-    }
-    return a.text == b.text;
-  }
+  /// What of [message] decides whether a session saw it, compared with `==`
+  /// against the message as the loop sends it back. Not every field: the loop
+  /// keeps what it was given, but the reasoning it keeps is its own and the
+  /// text may be trimmed, so the ids decide where there are any. A parked
+  /// session holds these rather than the messages, so it keeps no
+  /// attachment's bytes alive.
+  static MessageMark markOf(LlmMessage message) => (
+    role: message.role,
+    toolCallId: message.toolCallId,
+    calls: [for (final c in message.toolCalls) c.id].join("\n"),
+    text: message.role == LlmRole.assistant
+        ? message.text.trim()
+        : message.text,
+  );
 }
+
+/// What [CliClient.markOf] keeps of a message.
+typedef MessageMark = ({
+  LlmRole role,
+  String? toolCallId,
+  String calls,
+  String text,
+});
 
 class _Parked {
   _Parked(this.session, this.seen, this.timer);
 
   final CliSession session;
-  final List<LlmMessage> seen;
+  final List<MessageMark> seen;
   final Timer timer;
 }
 
@@ -387,16 +395,6 @@ String transcriptOf(List<LlmMessage> history) {
   }
   out.write("</conversation>");
   return out.toString();
-}
-
-/// [json] decoded for comparing two tool inputs by value, null where it does
-/// not parse.
-Object? decodedArguments(String json) {
-  try {
-    return jsonDecode(json.isEmpty ? "{}" : json);
-  } on FormatException {
-    return null;
-  }
 }
 
 /// What a session needs of the program it runs: its output a line at a

@@ -300,17 +300,24 @@ class BuiltinBackend implements AgentBackend {
 
       final target = _resolveModel(settings.model, settings.provider);
       if (target == null) {
+        final provider = settings.provider;
+        final endpoint = provider == null
+            ? null
+            : registry.providerFor(provider);
         _fail(
           controller,
-          settings.provider == null
+          provider == null
               ? "No model is selected. Add a provider in Settings and pick one."
-              : isTitleOnlyModel(settings.provider, settings.model)
+              // Removed from Settings, or never here (a chat mirrored from
+              // another device): the id is all that is left to name it by.
+              : endpoint == null
+              ? missingProviderMessage(settings.model, provider)
+              : isTitleOnlyModel(provider, settings.model)
               ? "The Apple on-device model only names chats: its context "
                     "is too small for the agent. Pick another model for "
                     "this chat."
-              // Removed from Settings, or never here (a chat mirrored from
-              // another device): the id is all that is left to name it by.
-              : missingProviderMessage(settings.model, settings.provider!),
+              : "${endpoint.config.name} has no default model. Pick a model "
+                    "for this chat.",
         );
         return;
       }

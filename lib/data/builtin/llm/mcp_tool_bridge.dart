@@ -1,9 +1,9 @@
 import "dart:async";
 import "dart:convert";
 import "dart:io";
-import "dart:math";
 
 import "../../../core/log.dart";
+import "../../../core/random_token.dart";
 import "llm_client.dart";
 
 /// A tool call a harness made over [McpToolBridge], held open until Entoli's
@@ -15,12 +15,13 @@ class HeldToolCall {
   final Object? arguments;
   final _result = Completer<Map<String, dynamic>>();
 
-  bool get answered => _result.isCompleted;
+  /// What a call is failed with when the session it was made in goes first.
+  static const stopped = "Entoli stopped this turn";
 
   /// [result], a tool message, as MCP's content: its text, and its images as
   /// blocks of their own.
   void answer(LlmMessage result) {
-    if (answered) return;
+    if (_result.isCompleted) return;
     _result.complete({
       "content": [
         {"type": "text", "text": result.text},
@@ -34,7 +35,7 @@ class HeldToolCall {
   }
 
   void fail(String reason) {
-    if (answered) return;
+    if (_result.isCompleted) return;
     _result.complete({
       "content": [
         {"type": "text", "text": reason},
@@ -137,7 +138,7 @@ class McpToolRoutes {
   /// Fails every call still held.
   void failHeld() {
     for (final call in _held.toList()) {
-      call.fail("Entoli stopped this turn");
+      call.fail(HeldToolCall.stopped);
     }
   }
 }
@@ -151,7 +152,7 @@ class McpToolRoutes {
 /// answer into a response — and no test covers it, for the reason the sync
 /// servers' adapters go uncovered: a test binds no port.
 class McpToolBridge implements ToolBridge {
-  McpToolBridge._(this._server, this.routes, this.token) {
+  McpToolBridge._(this._server, this._routes, this._token) {
     _server.listen(
       (request) => unawaited(_handle(request)),
       onError: (Object e) => logFailure("llm", "the MCP bridge failed", e),
@@ -163,29 +164,28 @@ class McpToolBridge implements ToolBridge {
     void Function(HeldToolCall call) onCall,
   ) async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final random = Random.secure();
-    final token = [
-      for (var i = 0; i < 32; i++)
-        random.nextInt(256).toRadixString(16).padLeft(2, "0"),
-    ].join();
-    return McpToolBridge._(server, McpToolRoutes(tools, onCall), token);
+    return McpToolBridge._(
+      server,
+      McpToolRoutes(tools, onCall),
+      randomToken(32),
+    );
   }
 
   final HttpServer _server;
-  final McpToolRoutes routes;
-  final String token;
+  final McpToolRoutes _routes;
+  final String _token;
 
   @override
   Map<String, dynamic> get config => {
     "type": "http",
     "url": "http://127.0.0.1:${_server.port}/mcp",
-    "headers": {"Authorization": "Bearer $token"},
+    "headers": {"Authorization": "Bearer $_token"},
   };
 
   Future<void> _handle(HttpRequest request) async {
     final response = request.response;
     try {
-      if (request.headers.value("authorization") != "Bearer $token") {
+      if (request.headers.value("authorization") != "Bearer $_token") {
         response.statusCode = HttpStatus.unauthorized;
         return;
       }
@@ -202,7 +202,7 @@ class McpToolBridge implements ToolBridge {
         response.statusCode = HttpStatus.badRequest;
         return;
       }
-      final answer = await routes.answer(body);
+      final answer = await _routes.answer(body);
       if (answer == null) {
         response.statusCode = HttpStatus.accepted;
         return;
@@ -219,7 +219,7 @@ class McpToolBridge implements ToolBridge {
 
   @override
   Future<void> close() async {
-    routes.failHeld();
+    _routes.failHeld();
     await _server.close(force: true);
   }
 }
