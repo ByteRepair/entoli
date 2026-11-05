@@ -4,6 +4,7 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/app_settings.dart";
+import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/selection.dart";
@@ -144,6 +145,35 @@ void main() {
     expect(find.byType(AlertDialog), findsNothing);
   });
 
+  // A service is offered by the name its user knows, and connecting it is
+  // its own preset: ChatGPT is Codex CLI, with nothing to type.
+  testWidgets("a service on the provider page connects its own preset", (
+    tester,
+  ) async {
+    await app.pump(tester, const WelcomePage());
+    await walkToProviders(tester);
+
+    await tester.tap(find.text("ChatGPT"));
+    await tester.pumpAndSettle();
+    expect(find.text("Connect Codex CLI"), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, "Save"));
+    await settleIo(tester);
+
+    expect(settings().llmProviders.map((p) => p.api), [LlmApi.codexCli]);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  // A phone runs no programs, so the services that are one are not offered.
+  testWidgets("a phone is offered no service that runs a program", (
+    tester,
+  ) async {
+    await app.pump(tester, const WelcomePage());
+    await walkToProviders(tester);
+
+    expect(find.text("Ollama Cloud"), findsOneWidget);
+    expect(find.text("ChatGPT"), findsNothing);
+    expect(find.text("Claude Pro"), findsNothing);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
   // The provider page holds the tour until some model is reachable: the
   // button is dead and the swipe cannot go around it.
   testWidgets("Next is held on the provider page until a model is reachable", (
@@ -175,7 +205,8 @@ void main() {
       await app.pump(tester, const WelcomePage());
       await walkToProviders(tester);
 
-      await tester.tap(find.text("A provider"));
+      await scrollTo(tester, find.text("Advanced"));
+      await tester.tap(find.text("Advanced"));
       await tester.pumpAndSettle();
       expect(find.text("Connect a model"), findsNothing);
       // What the tour watches changing while it is covered is what rebuilt it

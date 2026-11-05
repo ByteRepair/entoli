@@ -1,11 +1,13 @@
 import "package:file_selector/file_selector.dart";
 import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../core/log.dart";
 import "../../core/platform/form_factor.dart";
 import "../../data/builtin/llm/llm_client.dart" show LlmException;
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/llm_provider.dart";
+import "../../providers.dart";
 import "environment_section.dart";
 
 /// Add or edit one endpoint the agent can call. A preset opens on the key
@@ -45,6 +47,36 @@ Future<ProviderEdit?> promptForProvider(
     checkKey: checkKey,
   ),
 );
+
+/// [promptForProvider] with what the app knows filled in, saved through the
+/// settings notifier: an entry being edited keeps its id, and one being
+/// added, preset or not, has none until the notifier gives it one. The one
+/// way in for the Providers page and the welcome tour alike.
+Future<void> editProvider(
+  BuildContext context,
+  WidgetRef ref, {
+  LlmProviderConfig? initial,
+  String title = "Add provider",
+}) async {
+  // Notifier first: the page that asked can go away while the dialog is
+  // open, and the save must outlive it rather than resume on a defunct ref.
+  final notifier = ref.read(appSettingsProvider.notifier);
+  final secrets = ref.read(appSecretsProvider);
+  final saved = await promptForProvider(
+    context,
+    initial: initial,
+    storedKey: initial == null ? null : secrets.providerKey(initial.id),
+    nameTaken: (name) => ref
+        .read(appSettingsProvider)
+        .providerNameTaken(name, exceptId: initial?.id),
+    encrypted: secrets.encrypted,
+    title: title,
+    openLink: ref.read(linkOpenerProvider).open,
+    checkKey: ref.read(keyCheckProvider),
+  );
+  if (saved == null) return;
+  await notifier.upsertProvider(saved.config, setKey: saved.setKey);
+}
 
 class ProviderEdit {
   const ProviderEdit(this.config, this.setKey);

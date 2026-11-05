@@ -10,6 +10,7 @@ import "../../../../domain/model_info.dart";
 import "../llm_client.dart";
 import "../openai_client.dart" show inlineText;
 import "cli.dart";
+import "provider.dart";
 
 /// Codex CLI (`codex`) as a provider: the user's own ChatGPT sign-in
 /// answering Entoli's turns.
@@ -20,7 +21,7 @@ import "cli.dart";
 /// are switched off; Entoli's are the thread's dynamic tools, which Codex
 /// calls back over the same pipe and waits on until the loop's next step
 /// brings the result.
-class CodexCliProvider extends CliProvider {
+class CodexCliProvider extends CliProvider with OfferedByName {
   const CodexCliProvider([LlmProviderConfig config = preset])
     : this.over(config);
 
@@ -41,6 +42,12 @@ class CodexCliProvider extends CliProvider {
 
   @override
   String get account => "Uses your ChatGPT account";
+
+  @override
+  String get serviceName => "ChatGPT";
+
+  @override
+  String get connectHint => "Use your ChatGPT plan, through Codex CLI.";
 
   @override
   String get workFolder => "codex-cli";

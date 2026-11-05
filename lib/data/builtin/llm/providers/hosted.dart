@@ -67,7 +67,7 @@ class ZaiProvider extends OpenAiCompatibleProvider with ChecksKeyByCompletion {
 
 // shortcut: not known to keep a model list behind the key.
 class OllamaCloudProvider extends OpenAiCompatibleProvider
-    with ChecksKeyByCompletion {
+    with ChecksKeyByCompletion, OfferedByName {
   const OllamaCloudProvider([LlmProviderConfig config = preset])
     : super(config, _terms);
 
@@ -88,6 +88,12 @@ class OllamaCloudProvider extends OpenAiCompatibleProvider
     policy: "https://ollama.com/privacy",
     keyUrl: "https://ollama.com/settings/keys",
   );
+
+  @override
+  String get serviceName => "Ollama Cloud";
+
+  @override
+  String get connectHint => "Hosted open models, connected with an Ollama key.";
 
   /// `/api/balance`, documented: the plan's monthly credits and what was
   /// bought on top of them, both in dollars. A plan from before credits

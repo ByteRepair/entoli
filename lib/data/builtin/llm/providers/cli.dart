@@ -75,6 +75,7 @@ abstract class CliProvider extends LlmProvider with KeyFree {
 
   /// Whether this platform can run a program at all. A phone cannot, so a
   /// CLI entry synced onto one offers nothing rather than failing per turn.
+  @override
   bool get supported => isDesktop;
 
   /// The program the config names, or null where it leaves it to the default.

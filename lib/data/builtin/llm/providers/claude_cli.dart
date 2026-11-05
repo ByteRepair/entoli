@@ -13,6 +13,7 @@ import "../anthropic_client.dart";
 import "../llm_client.dart";
 import "../mcp_tool_bridge.dart";
 import "cli.dart";
+import "provider.dart";
 
 /// Claude CLI (`claude`, Claude Code) as a provider: the user's own sign-in,
 /// whatever plan it is on, answering Entoli's turns.
@@ -23,7 +24,7 @@ import "cli.dart";
 /// all off; Entoli's are offered over a [ToolBridge], so a tool the model
 /// calls runs in Entoli's loop, and the CLI waits on the held call until the
 /// loop's next step brings the result.
-class ClaudeCliProvider extends CliProvider {
+class ClaudeCliProvider extends CliProvider with OfferedByName {
   const ClaudeCliProvider([LlmProviderConfig config = preset])
     : this.over(config);
 
@@ -54,6 +55,12 @@ class ClaudeCliProvider extends CliProvider {
 
   @override
   String get account => "Uses your Claude account";
+
+  @override
+  String get serviceName => "Claude Pro";
+
+  @override
+  String get connectHint => "Use your Claude plan, through Claude CLI.";
 
   @override
   String get workFolder => "claude-cli";

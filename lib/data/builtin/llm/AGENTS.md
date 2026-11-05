@@ -69,6 +69,15 @@ entry there. A provider nothing guards — a local server, the on-device ones �
 takes `KeyFree`, whose `needsKey` is what the dialog and the provider list
 read.
 
+The welcome tour offers a few of them by the service's name rather than the
+API's — ChatGPT is Codex CLI, Claude Pro is Claude CLI — to someone who knows
+what they pay for and not what answers for it. A class offered there takes
+`OfferedByName`, whose `serviceName` and `connectHint` are its words on the
+tour, and `welcomeProviders` is which of them and in what order; one its
+`supported` says this platform cannot reach (a CLI on a phone) is not drawn.
+Connecting one is its preset in the ordinary provider dialog, so its default
+models are the preset's and nothing on the tour asks for one.
+
 **What a model can do is its type.** A provider `serve`s a model id as one
 `Model` per thing it does (`lib/domain/model_capability.dart`): a
 `ChatModel`, an `ImageModel`, a `TranscriptionModel`, a `SynthesisModel`.
