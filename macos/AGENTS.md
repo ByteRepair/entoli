@@ -181,6 +181,37 @@ seconds, not the minutes a turn can take, so Ask with Wait for Reply is a
 foreground affair there; with it off the turn is left running, and the
 completion notification says when it ends.
 
+An ad-hoc signed build — what `flutter build macos` makes on its own — lists
+every action in Shortcuts and runs none: `linkd` identifies the app by its
+team id and, finding none, never connects (`Unable to get teamId` in the
+system log, then `openApplicationAndConnect failed`), running or not. The
+release's Developer ID signature carries one; a local build tried against
+Shortcuts wants signing with a team identity first.
+
+## Closing the window during a turn
+
+The agent runs in the app's own process, so the window's close — which quits
+the app, its one window being its last — would kill a turn under way. While
+one runs (`BackgroundWork.running`, which `TurnHold` in
+`MainFlutterWindow.swift` answers on `agent_chat/background`), the red button
+and Close Window hide the app instead, and the Dock says it is running in the
+background; clicking the icon brings it back. Cmd-H is an ordinary hide, and
+Cmd-Q quits at once, turn or no turn.
+
+**One rule ends a session nobody is watching**, `AppDelegate.quitIfUnwatched`:
+nobody has activated the app since it went unwatched (`watched`), no turn is
+running, and a wake's own work has drained (`wakePending`). A wake launch
+starts unwatched and a close that hid a turn makes it so; an activation, the
+one signal for both, makes it watched again. The end of the last turn and
+`doneFiring` each ask, so neither quits under the other's work — a wake's
+drain no longer ends a Shortcuts turn started in the same session. A
+Shortcuts launch is not unwatched: it is the system's to end, below.
+
+The same hold disables automatic and sudden termination: a Shortcuts action
+launches the app hidden in the background, and once the action returns —
+Ask without Wait for Reply returns at once — `linkd` lets go of it and asks
+for it to be ended if appropriate, which a running turn makes it not.
+
 ## Waking for a trigger
 
 **The model the pieces below implement:** `reminders.json` is the only truth,
@@ -262,7 +293,9 @@ visible-at-launch ordering, which re-fronts the window after the nib loads;
 the whole-app hide is what the `-j` launch flag would have done and cannot
 (relaunching hidden never runs an engine). The drained session quits the
 moment `doneFiring` says its work has drained — unless someone activated it,
-which is `AppDelegate.userShowedUp`, set by an activation watcher rather than
+or a turn is still running, a Shortcuts action's say; both are
+`AppDelegate.quitIfUnwatched`, the one rule this shares with "Closing the
+window during a turn". `watched` is set by an activation watcher rather than
 a delegate override so nothing the framework forwards through is displaced.
 The turn the wake ran is the ordinary trigger flow: the clock kinds' catch-up
 runs it at watch start, unattended and headless exactly as it runs on an

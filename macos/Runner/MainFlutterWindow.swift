@@ -42,33 +42,77 @@ class MainFlutterWindow: NSWindow {
     VoiceChannel.register(with: flutterViewController.engine.binaryMessenger)
     AppleFmChannel.register(with: flutterViewController.engine.binaryMessenger)
     IntentBridge.shared.register(with: flutterViewController.engine.binaryMessenger)
+    TurnHold.register(with: flutterViewController.engine.binaryMessenger)
 
     // A wake session is not an opening anyone is watching: the trigger's
     // launchd job started the process, and hiding is the application's own —
     // `orderOut` alone loses to AppKit's visible-at-launch ordering, which
     // re-fronts the window after this method returns, so the whole app hides
-    // instead (the -j launch flag this replaces never ran an engine). The
-    // first activation hereafter is the user's, which unhides the app,
-    // shows the window, and stops the session being a wake — an observer
-    // rather than a delegate override, so no delegate the framework
-    // forwards through is displaced.
+    // instead (the -j launch flag this replaces never ran an engine).
     if AppDelegate.wake {
       self.orderOut(nil)
       NSApp.hide(nil)
-      NotificationCenter.default.addObserver(
-        forName: NSApplication.didBecomeActiveNotification, object: nil,
-        queue: .main
-      ) { _ in
-        AppDelegate.userShowedUp = true
-        NSApp.unhide(nil)
-        for window in NSApplication.shared.windows
-        where window is MainFlutterWindow && !window.isVisible {
-          window.makeKeyAndOrderFront(nil)
-        }
+    }
+    // An activation is the user's — a wake's launch and a close's hide never
+    // activate — so it makes the session watched (`AppDelegate.watched`),
+    // and a wake's first one also unhides the app and shows the window. An
+    // observer rather than a delegate override, so no delegate the framework
+    // forwards through is displaced.
+    NotificationCenter.default.addObserver(
+      forName: NSApplication.didBecomeActiveNotification, object: nil,
+      queue: .main
+    ) { _ in
+      AppDelegate.watched = true
+      guard AppDelegate.wake else { return }
+      NSApp.unhide(nil)
+      for window in NSApplication.shared.windows
+      where window is MainFlutterWindow && !window.isVisible {
+        window.makeKeyAndOrderFront(nil)
       }
     }
 
     super.awakeFromNib()
+  }
+
+  /// The red button and Close Window, while a turn runs, hide the app rather
+  /// than close its one window — which would quit it, and the turn with it.
+  /// See `TurnHold`.
+  override func performClose(_ sender: Any?) {
+    guard TurnHold.isRunning else { return super.performClose(sender) }
+    AppDelegate.watched = false
+    NSApp.hide(nil)
+  }
+}
+
+/// Answers `running` on `agent_chat/background`, the channel Android's
+/// foreground services answer: while a turn runs, a close hides the app and
+/// macOS may not end it. In this file rather than its own so the Xcode project
+/// needs no new entry. See "Closing the window during a turn" in
+/// macos/AGENTS.md.
+enum TurnHold {
+  private(set) static var isRunning = false
+
+  static func register(with messenger: FlutterBinaryMessenger) {
+    FlutterMethodChannel(name: "agent_chat/background", binaryMessenger: messenger)
+      .setMethodCallHandler { call, result in
+        guard call.method == "running" else { return result(FlutterMethodNotImplemented) }
+        update(running: ((call.arguments as? NSNumber)?.intValue ?? 0) > 0)
+        result(nil)
+      }
+  }
+
+  private static func update(running: Bool) {
+    guard running != isRunning else { return }
+    isRunning = running
+    let reason = "A turn is running"
+    if running {
+      ProcessInfo.processInfo.disableAutomaticTermination(reason)
+      ProcessInfo.processInfo.disableSuddenTermination()
+    } else {
+      ProcessInfo.processInfo.enableAutomaticTermination(reason)
+      ProcessInfo.processInfo.enableSuddenTermination()
+      AppDelegate.quitIfUnwatched()
+    }
   }
 }
 
