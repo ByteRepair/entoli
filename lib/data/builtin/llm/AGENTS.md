@@ -197,6 +197,16 @@ is set to a day, a tool being able to wait on the user. Closing is stdin
 first, then SIGTERM, then SIGKILL, three seconds apart, with every held
 call failed so the CLI is not left waiting on it.
 
+The process and the bridge are ports a session is handed:
+`ClaudeCliProvider.over` takes a `LaunchCli` (the real one is
+`launchProcess`, a `CliProcess` over `dart:io`'s) and a `BindToolBridge`
+(`McpToolBridge.bind`). What the bridge decides is `McpToolRoutes`, a
+JSON-RPC request in and its answer out, and `McpToolBridge` is that behind
+a socket — the token check and the HTTP translation, which no test covers,
+since no test binds a port. The session's tests run over a fake process
+and a bridge with no socket under it, playing the CLI by printing its
+stream events and calling the routes.
+
 ## Errors, and how long the UI waits
 
 Failures are reported as they happen: a rejected key or a bad request reaches

@@ -398,3 +398,80 @@ Object? decodedArguments(String json) {
     return null;
   }
 }
+
+/// What a session needs of the program it runs: its output a line at a
+/// time, a way to write to it, and its end. The port a test fakes;
+/// [launchProcess] is the real one.
+abstract class CliProcess {
+  /// Its standard output, one line per event.
+  Stream<String> get lines;
+
+  /// Its standard error, as it comes.
+  Stream<String> get errors;
+
+  void writeLine(String line);
+
+  /// Closes its standard input, which a program reading it takes as the end.
+  Future<void> closeInput();
+
+  Future<int> get exitCode;
+
+  /// SIGTERM, or SIGKILL where [force].
+  void kill({bool force = false});
+}
+
+/// How a session starts its program.
+typedef LaunchCli =
+    Future<CliProcess> Function(
+      String executable,
+      List<String> arguments, {
+      required String workingDirectory,
+      required Map<String, String> environment,
+    });
+
+/// [executable] run as a process of this machine, with [environment] and
+/// nothing else of the app's.
+Future<CliProcess> launchProcess(
+  String executable,
+  List<String> arguments, {
+  required String workingDirectory,
+  required Map<String, String> environment,
+}) async => _IoCliProcess(
+  await Process.start(
+    executable,
+    arguments,
+    workingDirectory: workingDirectory,
+    environment: environment,
+    includeParentEnvironment: false,
+    // npm installs a `.cmd` shim on Windows, which only a shell runs.
+    runInShell:
+        Platform.isWindows &&
+        const [".cmd", ".bat"].contains(p.extension(executable).toLowerCase()),
+  ),
+);
+
+class _IoCliProcess implements CliProcess {
+  _IoCliProcess(this._process);
+
+  final Process _process;
+
+  @override
+  Stream<String> get lines =>
+      _process.stdout.transform(utf8.decoder).transform(const LineSplitter());
+
+  @override
+  Stream<String> get errors => _process.stderr.transform(utf8.decoder);
+
+  @override
+  void writeLine(String line) => _process.stdin.writeln(line);
+
+  @override
+  Future<void> closeInput() => _process.stdin.close();
+
+  @override
+  Future<int> get exitCode => _process.exitCode;
+
+  @override
+  void kill({bool force = false}) =>
+      _process.kill(force ? ProcessSignal.sigkill : ProcessSignal.sigterm);
+}

@@ -19,11 +19,26 @@ import "cli.dart";
 /// A session is one `claude -p` in stream-json mode on both sides, kept
 /// running for a conversation: each step's new message goes in on stdin and
 /// its raw Anthropic stream events come out on stdout. Claude's own tools are
-/// all off; Entoli's are offered over an [McpToolBridge], so a tool the model
+/// all off; Entoli's are offered over a [ToolBridge], so a tool the model
 /// calls runs in Entoli's loop, and the CLI waits on the held call until the
 /// loop's next step brings the result.
 class ClaudeCliProvider extends CliProvider {
-  const ClaudeCliProvider([super.config = preset]);
+  const ClaudeCliProvider([LlmProviderConfig config = preset])
+    : this.over(config);
+
+  /// With the process and the tool bridge given rather than real: what a
+  /// test runs a session over.
+  const ClaudeCliProvider.over(
+    super.config, {
+    this.launch = launchProcess,
+    this.bindBridge = McpToolBridge.bind,
+  });
+
+  /// How a session starts `claude`.
+  final LaunchCli launch;
+
+  /// How a session offers Entoli's tools to it.
+  final BindToolBridge bindBridge;
 
   static const preset = LlmProviderConfig(
     name: "Claude CLI",
@@ -143,8 +158,8 @@ class ClaudeCliSession extends CliSession {
 
   /// [ClaudeCliProvider.workRoot]: its `work/` is where every session runs.
   final Directory _root;
-  Process? _process;
-  McpToolBridge? _bridge;
+  CliProcess? _process;
+  ToolBridge? _bridge;
 
   var _alive = true;
   var _closing = false;
@@ -166,7 +181,7 @@ class ClaudeCliSession extends CliSession {
   /// The last of what the CLI said on stderr, for an exit to explain itself.
   final _stderr = StringBuffer();
 
-  static final _prefix = "mcp__${McpToolBridge.serverName}__";
+  static final _prefix = "mcp__${McpToolRoutes.serverName}__";
 
   static Future<ClaudeCliSession> start(
     ClaudeCliProvider provider,
@@ -194,12 +209,12 @@ class ClaudeCliSession extends CliSession {
     final tools = spec.tools;
     final bridge = tools.isEmpty
         ? null
-        : await McpToolBridge.bind(tools, _held);
+        : await provider.bindBridge(tools, _held);
     _bridge = bridge;
     final mcpConfig = File(p.join(_dir.path, "mcp.json"));
     await mcpConfig.writeAsString(
       jsonEncode({
-        "mcpServers": {McpToolBridge.serverName: ?bridge?.config},
+        "mcpServers": {McpToolRoutes.serverName: ?bridge?.config},
       }),
     );
     final system = File(p.join(_dir.path, "system.md"));
@@ -223,7 +238,7 @@ class ClaudeCliSession extends CliSession {
       mcpConfig.path,
       if (bridge != null) ...[
         "--allowedTools",
-        "mcp__${McpToolBridge.serverName}",
+        "mcp__${McpToolRoutes.serverName}",
       ],
       // Anything not allowed above is refused rather than asked about: a
       // built-in `--tools ""` leaves behind (EndConversation, while MCP tools
@@ -236,7 +251,7 @@ class ClaudeCliSession extends CliSession {
       if (effort != null) ...["--effort", effort],
     ];
     final env = provider.environment;
-    final process = await Process.start(
+    final process = await provider.launch(
       executable,
       args,
       // One folder for every session, and empty: no project's CLAUDE.md or
@@ -251,21 +266,10 @@ class ClaudeCliSession extends CliSession {
         "MCP_TOOL_TIMEOUT": "${const Duration(days: 1).inMilliseconds}",
         ...env,
       },
-      includeParentEnvironment: false,
-      // npm installs a `.cmd` shim on Windows, which only a shell runs.
-      runInShell:
-          Platform.isWindows &&
-          const [
-            ".cmd",
-            ".bat",
-          ].contains(p.extension(executable).toLowerCase()),
     );
     _process = process;
-    process.stdout
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen(_line, onError: (Object e) => _fail("$e"));
-    process.stderr.transform(utf8.decoder).listen((text) {
+    process.lines.listen(_line, onError: (Object e) => _fail("$e"));
+    process.errors.listen((text) {
       _stderr.write(text);
       final over = _stderr.length - 4000;
       if (over > 0) {
@@ -351,7 +355,7 @@ class ClaudeCliSession extends CliSession {
   }
 
   void _send(List<Map<String, dynamic>> content) {
-    _process?.stdin.writeln(
+    _process?.writeLine(
       jsonEncode({
         "type": "user",
         "message": {"role": "user", "content": content},
@@ -377,7 +381,7 @@ class ClaudeCliSession extends CliSession {
         final servers = event["mcp_servers"];
         final ours = servers is List
             ? servers.firstWhereOrNull(
-                (s) => s is Map && s["name"] == McpToolBridge.serverName,
+                (s) => s is Map && s["name"] == McpToolRoutes.serverName,
               )
             : null;
         if (_bridge != null && ours is Map && ours["status"] == "failed") {
@@ -554,7 +558,7 @@ class ClaudeCliSession extends CliSession {
       try {
         // Stdin closed is the end of its input, which it takes as the end of
         // the session; a signal is for one that does not.
-        await process.stdin.close().timeout(_grace, onTimeout: () {});
+        await process.closeInput().timeout(_grace, onTimeout: () {});
       } on Object catch (e) {
         logFailure("llm", "closing claude's input failed", e);
       }
@@ -563,17 +567,18 @@ class ClaudeCliSession extends CliSession {
         process.kill();
         exited = await _waitExit(process);
       }
-      if (!exited) process.kill(ProcessSignal.sigkill);
+      if (!exited) process.kill(force: true);
     }
-    await _bridge?.close();
     try {
       await _dir.delete(recursive: true);
     } on FileSystemException catch (e) {
       logFailure("llm", "removing a Claude CLI session's files failed", e);
     }
+    // Last, so a bridge that has closed is a session that is wholly gone.
+    await _bridge?.close();
   }
 
-  static Future<bool> _waitExit(Process process) => process.exitCode
+  static Future<bool> _waitExit(CliProcess process) => process.exitCode
       .then((_) => true)
       .timeout(_grace, onTimeout: () => false);
 }

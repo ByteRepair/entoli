@@ -86,6 +86,169 @@ Future<LlmCompletion> _call(
   List<LlmMessage> messages,
 ) async => (await client.stream(messages, model: "m").last) as LlmCompletion;
 
+/// `claude` as the session sees it: the lines it writes are [sent], and
+/// [reply] is what it would print back for one API message.
+class _FakeProcess implements CliProcess {
+  _FakeProcess(this.arguments, this.workingDirectory, this.environment);
+
+  final List<String> arguments;
+  final String workingDirectory;
+  final Map<String, String> environment;
+
+  final _stdout = StreamController<String>();
+  final stderr = StreamController<String>();
+  final _exit = Completer<int>();
+  final _inputClosed = Completer<void>();
+  final sent = _Inbox<Map<String, dynamic>>();
+
+  Future<void> get inputClosed => _inputClosed.future;
+
+  @override
+  Stream<String> get lines => _stdout.stream;
+
+  @override
+  Stream<String> get errors => stderr.stream;
+
+  @override
+  void writeLine(String line) =>
+      sent.add(jsonDecode(line) as Map<String, dynamic>);
+
+  /// Stdin closed is the end of its input, and so of it.
+  @override
+  Future<void> closeInput() async {
+    if (!_inputClosed.isCompleted) _inputClosed.complete();
+    exit(0);
+  }
+
+  @override
+  Future<int> get exitCode => _exit.future;
+
+  @override
+  void kill({bool force = false}) => exit(force ? -9 : -15);
+
+  void exit(int code) {
+    if (!_exit.isCompleted) _exit.complete(code);
+  }
+
+  void _event(Map<String, dynamic> event) => _stdout.add(
+    jsonEncode({
+      "type": "stream_event",
+      "event": event,
+      "parent_tool_use_id": null,
+    }),
+  );
+
+  /// One message of [blocks], text or tool use, ending with [stop], as the
+  /// raw stream events `--include-partial-messages` prints.
+  void reply(List<Map<String, dynamic>> blocks, String stop) {
+    _event({
+      "type": "message_start",
+      "message": {
+        "usage": {"input_tokens": 10, "output_tokens": 1},
+      },
+    });
+    for (final (i, block) in blocks.indexed) {
+      final text = block["type"] == "text";
+      _event({
+        "type": "content_block_start",
+        "index": i,
+        "content_block": text
+            ? {"type": "text", "text": ""}
+            : {"type": "tool_use", "id": block["id"], "name": block["name"]},
+      });
+      _event({
+        "type": "content_block_delta",
+        "index": i,
+        "delta": text
+            ? {"type": "text_delta", "text": block["text"]}
+            : {
+                "type": "input_json_delta",
+                "partial_json": jsonEncode(block["input"]),
+              },
+      });
+      _event({"type": "content_block_stop", "index": i});
+    }
+    _event({
+      "type": "message_delta",
+      "delta": {"stop_reason": stop},
+      "usage": {"output_tokens": 5},
+    });
+    _event({"type": "message_stop"});
+    if (stop != "tool_use") {
+      _stdout.add(jsonEncode({"type": "result", "subtype": "success"}));
+    }
+  }
+}
+
+/// The launcher: each process it starts arrives on [started].
+class _FakeLaunch {
+  final started = _Inbox<_FakeProcess>();
+  var calls = 0;
+
+  Future<CliProcess> call(
+    String executable,
+    List<String> arguments, {
+    required String workingDirectory,
+    required Map<String, String> environment,
+  }) async {
+    calls++;
+    final process = _FakeProcess(arguments, workingDirectory, environment);
+    started.add(process);
+    return process;
+  }
+}
+
+/// The bridge with no socket under it: a test plays the CLI by calling
+/// [routes] directly.
+class _FakeBridge implements ToolBridge {
+  late McpToolRoutes routes;
+
+  Future<ToolBridge> bind(
+    List<LlmTool> tools,
+    void Function(HeldToolCall call) onCall,
+  ) async {
+    routes = McpToolRoutes(tools, onCall);
+    return this;
+  }
+
+  @override
+  Map<String, dynamic> get config => const {"type": "fake"};
+
+  final _closed = Completer<void>();
+
+  /// The session's last act in closing.
+  Future<void> get closed => _closed.future;
+
+  @override
+  Future<void> close() async {
+    routes.failHeld();
+    if (!_closed.isCompleted) _closed.complete();
+  }
+}
+
+/// What arrived, taken in order: [next] is the oldest not yet taken, or the
+/// next to arrive.
+class _Inbox<T> {
+  final _waiting = <T>[];
+  final _takers = <Completer<T>>[];
+
+  void add(T item) =>
+      _takers.isEmpty ? _waiting.add(item) : _takers.removeAt(0).complete(item);
+
+  Future<T> get next {
+    if (_waiting.isNotEmpty) return Future.value(_waiting.removeAt(0));
+    final taker = Completer<T>();
+    _takers.add(taker);
+    return taker.future;
+  }
+}
+
+/// The text a stream-json user line carries.
+String _textOf(Map<String, dynamic> line) => [
+  for (final block in line["message"]["content"] as List)
+    if (block["type"] == "text") block["text"],
+].join();
+
 void main() {
   group("a CLI client", () {
     test(
@@ -148,53 +311,36 @@ void main() {
     });
   });
 
-  group("the MCP bridge", () {
-    late McpToolBridge bridge;
+  group("the MCP routes", () {
+    late McpToolRoutes routes;
     final held = <HeldToolCall>[];
 
-    setUp(() async {
+    setUp(() {
       held.clear();
-      bridge = await McpToolBridge.bind(const [
+      routes = McpToolRoutes(const [
         LlmTool(name: "echo", description: "says it back", schema: {}),
       ], held.add);
     });
-    tearDown(() => bridge.close());
 
-    Future<(int, Map?)> post(Map body, {String? token}) async {
-      final client = HttpClient();
-      try {
-        final request = await client.postUrl(bridge.url);
-        request.headers.set("authorization", "Bearer ${token ?? bridge.token}");
-        request.write(jsonEncode(body));
-        final response = await request.close();
-        final text = await utf8.decodeStream(response);
-        return (
-          response.statusCode,
-          text.isEmpty ? null : jsonDecode(text) as Map,
-        );
-      } finally {
-        client.close();
-      }
-    }
-
-    test("refuses a request without its token", () async {
-      final (status, _) = await post({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "tools/list",
-      }, token: "wrong");
-      expect(status, HttpStatus.unauthorized);
+    test("answer a notification with nothing", () async {
+      expect(
+        await routes.answer({
+          "jsonrpc": "2.0",
+          "method": "notifications/initialized",
+        }),
+        isNull,
+      );
     });
 
-    test("lists the tools, and holds a call until it is answered", () async {
-      final (_, listed) = await post({
+    test("list the tools, and hold a call until it is answered", () async {
+      final listed = await routes.answer({
         "jsonrpc": "2.0",
         "id": 1,
         "method": "tools/list",
       });
       expect(listed!["result"]["tools"].single["name"], "echo");
 
-      final call = post({
+      final call = routes.answer({
         "jsonrpc": "2.0",
         "id": 2,
         "method": "tools/call",
@@ -203,63 +349,87 @@ void main() {
           "arguments": {"x": 1},
         },
       });
-      while (held.isEmpty) {
-        await Future<void>.delayed(const Duration(milliseconds: 5));
-      }
       expect(held.single.name, "echo");
       expect(held.single.arguments, {"x": 1});
       held.single.answer(const LlmMessage(role: LlmRole.tool, text: "1"));
-      final (_, answered) = await call;
-      expect(answered!["result"]["content"].single["text"], "1");
+      final answered = await call;
+      expect(answered!["id"], 2);
+      expect(answered["result"]["content"].single["text"], "1");
+    });
+
+    test("fail what is still held when told to", () async {
+      final call = routes.answer({
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {"name": "echo"},
+      });
+      routes.failHeld();
+      expect((await call)!["result"]["isError"], isTrue);
     });
   });
 
   group("a Claude CLI session", () {
     late Directory dir;
-    late String log;
+    late _FakeLaunch launch;
+    late _FakeBridge bridge;
     late CliProvider provider;
 
     setUp(() {
-      dir = Directory.systemTemp.createTempSync("fake-claude-");
+      dir = Directory.systemTemp.createTempSync("claude-cli-");
       ClaudeCliProvider.cacheRoot = p.join(dir.path, "cache");
-      addTearDown(() => ClaudeCliProvider.cacheRoot = null);
-      log = p.join(dir.path, "args.json");
-      final script = p.join(dir.path, "claude");
-      final fake = p.absolute(
-        "test/data/builtin/llm/fixtures/fake_claude.dart",
-      );
-      File(script).writeAsStringSync('#!/bin/sh\nexec dart "$fake" "\$@"\n');
-      Process.runSync("chmod", ["+x", script]);
-      provider = ClaudeCliProvider(
+      final exe = File(p.join(dir.path, "claude"))..createSync();
+      launch = _FakeLaunch();
+      bridge = _FakeBridge();
+      provider = ClaudeCliProvider.over(
         LlmProviderConfig(
           id: "c",
           api: LlmApi.claudeCli,
           baseUrl: "",
-          command: script,
-          env: {"FAKE_CLAUDE_LOG": log},
+          command: exe.path,
+          env: const {"FROM_CONFIG": "1"},
         ),
+        launch: launch.call,
+        bindBridge: bridge.bind,
       );
     });
-    tearDown(() => dir.deleteSync(recursive: true));
+    tearDown(() {
+      ClaudeCliProvider.cacheRoot = null;
+      dir.deleteSync(recursive: true);
+    });
+
+    const tool = LlmTool(name: "echo", description: "says it", schema: {});
+    const ask = LlmMessage(role: LlmRole.user, text: "use echo");
+
+    Future<LlmCompletion> step(LlmClient client, List<LlmMessage> messages) =>
+        client
+            .stream(
+              messages,
+              model: "sonnet",
+              tools: [tool],
+              reasoningEffort: "minimal",
+            )
+            .last
+            .then((chunk) => chunk as LlmCompletion);
 
     test(
       "runs Entoli's tool through the held call and carries on in one process",
       () async {
         final client = provider.client(null);
-        const tool = LlmTool(name: "echo", description: "says it", schema: {});
-        Future<LlmCompletion> step(List<LlmMessage> messages) async =>
-            (await client
-                    .stream(
-                      messages,
-                      model: "sonnet",
-                      tools: [tool],
-                      reasoningEffort: "minimal",
-                    )
-                    .last)
-                as LlmCompletion;
 
-        const ask = LlmMessage(role: LlmRole.user, text: "use echo");
-        final first = await step([_system, ask]);
+        final firstStep = step(client, [_system, ask]);
+        final process = await launch.started.next;
+        expect(_textOf(await process.sent.next), "use echo");
+        process.reply([
+          {"type": "text", "text": "calling"},
+          {
+            "type": "tool_use",
+            "id": "toolu_1",
+            "name": "mcp__entoli__echo",
+            "input": {"x": 1},
+          },
+        ], "tool_use");
+        final first = await firstStep;
         expect(first.finishReason, "tool_use");
         expect(first.message.text, "calling");
         final call = first.message.toolCalls.single;
@@ -268,16 +438,31 @@ void main() {
           ("toolu_1", "echo", '{"x":1}'),
         );
 
+        // The CLI calls the tool and waits; the loop's next step answers it.
+        final called = bridge.routes.answer({
+          "jsonrpc": "2.0",
+          "id": 1,
+          "method": "tools/call",
+          "params": {
+            "name": "echo",
+            "arguments": {"x": 1},
+          },
+        });
         const result = LlmMessage(
           role: LlmRole.tool,
           toolCallId: "toolu_1",
           text: "one",
         );
-        final second = await step([_system, ask, first.message, result]);
-        expect(second.message.text, "tools [echo]; echo said one");
+        final secondStep = step(client, [_system, ask, first.message, result]);
+        expect((await called)!["result"]["content"].first["text"], "one");
+        process.reply([
+          {"type": "text", "text": "echo said one"},
+        ], "end_turn");
+        final second = await secondStep;
+        expect(second.message.text, "echo said one");
 
         const again = LlmMessage(role: LlmRole.user, text: "and now");
-        final third = await step([
+        final thirdStep = step(client, [
           _system,
           ask,
           first.message,
@@ -285,37 +470,61 @@ void main() {
           second.message,
           again,
         ]);
+        expect(_textOf(await process.sent.next), "and now");
+        process.reply([
+          {"type": "text", "text": "hello again"},
+        ], "end_turn");
+        final third = await thirdStep;
         expect(third.message.text, "hello again");
         expect(third.usage?.outputTokens, 5);
+        expect(launch.calls, 1);
 
-        final args = (jsonDecode(File(log).readAsStringSync()) as List)
-            .cast<String>();
+        final args = process.arguments;
         expect(args, containsAllInOrder(["--model", "sonnet"]));
         expect(args, containsAllInOrder(["--tools", ""]));
         expect(args, containsAllInOrder(["--permission-mode", "dontAsk"]));
         expect(args, containsAllInOrder(["--allowedTools", "mcp__entoli"]));
         expect(args, containsAllInOrder(["--effort", "low"]));
-        expect(args, contains("--system-prompt-file"));
-        // Every session runs in the one folder in the cache, never a fresh
-        // one, and its own files sit apart from it.
-        final work = p.join(dir.path, "cache", "claude-cli", "work");
-        expect(
-          File("$log.cwd").readAsStringSync(),
-          Directory(work).resolveSymbolicLinksSync(),
-        );
         final systemFile = args[args.indexOf("--system-prompt-file") + 1];
-        expect(
-          p.isWithin(
-            p.join(dir.path, "cache", "claude-cli", "sessions"),
-            systemFile,
-          ),
-          isTrue,
-        );
+        expect(File(systemFile).readAsStringSync(), "be brief");
+        final mcp = args[args.indexOf("--mcp-config") + 1];
+        expect(jsonDecode(File(mcp).readAsStringSync()), {
+          "mcpServers": {"entoli": bridge.config},
+        });
+        // Every session runs in the one folder in the cache, and its own
+        // files sit apart from it.
+        final root = p.join(dir.path, "cache", "claude-cli");
+        expect(process.workingDirectory, p.join(root, "work"));
+        expect(p.isWithin(p.join(root, "sessions"), systemFile), isTrue);
+        expect(process.environment["FROM_CONFIG"], "1");
+
         client.close();
+        await process.inputClosed;
+        await bridge.closed;
       },
-      timeout: const Timeout(Duration(seconds: 60)),
-      skip: Platform.isWindows ? "the fake is a shell script" : false,
     );
+
+    test("a program that ends mid-call says so, with what it said", () async {
+      final client = provider.client(null);
+      final pending = step(client, [_system, ask]);
+      final process = await launch.started.next;
+      await process.sent.next;
+      process.stderr.add("signed out");
+      await process.stderr.close();
+      process.exit(1);
+      await expectLater(
+        pending,
+        throwsA(
+          isA<LlmException>().having(
+            (e) => e.message,
+            "message",
+            allOf(contains("exited (1)"), contains("signed out")),
+          ),
+        ),
+      );
+      client.close();
+      await bridge.closed;
+    });
 
     test("a program that is not there says so", () async {
       final missing = ClaudeCliProvider(

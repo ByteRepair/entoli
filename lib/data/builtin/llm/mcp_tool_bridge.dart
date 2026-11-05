@@ -44,93 +44,47 @@ class HeldToolCall {
   }
 }
 
-/// Entoli's tools as an MCP server on loopback, over the Streamable HTTP
-/// transport's plain-JSON half: one POST, one JSON answer, no event stream.
-///
-/// It runs none of them. A `tools/call` is handed to [onCall] and its request
-/// stays open until the call is answered, which is how a harness that runs
-/// its own loop is made to wait while Entoli's loop — approvals, sub-agents
-/// and all — runs the tool and comes back with the result.
-///
-/// A random bearer token guards it, since any process on the machine can
-/// reach a loopback port.
-class McpToolBridge {
-  McpToolBridge._(this._server, this.tools, this.onCall, this.token) {
-    _server.listen(
-      (request) => unawaited(_handle(request)),
-      onError: (Object e) => logFailure("llm", "the MCP bridge failed", e),
-    );
-  }
+/// What a session hands a harness so it can reach Entoli's tools, and takes
+/// down after it. The port a test fakes: [McpToolBridge] is the real one, a
+/// socket around [McpToolRoutes].
+abstract class ToolBridge {
+  /// The `mcpServers` entry that reaches it.
+  Map<String, dynamic> get config;
 
-  /// Bound on an ephemeral loopback port.
-  static Future<McpToolBridge> bind(
-    List<LlmTool> tools,
-    void Function(HeldToolCall call) onCall,
-  ) async {
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final random = Random.secure();
-    final token = [
-      for (var i = 0; i < 32; i++)
-        random.nextInt(256).toRadixString(16).padLeft(2, "0"),
-    ].join();
-    return McpToolBridge._(server, tools, onCall, token);
-  }
+  /// Fails every call still held, so the harness is not left waiting, and
+  /// stops answering.
+  Future<void> close();
+}
+
+/// How a session gets a [ToolBridge] for its tools.
+typedef BindToolBridge =
+    Future<ToolBridge> Function(
+      List<LlmTool> tools,
+      void Function(HeldToolCall call) onCall,
+    );
+
+/// What the MCP server decides, apart from the socket that carries it: a
+/// JSON-RPC request in, its answer out. Nothing runs here. A `tools/call` is
+/// handed to [onCall] and its answer waits until the call is answered,
+/// which is how a harness that runs its own loop is made to wait while
+/// Entoli's loop — approvals, sub-agents and all — runs the tool and comes
+/// back with the result.
+class McpToolRoutes {
+  McpToolRoutes(this.tools, this.onCall);
 
   /// What the server is called to the harness, and so the prefix of every
   /// tool name it shows the model: `mcp__entoli__bash`.
   static const serverName = "entoli";
 
-  final HttpServer _server;
   final List<LlmTool> tools;
   final void Function(HeldToolCall call) onCall;
-  final String token;
   final _held = <HeldToolCall>{};
 
-  Uri get url => Uri.parse("http://127.0.0.1:${_server.port}/mcp");
-
-  /// The `mcpServers` entry that reaches it.
-  Map<String, dynamic> get config => {
-    "type": "http",
-    "url": "$url",
-    "headers": {"Authorization": "Bearer $token"},
-  };
-
-  Future<void> _handle(HttpRequest request) async {
-    final response = request.response;
-    try {
-      if (request.headers.value("authorization") != "Bearer $token") {
-        response.statusCode = HttpStatus.unauthorized;
-        return;
-      }
-      if (request.method == "DELETE") return;
-      if (request.method != "POST") {
-        // No event stream is offered: everything is answered in the POST.
-        response.statusCode = HttpStatus.methodNotAllowed;
-        return;
-      }
-      final Object? body;
-      try {
-        body = jsonDecode(await utf8.decodeStream(request));
-      } on FormatException {
-        response.statusCode = HttpStatus.badRequest;
-        return;
-      }
-      if (body is! Map || !body.containsKey("id")) {
-        // A notification, which is answered with nothing.
-        response.statusCode = HttpStatus.accepted;
-        return;
-      }
-      final answer = await _answer(body);
-      response.headers.contentType = ContentType.json;
-      response.write(
-        jsonEncode({"jsonrpc": "2.0", "id": body["id"], ...answer}),
-      );
-    } catch (e) {
-      logFailure("llm", "the MCP bridge could not answer a request", e);
-      response.statusCode = HttpStatus.internalServerError;
-    } finally {
-      await response.close().catchError((_) {});
-    }
+  /// [body]'s answer as the JSON-RPC response, or null for a notification,
+  /// which is answered with nothing.
+  Future<Map<String, dynamic>?> answer(Object? body) async {
+    if (body is! Map || !body.containsKey("id")) return null;
+    return {"jsonrpc": "2.0", "id": body["id"], ...await _answer(body)};
   }
 
   Future<Map<String, dynamic>> _answer(Map body) async {
@@ -180,12 +134,92 @@ class McpToolBridge {
     }
   }
 
-  /// Fails every call still held, so the harness is not left waiting, and
-  /// stops listening.
-  Future<void> close() async {
+  /// Fails every call still held.
+  void failHeld() {
     for (final call in _held.toList()) {
       call.fail("Entoli stopped this turn");
     }
+  }
+}
+
+/// [McpToolRoutes] on an ephemeral loopback port, over the Streamable HTTP
+/// transport's plain-JSON half: one POST, one JSON answer, no event stream.
+/// A random bearer token guards it, since any process on the machine can
+/// reach a loopback port.
+///
+/// This is the socket alone — the token check and the translation of an
+/// answer into a response — and no test covers it, for the reason the sync
+/// servers' adapters go uncovered: a test binds no port.
+class McpToolBridge implements ToolBridge {
+  McpToolBridge._(this._server, this.routes, this.token) {
+    _server.listen(
+      (request) => unawaited(_handle(request)),
+      onError: (Object e) => logFailure("llm", "the MCP bridge failed", e),
+    );
+  }
+
+  static Future<McpToolBridge> bind(
+    List<LlmTool> tools,
+    void Function(HeldToolCall call) onCall,
+  ) async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final random = Random.secure();
+    final token = [
+      for (var i = 0; i < 32; i++)
+        random.nextInt(256).toRadixString(16).padLeft(2, "0"),
+    ].join();
+    return McpToolBridge._(server, McpToolRoutes(tools, onCall), token);
+  }
+
+  final HttpServer _server;
+  final McpToolRoutes routes;
+  final String token;
+
+  @override
+  Map<String, dynamic> get config => {
+    "type": "http",
+    "url": "http://127.0.0.1:${_server.port}/mcp",
+    "headers": {"Authorization": "Bearer $token"},
+  };
+
+  Future<void> _handle(HttpRequest request) async {
+    final response = request.response;
+    try {
+      if (request.headers.value("authorization") != "Bearer $token") {
+        response.statusCode = HttpStatus.unauthorized;
+        return;
+      }
+      if (request.method == "DELETE") return;
+      if (request.method != "POST") {
+        // No event stream is offered: everything is answered in the POST.
+        response.statusCode = HttpStatus.methodNotAllowed;
+        return;
+      }
+      final Object? body;
+      try {
+        body = jsonDecode(await utf8.decodeStream(request));
+      } on FormatException {
+        response.statusCode = HttpStatus.badRequest;
+        return;
+      }
+      final answer = await routes.answer(body);
+      if (answer == null) {
+        response.statusCode = HttpStatus.accepted;
+        return;
+      }
+      response.headers.contentType = ContentType.json;
+      response.write(jsonEncode(answer));
+    } catch (e) {
+      logFailure("llm", "the MCP bridge could not answer a request", e);
+      response.statusCode = HttpStatus.internalServerError;
+    } finally {
+      await response.close().catchError((_) {});
+    }
+  }
+
+  @override
+  Future<void> close() async {
+    routes.failHeld();
     await _server.close(force: true);
   }
 }
