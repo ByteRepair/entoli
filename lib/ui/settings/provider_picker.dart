@@ -42,7 +42,7 @@ class _PresetPicker extends ConsumerWidget {
     final groups = [
       ("Paid", llmProviderPresets.where((p) => !free(p) && !local(p))),
       ("Free, at a cost to privacy", llmProviderPresets.where(free)),
-      ("On this machine", llmProviderPresets.where(local)),
+      (_onThisMachine, llmProviderPresets.where(local)),
     ];
 
     return AlertDialog(
@@ -57,24 +57,28 @@ class _PresetPicker extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               for (final (heading, entries) in groups)
-                if (entries.isNotEmpty) ...[
+                if (entries.isNotEmpty || heading == _onThisMachine) ...[
                   _GroupHeading(heading),
                   for (final p in entries)
                     _PresetTile(
                       preset: p,
                       onTap: () => _choose(context, ref, p),
                     ),
+                  // A program run here, which only a desktop can do.
+                  if (heading == _onThisMachine && isDesktop)
+                    _ClaudeCliTile(
+                      onTap: () => Navigator.pop(context, (
+                        preset: ClaudeCliProvider.preset,
+                      )),
+                    ),
                 ],
               const Divider(),
               ListTile(
                 leading: const Icon(Icons.tune),
                 title: const Text("Custom…"),
-                subtitle: Text(
-                  isDesktop
-                      ? "Any OpenAI- or Anthropic-compatible endpoint, by "
-                            "URL, or Claude CLI on this computer."
-                      : "Any OpenAI- or Anthropic-compatible "
-                            "endpoint, by URL.",
+                subtitle: const Text(
+                  "Any OpenAI- or Anthropic-compatible "
+                  "endpoint, by URL.",
                 ),
                 onTap: () => Navigator.pop(context, (preset: null)),
               ),
@@ -88,6 +92,43 @@ class _PresetPicker extends ConsumerWidget {
           child: const Text("Cancel"),
         ),
       ],
+    );
+  }
+}
+
+const _onThisMachine = "On this machine";
+
+/// Claude CLI beside the local servers. Not a [_PresetTile]: it has no terms
+/// of its own to tag, its prompts going wherever the user's Claude account
+/// sends them.
+class _ClaudeCliTile extends StatelessWidget {
+  const _ClaudeCliTile({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: colors.secondaryContainer,
+        foregroundColor: colors.onSecondaryContainer,
+        child: const Icon(Icons.terminal),
+      ),
+      title: const Text("Claude CLI"),
+      subtitle: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Claude Code on this computer, signed in as it already is. "
+            "Its own tools are off; Entoli's are used.",
+          ),
+          SizedBox(height: 6),
+          _Tag(Icons.account_circle_outlined, "Uses your Claude account"),
+        ],
+      ),
+      isThreeLine: true,
+      onTap: onTap,
     );
   }
 }

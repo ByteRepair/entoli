@@ -1,7 +1,9 @@
+import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/ui/settings/provider_picker.dart";
 
 void main() {
@@ -28,5 +30,54 @@ void main() {
     // An overflow is reported as a test failure on its own; this only checks
     // the picker was drawn at all.
     expect(find.text("Free tier trains on prompts"), findsOneWidget);
+  });
+
+  testWidgets("offers Claude CLI on a desktop, opening on its own fields", (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    ({LlmProviderConfig? preset})? picked;
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () async => picked = await pickProviderPreset(context),
+              child: const Text("open"),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text("open"));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text("Claude CLI"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Claude CLI"));
+    await tester.pumpAndSettle();
+    debugDefaultTargetPlatformOverride = null;
+
+    expect(picked!.preset!.api, LlmApi.claudeCli);
+  });
+
+  testWidgets("offers no Claude CLI on a phone", (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => pickProviderPreset(context),
+              child: const Text("open"),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text("open"));
+    await tester.pumpAndSettle();
+    final found = find.text("Claude CLI").evaluate().length;
+    debugDefaultTargetPlatformOverride = null;
+    expect(found, 0);
   });
 }
