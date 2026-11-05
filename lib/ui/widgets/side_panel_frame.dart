@@ -13,8 +13,8 @@ enum SidePanelMode {
   /// The content's drawer, in a window too narrow to dock it.
   drawer,
 
-  /// The whole window, in a window too narrow to dock it, with the content
-  /// behind it until something in the panel opens it.
+  /// The whole window, in a window too narrow to dock it, the content kept
+  /// hidden until something in the panel opens it.
   panelPage,
 
   /// The content as the whole window, in front of the panel, which it is
@@ -90,55 +90,11 @@ class SidePanelFrame extends StatefulWidget {
   State<SidePanelFrame> createState() => _SidePanelFrameState();
 }
 
-class _SidePanelFrameState extends State<SidePanelFrame>
-    with SingleTickerProviderStateMixin {
+class _SidePanelFrameState extends State<SidePanelFrame> {
   final _scaffold = GlobalKey<ScaffoldState>();
-
-  /// Where the content is between the panel's page (0) and its own (1).
-  /// It follows [SidePanelFrame.contentShown] in every mode, so a window
-  /// narrowed mid-way lands on the right page, but it animates only where
-  /// the two are pages: docked, the content was on screen all along.
-  late final _page = AnimationController(
-    vsync: this,
-    value: widget.contentShown ? 1 : 0,
-  );
-
-  /// Whether the last layout had the panel and content as pages, which is
-  /// what decides whether a change to [SidePanelFrame.contentShown] slides.
-  bool _paged = false;
-
-  @override
-  void didUpdateWidget(SidePanelFrame old) {
-    super.didUpdateWidget(old);
-    if (widget.contentShown == old.contentShown) return;
-    // Forward and reverse rather than animateTo, whose status ends
-    // completed whichever end it reaches.
-    if (!_paged) {
-      _page.value = widget.contentShown ? 1 : 0;
-    } else if (widget.contentShown) {
-      _page.forward();
-    } else {
-      _page.reverse();
-    }
-  }
-
-  @override
-  void dispose() {
-    _page.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
-    // The page's own route, whose transition the content is pushed with,
-    // and for as long.
-    final route = switch (ModalRoute.of(context)) {
-      final PageRoute<Object?> route => route,
-      _ => null,
-    };
-    _page
-      ..duration = route?.transitionDuration ?? Duration.zero
-      ..reverseDuration = route?.reverseTransitionDuration ?? Duration.zero;
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= widget.breakpoint;
@@ -150,10 +106,6 @@ class _SidePanelFrameState extends State<SidePanelFrame>
                   SidePanelMode.contentPage,
                 SidePanelNarrow.page => SidePanelMode.panelPage,
               };
-        final paged =
-            mode == SidePanelMode.panelPage ||
-            mode == SidePanelMode.contentPage;
-        _paged = paged;
         // Back from the content is to the panel rather than out of the
         // route.
         final content = PopScope(
@@ -195,9 +147,8 @@ class _SidePanelFrameState extends State<SidePanelFrame>
                   child: widget.narrow == SidePanelNarrow.drawer
                       ? content
                       : _Pages(
-                          page: _page,
-                          paged: paged,
-                          route: route,
+                          paged: !wide,
+                          contentShown: widget.contentShown,
                           panel: widget.panel,
                           content: content,
                         ),
@@ -212,34 +163,77 @@ class _SidePanelFrameState extends State<SidePanelFrame>
 }
 
 /// The panel and the content as two pages, the content pushed over the
-/// panel by the theme's page transition, the one [route] itself was pushed
-/// with: [page] is the content's route animation and the panel's secondary
-/// one. Under no page route there is nothing to push with, and the pages
-/// switch. The content is wrapped the same
-/// in every mode — a wide window draws it at rest — so it is at one place in
-/// the tree whatever the width, and stays under the panel's page, offstage,
-/// for the same reason.
-class _Pages extends StatelessWidget {
+/// panel by the theme's page transition, the one the page's own route was
+/// pushed with, and for as long; under no page route the pages switch. Only
+/// while [paged]: wide, the content is drawn at rest and a change of
+/// [contentShown] lands at once. The content is wrapped the same in every
+/// mode, so it is at one place in the tree whatever the width, and each page
+/// is kept, hidden, while the other is in front, so neither is rebuilt from
+/// nothing by the way back.
+class _Pages extends StatefulWidget {
   const _Pages({
-    required this.page,
     required this.paged,
-    required this.route,
+    required this.contentShown,
     required this.panel,
     required this.content,
   });
 
-  final AnimationController page;
   final bool paged;
-  final PageRoute<Object?>? route;
+  final bool contentShown;
   final Widget panel;
   final Widget content;
 
+  @override
+  State<_Pages> createState() => _PagesState();
+}
+
+class _PagesState extends State<_Pages> with SingleTickerProviderStateMixin {
+  /// The content's route animation, and the panel's secondary one.
+  late final _page = AnimationController(
+    vsync: this,
+    value: widget.contentShown ? 1 : 0,
+  )..addStatusListener((_) => setState(() {}));
+
+  PageRoute<Object?>? _route;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _route = switch (ModalRoute.of(context)) {
+      final PageRoute<Object?> route => route,
+      _ => null,
+    };
+    _page
+      ..duration = _route?.transitionDuration ?? Duration.zero
+      ..reverseDuration = _route?.reverseTransitionDuration ?? Duration.zero;
+  }
+
+  @override
+  void didUpdateWidget(_Pages old) {
+    super.didUpdateWidget(old);
+    if (widget.contentShown == old.contentShown) return;
+    // Forward and reverse rather than animateTo, whose status ends
+    // completed whichever end it reaches.
+    if (!widget.paged) {
+      _page.value = widget.contentShown ? 1 : 0;
+    } else if (widget.contentShown) {
+      _page.forward();
+    } else {
+      _page.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _page.dispose();
+    super.dispose();
+  }
+
   Widget _transition(
-    BuildContext context,
     Animation<double> animation,
     Animation<double> secondary,
     Widget child,
-  ) => switch (route) {
+  ) => switch (_route) {
     final route? => Theme.of(context).pageTransitionsTheme.buildTransitions(
       route,
       context,
@@ -250,47 +244,49 @@ class _Pages extends StatelessWidget {
     null => child,
   };
 
+  // Rebuilt as the animation's status changes, not on its every tick: the
+  // transitions listen to it themselves.
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: page,
-    builder: (context, _) {
-      final animation = paged ? page : kAlwaysCompleteAnimation;
-      return IgnorePointer(
-        // As a route does: a tap mid-slide is on neither page.
-        ignoring: paged && page.isAnimating,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (paged && !page.isCompleted)
-              KeyedSubtree(
-                key: const ValueKey("panel"),
-                child: _transition(
-                  context,
-                  kAlwaysCompleteAnimation,
-                  animation,
-                  panel,
-                ),
-              ),
+  Widget build(BuildContext context) {
+    final paged = widget.paged;
+    final animation = paged ? _page : kAlwaysCompleteAnimation;
+    return IgnorePointer(
+      // As a route does: a tap mid-slide is on neither page.
+      ignoring: animation.isAnimating,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (paged)
             KeyedSubtree(
-              key: const ValueKey("content"),
-              // Hidden outside the transition, which may paint a backdrop
-              // of its own that would take the panel's taps.
+              key: const ValueKey("panel"),
               child: Visibility(
-                visible: !animation.isDismissed,
+                visible: !animation.isCompleted,
                 maintainState: true,
                 child: _transition(
-                  context,
+                  kAlwaysCompleteAnimation,
                   animation,
-                  kAlwaysDismissedAnimation,
-                  content,
+                  widget.panel,
                 ),
               ),
             ),
-          ],
-        ),
-      );
-    },
-  );
+          KeyedSubtree(
+            key: const ValueKey("content"),
+            // Hidden outside the transition, which may paint a backdrop of
+            // its own that would take the panel's taps.
+            child: Visibility(
+              visible: !animation.isDismissed,
+              maintainState: true,
+              child: _transition(
+                animation,
+                kAlwaysDismissedAnimation,
+                widget.content,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// The docked panel, sliding in and out at the left edge with the content
