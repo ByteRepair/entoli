@@ -38,7 +38,8 @@ not a quit app, so what #486 put on master cannot show it. Only a separate proce
    background item is built only if stage 5a shows a child does not get the
    dot.
 4. **The server is the only writer of `<dataDir>`**, `conv.jsonl` included.
-   Triggers and sync are server-side.
+   Triggers and sync are server-side. The cache (`ENTOLI_CACHE`) belongs to
+   both the server and the client; `<dataDir>` belongs to the server alone.
 5. **One client at a time.** No multi-client coordination.
 6. **A secret handed over at start**, as `Entoli Models.app` gets its key in
    its environment.
@@ -117,9 +118,10 @@ which its own server is just the nearer home device.
 
 So **the client loads the voice models itself.** They are the input's, as a
 keyboard's dictionary is, not the user's data: the client downloads them into
-its own cache, keeps them there, and loads them from there. That is the one
-thing a client keeps on disk, and it is a cache: deleting it costs a
-download, never anything the user made. On macOS the voice engines run in a
+the cache, keeps them there, and loads them from there. The cache belongs to
+the server and the client alike, and `<dataDir>` to the server alone, so this
+breaks no rule: deleting the cache costs a download, never anything the user
+made. On macOS the voice engines run in a
 model host the client starts, as the app does today, and the server's MLX
 models in one the server starts.
 
@@ -568,14 +570,16 @@ Each stage ships alone and leaves the app working on every platform.
 have. Add the import-graph rules for `lib/server/`. Replace `ValueListenable` in
 `domain/`. No protocol change, no process change.
 
-**Inside every stage: no client state on disk, and no paths.** The client
-keeps nothing on disk of its own but the voice models' cache (see "Inputs stay
-in the client"). Window size, the last open chat and every
+**Inside every stage: `<dataDir>` is the server's, the cache is both's, and
+no paths.** The client writes nothing under `<dataDir>`, and keeps nothing of
+the user's anywhere. What it writes goes in the cache, where the server writes
+too: the voice models (see "Inputs stay in the client") and whatever it holds
+while showing it. Window size, the last open chat and every
 other preference are the server's to store, sent and written over the
 protocol. An artifact, a backup or an attachment reaches the client as bytes
 from the server, never as a path to open, on the same machine as on another.
-The client may hold bytes in a temporary directory while it shows them, as a
-mirror already does with `unzipRemoteArtifact`.
+The bytes it holds while showing them go in the cache or a temporary
+directory, as a mirror already does with `unzipRemoteArtifact`.
 
 **Stage 1: the schema.** Write the `.proto` files for every `SyncMessage` arm,
 records and states as JSON wrappers. Add `protoc` to `tool/prepare.sh` and CI.
