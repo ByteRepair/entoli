@@ -57,11 +57,13 @@ class OpenAiUsageClient extends OpenAiClient implements ReportsUsage {
       value == null ? null : int.tryParse(value.trim());
 
   /// Parse OpenAI's 1s / 6m0s reset intervals; reject other formats.
+  static final _resetPattern = RegExp(
+    r"^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)?$",
+  );
+
   static Duration? durationOf(String? value) {
     if (value == null || value.isEmpty) return null;
-    final match = RegExp(
-      r"^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)?$",
-    ).firstMatch(value.trim());
+    final match = _resetPattern.firstMatch(value.trim());
     if (match == null || match.group(0)!.isEmpty) return null;
     final hours = int.tryParse(match.group(1) ?? "0") ?? 0;
     final minutes = int.tryParse(match.group(2) ?? "0") ?? 0;
