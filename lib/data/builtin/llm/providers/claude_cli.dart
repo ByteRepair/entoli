@@ -39,6 +39,21 @@ class ClaudeCliProvider extends CliProvider {
   @override
   bool get takesPdfs => true;
 
+  /// Everything a running Claude Code session gave this app, where it was
+  /// started from inside one — a Claude Code terminal, a Claude Desktop
+  /// session — and nothing of it otherwise. `CLAUDECODE` is how a session
+  /// marks what it starts; under it, every `CLAUDE*`, `ANTHROPIC_*` and
+  /// `MCP_*` variable is that session's — its id, its account and email, its
+  /// proxy for the API — and handed on, they would make this `claude` a child
+  /// of a session it has nothing to do with. A variable the user wants passed
+  /// anyway goes in the provider's environment, which is laid over this.
+  @override
+  bool inherits(String name, Map<String, String> inherited) =>
+      !inherited.containsKey("CLAUDECODE") ||
+      !(name.startsWith("CLAUDE") ||
+          name.startsWith("ANTHROPIC_") ||
+          name.startsWith("MCP_"));
+
   /// The CLI's aliases, each the newest of its family.
   @override
   List<ModelInfo> get knownModels => _known;

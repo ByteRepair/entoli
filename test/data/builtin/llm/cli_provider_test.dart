@@ -353,6 +353,28 @@ void main() {
       expect(ids, containsAll(["opus", "sonnet", "haiku"]));
     });
 
+    test("leaves a parent Claude Code session's variables behind", () {
+      const provider = ClaudeCliProvider(
+        LlmProviderConfig(id: "c", api: LlmApi.claudeCli, baseUrl: ""),
+      );
+      const own = {"HOME": "/home/u", "ANTHROPIC_API_KEY": "sk-1"};
+      // Started from a Claude Code session: its variables are its own.
+      expect(
+        provider.inheritedFrom({
+          ...own,
+          "CLAUDECODE": "1",
+          "CLAUDE_CODE_SESSION_ID": "s",
+          "CLAUDE_CODE_USER_EMAIL": "a@b.test",
+          "CLAUDE_AGENT_SDK_VERSION": "1",
+          "ANTHROPIC_BASE_URL": "https://proxy.test",
+          "MCP_CONNECTION_NONBLOCKING": "true",
+        }),
+        {"HOME": "/home/u"},
+      );
+      // Started from anywhere else: what the user exported is theirs.
+      expect(provider.inheritedFrom(own), own);
+    });
+
     test("finds a bare name on the environment's PATH", () {
       final dir = Directory.systemTemp.createTempSync("cli-path-");
       addTearDown(() => dir.deleteSync(recursive: true));

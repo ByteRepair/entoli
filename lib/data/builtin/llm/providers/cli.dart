@@ -48,12 +48,22 @@ abstract class CliProvider extends LlmProvider with KeyFree {
     return named == null || named.isEmpty ? defaultCommand : named;
   }
 
-  /// The app's own environment, the login `PATH` over it, and the config's
-  /// variables over both.
+  /// What of the app's own environment [name] is passed on as. All of it,
+  /// unless a subclass knows of variables that belong to something else.
+  bool inherits(String name, Map<String, String> inherited) => true;
+
+  /// The app's own environment less what [inherits] keeps out, the login
+  /// `PATH` over it, and the config's variables over both.
   Map<String, String> get environment => {
-    ...Platform.environment,
+    ...inheritedFrom(Platform.environment),
     "PATH": ?loginPath,
     ...config.env,
+  };
+
+  /// [inherited] less what [inherits] keeps out.
+  Map<String, String> inheritedFrom(Map<String, String> inherited) => {
+    for (final MapEntry(:key, :value) in inherited.entries)
+      if (inherits(key, inherited)) key: value,
   };
 
   /// [command] as a path to run, or null where there is none: a path is taken

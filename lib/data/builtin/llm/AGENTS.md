@@ -136,6 +136,13 @@ program is found on the login shell's `PATH` (`CliProvider.loginPath`, set
 by `main` from the same capture the shell uses), since a desktop launch
 inherits one that misses `~/.local/bin`. A phone runs no programs, so there
 it offers no models, and the dialog offers the API only on a desktop.
+What of the app's own environment reaches the program is the subclass's
+(`inherits`): an Entoli started from inside a Claude Code session — a
+Claude Code terminal, a Claude Desktop session — carries that session's
+variables, `CLAUDECODE` among them, and `ClaudeCliProvider` hands on none
+of its `CLAUDE*`, `ANTHROPIC_*` or `MCP_*` ones then, since they would make
+its `claude` a child of that session: its id, its account email, its proxy
+for the API.
 
 **The split is interface against lifecycle.** `CliProvider` owns what every
 such program shares: finding it, its environment, and `CliClient` — the
