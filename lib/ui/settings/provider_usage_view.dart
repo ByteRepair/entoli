@@ -66,6 +66,8 @@ String _describeWindow(UsageWindow window, DateTime now) {
           "\$${window.max.toStringAsFixed(2)}",
     UsageUnit.requests =>
       "${window.used.round()} of ${window.max.round()} requests",
+    UsageUnit.tokens =>
+      "${window.used.round()} of ${window.max.round()} tokens",
   };
   final resets = window.resetsAt;
   return [

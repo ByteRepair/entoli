@@ -137,7 +137,7 @@ default is nothing, which is what most providers have to say; the Providers
 section in Settings draws a line per entry under the row, a bar under each
 window, and nothing at all for an empty list.
 
-**Only where the answer is the provider's to keep stable.** Three say it:
+**Only where the answer is the provider's to keep stable.** Four say it:
 
 - **OpenRouter** — `/key`, documented: the key's spending cap, what is left of
   it and whether it resets daily, weekly or monthly. Its periods are UTC's, so
@@ -148,6 +148,12 @@ window, and nothing at all for an empty list.
   one as a `ReportsUsage` — a client that learns usage from its replies rather
   than a provider that asks. Nothing until a reply has arrived; the tokens pair
   is per minute, a pace rather than an allowance, and is left out.
+- **OpenAI** — its documented response headers carry request and token rate
+  limit/remaining pairs, including project-token limits where present.
+  `OpenAiUsageClient` retains those pairs from its latest response. This is
+  rate-limit capacity, not account spend or completion-token usage; no separate
+  endpoint or elevated key is needed. Custom OpenAI-compatible endpoints do not
+  get this client.
 - **Ollama Cloud** — `ollama.com/api/balance`, documented (outside the `/v1`
   the chat endpoint is under): the plan's included credits, an allowance in
   dollars that resets at the end of its monthly period, and the purchased
@@ -159,8 +165,9 @@ window, and nothing at all for an empty list.
 
 Z.ai's coding-plan quota, Claude CLI's `rate_limit_event` and Codex's
 `account/rateLimits/read` exist and are left out: none is documented, and
-each has changed shape within a year. Anthropic's and OpenAI's APIs have nothing a normal key can ask; their
-usage reports want an admin key and cover the whole organisation.
+each has changed shape within a year. Anthropic's usage and cost reports want
+an admin key and cover the whole organisation; its ordinary Messages API has
+no account-allowance endpoint.
 
 `LlmRegistry.usageOf` asks the provider with the resolved key, bounded at ten
 seconds, and where it has nothing to ask reads the client its turns already

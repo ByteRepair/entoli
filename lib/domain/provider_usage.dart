@@ -1,7 +1,7 @@
 /// What one of a provider's allowances is counted in. A share is a fraction
 /// of the allowance with nothing behind it to count: a provider that only says
 /// "37% of your week" is a [share] with a max of 1.
-enum UsageUnit { share, usd, requests }
+enum UsageUnit { share, usd, requests, tokens }
 
 /// Something a provider says about what the account has spent or has left:
 /// an allowance with a size ([UsageWindow]) or a balance with none
