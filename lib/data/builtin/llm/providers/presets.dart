@@ -1,6 +1,8 @@
 import "../../../../domain/llm_provider.dart";
 import "anthropic.dart";
 import "claude_cli.dart";
+import "cli.dart";
+import "codex_cli.dart";
 import "google.dart";
 import "hosted.dart";
 import "local_servers.dart";
@@ -11,6 +13,7 @@ import "provider.dart";
 export "anthropic.dart";
 export "claude_cli.dart";
 export "cli.dart";
+export "codex_cli.dart";
 export "google.dart";
 export "hosted.dart";
 export "local_servers.dart";
@@ -37,6 +40,16 @@ const _kinds = <LlmProvider Function([LlmProviderConfig])>[
 /// can be added by hand.
 final llmProviderPresets = [for (final kind in _kinds) kind()];
 
+/// The programs that can answer in a model's place, offered on a desktop.
+const cliProviderPresets = <CliProvider>[
+  ClaudeCliProvider(),
+  CodexCliProvider(),
+];
+
+/// The preset of the program [api] runs.
+CliProvider cliPresetOf(LlmApi api) =>
+    cliProviderPresets.firstWhere((p) => p.config.api == api);
+
 /// The class [config] is read as. By host first, since a provider's quirks are
 /// its server's and an entry renamed by hand still reaches them; then by
 /// models.dev id, which is what a local server has; then by the wire format
@@ -48,6 +61,7 @@ LlmProvider providerOf(LlmProviderConfig config) {
     LlmApi.anthropic => AnthropicCompatibleProvider(config),
     LlmApi.openai => OpenAiCompatibleProvider(config),
     LlmApi.claudeCli => ClaudeCliProvider(config),
+    LlmApi.codexCli => CodexCliProvider(config),
   };
 }
 

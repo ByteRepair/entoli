@@ -55,23 +55,19 @@ class ClaudeCliProvider extends CliProvider {
   @override
   bool get takesPdfs => true;
 
-  /// Where `claude`'s sessions keep what they run with, set once by `main` to
-  /// a folder in the app's cache. Null — a test, a build that never set it —
-  /// is one fixed folder under the system's temp.
-  static String? cacheRoot;
-
-  /// What it is, in the words the provider list and dialog show.
-  static const about =
+  @override
+  String get about =>
       "Runs Claude CLI on this computer, signed in as it already is. "
       "Its own tools are off; it uses Entoli's.";
 
-  /// [cacheRoot]'s `claude-cli/`, or the temp fallback.
-  Directory get workRoot => Directory(
-    p.join(
-      cacheRoot ?? p.join(Directory.systemTemp.path, "entoli"),
-      "claude-cli",
-    ),
-  );
+  @override
+  String get account => "Uses your Claude account";
+
+  @override
+  String get workFolder => "claude-cli";
+
+  @override
+  String get bundler => "Claude Desktop";
 
   /// Claude Desktop's own `claude`, newest version first. It keeps each under
   /// `claude-code/<version>/<build>/`, replacing the directory on an update,
@@ -156,10 +152,6 @@ class ClaudeCliProvider extends CliProvider {
 class ClaudeCliSession extends CliSession {
   ClaudeCliSession._(super.spec, this._dir);
 
-  /// How long a closing session is given to go on its own, once stdin is
-  /// closed, and then again after a SIGTERM.
-  static const _grace = Duration(seconds: 3);
-
   final Directory _dir;
   CliProcess? _process;
   ToolBridge? _bridge;
@@ -181,8 +173,7 @@ class ClaudeCliSession extends CliSession {
   /// Bridge calls that came in before the reply that made them was read.
   final _orphans = <HeldToolCall>[];
 
-  /// The last of what the CLI said on stderr, for an exit to explain itself.
-  final _stderr = StringBuffer();
+  final _stderr = StderrTail();
 
   static final _prefix = "mcp__${McpToolRoutes.serverName}__";
 
@@ -221,7 +212,7 @@ class ClaudeCliSession extends CliSession {
     );
     final system = File(p.join(_dir.path, "system.md"));
     if (spec.system.isNotEmpty) await system.writeAsString(spec.system);
-    final effort = _effortOf(spec.reasoningEffort);
+    final effort = effortOf(spec.reasoningEffort);
     final args = [
       "-p",
       "--input-format",
@@ -256,13 +247,9 @@ class ClaudeCliSession extends CliSession {
     final process = await provider.launch(
       executable,
       args,
-      // One folder for every session, and empty: no project's CLAUDE.md or
-      // settings are picked up from it, and what the CLI keeps per working
-      // directory — its cache's MCP logs, its project entry — is kept once
-      // rather than once per session.
-      workingDirectory: (await Directory(
-        p.join(provider.workRoot.path, "work"),
-      ).create(recursive: true)).path,
+      // No project's CLAUDE.md or settings are picked up from it, and its
+      // cache's MCP logs and project entry are kept once.
+      workingDirectory: await provider.workDirectory(),
       environment: {
         // A tool can wait on an approval for as long as the user takes.
         "MCP_TOOL_TIMEOUT": "${const Duration(days: 1).inMilliseconds}",
@@ -271,25 +258,9 @@ class ClaudeCliSession extends CliSession {
     );
     _process = process;
     process.lines.listen(_line, onError: (Object e) => _fail("$e"));
-    process.errors.listen((text) {
-      _stderr.write(text);
-      final over = _stderr.length - 4000;
-      if (over > 0) {
-        final kept = _stderr.toString().substring(over);
-        _stderr
-          ..clear()
-          ..write(kept);
-      }
-    });
+    process.errors.listen(_stderr.add);
     unawaited(process.exitCode.then(_exited));
   }
-
-  /// The loop's effort word as one the CLI takes.
-  static String? _effortOf(String? effort) => switch (effort) {
-    "minimal" => "low",
-    "low" || "medium" || "high" || "xhigh" || "max" => effort,
-    _ => null,
-  };
 
   @override
   bool get alive => _alive;
@@ -299,20 +270,10 @@ class ClaudeCliSession extends CliSession {
     if (!alive || _current != null || rest.isEmpty) return false;
     if (_fresh) return true;
     if (_uses.isNotEmpty) {
-      return rest.length == _uses.length &&
-          rest.every((m) => m.role == LlmRole.tool) &&
-          const SetEquality<String?>().equals(
-            {for (final m in rest) m.toolCallId},
-            {for (final u in _uses) u.id},
-          );
+      return answersAll(rest, [for (final u in _uses) u.id]);
     }
-    return rest.every(_fromUser);
+    return rest.every(fromUser);
   }
-
-  /// A message the CLI is sent as user content: what follows a reply, rather
-  /// than a reply or its results.
-  static bool _fromUser(LlmMessage m) =>
-      m.role == LlmRole.user || m.role == LlmRole.system;
 
   @override
   Stream<LlmChunk> exchange(List<LlmMessage> rest) {
@@ -341,17 +302,11 @@ class ClaudeCliSession extends CliSession {
   /// [rest] as one user message's content. A fresh session handed a history
   /// is told it as a transcript, with the trailing user turns as themselves.
   List<Map<String, dynamic>> _firstContent(List<LlmMessage> rest) {
-    final cut = rest.lastIndexWhere((m) => !_fromUser(m)) + 1;
-    final history = rest.sublist(0, cut);
-    final tail = rest.sublist(cut);
+    final (:history, :tail) = splitTail(rest);
     return [
       if (history.isNotEmpty) {"type": "text", "text": transcriptOf(history)},
       for (final message in tail) ...AnthropicClient.userBlocks(message),
-      if (tail.isEmpty)
-        {
-          "type": "text",
-          "text": "Carry on from where the conversation leaves off.",
-        },
+      if (tail.isEmpty) {"type": "text", "text": carryOn},
     ];
   }
 
@@ -527,7 +482,7 @@ class ClaudeCliSession extends CliSession {
   void _exited(int code) {
     _alive = false;
     if (_closing) return;
-    final said = _stderr.toString().trim();
+    final said = _stderr.toString();
     logFailure("llm", "claude exited with $code");
     _fail(
       said.isEmpty
@@ -553,21 +508,7 @@ class ClaudeCliSession extends CliSession {
     _uses.clear();
     _orphans.clear();
     final process = _process;
-    if (process != null) {
-      try {
-        // Stdin closed is the end of its input, which it takes as the end of
-        // the session; a signal is for one that does not.
-        await process.closeInput().timeout(_grace, onTimeout: () {});
-      } on Object catch (e) {
-        logFailure("llm", "closing claude's input failed", e);
-      }
-      var exited = await _waitExit(process);
-      if (!exited) {
-        process.kill();
-        exited = await _waitExit(process);
-      }
-      if (!exited) process.kill(force: true);
-    }
+    if (process != null) await stopProcess(process, "claude");
     try {
       await _dir.delete(recursive: true);
     } on FileSystemException catch (e) {
@@ -576,10 +517,6 @@ class ClaudeCliSession extends CliSession {
     // Last, so a bridge that has closed is a session that is wholly gone.
     await _bridge?.close();
   }
-
-  static Future<bool> _waitExit(CliProcess process) => process.exitCode
-      .then((_) => true)
-      .timeout(_grace, onTimeout: () => false);
 }
 
 class _ToolUse {

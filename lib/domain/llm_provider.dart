@@ -2,17 +2,18 @@ import "model_info.dart";
 
 /// Which wire format a provider speaks. Everything that copied OpenAI's
 /// `/chat/completions` is [openai]; Anthropic's `/messages` is its own.
-/// [claudeCli] is no wire at all: another harness's command-line program,
-/// run on this machine, answers in the model's place.
+/// [claudeCli] and [codexCli] are no wire at all: another harness's
+/// command-line program, run on this machine, answers in the model's place.
 enum LlmApi {
   openai,
   anthropic,
-  claudeCli;
+  claudeCli,
+  codexCli;
 
   /// Whether it is a program run here rather than an endpoint reached over
   /// HTTP: what it is configured with is an executable and an environment,
   /// not a base URL and a key.
-  bool get isCli => this == claudeCli;
+  bool get isCli => this == claudeCli || this == codexCli;
 }
 
 /// An endpoint the agent can call, as the user configured it. Held in

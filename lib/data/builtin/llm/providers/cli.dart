@@ -32,9 +32,37 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   /// leaves the inherited one.
   static String? loginPath;
 
+  /// Where the programs' sessions keep what they run with, set once by
+  /// `main` to the app's cache. Null — a test, a build that never set it —
+  /// is one fixed folder under the system's temp.
+  static String? cacheRoot;
+
   /// What [command] is when the config names none: a bare name, looked up on
   /// `PATH`.
   String get defaultCommand;
+
+  /// What it is, in the words the provider list and dialog show.
+  String get about;
+
+  /// Whose account its prompts go to, for the provider list's tag.
+  String get account;
+
+  /// The folder of [cacheRoot] this program's sessions run in.
+  String get workFolder;
+
+  Directory get workRoot => Directory(
+    p.join(
+      cacheRoot ?? p.join(Directory.systemTemp.path, "entoli"),
+      workFolder,
+    ),
+  );
+
+  /// The one empty folder every session runs in, so nothing a project keeps
+  /// for the program is picked up from it and what the program keeps per
+  /// working directory is kept once.
+  Future<String> workDirectory() async => (await Directory(
+    p.join(workRoot.path, "work"),
+  ).create(recursive: true)).path;
 
   /// The models the program takes by name, offered beside the user's own.
   List<ModelInfo> get knownModels;
@@ -74,6 +102,9 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   /// app's updates. None unless a subclass knows of one.
   List<String> get bundledCopies => const [];
 
+  /// The app [bundledCopies] come with, for saying where it was looked for.
+  String get bundler => "";
+
   /// [command] as a path to run, or null where there is none: a path is taken
   /// as it is, a bare name is looked for on [environment]'s `PATH`, and the
   /// default name, found nowhere there, is the first of [bundledCopies].
@@ -111,7 +142,7 @@ abstract class CliProvider extends LlmProvider with KeyFree {
       (throw LlmException(
         p.isAbsolute(command)
             ? "$command does not exist"
-            : "$command was not found on PATH${bundledCopies.isEmpty ? "" : " or in Claude Desktop"}. "
+            : "$command was not found on PATH${bundledCopies.isEmpty ? "" : " or in $bundler"}. "
                   "Install it, or set its path in the provider's settings.",
       ));
 
@@ -360,6 +391,39 @@ class _Parked {
   final Timer timer;
 }
 
+/// A message a program is sent as user input: what follows a reply, rather
+/// than a reply or its results.
+bool fromUser(LlmMessage m) =>
+    m.role == LlmRole.user || m.role == LlmRole.system;
+
+/// What a fresh session is first told: [rest] split into the [history] it
+/// is told as a [transcriptOf], and the trailing user turns, sent as
+/// themselves. With no such turns, [carryOn] is the message instead.
+({List<LlmMessage> history, List<LlmMessage> tail}) splitTail(
+  List<LlmMessage> rest,
+) {
+  final cut = rest.lastIndexWhere((m) => !fromUser(m)) + 1;
+  return (history: rest.sublist(0, cut), tail: rest.sublist(cut));
+}
+
+const carryOn = "Carry on from where the conversation leaves off.";
+
+/// Whether [rest] is the results of exactly the calls [ids], each once.
+bool answersAll(List<LlmMessage> rest, List<String> ids) =>
+    rest.length == ids.length &&
+    rest.every((m) => m.role == LlmRole.tool) &&
+    const SetEquality<String?>().equals({
+      for (final m in rest) m.toolCallId,
+    }, ids.toSet());
+
+/// The loop's effort word as one the programs take, which is the loop's own
+/// less `minimal`.
+String? effortOf(String? effort) => switch (effort) {
+  "minimal" => "low",
+  "low" || "medium" || "high" || "xhigh" || "max" => effort,
+  _ => null,
+};
+
 /// [history] written out as text, for a session that starts part-way through
 /// a conversation: a program takes a new message, not a past it did not live
 /// through, so the past is told to it.
@@ -416,6 +480,46 @@ abstract class CliProcess {
 
   /// SIGTERM, or SIGKILL where [force].
   void kill({bool force = false});
+}
+
+/// How long a closing program is given to go on its own, once its stdin is
+/// closed, and then again after a SIGTERM.
+const _grace = Duration(seconds: 3);
+
+/// Ends [process]: stdin closed first, which a program reading it takes as
+/// the end, then SIGTERM, then SIGKILL, [_grace] apart.
+Future<void> stopProcess(CliProcess process, String name) async {
+  Future<bool> exited() => process.exitCode
+      .then((_) => true)
+      .timeout(_grace, onTimeout: () => false);
+  try {
+    await process.closeInput().timeout(_grace, onTimeout: () {});
+  } on Object catch (e) {
+    logFailure("llm", "closing $name's input failed", e);
+  }
+  if (await exited()) return;
+  process.kill();
+  if (!await exited()) process.kill(force: true);
+}
+
+/// The last of what a program said on stderr, for an exit to explain itself.
+class StderrTail {
+  static const _keep = 4000;
+
+  final _buffer = StringBuffer();
+
+  void add(String text) {
+    _buffer.write(text);
+    final over = _buffer.length - _keep;
+    if (over <= 0) return;
+    final kept = _buffer.toString().substring(over);
+    _buffer
+      ..clear()
+      ..write(kept);
+  }
+
+  @override
+  String toString() => _buffer.toString().trim();
 }
 
 /// How a session starts its program.
