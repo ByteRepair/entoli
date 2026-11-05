@@ -1382,7 +1382,16 @@ writes nothing for an id that is not live (the tool says so), and
 `maintain` is the batch shape the model reports in — drops, replacements and
 new ones, an op on a missing id ignored, a replacement of a missing id
 landing as a new memory rather than a record with a made-up id, so a model
-that misremembers a name costs nothing. A memory's `chat` is its provenance:
+that misremembers a name costs nothing. It reads the batch whole before it
+writes, because a model shown the store answers with the store — every kept
+memory back as a new one, an id both spent and rewritten, which is how one
+store grew four copies of the same note. A new memory whose words
+(`sameFact`: lowercased, punctuation and spacing gone) match a kept one lands
+as nothing, and takes back a spend of that one in the same batch, so the fact
+keeps its id; a replacement of an id the batch spends is dropped rather than
+bringing it back; and a replacement to the text already there writes nothing.
+A rewording is not caught, and is the consolidation pass's to merge. A
+memory's `chat` is its provenance:
 the chat that wrote it, or null where the user typed it in the explorer,
 which is the line the explorer's "added by you" reads.
 
@@ -1433,6 +1442,18 @@ read-only until the user has given it a writer. Where the pass kept anything
 new, it adds a `MemoryNote` to the backend's note stream and the chat's own
 page shows it as a line — "Kept N memories." — because a silent keep is
 indistinguishable from a failed one.
+
+What the prompt asks for is the narrow half, because it runs after every turn
+and on the light model, which keeps whatever it is told is a candidate. Asked
+for "a decision that was made, a fact learned about a codebase", it filled a
+store with branch names, commit hashes, merged pull requests, test counts and
+the day's oil price — a coding turn's reply is mostly a progress report. So it
+is told most exchanges hold nothing, keeps only what will be true in months
+(a stated preference, a lasting fact about the user, a project constraint its
+files would not show), and is told by name never to keep task progress, what
+the repository already records, facts about the world that date, or a passing
+mention. The consolidation pass spends task progress it finds the same way,
+which is what clears a store filled before the prompt said so.
 
 **Consolidation.** The slow half of the housekeeping, chained behind the
 extraction in the same unawaited: where the extraction keeps what one
