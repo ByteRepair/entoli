@@ -1,5 +1,6 @@
 import "../../../../domain/llm_provider.dart";
 import "anthropic.dart";
+import "claude_cli.dart";
 import "google.dart";
 import "hosted.dart";
 import "local_servers.dart";
@@ -8,6 +9,8 @@ import "openrouter.dart";
 import "provider.dart";
 
 export "anthropic.dart";
+export "claude_cli.dart";
+export "cli.dart";
 export "google.dart";
 export "hosted.dart";
 export "local_servers.dart";
@@ -37,13 +40,14 @@ final llmProviderPresets = [for (final kind in _kinds) kind()];
 /// The class [config] is read as. By host first, since a provider's quirks are
 /// its server's and an entry renamed by hand still reaches them; then by
 /// models.dev id, which is what a local server has; then by the wire format
-/// alone.
+/// alone. A CLI is its program, whatever else the entry says.
 LlmProvider providerOf(LlmProviderConfig config) {
   final kind = _kindOf(config);
   if (kind != null) return kind(config);
   return switch (config.api) {
     LlmApi.anthropic => AnthropicCompatibleProvider(config),
     LlmApi.openai => OpenAiCompatibleProvider(config),
+    LlmApi.claudeCli => ClaudeCliProvider(config),
   };
 }
 
@@ -51,9 +55,12 @@ LlmProvider providerOf(LlmProviderConfig config) {
 /// endpoint typed in by hand.
 LlmProvider? presetOf(LlmProviderConfig config) => _kindOf(config)?.call();
 
+/// A preset's class, which a CLI never has: its entry is its program.
 LlmProvider Function([LlmProviderConfig])? _kindOf(LlmProviderConfig config) =>
-    _byHost[Uri.tryParse(config.baseUrl)?.host] ??
-    _byCatalogId[config.catalogId];
+    config.api.isCli
+    ? null
+    : _byHost[Uri.tryParse(config.baseUrl)?.host] ??
+          _byCatalogId[config.catalogId];
 
 /// A local server's host is anybody's, so it is read by models.dev id alone.
 final _byHost = {

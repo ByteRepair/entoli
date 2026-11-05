@@ -1,5 +1,6 @@
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/ui/widgets/provider_dialog.dart";
+import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
@@ -151,4 +152,48 @@ void main() {
     );
     expect(keyField.controller!.text, isEmpty);
   });
+
+  testWidgets(
+    "Claude CLI asks for a program and an environment, not a URL or a key",
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      await pumpDialog(tester);
+      await tester.enterText(find.byType(TextField).at(0), "Claude");
+      await tester.tap(find.text("OpenAI-compatible"));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text("Claude CLI").last);
+      await tester.pumpAndSettle();
+
+      expect(find.text("Base URL"), findsNothing);
+      expect(find.text("API key"), findsNothing);
+      await tester.enterText(
+        find.widgetWithText(TextField, "Executable"),
+        "/opt/bin/claude",
+      );
+      for (final (name, value) in [("A", "1"), ("B", "two=2")]) {
+        await tester.ensureVisible(find.text("Add variable"));
+        await tester.tap(find.text("Add variable"));
+        await tester.pumpAndSettle();
+        // The variable's dialog, over the provider's, which has a Name too.
+        await tester.enterText(
+          find.widgetWithText(TextField, "Name").last,
+          name,
+        );
+        await tester.enterText(find.widgetWithText(TextField, "Value"), value);
+        await tester.tap(find.text("Save").last);
+        await tester.pumpAndSettle();
+      }
+      expect(find.text("two=2"), findsNothing, reason: "values are masked");
+      await tester.tap(find.text("Save"));
+      await tester.pumpAndSettle();
+
+      final config = returned!.config;
+      expect(config.api, LlmApi.claudeCli);
+      expect(config.command, "/opt/bin/claude");
+      expect(config.env, {"A": "1", "B": "two=2"});
+      expect(config.defaultModelId, "sonnet");
+      expect(returned!.setKey, isNull);
+    },
+  );
 }

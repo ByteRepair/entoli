@@ -465,6 +465,34 @@ void main() {
     expect(fieldText(tester), "gone-1");
   });
 
+  // A turn on a provider that is not here fails, so the field says so
+  // rather than reading as the null entry it would not run on.
+  testWidgets("a model whose provider is not found says so", (tester) async {
+    await pump(tester, choice: (providerId: "removed-id", modelId: "sonnet"));
+
+    expect(fieldText(tester), "Select New Model");
+    expect(
+      find.text(
+        "The sonnet provider (id: 'removed-id') is not found. "
+        "Please pick another model.",
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets("a missing provider's Default says so too", (tester) async {
+    await pump(tester, choice: (providerId: "removed-id", modelId: null));
+
+    expect(fieldText(tester), "Select New Model");
+    expect(
+      find.text(
+        "The Default provider (id: 'removed-id') is not found. "
+        "Please pick another model.",
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets("a model added by hand is stored on its provider and offered", (
     tester,
   ) async {

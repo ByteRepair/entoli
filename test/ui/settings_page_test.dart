@@ -425,7 +425,9 @@ void main() {
       expect(settings.titleModelId, isNull);
     });
 
-    testWidgets("a model the backend no longer offers reads as off", (
+    // Its provider is gone, so the field asks for a new model rather than
+    // reading as Off, which is not what is stored.
+    testWidgets("a model whose provider is gone asks for a new one", (
       tester,
     ) async {
       app.seedSettings(
@@ -440,7 +442,20 @@ void main() {
         matching: find.byType(LabelledField),
       );
       expect(
-        find.descendant(of: titleField, matching: find.text("Off")),
+        find.descendant(
+          of: titleField,
+          matching: find.text("Select New Model"),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: titleField,
+          matching: find.text(
+            "The vanished provider (id: 'gone') is not found. "
+            "Please pick another model.",
+          ),
+        ),
         findsOneWidget,
       );
     });

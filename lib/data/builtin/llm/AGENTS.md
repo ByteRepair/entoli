@@ -122,6 +122,91 @@ gate is distinct from `maxConcurrentSubAgents` (8), which bounds long-lived
 agent parallelism — one sub-agent makes up to `stepLimit` calls. Null for agents
 built against a raw client (tests), where the per-agent retry path governs.
 
+## A program in the model's place
+
+`CliProvider` (`providers/cli.dart`) is the third kind beside the two wire
+formats: another harness's command-line program — Claude CLI today, Codex
+the obvious next — answering Entoli's turns under the user's own sign-in.
+Its config is `LlmApi.claudeCli` with a `command` (a path, or a bare name
+looked up on `PATH`, null for the subclass's `defaultCommand`) and an `env`
+laid over the app's own environment; `baseUrl` is empty and no key is asked
+for (`KeyFree`). `providerOf` reads it by API before anything else, so a
+CLI entry is never mistaken for the endpoint its catalog id names. The
+program is found on the login shell's `PATH` (`CliProvider.loginPath`, set
+by `main` from the same capture the shell uses), since a desktop launch
+inherits one that misses `~/.local/bin`. A default name found nowhere on
+it falls back to a copy another app ships (`bundledCopies`): on macOS,
+Claude Desktop keeps its own `claude` under
+`~/Library/Application Support/Claude/claude-code/<version>/<build>/`,
+replaced on each update, so the newest is looked up per session rather than
+stored — run outside a Desktop session it signs in as any `claude` does. A phone runs no programs, so there
+it offers no models, and the dialog offers the API only on a desktop.
+What of the app's own environment reaches the program is the subclass's
+(`inherits`): an Entoli started from inside a Claude Code session — a
+Claude Code terminal, a Claude Desktop session — carries that session's
+variables, `CLAUDECODE` among them, and `ClaudeCliProvider` hands on none
+of its `CLAUDE*`, `ANTHROPIC_*` or `MCP_*` ones then, since they would make
+its `claude` a child of that session: its id, its account email, its proxy
+for the API.
+
+**The split is interface against lifecycle.** `CliProvider` owns what every
+such program shares: finding it, its environment, and `CliClient` — the
+`LlmClient` that pools `CliSession`s. The loop resends the whole
+conversation each step; the client finds the parked session whose `seen`
+conversation the new one extends (by `CliClient.markOf`: role and ids,
+text where there are no ids, since the loop keeps its own reasoning), with
+the same `CliSessionSpec` — model, leading system text, tools, effort,
+which a program is told once on its command line — and feeds it only the
+rest. No such session means a fresh one, told the past as a transcript
+(`transcriptOf`), since a program takes a new message and not a history it
+did not live through. A session is parked the moment its completion is
+read, so a consumer that stops on the reply does not take it down; one
+stopped part-way is closed. Parked sessions go after ten minutes or past
+four, and `close` takes every one down. What a session *is* belongs to the
+subclass, through `start`.
+
+`ClaudeCliProvider`'s session is one `claude -p` in stream-json on both
+sides, run in one empty folder every session shares —
+`<cache>/claude-cli/work/`, the cache `main` hands `ClaudeCliProvider` — so
+no project's `CLAUDE.md` is picked up and what the CLI keeps per working
+directory (its cache's MCP logs, its project entry in `~/.claude.json`) is
+kept once rather than once per session; the files a session is handed sit
+in `claude-cli/sessions/<id>/`, which goes with it. It runs with `--tools ""` (Claude's own tools off), `--permission-mode dontAsk`
+over an allow list of Entoli's server alone — `--tools ""` leaves
+`EndConversation` while MCP tools are present, and this refuses it and
+anything else that slips through rather than asking — `--strict-mcp-config`,
+`--no-session-persistence`, the system prompt by `--system-prompt-file`
+(argv has a length limit and the prompt can pass it) and `--effort` from
+the loop's word. Its `--include-partial-messages` lines are Anthropic's
+raw stream events, so `AnthropicEventReader` — lifted out of
+`AnthropicClient` for this — reads them into the same chunks.
+
+**Entoli's tools reach it over MCP, and the call is held.** `McpToolBridge`
+serves them on an ephemeral loopback port behind a random bearer token,
+`tools/call` answered by nothing until the loop has run the tool: the
+reply's `tool_use` ends the exchange with the calls (named without the
+`mcp__entoli__` prefix), the CLI meanwhile waits on the bridge, and the
+next step's tool results answer the held requests — paired to each
+`tool_use` by name and input, since the MCP request does not carry the id.
+That is how approvals, sub-agents and the rest of the loop stay Entoli's
+while the conversation stays in one process with its cache. A call that
+arrives before its reply has been read waits as an orphan. A reply the
+CLI makes that the loop did not ask for (it ran something itself) marks
+the session dead, and the next step starts a fresh one. `MCP_TOOL_TIMEOUT`
+is set to a day, a tool being able to wait on the user. Closing is stdin
+first, then SIGTERM, then SIGKILL, three seconds apart, with every held
+call failed so the CLI is not left waiting on it.
+
+The process and the bridge are ports a session is handed:
+`ClaudeCliProvider.over` takes a `LaunchCli` (the real one is
+`launchProcess`, a `CliProcess` over `dart:io`'s) and a `BindToolBridge`
+(`McpToolBridge.bind`). What the bridge decides is `McpToolRoutes`, a
+JSON-RPC request in and its answer out, and `McpToolBridge` is that behind
+a socket — the token check and the HTTP translation, which no test covers,
+since no test binds a port. The session's tests run over a fake process
+and a bridge with no socket under it, playing the CLI by printing its
+stream events and calling the routes.
+
 ## Errors, and how long the UI waits
 
 Failures are reported as they happen: a rejected key or a bad request reaches
