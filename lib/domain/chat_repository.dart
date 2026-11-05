@@ -842,8 +842,14 @@ class ChatRepository {
 
 /// The model a chat's turns run on: its own choice, else the app default.
 /// Never mixed halves: a chat's model under the app default's provider is not
-/// a combination anyone asked for. A null model is the provider's default.
-ModelChoice chatModelOf(ChatMeta meta, AppSettings settings) => (
-  modelId: meta.model ?? settings.defaultModelId,
-  providerId: meta.model != null ? meta.provider : settings.defaultProviderId,
-);
+/// a combination anyone asked for. The provider decides whose choice it is,
+/// since a null model under a provider is that provider's own Default entry
+/// in the picker — reading it as no choice at all sent the turn to whatever
+/// the app default named instead.
+ModelChoice chatModelOf(ChatMeta meta, AppSettings settings) =>
+    meta.provider != null
+    ? (modelId: meta.model, providerId: meta.provider)
+    : (
+        modelId: meta.model ?? settings.defaultModelId,
+        providerId: meta.model != null ? null : settings.defaultProviderId,
+      );
