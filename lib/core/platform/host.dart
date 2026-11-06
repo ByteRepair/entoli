@@ -110,12 +110,20 @@ Shell platformShell({
                 "settings to run commands.",
     );
   }
-  return LocalShell(environment: environment, driver: driver);
+  return LocalShell(
+    environment: environment,
+    driver: driver,
+    withoutDriver: Platform.isAndroid
+        ? "Android, with no Linux installed. Install one from the Terminal "
+              "settings to run commands."
+        : null,
+  );
 }
 
 /// What the next command runs under: the picked Linux where it is installed
-/// and this build carries proot, else the machine itself. Synchronous because
-/// it is asked before every command.
+/// and this build carries proot, else the machine itself — except on Android,
+/// where it is the Linux or nothing. Synchronous because it is asked before
+/// every command.
 ///
 /// On the machine itself, a rootfs-isolated built-in project's bin directory
 /// is prefixed onto `PATH`; a user-set `PATH` in the command environment still
@@ -166,6 +174,11 @@ ShellDriver? platformDriver({
       abi: abi,
     );
   }
+  // Android's own shell is not offered: it has no /bin, its toybox is not
+  // what the model expects, and the CLIs and package installs everything
+  // else leans on live in the Linux. With none installed there is no
+  // terminal, as on iOS, and the first-run setup is what installs one.
+  if (Platform.isAndroid) return null;
   return LocalShell.hostDriver(
     tools: tools,
     projectHome: Platform.isAndroid,
@@ -281,8 +294,8 @@ String? byteRepairBinDir(String cacheDir) =>
 /// the chat page asks it in a build.
 ///
 /// On the host the binary must be there too: the tools live in a cache the OS
-/// may empty. On a phone a rootfs must be picked, since the "Host" env has no
-/// package manager (iOS's no shell) to stand the setup up again.
+/// may empty. On a phone a rootfs must be picked, since without one there is
+/// no shell to stand the setup up again in.
 bool setupComplete(AppConfig config, String? project, String? binDir) {
   if (isPhone && AppSettings.load(config).rootfsId == null) {
     return false;

@@ -189,6 +189,12 @@ Nothing found is a null driver and `canRunCommands: false`, which is the
 honest answer: the loop stops offering a tool there is
 nothing behind. The other driver is the guest — see "A whole Linux under proot"
 in `data/local/` — and `platformDriver` picks between the two per command.
+**Android gets the guest or nothing.** Its own shell was offered as "Host"
+until the Linux became what everything leans on — package installs, Byte
+Repair's setup, the CLI programs — and a turn run on toybox with no `/bin`
+only failed further in. With no Linux picked, `platformDriver` is null there,
+as iOS's shell is with none installed, `LocalShell.withoutDriver` tells the
+model why, and the first-run setup is what installs one.
 `LocalShell` runs whichever it is handed, since to it both are a command that
 ends in a shell, and that is the whole of what a new driver owes it.
 

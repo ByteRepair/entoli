@@ -278,19 +278,13 @@ class ByteRepairStore {
 
   /// Why this environment cannot run a setup, or null where it can.
   String? get capabilityBanner {
-    // On a guest platform the rootfs pick is the gate: a "Host" env has no
-    // package manager on Android and no shell at all on iOS. The target, not
+    // On a phone the rootfs pick is the gate: with no Linux there is no
+    // shell to run anything in, on Android as on iOS. The target, not
     // `Platform`, so the section's fixtures can name their platform.
     if (isPhone) {
       if (AppSettings.load(config).rootfsId != null) return null;
-      return isAndroid
-          ? 'Byte Repair does not work when using the "Host" terminal '
-                "environment on this device. Please choose another terminal "
-                "environment."
-          : 'Byte Repair does not work when using the "Host" terminal '
-                "environment on this platform, which has no shell to run "
-                "anything in. Please install a Linux from the Terminal "
-                "settings.";
+      return "Byte Repair needs a Linux to run in, and this device has none "
+          "installed. Please install one from the Terminal settings.";
     }
     return installDir == null ? noInstallDestination : null;
   }

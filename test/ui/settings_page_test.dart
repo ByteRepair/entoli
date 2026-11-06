@@ -737,11 +737,11 @@ void main() {
 
     // iOS carries the guest-shaped store: the install destination is the
     // guest's own /usr/local/bin and the gate is the rootfs pick, the way
-    // Android's is — its "Host" env being no shell at all. With nothing
+    // Android's is — with none there is no shell at all. With nothing
     // picked the banner asks for the Linux, the buttons are not drawn, and
     // the delete stays behind a message that names only the data.
     targetTest(
-      'iOS with the "Host" env drawn the guest gate and keeps the delete',
+      "iOS with no Linux draws the guest gate and keeps the delete",
       TargetPlatform.iOS,
       (tester) async {
         // The install dir stays the guest const the harness defaults to; the
@@ -750,10 +750,7 @@ void main() {
 
         expect(find.text("Run Setup"), findsNothing);
         expect(find.text("Import ESBMC"), findsNothing);
-        expect(
-          find.textContaining('using the "Host" terminal environment'),
-          findsOneWidget,
-        );
+        expect(find.textContaining("needs a Linux to run in"), findsOneWidget);
 
         expect(
           await deleteDialogMessage(tester),
@@ -897,16 +894,13 @@ void main() {
     // install dir — which is exactly why the banner asks about the pick and
     // the dialog names no host tree.
     targetTest(
-      "Android's Host env draws the env banner and keeps the delete",
+      "Android with no Linux draws the env banner and keeps the delete",
       TargetPlatform.android,
       (tester) async {
         await pumpSettings(tester, app, SettingsCategory.byteRepair);
 
         expect(find.text("Run Setup"), findsNothing);
-        expect(
-          find.textContaining('when using the "Host" terminal environment'),
-          findsOneWidget,
-        );
+        expect(find.textContaining("needs a Linux to run in"), findsOneWidget);
 
         expect(await deleteDialogMessage(tester), isNot(contains("rootfs")));
       },

@@ -202,9 +202,8 @@ installed, and its confirm says that.
 See "Byte Repair's environment, in four variables" in `lib/data/local/AGENTS.md`.
 The
 banner asks the same env question everywhere, the store naming the platform's
-own answer: a "Host" env on Android has no package manager, while iOS's has
-no shell at all — so both hide the rest until a rootfs is picked from
-Terminal, and a setup run by either guest installs through its own `apk`.
+own answer: a phone with no Linux has no shell at all — so both hide the
+rest until a rootfs is picked from Terminal, and a setup run by either guest installs through its own `apk`.
 The desktops'
 host shells are each given an install destination and so are capable.
 The delete sits below the banner everywhere the

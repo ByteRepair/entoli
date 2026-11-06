@@ -13,8 +13,11 @@ import "package:agent_chat/ui/settings/settings_category.dart";
 void main() {
   late TestApp app;
 
-  // What the picker names each environment. Whether it enforces the sandbox
-  // is the status card's alone; the tests' host enforces nothing unless told.
+  // What the picker names each environment, and what it reads with none
+  // picked: a phone has no shell of its own to offer in its place. Whether
+  // one enforces the sandbox is the status card's alone; the tests' host
+  // enforces nothing unless told.
+  const none = "None";
   const host = "Host";
   const alpine = "Alpine Linux";
 
@@ -46,7 +49,8 @@ void main() {
       find.textContaining("tool/android/build.sh arm64-v8a"),
       findsOneWidget,
     );
-    expect(find.text(host), findsOneWidget);
+    // No shell of its own offered in the Linux's place, even here.
+    expect(find.text(host), findsNothing);
     expect(find.textContaining("What driver to use"), findsOneWidget);
     expect(find.text("Alpine Linux 3.24.1"), findsNothing);
   });
@@ -63,9 +67,11 @@ void main() {
     expect(find.byTooltip("Delete"), findsNothing);
     expect(find.textContaining("tool/android/build.sh"), findsNothing);
 
-    // Nothing installed yet, so nothing to pick: commands run on the host.
+    // Nothing installed yet, so nothing to pick, and no shell of the
+    // device's own offered in its place.
     expect(find.text("Commands run on"), findsOneWidget);
-    expect(find.text(host), findsOneWidget);
+    expect(find.text("Nothing downloaded yet."), findsOneWidget);
+    expect(find.text("Host"), findsNothing);
     expect(find.text(alpine), findsNothing);
   });
 
@@ -99,7 +105,7 @@ void main() {
     // Installed is not the same as chosen: what commands run on is the user's
     // to say, and a download is not that.
     expect(app.container.read(appSettingsProvider).rootfsId, isNull);
-    await tester.tap(find.text(host));
+    await tester.tap(find.text(none));
     await settleIo(tester);
     expect(find.text(alpine), findsWidgets);
   });
@@ -110,7 +116,7 @@ void main() {
     app = TestApp.create(proot: true, linuxes: const {"alpine"});
     await pumpTerminal(tester);
 
-    await tester.tap(find.text(host));
+    await tester.tap(find.text(none));
     await settleIo(tester);
     await tester.tap(find.text(alpine).last);
     await settleUntil(
@@ -122,7 +128,7 @@ void main() {
     expect(app.container.read(appSettingsProvider).rootfsId, "alpine");
   });
 
-  testWidgets("deleting the one commands run in puts them back on the host", (
+  testWidgets("deleting the one commands run in leaves none picked", (
     tester,
   ) async {
     app = TestApp.create(proot: true, linuxes: const {"alpine"});

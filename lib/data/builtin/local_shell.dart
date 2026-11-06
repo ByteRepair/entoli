@@ -29,8 +29,14 @@ class LocalShell extends Shell {
   LocalShell({
     Map<String, String> Function()? environment,
     ShellDriver? Function({String? project})? driver,
+    this.withoutDriver,
   }) : _environment = environment ?? (() => const {}),
        _driver = driver ?? _hostDriver;
+
+  /// What the model is told while there is no driver, where the platform
+  /// knows why — Android with no Linux installed — rather than the bare
+  /// "no shell".
+  final String? withoutDriver;
 
   /// What the commands run under, read at each command for the reason
   /// [_environment] is: installing a Linux from the settings page, or going
@@ -109,8 +115,9 @@ class LocalShell extends Shell {
   String get platformDescription {
     final driver = _driver();
     if (driver != null) return driver.description;
-    return "${Platform.operatingSystem} ${Platform.operatingSystemVersion}, "
-        "commands run under no shell";
+    return withoutDriver ??
+        "${Platform.operatingSystem} ${Platform.operatingSystemVersion}, "
+            "commands run under no shell";
   }
 
   /// False where there is no shell to offer at all. Android is why this is

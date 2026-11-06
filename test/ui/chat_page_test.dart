@@ -297,8 +297,9 @@ void main() {
     });
 
     // The marker alone is not enough on Android: Byte Repair needs a rootfs
-    // with a package manager, and "Host" has none — a setup run under a
-    // rootfs leaves the marker on disk, so the Host env that follows is what
+    // with a package manager, and with none picked there is no shell at
+    // all — a setup run under a rootfs leaves the marker on disk, so the
+    // unpicked env that follows is what
     // the closing phase of the test below asserts. The `androidTest` wrapper
     // sets the platform override the way `link_opener_test.dart` does, and
     // undoes it before the tear-down.
