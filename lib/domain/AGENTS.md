@@ -10,7 +10,7 @@ written, so the only thing a kill can now cost is whatever had not been appended
 yet. That is what makes an interrupted turn something to offer to continue
 rather than something to apologise for.
 
-Ten records. `message` opens one — before it holds anything, which is what the
+Eleven records. `message` opens one — before it holds anything, which is what the
 empty assistant message at the head of a turn is — and its `siblingOf` names
 what it is an alternative to, or nothing at all, which puts it on the end of the
 thread being read; `replacesSibling` takes that one away rather than joining it,
@@ -24,7 +24,8 @@ the conversation up to a message is summarized for the model, and still there
 for the user to read — see "Compaction" below.
 `callEvent` says something happened to a call after its turn — today, that
 the background job it started ended (`jobEnded`). `retract` takes back a
-reaction — see "Reactions".
+reaction — see "Reactions". `goal` says the chat's goal moved, after a
+message — see "Goals".
 
 Nothing is mutable, so a part that changed is **superseded**: the same index
 written again wins, and `replay` applies records in order, so the last one
@@ -69,8 +70,8 @@ of its records and its provider and model the last one's, folded by
 `Message.withUsage` both here and live from the `ContextEvent` each call ends
 with, so a reload and the screen agree. Nothing draws them yet.
 
-`callEvent` is the one record written **between turns**: a job outlives the
-turn that started it and usually ends when nothing is running. It goes
+`callEvent` is a record written **between turns**, as `goal` can be — a
+pause or a clear with nothing running. A job outlives the turn that started it and usually ends when nothing is running. It goes
 through the room's one append queue like a turn's records, so lines never
 interleave, and it names a call rather than a part's index, so a job ending
 while the turn that started it is still writing that reply cannot collide
@@ -482,8 +483,8 @@ expanding its body as a prompt template — the same one `/` namespace the
 opencode-era offered commands under, where frontmatter decided what a send
 meant, restored under the built-in backend with the key the spec's `metadata:`
 map carries. What the callback does is the closed set in
-`lib/domain/wired_skill.dart` (`WiredSkill`), and the bundled `compact` skill
-is the one that ships. The body of a wired skill is the user's documentation,
+`lib/domain/wired_skill.dart` (`WiredSkill`), and the bundled `compact` and
+`goal` skills are the ones that ship. The body of a wired skill is the user's documentation,
 never sent to a model — `promptReferences` does not record one and
 `expandedPrompt` refuses to expand one, so the
 conversation never gains prose pretending the model read it.
@@ -497,6 +498,77 @@ composer's dress-up, and the Omada author stamp. A name in the enum dispatches
 whether or not the library still holds the skill — the reader of a turn being
 resent cannot ask what the frontmatter said when it ran — which is also the
 one cost: a user's own skill shadowing a wired name is not offered as prose.
+
+`/goal` is the one callback whose turn can be a model's: setting a goal and
+resuming one change the goal and then start the work. `wiredRunsModel` says
+which, and the readers that keep a callback from a model ask it where it
+matters — such a turn is resumable (`endsUnfinished`), and the title namer
+names the chat from the objective. It still addresses nobody and never steers
+(`isCommand`), so it goes to Athena.
+
+### Goals
+
+`/goal <objective>` is Claude Code's `/goal` and OpenCode's, with the same
+split of who decides: the working model never marks its own goal done. Each
+time a reply ends with no tool call, a reviewer reads the conversation and
+answers met, carry on, or blocked; the agent's claim is not evidence. See
+"The agent loop" in `lib/data/builtin/AGENTS.md` for the review itself.
+
+**The goal is the log's.** Every change to it is a `goal` record —
+`set`, `resumed`, `paused`, `cleared`, `met`, `blocked` — naming the message
+it comes after, as a `compaction` names its boundary. Replay keeps the ones
+whose message is live, in thread order, as `Chat.goals` (`GoalMark`s), and
+the goal as it stands is their fold (`goalOf`, read as `chat.goal`): a set
+starts one, a clear ends it, the rest move the one there is, and a mark about
+another objective — a verdict landing after a new `/goal` — moves nothing.
+So a restart reloads the goal by reading the log, and a rewind past the
+`/goal` that set it takes it away with the message, as a rewind takes a
+compaction. Nothing keeps the goal beside the log; it used to live in
+`meta.json`, and was moved here so that what the conversation shows and what
+the goal is cannot disagree. A new record type is what a build from before
+this stops decoding at, as `compaction` was when it landed.
+
+**The room is the one writer.** `/goal <objective>` and `/goal resume` write
+theirs in `_openTurn`, after the prompt; `pause` and `clear` write theirs
+after the last message, mid-turn or not, and nothing else — no message, no
+turn. The review is the agent's but the record is not: a verdict that moves
+the goal (met, blocked, or the stall pause) goes out as a `GoalEvent`, and the
+room appends it after the reply through the one append queue, as it does a
+job's end. Each is applied to the room's chat at once, which is what the
+running turn reads — `TurnSettings.goal` is a reader over the room's copy,
+handed through `Agent` — so a pause mid-turn lands before the next review.
+
+**Each mark is a row.** `entriesOf` puts a `GoalEntry` after the message the
+mark names, drawn as an activity label — "Goal set: …", "Goal met: …" — that
+opens a drawer with where the goal stood after it, why, and the goal prompt
+the model was given (`goalKickoff`). See "A goal, on screen" in
+`lib/ui/chat/AGENTS.md`.
+
+What reaches the model is the two commands that start work. `/goal
+<objective>` and `/goal resume` are user messages as typed, and the
+projection words them — `goalKickoff`, `goalResumedText` — so the model is
+told the goal, that a reviewer will check the evidence, and to stop and say so
+when blocked. The records are never projected. `/goal` alone (and Claude
+Code's `stop`, `off`, `reset`, `none`, `cancel` for clear) says where the goal
+stands on the status row. A one-word verb is the verb; anything longer is an
+objective.
+
+`GoalStatus` is active, paused, met or blocked; only active is reviewed, the
+rest are kept for the goal row above the composer to show until cleared —
+`GoalStrip` in Flutter, `goalRow` in the native shell, fed by
+`TurnSnapshot.goal` and answering through `TurnIntents.goal`; either way a
+button is sent as the `/goal` command it is. The `+` menu's New Goal, in both,
+is `startGoal`: `/goal ` at the head of the field, so what was typed becomes
+the objective.
+
+**No cap on rounds of its own.** A send-back is a step of the turn it happens
+in, so the turn's step limit — the one the settings already give the user —
+is what bounds a run of them; OpenCode's fixed 50 would be a second limit on
+the same thing, and one the user cannot set. A turn that hits it ends as any
+does at its limit, offered to Continue, with the goal still active. What the
+step limit cannot catch is a model that stops without doing anything, which
+spends a step each time to no end: `maxGoalStalls` (3) reviews in a row after
+stretches with no tool call, in one turn, pause the goal.
 
 ### Carrying on an interrupted turn
 

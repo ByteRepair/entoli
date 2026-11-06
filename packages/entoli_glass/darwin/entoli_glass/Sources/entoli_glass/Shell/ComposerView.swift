@@ -95,6 +95,12 @@ struct ComposerView: View {
       } label: {
         Label("Agent", systemImage: "at")
       }
+      Divider()
+      Button {
+        model.say?.goal { _ in }
+      } label: {
+        Label("New Goal", systemImage: "scope")
+      }
     } label: {
       Image(systemName: "plus")
         .font(.body.weight(.medium))

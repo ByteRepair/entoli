@@ -8,6 +8,7 @@ import "../domain/ask.dart";
 import "../domain/shell_job.dart";
 import "../domain/builtin_project.dart";
 import "../domain/chat_log.dart";
+import "../domain/goal.dart";
 import "../domain/model_capability.dart";
 import "../domain/models.dart";
 import "../domain/permission.dart";
@@ -289,6 +290,17 @@ class SteerInbox {
   }
 }
 
+/// The turn's review moved the chat's goal: met, blocked, or paused for a
+/// model that kept stopping without doing anything. Not a part: the room
+/// writes it to the log as a `goal` record after the reply, which is what
+/// the goal is folded from. See "Goals" in `lib/domain/AGENTS.md`.
+class GoalEvent extends AgentEvent {
+  const GoalEvent(this.change, this.objective, {this.reason});
+  final GoalChange change;
+  final String objective;
+  final String? reason;
+}
+
 /// The agent ran out of steps without finishing. Not an [ErrorEvent]: the turn
 /// gave up because it hit the step limit, not because something broke, so no
 /// [ErrorPart] is added to the message. The turn still ends as
@@ -484,6 +496,12 @@ class TurnSettings {
   /// copied here: a rule saved mid-turn applies to the next call.
   final PolicyReader policy;
 
+  /// The chat's goal, read at every stop rather than copied here, so a pause
+  /// or a clear mid-turn lands before the next review. The room's, which
+  /// holds the log the goal is folded from; null is a turn with no room
+  /// behind it — a compaction's, a test's.
+  final GoalReader? goal;
+
   const TurnSettings({
     this.memory = MemorySettings.off,
     this.model,
@@ -509,6 +527,7 @@ class TurnSettings {
     this.tone = Tone.none,
     this.citations = false,
     this.policy = noPolicy,
+    this.goal,
   });
 }
 

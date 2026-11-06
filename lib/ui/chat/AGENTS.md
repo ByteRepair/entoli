@@ -144,7 +144,7 @@ the exit code in the status line.
 shell's, over the one Flutter view a sheet is drawn in, so a sheet came up
 under it. A pushed page is what the shell already steps its composer and
 turn surface aside for, and its `PageBar` is the window's title bar, so
-`LabelledActivity.open` pushes `ActivityCard` as a page while Liquid Glass is
+`openActivityCard` pushes `ActivityCard` as a page while Liquid Glass is
 on: the title and actions in the window's bar, its back the way out, the
 status line and the spinner at the top of the body. A sub-agent's activity
 opened from its transcript is a page over that one. Everywhere else it stays
@@ -590,9 +590,9 @@ command yourself".
 ### A compact turn, and its divider
 
 `/compact` is a callback, not a prompt: the composer dresses for it (an
-`auto_awesome` icon and a "Compact the conversation" hint — lighter than the
-shell's dressing, since nothing runs on the machine and no model is asked), the
-send dispatches it before the room's guards, and while a turn runs it is
+`auto_awesome` icon, and the send button named for what the callback does —
+lighter than the shell's dressing, since nothing runs on the machine and no
+model is asked), the send dispatches it before the room's guards, and while a turn runs it is
 **refused, not queued** — a callback mid-turn is the session the turn is
 rewriting underneath it. The turn itself goes through the room's machinery:
 prompt logged as said, empty reply, the status row saying "Compacting the
@@ -667,6 +667,25 @@ as the job's watches the room; a label of its own watches its own provider,
 as the plan's label watches `planProvider`; the `ToolUI` itself holds no state. A test checks
 every `ToolUI` names a tool the registry has, since the two are paired by
 that string alone.
+
+## A goal, on screen
+
+`/goal` is dressed as the callback it is, the one dress every callback
+shares; what differs is the send button, which `callbackSendLabel` names
+from what is typed — "Set goal", "Pause goal", "Clear goal" — as it names
+`/compact` "Compact". A label per callback, since a button saying "Compact"
+over `/goal pause` was the dress claiming more than was true.
+
+The goal shows twice. **Where it stands now** is the row above the composer —
+`GoalStrip` in Flutter, `goalRow` in the native shell — with its pause or
+resume and its clear, each sent as the `/goal` command it is. **Where it
+moved** is a `GoalMarkRow` in the conversation for each `goal` record, after
+the message it names: an activity label in the reply's gutter, "Goal set: …",
+"Goal paused: …", "Goal met: …", opening the same kind of drawer every
+activity has (a sheet, a page under the native shell). The drawer says the
+state the goal was left in, why — the user's pause, the reviewer's verdict —
+and the goal prompt as the model was given it. Off the log, so a restart
+draws the same rows and a rewind takes them away with their message.
 
 ## The plan, on screen
 

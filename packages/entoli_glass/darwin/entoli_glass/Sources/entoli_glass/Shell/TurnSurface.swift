@@ -4,8 +4,8 @@ extension TurnSnapshot {
   static let initial = TurnSnapshot(running: [], steers: [], withdrawable: false, approvals: [])
 
   var isEmpty: Bool {
-    resume == nil && running.isEmpty && steers.isEmpty && approvals.isEmpty
-      && question == nil
+    goal == nil && resume == nil && running.isEmpty && steers.isEmpty
+      && approvals.isEmpty && question == nil
   }
 }
 
@@ -14,7 +14,7 @@ extension SteerSnapshot: Identifiable {}
 extension ApprovalSnapshot: Identifiable {}
 
 /// What a running turn puts above the composer, in the system's glass: the
-/// offer to carry on an interrupted turn, what is running, the says the turn
+/// offer to carry on an interrupted turn, the chat's goal, what is running, the says the turn
 /// has not read yet, and the calls waiting on an answer. Dart's
 /// `ShellTurnSurface` says what is there and runs what is pressed.
 struct TurnSurfaceView: View {
@@ -29,6 +29,7 @@ struct TurnSurfaceView: View {
   var body: some View {
     VStack(spacing: 6) {
       if let resume = turn.resume { resumeRow(resume) }
+      if let goal = turn.goal { goalRow(goal) }
       if !turn.running.isEmpty { runningRow }
       if !turn.steers.isEmpty { steerCard }
       ForEach(turn.approvals) { approvalCard($0) }
@@ -64,6 +65,57 @@ struct TurnSurfaceView: View {
     .padding(.trailing, 6)
     .padding(.vertical, 6)
     .glassSurface(Capsule())
+    .transition(.opacity.combined(with: .move(edge: .bottom)))
+  }
+
+  // MARK: Goal
+
+  /// The chat's goal, as Flutter's `GoalStrip` draws it: where it stands,
+  /// what it is, and its pause or resume and its clear, each sent back as the
+  /// `/goal` command it is.
+  private func goalRow(_ goal: GoalSnapshot) -> some View {
+    let (symbol, tint): (String, Color) =
+      switch goal.phase {
+      case .active: ("scope", .accentColor)
+      case .paused: ("pause.circle", .secondary)
+      case .met: ("checkmark.circle", .accentColor)
+      case .blocked: ("nosign", .red)
+      }
+    return HStack(spacing: 8) {
+      Image(systemName: symbol).foregroundStyle(tint)
+      (Text(goal.label + "  ").foregroundStyle(.secondary) + Text(goal.objective))
+        .font(.callout)
+        .lineLimit(1)
+      Spacer(minLength: 4)
+      if goal.phase == .active {
+        Button {
+          say.goal(action: .pause) { _ in }
+        } label: {
+          Image(systemName: "pause.fill")
+        }
+        .buttonStyle(.borderless)
+        .help("Pause the goal")
+      } else if goal.phase != .met {
+        Button {
+          say.goal(action: .resume) { _ in }
+        } label: {
+          Image(systemName: "play.fill")
+        }
+        .buttonStyle(.borderless)
+        .help("Resume the goal")
+      }
+      Button {
+        say.goal(action: .clear) { _ in }
+      } label: {
+        Image(systemName: "xmark")
+      }
+      .buttonStyle(.borderless)
+      .help("Clear the goal")
+    }
+    .padding(.horizontal, 14)
+    .frame(minHeight: 34)
+    .glassSurface(Capsule())
+    .help(goal.summary)
     .transition(.opacity.combined(with: .move(edge: .bottom)))
   }
 

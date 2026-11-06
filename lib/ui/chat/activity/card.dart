@@ -1,8 +1,10 @@
 import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
 import "../../../domain/models.dart";
 import "../../../domain/room/room_state.dart" show ChatViewState;
+import "../../widgets/liquid_glass.dart" show liquidGlassProvider;
 import "../../widgets/page_bar.dart";
 import "../../widgets/scrolling.dart" show ScrollFollow;
 import "../widgets/code_block.dart" show codeBlockDecoration, codeBlockStyle;
@@ -45,7 +47,7 @@ class ActivitySource extends InheritedWidget {
 /// modal route, so the back key closes it; on a wide window as wide as a
 /// reading column, not Material's 640. On the surface a dialog sits on, which
 /// is what it is drawn after. Under the native shell a drawer is a page
-/// instead; see [LabelledActivity.open].
+/// instead; see [openActivityCard].
 Future<T?> showActivityCard<T>(BuildContext context, WidgetBuilder builder) =>
     showModalBottomSheet<T>(
       context: context,
@@ -56,6 +58,25 @@ Future<T?> showActivityCard<T>(BuildContext context, WidgetBuilder builder) =>
       constraints: const BoxConstraints(maxWidth: 960),
       builder: builder,
     );
+
+/// A label's drawer, opened the way this window opens one: under the native
+/// shell a page, not a sheet — the composer is the shell's, over the Flutter
+/// view a sheet is drawn in, and a page is what it steps aside for, the
+/// page's bar then the window's, with its back. [card] is told which.
+Future<void> openActivityCard(
+  BuildContext context,
+  Widget Function(bool page) card,
+) {
+  final page = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(liquidGlassProvider).on;
+  Widget build(BuildContext _) => card(page);
+  if (page) {
+    return Navigator.of(context).push(MaterialPageRoute<void>(builder: build));
+  }
+  return showActivityCard<void>(context, build);
+}
 
 /// A status line under a card's title: "Running · pid 4001", "Exit code 1".
 typedef ActivityStatus = ({String text, bool isError});

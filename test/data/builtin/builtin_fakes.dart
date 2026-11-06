@@ -1,10 +1,12 @@
 import "dart:async";
 import "dart:convert";
 
+import "package:agent_chat/data/builtin/goal_reviewer.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/providers/provider.dart";
 import "package:agent_chat/domain/artifact.dart";
 import "package:agent_chat/domain/ask.dart";
+import "package:agent_chat/domain/goal.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/shell.dart";
 import "package:agent_chat/domain/llm_provider.dart";
@@ -547,5 +549,39 @@ class FakeClassifier implements PermissionClassifier {
     classified.add((tool: toolName, args: argumentsJson));
     this.alsoWritable.add(alsoWritable);
     return decide?.call(toolName, argumentsJson) ?? decision;
+  }
+}
+
+/// A chat's goal held where a test can move it, as the room's log would:
+/// [read] is the reader a turn is handed.
+class FakeGoal {
+  FakeGoal(this.goal);
+
+  ChatGoal? goal;
+
+  ChatGoal? read() => goal;
+}
+
+/// A reviewer that answers [verdicts] in order — null being one that gave no
+/// usable answer — and keeps what it was shown. [whileReading] runs inside
+/// the review, the moment a user's pause would land in.
+class FakeGoalReviewer implements GoalReviewer {
+  FakeGoalReviewer(List<GoalVerdict?> verdicts, {this.whileReading})
+    : _verdicts = [...verdicts];
+
+  final List<GoalVerdict?> _verdicts;
+  final void Function()? whileReading;
+
+  /// The conversation each review read.
+  final List<List<LlmMessage>> read = [];
+
+  @override
+  Future<GoalVerdict?> review(
+    String objective,
+    List<LlmMessage> transcript,
+  ) async {
+    read.add(List.of(transcript));
+    whileReading?.call();
+    return _verdicts.removeAt(0);
   }
 }

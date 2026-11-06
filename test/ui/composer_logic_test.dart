@@ -80,4 +80,22 @@ void main() {
     controller.text = "plain";
     expect(logic.mode, ComposerMode.shell, reason: "the old one is let go");
   });
+
+  test("the send button names the callback typed, not every callback's", () {
+    String label() =>
+        logic.mode.sendLabel(queues: false, callback: logic.callbackLabel);
+
+    controller.text = "/compact";
+    expect(logic.mode, ComposerMode.callback);
+    expect(label(), "Compact");
+
+    controller.text = "/goal the tests pass";
+    expect(label(), "Set goal");
+    controller.text = "/goal pause";
+    expect(label(), "Pause goal");
+
+    controller.text = "hello";
+    expect(logic.callbackLabel, isNull);
+    expect(label(), "Send");
+  });
 }

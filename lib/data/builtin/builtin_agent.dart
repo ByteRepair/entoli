@@ -10,6 +10,7 @@ import "../../domain/agent_definition.dart";
 import "../../domain/agent_browser.dart";
 import "../../domain/ask.dart";
 import "../../domain/file_tools.dart";
+import "../../domain/goal.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
 import "../../domain/profile.dart";
@@ -24,6 +25,7 @@ import "../../domain/web_search.dart";
 import "approval_gate.dart";
 import "background_jobs.dart";
 import "compact_prompt.dart" show estimateTokens;
+import "goal_reviewer.dart";
 import "llm/llm_client.dart";
 import "llm/rate_limit_gate.dart";
 import "memory/instructions.dart";
@@ -236,7 +238,19 @@ class BuiltinAgent implements Turn {
     this.policy = noPolicy,
     this.dataDir,
     this.claimInstruction,
+    this.goal,
+    this.goalReviewer,
   });
+
+  /// The chat's goal, read at each stop; null for a turn that keeps none — a
+  /// sub-agent's, or a test's. The turn never writes it: what a review finds
+  /// goes out as a [GoalEvent], which the room puts on the log the goal is
+  /// folded from. See "Goals" in `lib/domain/AGENTS.md`.
+  final GoalReader? goal;
+
+  /// Who decides, at a stop, whether [goal] is met. Without one the goal is
+  /// never reviewed and a stop ends the turn as it always did.
+  final GoalReviewer? goalReviewer;
 
   /// Who this turn answers as: the participant's bare name the room routed
   /// the say to, or null for a sub-agent, which answers as no one in a room.
@@ -893,24 +907,36 @@ class BuiltinAgent implements Turn {
       // tasks left, or a reply the provider marked as not its answer: the
       // model is told, a bounded number of times, and stopping to ask is
       // `ask_user`'s.
+      //
+      // Past those, a goal: the reply is put to the reviewer, and one it
+      // finds short of the goal is sent back with the reason. Each send-back
+      // is a step, so the step limit bounds a run of them.
       if (completion.message.toolCalls.isEmpty) {
-        final left = _nudges < maxStopNudges && step < options.stepLimit - 1
+        final last = step >= options.stepLimit - 1;
+        final left = _nudges < maxStopNudges && !last
             ? await _unfinished(completion.stop)
             : null;
-        if (left == null) break;
-        _nudges++;
-        yield SteerEvent(
-          Message(
-            id: const Uuid().v4(),
-            role: MessageRole.user,
-            createdAt: DateTime.now(),
-            parts: [MessagePart.text(text: left)],
-          ),
-        );
-        continue;
+        if (left != null) {
+          _nudges++;
+          yield _nudge(left);
+          continue;
+        }
+        if (last) break;
+        if (_activeGoal() case final asked?) {
+          // The reply that stopped is in the session before the reviewer
+          // reads it.
+          _sayWhatWasSaid();
+          yield const StatusEvent("Checking the goal");
+          final review = await _reviewGoal(asked);
+          yield const StatusEvent(null);
+          if (review != null) yield review.event;
+          if (review != null && review.carriesOn && !_cancelled) continue;
+        }
+        break;
       }
 
       yield* _executeAll(completion.message.toolCalls);
+      _actedSinceReview = true;
       if (_cancelled || _ended) break;
 
       if (step == options.stepLimit - 1) {
@@ -919,6 +945,86 @@ class BuiltinAgent implements Turn {
     }
 
     yield const DoneEvent();
+  }
+
+  /// [text] said to the turn as the app, a step boundary's steer.
+  static SteerEvent _nudge(String text) => SteerEvent(
+    Message(
+      id: const Uuid().v4(),
+      role: MessageRole.user,
+      createdAt: DateTime.now(),
+      parts: [MessagePart.text(text: text)],
+    ),
+  );
+
+  /// Whether the model called a tool since the goal last sent it back — or,
+  /// before then, this turn. A review that sends back a model that did
+  /// nothing since the last one is a stall.
+  bool _actedSinceReview = false;
+
+  /// Reviews in a row this turn that sent back a model that had done nothing
+  /// since the last. Per turn: a stall is a model talking instead of acting,
+  /// which is a thing one turn does.
+  int _stalls = 0;
+
+  /// The chat's goal, where it is one to review: there is a reviewer, and the
+  /// goal is active.
+  ChatGoal? _activeGoal() => switch (goal?.call()) {
+    final asked? when goalReviewer != null && asked.isActive => asked,
+    _ => null,
+  };
+
+  /// The stop just made, put to the reviewer against [asked]. Met or blocked
+  /// ends the goal's run and the turn; short of it the turn carries on with
+  /// the reviewer's reason as a `<system-notification>` — until the step
+  /// limit ends the turn, or the stalls run out, which pauses the goal. What
+  /// moves the goal is said as a [GoalEvent]; null says nothing and ends the
+  /// turn.
+  ///
+  /// The goal is read again after the review: the user may have paused,
+  /// cleared or replaced it while the reviewer read, and what they did then
+  /// stands over what the reviewer found.
+  Future<({AgentEvent event, bool carriesOn})?> _reviewGoal(
+    ChatGoal asked,
+  ) async {
+    final verdict = await goalReviewer!.review(
+      asked.objective,
+      session.messages,
+    );
+    if (verdict == null || _cancelled) return null;
+    final current = _activeGoal();
+    if (current == null || current.objective != asked.objective) return null;
+    final objective = current.objective;
+    GoalEvent ends(GoalChange change, String reason) =>
+        GoalEvent(change, objective, reason: reason);
+    switch (verdict.kind) {
+      case GoalVerdictKind.met:
+        return (event: ends(GoalChange.met, verdict.reason), carriesOn: false);
+      case GoalVerdictKind.blocked:
+        return (
+          event: ends(GoalChange.blocked, verdict.reason),
+          carriesOn: false,
+        );
+      case GoalVerdictKind.carryOn:
+        // No cap on rounds of its own: a send-back is a step of this turn,
+        // so the step limit the user set is what bounds a run of them.
+        _stalls = _actedSinceReview ? 0 : _stalls + 1;
+        if (_stalls >= maxGoalStalls) {
+          return (
+            event: ends(
+              GoalChange.paused,
+              "The agent stopped $_stalls times in a row without doing "
+              "anything. ${verdict.reason}",
+            ),
+            carriesOn: false,
+          );
+        }
+        _actedSinceReview = false;
+        return (
+          event: _nudge(goalNudge(objective, verdict.reason, verdict.next)),
+          carriesOn: true,
+        );
+    }
   }
 
   /// What the user said since the last step, recorded so the rebuild below

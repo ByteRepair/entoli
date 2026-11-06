@@ -34,21 +34,15 @@ class LlmClassifier implements PermissionClassifier {
       alsoWritable: alsoWritable,
     );
     try {
-      final chunks = await client
-          .stream([
-            LlmMessage(role: LlmRole.system, text: _systemPrompt),
-            LlmMessage(role: LlmRole.user, text: prompt),
-          ], model: model)
-          .timeout(_timeout)
-          .toList();
-      final answer = chunks
-          .whereType<LlmCompletion>()
-          .lastOrNull
-          ?.message
-          .text
-          .trim()
-          .toLowerCase();
-      return _parse(answer);
+      final answer = await client.complete(
+        [
+          LlmMessage(role: LlmRole.system, text: _systemPrompt),
+          LlmMessage(role: LlmRole.user, text: prompt),
+        ],
+        model: model,
+        timeout: _timeout,
+      );
+      return _parse(answer?.toLowerCase());
     } catch (_) {
       return PermissionDecision.ask;
     }

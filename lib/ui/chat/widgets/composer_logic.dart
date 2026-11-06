@@ -1,6 +1,7 @@
 import "package:flutter/foundation.dart";
 
 import "../../../domain/file_tools.dart" show guestWorkspacePath;
+import "../../../domain/goal.dart";
 import "../../../domain/models.dart";
 import "../../../domain/shell.dart";
 import "../../../domain/wired_skill.dart";
@@ -35,21 +36,34 @@ enum ComposerMode {
 /// What each composer says about its [ComposerMode], in its own dress.
 extension ComposerModeWords on ComposerMode {
   /// The field's hint, where the mode has one of its own; a message's is the
-  /// composer's.
+  /// composer's. A callback has none: the field holding one is never empty.
   String? get hint => switch (this) {
     ComposerMode.shell => "Shell command",
-    ComposerMode.callback => "Compact the conversation",
-    ComposerMode.message => null,
+    ComposerMode.callback || ComposerMode.message => null,
   };
 
   /// What the send button does, said as its tooltip or label. [queues] is
   /// [ComposerLogic.queues]: what is typed would steer the running turn.
-  String sendLabel({required bool queues}) => switch (this) {
+  /// [callback] is [ComposerLogic.callbackLabel], which names the callback
+  /// typed — there is more than one.
+  String sendLabel({required bool queues, String? callback}) => switch (this) {
     ComposerMode.shell => "Run",
-    ComposerMode.callback => "Compact",
+    ComposerMode.callback => callback ?? "Run",
     ComposerMode.message => queues ? "Send now, read at its next step" : "Send",
   };
 }
+
+/// What sending the callback [wired] does, as the send button says it.
+String callbackSendLabel(WiredCall wired) => switch (wired.skill) {
+  WiredSkill.compact => "Compact",
+  WiredSkill.goal => switch (goalCommandOf(wired.arguments)) {
+    GoalSet() => "Set goal",
+    GoalResume() => "Resume goal",
+    GoalPause() => "Pause goal",
+    GoalClear() => "Clear goal",
+    GoalShow() => "Show goal",
+  },
+};
 
 /// Where a `!` command runs before the shell has said: [workspace], in the
 /// guest's own words where commands run in one under [guestRoot]. [home] is
@@ -124,6 +138,11 @@ class ComposerLogic extends ChangeNotifier {
   ComposerMode _mode = ComposerMode.message;
   ComposerMode get mode => _mode;
 
+  /// What the callback typed does, for the send button; null where the
+  /// field holds none.
+  String? _callbackLabel;
+  String? get callbackLabel => _callbackLabel;
+
   /// How many embeds the field holds: each is taller than a line, so a field
   /// lets itself grow by them rather than scroll them away.
   int _embeds = 0;
@@ -153,14 +172,19 @@ class ComposerLogic extends ChangeNotifier {
     // The field's text rather than the message: an embed is never `!` or a
     // `/skill`, so the answer is the same without writing the message out.
     final text = _controller.text;
+    final wired = shellBypassCommand(text) != null
+        ? null
+        : wiredSkillFromText(text);
     final mode = shellBypassCommand(text) != null
         ? ComposerMode.shell
-        : wiredSkillFromText(text) != null
+        : wired != null
         ? ComposerMode.callback
         : ComposerMode.message;
+    final label = wired == null ? null : callbackSendLabel(wired);
     final embeds = _controller.embeds.length;
-    if (mode == _mode && embeds == _embeds) return;
+    if (mode == _mode && embeds == _embeds && label == _callbackLabel) return;
     _mode = mode;
+    _callbackLabel = label;
     _embeds = embeds;
     notifyListeners();
   }

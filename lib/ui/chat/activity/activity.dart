@@ -3,7 +3,6 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
 import "../../../domain/models.dart";
-import "../../widgets/liquid_glass.dart" show liquidGlassProvider;
 import "card.dart";
 import "label.dart";
 
@@ -80,19 +79,10 @@ abstract class LabelledActivity extends Activity {
     ProviderListenable<LiveMessage>? source,
   }) {
     final from = source ?? ActivitySource.of(context);
-    // Under the native shell a page, not a sheet: the composer is the
-    // shell's, over the Flutter view a sheet is drawn in, and a page is what
-    // it steps aside for — the page's bar then the window's, with its back.
-    final page = ProviderScope.containerOf(
+    return openActivityCard(
       context,
-      listen: false,
-    ).read(liquidGlassProvider).on;
-    Widget card(BuildContext _) =>
-        _RunCard(activity: this, run: run, source: from, page: page);
-    if (page) {
-      return Navigator.of(context).push(MaterialPageRoute<void>(builder: card));
-    }
-    return showActivityCard<void>(context, card);
+      (page) => _RunCard(activity: this, run: run, source: from, page: page),
+    );
   }
 }
 

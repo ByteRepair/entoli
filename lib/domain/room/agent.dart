@@ -1,15 +1,19 @@
 import "../agent_backend.dart";
 import "../chat_repository.dart";
+import "../goal.dart";
 import "../models.dart";
 
 /// A participant that takes turns. Each answers in a session of its own,
 /// which the backend keys by the handle; this is the room's hold on it.
 class Agent {
-  Agent(this._repo, this.chatId, this.handle);
+  Agent(this._repo, this.chatId, this.handle, {this.goal});
 
   final ChatRepository _repo;
   final String chatId;
   final String handle;
+
+  /// The room's goal as it stands, which the turn reads at every stop.
+  final GoalReader? goal;
 
   /// Answer [say]. [history] ends before it; [replaces] says the session holds
   /// a thread [say] does not continue; [mayDecline] says the participant may
@@ -33,6 +37,7 @@ class Agent {
     participant: handle,
     mayDecline: mayDecline,
     steers: steers,
+    goal: goal,
   );
 
   /// Carry on the turn [history] ends in.
@@ -48,5 +53,6 @@ class Agent {
     compactions: compactions,
     participant: handle,
     steers: steers,
+    goal: goal,
   );
 }

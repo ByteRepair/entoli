@@ -45,6 +45,7 @@ import "activity/format.dart" show formatRemaining;
 import "widgets/chapter_rail.dart";
 import "widgets/composer.dart";
 import "widgets/composer_controller.dart";
+import "widgets/goal_mark_row.dart";
 import "widgets/composer_embed.dart";
 import "widgets/paired_project_badges.dart";
 import "widgets/message_bubble.dart";
@@ -815,17 +816,26 @@ class CompactionEntry extends ConversationEntry {
   final String summary;
 }
 
+/// A change to the chat's goal, after the message its record names.
+class GoalEntry extends ConversationEntry {
+  const GoalEntry(this.mark);
+
+  final GoalMark mark;
+}
+
 /// The conversation as rows, walked off the thread in order. A turn opener
 /// carrying a mode that differs from the running one emits a [SectionEntry]
 /// first — both flips are rows, the off-flip bounding an on-section. A
 /// compaction boundary is said after
-/// the message it covers: the divider is where the summary took over. A reply
+/// the message it covers: the divider is where the summary took over, and a
+/// goal's change after the message its record names. A reply
 /// that ended with `end_turn` is not a row: it is on the log, not the page.
 /// Nor is a reaction: it shows on the message it answers.
 List<ConversationEntry> entriesOf(Chat chat) {
   final entries = <ConversationEntry>[];
   var on = false;
   final byBoundary = {for (final c in chat.compactions) c.upToMessageId: c};
+  final goals = chat.goals.groupListsBy((g) => g.afterMessageId);
   final reactions = reactionsOn(chat.messages);
   // What a running turn appends to: the newest message that is not a
   // reaction, which a reaction queued behind the turn must not displace.
@@ -847,6 +857,9 @@ List<ConversationEntry> entriesOf(Chat chat) {
     }
     final marker = byBoundary[m.id];
     if (marker != null) entries.add(CompactionEntry(marker.summary));
+    for (final mark in goals[m.id] ?? const <GoalMark>[]) {
+      entries.add(GoalEntry(mark));
+    }
   }
   return entries;
 }
@@ -1605,6 +1618,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                 SectionEntry(:final omada) => ConversationSeparator(
                   text: omada ? "Omada is turned on" : "Omada is turned off",
                 ),
+                GoalEntry(:final mark) => GoalMarkRow(mark: mark),
                 CompactionEntry(:final summary) => ConversationSeparator(
                   text: "Compact Conversation",
                   body: MessageText(

@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/ask.dart";
+import "package:agent_chat/domain/goal.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/room/room_state.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
@@ -14,6 +15,14 @@ import "fake_native_shell.dart";
 /// Records what the native turn surface asked of the turn.
 class _Driver implements TurnDriver {
   final answered = <(String, List<String?>)>[];
+  final sent = <String>[];
+
+  @override
+  Future<void> send(
+    String text, {
+    List<Attachment> attachments = const [],
+    bool queue = false,
+  }) async => sent.add(text);
   final approved = <(String, ApprovalResponse)>[];
 
   @override
@@ -117,5 +126,28 @@ void main() {
       "call-1",
       ApprovalResponse.alwaysAllowChat,
     ));
+  });
+
+  test("a goal is drawn with where it stands, and the line in full", () {
+    expect(goalSnapshotOf(null), isNull);
+    final goal = goalSnapshotOf(
+      const ChatGoal(
+        objective: "the tests pass",
+        status: GoalStatus.blocked,
+        reason: "Needs a key.",
+      ),
+    )!;
+    expect(goal.objective, "the tests pass");
+    expect(goal.phase, GoalPhase.blocked);
+    expect(goal.summary, "Goal blocked: the tests pass · Needs a key.");
+  });
+
+  testWidgets("the goal row's buttons come back as /goal commands", (
+    tester,
+  ) async {
+    final surface = await pump(tester, ChatViewState());
+    await surface.goal(GoalAction.resume);
+    await surface.goal(GoalAction.clear);
+    expect(driver.sent, ["/goal resume", "/goal clear"]);
   });
 }

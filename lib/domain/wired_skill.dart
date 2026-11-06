@@ -1,3 +1,4 @@
+import "goal.dart";
 import "prompt_library.dart";
 
 /// A skill whose frontmatter says `invocation: callback` runs code rather than
@@ -8,13 +9,20 @@ import "prompt_library.dart";
 /// back to being the ordinary template expansion it would have been without
 /// the key.
 ///
-/// A callback turn is never sent to a model — the same pre-model route the `!`
-/// shell bypass takes — so the places that must not route a message to a model
-/// read [wiredSkillFromText] beside [shellBypassCommand]. The enum is the
-/// closed set, which is why the match is by name alone: a build-stable name
-/// is answered the same by every reader, and the reader of a turn being resent
-/// cannot ask what the frontmatter said when it ran.
-enum WiredSkill { compact }
+/// A callback turn is not sent to a model as typed — the same pre-model route
+/// the `!` shell bypass takes — so the places that must not route a message to
+/// a model read [wiredSkillFromText] beside [shellBypassCommand]. The enum is
+/// the closed set, which is why the match is by name alone: a build-stable
+/// name is answered the same by every reader, and the reader of a turn being
+/// resent cannot ask what the frontmatter said when it ran.
+///
+/// `goal` is the one whose callback can end in a model turn: setting a goal
+/// and resuming one change the chat's goal and then start the work, the
+/// projection wording the message as the kickoff — see [wiredRunsModel].
+enum WiredSkill { compact, goal }
+
+/// A callback message read: which one, and what followed its name.
+typedef WiredCall = ({WiredSkill skill, String arguments});
 
 /// The wired skills by name — the enum is the closed set, so this is the one
 /// lookup the dispatch shares.
@@ -28,7 +36,7 @@ final _byName = {for (final s in WiredSkill.values) s.name: s};
 /// Read beside [shellBypassCommand] by the dispatch and by every caller that
 /// must not hand a callback message to a model: the title namer, the resume
 /// offer, and the composer's dress-up.
-({WiredSkill skill, String arguments})? wiredSkillFromText(String text) {
+WiredCall? wiredSkillFromText(String text) {
   final match = skillReference.firstMatch(text.trim());
   if (match == null) return null;
   return switch (_byName[match.group(1)!]) {
@@ -36,3 +44,14 @@ final _byName = {for (final s in WiredSkill.values) s.name: s};
     final skill => (skill: skill, arguments: match.group(2) ?? ""),
   };
 }
+
+/// Whether the callback [text] runs hands a turn to a model after all: a goal
+/// being set or resumed. Such a turn is resumable like any other, and its
+/// message is worded for the model by the projection rather than kept from
+/// it; every other callback appends nothing a model wrote.
+bool wiredRunsModel(String text) => switch (wiredSkillFromText(text)) {
+  (skill: WiredSkill.goal, :final arguments) => goalCommandOf(
+    arguments,
+  ).runsModel,
+  _ => false,
+};

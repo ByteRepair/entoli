@@ -7,6 +7,7 @@ import "package:agent_chat/data/builtin/projection.dart";
 import "package:agent_chat/data/builtin/templates.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/end_turn.dart";
+import "package:agent_chat/domain/goal.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/reaction.dart";
 
@@ -51,6 +52,22 @@ void main() {
   );
 
   setUp(() => next = 0);
+
+  test("a goal is worded as its kickoff, and a resume as carrying on; "
+      "the rest of /goal never reaches a model as typed", () async {
+    final projected = await project([
+      asked("/goal the tests pass"),
+    ], first: false);
+    expect(
+      projected.single.text,
+      userTurnText(goalKickoff("the tests pass"), at: at, first: false),
+    );
+    final resumed = await project([asked("/goal resume")], first: false);
+    expect(
+      resumed.single.text,
+      userTurnText(goalResumedText, at: at, first: false),
+    );
+  });
 
   test("a reaction is worded as the user responding, with what to", () async {
     final answer = said(MessageRole.assistant, const [

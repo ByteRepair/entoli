@@ -373,6 +373,24 @@ abstract class LlmClient {
   void close();
 }
 
+/// One answer, with no tools and nothing streamed to anyone: the last
+/// completion the model sends within [timeout], trimmed, or null where it
+/// sent none. The timeout is on the stream rather than the future collecting
+/// it, a timed-out future leaving the response being read to nobody.
+extension OneCompletion on LlmClient {
+  Future<String?> complete(
+    List<LlmMessage> messages, {
+    required String model,
+    required Duration timeout,
+  }) async {
+    final chunks = await stream(
+      messages,
+      model: model,
+    ).timeout(timeout).toList();
+    return chunks.whereType<LlmCompletion>().lastOrNull?.message.text.trim();
+  }
+}
+
 /// A client that learns how much of an allowance is spent from the replies it
 /// receives, where its provider has nothing to ask. Read by the registry off
 /// the client turns already run over, never one built to ask.

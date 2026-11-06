@@ -7,6 +7,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
+import "package:agent_chat/data/builtin/goal_reviewer.dart";
 import "package:agent_chat/data/builtin/tools/image_tool.dart";
 import "package:agent_chat/data/builtin/tools/turn.dart" show SubAgents;
 import "package:agent_chat/data/builtin/memory/instructions.dart";
@@ -17,6 +18,7 @@ import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/artifact.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/file_tools.dart" show attachmentSaveToolName;
+import "package:agent_chat/domain/goal.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/system_notification.dart";
 import "package:agent_chat/domain/permission.dart";
@@ -66,6 +68,8 @@ void main() {
     SubAgents? subAgents,
     LlmOutputLimit outputLimit = const LlmOutputLimit(),
     String? provider,
+    GoalReader? goal,
+    GoalReviewer? goalReviewer,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-test");
     // Beside the workspaces, the way the layout keeps `chats/<id>/resources`.
@@ -109,6 +113,8 @@ void main() {
       attachmentsDir: attachments ? attachmentsDir : null,
       readOnlyDirs: attachments ? [attachmentsDir] : const [],
       subAgents: subAgents,
+      goal: goal,
+      goalReviewer: goalReviewer,
     );
   }
 
@@ -880,6 +886,164 @@ void main() {
         ]);
       },
     );
+  });
+
+  group("a goal", () {
+    /// What the turn said moved the goal.
+    List<GoalEvent> moved(List<AgentEvent> events) =>
+        events.whereType<GoalEvent>().toList();
+
+    test("a stop short of the goal is sent back with the reviewer's reason, "
+        "until the reviewer finds it met", () async {
+      final client = FakeLlmClient([
+        [saidOnly("All done.")],
+        [bashCall("flutter test")],
+        [saidOnly("The tests pass.")],
+      ]);
+      final goal = FakeGoal(const ChatGoal(objective: "tests pass"));
+      final reviewer = FakeGoalReviewer([
+        const GoalVerdict(
+          GoalVerdictKind.carryOn,
+          "Nothing was run.",
+          next: "Run the tests.",
+        ),
+        const GoalVerdict(GoalVerdictKind.met, "The test run passed."),
+      ]);
+
+      final events = await agentOver(
+        client,
+        goal: goal.read,
+        goalReviewer: reviewer,
+      ).run(userMessage("/goal tests pass")).toList();
+
+      final nudge = events.whereType<SteerEvent>().single.message.plainText;
+      expect(isSystemNotification(nudge), isTrue);
+      expect(nudge, contains("tests pass"));
+      expect(nudge, contains("Nothing was run."));
+      expect(nudge, contains("Next step: Run the tests."));
+      expect(client.sent, hasLength(3));
+      // The reviewer read each stop, the reply that stopped included.
+      expect(reviewer.read, hasLength(2));
+      expect(reviewer.read.first.last.text, "All done.");
+      // Sending back moves nothing; met is said, for the room to log.
+      final met = moved(events).single;
+      expect(met.change, GoalChange.met);
+      expect(met.objective, "tests pass");
+      expect(met.reason, "The test run passed.");
+    });
+
+    test("the step limit is what bounds the send-backs, and leaves the "
+        "goal set", () async {
+      final client = FakeLlmClient([
+        [saidOnly("First go.")],
+        [saidOnly("Second go.")],
+      ]);
+      final reviewer = FakeGoalReviewer([
+        const GoalVerdict(GoalVerdictKind.carryOn, "Not yet."),
+      ]);
+
+      final events = await agentOver(
+        client,
+        options: const BuiltinOptions(stepLimit: 2),
+        goal: FakeGoal(const ChatGoal(objective: "ship")).read,
+        goalReviewer: reviewer,
+      ).run(userMessage("go")).toList();
+
+      // Sent back once; the last step's stop is never reviewed.
+      expect(reviewer.read, hasLength(1));
+      expect(client.sent, hasLength(2));
+      expect(moved(events), isEmpty);
+    });
+
+    test("blocked ends the turn and says why", () async {
+      final client = FakeLlmClient([
+        [saidOnly("I need the API key.")],
+      ]);
+      final reviewer = FakeGoalReviewer([
+        const GoalVerdict(GoalVerdictKind.blocked, "Needs the user's key."),
+      ]);
+
+      final events = await agentOver(
+        client,
+        goal: FakeGoal(const ChatGoal(objective: "deploy")).read,
+        goalReviewer: reviewer,
+      ).run(userMessage("go")).toList();
+
+      expect(events.whereType<SteerEvent>(), isEmpty);
+      final blocked = moved(events).single;
+      expect(blocked.change, GoalChange.blocked);
+      expect(blocked.reason, "Needs the user's key.");
+    });
+
+    test("stopping again and again without acting pauses it", () async {
+      final client = FakeLlmClient([
+        for (var i = 0; i < maxGoalStalls; i++) [saidOnly("Working on it.")],
+      ]);
+      final reviewer = FakeGoalReviewer([
+        for (var i = 0; i < maxGoalStalls; i++)
+          const GoalVerdict(GoalVerdictKind.carryOn, "Nothing done."),
+      ]);
+
+      final events = await agentOver(
+        client,
+        goal: FakeGoal(const ChatGoal(objective: "ship")).read,
+        goalReviewer: reviewer,
+      ).run(userMessage("go")).toList();
+
+      // Sent back twice; the third stall pauses rather than sending back.
+      expect(events.whereType<SteerEvent>(), hasLength(maxGoalStalls - 1));
+      expect(client.sent, hasLength(maxGoalStalls));
+      final paused = moved(events).single;
+      expect(paused.change, GoalChange.paused);
+      expect(paused.reason, startsWith("The agent stopped"));
+    });
+
+    test("a paused goal, or a review with no verdict, ends the turn as "
+        "a stop always did", () async {
+      for (final (standing, verdicts) in [
+        (
+          const ChatGoal(objective: "ship", status: GoalStatus.paused),
+          [const GoalVerdict(GoalVerdictKind.carryOn, "Not yet.")],
+        ),
+        (const ChatGoal(objective: "ship"), <GoalVerdict?>[null]),
+      ]) {
+        final client = FakeLlmClient([
+          [saidOnly("Done.")],
+        ]);
+        final events = await agentOver(
+          client,
+          goal: FakeGoal(standing).read,
+          goalReviewer: FakeGoalReviewer(verdicts),
+        ).run(userMessage("go")).toList();
+
+        expect(events.whereType<SteerEvent>(), isEmpty);
+        expect(moved(events), isEmpty);
+        expect(client.sent, hasLength(1));
+      }
+    });
+
+    test("a goal paused while the reviewer reads is not sent back", () async {
+      final client = FakeLlmClient([
+        [saidOnly("Done.")],
+      ]);
+      final goal = FakeGoal(const ChatGoal(objective: "ship"));
+      final reviewer = FakeGoalReviewer(
+        [const GoalVerdict(GoalVerdictKind.carryOn, "Not yet.")],
+        whileReading: () => goal.goal = const ChatGoal(
+          objective: "ship",
+          status: GoalStatus.paused,
+        ),
+      );
+
+      final events = await agentOver(
+        client,
+        goal: goal.read,
+        goalReviewer: reviewer,
+      ).run(userMessage("go")).toList();
+
+      expect(events.whereType<SteerEvent>(), isEmpty);
+      expect(moved(events), isEmpty);
+    });
   });
 
   group("with no shell to run anything", () {

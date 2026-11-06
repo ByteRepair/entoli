@@ -12,6 +12,7 @@ import "../domain/chat_log.dart";
 import "../domain/chat_meta.dart";
 import "../domain/chat_store.dart";
 import "../domain/chat_title.dart";
+import "../domain/goal.dart";
 import "../domain/models.dart";
 import "../domain/permission.dart";
 import "../domain/project.dart";
@@ -304,16 +305,27 @@ class ChatRepository {
   /// one turn the user routed away from a model — in a chat that may have no
   /// provider configured at all. A `invocation: callback` skill is the same:
   /// a callback turn is not a thing said, and naming one is a model call on
-  /// the turn the user routed away from a model.
+  /// the turn the user routed away from a model — except `/goal`'s, whose
+  /// objective is what the chat is about.
   Future<String?> suggestTitle(String text) async {
     final settings = _settings();
     final provider = settings.titleProviderId;
     final model = settings.titleModelId;
     if (provider == null || text.trim().isEmpty) return null;
     if (shellBypassCommand(text) != null) return null;
-    if (wiredSkillFromText(text) != null) return null;
+    // A goal names its chat by the objective: it is the one callback that is
+    // a thing said, and the slash and the name are not part of what.
+    var said = text;
+    if (wiredSkillFromText(text) case final wired?) {
+      if (wired.skill != WiredSkill.goal) return null;
+      if (goalCommandOf(wired.arguments) case GoalSet(:final objective)) {
+        said = objective;
+      } else {
+        return null;
+      }
+    }
     final answer = await _backend.ask(
-      titlePrompt(text),
+      titlePrompt(said),
       model: model,
       provider: provider,
     );
@@ -372,6 +384,7 @@ class ChatRepository {
     required String participant,
     bool mayDecline = false,
     SteerInbox? steers,
+    GoalReader? goal,
   }) async* {
     if (replaces) {
       await _backend.resetSession(chatId);
@@ -383,7 +396,7 @@ class ChatRepository {
       compactions: compactions,
       participant: participant,
       mayDecline: mayDecline,
-      settings: await _turnSettings(chatId),
+      settings: await _turnSettings(chatId, goal: goal),
       steers: steers,
     );
   }
@@ -397,13 +410,14 @@ class ChatRepository {
     List<ConversationCompaction> compactions = const [],
     required String participant,
     SteerInbox? steers,
+    GoalReader? goal,
   }) async* {
     yield* _backend.resumeTurn(
       chatId,
       history: history,
       compactions: compactions,
       participant: participant,
-      settings: await _turnSettings(chatId),
+      settings: await _turnSettings(chatId, goal: goal),
       steers: steers,
     );
   }
@@ -457,7 +471,7 @@ class ChatRepository {
   /// chat alone, and where the project already took it away it cannot be given
   /// it back from here. `headless` is the other: a chat nobody watches (a
   /// reminder's) drops `ask_user` and `task`, since nobody is there to answer.
-  Future<TurnSettings> _turnSettings(String chatId) async {
+  Future<TurnSettings> _turnSettings(String chatId, {GoalReader? goal}) async {
     final meta = await loadMeta(chatId);
     final settings = _settings();
     final project = await projectOf(chatId);
@@ -514,6 +528,7 @@ class ChatRepository {
       // The project's own command variables, beside the app-level ones.
       environment: projectSettings.environment ?? const {},
       policy: () => _policyOf(chatId),
+      goal: goal,
       turnMaxSteps: projectSettings.turnMaxSteps ?? settings.turnMaxSteps,
       responseLength: settings.responseLength,
       capResponseLength: settings.capResponseLength,

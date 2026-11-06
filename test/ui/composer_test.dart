@@ -459,6 +459,21 @@ void main() {
     },
   );
 
+  testWidgets("the + button's New Goal makes what is typed the objective", (
+    tester,
+  ) async {
+    await pump(tester);
+    await type(tester, "the tests pass");
+
+    await insertVia(tester, "New Goal");
+    expect(controller.text, "/goal the tests pass");
+    expect(controller.selection.baseOffset, controller.text.length);
+
+    // A message already a goal is left as it is.
+    await insertVia(tester, "New Goal");
+    expect(controller.text, "/goal the tests pass");
+  });
+
   testWidgets("asking for skills twice does not stack up slashes", (
     tester,
   ) async {
