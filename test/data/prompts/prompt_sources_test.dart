@@ -420,6 +420,7 @@ void main() {
       "deep-research",
       "entoli-customization",
       "entoli-welcome-party",
+      "goal",
       "refactor",
       "simplify",
       "skill-creator",
