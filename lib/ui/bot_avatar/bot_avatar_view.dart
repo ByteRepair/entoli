@@ -336,7 +336,7 @@ class _BotAvatarViewState extends State<BotAvatarView>
     final step = _animator.step(
       now: ms,
       mood: mood,
-      target: look && mood != BotMood.thinking ? _target() : null,
+      target: look ? _target() : null,
       hold: _dragFrom != null,
     );
     return _prepared.frame(
