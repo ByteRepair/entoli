@@ -1,4 +1,5 @@
 [submodule "tool/ios/ish/src"]
 	path = tool/ios/ish/src
-	url = https://github.com/ish-app/ish.git
+	url = https://github.com/ByteRepair/ish.git
 	shallow = true
+	branch = blinkish
