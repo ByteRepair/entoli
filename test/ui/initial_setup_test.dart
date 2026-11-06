@@ -8,7 +8,7 @@ import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/browser/cdp_browser.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart"
-    show CliProvider;
+    show CliGuest, CliProvider;
 import "package:agent_chat/domain/agent_browser.dart";
 import "package:agent_chat/domain/download.dart";
 
@@ -157,6 +157,27 @@ void main() {
     expect(find.text("tour"), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
+  // Android runs the CLIs in its Alpine, so its own copy of each is
+  // installed after the Alpine is; iOS's emulated Alpine runs neither, so its
+  // plan is the Alpine alone.
+  test("Android's plan installs each CLI after Alpine, and iOS's does not", () {
+    CliProvider.guest = const _AnyGuest();
+    addTearDown(() => CliProvider.guest = null);
+    app = TestApp.create(proot: true);
+    expect(app.container.read(setupPlanProvider).steps.map((s) => s.name), [
+      "Alpine Linux",
+      "Claude CLI",
+      "Codex CLI",
+    ]);
+    app.dispose();
+
+    CliProvider.guest = null;
+    app = TestApp.create(abi: "ios");
+    expect(app.container.read(setupPlanProvider).steps.map((s) => s.name), [
+      "Alpine Linux",
+    ]);
+  });
+
   testWidgets("a Helium already on disk is only picked", (tester) async {
     app = desktop(FakeHelium()..installedVersion = "1");
     await app.pump(tester, gate);
@@ -296,4 +317,19 @@ class FakeHelium implements EmbeddedBrowser {
 
   @override
   Future<void> remove() async => installedVersion = null;
+}
+
+/// A guest no test runs anything in: what makes a CLI supported on Android.
+class _AnyGuest implements CliGuest {
+  const _AnyGuest();
+
+  @override
+  ({List<String> command, Map<String, String> environment}) wrap(
+    List<String> argv, {
+    required String cwd,
+    required List<String> shared,
+  }) => throw UnimplementedError();
+
+  @override
+  List<String> install(List<String> packages) => throw UnimplementedError();
 }

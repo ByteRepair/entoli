@@ -28,15 +28,8 @@ class CliSignIn {
   }
 
   /// [provider]'s program, started on its [CliProvider.signInArguments].
-  static Future<CliSignIn> start(CliProvider provider) async => CliSignIn._(
-    provider,
-    await provider.launch(
-      provider.executable(),
-      provider.signInArguments,
-      workingDirectory: await provider.workDirectory(),
-      environment: provider.environment,
-    ),
-  );
+  static Future<CliSignIn> start(CliProvider provider) async =>
+      CliSignIn._(provider, await provider.run(provider.signInArguments));
 
   final CliProvider provider;
   final CliProcess _process;

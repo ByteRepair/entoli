@@ -135,9 +135,22 @@ class ClaudeCliProvider extends CliProvider with OfferedByName {
 
   static final _version = RegExp(r"^\d+\.\d+\.\d+$");
 
+  /// Its own docs: on Alpine and other musl Linuxes, the program wants these
+  /// beside it, and the system's `rg` rather than the one it carries.
+  @override
+  List<String> get guestPackages => const ["libgcc", "libstdc++", "ripgrep"];
+
+  @override
+  Map<String, String> get guestEnvironment => const {
+    "USE_BUILTIN_RIPGREP": "0",
+  };
+
   /// The manifest's name for [abi]'s build, the musl one for a Linux whose
-  /// C library is musl; null for a machine it builds nothing for.
+  /// C library is musl — and on Android, whose Linux is Alpine; null for a
+  /// machine it builds nothing for.
   static String? platformOf(Abi abi, {bool musl = false}) => switch (abi) {
+    Abi.androidArm64 => "linux-arm64-musl",
+    Abi.androidX64 => "linux-x64-musl",
     Abi.macosArm64 => "darwin-arm64",
     Abi.macosX64 => "darwin-x64",
     Abi.linuxX64 => musl ? "linux-x64-musl" : "linux-x64",
@@ -259,20 +272,18 @@ class ClaudeCliSession extends CliProcessSession {
     ClaudeCliProvider provider,
     CliSessionSpec spec,
   ) async {
-    final executable = provider.executable();
+    // Looked for now, so a program that is not there fails the start with
+    // where it was looked for.
+    provider.executable();
     // The files it is handed go in a folder of the session's own, which
     // goes with it.
     final sessions = Directory(p.join(provider.workRoot.path, "sessions"));
     await sessions.create(recursive: true);
     final session = ClaudeCliSession._(spec, await sessions.createTemp());
-    return opened(
-      provider,
-      session,
-      () => session._launch(provider, executable),
-    );
+    return opened(provider, session, () => session._launch(provider));
   }
 
-  Future<void> _launch(ClaudeCliProvider provider, String executable) async {
+  Future<void> _launch(ClaudeCliProvider provider) async {
     final tools = spec.tools;
     final bridge = tools.isEmpty
         ? null
@@ -289,7 +300,6 @@ class ClaudeCliSession extends CliProcessSession {
     final effort = effortOf(spec.reasoningEffort);
     await run(
       provider,
-      executable,
       [
         "-p",
         "--input-format",
@@ -320,13 +330,12 @@ class ClaudeCliSession extends CliProcessSession {
         if (spec.system.isNotEmpty) ...["--system-prompt-file", system.path],
         if (effort != null) ...["--effort", effort],
       ],
-      // No project's CLAUDE.md or settings are picked up from it, and its
-      // cache's MCP logs and project entry are kept once.
-      workingDirectory: await provider.workDirectory(),
+      // Run in the provider's empty work folder, so no project's CLAUDE.md
+      // or settings are picked up, and its cache's MCP logs and project
+      // entry are kept once.
       environment: {
         // A tool can wait on an approval for as long as the user takes.
         "MCP_TOOL_TIMEOUT": "${const Duration(days: 1).inMilliseconds}",
-        ...provider.environment,
       },
     );
   }

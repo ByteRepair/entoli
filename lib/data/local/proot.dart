@@ -2,6 +2,9 @@ import "dart:io" show Platform;
 
 import "../../domain/file_tools.dart";
 import "../../domain/rootfs.dart";
+import "../../domain/rootfs_store.dart";
+import "../builtin/llm/llm_client.dart" show LlmException;
+import "../builtin/llm/providers/cli.dart" show CliGuest;
 import "../../domain/shell.dart";
 
 /// How a command is run inside a downloaded Linux: the proot invocation, the
@@ -102,4 +105,88 @@ ShellDriver prootDriver({
         "${Platform.operatingSystemVersion}, so filesystem-heavy commands are "
         "slower than they look",
   );
+}
+
+/// [argv] run as a program of the Linux at [rootfsDir] rather than as a
+/// shell: the same proot the driver above runs commands under, with each of
+/// [shared] bound at its own host path, so a path the app hands the program
+/// — its files, its data folder, a session's — is one answer inside the
+/// guest and out, and [cwd], which must be under one of them, its working
+/// directory. Pure, as [prootDriver] is, and for the same reason.
+({List<String> command, Map<String, String> environment}) prootProgram({
+  required Proot proot,
+  required String rootfsDir,
+  required List<String> shared,
+  required String cwd,
+  required List<String> argv,
+}) => (
+  command: [
+    proot.binary,
+    "-r", rootfsDir,
+    "--kill-on-exit",
+    "--link2symlink",
+    // Root to the guest, which a package install wants and which is still
+    // the app's own uid to the kernel.
+    "-0",
+    "-b", "/dev",
+    "-b", "/proc",
+    "-b", "/sys",
+    for (final dir in shared) ...["-b", "$dir:$dir"],
+    "-b", "${proot.tmpDir}:/tmp",
+    "-b", "${proot.resolvConf}:/etc/resolv.conf",
+    "-w", cwd,
+    ...argv,
+  ],
+  environment: {
+    "PROOT_LOADER": proot.loader,
+    if (proot.loader32 != null) "PROOT_LOADER_32": proot.loader32!,
+    "PROOT_TMP_DIR": proot.tmpDir,
+  },
+);
+
+/// Android's Linux as where a CLI's program runs: [prootProgram] over the
+/// rootfs the Terminal settings picked, looked up at each start, so one
+/// installed after launch is used and one deleted is said rather than run.
+class ProotCliGuest implements CliGuest {
+  ProotCliGuest({
+    required this.proot,
+    required this.store,
+    required this.rootfsId,
+  });
+
+  final Proot proot;
+  final RootfsStore store;
+  final String? Function() rootfsId;
+
+  @override
+  ({List<String> command, Map<String, String> environment}) wrap(
+    List<String> argv, {
+    required String cwd,
+    required List<String> shared,
+  }) {
+    final rootfs = rootfsById(rootfsId());
+    final dir = rootfs == null ? null : store.directoryOfSync(rootfs.id);
+    if (dir == null) {
+      throw LlmException(
+        "No Linux is installed to run it in. Install one from the Terminal "
+        "settings.",
+      );
+    }
+    return prootProgram(
+      proot: proot,
+      rootfsDir: dir,
+      shared: shared,
+      cwd: cwd,
+      argv: argv,
+    );
+  }
+
+  /// Alpine's, the one Linux the catalog has.
+  @override
+  List<String> install(List<String> packages) => [
+    "apk",
+    "add",
+    "--no-cache",
+    ...packages,
+  ];
 }

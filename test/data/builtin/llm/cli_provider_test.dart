@@ -8,6 +8,7 @@ import "package:agent_chat/data/builtin/llm/mcp_tool_bridge.dart";
 import "package:agent_chat/data/builtin/llm/providers/cli_sign_in.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart";
 import "package:agent_chat/domain/llm_provider.dart";
+import "package:agent_chat/domain/shell.dart" show guestHome, guestPath;
 import "package:agent_chat/domain/model_registry.dart";
 import "package:flutter/foundation.dart";
 import "package:archive/archive.dart";
@@ -1298,4 +1299,183 @@ void main() {
       expect(await signIn.result, isFalse);
     });
   });
+
+  group("in Android's Linux", () {
+    late Directory dir;
+    late _Guest guest;
+    setUp(() {
+      dir = Directory.systemTemp.createTempSync("cli-guest-");
+      CliProvider.cacheRoot = dir.path;
+      guest = _Guest();
+      CliProvider.guest = guest;
+    });
+    tearDown(() {
+      CliProvider.guest = null;
+      CliProvider.cacheRoot = null;
+      CliProvider.abi = Abi.current();
+      dir.deleteSync(recursive: true);
+    });
+
+    test("Android's builds are the musl ones its Alpine runs", () {
+      expect(
+        ClaudeCliProvider.platformOf(Abi.androidArm64),
+        "linux-arm64-musl",
+      );
+      expect(
+        CodexCliProvider.tripleOf(Abi.androidArm64),
+        "aarch64-unknown-linux-musl",
+      );
+    });
+
+    // Started through the guest with the program as its own first word, the
+    // program's folder shared at its own path, and the guest's basics in
+    // place of the app's environment, which is Android's.
+    test(
+      "a program is started in the guest, told the guest's basics",
+      () async {
+        final launched = <_FakeProcess>[];
+        final claude = ClaudeCliProvider.over(
+          ClaudeCliProvider.preset.copyWith(id: "g"),
+          launch:
+              (
+                executable,
+                arguments, {
+                required workingDirectory,
+                required environment,
+              }) async {
+                final process = _FakeProcess(
+                  [executable, ...arguments],
+                  workingDirectory,
+                  environment,
+                )..exit(0);
+                launched.add(process);
+                return process;
+              },
+        );
+        File(claude.ownCopy).createSync(recursive: true);
+
+        expect(await claude.signedIn(), isTrue);
+        final process = launched.single;
+        expect(process.arguments, [
+          "proot",
+          "-w",
+          p.join(dir.path, "claude-cli", "work", "g"),
+          claude.ownCopy,
+          ...claude.statusArguments,
+        ]);
+        expect(guest.shared.single, [p.join(dir.path, "claude-cli")]);
+        expect(process.environment["PATH"], guestPath);
+        expect(process.environment["HOME"], guestHome);
+        expect(process.environment["USE_BUILTIN_RIPGREP"], "0");
+        expect(process.environment["CLAUDE_CONFIG_DIR"], claude.dataDirectory);
+        expect(process.environment["PROOT_TMP_DIR"], "/guest/tmp");
+      },
+    );
+
+    /// Anthropic's release of [program] for Android, its checksum true.
+    http.Client claudeForAndroid(List<int> program) =>
+        MockClient((request) async {
+          final path = request.url.path;
+          if (path.endsWith("/latest")) return http.Response("2.1.320", 200);
+          if (path.endsWith("/manifest.json")) {
+            return http.Response(
+              jsonEncode({
+                "platforms": {
+                  "linux-arm64-musl": {
+                    "checksum": "${sha256.convert(program)}",
+                    "size": program.length,
+                  },
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response.bytes(program, 200);
+        });
+
+    /// Claude CLI whose package installs in the guest exit with [code].
+    ({ClaudeCliProvider claude, List<List<String>> ran}) installing(int code) {
+      final ran = <List<String>>[];
+      final claude = ClaudeCliProvider.over(
+        ClaudeCliProvider.preset,
+        launch:
+            (
+              executable,
+              arguments, {
+              required workingDirectory,
+              required environment,
+            }) async {
+              ran.add([executable, ...arguments]);
+              return _FakeProcess(arguments, workingDirectory, environment)
+                ..exit(code);
+            },
+      );
+      return (claude: claude, ran: ran);
+    }
+
+    // What it needs on Alpine is installed in the guest before the program
+    // is in place, so a copy that is installed has what it runs with.
+    test(
+      "an install puts the program's libraries in the guest first",
+      () async {
+        CliProvider.abi = Abi.androidArm64;
+        final (:claude, :ran) = installing(0);
+        await claude
+            .install(client: claudeForAndroid(utf8.encode("#!/bin/sh")))
+            .drain<void>();
+
+        expect(claude.installed, isTrue);
+        expect(ran.single, [
+          "proot",
+          "-w",
+          p.join(dir.path, "claude-cli"),
+          "apk",
+          "add",
+          "--no-cache",
+          "libgcc",
+          "libstdc++",
+          "ripgrep",
+        ]);
+      },
+    );
+
+    test("an install whose libraries fail is not installed", () async {
+      CliProvider.abi = Abi.androidArm64;
+      final (:claude, ran: _) = installing(1);
+      await expectLater(
+        claude
+            .install(client: claudeForAndroid(utf8.encode("#!/bin/sh")))
+            .drain<void>(),
+        throwsA(isA<LlmException>()),
+      );
+      expect(claude.installed, isFalse);
+    });
+  });
+}
+
+/// A guest that runs nothing: what it was asked to run is `proot -w <cwd>`
+/// and the program's own words, what it shared is in [shared].
+class _Guest implements CliGuest {
+  final shared = <List<String>>[];
+
+  @override
+  ({List<String> command, Map<String, String> environment}) wrap(
+    List<String> argv, {
+    required String cwd,
+    required List<String> shared,
+  }) {
+    this.shared.add(shared);
+    return (
+      command: ["proot", "-w", cwd, ...argv],
+      environment: const {"PROOT_TMP_DIR": "/guest/tmp"},
+    );
+  }
+
+  @override
+  List<String> install(List<String> packages) => [
+    "apk",
+    "add",
+    "--no-cache",
+    ...packages,
+  ];
 }

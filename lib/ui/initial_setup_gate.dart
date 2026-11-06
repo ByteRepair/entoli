@@ -24,21 +24,27 @@ class SetupPlan {
 }
 
 /// The plan this device runs. A phone gets Alpine as where commands run —
-/// proot on Android, the emulator on iOS. A desktop gets Helium as the
-/// browser its agent drives, where the agent drives one the app launches
-/// rather than its own WebView, and its own copy of each CLI program, which is
-/// what the welcome tour signs a ChatGPT or Claude plan in with. Anywhere else
-/// nothing is set up.
+/// proot on Android, the emulator on iOS — and Android, whose Alpine runs
+/// them, Entoli's own copy of each CLI program after it. A desktop gets
+/// Helium as the browser its agent drives, where the agent drives one the
+/// app launches rather than its own WebView, and its own copy of each CLI
+/// program. The CLIs are what the welcome tour signs a ChatGPT or Claude
+/// plan in with. Anywhere else nothing is set up.
 final setupPlanProvider = Provider<SetupPlan>((ref) {
+  final clis = [
+    for (final cli in ref.watch(cliProgramsProvider))
+      if (cli.supported) CliSetup(cli),
+  ];
+  // Android's CLIs run in the Alpine installed first; iOS's emulated one
+  // runs neither, so it gets Alpine alone.
   if (ref.watch(prootAvailableProvider) ||
       ref.watch(deviceAbiProvider) == "ios") {
-    return const SetupPlan([AlpineSetup()]);
+    return SetupPlan([const AlpineSetup(), ...clis]);
   }
   final browser = ref.watch(agentBrowserProvider);
   return SetupPlan([
     if (browser.available && !browser.inApp) const HeliumSetup(),
-    for (final cli in ref.watch(cliProgramsProvider))
-      if (cli.supported) CliSetup(cli),
+    ...clis,
   ], progress: const PlanProgress());
 });
 

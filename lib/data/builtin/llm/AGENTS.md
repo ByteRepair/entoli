@@ -212,8 +212,9 @@ it falls back to a copy another app ships (`bundledCopies`): on macOS,
 Claude Desktop keeps its own `claude` under
 `~/Library/Application Support/Claude/claude-code/<version>/<build>/`,
 replaced on each update, so the newest is looked up per session rather than
-stored — run outside a Desktop session it signs in as any `claude` does. A phone runs no programs, so there
-it offers no models, and the dialog offers the API only on a desktop.
+stored — run outside a Desktop session it signs in as any `claude` does. Android runs the
+programs in its Linux (below); iOS runs none, so there a CLI entry offers no
+models and the dialog offers the API only where `supported` says it can run.
 What of the app's own environment reaches the program is the subclass's
 (`inherits`): an Entoli started from inside a Claude Code session — a
 Claude Code terminal, a Claude Desktop session — carries that session's
@@ -286,6 +287,29 @@ is backed up and synced, and a sign-in is a secret. A cleared cache costs a
 sign-in, not a leaked token. `withConfig` reads one program for another entry
 with the same ports, which is how the UI gets an entry's program from
 `cliProgramsProvider`.
+
+**On Android the program runs in the Linux.** Android's own processes are
+not Linux's, so `main` sets `CliProvider.guest` to a `ProotCliGuest` where the
+build carries proot, and every start — a session, a status check, a sign-in
+— goes through `CliProvider.run`, which hands the program's own words to the
+guest. `prootProgram` (`data/local/proot.dart`) is the terminal driver's proot
+running one program rather than a shell, with the program's cache folder
+bound at its own host path, so its file, its `data/<id>/`, its `work/<id>/` and
+a Claude session's files are one path inside the guest and out and nothing is
+translated; the guest's `PATH`, `HOME` and the subclass's `guestEnvironment`
+stand in for the app's environment, which is Android's. The rootfs is looked
+up at each start, so the one the first-run setup installs is used without a
+restart, and with none the start says to install one. The builds are the musl
+ones (`linux-arm64-musl`, `aarch64-unknown-linux-musl`), which is what Alpine
+runs; Claude CLI's docs ask for `libgcc`, `libstdc++` and the system's
+`ripgrep` on a musl Linux, so its `guestPackages` are `apk add`ed in the guest
+before the program is put in place, and a failure there is a failed install.
+The sign-in's callback is the program's own `localhost` server, which proot
+shares with the phone, so the phone's browser reaches it. iOS has no guest:
+its Alpine is iSH's, which emulates 32-bit x86 and loads no 64-bit program,
+and neither program is built for anything else. What is not known is how
+either behaves under proot on a real device — Codex's own exec sandbox above
+all; nothing here has run on one.
 
 **The split is interface against lifecycle.** `CliProvider` owns what every
 such program shares: finding it, its environment, and `CliClient` — the

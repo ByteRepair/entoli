@@ -2,7 +2,6 @@ import "package:file_selector/file_selector.dart";
 import "package:flutter/material.dart";
 
 import "../../core/log.dart";
-import "../../core/platform/form_factor.dart";
 import "../../data/builtin/llm/llm_client.dart" show LlmException;
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/llm_provider.dart";
@@ -392,10 +391,10 @@ class _ProviderDialogState extends State<_ProviderDialog> {
           value: LlmApi.anthropic,
           child: Text("Anthropic"),
         ),
-        // A program run here, which a phone cannot do; an entry synced onto
-        // one still shows what it is.
+        // A program run here — a desktop's own, or in Android's Linux — which
+        // iOS cannot do; an entry synced onto it still shows what it is.
         for (final cli in cliProviderPresets)
-          if (isDesktop || _api == cli.config.api)
+          if (cli.supported || _api == cli.config.api)
             DropdownMenuItem(
               value: cli.config.api,
               child: Text(cli.config.displayName),

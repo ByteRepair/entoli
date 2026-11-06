@@ -189,4 +189,35 @@ void main() {
     expect(guestWorkspacePath("/root", home, cwd), "/root/chats/abc-123");
     expect(guestWorkspacePath("/root", home, home), "/root");
   });
+
+  // A CLI's program is a program, not a shell: started in the guest from the
+  // working directory it was given, with the cache folder it lives in bound
+  // at its own path, so its own path, its data folder's and a session's
+  // files are the same answer inside the guest and out.
+  test("a program runs in the guest at the host's own paths", () {
+    const cli = "/data/user/0/pkg/files/entoli/claude-cli";
+    final (:command, :environment) = prootProgram(
+      proot: proot,
+      rootfsDir: "/data/user/0/pkg/cache/rootfs/alpine",
+      shared: const [cli],
+      cwd: "$cli/work/p1",
+      argv: const ["$cli/bin/claude", "auth", "status"],
+    );
+
+    expect(command.first, proot.binary);
+    expect(valuesOf(command, "-r"), ["/data/user/0/pkg/cache/rootfs/alpine"]);
+    expect(valuesOf(command, "-b"), contains("$cli:$cli"));
+    expect(valuesOf(command, "-w"), ["$cli/work/p1"]);
+    expect(command, contains("-0"));
+    // The program last, as itself: no shell in between to quote it for.
+    expect(command.sublist(command.length - 3), [
+      "$cli/bin/claude",
+      "auth",
+      "status",
+    ]);
+    expect(environment, {
+      "PROOT_LOADER": proot.loader,
+      "PROOT_TMP_DIR": proot.tmpDir,
+    });
+  });
 }

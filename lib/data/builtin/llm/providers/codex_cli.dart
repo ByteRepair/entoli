@@ -134,6 +134,9 @@ class CodexCliProvider extends CliProvider with OfferedByName {
   /// The target [abi]'s build is named for: musl on Linux, which runs on
   /// either C library; null for a machine OpenAI builds nothing for.
   static String? tripleOf(Abi abi) => switch (abi) {
+    // Android's Linux is Alpine, which these run in.
+    Abi.androidArm64 => "aarch64-unknown-linux-musl",
+    Abi.androidX64 => "x86_64-unknown-linux-musl",
     Abi.macosArm64 => "aarch64-apple-darwin",
     Abi.macosX64 => "x86_64-apple-darwin",
     Abi.linuxX64 => "x86_64-unknown-linux-musl",
@@ -297,7 +300,9 @@ class CodexCliSession extends CliProcessSession {
     CodexCliProvider provider,
     CliSessionSpec spec,
   ) async {
-    final executable = provider.executable();
+    // Looked for now, so a program that is not there fails the start with
+    // where it was looked for.
+    provider.executable();
     final env = provider.environment;
     final cwd = await provider.workDirectory();
     final arguments = CodexCliProvider.argumentsFor(
@@ -305,13 +310,7 @@ class CodexCliSession extends CliProcessSession {
     );
     final session = CodexCliSession._(spec);
     return opened(provider, session, () async {
-      await session.run(
-        provider,
-        executable,
-        arguments,
-        workingDirectory: cwd,
-        environment: env,
-      );
+      await session.run(provider, arguments);
       await session._open(cwd);
     });
   }

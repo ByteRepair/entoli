@@ -15,6 +15,7 @@ import "../../../../domain/download.dart";
 import "../../../../domain/llm_provider.dart";
 import "../../../../domain/model_capability.dart";
 import "../../../../domain/model_registry.dart";
+import "../../../../domain/shell.dart" show guestHome, guestPath;
 import "../../../download.dart";
 import "../../../local/file_modes.dart";
 import "../hosted_models.dart";
@@ -35,6 +36,25 @@ export "cli_release.dart";
 /// one harness process carries a conversation across the steps of a turn.
 /// What a session *is* — a process per call, a long-lived one fed over stdin,
 /// a server it talks to — is the subclass's, through [start].
+/// A Linux a CLI's program runs in, where the platform's own processes are
+/// not Linux's: Android, whose Alpine is arm64 musl under proot. iOS has none
+/// — its Alpine is emulated 32-bit x86, which neither program is built for.
+abstract class CliGuest {
+  /// [argv] as it is started in the guest from [cwd], each of [shared] bound
+  /// at its own host path, so a path the app hands the program is one
+  /// answer inside the guest and out; and the environment the starting
+  /// process needs of its own. Throws an [LlmException] where there is no
+  /// Linux to run it in yet.
+  ({List<String> command, Map<String, String> environment}) wrap(
+    List<String> argv, {
+    required String cwd,
+    required List<String> shared,
+  });
+
+  /// The guest's own way of installing [packages].
+  List<String> install(List<String> packages);
+}
+
 abstract class CliProvider extends LlmProvider with KeyFree {
   const CliProvider(super.config, {this.launch = launchProcess});
 
@@ -46,6 +66,10 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   /// adds, which is where a program like `claude` is usually installed. Null
   /// leaves the inherited one.
   static String? loginPath;
+
+  /// Where programs run where it is not this machine — Android's Linux —
+  /// set once by `main` where the build carries one; null runs them here.
+  static CliGuest? guest;
 
   /// Where the programs' sessions keep what they run with, set once by
   /// `main` to the app's cache. Null — a test, a build that never set it —
@@ -124,10 +148,18 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   /// The models the program takes by name, offered beside the user's own.
   List<ModelInfo> get knownModels;
 
-  /// Whether this platform can run a program at all. A phone cannot, so a
-  /// CLI entry synced onto one offers nothing rather than failing per turn.
+  /// Whether this platform can run a program at all: a desktop, or Android in
+  /// its Linux. iOS cannot, so a CLI entry synced onto one offers nothing
+  /// rather than failing per turn.
   @override
-  bool get supported => isDesktop;
+  bool get supported => isDesktop || guest != null;
+
+  /// What the program needs installed in a [guest] beside it, by the
+  /// guest's package names: nothing, unless a subclass knows better.
+  List<String> get guestPackages => const [];
+
+  /// What the program is told in a [guest] beyond the guest's own basics.
+  Map<String, String> get guestEnvironment => const {};
 
   /// The machine a release is chosen for: this one, unless a test names
   /// another.
@@ -224,6 +256,7 @@ abstract class CliProvider extends LlmProvider with KeyFree {
           await file.packing.place(File(part), staged);
           makeExecutable(staged);
         }
+        await _installGuestPackages();
         for (final file in release.files) {
           await File(
             p.join(_bin, "${file.name}.new"),
@@ -231,6 +264,40 @@ abstract class CliProvider extends LlmProvider with KeyFree {
         }
       },
     ).stream;
+  }
+
+  /// [guestPackages] into the [guest], before the program is in place, so a
+  /// copy that is [installed] has what it runs with. Nothing where there is
+  /// no guest or nothing to install.
+  Future<void> _installGuestPackages() async {
+    final guest = CliProvider.guest;
+    if (guest == null || guestPackages.isEmpty) return;
+    final (:command, :environment) = guest.wrap(
+      guest.install(guestPackages),
+      cwd: workRoot.path,
+      shared: [workRoot.path],
+    );
+    final process = await launch(
+      command.first,
+      command.sublist(1),
+      workingDirectory: workRoot.path,
+      environment: {
+        "HOME": guestHome,
+        "PATH": guestPath,
+        "LANG": "C.UTF-8",
+        ...environment,
+      },
+    );
+    final said = StderrTail();
+    unawaited(process.lines.drain<void>());
+    process.errors.listen(said.add);
+    final code = await process.exitCode;
+    if (code != 0) {
+      throw LlmException(
+        "Installing ${guestPackages.join(", ")} in the Linux failed "
+        "($code): $said",
+      );
+    }
   }
 
   /// Takes [ownCopy] and its [companions] away, and the program falls back
@@ -242,12 +309,7 @@ abstract class CliProvider extends LlmProvider with KeyFree {
 
   /// Whether the program is signed in, by its own [statusArguments].
   Future<bool> signedIn() async {
-    final process = await launch(
-      executable(),
-      statusArguments,
-      workingDirectory: await workDirectory(),
-      environment: environment,
-    );
+    final process = await run(statusArguments);
     unawaited(process.lines.drain<void>());
     unawaited(process.errors.drain<void>());
     return await process.exitCode == 0;
@@ -256,12 +318,7 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   /// Signs the program out, by its own [signOutArguments]; whether it was
   /// signed in or not, it is not after.
   Future<void> signOut() async {
-    final process = await launch(
-      executable(),
-      signOutArguments,
-      workingDirectory: await workDirectory(),
-      environment: environment,
-    );
+    final process = await run(signOutArguments);
     unawaited(process.lines.drain<void>());
     unawaited(process.errors.drain<void>());
     await process.exitCode;
@@ -288,12 +345,54 @@ abstract class CliProvider extends LlmProvider with KeyFree {
 
   /// The app's own environment less what [inherits] keeps out, the login
   /// `PATH` over it, and the config's variables over both.
+  ///
+  /// In a [guest], none of the app's own: it is Android's, and means nothing
+  /// to a Linux program. The guest's basics stand in its place.
   Map<String, String> get environment => {
-    ...inheritedFrom(Platform.environment),
-    "PATH": ?loginPath,
+    if (guest == null) ...{
+      ...inheritedFrom(Platform.environment),
+      "PATH": ?loginPath,
+    } else ...{
+      "HOME": guestHome,
+      "PATH": guestPath,
+      "LANG": "C.UTF-8",
+      ...guestEnvironment,
+    },
     ...homeEnvironment(dataDirectory),
     ...config.env,
   };
+
+  /// The program, started on [arguments] in its work folder, with
+  /// [environment] below its own — here, or in the [guest] where there is
+  /// one, its folder in the cache bound at its own path there.
+  Future<CliProcess> run(
+    List<String> arguments, {
+    Map<String, String> environment = const {},
+  }) async {
+    final cwd = await workDirectory();
+    final env = {...environment, ...this.environment};
+    final program = executable();
+    final guest = CliProvider.guest;
+    if (guest == null) {
+      return launch(
+        program,
+        arguments,
+        workingDirectory: cwd,
+        environment: env,
+      );
+    }
+    final (:command, environment: own) = guest.wrap(
+      [program, ...arguments],
+      cwd: cwd,
+      shared: [workRoot.path],
+    );
+    return launch(
+      command.first,
+      command.sublist(1),
+      workingDirectory: cwd,
+      environment: {...env, ...own},
+    );
+  }
 
   /// [inherited] less what [inherits] keeps out.
   Map<String, String> inheritedFrom(Map<String, String> inherited) => {
@@ -513,22 +612,15 @@ abstract class CliProcessSession extends CliSession {
   @protected
   void answer(List<LlmMessage> results);
 
-  /// Starts the program and reads it: each line of its output that is a JSON
-  /// object goes to [line].
+  /// Starts the program, by [CliProvider.run], and reads it: each line of
+  /// its output that is a JSON object goes to [line].
   @protected
   Future<void> run(
     CliProvider provider,
-    String executable,
     List<String> arguments, {
-    required String workingDirectory,
-    required Map<String, String> environment,
+    Map<String, String> environment = const {},
   }) async {
-    final process = await provider.launch(
-      executable,
-      arguments,
-      workingDirectory: workingDirectory,
-      environment: environment,
-    );
+    final process = await provider.run(arguments, environment: environment);
     _process = process;
     process.lines.listen(_read, onError: (Object e) => fail("$e"));
     process.errors.listen(_stderr.add);

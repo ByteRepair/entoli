@@ -1,7 +1,6 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../core/platform/form_factor.dart";
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/llm_provider.dart";
 import "../../providers.dart";
@@ -64,14 +63,16 @@ class _PresetPicker extends ConsumerWidget {
                       preset: p,
                       onTap: () => _choose(context, ref, p),
                     ),
-                  // A program run here, which only a desktop can do.
-                  if (heading == _onThisMachine && isDesktop)
+                  // A program run here: a desktop's own, or in Android's
+                  // Linux. iOS runs neither.
+                  if (heading == _onThisMachine)
                     for (final cli in cliProviderPresets)
-                      _CliTile(
-                        cli,
-                        onTap: () =>
-                            Navigator.pop(context, (preset: cli.config)),
-                      ),
+                      if (cli.supported)
+                        _CliTile(
+                          cli,
+                          onTap: () =>
+                              Navigator.pop(context, (preset: cli.config)),
+                        ),
                 ],
               const Divider(),
               ListTile(
