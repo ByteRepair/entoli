@@ -105,6 +105,31 @@ class LocalShell extends Shell {
   /// shell starts in.
   final Map<String, ValueNotifier<String?>> _cwds = {};
 
+  /// Where each chat's commands stand on the machine: the directory the last
+  /// command left, whichever shell ran it. A sandboxed command is a subshell
+  /// of its own, and it used to start in the workspace whatever the session
+  /// shell had been moved to — so a chat had two working directories and the
+  /// model, told of one, was standing in the other half the time. Host
+  /// drivers only: a guest's `pwd` is a guest path, and a guest has no
+  /// confined subshell to keep in step.
+  final Map<String, String> _dirs = {};
+
+  @override
+  String? standingIn(String cwd) {
+    final dir = _dirs[cwd];
+    return dir != null && Directory(dir).existsSync() ? dir : null;
+  }
+
+  /// Record that [cwd]'s commands now stand in [dir], for the composer's bar
+  /// and for the next command, whichever shell it runs in.
+  void _stood(String cwd, String dir) {
+    _dirs[cwd] = dir;
+    _cwds[cwd]?.value = dir;
+  }
+
+  bool _onHost({String? project}) =>
+      _driver(project: project)?.guestRoot == null;
+
   @override
   String get platformDescription {
     final driver = _driver();
@@ -229,6 +254,7 @@ class LocalShell extends Shell {
 
   @override
   void closeSession(String cwd) {
+    _dirs.remove(cwd);
     _cwds.remove(cwd)?.dispose();
     _sessions.remove(cwd)?.close();
   }
@@ -252,15 +278,22 @@ class LocalShell extends Shell {
     // and dropped for the next — a `cd` into the workspace would stand in a
     // shell whose exports, aliases and functions the next command inherits
     // unconfined. The confinement is per run, so the run is.
+    //
+    // It still starts where the chat's commands stand and reports where it
+    // finished, so a `cd` holds across the two kinds of run: one working
+    // directory per chat. Only its exports and functions are its own.
+    if (restart) _dirs.remove(cwd);
     final confined = sandbox != null || oneShot;
     if (confined) {
       final driver = _driver(project: project);
+      final follows = !oneShot && driver?.guestRoot == null;
       return _OneShotRun(
         // The driver's shell, built for this chat's cwd and home, or nothing
         // where there is no driver at all.
         command: driver?.commandFor(cwd, home, readOnly: readOnly) ?? const [],
         script: command,
-        cwd: cwd,
+        cwd: follows ? standingIn(cwd) ?? cwd : cwd,
+        onDir: follows ? (dir) => _stood(cwd, dir) : null,
         timeout: timeout,
         environment: _compose(
           home: home,
@@ -503,6 +536,10 @@ class _Session {
   Process? _process;
   bool _ownsGroup = false;
 
+  /// Where this shell itself is standing, as its last sentinel said — which
+  /// lags the chat's directory when a sandboxed run moved it since.
+  String? _at;
+
   /// What the shell was spawned with. A command whose answer differs — a
   /// variable added in settings, a Linux installed or deleted — respawns the
   /// shell cold, which is how the change reaches the next command rather than
@@ -587,6 +624,16 @@ class _Session {
         return;
       }
     }
+    // A sandboxed run since this shell last spoke may have moved the chat
+    // elsewhere; the shell follows before the command, so a `cd` stands
+    // whichever kind of run made it.
+    var line = command;
+    if (_shell._onHost(project: _project)) {
+      final want = _shell.standingIn(_cwdPath);
+      if (want != null && want != _at) {
+        line = "cd -- ${_singleQuoted(want)}\n$command";
+      }
+    }
     final process = _process;
     final state = run.state;
     // Fail a previous run that never completed before overwriting _current,
@@ -609,7 +656,7 @@ class _Session {
     try {
       // The whole of the wire protocol: one base64 line, decoded and
       // evaluated by the shell.
-      process!.stdin.write("${base64.encode(utf8.encode(command))}\n");
+      process!.stdin.write("${base64.encode(utf8.encode(line))}\n");
       await process.stdin.flush();
     } catch (e) {
       // A write that fails is a pipe whose other end is gone: the shell is
@@ -669,6 +716,7 @@ class _Session {
       ),
     );
     // A fresh shell is standing where it was told to start.
+    _at = _cwdPath;
     _shell._cwds[_cwdPath]?.value = _displayCwd;
   }
 
@@ -697,7 +745,12 @@ class _Session {
     final cwd = line.substring(cwdAt + " cwd=".length);
     _current = null;
     run.timeoutTimer?.cancel();
-    _shell._cwds[_cwdPath]?.value = cwd;
+    _at = cwd;
+    if (_shell._onHost(project: _project)) {
+      _shell._stood(_cwdPath, cwd);
+    } else {
+      _shell._cwds[_cwdPath]?.value = cwd;
+    }
     run.complete(
       ShellResult(
         returnCode: rc,
@@ -745,6 +798,7 @@ class _Session {
         ),
       );
     }
+    _shell._dirs.remove(_cwdPath);
     _shell._cwds[_cwdPath]?.value = _displayCwd;
   }
 
@@ -942,9 +996,16 @@ class _OneShotRun extends ShellRun {
     this.includeParentEnvironment = true,
     this.sandbox,
     this.sandboxHelper,
+    this.onDir,
   }) {
     result = _run();
   }
+
+  /// Told where the command finished, where the caller keeps a chat's
+  /// directory: the run then ends by printing it after a marker unique to
+  /// the run, which is cut from the output before anyone reads it.
+  final void Function(String dir)? onDir;
+  late final String _dirMarker = "@@D@${const Uuid().v4()}@";
 
   /// What to run, ending in a shell. `-c` and the script go on the end of it,
   /// so a guest's shell reached through proot and the machine's own are the
@@ -1032,9 +1093,10 @@ class _OneShotRun extends ShellRun {
       // is killed, so waiting for the rest of it has to be bounded.
       await drained.timeout(_drainGrace, onTimeout: () {});
       await reading.cancel();
-      final text = output.toString();
+      final (text, dir) = _cutDir(output.toString());
+      if (dir != null) onDir?.call(dir);
       if (!_killed && timer.isActive) {
-        return ShellResult(returnCode: code, output: text);
+        return ShellResult(returnCode: code, output: text, cwd: dir);
       }
       return ShellResult(
         returnCode: -1,
@@ -1069,8 +1131,24 @@ class _OneShotRun extends ShellRun {
   ///
   /// Whether `setsid` exists is learned by trying it rather than by probing
   /// first: a failed spawn says the same thing without costing a subprocess.
+  /// [text] without the directory report, and the directory it named.
+  (String, String?) _cutDir(String text) {
+    if (onDir == null) return (text, null);
+    final at = text.lastIndexOf("\n$_dirMarker cwd=");
+    if (at == -1) return (text, null);
+    final end = text.indexOf("@@\n", at);
+    if (end == -1) return (text, null);
+    final dir = text.substring(at + "\n$_dirMarker cwd=".length, end);
+    return (text.substring(0, at) + text.substring(end + 3), dir);
+  }
+
   Future<Process> _spawn() async {
-    final body = "exec 2>&1 </dev/null\n$script";
+    // The report rides an EXIT trap, which keeps the command's own status as
+    // the shell's, so a command that runs `exit` still says where it was.
+    final report = onDir == null
+        ? ""
+        : "trap 'printf \"\\n$_dirMarker cwd=%s@@\\n\" \"\$(pwd)\"' EXIT\n";
+    final body = "exec 2>&1 </dev/null\n$report$script";
     var argv = [...command.skip(1), "-c", body];
     var head = command.first;
     // The sandboxed shape: the helper's prefix goes ahead of the shell, so
@@ -1128,6 +1206,11 @@ class _OneShotRun extends ShellRun {
     final notifier = _notifier;
     if (notifier == null) return;
     _emitted = _liveTail(_emitted ?? "", chunk);
-    notifier.value = _emitted;
+    final shown = _emitted!;
+    final cut = onDir == null ? -1 : shown.lastIndexOf("\n@@D@");
+    notifier.value = cut == -1 ? shown : shown.substring(0, cut);
   }
 }
+
+/// [text] as one single-quoted shell word.
+String _singleQuoted(String text) => "'${text.replaceAll("'", r"'\''")}'";

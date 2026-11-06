@@ -151,9 +151,9 @@ class PlanNextTool extends _PlanTool {
   @override
   String get description =>
       "Take the next pending task of the plan and mark "
-      "it as being worked on. Answers the task's number, so plan_done can "
-      "name it, and the plan written for it. \"All tasks done.\" when nothing "
-      "is left.";
+      "it as being worked on, answering its number and its plan. Only needed "
+      "to pick a plan back up: Go and $planDoneToolName already take the "
+      "next task. \"All tasks done.\" when nothing is left.";
 
   @override
   Map<String, dynamic> get schema => const {"type": "object", "properties": {}};
@@ -185,9 +185,9 @@ class PlanDoneTool extends _PlanTool {
 
   @override
   String get description =>
-      "Mark a task of the plan done: the one "
-      "$planNextToolName last answered, by number, or by naming enough of the "
-      "task's text to identify it.";
+      "Mark a task of the plan done: by number, or by naming enough of the "
+      "task's text to identify it. Takes the next task in the same call and "
+      "answers its plan, so go straight on to it.";
 
   @override
   Map<String, dynamic> get schema => const {
@@ -239,11 +239,31 @@ class PlanDoneTool extends _PlanTool {
       return;
     }
     // The index came from the text just read, so the mark cannot miss.
-    final marked = planMark(plan, found.index, PlanTaskStatus.done)!;
+    var marked = planMark(plan, found.index, PlanTaskStatus.done)!;
+    // The next task is taken in the same call and its plan handed back, so
+    // working through a plan costs one call per task rather than two —
+    // unless another is already being worked on.
+    final next = _anyInProgress(marked) ? null : planNext(marked);
+    if (next != null) {
+      marked = planMark(marked, next.index, PlanTaskStatus.inProgress)!;
+    }
     await File(_planPath(turn)).writeAsString(marked);
-    yield toolOk(call, planDoneResult(found, planProgress(marked)));
+    final progress = planProgress(marked);
+    yield toolOk(
+      call,
+      [
+        planDoneResult(found, progress),
+        if (next != null)
+          "Now taken — ${planNextResult(next, progress)}"
+        else if (progress.$1 == progress.$2)
+          "All tasks done.",
+      ].join("\n\n"),
+    );
   }
 }
+
+bool _anyInProgress(String plan) =>
+    planTasksFrom(plan).any((t) => t.status == PlanTaskStatus.inProgress);
 
 /// The plan, put to the user: the chat draws the call as the plan itself,
 /// read off $planFileName, and the Go / changes question the panel asks sits
@@ -322,6 +342,25 @@ class PresentPlanTool extends AgentTool {
     );
     yield QuestionRequestEvent(request);
     final answers = await turn.answer(request);
-    yield toolOk(call, planVerdict(answers.firstOrNull));
+    final verdict = answers.firstOrNull;
+    if (verdict != "go") {
+      yield toolOk(call, planVerdict(verdict));
+      return;
+    }
+    // Go takes the first task, so the work starts from what was approved
+    // with no call spent asking for it.
+    final plan = await _readPlan(turn);
+    final first = plan == null ? null : planNext(plan);
+    if (plan == null || first == null || _anyInProgress(plan)) {
+      yield toolOk(call, planVerdict(verdict));
+      return;
+    }
+    final marked = planMark(plan, first.index, PlanTaskStatus.inProgress)!;
+    await File(_planPath(turn)).writeAsString(marked);
+    yield toolOk(
+      call,
+      "${planVerdict(verdict)}\n\n"
+      "Now taken — ${planNextResult(first, planProgress(marked))}",
+    );
   }
 }

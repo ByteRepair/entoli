@@ -1,3 +1,4 @@
+import "../../../core/log.dart";
 import "../../../domain/agent_backend.dart";
 import "../../../domain/shell.dart";
 import "../../../domain/tool_arg.dart";
@@ -63,7 +64,44 @@ class WebSearchTool extends AgentTool {
       return;
     }
     yield toolCalled(call, query);
-    yield ToolResultEvent(toolRan(call, await turn.webSearch!.search(query)));
+    var result = await turn.webSearch!.search(query);
+    if (result.returnCode != 0) result = await _inBrowser(turn, query, result);
+    yield ToolResultEvent(toolRan(call, result));
+  }
+
+  /// The same search run in the agent's browser, where a direct request was
+  /// refused: DuckDuckGo answers a client it takes for a bot with a 202 and
+  /// no results, and a real browser is not one. Done here rather than
+  /// suggested, since a suggestion costs the model a step it may not take,
+  /// and the search is the one the model asked for, so it is not gated as a
+  /// navigation of its own would be. Where there is no browser to try, or it
+  /// fails too, the direct request's failure stands.
+  Future<ShellResult> _inBrowser(
+    Turn turn,
+    String query,
+    ShellResult failed,
+  ) async {
+    final tab = turn.browser;
+    if (!offer.caps.browser || tab == null || tab.hold.value != null) {
+      return failed;
+    }
+    try {
+      await tab.goto(
+        Uri.https("html.duckduckgo.com", "/html/", {"q": query}).toString(),
+      );
+      final text = await tab.pageText();
+      if (text.trim().isEmpty) return failed;
+      return ShellResult(
+        returnCode: 0,
+        output:
+            "(${failed.exceptionInfo ?? "The search was refused"} It was run "
+            "in your browser instead, which is now on the results page.)\n\n"
+            "$text",
+      );
+    } on Object catch (e) {
+      logFailure("websearch", "the browser fallback failed", e);
+      return failed;
+    }
   }
 }
 

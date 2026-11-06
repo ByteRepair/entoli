@@ -18,6 +18,7 @@ import "package:agent_chat/domain/artifact.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/file_tools.dart" show attachmentSaveToolName;
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/shell_job.dart" show isSystemNotification;
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/plan.dart";
 import "package:agent_chat/domain/shell.dart";
@@ -2469,10 +2470,84 @@ void main() {
 
         expect(
           heldEvents.whereType<ToolResultEvent>().single.result.output,
-          contains("Finish the turn"),
+          contains("End the turn"),
         );
       },
     );
+
+    test("Go takes the first task, and plan_done the next", () async {
+      final client = FakeLlmClient([
+        [fileCall(presentPlanToolName, {}, id: "pp")],
+        [
+          fileCall(planDoneToolName, {"task": "1"}, id: "d1"),
+        ],
+        [
+          fileCall(planDoneToolName, {"task": "2"}, id: "d2"),
+        ],
+        [finish],
+      ]);
+      final (agent, workspace) = planAgent(client, answers: ["go"]);
+      final plan = File(p.join(workspace, "PLAN.md"))
+        ..writeAsStringSync("- [ ] one\n  Do one.\n- [ ] two\n  Do two.\n");
+
+      final events = await agent.run(userMessage("go on")).toList();
+
+      final results = events.whereType<ToolResultEvent>().toList();
+      expect(results[0].result.output, contains("Task 1 of 2: one"));
+      expect(results[0].result.output, contains("Do one."));
+      expect(results[1].result.output, contains("Task 2 of 2: two"));
+      expect(results[1].result.output, contains("Do two."));
+      expect(results[2].result.output, contains("All tasks done."));
+      expect(
+        plan.readAsStringSync(),
+        "- [x] one\n  Do one.\n- [x] two\n  Do two.\n",
+      );
+    });
+
+    test("a reply that stops with tasks left is told what remains, "
+        "a bounded number of times", () async {
+      final client = FakeLlmClient([
+        [saidOnly("Task 1 is done; next I'll do two.")],
+        [saidOnly("Still on it.")],
+        [saidOnly("Stopping here.")],
+        [finish],
+      ]);
+      final (agent, workspace) = planAgent(client);
+      File(
+        p.join(workspace, "PLAN.md"),
+      ).writeAsStringSync("- [x] one\n- [~] two\n- [ ] three\n");
+
+      final events = await agent.run(userMessage("carry on")).toList();
+
+      final nudges = events.whereType<SteerEvent>().toList();
+      expect(nudges, hasLength(BuiltinAgent.maxPlanNudges));
+      final said = nudges.first.message.plainText;
+      expect(isSystemNotification(said), isTrue);
+      expect(said, contains("2. two"));
+      expect(said, contains("3. three"));
+      expect(said, isNot(contains("1. one")));
+      expect(
+        client.sent,
+        hasLength(BuiltinAgent.maxPlanNudges + 1),
+        reason: "the third stop ends the turn",
+      );
+    });
+
+    test("a plan nobody has started is not a reason to keep going", () async {
+      final client = FakeLlmClient([
+        [saidOnly("Here is the plan.")],
+        [finish],
+      ]);
+      final (agent, workspace) = planAgent(client);
+      File(
+        p.join(workspace, "PLAN.md"),
+      ).writeAsStringSync("- [ ] one\n- [ ] two\n");
+
+      final events = await agent.run(userMessage("plan it")).toList();
+
+      expect(events.whereType<SteerEvent>(), isEmpty);
+      expect(client.sent, hasLength(1));
+    });
 
     test("present_plan with nothing to show is refused", () async {
       final client = FakeLlmClient([

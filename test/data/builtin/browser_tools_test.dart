@@ -969,6 +969,71 @@ void main() {
     },
   );
 
+  group("websearch's fallback", () {
+    const refused = ShellResult.failed("DuckDuckGo returned HTTP 202.");
+
+    Future<(ToolResult, FakeBrowserTab?)> searched(
+      ShellResult result, {
+      required bool browser,
+    }) async {
+      final tab = browser ? FakeBrowserTab() : null;
+      final events = await agentOver(
+        FakeLlmClient([
+          [searchCall("flutter engine stamp")],
+          [finish],
+        ]),
+        tab: tab,
+        browser: browser,
+        webSearch: FakeWebSearch(searchResult: (_) => result),
+      ).run(userMessage("search")).toList();
+      return (events.whereType<ToolResultEvent>().first.result, tab);
+    }
+
+    test("a refused search is run in the browser instead", () async {
+      final (result, tab) = await searched(refused, browser: true);
+
+      expect(tab!.calls, [
+        "goto https://html.duckduckgo.com/html/?q=flutter+engine+stamp",
+        "text 0",
+      ]);
+      expect(result.returnCode, 0);
+      expect(result.output, contains("HTTP 202"));
+      expect(result.output, endsWith("all of it"));
+    });
+
+    test("with no browser the refusal stands", () async {
+      final (result, _) = await searched(refused, browser: false);
+      expect(result.returnCode, isNot(0));
+      expect(result.exceptionInfo, contains("HTTP 202"));
+    });
+
+    test("a search that worked never touches the browser", () async {
+      final (result, tab) = await searched(
+        const ShellResult(returnCode: 0, output: "1. A result"),
+        browser: true,
+      );
+      expect(result.output, "1. A result");
+      expect(tab!.calls, isEmpty);
+    });
+
+    test("a browser the user has hidden is left alone", () async {
+      final tab = FakeBrowserTab()..hide(const BrowserHold(reason: "busy"));
+      final events = await agentOver(
+        FakeLlmClient([
+          [searchCall("q")],
+          [finish],
+        ]),
+        tab: tab,
+        webSearch: FakeWebSearch(searchResult: (_) => refused),
+      ).run(userMessage("search")).toList();
+      expect(
+        events.whereType<ToolResultEvent>().first.result.returnCode,
+        isNot(0),
+      );
+      expect(tab.calls, isEmpty);
+    });
+  });
+
   group("webfetch's hint", () {
     Future<String> fetched(ShellResult result, {required bool browser}) async {
       final events = await agentOver(

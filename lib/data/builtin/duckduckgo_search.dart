@@ -8,9 +8,11 @@ import "package:html/parser.dart";
 import "../../domain/shell.dart";
 import "../../domain/web_search.dart";
 
-/// DuckDuckGo Lite, reached through plain HTTP — no API key, no rate limit to
-/// speak of. The search page is HTML, not JSON, so the results are parsed out
-/// of the table it renders. `webfetch` is a plain GET with markup stripped to
+/// DuckDuckGo Lite, reached through plain HTTP — no API key. It does limit:
+/// a client it takes for a bot gets HTTP 202 and no results, often after the
+/// first few searches of a session, which `websearch` answers by running the
+/// search in the agent's browser. The search page is HTML, not JSON, so the
+/// results are parsed out of the table it renders. `webfetch` is a plain GET with markup stripped to
 /// text, the same way the model would read a page if it could.
 class DuckDuckGoSearch extends WebSearch {
   DuckDuckGoSearch({

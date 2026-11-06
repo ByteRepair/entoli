@@ -1,8 +1,10 @@
 import "dart:async";
 import "dart:convert";
+import "dart:io";
 import "dart:typed_data";
 
 import "package:flutter/foundation.dart" show visibleForTesting;
+import "package:path/path.dart" as p;
 import "package:uuid/uuid.dart";
 
 import "../../domain/agent_backend.dart";
@@ -12,9 +14,11 @@ import "../../domain/ask.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
+import "../../domain/plan.dart";
 import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
+import "../../domain/shell_job.dart" show systemNotificationTag;
 import "../../domain/tone.dart";
 import "../../domain/tool_arg.dart";
 import "../../domain/trigger_manager.dart" show TriggerRegistry;
@@ -99,19 +103,23 @@ class BuiltinSession {
   }
 
   /// Put the conversation back into a session that does not have it — one
-  /// rewound, or one belonging to a chat opened after a restart. `project` is
-  /// what builds the argument, out of what `conv.jsonl` kept.
+  /// rewound, resumed, or belonging to a chat opened after a restart.
+  /// `project` is what builds the argument, out of what `conv.jsonl` kept.
+  ///
+  /// [readFiles] stays: a resume after the step limit or a stop rebuilds the
+  /// session, and clearing the stamps there refused edits to files the model
+  /// had read a step before. A stamp is checked against the disk anyway, so
+  /// one that outlived its read answers "changed since", never a wrong yes.
   void replaceWith(Iterable<LlmMessage> conversation) {
     messages
       ..clear()
       ..addAll(conversation);
-    readFiles.clear();
   }
 
   /// The files the model has read, by resolved path, as they stood when it
-  /// read them: what `write` and `edit` check an existing file against. Not
-  /// rebuilt from the log — a session refilled after a rewind or a restart
-  /// starts empty, and the model reads again.
+  /// read them: what `write` and `edit` check an existing file against. Kept
+  /// for the session's life, across its turns and its rebuilds; a chat opened
+  /// after a restart starts with none, and the model reads again.
   final Map<String, FileStamp> readFiles = {};
 
   /// Replace everything from [from] on with [turn]. How a running turn puts
@@ -780,6 +788,39 @@ class BuiltinAgent implements Turn {
         }
       };
 
+  /// How many times this turn was told its plan has tasks left.
+  int _nudges = 0;
+
+  /// How many times a turn is told its plan has tasks left before a reply
+  /// with no tool call ends it anyway: twice is room to carry on after a
+  /// progress report, and not a loop against a model that means to stop.
+  static const maxPlanNudges = 2;
+
+  /// What a plan under way has left, said as the app's notification, or null
+  /// where nothing is under way. Under way is a task in progress — the plan
+  /// was approved and its work taken — which is the one state where a reply
+  /// with no tool call is a stop in the middle rather than an answer.
+  String? openPlanTasks() {
+    if (offer.oneShot) return null;
+    final file = File(p.join(workspace, planFileName));
+    if (!file.existsSync()) return null;
+    final tasks = planTasksFrom(file.readAsStringSync());
+    if (!tasks.any((t) => t.status == PlanTaskStatus.inProgress)) return null;
+    final open = [
+      for (final t in tasks)
+        if (t.status != PlanTaskStatus.done) "${t.index}. ${t.text}",
+    ];
+    return [
+      "<$systemNotificationTag>",
+      "The approved plan still has ${open.length} task(s) not done:",
+      ...open,
+      "Carry on with the work. If you are blocked or need a decision, ask "
+          "the user with $askToolName; if a task turned out unnecessary, "
+          "mark it done and say why.",
+      "</$systemNotificationTag>",
+    ].join("\n");
+  }
+
   /// The running turn's rebuild, set by [_recorded] and called by the loop.
   void Function() _sayWhatWasSaid = _nothingSaidYet;
 
@@ -821,7 +862,23 @@ class BuiltinAgent implements Turn {
       // A reply with no tool calls is the finished answer — the text was
       // already streamed as TextDelta by _query. This is the native API
       // contract models are trained on, and works with or without a shell.
-      if (completion.message.toolCalls.isEmpty) break;
+      // The one exception is a plan under way with tasks left: a model that
+      // stops to report progress is told what remains, a bounded number of
+      // times, and stopping to ask is `ask_user`'s.
+      if (completion.message.toolCalls.isEmpty) {
+        final left = _nudges < maxPlanNudges ? openPlanTasks() : null;
+        if (left == null || step == options.stepLimit - 1) break;
+        _nudges++;
+        yield SteerEvent(
+          Message(
+            id: const Uuid().v4(),
+            role: MessageRole.user,
+            createdAt: DateTime.now(),
+            parts: [MessagePart.text(text: left)],
+          ),
+        );
+        continue;
+      }
 
       yield* _executeAll(completion.message.toolCalls);
       if (_cancelled || _ended) break;

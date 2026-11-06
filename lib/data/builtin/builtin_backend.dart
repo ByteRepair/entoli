@@ -475,8 +475,14 @@ class BuiltinBackend implements AgentBackend {
       // out of the history also takes the file back out of it, and re-running
       // the turn records the read again — the log as it now reads stays true.
       // Held state would drift from the log and lie; this cannot.
+      // Only since the last compaction: what a summary stands in for is no
+      // longer in front of the model, so the rules it was shown come back
+      // with the next read that reaches them.
+      final cut = compactions.isEmpty
+          ? -1
+          : history.indexWhere((m) => m.id == compactions.last.upToMessageId);
       final reached = {
-        for (final m in history)
+        for (final m in history.skip(cut + 1))
           for (final part in m.parts)
             if (part is InstructionsPart)
               for (final ref in part.files) ref.path,

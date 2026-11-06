@@ -595,6 +595,12 @@ class FakeShellJobs implements ChatShellJobs {
 
   @override
   Stream<String> log(ShellJob job) => Stream.value(logs[job.id] ?? "");
+
+  /// The jobs whose end the agent was told of by a wake.
+  final List<int> toldOf = [];
+
+  @override
+  void told(int id) => toldOf.add(id);
 }
 
 class FakeBackend implements AgentBackend {

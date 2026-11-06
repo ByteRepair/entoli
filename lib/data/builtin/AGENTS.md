@@ -24,6 +24,14 @@ tool call
 is a format error it retries — so the one behaviour the old name would have
 predicted is the one this does backwards.
 
+The one exception is a plan under way: where `PLAN.md` has a task in
+progress — it was approved and its work taken — a reply with no tool call is
+a stop in the middle rather than an answer, and the loop says what is left
+as a `<system-notification>` steer and carries on, at most
+`maxPlanNudges` (two) times a turn. A model that stopped to report progress
+was the "why did you stop?" every long task ended in; one that means to stop
+still can, and one that needs the user asks with `ask_user`. See "The plan".
+
 What is not upstream's at all, and it is most of this directory: cost tracking
 and the cost limit that is upstream's real budget (this counts steps instead),
 the format-error machinery, the trajectory serialization, and litellm — `llm/`
@@ -263,6 +271,21 @@ What a shell is spawned with — its command and environment — is fingerprinte
 and a change respawns the shell cold: a variable added in settings, or a Linux
 installed or deleted, reaches the next command rather than the next launch.
 
+**A sandboxed command still moves the chat.** Under the sandbox every
+command is a confined subshell of its own (see "Approvals"), so it cannot
+stand in the session shell — and it used to start in the workspace whatever
+the session shell had been moved to, which gave a chat two working
+directories, the model told of one and standing in the other half the time.
+So `LocalShell` keeps one directory per chat on the host (`standingIn`): a
+confined run starts there and ends by printing where it finished after a
+marker unique to the run, cut from the output before anyone reads it; the
+session shell's sentinel updates the same place; and the session shell `cd`s
+to it before a command when a confined run moved the chat since. Exports,
+aliases and functions stay each confined run's own, which is what the tool
+description says. A restart or a shell that died puts the chat back in the
+workspace. A guest keeps none of this: its `pwd` is a guest path and it has
+no confined subshell.
+
 Sub-agents run `oneShot` instead: a fresh subshell per command, no state, no
 sharing. A fan-out of workers wants concurrency rather than a terminal, and a
 shell they all `cd` around is as many races as there are of them. The flag
@@ -301,6 +324,11 @@ The answer gives the job's number, its pid (the group leader, so
 reads with `tail` or `read`; the number also rides the result as
 `ToolResult.jobId`, which is how the chat tells a job's call from a call.
 
+A job starts in the directory the chat's commands stand in
+(`Shell.standingIn`), its log opened first so it still lands in the
+workspace. It used to start in the workspace, so a `flutter run` after a
+`cd` into a checkout found no `pubspec.yaml`.
+
 `BackgroundJobs` holds them per chat on the backend, so a job outlives its
 turn. How one ended rides the agent's next tool result in that chat, this
 turn or a later one, as `ToolResult.notes`: beside the output rather than in
@@ -314,7 +342,21 @@ sees a job neither running nor ended. A job the app killed on its
 way out has no end; that absence is what "ended with the app" reads.
 Each is killed after `timeout`; deleting the chat
 or quitting the app kills them, and ids are never reused while the app runs,
-since the model stops a job by its id. Offered where `Shell.canRunInBackground` (the
+since the model stops a job by its id.
+
+**A job that ends between turns wakes the agent.** The note on the next tool
+result only reaches a turn that is running; between turns nothing came, and
+the agent's "it's building now" was the last word on a build that then
+failed with nobody looking. So the room, on a job's end with no turn running,
+starts a turn whose prompt is a `<system-notification>` naming the job, its
+exit code and its log's tail (`jobEndedNotification`), and tells the jobs the
+agent knows (`ChatShellJobs.told`), so the next tool result does not say it
+twice. A job that was stopped wakes nobody — whoever stopped it knows — and
+one end is one wake, so a watcher that keeps dying cannot loop. The chat
+draws that prompt as the app's note, not the user's; see "When a turn is
+over" in `lib/domain/room/AGENTS.md`.
+
+Offered where `Shell.canRunInBackground` (the
 machine's shell, a guest under proot included), never to a sub-agent: nobody
 would hear how its job ended. The chat page draws them as pills and in the reply; see "What is running,
 on screen" in `lib/ui/chat/AGENTS.md`.
@@ -424,6 +466,24 @@ matches an unconfined rule — a segment the parse proves reads only
 back, and at least one segment must match — and `writes` are the union of
 the matched rules'. The turn's grant is the chat's workspace, its tmp, the
 project's workspace beside it, and the tiers' `writableDirs`.
+
+Beside those, two grants a build needs and a user should never have had to
+make (`sandbox_grants.dart`). **The toolchain caches** under the machine
+user's home that exist — `~/.cache`, `~/Library/Caches`, Xcode's
+DerivedData, `~/.pub-cache`, `~/.npm`, `~/.gradle`, Cargo's registry, Go's
+module cache and their kin, the variables that move them, and the `bin/cache`
+of the Flutter SDK on `PATH`, resolved through Homebrew's link, where every
+`flutter` run stamps its engine. Without them `flutter test` died before it
+ran a test and the only way on was leaving the sandbox entirely, which grants
+everything a cache does not need. The cost is that a confined command can
+write a cache a later build reads; that is the bargain every build tool's
+sandbox makes. **A worktree's repository**: where the chat stands in a git
+worktree inside the grant whose repository is outside it, that repository's
+git directory is granted — read off the worktree's `.git` file and its
+`commondir`, not by running git — so a commit in a worktree the chat made
+lands; the repository's own files stay as they were. A setuid program such as
+`/bin/ps` cannot be exec'd under Seatbelt at all, whatever the profile says,
+and the `unsandboxed` argument's description says so and points at `pgrep`.
 
 **The rules are policy; the terminal environment enforces them or says it
 does not.** The rules, their sandbox half and the switch below are set
@@ -766,6 +826,17 @@ wherever the app runs, a fake in a test. A turn with none wired is offered no
 search page is HTML, not JSON, so results are parsed out of the table it
 renders. Both return a `ShellResult`, so the agent words a search's outcome
 the same way it words a command's — the model reads one shape, whatever ran.
+
+DuckDuckGo does limit, whatever it once seemed: a client it takes for a bot
+gets HTTP 202 and no results, often after the first few searches of a
+session. A search that fails is therefore run again in the agent's browser,
+where the turn has one and the user has not hidden it — the same query on
+`html.duckduckgo.com`, the page's text as the result, with a line saying it
+was run there. It is done by the tool rather than suggested, since a hint
+costs the model a step it may not take, and it is not gated as a navigation:
+it is the search the model asked for. The provider's own search tools are
+not used for this or anything: the tools are Entoli's, the same whichever
+model runs.
 
 A fetch that comes back refused (401, 403, 429, 503), empty, or saying it
 wants JavaScript or a human check gets a line pointing at
@@ -1313,11 +1384,13 @@ were what the user was asked to approve before, and a list of titles said too
 little to approve or to work from.
 
 Four tools. `plan_add` records a task (creating the file when there is none),
-one call per task, and refuses a call without `details`; `plan_next` marks the
-first pending task in progress and answers its number and its details, so the
-work starts from what the user approved; `plan_done` ticks one, by number or
-by enough of its text to identify it (ambiguous is refused with the
-candidates, not guessed). The trio rides the floor beside the file tools — no
+one call per task, and refuses a call without `details`; `plan_done` ticks
+one, by number or by enough of its text to identify it (ambiguous is refused
+with the candidates, not guessed), and **takes the next** — marks it in
+progress and answers its details — so working through a plan is one call per
+task. Go on `present_plan` takes the first the same way, so the work starts
+from what the user approved with no call spent asking for it. `plan_next`
+remains for picking a plan back up. The trio rides the floor beside the file tools — no
 shell needed, so a turn without one has them — and is dropped for a sub-agent through
 the `oneShot` flag.
 
@@ -1338,10 +1411,15 @@ is: a headless turn and a sub-agent fold `ask` out of their takes (a Go/Deny
 nobody answers would park it on a completer). Nothing answered reads as
 "finish the turn", never as "start".
 
-The workflow is the coding skill's ("Plan first"), not the system prompt's —
-the prompt carries only the one tool-fragment line, the skill carries the
-plan-first rule, what a task's details hold, and the do-not-execute-before-Go
-rule.
+The workflow is the coding skill's ("When to plan", "Plan first"), not the
+system prompt's — the prompt carries only the one tool-fragment line, the
+skill carries when a plan is wanted at all, what a task's details hold, and
+the do-not-execute-before-Go rule. **A plan is for work the user asked to be
+done**: a question, research, or a conversation about what the change should
+be is answered in prose. The skill used to say "any coding task", and a
+"so what's the plan?" asked while still deciding became plan tools and an
+approval panel in front of a user who wanted an answer. An unanswered panel
+reads "end the turn, the plan is waiting for Go", never "start".
 
 ## Memory
 
@@ -1542,11 +1620,25 @@ provider reporting one (issue #135), so until then it is the floor alone.
 A nested `AGENTS.md` found above a file the agent reads mid-turn joins the
 turn where the nested switch is on, and that one defaults on too: a
 directory that writes its own rules is a place the user meant to have them.
-The walk goes from the file's directory to `/`, not to the workspace root: the
-agent's real work is often a repository elsewhere on the machine, and its
-rules sit at that repository's root. An AGENTS.md read on purpose is not
-appended to itself. `Turn.loadedInstructions` holds the paths already in front of
-the model so the same file is never injected twice. They render as
+The walk goes from the file's directory up to the repository the file is in
+— the first directory holding a `.git`, a worktree's file or a checkout's
+directory, its own AGENTS.md included — and to `/` only for a file in no
+repository: the agent's real work is often a repository elsewhere on the
+machine, its rules sit at that repository's root, and the folders it sits in
+are not its rules. An AGENTS.md read on purpose is not appended to itself.
+
+**A file is injected once per conversation, not once per turn.** The claim
+set the labels spend — what the history's `InstructionsPart`s name — is
+also what decides injection, so a file an earlier turn's result already
+carries is not sent again; it is counted from the last compaction, so the
+rules a summary stands in for come back with the next read that reaches
+them. Per turn, as it was, a long session of reads in one repository sent
+the same 150 KB of rules with every turn's first read, and that alone was
+most of the context. A file over `instructionBudgetChars` is named in the
+result with its size, not sent — one read must not spend a fifth of a window
+on rules — and the model reads the sections it needs.
+`Turn.loadedInstructions` still holds what this turn has met, the up-front
+files with it. They render as
 "## Workspace instructions" — the one section of the second message with no
 preamble of its own, because these are the instructions.
 
@@ -1563,8 +1655,15 @@ changed since: `BuiltinSession.readFiles` stamps each read, write and edit
 stale is refused with an answer telling the model to read it first. A file
 that does not exist is a `write` creating it and needs no read. The check runs
 before the gate, so a refusal raises no banner, and again inside the run. The
-stamps are not rebuilt from the log: `replaceWith` clears them, so after a
-rewind or a restart the model reads again before it edits.
+stamps are kept for the session's life, across its turns and its rebuilds —
+a resume after the step limit or a stop rebuilds the session, and clearing
+them there refused edits to files read a step before. A stamp is checked
+against the disk anyway, so one that outlived its read answers "changed
+since", never a wrong yes. A chat opened after a restart starts with none.
+
+`read` on a directory lists it — its entries sorted, directories marked with
+a slash, cut at 500 — rather than answering "File not found" for a path that
+is plainly there.
 
 **The first reach of each file is recorded** as an `InstructionsPart` on the
 reply — the turn's up-front load one part naming every file it first put in

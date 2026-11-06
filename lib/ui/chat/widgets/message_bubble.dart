@@ -10,6 +10,7 @@ import "../../../domain/models.dart";
 import "../../../domain/quote.dart";
 import "../../../domain/reaction.dart" show Reaction;
 import "../../../domain/shell.dart";
+import "../../../domain/shell_job.dart" show isSystemNotification;
 import "../../../domain/wired_skill.dart";
 import "../../widgets/action_icon.dart";
 import "../../widgets/agent_picture.dart" show AgentPictureImage;
@@ -253,11 +254,17 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   /// anything said. Read beside [_command], for the same reasons.
   bool _wired = false;
 
+  /// Whether this prompt is the app's notification rather than the user's
+  /// words — a background job's end that woke the agent. Read beside
+  /// [_command], for the same reasons.
+  bool _notice = false;
+
   void _readCommand() {
     final user = widget.message.role == MessageRole.user;
     final text = widget.message.plainText;
     _command = user ? shellBypassCommand(text) : null;
     _wired = user && wiredSkillFromText(text) != null;
+    _notice = user && isSystemNotification(text);
   }
 
   @override
@@ -273,6 +280,11 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     final (name, bg) = switch (widget.message.role) {
       // A command the user ran is not something they said, so it does not get
       // the colour the things they said are in.
+      // The app spoke, not the user: drawn as the system notes are.
+      MessageRole.user when _notice => (
+        "System",
+        theme.colorScheme.tertiaryContainer,
+      ),
       MessageRole.user => (
         "You",
         _command == null && !_wired
@@ -677,9 +689,11 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
           spoken.add(said("Error: $message", isError: true));
         case SteerPart(:final message):
           // What the user said while the turn ran, where the turn read it:
-          // their bubble, with the reply carrying on under it.
+          // their bubble, with the reply carrying on under it. Or what the
+          // app said to it — a plan with tasks left — which is not theirs.
           flushRun();
           closeBubble();
+          final notice = isSystemNotification(message.plainText);
           rows.add(
             Align(
               key: widget.steerKey?.call(message.id),
@@ -691,7 +705,9 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                   Padding(
                     padding: const EdgeInsets.only(top: 4, right: 4, bottom: 2),
                     child: Text(
-                      "You, while it worked",
+                      notice
+                          ? "Entoli, while it worked"
+                          : "You, while it worked",
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -699,7 +715,9 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                   ),
                   _bubble(
                     context,
-                    theme.colorScheme.primaryContainer,
+                    notice
+                        ? theme.colorScheme.tertiaryContainer
+                        : theme.colorScheme.primaryContainer,
                     said: [if (message.hasText) said(message.plainText)],
                     files: message.files.toList(),
                     trailing: const [],

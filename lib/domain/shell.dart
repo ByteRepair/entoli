@@ -396,6 +396,12 @@ abstract class Shell {
   /// spoken seeds nothing. The composer's bar is what asks.
   ValueListenable<String?>? sessionCwd(String cwd, {String? home}) => null;
 
+  /// The machine directory [cwd]'s commands are standing in — where the last
+  /// one left the chat, sandboxed or not — or null where it is [cwd] itself,
+  /// or this shell keeps no such place. What a background job starts in, so
+  /// it runs where the commands before it did.
+  String? standingIn(String cwd) => null;
+
   /// End [cwd]'s persistent shell, where this one runs them. A no-op where it
   /// does not. Called when the chat the shell belongs to is deleted or leaves
   /// its project: a shell standing in a directory that is gone — or moving —

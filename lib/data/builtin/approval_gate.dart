@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:io";
 
 import "../../domain/agent_backend.dart";
 import "../../domain/file_tools.dart";
@@ -9,6 +10,7 @@ import "../../domain/shell.dart";
 import "../../domain/shell_command_analysis.dart";
 import "../../domain/web_search.dart" show webfetchToolName;
 import "llm/llm_client.dart";
+import "sandbox_grants.dart";
 import "templates.dart" show notExecuted;
 import "tool_outcome.dart";
 
@@ -138,13 +140,30 @@ class ApprovalGate {
   CommandSandbox? _sandboxFor(StandingPermissions permissions) {
     if (!permissions.sandboxed) return null;
     if (helper == null) return null;
+    final granted = [
+      workspace,
+      if (projectWorkspace != workspace) projectWorkspace,
+      ...permissions.writableDirs,
+    ];
+    final gitDir = worktreeGitDir(
+      shell.standingIn(workspace) ?? workspace,
+      granted,
+    );
     return CommandSandbox(
       workspace: workspace,
       tmp: shell.tmpDirFor(workspace),
       home: shell.machineHome,
       extraWrites: [
-        if (projectWorkspace != workspace) projectWorkspace,
-        ...permissions.writableDirs,
+        ...granted.skip(1),
+        // What developer tools write in the ordinary course of a build, and
+        // the repository a worktree the chat owns commits into: denied, they
+        // sent every build out of the sandbox altogether.
+        ...toolchainCaches(
+          home: shell.machineHome,
+          path: Platform.environment["PATH"] ?? "",
+          environment: Platform.environment,
+        ),
+        ?gitDir,
       ],
     );
   }

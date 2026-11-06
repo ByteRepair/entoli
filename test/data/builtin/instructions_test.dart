@@ -416,6 +416,36 @@ void main() {
       expect(found.single.path, p.join(repo, "AGENTS.md"));
     });
 
+    test("stops at the repository the file is in", () async {
+      File(p.join(tmp.path, "AGENTS.md")).writeAsStringSync("above rules");
+      final repo = p.join(tmp.path, "repo");
+      Directory(p.join(repo, ".git")).createSync(recursive: true);
+      Directory(p.join(repo, "src")).createSync(recursive: true);
+      File(p.join(repo, "AGENTS.md")).writeAsStringSync("repo rules");
+      File(p.join(repo, "src", "AGENTS.md")).writeAsStringSync("src rules");
+      final found = await findNestedInstructions(
+        p.join(repo, "src", "notes.txt"),
+        alreadyLoaded: {},
+      );
+      expect(found.map((f) => f.path), [
+        p.join(repo, "src", "AGENTS.md"),
+        p.join(repo, "AGENTS.md"),
+      ]);
+    });
+
+    test("a worktree's .git file is a repository's root too", () async {
+      File(p.join(tmp.path, "AGENTS.md")).writeAsStringSync("above rules");
+      final repo = p.join(tmp.path, "tree");
+      Directory(repo).createSync(recursive: true);
+      File(p.join(repo, ".git")).writeAsStringSync("gitdir: elsewhere\n");
+      File(p.join(repo, "AGENTS.md")).writeAsStringSync("tree rules");
+      final found = await findNestedInstructions(
+        p.join(repo, "notes.txt"),
+        alreadyLoaded: {},
+      );
+      expect(found.single.path, p.join(repo, "AGENTS.md"));
+    });
+
     test("walks past the project workspace's root", () async {
       File(p.join(tmp.path, "AGENTS.md")).writeAsStringSync("above rules");
       write("chats/chat-1/sub/AGENTS.md", "sub rules");

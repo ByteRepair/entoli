@@ -377,11 +377,12 @@ String planApprovalQuestionsJson(String? title) => const JsonEncoder().convert({
 /// the turn is running now or being read back out of the log.
 String planVerdict(String? verdict) => switch (verdict) {
   "go" =>
-    "Approved: the user pressed Go. Start working through the plan with "
-        "$planNextToolName and $planDoneToolName, one task at a time.",
+    "Approved: the user pressed Go. Work through the plan one task at a "
+        "time, calling $planDoneToolName as each is finished, and do not "
+        "stop until the last is done unless you need the user.",
   null =>
-    "No verdict was reached. Finish the turn; do not start executing "
-        "the plan.",
+    "The user did not answer. End the turn with one line saying the plan "
+        "is waiting for Go; their next message is the answer.",
   final changes =>
     "The user asked for changes: \"$changes\". Revise the plan "
         "(edit $planFileName, or add tasks with $planAddToolName) and "

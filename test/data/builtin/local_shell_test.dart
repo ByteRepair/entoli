@@ -880,4 +880,116 @@ void main() {
       );
     });
   });
+
+  group("one working directory per chat", () {
+    // What is pinned here is where a run starts and what it reports, not the
+    // confinement, so the helper confines nothing: `env` in front of the
+    // shell runs it as it is, on any machine.
+    late LocalShell shell;
+    late Directory sub;
+    const sandbox = CommandSandbox(workspace: "/");
+
+    setUp(() {
+      final driver = LocalShell.hostDriver(sandboxHelper: _PassThrough());
+      shell = LocalShell(driver: ({String? project}) => driver);
+      sub = Directory(p.join(workspace.path, "sub"))..createSync();
+    });
+
+    Future<ShellResult> run(
+      String command, {
+      bool sandboxed = true,
+      bool restart = false,
+    }) => shell
+        .start(
+          command,
+          cwd: workspace.path,
+          home: home.path,
+          timeout: const Duration(seconds: 10),
+          sandbox: sandboxed ? sandbox : null,
+          restart: restart,
+        )
+        .result;
+
+    test("a sandboxed cd is where the next sandboxed command starts", () async {
+      final moved = await run("cd sub");
+      expect(moved.cwd, sub.path);
+      expect(
+        moved.output,
+        isEmpty,
+        reason: "the report is cut from the output",
+      );
+
+      final next = await run("pwd");
+      expect(next.output, "${sub.path}\n");
+      expect(shell.standingIn(workspace.path), sub.path);
+    });
+
+    test(
+      "and where the session shell runs next, and back the other way",
+      () async {
+        await run("cd sub");
+        final session = await run("pwd", sandboxed: false);
+        expect(session.output, "${sub.path}\n");
+
+        await run("cd ..", sandboxed: false);
+        final sandboxed = await run("pwd");
+        expect(sandboxed.output, "${workspace.path}\n");
+      },
+    );
+
+    test("a sandboxed command's exports stay its own", () async {
+      await run("export MARK=one");
+      final next = await run(r"echo ${MARK:-unset}");
+      expect(next.output, "unset\n");
+    });
+
+    test(
+      "a command that exits still says where it was, and keeps its code",
+      () async {
+        final result = await run("cd sub; exit 3");
+        expect(result.returnCode, 3);
+        expect(result.cwd, sub.path);
+      },
+    );
+
+    test("a restart puts the chat back in the workspace", () async {
+      await run("cd sub");
+      final result = await run("pwd", sandboxed: false, restart: true);
+      expect(result.output, "${workspace.path}\n");
+      expect(shell.standingIn(workspace.path), workspace.path);
+    });
+
+    test("a background job starts where the commands stand", () async {
+      await run("cd sub");
+      await shell
+          .start(
+            backgroundScript(
+              "c1",
+              "pwd",
+              startIn: shell.standingIn(workspace.path),
+            ),
+            cwd: workspace.path,
+            home: home.path,
+            timeout: const Duration(seconds: 10),
+            oneShot: true,
+          )
+          .result;
+      expect(
+        File(
+          p.join(workspace.path, ".entoli-jobs", "c1.log"),
+        ).readAsStringSync(),
+        "${sub.path}\n",
+        reason: "the log is still the workspace's; the job ran in sub",
+      );
+    });
+  });
+}
+
+/// A sandbox helper that confines nothing, for tests about where a confined
+/// run starts rather than what it may write.
+class _PassThrough extends SandboxHelper {
+  @override
+  Future<List<String>?> prefixFor(CommandSandbox sandbox) async => [
+    "/usr/bin/env",
+  ];
 }

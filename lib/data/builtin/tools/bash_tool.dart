@@ -47,6 +47,14 @@ class BashTool extends AgentTool {
             "starts in the workspace directory, so a `cd` or an export does not "
             "carry over to the next command: prefix what it needs, or use "
             "absolute paths."
+      : leavesSandbox
+      ? "Execute a bash command. Commands start in the workspace directory, "
+            "and a `cd` made by one command is where the next one starts. "
+            "Each command runs sandboxed in a fresh subshell, so an export, "
+            "alias or function does not carry over: prefix what a command "
+            "needs. A command run with `unsandboxed` runs in the chat's "
+            "persistent shell, where exports do carry over between such "
+            "commands."
       : "Execute a bash command in the chat's persistent shell, which starts "
             "in the workspace directory and keeps its state between commands: a "
             "`cd` or an export made by one command is still there for the next.";
@@ -101,9 +109,12 @@ class BashTool extends AgentTool {
           "\"Permission denied\" or \"Operation not permitted\". When a "
           "command needs to write elsewhere (container tools like podman or "
           "toolbox, installers, caches under ~), call it again with this "
-          "set. The user is asked to approve it unless a rule already "
-          "allows it. Never set it to get around a failure the sandbox did "
-          "not cause.",
+          "set. Package and build caches (~/.cache, ~/.pub-cache, ~/.npm, "
+          "the Flutter SDK's cache and the like) are already writable. A "
+          "setuid program such as `ps` cannot start sandboxed at all: use "
+          "`pgrep`, or set this. The user is asked to approve it unless a "
+          "rule already allows it. Never set it to get around a failure the "
+          "sandbox did not cause.",
     },
   };
 
@@ -112,12 +123,13 @@ class BashTool extends AgentTool {
       "type": "boolean",
       "description":
           "Start the command and answer at once, leaving it running: for a "
-          "server, a watcher, or anything that does not exit on its own. It "
-          "runs in a fresh shell that starts in the chat workspace (an earlier "
-          "`cd` does not apply) with no input, and everything it prints goes "
-          "to a log file the answer names: read it with `tail` or the read "
-          "tool. The answer gives its process id to stop it with, and your "
-          "next call after it exits says how it ended. Use this rather than "
+          "server, a watcher, a build, or anything that does not exit on "
+          "its own or soon. It runs in a fresh shell that starts in the "
+          "directory your commands are standing in, with no input, and "
+          "everything it prints goes to a log file the answer names: read it "
+          "with `tail` or the read tool. The answer gives its process id to "
+          "stop it with. When it exits you are told how it ended, even after "
+          "your turn is over, so do not poll it with `sleep`. Use this rather than "
           "`&`, `nohup` or `setsid`, which leave a command holding the call "
           "open.",
     },
@@ -242,6 +254,7 @@ class BashTool extends AgentTool {
       command,
       callId: callId,
       workspace: turn.workspace,
+      startIn: turn.shell.standingIn(turn.workspace),
       spawn: (script) => turn.shell.start(
         script,
         cwd: turn.workspace,
@@ -267,8 +280,8 @@ class BashTool extends AgentTool {
       output:
           "Started in the background as job ${job.id}.$stop Its output "
           "goes to $log in the chat workspace$where: read it with `tail` or "
-          "the read tool at chat:$log. Your next call after it exits says "
-          "how it ended.",
+          "the read tool at chat:$log. You are told how it ended when it "
+          "exits, even after this turn is over.",
     );
   }
 }

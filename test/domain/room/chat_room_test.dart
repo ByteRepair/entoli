@@ -6,7 +6,13 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/models.dart"
-    show CallEvents, JobEnd, MessageRole, Retraction, jobEndedEvent;
+    show
+        CallEvents,
+        JobEnd,
+        MessageParts,
+        MessageRole,
+        Retraction,
+        jobEndedEvent;
 import "package:agent_chat/domain/reaction.dart";
 import "package:agent_chat/domain/shell_job.dart";
 import "package:agent_chat/domain/project_settings.dart" show OmadaOrdering;
@@ -229,6 +235,89 @@ void main() {
       );
     },
   );
+
+  group("a job that ends between turns wakes the agent", () {
+    const job = ShellJob(
+      id: 3,
+      callId: "c1",
+      command: "flutter run --profile",
+      logPath: "/l",
+    );
+
+    Future<ChatRoom> afterATurn() async {
+      final (room, host) = await openRoom();
+      await room.send("build it");
+      await waitFor(() => host.settled == 1, what: "the settle");
+      return room;
+    }
+
+    test("with a notification of how it ended", () async {
+      final room = await afterATurn();
+      final jobs = app.backend.jobsOf(room.chatId);
+      jobs.jobs.value = [job];
+
+      jobs.endings.add((
+        callId: "c1",
+        end: const JobEnd(jobId: 3, exitCode: 1, tail: "Error: no pubspec"),
+      ));
+      await waitFor(() => app.backend.prompts.length == 2, what: "the wake");
+
+      final said = app.backend.prompts.last.prompt.plainText;
+      expect(isSystemNotification(said), isTrue);
+      expect(said, contains("Background job 3 (`flutter run --profile`)"));
+      expect(said, contains("exited with code 1"));
+      expect(said, contains("Error: no pubspec"));
+      expect(jobs.toldOf, [
+        3,
+      ], reason: "the next tool result does not say it a second time");
+      // The woken turn runs to its end before the app goes.
+      await waitFor(() => !room.state.isRunning, what: "the woken turn");
+    });
+
+    test("but not where it was stopped", () async {
+      final room = await afterATurn();
+      final jobs = app.backend.jobsOf(room.chatId);
+      jobs.jobs.value = [job];
+
+      jobs.endings.add((callId: "c1", end: const JobEnd(jobId: 3, tail: "")));
+      await waitFor(
+        () => room.state.chat?.jobEndOf("c1") != null,
+        what: "the end on the chat",
+      );
+
+      expect(app.backend.prompts, hasLength(1));
+      await waitFor(
+        () async =>
+            (await app.repo.readRecords(room.chatId)).last is CallEventRecord,
+        what: "the end in the log",
+      );
+    });
+
+    test(
+      "nor while a turn is running, which reads it on its next call",
+      () async {
+        final (room, _) = await openRoom();
+        app.backend.hold = Completer<void>();
+        await room.send("build it");
+        await waitFor(() => room.state.isRunning, what: "the turn under way");
+        final jobs = app.backend.jobsOf(room.chatId);
+        jobs.jobs.value = [job];
+
+        jobs.endings.add((
+          callId: "c1",
+          end: const JobEnd(jobId: 3, exitCode: 0, tail: ""),
+        ));
+        await waitFor(
+          () => room.state.chat?.jobEndOf("c1") != null,
+          what: "the end on the chat",
+        );
+
+        expect(app.backend.prompts.length, lessThan(2));
+        expect(jobs.toldOf, isEmpty);
+        await room.abort();
+      },
+    );
+  });
 
   test("a job goes from running to ended with no step between, the end "
       "landing before the backend drops it", () async {
