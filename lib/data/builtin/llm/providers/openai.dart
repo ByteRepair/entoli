@@ -1,5 +1,5 @@
 import "../../../../domain/llm_provider.dart";
-import "../openai_usage_client.dart";
+import "../openai_platform_client.dart";
 import "provider.dart";
 
 class OpenAiProvider extends OpenAiCompatibleProvider {
@@ -24,8 +24,8 @@ class OpenAiProvider extends OpenAiCompatibleProvider {
   );
 
   @override
-  OpenAiUsageClient client(String? apiKey) =>
-      OpenAiUsageClient(baseUrl: baseUrl, apiKey: apiKey);
+  OpenAiPlatformClient client(String? apiKey) =>
+      OpenAiPlatformClient(baseUrl: baseUrl, apiKey: apiKey);
 
   /// As a `file` part, which OpenAI's own `/chat/completions` takes.
   @override
