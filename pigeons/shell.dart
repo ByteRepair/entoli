@@ -680,6 +680,9 @@ abstract class WindowEvents {
 
   /// The sidebar shown or hidden by the client's own control.
   void sidebarShown(bool shown);
+
+  /// The mouse position while it is over native chrome that covers Flutter.
+  void pointer(double x, double y);
 }
 
 /// The sidebar, which is always there.

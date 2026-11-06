@@ -11,6 +11,7 @@ import "../app_menu_bar.dart";
 import "../command_intents.dart";
 import "../commands.dart";
 import "../selection.dart";
+import "../bot_avatar/bot_avatar_view.dart" show setNativePointerPosition;
 import "../app_routes.dart";
 import "../chat/chat_page.dart";
 import "shell_outbox.dart";
@@ -172,4 +173,7 @@ class _Window implements WindowEvents {
   @override
   void sidebarShown(bool shown) =>
       ref.read(sidebarShownProvider.notifier).set(shown);
+
+  @override
+  void pointer(double x, double y) => setNativePointerPosition(Offset(x, y));
 }
