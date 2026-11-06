@@ -54,9 +54,9 @@ it was never offered is a request some refuse. The model is the classifier
 model where one is set, as Claude Code's reviewer is a small fast model, else
 the turn's own, as OpenCode's is. Short of the goal, the reason and the next
 step go in as a `<system-notification>` steer and the turn carries on; met or
-blocked is written to the goal and the turn ends. The goal's budget is its
-own, kept on it across turns, not `maxStopNudges`; the last step is still
-never sent back. A review with no usable verdict ends the turn as a stop did
+blocked is written to the goal and the turn ends. A send-back is not one of
+`maxStopNudges`: the step limit is what bounds them, each being a step, and
+the last step is never sent back. A review with no usable verdict ends the turn as a stop did
 before goals, and leaves the goal active. The goal is read again after the
 review, so a pause the user made while the reviewer read stands.
 

@@ -40,8 +40,9 @@ class ChatGoal {
 
   final GoalStatus status;
 
-  /// How many times the reviewer sent the agent back to work on this goal.
-  /// [maxGoalRounds] of them pause it.
+  /// How many times the reviewer sent the agent back to work on this goal:
+  /// said, not capped. The turn's step limit is what bounds a run of them,
+  /// each send-back being a step of the turn it happens in.
   final int rounds;
 
   /// Reviews in a row that sent the agent back after a stretch in which it
@@ -107,11 +108,6 @@ class ChatGoal {
   @override
   int get hashCode => Object.hash(objective, status, rounds, stalls, reason);
 }
-
-/// How many times a goal sends the agent back before it pauses: OpenCode's
-/// number. Claude Code has no cap of its own; a loop the user is not
-/// watching wants one.
-const maxGoalRounds = 50;
 
 /// How many reviews in a row may follow a stretch with no tool call before
 /// the goal pauses: a model that only talks is not getting closer.

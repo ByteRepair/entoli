@@ -2736,8 +2736,9 @@ void main() {
         const ChatGoal(
           objective: "ship it",
           status: GoalStatus.paused,
-          rounds: maxGoalRounds,
-          reason: "Paused after 50 rounds.",
+          rounds: 7,
+          stalls: maxGoalStalls,
+          reason: "Paused: the agent stopped 3 times in a row.",
         ),
       );
       await controller.send("/goal resume");

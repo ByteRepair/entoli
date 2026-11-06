@@ -959,7 +959,8 @@ class BuiltinAgent implements Turn {
   /// The stop just made, put to the reviewer where the chat has an active
   /// goal. Met or blocked ends the goal's run and the turn; short of it the
   /// turn carries on with the reviewer's reason as a `<system-notification>`
-  /// — until the goal's rounds or stalls run out, which pauses it.
+  /// — until the step limit ends the turn, or the stalls run out, which
+  /// pauses the goal.
   ///
   /// The goal is read again after the review: the user may have paused,
   /// cleared or replaced it while the reviewer read, and what they did then
@@ -992,24 +993,24 @@ class BuiltinAgent implements Turn {
           current.copyWith(status: GoalStatus.blocked, reason: verdict.reason),
         );
       case GoalVerdictKind.carryOn:
+        // No cap on rounds of its own: a send-back is a step of this turn,
+        // so the step limit the user set is what bounds a run of them.
         final stalls = _actedSinceReview ? 0 : current.stalls + 1;
-        final rounds = current.rounds + 1;
-        if (stalls >= maxGoalStalls || rounds > maxGoalRounds) {
+        if (stalls >= maxGoalStalls) {
           await store.write(
             current.copyWith(
               status: GoalStatus.paused,
               stalls: stalls,
-              reason: stalls >= maxGoalStalls
-                  ? "Paused: the agent stopped $stalls times in a row "
-                        "without doing anything. ${verdict.reason}"
-                  : "Paused after $maxGoalRounds rounds. ${verdict.reason}",
+              reason:
+                  "Paused: the agent stopped $stalls times in a row "
+                  "without doing anything. ${verdict.reason}",
             ),
           );
           return;
         }
         await store.write(
           current.copyWith(
-            rounds: rounds,
+            rounds: current.rounds + 1,
             stalls: stalls,
             reason: verdict.reason,
           ),

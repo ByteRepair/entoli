@@ -926,6 +926,30 @@ void main() {
       expect(store.goal?.reason, "The test run passed.");
     });
 
+    test("the step limit is what bounds the send-backs, and leaves the "
+        "goal set", () async {
+      final client = FakeLlmClient([
+        [saidOnly("First go.")],
+        [saidOnly("Second go.")],
+      ]);
+      final store = FakeGoalStore(const ChatGoal(objective: "ship"));
+      final reviewer = FakeGoalReviewer([
+        const GoalVerdict(GoalVerdictKind.carryOn, "Not yet."),
+      ]);
+
+      await agentOver(
+        client,
+        options: const BuiltinOptions(stepLimit: 2),
+        goal: store,
+        goalReviewer: reviewer,
+      ).run(userMessage("go")).toList();
+
+      // Sent back once; the last step's stop is never reviewed.
+      expect(reviewer.read, hasLength(1));
+      expect(client.sent, hasLength(2));
+      expect(store.goal?.status, GoalStatus.active);
+    });
+
     test("blocked ends the turn and says why", () async {
       final client = FakeLlmClient([
         [saidOnly("I need the API key.")],
