@@ -19,7 +19,7 @@ import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/scrolling.dart";
 import "llm_settings.dart";
-import "cli_sign_in_dialog.dart";
+import "connect_provider.dart";
 import "settings_category.dart";
 
 /// The welcome tour as the home content on first launch. It is the root route,

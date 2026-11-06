@@ -1,13 +1,11 @@
 import "package:file_selector/file_selector.dart";
 import "package:flutter/material.dart";
-import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../core/log.dart";
 import "../../core/platform/form_factor.dart";
 import "../../data/builtin/llm/llm_client.dart" show LlmException;
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/llm_provider.dart";
-import "../../providers.dart";
 import "environment_section.dart";
 
 /// Add or edit one endpoint the agent can call. A preset opens on the key
@@ -35,6 +33,7 @@ Future<ProviderEdit?> promptForProvider(
   String title = "Add provider",
   void Function(BuildContext, Uri)? openLink,
   Future<bool> Function(LlmProviderConfig config, String apiKey)? checkKey,
+  Widget Function(LlmApi api)? cliAccount,
 }) => showDialog<ProviderEdit>(
   context: context,
   builder: (context) => _ProviderDialog(
@@ -45,44 +44,9 @@ Future<ProviderEdit?> promptForProvider(
     title: title,
     openLink: openLink,
     checkKey: checkKey,
+    cliAccount: cliAccount,
   ),
 );
-
-/// [promptForProvider] with what the app knows filled in, saved through the
-/// settings notifier: an entry being edited keeps its id, and one being
-/// added, preset or not, has none until the notifier gives it one. The one
-/// way in for the Providers page and the welcome tour alike; [adopt] is the
-/// notifier's own, the tour's choosing a service by name.
-Future<void> editProvider(
-  BuildContext context,
-  WidgetRef ref, {
-  LlmProviderConfig? initial,
-  String title = "Add provider",
-  bool adopt = false,
-}) async {
-  // Notifier first: the page that asked can go away while the dialog is
-  // open, and the save must outlive it rather than resume on a defunct ref.
-  final notifier = ref.read(appSettingsProvider.notifier);
-  final secrets = ref.read(appSecretsProvider);
-  final saved = await promptForProvider(
-    context,
-    initial: initial,
-    storedKey: initial == null ? null : secrets.providerKey(initial.id),
-    nameTaken: (name) => ref
-        .read(appSettingsProvider)
-        .providerNameTaken(name, exceptId: initial?.id),
-    encrypted: secrets.encrypted,
-    title: title,
-    openLink: ref.read(linkOpenerProvider).open,
-    checkKey: ref.read(keyCheckProvider),
-  );
-  if (saved == null) return;
-  await notifier.upsertProvider(
-    saved.config,
-    setKey: saved.setKey,
-    adopt: adopt,
-  );
-}
 
 class ProviderEdit {
   const ProviderEdit(this.config, this.setKey);
@@ -102,6 +66,7 @@ class _ProviderDialog extends StatefulWidget {
     required this.title,
     required this.openLink,
     required this.checkKey,
+    required this.cliAccount,
   });
 
   final LlmProviderConfig? initial;
@@ -112,6 +77,11 @@ class _ProviderDialog extends StatefulWidget {
   final void Function(BuildContext, Uri)? openLink;
   final Future<bool> Function(LlmProviderConfig config, String apiKey)?
   checkKey;
+
+  /// What a CLI's entry shows of the program's sign-in, above its fields:
+  /// the caller's, since signing in runs and installs things this dialog
+  /// knows nothing of. Nothing where it is not given.
+  final Widget Function(LlmApi api)? cliAccount;
 
   @override
   State<_ProviderDialog> createState() => _ProviderDialogState();
@@ -444,6 +414,11 @@ class _ProviderDialogState extends State<_ProviderDialog> {
     return [
       Text(cli.about, style: Theme.of(context).textTheme.bodySmall),
       const SizedBox(height: 16),
+      if (widget.cliAccount case final account?) ...[
+        // Keyed by the program, so switching the API asks the other one.
+        KeyedSubtree(key: ValueKey(_api), child: account(_api)),
+        const SizedBox(height: 16),
+      ],
       TextField(
         controller: _command,
         decoration: InputDecoration(

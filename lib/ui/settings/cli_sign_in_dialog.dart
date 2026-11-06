@@ -8,56 +8,9 @@ import "../../core/log.dart";
 import "../../data/builtin/llm/providers/cli_sign_in.dart";
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/download.dart";
+import "../../domain/llm_provider.dart" show LlmApi;
 import "../../providers.dart";
-import "../widgets/provider_dialog.dart";
 import "cli_downloads.dart";
-
-/// Connects [service] the way its user knows it: a CLI is installed and
-/// signed in, and an API is its preset's dialog. Either way it is adopted —
-/// it answers new chats at its own defaults.
-Future<void> connectService(
-  BuildContext context,
-  WidgetRef ref,
-  OfferedByName service,
-) => switch (service) {
-  CliProvider() => _connectCli(context, ref, service),
-  _ => editProvider(
-    context,
-    ref,
-    initial: service.config,
-    title: "Connect ${service.displayName}",
-    adopt: true,
-  ),
-};
-
-/// [service]'s program, Entoli's own copy of it installed where it is not
-/// yet and signed in where it is not yet, added once it is — or, where an
-/// entry for it is already configured, that entry adopted rather than a
-/// second one added beside it.
-Future<void> _connectCli(
-  BuildContext context,
-  WidgetRef ref,
-  OfferedByName service,
-) async {
-  // Notifier first: the page that asked can go away while the dialog is
-  // open, and the save must outlive it.
-  final notifier = ref.read(appSettingsProvider.notifier);
-  final cli = ref
-      .read(cliProgramsProvider)
-      .firstWhere((c) => c.config.api == service.config.api);
-  final ready = await showDialog<bool>(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => CliSignInDialog(cli: cli, service: service),
-  );
-  if (ready != true) return;
-  final existing = ref
-      .read(appSettingsProvider)
-      .llmProviders
-      .where((p) => p.api == cli.config.api && p.command == null)
-      .firstOrNull;
-  await notifier.upsertProvider(existing ?? cli.config, adopt: true);
-}
 
 /// Where a sign-in has got to.
 sealed class _Stage {
@@ -94,12 +47,9 @@ class _Failed extends _Stage {
 /// shown here to open, and a code the page shows can be pasted back. Pops
 /// true once the program says it is signed in, false when cancelled.
 class CliSignInDialog extends ConsumerStatefulWidget {
-  const CliSignInDialog({super.key, required this.cli, required this.service});
+  const CliSignInDialog({super.key, required this.cli});
 
   final CliProvider cli;
-
-  /// The words the service is shown with, which [cli] may be a stand-in for.
-  final OfferedByName service;
 
   @override
   ConsumerState<CliSignInDialog> createState() => _CliSignInDialogState();
@@ -110,7 +60,6 @@ class _CliSignInDialogState extends ConsumerState<CliSignInDialog> {
   final _code = TextEditingController();
 
   CliProvider get _cli => widget.cli;
-  String get _name => widget.service.serviceName;
 
   @override
   void initState() {
@@ -201,7 +150,7 @@ class _CliSignInDialogState extends ConsumerState<CliSignInDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return AlertDialog(
-      title: Text("Connect $_name"),
+      title: Text("Sign in to ${_cli.planName}"),
       content: SizedBox(
         width: 420,
         child: switch (_stage) {
@@ -319,5 +268,91 @@ class _SignInPage extends StatelessWidget {
         const LinearProgressIndicator(),
       ],
     );
+  }
+}
+
+/// [cli]'s sign-in where a provider on it is set up: whether the program is
+/// signed in, as it says itself, and the way to sign it in where it is not —
+/// [CliSignInDialog], the one the welcome tour opens. The account is the
+/// program's, so this says the same for every entry on the same program.
+class CliAccountSection extends ConsumerStatefulWidget {
+  const CliAccountSection({super.key, required this.api});
+
+  final LlmApi api;
+
+  @override
+  ConsumerState<CliAccountSection> createState() => _CliAccountSectionState();
+}
+
+class _CliAccountSectionState extends ConsumerState<CliAccountSection> {
+  /// Null while the program is being asked; false also where it is not
+  /// there to ask, signing in being what installs it.
+  bool? _signedIn;
+
+  late final CliProvider _cli = ref
+      .read(cliProgramsProvider)
+      .firstWhere((c) => c.config.api == widget.api);
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_check());
+  }
+
+  Future<void> _check() async {
+    if (mounted) setState(() => _signedIn = null);
+    var signedIn = false;
+    try {
+      signedIn = _cli.installed && await _cli.signedIn();
+    } catch (e) {
+      logFailure("cli", "asking ${_cli.config.displayName} its sign-in", e);
+    }
+    if (mounted) setState(() => _signedIn = signedIn);
+  }
+
+  Future<void> _signIn() async {
+    final done = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => CliSignInDialog(cli: _cli),
+    );
+    if (done == true) {
+      if (mounted) setState(() => _signedIn = true);
+    } else {
+      await _check();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final plan = _cli.planName;
+    return switch (_signedIn) {
+      null => const Row(
+        children: [
+          SizedBox.square(
+            dimension: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: 12),
+          Text("Checking the sign-in…"),
+        ],
+      ),
+      true => Row(
+        children: [
+          Icon(Icons.check_circle, color: scheme.primary),
+          const SizedBox(width: 12),
+          Expanded(child: Text("Signed in to your $plan account")),
+        ],
+      ),
+      false => Row(
+        children: [
+          Icon(Icons.account_circle_outlined, color: scheme.onSurfaceVariant),
+          const SizedBox(width: 12),
+          const Expanded(child: Text("Not signed in")),
+          FilledButton.tonal(onPressed: _signIn, child: const Text("Sign in")),
+        ],
+      ),
+    };
   }
 }

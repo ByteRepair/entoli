@@ -79,14 +79,21 @@ a slide per point. The model page holds Next until some model is reachable and
 a default is picked, and picks nothing itself: its rows are the services a
 plan someone pays for answers through (`welcomeProviders`), then Local Model
 and Advanced. A service is connected by `connectService`
-(`cli_sign_in_dialog.dart`) as its kind is — a CLI installed if Entoli has no
-copy of it and signed in if it is not (`CliSignInDialog`: the program's own
+(`connect_provider.dart`, beside `editProvider`, the Providers page's way in)
+as its kind is — a CLI installed if Entoli has no
+copy of it and signed in if it is not (`CliSignInDialog` in `cli_sign_in_dialog.dart`: the program's own
 sign-in run, the page it prints opened from the dialog, a code the page shows
 pasted back), an API in its preset's dialog — and adopted, answering new
 chats, titles and the classifier at its own defaults; connecting one already
 configured adopts that entry rather than adding a second. The first
 on-device model downloaded fills those roles where nothing answers yet
 (`ModelDownloads.landed`), so Local Model needs no picking either.
+The same dialog is the way to sign in outside the tour: a CLI's
+entry in the provider dialog shows `CliAccountSection` above its fields —
+whether the program says it is signed in, and Sign in where it is not. The
+provider dialog is a shared widget and knows nothing of programs or
+downloads, so it takes the section as `promptForProvider`'s `cliAccount`
+builder, which `editProvider` fills in.
 `DefaultsSection` is drawn only where models are reachable and nothing
 answers new chats — a setup from before this — which is the one case Next
 would otherwise wait on with nothing to press. The extras page is optional throughout: a row into each extra, a row

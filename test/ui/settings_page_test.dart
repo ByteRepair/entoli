@@ -15,6 +15,7 @@ import "package:agent_chat/ui/chat/widgets/code_block.dart" show CodeBlock;
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
+import "../fakes.dart";
 import "../harness.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
 
@@ -358,6 +359,35 @@ void main() {
       expect(provider.defaultLightModelId, "claude-haiku-4-5");
     });
   });
+
+  // A CLI's entry says whether its program is signed in, and signs it in
+  // through the same dialog the welcome tour opens.
+  testWidgets("a CLI's dialog signs its program in", (tester) async {
+    final codex = FakeCli.codex(signedIn: false);
+    app.dispose();
+    app = TestApp.create(clis: [FakeCli.claude(), codex]);
+    await pumpSettings(tester, app, SettingsCategory.providers);
+
+    await tester.tap(find.text("Add provider"));
+    await settleIo(tester);
+    await tester.ensureVisible(find.text("Codex CLI"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Codex CLI"));
+    await frames(tester);
+    expect(find.text("Not signed in"), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, "Sign in"));
+    await frames(tester);
+    expect(find.text("Sign in to ChatGPT"), findsOneWidget);
+    codex.processes.single.say("https://auth.openai.com/oauth/authorize?x=1");
+    await frames(tester);
+    expect(find.text("Open the sign-in page"), findsOneWidget);
+
+    codex.finishSignIn();
+    await frames(tester);
+    expect(find.text("Sign in to ChatGPT"), findsNothing);
+    expect(find.text("Signed in to your ChatGPT account"), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   testWidgets("selecting a model persists it with its provider", (
     tester,
