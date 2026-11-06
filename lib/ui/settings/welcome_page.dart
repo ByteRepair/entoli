@@ -455,14 +455,20 @@ int _agentModels(List<ModelOption>? models) => (models ?? const [])
 
 /// Where the model runs: a service by the name its user knows it by, which
 /// connects with that provider's recommended models, or the settings that
-/// hold everything else. Next waits here until some model is reachable and a
-/// default is picked; the first provider added is made the default.
+/// hold everything else. Next waits here until some model is reachable and
+/// answers new chats. A service chosen here answers them at its own defaults,
+/// and so does the first model downloaded, so nothing is picked on this page —
+/// unless models are reachable with nothing answering, a setup from before,
+/// which is the one case that gets the pickers.
 class _ModelPage extends ConsumerWidget {
   const _ModelPage();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final count = _agentModels(ref.watch(availableModelsProvider).value);
+    final unanswered = ref.watch(
+      appSettingsProvider.select((s) => s.defaultProviderId == null),
+    );
     final scheme = Theme.of(context).colorScheme;
     return _Slide(
       icon: Icons.hub_outlined,
@@ -502,8 +508,10 @@ class _ModelPage extends ConsumerWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    const DefaultsSection(),
+                    if (unanswered) ...[
+                      const SizedBox(height: 16),
+                      const DefaultsSection(),
+                    ],
                   ],
                 )
               : Text(
@@ -767,6 +775,7 @@ class _SetupRow extends ConsumerWidget {
         ref,
         initial: provider.config,
         title: "Connect ${provider.displayName}",
+        adopt: true,
       )),
       offered = ((_) => provider.supported);
 

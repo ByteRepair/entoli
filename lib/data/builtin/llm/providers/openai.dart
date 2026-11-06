@@ -2,7 +2,7 @@ import "../../../../domain/llm_provider.dart";
 import "../openai_usage_client.dart";
 import "provider.dart";
 
-class OpenAiProvider extends OpenAiCompatibleProvider with OfferedByName {
+class OpenAiProvider extends OpenAiCompatibleProvider {
   const OpenAiProvider([LlmProviderConfig config = preset])
     : super(config, _terms);
 
@@ -22,12 +22,6 @@ class OpenAiProvider extends OpenAiCompatibleProvider with OfferedByName {
     policy: "https://openai.com/enterprise-privacy",
     keyUrl: "https://platform.openai.com/api-keys",
   );
-
-  @override
-  String get serviceName => "OpenAI (API)";
-
-  @override
-  String get connectHint => "Connect with an OpenAI API key.";
 
   @override
   OpenAiUsageClient client(String? apiKey) =>

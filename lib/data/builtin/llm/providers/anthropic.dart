@@ -31,7 +31,7 @@ class AnthropicCompatibleProvider extends LlmProvider {
       );
 }
 
-class AnthropicProvider extends AnthropicCompatibleProvider with OfferedByName {
+class AnthropicProvider extends AnthropicCompatibleProvider {
   const AnthropicProvider([LlmProviderConfig config = preset])
     : super(config, _terms);
 
@@ -51,10 +51,4 @@ class AnthropicProvider extends AnthropicCompatibleProvider with OfferedByName {
     policy: "https://www.anthropic.com/legal/commercial-terms",
     keyUrl: "https://platform.claude.com/settings/keys",
   );
-
-  @override
-  String get serviceName => "Anthropic (API)";
-
-  @override
-  String get connectHint => "Connect with an Anthropic API key.";
 }

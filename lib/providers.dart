@@ -1026,9 +1026,15 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// done — until the user picks something themselves. A role the user has
   /// already picked is left where it is; importing a backup and other bulk
   /// writes stay on [setProviders], which adopts nothing.
+  ///
+  /// [adopt] goes further, and is what choosing a service by name means: it
+  /// answers new chats, their titles and the command classifier whatever was
+  /// picked before, each at the provider's own default for the role — the
+  /// model ids are cleared, which is how a role names that default.
   Future<void> upsertProvider(
     LlmProviderConfig provider, {
     String? setKey,
+    bool adopt = false,
   }) async {
     if (provider.id.isEmpty) {
       provider = provider.copyWith(id: const Uuid().v4());
@@ -1043,8 +1049,8 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     }
     final existing = state.llmProviders;
     final isNew = existing.every((p) => p.id != provider.id);
-    await _update(
-      (s) => s
+    await _update((s) {
+      s
         ..llmProviders = List.unmodifiable([
           ...existing.where((p) => p.id != provider.id),
           provider,
@@ -1054,9 +1060,29 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
         ..titleProviderId = s.titleProviderId ?? (isNew ? provider.id : null)
         ..memoryProviderId = s.memoryProviderId ?? (isNew ? provider.id : null)
         ..classifierProviderId =
-            s.classifierProviderId ?? (isNew ? provider.id : null),
-    );
+            s.classifierProviderId ?? (isNew ? provider.id : null);
+      if (adopt) _answerWith(s, provider.id);
+    });
     ref.invalidate(availableModelsProvider);
+  }
+
+  /// [modelId] of [providerId] answering new chats, their titles and the
+  /// command classifier, unless something already answers new chats: what a
+  /// model the user fetched rather than picked fills, so the first one is
+  /// used with nothing more asked.
+  Future<void> adoptIfUnset(String providerId, String modelId) async {
+    if (state.defaultProviderId != null) return;
+    await _update((s) => _answerWith(s, providerId, modelId));
+  }
+
+  static void _answerWith(AppSettings s, String providerId, [String? modelId]) {
+    s
+      ..defaultProviderId = providerId
+      ..defaultModelId = modelId
+      ..titleProviderId = providerId
+      ..titleModelId = modelId
+      ..classifierProviderId = providerId
+      ..classifierModelId = modelId;
   }
 
   /// The endpoints the agent can call, written as given. The model list is

@@ -371,6 +371,31 @@ void main() {
     },
   );
 
+  // The welcome tour's Local Model way through picks nothing, so where
+  // nothing answers new chats yet the model that landed does.
+  testWidgets("the first model downloaded answers where nothing does", (
+    tester,
+  ) async {
+    app = TestApp.create(localRuntime: FakeLocalRuntime());
+    await pumpOnDevice(tester);
+    expect(app.container.read(appSettingsProvider).defaultProviderId, isNull);
+
+    await tester.tap(find.byTooltip("Download").first);
+    await pumpUntil(tester, find.byTooltip("Delete"));
+    await tester.pump();
+
+    final landed = app.container.read(installedLocalModelsProvider).single;
+    final s = app.container.read(appSettingsProvider);
+    expect(
+      [s.defaultProviderId, s.titleProviderId, s.classifierProviderId],
+      [localProviderId, localProviderId, localProviderId],
+    );
+    expect(
+      [s.defaultModelId, s.titleModelId, s.classifierModelId],
+      [landed, landed, landed],
+    );
+  });
+
   testWidgets(
     "a downloaded model the catalog does not offer is a row, and deletable",
     (tester) async {

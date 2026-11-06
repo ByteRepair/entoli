@@ -51,12 +51,14 @@ Future<ProviderEdit?> promptForProvider(
 /// [promptForProvider] with what the app knows filled in, saved through the
 /// settings notifier: an entry being edited keeps its id, and one being
 /// added, preset or not, has none until the notifier gives it one. The one
-/// way in for the Providers page and the welcome tour alike.
+/// way in for the Providers page and the welcome tour alike; [adopt] is the
+/// notifier's own, the tour's choosing a service by name.
 Future<void> editProvider(
   BuildContext context,
   WidgetRef ref, {
   LlmProviderConfig? initial,
   String title = "Add provider",
+  bool adopt = false,
 }) async {
   // Notifier first: the page that asked can go away while the dialog is
   // open, and the save must outlive it rather than resume on a defunct ref.
@@ -75,7 +77,11 @@ Future<void> editProvider(
     checkKey: ref.read(keyCheckProvider),
   );
   if (saved == null) return;
-  await notifier.upsertProvider(saved.config, setKey: saved.setKey);
+  await notifier.upsertProvider(
+    saved.config,
+    setKey: saved.setKey,
+    adopt: adopt,
+  );
 }
 
 class ProviderEdit {

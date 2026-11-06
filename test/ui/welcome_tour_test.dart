@@ -87,11 +87,9 @@ void main() {
     expect(find.text("Welcome to Entoli"), findsOneWidget);
 
     await walkToProviders(tester);
-    // Both halves of the LLM pickers travel with the page, once a model is
-    // reachable.
-    await scrollTo(tester, find.text("Title LLM"));
-    expect(find.text("LLM"), findsOneWidget);
-    expect(find.text("Title LLM"), findsOneWidget);
+    // A model answering new chats leaves nothing to pick on the page.
+    expect(find.text("LLM"), findsNothing);
+    expect(find.text("Title LLM"), findsNothing);
 
     await next(tester);
     expect(find.text("More to set up"), findsOneWidget);
@@ -146,7 +144,8 @@ void main() {
   });
 
   // A service is offered by the name its user knows, and connecting it is
-  // its own preset: ChatGPT is Codex CLI, with nothing to type.
+  // its own preset: ChatGPT is Codex CLI, with nothing to type and no model
+  // to pick.
   testWidgets("a service on the provider page connects its own preset", (
     tester,
   ) async {
@@ -160,6 +159,18 @@ void main() {
     await settleIo(tester);
 
     expect(settings().llmProviders.map((p) => p.api), [LlmApi.codexCli]);
+    // Chosen by name, it answers everything a first model does at its own
+    // defaults, over the default the walk was seeded with.
+    final id = settings().llmProviders.single.id;
+    final s = settings();
+    expect(
+      [s.defaultProviderId, s.titleProviderId, s.classifierProviderId],
+      [id, id, id],
+    );
+    expect(
+      [s.defaultModelId, s.titleModelId, s.classifierModelId],
+      [null, null, null],
+    );
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   // A phone runs no programs, so the services that are one are not offered.

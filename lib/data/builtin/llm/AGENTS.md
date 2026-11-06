@@ -71,12 +71,15 @@ read.
 
 The welcome tour offers a few of them by the service's name rather than the
 API's — ChatGPT is Codex CLI, Claude Pro is Claude CLI — to someone who knows
-what they pay for and not what answers for it. A class offered there takes
+what they pay for and not what answers for it; no API key is asked for there,
+the APIs being Advanced's. A class offered there takes
 `OfferedByName`, whose `serviceName` and `connectHint` are its words on the
 tour, and `welcomeProviders` is which of them and in what order; one its
 `supported` says this platform cannot reach (a CLI on a phone) is not drawn.
-Connecting one is its preset in the ordinary provider dialog, so its default
-models are the preset's and nothing on the tour asks for one.
+Connecting one is its preset in the ordinary provider dialog, adopted
+(`upsertProvider`'s `adopt`): it answers new chats, titles and the classifier
+at the preset's defaults, whatever was picked before, and nothing on the tour
+asks for a model.
 
 **What a model can do is its type.** A provider `serve`s a model id as one
 `Model` per thing it does (`lib/domain/model_capability.dart`): a
