@@ -225,8 +225,9 @@ void main() {
         timeout: Duration.zero,
       ),
     );
-    final (:callId, :end) = await ended;
+    final (:callId, :command, :end) = await ended;
     expect(callId, "c1");
+    expect(command, isNotEmpty);
     expect(end.jobId, 1);
     expect(end.exitCode, 3);
     expect(end.tail, [for (var i = 6; i <= 15; i++) "line $i"].join("\n"));

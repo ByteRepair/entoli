@@ -501,6 +501,10 @@ class FakeWebSearch extends WebSearch {
   }
 
   @override
+  Uri? searchPageUrl(String query) =>
+      Uri.https("search.test", "/", {"q": query});
+
+  @override
   Future<ShellResult> fetch(String url) async {
     fetched.add(url);
     return fetchResult?.call(url) ??

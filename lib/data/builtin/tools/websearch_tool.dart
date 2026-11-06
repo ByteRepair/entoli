@@ -82,13 +82,15 @@ class WebSearchTool extends AgentTool {
     ShellResult failed,
   ) async {
     final tab = turn.browser;
-    if (!offer.caps.browser || tab == null || tab.hold.value != null) {
+    final page = turn.webSearch!.searchPageUrl(query);
+    if (!offer.caps.browser ||
+        tab == null ||
+        tab.hold.value != null ||
+        page == null) {
       return failed;
     }
     try {
-      await tab.goto(
-        Uri.https("html.duckduckgo.com", "/html/", {"q": query}).toString(),
-      );
+      await tab.goto(page.toString());
       final text = await tab.pageText();
       if (text.trim().isEmpty) return failed;
       return ShellResult(

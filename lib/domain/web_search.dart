@@ -18,6 +18,11 @@ abstract class WebSearch {
   /// Fetch [url] and return its text content with markup stripped.
   Future<ShellResult> fetch(String url);
 
+  /// The page a browser shows [query]'s results on, where a search refused
+  /// to a plain request can be run in the agent's browser instead; null
+  /// where this search has no such page.
+  Uri? searchPageUrl(String query) => null;
+
   /// Release any resources. The default is a no-op; [DuckDuckGoSearch]
   /// overrides it to close its HTTP client.
   void close() {}

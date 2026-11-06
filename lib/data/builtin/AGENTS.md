@@ -24,11 +24,15 @@ tool call
 is a format error it retries — so the one behaviour the old name would have
 predicted is the one this does backwards.
 
-The one exception is a plan under way: where `PLAN.md` has a task in
-progress — it was approved and its work taken — a reply with no tool call is
-a stop in the middle rather than an answer, and the loop says what is left
-as a `<system-notification>` steer and carries on, at most
-`maxPlanNudges` (two) times a turn. A model that stopped to report progress
+The one exception is work a tool knows is unfinished. Before a reply with no
+tool call ends the turn, the loop asks the tools it offered
+(`AgentTool.beforeStop`), and the first answer goes in as a
+`<system-notification>` steer and the turn carries on — at most
+`maxStopNudges` (two) times a turn, and never on the last step: the budget is
+the loop's, what is unfinished is the tool's. The plan's is the one today:
+where `PLAN.md` has a task in progress (`planUnderWay`) — approved and its
+work taken — a stop is in the middle rather than an answer, and `plan_done`
+says what is left. A model that stopped to report progress
 was the "why did you stop?" every long task ended in; one that means to stop
 still can, and one that needs the user asks with `ask_user`. See "The plan".
 
@@ -278,7 +282,8 @@ the session shell had been moved to, which gave a chat two working
 directories, the model told of one and standing in the other half the time.
 So `LocalShell` keeps one directory per chat on the host (`standingIn`): a
 confined run starts there and ends by printing where it finished after a
-marker unique to the run, cut from the output before anyone reads it; the
+marker unique to the run, cut from the output and reported as the result's
+`ShellResult.cwd`, the same field the session shell's sentinel fills; the
 session shell's sentinel updates the same place; and the session shell `cd`s
 to it before a command when a confined run moved the chat since. Exports,
 aliases and functions stay each confined run's own, which is what the tool
@@ -469,7 +474,7 @@ project's workspace beside it, and the tiers' `writableDirs`.
 
 Beside those, two grants a build needs and a user should never have had to
 make (`sandbox_grants.dart`). **The toolchain caches** under the machine
-user's home that exist — `~/.cache`, `~/Library/Caches`, Xcode's
+user's home that exist, looked up once per turn — `~/.cache`, `~/Library/Caches`, Xcode's
 DerivedData, `~/.pub-cache`, `~/.npm`, `~/.gradle`, Cargo's registry, Go's
 module cache and their kin, the variables that move them, and the `bin/cache`
 of the Flutter SDK on `PATH`, resolved through Homebrew's link, where every
@@ -831,7 +836,8 @@ DuckDuckGo does limit, whatever it once seemed: a client it takes for a bot
 gets HTTP 202 and no results, often after the first few searches of a
 session. A search that fails is therefore run again in the agent's browser,
 where the turn has one and the user has not hidden it — the same query on
-`html.duckduckgo.com`, the page's text as the result, with a line saying it
+page `WebSearch.searchPageUrl` names (DuckDuckGo's HTML results), the
+page's text as the result, with a line saying it
 was run there. It is done by the tool rather than suggested, since a hint
 costs the model a step it may not take, and it is not gated as a navigation:
 it is the search the model asked for. The provider's own search tools are

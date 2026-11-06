@@ -3,6 +3,7 @@ import "dart:convert";
 import "package:flutter/foundation.dart" show ValueListenable;
 
 import "models.dart" show JobEnd;
+import "system_notification.dart";
 
 /// A command the agent ran with `background: true`: its call answered as soon
 /// as it started, and it runs on, its output going to a log in the chat's
@@ -81,18 +82,15 @@ abstract class ChatShellJobs {
 
   /// Each job as it ends, by the call that started it. Not one the app
   /// killed on its way out: that one has no end to record.
-  Stream<({String callId, JobEnd end})> get ended;
+  Stream<EndedJob> get ended;
 
   /// The agent has been told how job [id] ended some other way — the turn
   /// its end woke — so the note its next tool result would carry goes.
   void told(int id) {}
 }
 
-/// The tag a job's end is said to the agent in, when it ended with no turn
-/// running to carry it: a `<system-notification>` like Claude Code's task
-/// notifications, so the model reads it as the app speaking rather than the
-/// user, and the chat draws it as a note rather than something said.
-const systemNotificationTag = "system-notification";
+/// A job as it ended: the call that started it, what it ran, and how it went.
+typedef EndedJob = ({String callId, String command, JobEnd end});
 
 /// What wakes the agent when its background job [jobId], started as
 /// [command], ends between turns: how it ended and the last lines of its log.
@@ -102,21 +100,13 @@ String jobEndedNotification({
   required String command,
   required int exitCode,
   required String tail,
-}) => [
-  "<$systemNotificationTag>",
-  "Background job $jobId (`${command.split("\n").first}`) exited with code "
-      "$exitCode.",
+}) => systemNotification([
+  "Background job $jobId (`${firstLine(command)}`) exited with code $exitCode.",
   if (tail.trim().isNotEmpty) ...[
     "The last lines of its log:",
     tail.trimRight(),
   ],
-  "</$systemNotificationTag>",
-].join("\n");
-
-/// Whether [text] is a notification the app said rather than anything the
-/// user typed.
-bool isSystemNotification(String text) =>
-    text.trimLeft().startsWith("<$systemNotificationTag>");
+]);
 
 /// The log of the job [callId] started, relative to the chat workspace. Named
 /// by the call rather than the job's number, which starts again with the app,

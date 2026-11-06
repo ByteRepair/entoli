@@ -18,7 +18,7 @@ import "package:agent_chat/domain/artifact.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/file_tools.dart" show attachmentSaveToolName;
 import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/shell_job.dart" show isSystemNotification;
+import "package:agent_chat/domain/system_notification.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/plan.dart";
 import "package:agent_chat/domain/shell.dart";
@@ -2520,7 +2520,7 @@ void main() {
       final events = await agent.run(userMessage("carry on")).toList();
 
       final nudges = events.whereType<SteerEvent>().toList();
-      expect(nudges, hasLength(BuiltinAgent.maxPlanNudges));
+      expect(nudges, hasLength(BuiltinAgent.maxStopNudges));
       final said = nudges.first.message.plainText;
       expect(isSystemNotification(said), isTrue);
       expect(said, contains("2. two"));
@@ -2528,7 +2528,7 @@ void main() {
       expect(said, isNot(contains("1. one")));
       expect(
         client.sent,
-        hasLength(BuiltinAgent.maxPlanNudges + 1),
+        hasLength(BuiltinAgent.maxStopNudges + 1),
         reason: "the third stop ends the turn",
       );
     });

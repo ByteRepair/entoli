@@ -8,7 +8,7 @@ import "../agent_backend.dart";
 import "../chat_log.dart";
 import "../chat_repository.dart";
 import "../models.dart";
-import "../shell_job.dart" show ChatShellJobs, jobEndedNotification;
+import "../shell_job.dart" show ChatShellJobs, EndedJob, jobEndedNotification;
 import "../project_settings.dart" show OmadaOrdering;
 import "../prompt_library.dart" show nameOf;
 import "../reaction.dart";
@@ -104,12 +104,8 @@ class ChatRoom {
   /// the one queue every turn's writes take, and on the chat on screen —
   /// at once, ahead of the backend dropping it from its list, so it is never
   /// read as neither running nor ended.
-  Future<void> _jobEnded(({String callId, JobEnd end}) ended) async {
-    final (:callId, :end) = ended;
-    // Read now: the backend drops the job from its list right after this.
-    final command = _jobs.jobs.value
-        .firstWhereOrNull((job) => job.callId == callId)
-        ?.command;
+  Future<void> _jobEnded(EndedJob ended) async {
+    final (:callId, :command, :end) = ended;
     final data = end.toJson();
     unawaited(
       _append([
@@ -134,9 +130,9 @@ class ChatRoom {
   /// nobody looking. So the end starts a turn of its own, said as the app's
   /// notification. A job that was stopped wakes nobody: whoever stopped it
   /// knows. One end is one wake, so a watcher that keeps dying cannot loop.
-  Future<void> _wake(JobEnd end, String? command) async {
+  Future<void> _wake(JobEnd end, String command) async {
     final code = end.exitCode;
-    if (code == null || command == null || state.isRunning) return;
+    if (code == null || state.isRunning) return;
     _jobs.told(end.jobId);
     await _prompt(
       jobEndedNotification(

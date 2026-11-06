@@ -15,6 +15,7 @@ import "package:agent_chat/domain/models.dart"
         jobEndedEvent;
 import "package:agent_chat/domain/reaction.dart";
 import "package:agent_chat/domain/shell_job.dart";
+import "package:agent_chat/domain/system_notification.dart";
 import "package:agent_chat/domain/project_settings.dart" show OmadaOrdering;
 import "package:agent_chat/domain/room/chat_room.dart";
 import "package:agent_chat/domain/room/room_state.dart";
@@ -211,28 +212,30 @@ void main() {
       await room.send("hello");
       await room.turnDone;
       const end = JobEnd(jobId: 1, exitCode: 0, tail: "done");
-      app.backend.jobsOf(room.chatId).endings.add((callId: "c1", end: end));
+      app.backend.jobsOf(room.chatId).endings.add((
+        callId: "c1",
+        command: "make",
+        end: end,
+      ));
       await waitFor(
         () => room.state.chat?.jobEndOf("c1") != null,
         what: "the end on the chat",
       );
 
       expect(host.states.last.jobOf("c1"), const JobEnded(end));
-      // The state changes before the append lands, which is real I/O.
+      // The state changes before the append lands, which is real I/O; the
+      // wake the end starts writes its own records after it.
+      final recorded = ChatRecord.callEvent(
+        callId: "c1",
+        kind: jobEndedEvent,
+        data: end.toJson(),
+      );
       await waitFor(
         () async =>
-            (await app.repo.readRecords(room.chatId)).last is CallEventRecord,
+            (await app.repo.readRecords(room.chatId)).contains(recorded),
         what: "the end in the log",
       );
-      final records = await app.repo.readRecords(room.chatId);
-      expect(
-        records.last,
-        ChatRecord.callEvent(
-          callId: "c1",
-          kind: jobEndedEvent,
-          data: end.toJson(),
-        ),
-      );
+      await waitFor(() => !room.state.isRunning, what: "the woken turn");
     },
   );
 
@@ -258,6 +261,7 @@ void main() {
 
       jobs.endings.add((
         callId: "c1",
+        command: job.command,
         end: const JobEnd(jobId: 3, exitCode: 1, tail: "Error: no pubspec"),
       ));
       await waitFor(() => app.backend.prompts.length == 2, what: "the wake");
@@ -279,7 +283,11 @@ void main() {
       final jobs = app.backend.jobsOf(room.chatId);
       jobs.jobs.value = [job];
 
-      jobs.endings.add((callId: "c1", end: const JobEnd(jobId: 3, tail: "")));
+      jobs.endings.add((
+        callId: "c1",
+        command: "make",
+        end: const JobEnd(jobId: 3, tail: ""),
+      ));
       await waitFor(
         () => room.state.chat?.jobEndOf("c1") != null,
         what: "the end on the chat",
@@ -305,6 +313,7 @@ void main() {
 
         jobs.endings.add((
           callId: "c1",
+          command: "make",
           end: const JobEnd(jobId: 3, exitCode: 0, tail: ""),
         ));
         await waitFor(
@@ -329,7 +338,7 @@ void main() {
     expect(room.state.jobOf("c1"), const JobRunning(job));
 
     const end = JobEnd(jobId: 1, exitCode: 0, tail: "");
-    jobs.endings.add((callId: "c1", end: end));
+    jobs.endings.add((callId: "c1", command: "make", end: end));
     jobs.jobs.value = const [];
     expect(room.state.jobOf("c1"), const JobEnded(end));
     expect(room.state.runningJobs, isEmpty);

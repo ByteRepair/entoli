@@ -134,6 +134,14 @@ class ApprovalGate {
   /// is already the boundary, and Android's per-app sandbox is the OS's.
   SandboxHelper? get helper => sandboxHelper ?? shell.driverSandboxHelper;
 
+  /// The toolchain caches, looked up once per turn rather than per command:
+  /// home, `PATH` and the environment do not move under a turn.
+  late final List<String> _toolchainCaches = toolchainCaches(
+    home: shell.machineHome,
+    path: Platform.environment["PATH"] ?? "",
+    environment: Platform.environment,
+  );
+
   /// The sandbox a command runs in under [permissions]: the chat's workspace,
   /// its tmp, the project's workspace beside it — where work another
   /// conversation should find goes — and the granted directories.
@@ -158,11 +166,7 @@ class ApprovalGate {
         // What developer tools write in the ordinary course of a build, and
         // the repository a worktree the chat owns commits into: denied, they
         // sent every build out of the sandbox altogether.
-        ...toolchainCaches(
-          home: shell.machineHome,
-          path: Platform.environment["PATH"] ?? "",
-          environment: Platform.environment,
-        ),
+        ..._toolchainCaches,
         ?gitDir,
       ],
     );

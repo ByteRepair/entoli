@@ -993,7 +993,7 @@ void main() {
       final (result, tab) = await searched(refused, browser: true);
 
       expect(tab!.calls, [
-        "goto https://html.duckduckgo.com/html/?q=flutter+engine+stamp",
+        "goto https://search.test/?q=flutter+engine+stamp",
         "text 0",
       ]);
       expect(result.returnCode, 0);

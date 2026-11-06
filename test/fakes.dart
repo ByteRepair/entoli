@@ -583,12 +583,10 @@ class FakeShellJobs implements ChatShellJobs {
   final List<int> stopped = [];
 
   /// Where a test ends a job.
-  final endings = StreamController<({String callId, JobEnd end})>.broadcast(
-    sync: true,
-  );
+  final endings = StreamController<EndedJob>.broadcast(sync: true);
 
   @override
-  Stream<({String callId, JobEnd end})> get ended => endings.stream;
+  Stream<EndedJob> get ended => endings.stream;
 
   @override
   Future<void> stop(int id) async => stopped.add(id);

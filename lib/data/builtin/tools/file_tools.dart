@@ -270,12 +270,9 @@ class ReadTool extends AgentTool {
           nested.add(file);
         }
       }
-      final text = result.isEmpty ? "(empty file)" : result;
       final parts = [
-        if (nested.isEmpty)
-          text
-        else
-          "$result\n\n${renderInstructions(nested)}",
+        if (result.isEmpty && nested.isEmpty) "(empty file)" else result,
+        if (nested.isNotEmpty) renderInstructions(nested),
         // Over the budget a turn's instructions are held to: named, not
         // sent, so one read cannot spend a fifth of the window on rules.
         for (final file in big)

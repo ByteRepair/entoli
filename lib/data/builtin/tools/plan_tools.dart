@@ -6,6 +6,7 @@ import "../../../domain/agent_backend.dart";
 import "../../../domain/ask.dart";
 import "../../../domain/plan.dart";
 import "../../../domain/shell.dart";
+import "../../../domain/system_notification.dart";
 import "../../../domain/tool_arg.dart";
 import "../llm/llm_client.dart";
 import "agent_tool.dart";
@@ -168,12 +169,23 @@ class PlanNextTool extends _PlanTool {
       yield toolOk(call, missing ?? "All tasks done.");
       return;
     }
-    // The index came from the text just read, so the mark cannot miss.
-    final marked = planMark(plan, next.index, PlanTaskStatus.inProgress)!;
-    await File(_planPath(turn)).writeAsString(marked);
-    yield toolOk(call, planNextResult(next, planProgress(marked)));
+    yield toolOk(call, await _take(turn, plan!, next));
   }
 }
+
+/// Mark [task] of [plan] in progress, write the plan, and answer with the
+/// task's own plan. Every way a task is taken — `plan_next`, Go, and
+/// `plan_done` going on to the next — comes through here. The index came
+/// from the text just read, so the mark cannot miss.
+Future<String> _take(Turn turn, String plan, PlanTask task) async {
+  final marked = planMark(plan, task.index, PlanTaskStatus.inProgress)!;
+  await File(_planPath(turn)).writeAsString(marked);
+  return planNextResult(task, planProgress(marked));
+}
+
+/// The next task, where [plan] has none under way to finish first.
+PlanTask? _nextToTake(String plan) =>
+    planUnderWay(plan) ? null : planNext(plan);
 
 /// Finish a task: by number or by enough of its text to identify it.
 /// Ambiguous is refused with the candidates, not guessed.
@@ -195,9 +207,7 @@ class PlanDoneTool extends _PlanTool {
     "properties": {
       "task": {
         "type": "string",
-        "description":
-            "The task's number as $planNextToolName reported "
-            "it, or the start of its text.",
+        "description": "The task's number, or the start of its text.",
       },
     },
     "required": ["task"],
@@ -209,9 +219,8 @@ class PlanDoneTool extends _PlanTool {
     if (task == null) {
       yield* toolRejected(
         call,
-        'The $planDoneToolName tool takes {"task": "..."} — the number '
-        "$planNextToolName reported, or the start of the task's text; that "
-        "argument was missing.",
+        'The $planDoneToolName tool takes {"task": "..."} — the task\'s '
+        "number, or the start of its text; that argument was missing.",
       );
       return;
     }
@@ -231,39 +240,51 @@ class PlanDoneTool extends _PlanTool {
       yield toolFailed(
         call,
         candidates.isEmpty
-            ? "No task matches \"$task\". Call $planNextToolName to take "
-                  "the next one, or read $planFileName."
+            ? "No task matches \"$task\". Read $planFileName for the "
+                  "tasks and their numbers."
             : "\"$task\" matches more than one task: ${candidates.join("; ")}. "
                   "Name it by number, or by more of its text.",
       );
       return;
     }
     // The index came from the text just read, so the mark cannot miss.
-    var marked = planMark(plan, found.index, PlanTaskStatus.done)!;
+    final marked = planMark(plan, found.index, PlanTaskStatus.done)!;
+    final done = planDoneResult(found, planProgress(marked));
     // The next task is taken in the same call and its plan handed back, so
-    // working through a plan costs one call per task rather than two —
-    // unless another is already being worked on.
-    final next = _anyInProgress(marked) ? null : planNext(marked);
+    // working through a plan costs one call per task rather than two.
+    final next = _nextToTake(marked);
     if (next != null) {
-      marked = planMark(marked, next.index, PlanTaskStatus.inProgress)!;
+      yield toolOk(
+        call,
+        "$done\n\nNow taken — ${await _take(turn, marked, next)}",
+      );
+      return;
     }
     await File(_planPath(turn)).writeAsString(marked);
-    final progress = planProgress(marked);
-    yield toolOk(
-      call,
-      [
-        planDoneResult(found, progress),
-        if (next != null)
-          "Now taken — ${planNextResult(next, progress)}"
-        else if (progress.$1 == progress.$2)
-          "All tasks done.",
-      ].join("\n\n"),
-    );
+    final (finished, total) = planProgress(marked);
+    yield toolOk(call, finished == total ? "$done\n\nAll tasks done." : done);
+  }
+
+  /// A plan under way with tasks left: said where the model replies with no
+  /// tool call, so a progress report does not end the work. Asked of this
+  /// one plan tool, so it is said once and only where the plan is offered.
+  @override
+  Future<String?> beforeStop(Turn turn) async {
+    final plan = await _readPlan(turn);
+    if (!planUnderWay(plan)) return null;
+    final open = [
+      for (final t in planTasksFrom(plan))
+        if (t.status != PlanTaskStatus.done) "${t.index}. ${t.text}",
+    ];
+    return systemNotification([
+      "The approved plan still has ${open.length} task(s) not done:",
+      ...open,
+      "Carry on with the work. If you are blocked or need a decision, ask "
+          "the user with $askToolName; if a task turned out unnecessary, "
+          "mark it done and say why.",
+    ]);
   }
 }
-
-bool _anyInProgress(String plan) =>
-    planTasksFrom(plan).any((t) => t.status == PlanTaskStatus.inProgress);
 
 /// The plan, put to the user: the chat draws the call as the plan itself,
 /// read off $planFileName, and the Go / changes question the panel asks sits
@@ -324,7 +345,8 @@ class PresentPlanTool extends AgentTool {
       return;
     }
     yield toolCalled(call, args.title ?? planFileName);
-    final missing = _planMissing(await _readPlan(turn));
+    final plan = await _readPlan(turn);
+    final missing = _planMissing(plan);
     if (missing != null) {
       yield toolFailed(call, missing);
       return;
@@ -342,25 +364,15 @@ class PresentPlanTool extends AgentTool {
     );
     yield QuestionRequestEvent(request);
     final answers = await turn.answer(request);
-    final verdict = answers.firstOrNull;
-    if (verdict != "go") {
-      yield toolOk(call, planVerdict(verdict));
-      return;
-    }
+    final verdict = planVerdict(answers.firstOrNull);
     // Go takes the first task, so the work starts from what was approved
     // with no call spent asking for it.
-    final plan = await _readPlan(turn);
-    final first = plan == null ? null : planNext(plan);
-    if (plan == null || first == null || _anyInProgress(plan)) {
-      yield toolOk(call, planVerdict(verdict));
-      return;
-    }
-    final marked = planMark(plan, first.index, PlanTaskStatus.inProgress)!;
-    await File(_planPath(turn)).writeAsString(marked);
+    final first = answers.firstOrNull == "go" ? _nextToTake(plan!) : null;
     yield toolOk(
       call,
-      "${planVerdict(verdict)}\n\n"
-      "Now taken — ${planNextResult(first, planProgress(marked))}",
+      first == null
+          ? verdict
+          : "$verdict\n\nNow taken — ${await _take(turn, plan!, first)}",
     );
   }
 }

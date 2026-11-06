@@ -228,6 +228,13 @@ abstract class AgentTool {
   /// enough. Shared by a group the way [fragment] is.
   String? get section => null;
 
+  /// What the model is told when it replies with no tool call while this
+  /// tool's work is unfinished, or null where a stop is an answer. The loop
+  /// asks the tools it offered this turn, steers with the first answer, and
+  /// keeps the budget of how often; the tool knows only what is unfinished.
+  /// The plan's is the one today: tasks left in a plan under way.
+  Future<String?> beforeStop(Turn turn) async => null;
+
   /// Run [call], reporting it and answering it: every call is reported with
   /// a [ToolCallEvent] and answered with a [ToolResultEvent], whatever else
   /// happens between — a provider that sees a call with no result rejects

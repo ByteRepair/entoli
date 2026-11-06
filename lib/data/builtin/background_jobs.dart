@@ -46,7 +46,7 @@ class BackgroundJobs {
 /// print into the app.
 String backgroundScript(String callId, String command, {String? startIn}) =>
     "mkdir -p .entoli-jobs; exec >${backgroundLog(callId)} 2>&1 </dev/null || exit 1\n"
-    "${startIn == null ? "" : "cd -- '${startIn.replaceAll("'", r"'\''")}' || exit 1\n"}"
+    "${startIn == null ? "" : "cd -- ${shellQuoted(startIn)} || exit 1\n"}"
     "$command";
 
 /// One chat's jobs.
@@ -59,12 +59,10 @@ class ChatJobs implements ChatShellJobs {
   final _notes = <int, String>{};
   // Synchronous, so a listener has the end before the list drops the job: the
   // chat never reads a job as neither running nor ended.
-  final _ended = StreamController<({String callId, JobEnd end})>.broadcast(
-    sync: true,
-  );
+  final _ended = StreamController<EndedJob>.broadcast(sync: true);
 
   @override
-  Stream<({String callId, JobEnd end})> get ended => _ended.stream;
+  Stream<EndedJob> get ended => _ended.stream;
 
   /// What the agent and the pill call a job. Not what names its log, so
   /// starting again with the app overwrites nothing.
@@ -109,6 +107,7 @@ class ChatJobs implements ChatShellJobs {
     if (!_ended.isClosed) {
       _ended.add((
         callId: job.callId,
+        command: job.command,
         end: JobEnd(
           jobId: job.id,
           exitCode: code == -1 ? null : code,

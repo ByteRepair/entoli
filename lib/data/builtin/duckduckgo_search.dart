@@ -100,6 +100,10 @@ class DuckDuckGoSearch extends WebSearch {
   }
 
   @override
+  Uri? searchPageUrl(String query) =>
+      Uri.https("html.duckduckgo.com", "/html/", {"q": query});
+
+  @override
   void close() => _http.close();
 
   /// Parse DuckDuckGo Lite's result table. Each result is three rows: the

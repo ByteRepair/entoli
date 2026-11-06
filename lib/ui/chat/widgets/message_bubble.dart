@@ -10,7 +10,7 @@ import "../../../domain/models.dart";
 import "../../../domain/quote.dart";
 import "../../../domain/reaction.dart" show Reaction;
 import "../../../domain/shell.dart";
-import "../../../domain/shell_job.dart" show isSystemNotification;
+import "../../../domain/system_notification.dart";
 import "../../../domain/wired_skill.dart";
 import "../../widgets/action_icon.dart";
 import "../../widgets/agent_picture.dart" show AgentPictureImage;
@@ -282,7 +282,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       // the colour the things they said are in.
       // The app spoke, not the user: drawn as the system notes are.
       MessageRole.user when _notice => (
-        "System",
+        _noticeLabel,
         theme.colorScheme.tertiaryContainer,
       ),
       MessageRole.user => (
@@ -705,9 +705,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                   Padding(
                     padding: const EdgeInsets.only(top: 4, right: 4, bottom: 2),
                     child: Text(
-                      notice
-                          ? "Entoli, while it worked"
-                          : "You, while it worked",
+                      "${notice ? _noticeLabel : "You"}, while it worked",
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -861,3 +859,6 @@ class _Spinner extends StatelessWidget {
     );
   }
 }
+
+/// Who said a system notification, drawn where the user's name would be.
+const _noticeLabel = "System";

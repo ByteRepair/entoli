@@ -2,6 +2,8 @@ import "dart:io";
 
 import "package:path/path.dart" as p;
 
+import "local_shell.dart" show LocalShell;
+
 /// The caches developer tools write to as a matter of course, under the
 /// machine user's [home]: a package fetch, a build's derived data, a
 /// compiler's own scratch. A sandboxed command that cannot write them fails
@@ -60,7 +62,7 @@ List<String> toolchainCaches({
 /// Flutter writes its engine stamp there on every run, `flutter test`
 /// included.
 String? _flutterCache(String path) {
-  for (final dir in path.split(Platform.isWindows ? ";" : ":")) {
+  for (final dir in path.split(LocalShell.listSeparator())) {
     if (dir.isEmpty) continue;
     final link = File(
       p.join(dir, Platform.isWindows ? "flutter.bat" : "flutter"),

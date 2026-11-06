@@ -127,9 +127,6 @@ class LocalShell extends Shell {
     _cwds[cwd]?.value = dir;
   }
 
-  bool _onHost({String? project}) =>
-      _driver(project: project)?.guestRoot == null;
-
   @override
   String get platformDescription {
     final driver = _driver();
@@ -287,13 +284,13 @@ class LocalShell extends Shell {
     if (confined) {
       final driver = _driver(project: project);
       final follows = !oneShot && driver?.guestRoot == null;
-      return _OneShotRun(
+      final run = _OneShotRun(
         // The driver's shell, built for this chat's cwd and home, or nothing
         // where there is no driver at all.
         command: driver?.commandFor(cwd, home, readOnly: readOnly) ?? const [],
         script: command,
         cwd: follows ? standingIn(cwd) ?? cwd : cwd,
-        onDir: follows ? (dir) => _stood(cwd, dir) : null,
+        reportsDir: follows,
         timeout: timeout,
         environment: _compose(
           home: home,
@@ -304,6 +301,16 @@ class LocalShell extends Shell {
         sandbox: sandbox,
         sandboxHelper: driver?.sandboxHelper,
       );
+      // Registered here, ahead of whoever awaits the result, so the next
+      // command already starts where this one left the chat.
+      if (follows) {
+        unawaited(
+          run.result.then((r) {
+            if (r.cwd case final dir?) _stood(cwd, dir);
+          }),
+        );
+      }
+      return run;
     }
     return _sessions
         .putIfAbsent(cwd, () => _Session(this, cwd, home, project: project))
@@ -540,6 +547,11 @@ class _Session {
   /// lags the chat's directory when a sandboxed run moved it since.
   String? _at;
 
+  /// Whether the driver the last command was written under is the machine
+  /// itself, decided where the command was and read by its sentinel: a
+  /// guest's `pwd` is a guest path, kept off the chat's machine directory.
+  bool _onHost = true;
+
   /// What the shell was spawned with. A command whose answer differs — a
   /// variable added in settings, a Linux installed or deleted — respawns the
   /// shell cold, which is how the change reaches the next command rather than
@@ -628,10 +640,11 @@ class _Session {
     // elsewhere; the shell follows before the command, so a `cd` stands
     // whichever kind of run made it.
     var line = command;
-    if (_shell._onHost(project: _project)) {
+    _onHost = driver?.guestRoot == null;
+    if (_onHost) {
       final want = _shell.standingIn(_cwdPath);
       if (want != null && want != _at) {
-        line = "cd -- ${_singleQuoted(want)}\n$command";
+        line = "cd -- ${shellQuoted(want)}\n$command";
       }
     }
     final process = _process;
@@ -746,7 +759,7 @@ class _Session {
     _current = null;
     run.timeoutTimer?.cancel();
     _at = cwd;
-    if (_shell._onHost(project: _project)) {
+    if (_onHost) {
       _shell._stood(_cwdPath, cwd);
     } else {
       _shell._cwds[_cwdPath]?.value = cwd;
@@ -996,16 +1009,17 @@ class _OneShotRun extends ShellRun {
     this.includeParentEnvironment = true,
     this.sandbox,
     this.sandboxHelper,
-    this.onDir,
+    this.reportsDir = false,
   }) {
     result = _run();
   }
 
-  /// Told where the command finished, where the caller keeps a chat's
-  /// directory: the run then ends by printing it after a marker unique to
-  /// the run, which is cut from the output before anyone reads it.
-  final void Function(String dir)? onDir;
-  late final String _dirMarker = "@@D@${const Uuid().v4()}@";
+  /// Whether the run says where the command finished, as the result's
+  /// [ShellResult.cwd]: it then ends by printing the directory after a
+  /// marker unique to the run, which is cut from the output before anyone
+  /// reads it.
+  final bool reportsDir;
+  late final String _dirMarker = "$_dirMarkerPrefix${const Uuid().v4()}@";
 
   /// What to run, ending in a shell. `-c` and the script go on the end of it,
   /// so a guest's shell reached through proot and the machine's own are the
@@ -1094,7 +1108,6 @@ class _OneShotRun extends ShellRun {
       await drained.timeout(_drainGrace, onTimeout: () {});
       await reading.cancel();
       final (text, dir) = _cutDir(output.toString());
-      if (dir != null) onDir?.call(dir);
       if (!_killed && timer.isActive) {
         return ShellResult(returnCode: code, output: text, cwd: dir);
       }
@@ -1133,7 +1146,7 @@ class _OneShotRun extends ShellRun {
   /// first: a failed spawn says the same thing without costing a subprocess.
   /// [text] without the directory report, and the directory it named.
   (String, String?) _cutDir(String text) {
-    if (onDir == null) return (text, null);
+    if (!reportsDir) return (text, null);
     final at = text.lastIndexOf("\n$_dirMarker cwd=");
     if (at == -1) return (text, null);
     final end = text.indexOf("@@\n", at);
@@ -1145,7 +1158,7 @@ class _OneShotRun extends ShellRun {
   Future<Process> _spawn() async {
     // The report rides an EXIT trap, which keeps the command's own status as
     // the shell's, so a command that runs `exit` still says where it was.
-    final report = onDir == null
+    final report = !reportsDir
         ? ""
         : "trap 'printf \"\\n$_dirMarker cwd=%s@@\\n\" \"\$(pwd)\"' EXIT\n";
     final body = "exec 2>&1 </dev/null\n$report$script";
@@ -1207,10 +1220,10 @@ class _OneShotRun extends ShellRun {
     if (notifier == null) return;
     _emitted = _liveTail(_emitted ?? "", chunk);
     final shown = _emitted!;
-    final cut = onDir == null ? -1 : shown.lastIndexOf("\n@@D@");
+    final cut = reportsDir ? shown.lastIndexOf("\n$_dirMarkerPrefix") : -1;
     notifier.value = cut == -1 ? shown : shown.substring(0, cut);
   }
 }
 
-/// [text] as one single-quoted shell word.
-String _singleQuoted(String text) => "'${text.replaceAll("'", r"'\''")}'";
+/// What a run's directory report starts with; the rest is unique to the run.
+const _dirMarkerPrefix = "@@D@";
