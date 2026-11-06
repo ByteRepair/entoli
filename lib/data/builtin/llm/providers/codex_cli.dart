@@ -68,36 +68,55 @@ class CodexCliProvider extends CliProvider with OfferedByName {
     "https://api.github.com/repos/openai/codex/releases/latest",
   );
 
+  /// Code mode runs the model's scripts in a program of its own, which
+  /// Codex looks for beside itself; without it every `exec` call fails, and
+  /// with it every one of Entoli's tools a code-mode model calls from inside
+  /// one.
+  @override
+  List<String> get companions => const ["codex-code-mode-host"];
+
+  /// Each program its own asset, named for the target: Codex and its
+  /// [companions], the same way.
   @override
   Future<CliRelease?> latestRelease(http.Client client) async {
     final triple = tripleOf(CliProvider.abi);
     if (triple == null) return null;
     final windows = triple.endsWith("windows-msvc");
-    final name = windows ? "codex-$triple.exe.zip" : "codex-$triple.tar.gz";
     final release = await LlmProvider.getJson(
       latestUrl,
       headers: const {"Accept": "application/vnd.github+json"},
       httpClient: client,
     );
-    final asset = switch (release["assets"]) {
-      final List<dynamic> assets =>
-        assets
-            .whereType<Map<String, dynamic>>()
-            .where((a) => a["name"] == name)
-            .firstOrNull,
-      _ => null,
+    final assets = switch (release["assets"]) {
+      final List<dynamic> assets => assets.whereType<Map<String, dynamic>>(),
+      _ => const <Map<String, dynamic>>[],
     };
-    if (asset == null) return null;
-    final digest = asset["digest"];
-    if (digest is! String || !digest.startsWith("sha256:")) {
-      throw FormatException("$name has no SHA-256 stated beside it");
+    CliFile? fileOf(String program) {
+      final name = windows
+          ? "$program-$triple.exe.zip"
+          : "$program-$triple.tar.gz";
+      final asset = assets.where((a) => a["name"] == name).firstOrNull;
+      if (asset == null) return null;
+      final digest = asset["digest"];
+      if (digest is! String || !digest.startsWith("sha256:")) {
+        throw FormatException("$name has no SHA-256 stated beside it");
+      }
+      return CliFile(
+        name: windows ? "$program.exe" : program,
+        url: Uri.parse(asset["browser_download_url"] as String),
+        sha256: digest.substring("sha256:".length),
+        packing: windows ? const ZipProgram() : const TarGzProgram(),
+        bytes: asset["size"] as int?,
+      );
     }
+
+    final files = [
+      for (final program in [...companions, defaultCommand]) fileOf(program),
+    ];
+    if (files.contains(null)) return null;
     return CliRelease(
       version: "${release["tag_name"]}",
-      url: Uri.parse(asset["browser_download_url"] as String),
-      sha256: digest.substring("sha256:".length),
-      packing: windows ? const ZipProgram() : const TarGzProgram(),
-      bytes: asset["size"] as int?,
+      files: files.nonNulls.toList(),
     );
   }
 

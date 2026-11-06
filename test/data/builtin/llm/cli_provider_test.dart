@@ -1003,18 +1003,19 @@ void main() {
         final release = await const ClaudeCliProvider().latestRelease(
           claudeReleases("2.1.320", "ab"),
         );
+        final claude = release!.files.single;
         expect(
-          "${release!.url}",
+          "${claude.url}",
           "${ClaudeCliProvider.releases}/2.1.320/darwin-arm64/claude",
         );
-        expect(release.sha256, "ab");
-        expect(release.packing, isA<BareProgram>());
+        expect(claude.sha256, "ab");
+        expect(claude.packing, isA<BareProgram>());
 
         CliProvider.abi = Abi.windowsX64;
         final windows = await const ClaudeCliProvider().latestRelease(
           claudeReleases("2.1.320", "ab"),
         );
-        expect(windows!.url.pathSegments.last, "claude.exe");
+        expect(windows!.files.single.name, "claude.exe");
 
         // A machine the manifest has no build for has no release.
         CliProvider.abi = Abi.linuxArm64;
@@ -1044,28 +1045,42 @@ void main() {
       "digest": ?digest,
     };
 
-    test("Codex CLI's release is the asset built for this machine", () async {
+    test("Codex CLI's release is its program and its code-mode host, each "
+        "built for this machine", () async {
       final assets = [
-        asset("codex-x86_64-unknown-linux-musl.tar.gz"),
-        asset("codex-x86_64-pc-windows-msvc.exe.zip"),
+        for (final program in ["codex", "codex-code-mode-host"]) ...[
+          asset("$program-x86_64-unknown-linux-musl.tar.gz"),
+          asset("$program-x86_64-pc-windows-msvc.exe.zip"),
+        ],
         asset("codex-aarch64-apple-darwin.tar.gz", digest: null),
+        asset("codex-code-mode-host-aarch64-apple-darwin.tar.gz"),
+        asset("codex-x86_64-apple-darwin.tar.gz"),
       ];
       CliProvider.abi = Abi.linuxX64;
       final linux = await const CodexCliProvider().latestRelease(
         codexReleases(assets),
       );
+      // The host first, Codex last: its arrival is what says installed.
+      expect(linux!.files.map((f) => f.name), [
+        "codex-code-mode-host",
+        "codex",
+      ]);
       expect(
-        linux!.url.pathSegments.last,
+        linux.files.last.url.pathSegments.last,
         "codex-x86_64-unknown-linux-musl.tar.gz",
       );
-      expect(linux.sha256, "cd");
-      expect(linux.packing, isA<TarGzProgram>());
+      expect(linux.files.last.sha256, "cd");
+      expect(linux.files.last.packing, isA<TarGzProgram>());
 
       CliProvider.abi = Abi.windowsX64;
       final windows = await const CodexCliProvider().latestRelease(
         codexReleases(assets),
       );
-      expect(windows!.packing, isA<ZipProgram>());
+      expect(windows!.files.map((f) => f.name), [
+        "codex-code-mode-host.exe",
+        "codex.exe",
+      ]);
+      expect(windows.files.last.packing, isA<ZipProgram>());
 
       // No hash stated is nothing to check the download against.
       CliProvider.abi = Abi.macosArm64;
@@ -1073,50 +1088,85 @@ void main() {
         const CodexCliProvider().latestRelease(codexReleases(assets)),
         throwsFormatException,
       );
+      // A Codex without its host is not a release worth installing.
+      CliProvider.abi = Abi.macosX64;
+      expect(
+        await const CodexCliProvider().latestRelease(codexReleases(assets)),
+        isNull,
+      );
     });
 
-    /// Codex's release for [abi] as one asset, [archive] served as it, its
-    /// digest [digest].
-    http.Client codexServing(List<int> archive, String digest) =>
-        MockClient((request) async {
-          if (request.url == CodexCliProvider.latestUrl) {
-            return http.Response(
-              jsonEncode({
-                "tag_name": "rust-v0.170.0",
-                "assets": [
-                  asset(
-                    "codex-x86_64-unknown-linux-musl.tar.gz",
-                    digest: "sha256:$digest",
-                  ),
-                ],
-              }),
-              200,
-            );
-          }
-          return http.Response.bytes(archive, 200);
-        });
+    List<int> tarGzOf(String program, List<int> bytes) =>
+        GZipEncoder().encodeBytes(
+          TarEncoder().encodeBytes(
+            Archive()..addFile(
+              ArchiveFile.bytes("$program-x86_64-unknown-linux-musl", bytes),
+            ),
+          ),
+        );
 
-    List<int> tarGzOf(List<int> program) => GZipEncoder().encodeBytes(
-      TarEncoder().encodeBytes(
-        Archive()..addFile(
-          ArchiveFile.bytes("codex-x86_64-unknown-linux-musl", program),
-        ),
-      ),
-    );
+    /// Codex's release for Linux, each program served as [archives] has it
+    /// and stated to hash to what [digests] says.
+    http.Client codexServing(
+      Map<String, List<int>> archives,
+      Map<String, String> digests,
+    ) => MockClient((request) async {
+      if (request.url == CodexCliProvider.latestUrl) {
+        return http.Response(
+          jsonEncode({
+            "tag_name": "rust-v0.170.0",
+            "assets": [
+              for (final program in archives.keys)
+                asset(
+                  "$program-x86_64-unknown-linux-musl.tar.gz",
+                  digest: "sha256:${digests[program]}",
+                ),
+            ],
+          }),
+          200,
+        );
+      }
+      final program = archives.keys.firstWhere(
+        (p) =>
+            request.url.path.endsWith("/$p-x86_64-unknown-linux-musl.tar.gz"),
+      );
+      return http.Response.bytes(archives[program]!, 200);
+    });
 
-    test("an install unpacks the program it checked, runnable, and is found "
-        "first", () async {
+    /// Both programs as tarballs of [contents], and their true digests.
+    ({Map<String, List<int>> archives, Map<String, String> digests}) codexOf(
+      String contents,
+    ) {
+      final archives = {
+        for (final program in ["codex", "codex-code-mode-host"])
+          program: tarGzOf(program, utf8.encode("$contents $program")),
+      };
+      return (
+        archives: archives,
+        digests: {
+          for (final MapEntry(:key, :value) in archives.entries)
+            key: "${sha256.convert(value)}",
+        },
+      );
+    }
+
+    test("an install unpacks each program it checked, runnable, and is "
+        "found first", () async {
       CliProvider.abi = Abi.linuxX64;
-      final archive = tarGzOf(utf8.encode("#!/bin/sh\n"));
+      final (:archives, :digests) = codexOf("#!/bin/sh");
       const codex = CodexCliProvider();
       await codex
-          .install(client: codexServing(archive, "${sha256.convert(archive)}"))
+          .install(client: codexServing(archives, digests))
           .drain<void>();
 
       expect(codex.installed, isTrue);
-      expect(File(codex.ownCopy).readAsStringSync(), "#!/bin/sh\n");
-      if (!Platform.isWindows) {
-        expect(File(codex.ownCopy).statSync().mode & 0x40, isNot(0));
+      final bin = p.dirname(codex.ownCopy);
+      for (final program in ["codex", "codex-code-mode-host"]) {
+        final file = File(p.join(bin, program));
+        expect(file.readAsStringSync(), "#!/bin/sh $program");
+        if (!Platform.isWindows) {
+          expect(file.statSync().mode & 0x40, isNot(0));
+        }
       }
       // Ahead of one on PATH: the copy the tour signed in.
       final path = Directory(p.join(dir.path, "path"))..createSync();
@@ -1125,16 +1175,23 @@ void main() {
         CodexCliProvider.preset.copyWith(env: {"PATH": path.path}),
       );
       expect(withPath.locate(), codex.ownCopy);
+
+      // Without its host the copy is not whole, and is fetched again.
+      File(p.join(bin, "codex-code-mode-host")).deleteSync();
+      expect(codex.installed, isFalse);
     });
 
     test(
-      "a download that does not match its checksum is not installed",
+      "a download that does not match its checksum installs nothing",
       () async {
         CliProvider.abi = Abi.linuxX64;
+        final (:archives, :digests) = codexOf("#!/bin/sh");
         const codex = CodexCliProvider();
         await expectLater(
           codex
-              .install(client: codexServing(tarGzOf([1, 2, 3]), "00"))
+              .install(
+                client: codexServing(archives, {...digests, "codex": "00"}),
+              )
               .drain<void>(),
           throwsFormatException,
         );

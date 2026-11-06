@@ -244,12 +244,18 @@ names): Claude CLI's is the program itself from
 version's `manifest.json` for each platform's SHA-256 and size, the musl
 build on a musl Linux — taken as it is rather than run as an installer, since
 `claude install` would only add a launcher on the user's `PATH`; Codex CLI's
-is the asset GitHub's releases API names for the target (musl on Linux, a
-zip on Windows, a tarball elsewhere), whose `digest` is the hash, and a
-release stating none is refused. The download is checked against that hash,
+is two assets GitHub's releases API names for the target (musl on Linux, a
+zip on Windows, a tarball elsewhere) — `codex` and `codex-code-mode-host`,
+its `companions`, the program code mode runs the model's scripts in and which
+Codex looks for beside itself. Without it every `exec` a code-mode model such
+as `gpt-6-luna` makes fails inside Codex, and with it every one of Entoli's
+tools called from such a script, before anything reaches the loop. Each
+asset's `digest` is its hash, and a release stating none is refused; a copy
+missing a companion is not `installed`, so it is fetched again. Each file is checked against its hash,
 taken out of its packing (`CliPacking`: `BareProgram`, `TarGzProgram`,
 `ZipProgram`, read in Dart so no platform needs a `tar`), given its execute
-bit, and renamed into place, so a copy in use is replaced whole. `locate`
+bit, and renamed into place, the CLI's own last, so a copy in use is
+replaced whole. `locate`
 prefers it over the default name on `PATH`, which is what makes the copy the
 tour signed in the one every session runs. Signing in is the program's own:
 `statusArguments` exit 0 when signed in (`claude auth status`, `codex login

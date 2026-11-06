@@ -106,10 +106,15 @@ class ClaudeCliProvider extends CliProvider with OfferedByName {
     final program = platform.startsWith("win32") ? "claude.exe" : "claude";
     return CliRelease(
       version: version,
-      url: Uri.parse("$releases/$version/$platform/$program"),
-      sha256: checksum,
-      packing: const BareProgram(),
-      bytes: entry["size"] as int?,
+      files: [
+        CliFile(
+          name: program,
+          url: Uri.parse("$releases/$version/$platform/$program"),
+          sha256: checksum,
+          packing: const BareProgram(),
+          bytes: entry["size"] as int?,
+        ),
+      ],
     );
   }
 

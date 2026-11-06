@@ -2,18 +2,38 @@ import "dart:io";
 
 import "package:archive/archive_io.dart";
 
-/// One release of a CLI's program for this machine: where its file is, what
-/// that file must hash to, and how the program is packed inside it.
+/// One release of a CLI for this machine: the program, and any program it
+/// runs beside itself, each a file of its own.
 class CliRelease {
-  const CliRelease({
-    required this.version,
+  const CliRelease({required this.version, required this.files});
+
+  final String version;
+
+  /// The programs, the CLI's own last: it is the one whose presence says the
+  /// copy is installed, so it is put in place after the rest.
+  final List<CliFile> files;
+
+  /// What they weigh together, for one bar; null where any is unstated.
+  int? get bytes => files.any((f) => f.bytes == null)
+      ? null
+      : files.fold<int>(0, (sum, f) => sum + f.bytes!);
+}
+
+/// One program of a [CliRelease]: where its file is, what that file must
+/// hash to, how the program is packed in it, and what it is called once
+/// it is out.
+class CliFile {
+  const CliFile({
+    required this.name,
     required this.url,
     required this.sha256,
     required this.packing,
     this.bytes,
   });
 
-  final String version;
+  /// Its file name in the CLI's folder, `.exe` and all.
+  final String name;
+
   final Uri url;
 
   /// Lowercase hex, as the publisher states it. A file that hashes to
@@ -22,8 +42,8 @@ class CliRelease {
 
   final CliPacking packing;
 
-  /// What the publisher says the file weighs, for the bar; null leaves it to
-  /// the response's own length.
+  /// What the publisher says the file weighs; null leaves it to the
+  /// response's own length.
   final int? bytes;
 }
 

@@ -111,27 +111,38 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   /// Entoli's own copy of the program, kept in [workRoot] beside the folder
   /// its sessions run in, which is what the cache is for: deleted, it is
   /// downloaded again rather than lost.
-  String get ownCopy => p.join(
-    workRoot.path,
-    "bin",
-    Platform.isWindows ? "$defaultCommand.exe" : defaultCommand,
-  );
+  String get ownCopy => p.join(_bin, programFile(defaultCommand));
 
-  bool get installed => File(ownCopy).existsSync();
+  String get _bin => p.join(workRoot.path, "bin");
 
-  /// [latestRelease] fetched, checked against the hash its publisher states,
-  /// taken out of whatever it is packed in and put at [ownCopy] — in one
-  /// rename, so a copy in use is replaced whole or not at all. Over [client]
-  /// where given, which the run closes.
+  /// [name] as this platform names a program's file.
+  static String programFile(String name) =>
+      Platform.isWindows ? "$name.exe" : name;
+
+  /// Programs the CLI runs from beside itself, which a copy is not whole
+  /// without. None unless a subclass knows of one.
+  List<String> get companions => const [];
+
+  /// [ownCopy] there, with every one of its [companions].
+  bool get installed => [
+    ownCopy,
+    for (final name in companions) p.join(_bin, programFile(name)),
+  ].every((path) => File(path).existsSync());
+
+  /// [latestRelease] fetched, each of its files checked against the hash its
+  /// publisher states, taken out of whatever it is packed in, and put in
+  /// [ownCopy]'s folder — each in one rename, the CLI's own last, so a copy
+  /// in use is replaced whole and one only half fetched is not [installed].
+  /// Over [client] where given, which the run closes.
   Stream<DownloadProgress> install({http.Client? client}) {
     final web = client ?? tlsClient();
-    final bin = p.dirname(ownCopy);
-    final part = p.join(bin, "download.part");
-    final staged = "$ownCopy.new";
     Future<void> discard() async {
-      for (final path in [part, staged]) {
-        final file = File(path);
-        if (file.existsSync()) await file.delete();
+      final bin = Directory(_bin);
+      if (!bin.existsSync()) return;
+      await for (final entry in bin.list()) {
+        if (entry.path.endsWith(".part") || entry.path.endsWith(".new")) {
+          await entry.delete();
+        }
       }
     }
 
@@ -144,37 +155,49 @@ abstract class CliProvider extends LlmProvider with KeyFree {
             (throw UnsupportedError(
               "${config.displayName} publishes no build for this computer",
             ));
-        await Directory(bin).create(recursive: true);
-        final digest = await run.fetchSha256(
-          url: "${release.url}",
-          to: part,
-          total: release.bytes,
-        );
-        if (run.cancelled) return;
-        if (digest != release.sha256.toLowerCase()) {
-          throw FormatException(
-            "${release.url} does not match the checksum its publisher states",
+        await Directory(_bin).create(recursive: true);
+        final total = release.bytes;
+        var done = 0;
+        for (final file in release.files) {
+          final part = p.join(_bin, "${file.name}.part");
+          final digest = await run.fetchSha256(
+            url: "${file.url}",
+            to: part,
+            total: total,
+            done: done,
           );
+          if (run.cancelled) return;
+          if (digest != file.sha256.toLowerCase()) {
+            throw FormatException(
+              "${file.url} does not match the checksum its publisher states",
+            );
+          }
+          done += File(part).lengthSync();
+          run.report(
+            DownloadProgress(
+              received: done,
+              total: total ?? 0,
+              unpacking: true,
+            ),
+          );
+          final staged = p.join(_bin, "${file.name}.new");
+          await file.packing.place(File(part), staged);
+          makeExecutable(staged);
         }
-        run.report(
-          DownloadProgress(
-            received: release.bytes ?? 0,
-            total: release.bytes ?? 0,
-            unpacking: true,
-          ),
-        );
-        await release.packing.place(File(part), staged);
-        makeExecutable(staged);
-        await File(staged).rename(ownCopy);
+        for (final file in release.files) {
+          await File(
+            p.join(_bin, "${file.name}.new"),
+          ).rename(p.join(_bin, file.name));
+        }
       },
     ).stream;
   }
 
-  /// Takes [ownCopy] away, and the program falls back to whatever else
-  /// [locate] finds.
+  /// Takes [ownCopy] and its [companions] away, and the program falls back
+  /// to whatever else [locate] finds.
   Future<void> uninstall() async {
-    final file = File(ownCopy);
-    if (file.existsSync()) await file.delete();
+    final bin = Directory(_bin);
+    if (bin.existsSync()) await bin.delete(recursive: true);
   }
 
   /// Whether the program is signed in, by its own [statusArguments].
