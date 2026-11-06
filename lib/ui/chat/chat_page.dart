@@ -45,7 +45,6 @@ import "activity/format.dart" show formatRemaining;
 import "widgets/chapter_rail.dart";
 import "widgets/composer.dart";
 import "widgets/composer_controller.dart";
-import "widgets/goal_strip.dart";
 import "widgets/composer_embed.dart";
 import "widgets/paired_project_badges.dart";
 import "widgets/message_bubble.dart";
@@ -1514,12 +1513,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
             notifier: driver,
             onWithdrawn: (said) => _handle?.restore(said),
           ),
-          if (view.chat case final chat?) ...[
-            BrowserPrompts(chatId: chat.state.id),
-            // Flutter's beside the shell's too, until the shell's protocol
-            // carries a goal.
-            GoalStrip(chatId: chat.state.id, onCommand: driver.send),
-          ],
+          if (view.chat case final chat?) BrowserPrompts(chatId: chat.state.id),
         ] else
           TurnSurface(
             view: view,

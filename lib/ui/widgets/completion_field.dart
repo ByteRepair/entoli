@@ -126,6 +126,23 @@ List<CompletionOption> matchingCompletions(
   return options.where((o) => o.name.toLowerCase().contains(needle)).toList();
 }
 
+/// Start a goal in [controller]: `/goal ` at the head of the message, so what
+/// is already typed becomes the objective, and the caret at its end to go on
+/// writing it. A message already a goal is left as it is, caret aside. The
+/// `+` menus' New Goal, Flutter's and the native shell's, both land here.
+void startGoal(TextEditingController controller) {
+  const head = "/goal ";
+  final text = controller.text;
+  final already = text == "/goal" || text.startsWith(head);
+  final goal = already
+      ? (text == "/goal" ? head : text)
+      : "$head${text.trimLeft()}";
+  controller.value = TextEditingValue(
+    text: goal,
+    selection: TextSelection.collapsed(offset: goal.length),
+  );
+}
+
 /// The menu entries that open a completion menu by typing its trigger, for a
 /// button that offers other things too — the composer's `+` also attaches
 /// files. Each carries its action as its value, so it runs once the menu has

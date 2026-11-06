@@ -531,10 +531,21 @@ reviewer will check the evidence, and to stop and say so when blocked.
 nothing else. A one-word verb is the verb; anything longer is an objective.
 
 `GoalStatus` is active, paused, met or blocked; only active is reviewed, the
-rest are kept for the composer's `GoalStrip` to show until cleared. A goal
-pauses itself after `maxGoalRounds` (50, OpenCode's) sends back, or
-`maxGoalStalls` (3) reviews in a row after stretches with no tool call — a
-model that only talks is not getting closer. `/goal resume` starts both
+rest are kept for the goal row above the composer to show until cleared —
+`GoalStrip` in Flutter, `goalRow` in the native shell, fed by
+`TurnSnapshot.goal` and answering through `TurnIntents.goal`; either way a
+button is sent as the `/goal` command it is. The `+` menu's New Goal, in both,
+is `startGoal`: `/goal ` at the head of the field, so what was typed becomes
+the objective.
+
+**No cap on rounds of its own.** A send-back is a step of the turn it happens
+in, so the turn's step limit — the one the settings already give the user —
+is what bounds a run of them; OpenCode's fixed 50 would be a second limit on
+the same thing, and one the user cannot set. A turn that hits it ends as any
+does at its limit, offered to Continue, with the goal still active. What the
+step limit cannot catch is a model that stops without doing anything, which
+spends a step each time to no end: `maxGoalStalls` (3) reviews in a row after
+stretches with no tool call pause the goal. `/goal resume` starts the
 counters over.
 
 ### Carrying on an interrupted turn

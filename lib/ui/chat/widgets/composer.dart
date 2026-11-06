@@ -306,6 +306,17 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
                       ),
                       const PopupMenuDivider(),
                       ...completionInsertItems(context, _field),
+                      const PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: () => startGoal(widget.controller),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.track_changes, size: 18),
+                            SizedBox(width: 12),
+                            Text("New Goal"),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                   Expanded(child: field),

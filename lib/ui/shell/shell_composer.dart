@@ -181,6 +181,13 @@ class ShellComposerState extends ConsumerState<ShellComposer>
     if (mounted) setState(() {});
   }
 
+  @override
+  Future<void> goal() async {
+    _dismissed = null;
+    startGoal(_controller);
+    if (mounted) setState(() {});
+  }
+
   /// A row of the menu as last drawn.
   @override
   Future<void> pick(int index) async {

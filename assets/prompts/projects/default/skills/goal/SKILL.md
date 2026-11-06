@@ -28,7 +28,11 @@ tests".
 - `/goal clear` removes the goal. `stop`, `off`, `reset`, `none` and `cancel`
   do the same.
 
-A goal pauses itself after 50 rounds of being sent back, or when the agent
-stops three times in a row without doing anything in between. One goal per
-chat: setting another replaces it. The pill above the composer shows the goal
-and has its pause, resume and clear buttons.
+Each time the goal sends the agent back is a step of the turn, so the step
+limit under Settings bounds how long it runs; a turn that reaches it can be
+carried on with Continue, the goal still set. A goal pauses itself when the
+agent stops three times in a row without doing anything in between.
+
+One goal per chat: setting another replaces it. New Goal in the composer's
+`+` menu starts one, making whatever is typed the objective, and the row
+above the composer shows the goal with its pause, resume and clear buttons.

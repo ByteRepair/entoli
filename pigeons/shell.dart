@@ -414,11 +414,26 @@ class QuestionRequest {
   List<QuestionSnapshot> questions;
 }
 
+/// Where a chat's goal stands: `GoalStatus` in the domain.
+enum GoalPhase { active, paused, met, blocked }
+
+/// The chat's goal, the row above the composer while there is one.
+class GoalSnapshot {
+  String objective;
+  GoalPhase phase;
+
+  /// The goal in full — its rounds and the reviewer's last word — for the
+  /// row's tooltip.
+  String summary;
+}
+
 /// What a running turn puts above the composer: the offer to carry on an
-/// interrupted one, what is running, what was said to it unread, and the
-/// calls waiting on an answer. Empty where no chat page has one.
+/// interrupted one, the chat's goal, what is running, what was said to it
+/// unread, and the calls waiting on an answer. Empty where no chat page has
+/// one.
 class TurnSnapshot {
   TurnSnapshot({
+    this.goal,
     this.resume,
     this.running = const [],
     this.steers = const [],
@@ -426,6 +441,9 @@ class TurnSnapshot {
     this.approvals = const [],
     this.question,
   });
+
+  /// The chat's goal, null for none.
+  GoalSnapshot? goal;
 
   /// The resume bar's line, null for none.
   String? resume;
@@ -732,6 +750,9 @@ abstract class ComposerIntents {
   void attach(AttachKind kind);
   void trigger(ComposerTrigger kind);
 
+  /// The `+` menu's New Goal: `/goal ` at the head of the field.
+  void goal();
+
   /// A row of the menu as last sent.
   void pick(int index);
   void dismiss();
@@ -747,10 +768,16 @@ abstract class ComposerIntents {
 /// An answer to an approval.
 enum ApprovalAnswer { allow, chat, project, deny }
 
+/// What the goal row's buttons do: each is that `/goal` command.
+enum GoalAction { pause, resume, clear }
+
 /// The turn surface on screen.
 @FlutterApi()
 abstract class TurnIntents {
   void resume();
+
+  /// A button of the goal row.
+  void goal(GoalAction action);
 
   /// A [RunningSnapshot] by its id.
   void running(int id);

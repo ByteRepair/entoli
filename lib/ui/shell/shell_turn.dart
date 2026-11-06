@@ -2,8 +2,10 @@ import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/goal.dart";
 import "../../domain/models.dart";
 import "../../domain/room/room_state.dart";
+import "../../providers.dart" show chatGoalProvider;
 import "../chat/chat_controller.dart";
 import "../chat/widgets/approval_banner.dart";
 import "../chat/widgets/resume_bar.dart";
@@ -15,7 +17,7 @@ import "shell_outbox.dart";
 import "shell_slots.dart";
 
 /// [TurnSurface] drawn by the native shell, wired the same way: the resume
-/// offer, what is running, the says the turn has not read, and the calls
+/// offer, the chat's goal, what is running, the says the turn has not read, and the calls
 /// waiting on an answer go to the shell as a [TurnSnapshot], and what is
 /// pressed there comes back to [handle]. The browser's prompts stay Flutter's,
 /// beside this on the page.
@@ -70,6 +72,17 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface>
 
   @override
   Future<void> resume() => widget.notifier.resume();
+
+  /// A button of the goal row, sent as the `/goal` command it is, as
+  /// Flutter's `GoalStrip` sends it.
+  @override
+  Future<void> goal(GoalAction action) => widget.notifier.send(
+    "/goal ${switch (action) {
+      GoalAction.pause => "pause",
+      GoalAction.resume => "resume",
+      GoalAction.clear => "clear",
+    }}",
+  );
 
   /// A pill, by its index in [_running].
   @override
@@ -134,8 +147,12 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface>
     final asked = view.roomPhase == RoomPhase.waitingOnYou
         ? view.questions.values.expand((q) => q).firstOrNull
         : null;
+    final goal = chatId == null
+        ? null
+        : ref.watch(chatGoalProvider(chatId)).value;
     _outbox.turn(
       TurnSnapshot(
+        goal: goalSnapshotOf(goal),
         resume: chat != null && chat.unfinished && !view.isRunning
             ? ResumeBar.lineOf(
                 chat.messages.last.createdAt,
@@ -218,3 +235,17 @@ String? _symbolOf(IconData? icon) {
   if (icon == Icons.shield_outlined) return "checkmark.shield";
   return null;
 }
+
+/// [goal] as the shell's goal row draws it, or null for none.
+GoalSnapshot? goalSnapshotOf(ChatGoal? goal) => goal == null
+    ? null
+    : GoalSnapshot(
+        objective: goal.objective,
+        phase: switch (goal.status) {
+          GoalStatus.active => GoalPhase.active,
+          GoalStatus.paused => GoalPhase.paused,
+          GoalStatus.met => GoalPhase.met,
+          GoalStatus.blocked => GoalPhase.blocked,
+        },
+        summary: goalSummary(goal),
+      );
