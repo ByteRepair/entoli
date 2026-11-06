@@ -63,12 +63,16 @@ final class ShellHost {
       pointerMonitor = NSEvent.addLocalMonitorForEvents(
         matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
       ) { [weak self, weak window] event in
-        guard let self, let window, event.window === window,
-          let content = window.contentView
+        guard let self, let window, event.window === window
         else { return event }
-        let point = content.convert(event.locationInWindow, from: nil)
+        let flutterView = flutter.view
+        // Convert into Flutter's own view coordinates. The sidebar lies to
+        // its left, so its x values must be negative relative to the avatar;
+        // AppKit's bottom-left origin also needs flipping to Flutter's top-left.
+        let point = flutterView.convert(event.locationInWindow, from: nil)
         self.model.say.window.pointer(
-          x: point.x - content.bounds.minX, y: content.bounds.maxY - point.y
+          x: point.x - flutterView.bounds.minX,
+          y: flutterView.bounds.maxY - point.y
         ) { _ in }
         return event
       }
