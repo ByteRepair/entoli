@@ -314,7 +314,10 @@ class ShellComposerState extends ConsumerState<ShellComposer>
               ComposerMode.callback => InputMode.callback,
             },
             hint: mode.hint ?? "Message",
-            sendLabel: mode.sendLabel(queues: _logic.queues.value),
+            sendLabel: mode.sendLabel(
+              queues: _logic.queues.value,
+              callback: _logic.callbackLabel,
+            ),
             canSend: _logic.canSend.value,
             queues: _logic.queues.value,
             speaking: widget.config.agentSpeaking,

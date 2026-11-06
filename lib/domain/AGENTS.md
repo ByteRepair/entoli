@@ -10,7 +10,7 @@ written, so the only thing a kill can now cost is whatever had not been appended
 yet. That is what makes an interrupted turn something to offer to continue
 rather than something to apologise for.
 
-Ten records. `message` opens one — before it holds anything, which is what the
+Eleven records. `message` opens one — before it holds anything, which is what the
 empty assistant message at the head of a turn is — and its `siblingOf` names
 what it is an alternative to, or nothing at all, which puts it on the end of the
 thread being read; `replacesSibling` takes that one away rather than joining it,
@@ -70,8 +70,8 @@ of its records and its provider and model the last one's, folded by
 `Message.withUsage` both here and live from the `ContextEvent` each call ends
 with, so a reload and the screen agree. Nothing draws them yet.
 
-`callEvent` is the one record written **between turns**: a job outlives the
-turn that started it and usually ends when nothing is running. It goes
+`callEvent` is a record written **between turns**, as `goal` can be — a
+pause or a clear with nothing running. A job outlives the turn that started it and usually ends when nothing is running. It goes
 through the room's one append queue like a turn's records, so lines never
 interleave, and it names a call rather than a part's index, so a job ending
 while the turn that started it is still writing that reply cannot collide

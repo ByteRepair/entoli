@@ -395,6 +395,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
                             ),
                             tooltip: _logic.mode.sendLabel(
                               queues: _logic.queues.value,
+                              callback: _logic.callbackLabel,
                             ),
                           ),
                   ),

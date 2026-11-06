@@ -22,9 +22,9 @@ loads when that code is being read rather than on every session. A section
 named in a cross-reference is findable from this list.
 
 - `lib/domain/AGENTS.md` — The conversation log, Threads, The projection,
-  Carrying on an interrupted turn, Starting a chat, and naming it, Skills and
-  agents, Tools per agent, Resending a message, Reactions, Attachments,
-  Reminders
+  Compaction, Callbacks, and the wired skill, Goals, Carrying on an
+  interrupted turn, Starting a chat, and naming it, Skills and agents, Tools
+  per agent, Resending a message, Reactions, Attachments, Reminders
 - `lib/domain/bot_avatar/AGENTS.md` — Bot Avatars: the spec an agent wears,
   the presets and the user's imports, the engine ported from Open Bot Avatar,
   and the editor
@@ -63,7 +63,8 @@ named in a cross-reference is findable from this list.
   Selecting a reply, and copying it, Replying to a passage, How a reply
   is set, Formulas, Code
   blocks, A command
-  the user ran, Activities, on screen, The plan, on screen, A chat whose home device is elsewhere, The chat page
+  the user ran, Activities, on screen, A goal, on screen, The plan, on screen,
+  A chat whose home device is elsewhere, The chat page
 - `lib/data/voice/AGENTS.md` — Voice mode, What listens and what speaks, The
   Android system engines, Which language it is asked in, Ending the utterance,
   What counts as being spoken to, One listener, two engines, Mute is the user,

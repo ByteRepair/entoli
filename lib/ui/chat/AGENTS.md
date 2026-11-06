@@ -590,9 +590,9 @@ command yourself".
 ### A compact turn, and its divider
 
 `/compact` is a callback, not a prompt: the composer dresses for it (an
-`auto_awesome` icon and a "Compact the conversation" hint — lighter than the
-shell's dressing, since nothing runs on the machine and no model is asked), the
-send dispatches it before the room's guards, and while a turn runs it is
+`auto_awesome` icon, and the send button named for what the callback does —
+lighter than the shell's dressing, since nothing runs on the machine and no
+model is asked), the send dispatches it before the room's guards, and while a turn runs it is
 **refused, not queued** — a callback mid-turn is the session the turn is
 rewriting underneath it. The turn itself goes through the room's machinery:
 prompt logged as said, empty reply, the status row saying "Compacting the
@@ -669,6 +669,12 @@ every `ToolUI` names a tool the registry has, since the two are paired by
 that string alone.
 
 ## A goal, on screen
+
+`/goal` is dressed as the callback it is, the one dress every callback
+shares; what differs is the send button, which `callbackSendLabel` names
+from what is typed — "Set goal", "Pause goal", "Clear goal" — as it names
+`/compact` "Compact". A label per callback, since a button saying "Compact"
+over `/goal pause` was the dress claiming more than was true.
 
 The goal shows twice. **Where it stands now** is the row above the composer —
 `GoalStrip` in Flutter, `goalRow` in the native shell — with its pause or
