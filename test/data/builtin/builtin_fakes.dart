@@ -345,6 +345,25 @@ LlmCompletion taskCall(
   ),
 );
 
+/// One assistant turn that calls `websearch`.
+LlmCompletion searchCall(
+  String query, {
+  String id = "search-1",
+  String text = "",
+}) => LlmCompletion(
+  message: LlmMessage(
+    role: LlmRole.assistant,
+    text: text,
+    toolCalls: [
+      LlmToolCall(
+        id: id,
+        name: "websearch",
+        argumentsJson: jsonEncode({"query": query}),
+      ),
+    ],
+  ),
+);
+
 /// One assistant turn that calls `webfetch`.
 LlmCompletion fetchCall(
   String url, {
@@ -480,6 +499,10 @@ class FakeWebSearch extends WebSearch {
     return searchResult?.call(query) ??
         const ShellResult(returnCode: 0, output: "No results.");
   }
+
+  @override
+  Uri? searchPageUrl(String query) =>
+      Uri.https("search.test", "/", {"q": query});
 
   @override
   Future<ShellResult> fetch(String url) async {

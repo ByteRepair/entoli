@@ -583,18 +583,22 @@ class FakeShellJobs implements ChatShellJobs {
   final List<int> stopped = [];
 
   /// Where a test ends a job.
-  final endings = StreamController<({String callId, JobEnd end})>.broadcast(
-    sync: true,
-  );
+  final endings = StreamController<EndedJob>.broadcast(sync: true);
 
   @override
-  Stream<({String callId, JobEnd end})> get ended => endings.stream;
+  Stream<EndedJob> get ended => endings.stream;
 
   @override
   Future<void> stop(int id) async => stopped.add(id);
 
   @override
   Stream<String> log(ShellJob job) => Stream.value(logs[job.id] ?? "");
+
+  /// The jobs whose end the agent was told of by a wake.
+  final List<int> toldOf = [];
+
+  @override
+  void told(int id) => toldOf.add(id);
 }
 
 class FakeBackend implements AgentBackend {

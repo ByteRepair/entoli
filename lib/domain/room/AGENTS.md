@@ -266,6 +266,20 @@ records are still in flight, and closing the app in that window would lose them
 — and would leave a log that reads as killed when it was not. The window is
 milliseconds on a disk. A write that fails still has to
 clear the flag, or the composer stays disabled with nothing running.
+
+**A background job's end can start the next one.** A job the agent started
+outlives its turn, and when it ends with no turn running `_jobEnded` prompts
+the room with the job's `<system-notification>` (`jobEndedNotification` in
+`shell_job.dart`, over `system_notification.dart`'s one format): the exit
+code and its log's tail, said by the app. The end carries the command
+(`EndedJob`), so nothing is looked up in a list about to drop it. It goes
+through `_prompt` like anything said, so it is on the log as a user message
+and a reload words it the same; the bubble draws a user message that is a
+system notification as "System" rather than "You", and a steer that is one —
+the plan's tasks-left note — as "System, while it worked". A stopped job and
+a job ending while a turn runs start nothing: the running turn reads it on
+its next tool result.
+
 ## Automatic retry rounds
 
 **A retryable failure is a blip the turn is carried on from, not an outcome.**

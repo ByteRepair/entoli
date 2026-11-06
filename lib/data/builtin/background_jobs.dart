@@ -39,10 +39,14 @@ class BackgroundJobs {
 
 /// What a job's shell runs: its streams pointed at its log and at nothing
 /// before [command] starts, so a child it leaves behind holds no pipe of the
-/// app's, then [command] as written. A log that cannot be opened ends the
-/// job there rather than letting it print into the app.
-String backgroundScript(String callId, String command) =>
+/// app's, then [command] as written — from [startIn] where the chat's
+/// commands have moved, so a job runs where the commands before it did. The
+/// log is opened first, so it lands in the workspace wherever the job runs.
+/// A log that cannot be opened ends the job there rather than letting it
+/// print into the app.
+String backgroundScript(String callId, String command, {String? startIn}) =>
     "mkdir -p .entoli-jobs; exec >${backgroundLog(callId)} 2>&1 </dev/null || exit 1\n"
+    "${startIn == null ? "" : "cd -- ${shellQuoted(startIn)} || exit 1\n"}"
     "$command";
 
 /// One chat's jobs.
@@ -52,15 +56,13 @@ class ChatJobs implements ChatShellJobs {
   @override
   final ValueNotifier<List<ShellJob>> jobs = ValueNotifier(const []);
   final _runs = <int, ShellRun>{};
-  final _notes = <String>[];
+  final _notes = <int, String>{};
   // Synchronous, so a listener has the end before the list drops the job: the
   // chat never reads a job as neither running nor ended.
-  final _ended = StreamController<({String callId, JobEnd end})>.broadcast(
-    sync: true,
-  );
+  final _ended = StreamController<EndedJob>.broadcast(sync: true);
 
   @override
-  Stream<({String callId, JobEnd end})> get ended => _ended.stream;
+  Stream<EndedJob> get ended => _ended.stream;
 
   /// What the agent and the pill call a job. Not what names its log, so
   /// starting again with the app overwrites nothing.
@@ -72,10 +74,11 @@ class ChatJobs implements ChatShellJobs {
     String command, {
     required String callId,
     required String workspace,
+    String? startIn,
     required ShellRun Function(String script) spawn,
   }) async {
     final id = ++_count;
-    final run = spawn(backgroundScript(callId, command));
+    final run = spawn(backgroundScript(callId, command, startIn: startIn));
     _runs[id] = run;
     final job = ShellJob(
       id: id,
@@ -92,7 +95,8 @@ class ChatJobs implements ChatShellJobs {
   Future<void> _end(ShellJob job, int code) async {
     if (_runs.remove(job.id) == null) return;
     final how = code == -1 ? "was stopped" : "exited with code $code";
-    _notes.add("Background job ${job.id} (`${firstLine(job.command)}`) $how.");
+    _notes[job.id] =
+        "Background job ${job.id} (`${firstLine(job.command)}`) $how.";
     var log = "";
     try {
       final file = File(job.logPath);
@@ -103,6 +107,7 @@ class ChatJobs implements ChatShellJobs {
     if (!_ended.isClosed) {
       _ended.add((
         callId: job.callId,
+        command: job.command,
         end: JobEnd(
           jobId: job.id,
           exitCode: code == -1 ? null : code,
@@ -118,10 +123,13 @@ class ChatJobs implements ChatShellJobs {
 
   /// How the jobs that ended since the last call ended, once each.
   List<String> takeNotes() {
-    final notes = [..._notes];
+    final notes = [..._notes.values];
     _notes.clear();
     return notes;
   }
+
+  @override
+  void told(int id) => _notes.remove(id);
 
   @override
   Future<void> stop(int id) async => _runs[id]?.kill();

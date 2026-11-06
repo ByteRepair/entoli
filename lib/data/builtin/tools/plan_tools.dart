@@ -6,6 +6,7 @@ import "../../../domain/agent_backend.dart";
 import "../../../domain/ask.dart";
 import "../../../domain/plan.dart";
 import "../../../domain/shell.dart";
+import "../../../domain/system_notification.dart";
 import "../../../domain/tool_arg.dart";
 import "../llm/llm_client.dart";
 import "agent_tool.dart";
@@ -151,9 +152,9 @@ class PlanNextTool extends _PlanTool {
   @override
   String get description =>
       "Take the next pending task of the plan and mark "
-      "it as being worked on. Answers the task's number, so plan_done can "
-      "name it, and the plan written for it. \"All tasks done.\" when nothing "
-      "is left.";
+      "it as being worked on, answering its number and its plan. Only needed "
+      "to pick a plan back up: Go and $planDoneToolName already take the "
+      "next task. \"All tasks done.\" when nothing is left.";
 
   @override
   Map<String, dynamic> get schema => const {"type": "object", "properties": {}};
@@ -168,12 +169,23 @@ class PlanNextTool extends _PlanTool {
       yield toolOk(call, missing ?? "All tasks done.");
       return;
     }
-    // The index came from the text just read, so the mark cannot miss.
-    final marked = planMark(plan, next.index, PlanTaskStatus.inProgress)!;
-    await File(_planPath(turn)).writeAsString(marked);
-    yield toolOk(call, planNextResult(next, planProgress(marked)));
+    yield toolOk(call, await _take(turn, plan!, next));
   }
 }
+
+/// Mark [task] of [plan] in progress, write the plan, and answer with the
+/// task's own plan. Every way a task is taken — `plan_next`, Go, and
+/// `plan_done` going on to the next — comes through here. The index came
+/// from the text just read, so the mark cannot miss.
+Future<String> _take(Turn turn, String plan, PlanTask task) async {
+  final marked = planMark(plan, task.index, PlanTaskStatus.inProgress)!;
+  await File(_planPath(turn)).writeAsString(marked);
+  return planNextResult(task, planProgress(marked));
+}
+
+/// The next task, where [plan] has none under way to finish first.
+PlanTask? _nextToTake(String plan) =>
+    planUnderWay(plan) ? null : planNext(plan);
 
 /// Finish a task: by number or by enough of its text to identify it.
 /// Ambiguous is refused with the candidates, not guessed.
@@ -185,9 +197,9 @@ class PlanDoneTool extends _PlanTool {
 
   @override
   String get description =>
-      "Mark a task of the plan done: the one "
-      "$planNextToolName last answered, by number, or by naming enough of the "
-      "task's text to identify it.";
+      "Mark a task of the plan done: by number, or by naming enough of the "
+      "task's text to identify it. Takes the next task in the same call and "
+      "answers its plan, so go straight on to it.";
 
   @override
   Map<String, dynamic> get schema => const {
@@ -195,9 +207,7 @@ class PlanDoneTool extends _PlanTool {
     "properties": {
       "task": {
         "type": "string",
-        "description":
-            "The task's number as $planNextToolName reported "
-            "it, or the start of its text.",
+        "description": "The task's number, or the start of its text.",
       },
     },
     "required": ["task"],
@@ -209,9 +219,8 @@ class PlanDoneTool extends _PlanTool {
     if (task == null) {
       yield* toolRejected(
         call,
-        'The $planDoneToolName tool takes {"task": "..."} — the number '
-        "$planNextToolName reported, or the start of the task's text; that "
-        "argument was missing.",
+        'The $planDoneToolName tool takes {"task": "..."} — the task\'s '
+        "number, or the start of its text; that argument was missing.",
       );
       return;
     }
@@ -231,8 +240,8 @@ class PlanDoneTool extends _PlanTool {
       yield toolFailed(
         call,
         candidates.isEmpty
-            ? "No task matches \"$task\". Call $planNextToolName to take "
-                  "the next one, or read $planFileName."
+            ? "No task matches \"$task\". Read $planFileName for the "
+                  "tasks and their numbers."
             : "\"$task\" matches more than one task: ${candidates.join("; ")}. "
                   "Name it by number, or by more of its text.",
       );
@@ -240,8 +249,40 @@ class PlanDoneTool extends _PlanTool {
     }
     // The index came from the text just read, so the mark cannot miss.
     final marked = planMark(plan, found.index, PlanTaskStatus.done)!;
+    final done = planDoneResult(found, planProgress(marked));
+    // The next task is taken in the same call and its plan handed back, so
+    // working through a plan costs one call per task rather than two.
+    final next = _nextToTake(marked);
+    if (next != null) {
+      yield toolOk(
+        call,
+        "$done\n\nNow taken — ${await _take(turn, marked, next)}",
+      );
+      return;
+    }
     await File(_planPath(turn)).writeAsString(marked);
-    yield toolOk(call, planDoneResult(found, planProgress(marked)));
+    final (finished, total) = planProgress(marked);
+    yield toolOk(call, finished == total ? "$done\n\nAll tasks done." : done);
+  }
+
+  /// A plan under way with tasks left: said where the model replies with no
+  /// tool call, so a progress report does not end the work. Asked of this
+  /// one plan tool, so it is said once and only where the plan is offered.
+  @override
+  Future<String?> beforeStop(Turn turn) async {
+    final plan = await _readPlan(turn);
+    if (!planUnderWay(plan)) return null;
+    final open = [
+      for (final t in planTasksFrom(plan))
+        if (t.status != PlanTaskStatus.done) "${t.index}. ${t.text}",
+    ];
+    return systemNotification([
+      "The approved plan still has ${open.length} task(s) not done:",
+      ...open,
+      "Carry on with the work. If you are blocked or need a decision, ask "
+          "the user with $askToolName; if a task turned out unnecessary, "
+          "mark it done and say why.",
+    ]);
   }
 }
 
@@ -304,7 +345,8 @@ class PresentPlanTool extends AgentTool {
       return;
     }
     yield toolCalled(call, args.title ?? planFileName);
-    final missing = _planMissing(await _readPlan(turn));
+    final plan = await _readPlan(turn);
+    final missing = _planMissing(plan);
     if (missing != null) {
       yield toolFailed(call, missing);
       return;
@@ -322,6 +364,15 @@ class PresentPlanTool extends AgentTool {
     );
     yield QuestionRequestEvent(request);
     final answers = await turn.answer(request);
-    yield toolOk(call, planVerdict(answers.firstOrNull));
+    final verdict = planVerdict(answers.firstOrNull);
+    // Go takes the first task, so the work starts from what was approved
+    // with no call spent asking for it.
+    final first = answers.firstOrNull == "go" ? _nextToTake(plan!) : null;
+    yield toolOk(
+      call,
+      first == null
+          ? verdict
+          : "$verdict\n\nNow taken — ${await _take(turn, plan!, first)}",
+    );
   }
 }

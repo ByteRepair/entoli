@@ -98,10 +98,12 @@ Future<List<InstructionFile>> loadInstructions({
 }
 
 /// The AGENTS.md files above [filePath], nearest first, that have not been
-/// loaded already — what reading a file pulls into the turn. The walk goes to
-/// the filesystem root, so a repository outside the workspaces brings its own
-/// rules with the first file read in it. A file whose path [excludes] names
-/// is skipped.
+/// loaded already — what reading a file pulls into the turn. The walk stops
+/// at the repository the file is in — the first directory holding a `.git`,
+/// its own AGENTS.md included — so a repository outside the workspaces brings
+/// its own rules with the first file read in it and nothing from the folders
+/// it sits in. A file in no repository walks to the filesystem root. A file
+/// whose path [excludes] names is skipped.
 Future<List<InstructionFile>> findNestedInstructions(
   String filePath, {
   required Set<String> alreadyLoaded,
@@ -118,6 +120,12 @@ Future<List<InstructionFile>> findNestedInstructions(
       alreadyLoaded,
       excludes,
     );
+    // A worktree's `.git` is a file, a checkout's a directory: either is
+    // where the repository starts.
+    if (FileSystemEntity.typeSync(p.join(dir, ".git")) !=
+        FileSystemEntityType.notFound) {
+      break;
+    }
     final parent = _norm(p.dirname(dir));
     if (parent == dir) break;
     dir = parent;

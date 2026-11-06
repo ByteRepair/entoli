@@ -173,10 +173,10 @@ Some prose, with a list that is not the plan:
   group("the verdict", () {
     test("the verdict wording covers go, changes, and nothing answered", () {
       expect(planVerdict("go"), contains("Approved"));
-      expect(planVerdict("go"), contains(planNextToolName));
+      expect(planVerdict("go"), contains(planDoneToolName));
       expect(planVerdict("split task 2"), contains("Do not start executing"));
       expect(planVerdict("split task 2"), contains("\"split task 2\""));
-      expect(planVerdict(null), contains("Finish the turn"));
+      expect(planVerdict(null), contains("End the turn"));
     });
   });
 

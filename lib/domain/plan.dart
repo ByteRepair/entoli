@@ -212,7 +212,13 @@ PlanTask? planNext(String? text) => planTasksFrom(
   text,
 ).where((t) => t.status == PlanTaskStatus.pending).firstOrNull;
 
-/// [task] as the model named it — the number [planNext] reported, or enough
+/// Whether a plan is under way: a task in progress, which is a plan approved
+/// and its work taken. The one state where a reply with no tool call is a
+/// stop in the middle, and where taking another task would be one too many.
+bool planUnderWay(String? text) =>
+    planTasksFrom(text).any((t) => t.status == PlanTaskStatus.inProgress);
+
+/// [task] as the model named it — the number a taken task reported, or enough
 /// of the task's text to identify it — matched against the plan's tasks.
 /// Null where nothing matches; null where the text names several, since the
 /// caller refuses rather than guesses.
@@ -317,13 +323,14 @@ String? planMark(String? text, int index, PlanTaskStatus status) {
 /// The `plan_add` tool's result: what was added and where the plan stands.
 /// No index is claimed: where the task went is a section's end, which is not
 /// necessarily the plan's end, and the numbers the model uses are the ones
-/// `plan_next` reports.
+/// a taken task reports.
 String planAddResult(String task, (int done, int total) progress) =>
     "Added: ${task.trim()}. ${progress.$2} task(s) in the plan, "
     "${progress.$1} done.";
 
-/// The `plan_next` tool's result: the task and the plan written for it, so
-/// the work starts from what the user approved.
+/// A taken task's result — `plan_next`'s, and what Go and `plan_done` add
+/// when they take the next: the task and the plan written for it, so the
+/// work starts from what the user approved.
 String planNextResult(PlanTask task, (int done, int total) progress) => [
   "Task ${task.index} of ${progress.$2}: ${task.text}",
   if (task.details.isNotEmpty) task.details,
@@ -377,11 +384,12 @@ String planApprovalQuestionsJson(String? title) => const JsonEncoder().convert({
 /// the turn is running now or being read back out of the log.
 String planVerdict(String? verdict) => switch (verdict) {
   "go" =>
-    "Approved: the user pressed Go. Start working through the plan with "
-        "$planNextToolName and $planDoneToolName, one task at a time.",
+    "Approved: the user pressed Go. Work through the plan one task at a "
+        "time, calling $planDoneToolName as each is finished, and do not "
+        "stop until the last is done unless you need the user.",
   null =>
-    "No verdict was reached. Finish the turn; do not start executing "
-        "the plan.",
+    "The user did not answer. End the turn with one line saying the plan "
+        "is waiting for Go; their next message is the answer.",
   final changes =>
     "The user asked for changes: \"$changes\". Revise the plan "
         "(edit $planFileName, or add tasks with $planAddToolName) and "

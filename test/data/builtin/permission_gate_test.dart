@@ -1100,8 +1100,8 @@ void main() {
       ).run(userMessage("go")).toList();
       // The project's workspace, then the persisted tier's grant —
       // directories and files alike — is what the command's confinement
-      // carries.
-      expect(shell.sandboxes.single!.extraWrites, [
+      // carries, ahead of the toolchain caches this machine happens to have.
+      expect(shell.sandboxes.single!.extraWrites.take(3), [
         p.dirname(p.dirname(workspaceDir)),
         "/etc/hosts",
         "/var/log/entoli",

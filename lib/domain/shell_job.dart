@@ -3,6 +3,7 @@ import "dart:convert";
 import "package:flutter/foundation.dart" show ValueListenable;
 
 import "models.dart" show JobEnd;
+import "system_notification.dart";
 
 /// A command the agent ran with `background: true`: its call answered as soon
 /// as it started, and it runs on, its output going to a log in the chat's
@@ -81,8 +82,31 @@ abstract class ChatShellJobs {
 
   /// Each job as it ends, by the call that started it. Not one the app
   /// killed on its way out: that one has no end to record.
-  Stream<({String callId, JobEnd end})> get ended;
+  Stream<EndedJob> get ended;
+
+  /// The agent has been told how job [id] ended some other way — the turn
+  /// its end woke — so the note its next tool result would carry goes.
+  void told(int id) {}
 }
+
+/// A job as it ended: the call that started it, what it ran, and how it went.
+typedef EndedJob = ({String callId, String command, JobEnd end});
+
+/// What wakes the agent when its background job [jobId], started as
+/// [command], ends between turns: how it ended and the last lines of its log.
+/// [exitCode] is the job's own; a job that was stopped wakes nobody.
+String jobEndedNotification({
+  required int jobId,
+  required String command,
+  required int exitCode,
+  required String tail,
+}) => systemNotification([
+  "Background job $jobId (`${firstLine(command)}`) exited with code $exitCode.",
+  if (tail.trim().isNotEmpty) ...[
+    "The last lines of its log:",
+    tail.trimRight(),
+  ],
+]);
 
 /// The log of the job [callId] started, relative to the chat workspace. Named
 /// by the call rather than the job's number, which starts again with the app,

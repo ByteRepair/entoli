@@ -133,6 +133,7 @@ void main() {
     // The end, then the backend dropping it, as the backend sends them.
     jobs.endings.add((
       callId: "c1",
+      command: "make",
       end: const JobEnd(jobId: 1, exitCode: 0, tail: "built"),
     ));
     jobs.jobs.value = const [];

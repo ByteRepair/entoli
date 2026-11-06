@@ -99,19 +99,23 @@ class BuiltinSession {
   }
 
   /// Put the conversation back into a session that does not have it — one
-  /// rewound, or one belonging to a chat opened after a restart. `project` is
-  /// what builds the argument, out of what `conv.jsonl` kept.
+  /// rewound, resumed, or belonging to a chat opened after a restart.
+  /// `project` is what builds the argument, out of what `conv.jsonl` kept.
+  ///
+  /// [readFiles] stays: a resume after the step limit or a stop rebuilds the
+  /// session, and clearing the stamps there refused edits to files the model
+  /// had read a step before. A stamp is checked against the disk anyway, so
+  /// one that outlived its read answers "changed since", never a wrong yes.
   void replaceWith(Iterable<LlmMessage> conversation) {
     messages
       ..clear()
       ..addAll(conversation);
-    readFiles.clear();
   }
 
   /// The files the model has read, by resolved path, as they stood when it
-  /// read them: what `write` and `edit` check an existing file against. Not
-  /// rebuilt from the log — a session refilled after a rewind or a restart
-  /// starts empty, and the model reads again.
+  /// read them: what `write` and `edit` check an existing file against. Kept
+  /// for the session's life, across its turns and its rebuilds; a chat opened
+  /// after a restart starts with none, and the model reads again.
   final Map<String, FileStamp> readFiles = {};
 
   /// Replace everything from [from] on with [turn]. How a running turn puts
@@ -780,6 +784,24 @@ class BuiltinAgent implements Turn {
         }
       };
 
+  /// How many times this turn was told it stopped with work unfinished.
+  int _nudges = 0;
+
+  /// How many times a turn is told its work is unfinished before a reply
+  /// with no tool call ends it anyway: twice is room to carry on after a
+  /// progress report, and not a loop against a model that means to stop.
+  static const maxStopNudges = 2;
+
+  /// The first offered tool's word on what is unfinished; see
+  /// [AgentTool.beforeStop].
+  Future<String?> _unfinished() async {
+    for (final tool in _tools) {
+      final left = await tool.beforeStop(this);
+      if (left != null) return left;
+    }
+    return null;
+  }
+
   /// The running turn's rebuild, set by [_recorded] and called by the loop.
   void Function() _sayWhatWasSaid = _nothingSaidYet;
 
@@ -821,7 +843,25 @@ class BuiltinAgent implements Turn {
       // A reply with no tool calls is the finished answer — the text was
       // already streamed as TextDelta by _query. This is the native API
       // contract models are trained on, and works with or without a shell.
-      if (completion.message.toolCalls.isEmpty) break;
+      // The one exception is a plan under way with tasks left: a model that
+      // stops to report progress is told what remains, a bounded number of
+      // times, and stopping to ask is `ask_user`'s.
+      if (completion.message.toolCalls.isEmpty) {
+        final left = _nudges < maxStopNudges && step < options.stepLimit - 1
+            ? await _unfinished()
+            : null;
+        if (left == null) break;
+        _nudges++;
+        yield SteerEvent(
+          Message(
+            id: const Uuid().v4(),
+            role: MessageRole.user,
+            createdAt: DateTime.now(),
+            parts: [MessagePart.text(text: left)],
+          ),
+        );
+        continue;
+      }
 
       yield* _executeAll(completion.message.toolCalls);
       if (_cancelled || _ended) break;

@@ -23,6 +23,9 @@ const bashToolName = "bash";
 String? shellBypassCommand(String text) =>
     text.startsWith("!") ? text.substring(1).trim() : null;
 
+/// [text] as one single-quoted POSIX shell word, whatever it holds.
+String shellQuoted(String text) => "'${text.replaceAll("'", r"'\''")}'";
+
 /// What a command produced. Mirrors mini-swe-agent's observation shape: a
 /// return code of -1 means the command never ran to completion, and
 /// [exceptionInfo] says why.
@@ -44,10 +47,11 @@ class ShellResult {
   final String output;
   final String? exceptionInfo;
 
-  /// The working directory the shell was left in, from a shell whose state
-  /// carries over — the one that runs the chat's commands. Null where there is
-  /// no such state to report: a one-shot subshell is gone with the command,
-  /// and a command that was killed or never ran left no directory to read.
+  /// The working directory the command left the chat in: the session
+  /// shell's, or a sandboxed run's, which the chat's next command starts in.
+  /// Null where there is no such state to report: a sub-agent's one-shot
+  /// subshell is gone with the command, and a command that was killed or
+  /// never ran left no directory to read.
   final String? cwd;
 
   /// The background job the command started, where it started one.
@@ -395,6 +399,12 @@ abstract class Shell {
   /// a shell that shows nothing in the guest for [cwd] before the guest has
   /// spoken seeds nothing. The composer's bar is what asks.
   ValueListenable<String?>? sessionCwd(String cwd, {String? home}) => null;
+
+  /// The machine directory [cwd]'s commands are standing in — where the last
+  /// one left the chat, sandboxed or not — or null where it is [cwd] itself,
+  /// or this shell keeps no such place. What a background job starts in, so
+  /// it runs where the commands before it did.
+  String? standingIn(String cwd) => null;
 
   /// End [cwd]'s persistent shell, where this one runs them. A no-op where it
   /// does not. Called when the chat the shell belongs to is deleted or leaves

@@ -80,6 +80,7 @@ void main() {
 
     jobs.endings.add((
       callId: "c1",
+      command: "make",
       end: const JobEnd(jobId: 1, exitCode: 1, tail: "listening\nboom"),
     ));
     jobs.jobs.value = const [];

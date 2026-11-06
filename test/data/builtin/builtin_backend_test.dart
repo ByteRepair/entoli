@@ -15,7 +15,7 @@ import "package:agent_chat/data/builtin/llm/providers/claude_cli.dart";
 import "package:agent_chat/data/builtin/llm/providers/codex_cli.dart";
 import "package:agent_chat/data/builtin/llm/providers/provider.dart";
 import "package:agent_chat/data/builtin/memory/instructions.dart"
-    show InstructionFile, renderInstructions;
+    show InstructionFile, instructionBudgetChars, renderInstructions;
 import "package:agent_chat/data/builtin/memory/store.dart";
 import "package:agent_chat/data/builtin/tools/participants_tool.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
@@ -136,10 +136,12 @@ void main() {
     List<PermissionRule> permissions = const [],
     String participant = "athena",
     bool omada = false,
+    List<ConversationCompaction> compactions = const [],
   }) => backend
       .sendPrompt(
         chatId,
         participant: participant,
+        compactions: compactions,
         // Addressed the way the room stamps every say: to who answers it.
         userMessage(
           text,
@@ -749,6 +751,112 @@ void main() {
         );
 
         expect(events.whereType<InstructionsReadEvent>(), isEmpty);
+        expect(
+          events.whereType<ToolResultEvent>().first.result.output,
+          "1: the contents\n",
+          reason:
+              "the first turn's result still holds the rules, so a second "
+              "copy would be context spent on nothing",
+        );
+      });
+
+      test("after a compaction the rules come back with the next read "
+          "that reaches them", () async {
+        final backend = backendOver([
+          [readCall("sub/notes.txt")],
+          [finish],
+          [readCall("sub/notes.txt")],
+          [finish],
+        ]);
+        writeInstructions();
+        final sub = p.join(config.workspaceDir(chatId), "sub");
+        Directory(sub).createSync(recursive: true);
+        File(p.join(sub, "AGENTS.md")).writeAsStringSync("sub rules");
+        File(p.join(sub, "notes.txt")).writeAsStringSync("the contents");
+
+        final first = await send(backend, "read it");
+        final reply = replyRecording(first);
+        final events = await send(
+          backend,
+          "again",
+          history: [
+            userMessage("hi", at: sentAt),
+            reply,
+          ],
+          compactions: [
+            ConversationCompaction(upToMessageId: reply.id, summary: "read"),
+          ],
+        );
+
+        expect(events.whereType<InstructionsReadEvent>().skip(1).single.files, [
+          ref(p.join(sub, "AGENTS.md"), InstructionKind.directory),
+        ]);
+        expect(
+          events.whereType<ToolResultEvent>().first.result.output,
+          contains("sub rules"),
+        );
+      });
+
+      test("a rules file over the budget is named, not sent", () async {
+        final backend = backendOver([
+          [readCall("sub/notes.txt")],
+          [finish],
+        ]);
+        writeInstructions();
+        final sub = p.join(config.workspaceDir(chatId), "sub");
+        Directory(sub).createSync(recursive: true);
+        File(
+          p.join(sub, "AGENTS.md"),
+        ).writeAsStringSync("x" * (instructionBudgetChars + 1));
+        File(p.join(sub, "notes.txt")).writeAsStringSync("the contents");
+
+        final events = await send(backend, "read it");
+
+        final output = events.whereType<ToolResultEvent>().first.result.output;
+        expect(output, startsWith("1: the contents\n"));
+        expect(output, contains("${p.join(sub, "AGENTS.md")} holds rules"));
+        expect(output, isNot(contains("xxxx")));
+      });
+
+      test("a file read before a resume can be written after it", () async {
+        // A resume rebuilds the session from the log, which is what the step
+        // limit's Continue and a stopped turn's carry-on both do; the read
+        // the model made a step ago still stands.
+        final backend = backendOver([
+          [readCall("notes.txt")],
+          [finish],
+          [writeCall("notes.txt", "rewritten")],
+          [finish],
+        ]);
+        final notes = p.join(config.workspaceDir(chatId), "notes.txt");
+        Directory(p.dirname(notes)).createSync(recursive: true);
+        File(notes).writeAsStringSync("the contents");
+
+        final first = await send(backend, "read it");
+        final events = await resuming(backend, [
+          userMessage("read it", at: sentAt),
+          replyRecording(first),
+        ]);
+
+        final result = events.whereType<ToolResultEvent>().single.result;
+        expect(result.exceptionInfo, isNull);
+        expect(File(notes).readAsStringSync(), "rewritten");
+      });
+
+      test("reading a directory lists it", () async {
+        final backend = backendOver([
+          [readCall("sub")],
+          [finish],
+        ]);
+        final sub = p.join(config.workspaceDir(chatId), "sub");
+        Directory(p.join(sub, "inner")).createSync(recursive: true);
+        File(p.join(sub, "notes.txt")).writeAsStringSync("the contents");
+
+        final events = await send(backend, "look");
+
+        final result = events.whereType<ToolResultEvent>().first.result;
+        expect(result.returnCode, 0);
+        expect(result.output, "sub is a directory:\ninner/\nnotes.txt");
       });
 
       test(

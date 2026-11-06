@@ -6,9 +6,16 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/models.dart"
-    show CallEvents, JobEnd, MessageRole, Retraction, jobEndedEvent;
+    show
+        CallEvents,
+        JobEnd,
+        MessageParts,
+        MessageRole,
+        Retraction,
+        jobEndedEvent;
 import "package:agent_chat/domain/reaction.dart";
 import "package:agent_chat/domain/shell_job.dart";
+import "package:agent_chat/domain/system_notification.dart";
 import "package:agent_chat/domain/project_settings.dart" show OmadaOrdering;
 import "package:agent_chat/domain/room/chat_room.dart";
 import "package:agent_chat/domain/room/room_state.dart";
@@ -205,30 +212,121 @@ void main() {
       await room.send("hello");
       await room.turnDone;
       const end = JobEnd(jobId: 1, exitCode: 0, tail: "done");
-      app.backend.jobsOf(room.chatId).endings.add((callId: "c1", end: end));
+      app.backend.jobsOf(room.chatId).endings.add((
+        callId: "c1",
+        command: "make",
+        end: end,
+      ));
       await waitFor(
         () => room.state.chat?.jobEndOf("c1") != null,
         what: "the end on the chat",
       );
 
       expect(host.states.last.jobOf("c1"), const JobEnded(end));
-      // The state changes before the append lands, which is real I/O.
+      // The state changes before the append lands, which is real I/O; the
+      // wake the end starts writes its own records after it.
+      final recorded = ChatRecord.callEvent(
+        callId: "c1",
+        kind: jobEndedEvent,
+        data: end.toJson(),
+      );
+      await waitFor(
+        () async =>
+            (await app.repo.readRecords(room.chatId)).contains(recorded),
+        what: "the end in the log",
+      );
+      await waitFor(() => !room.state.isRunning, what: "the woken turn");
+    },
+  );
+
+  group("a job that ends between turns wakes the agent", () {
+    const job = ShellJob(
+      id: 3,
+      callId: "c1",
+      command: "flutter run --profile",
+      logPath: "/l",
+    );
+
+    Future<ChatRoom> afterATurn() async {
+      final (room, host) = await openRoom();
+      await room.send("build it");
+      await waitFor(() => host.settled == 1, what: "the settle");
+      return room;
+    }
+
+    test("with a notification of how it ended", () async {
+      final room = await afterATurn();
+      final jobs = app.backend.jobsOf(room.chatId);
+      jobs.jobs.value = [job];
+
+      jobs.endings.add((
+        callId: "c1",
+        command: job.command,
+        end: const JobEnd(jobId: 3, exitCode: 1, tail: "Error: no pubspec"),
+      ));
+      await waitFor(() => app.backend.prompts.length == 2, what: "the wake");
+
+      final said = app.backend.prompts.last.prompt.plainText;
+      expect(isSystemNotification(said), isTrue);
+      expect(said, contains("Background job 3 (`flutter run --profile`)"));
+      expect(said, contains("exited with code 1"));
+      expect(said, contains("Error: no pubspec"));
+      expect(jobs.toldOf, [
+        3,
+      ], reason: "the next tool result does not say it a second time");
+      // The woken turn runs to its end before the app goes.
+      await waitFor(() => !room.state.isRunning, what: "the woken turn");
+    });
+
+    test("but not where it was stopped", () async {
+      final room = await afterATurn();
+      final jobs = app.backend.jobsOf(room.chatId);
+      jobs.jobs.value = [job];
+
+      jobs.endings.add((
+        callId: "c1",
+        command: "make",
+        end: const JobEnd(jobId: 3, tail: ""),
+      ));
+      await waitFor(
+        () => room.state.chat?.jobEndOf("c1") != null,
+        what: "the end on the chat",
+      );
+
+      expect(app.backend.prompts, hasLength(1));
       await waitFor(
         () async =>
             (await app.repo.readRecords(room.chatId)).last is CallEventRecord,
         what: "the end in the log",
       );
-      final records = await app.repo.readRecords(room.chatId);
-      expect(
-        records.last,
-        ChatRecord.callEvent(
+    });
+
+    test(
+      "nor while a turn is running, which reads it on its next call",
+      () async {
+        final (room, _) = await openRoom();
+        app.backend.hold = Completer<void>();
+        await room.send("build it");
+        await waitFor(() => room.state.isRunning, what: "the turn under way");
+        final jobs = app.backend.jobsOf(room.chatId);
+        jobs.jobs.value = [job];
+
+        jobs.endings.add((
           callId: "c1",
-          kind: jobEndedEvent,
-          data: end.toJson(),
-        ),
-      );
-    },
-  );
+          command: "make",
+          end: const JobEnd(jobId: 3, exitCode: 0, tail: ""),
+        ));
+        await waitFor(
+          () => room.state.chat?.jobEndOf("c1") != null,
+          what: "the end on the chat",
+        );
+
+        expect(app.backend.prompts.length, lessThan(2));
+        expect(jobs.toldOf, isEmpty);
+        await room.abort();
+      },
+    );
+  });
 
   test("a job goes from running to ended with no step between, the end "
       "landing before the backend drops it", () async {
@@ -240,7 +338,7 @@ void main() {
     expect(room.state.jobOf("c1"), const JobRunning(job));
 
     const end = JobEnd(jobId: 1, exitCode: 0, tail: "");
-    jobs.endings.add((callId: "c1", end: end));
+    jobs.endings.add((callId: "c1", command: "make", end: end));
     jobs.jobs.value = const [];
     expect(room.state.jobOf("c1"), const JobEnded(end));
     expect(room.state.runningJobs, isEmpty);

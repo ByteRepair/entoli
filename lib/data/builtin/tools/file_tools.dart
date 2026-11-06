@@ -213,6 +213,10 @@ class ReadTool extends AgentTool {
     Future<ShellResult> run() async {
       final file = File(path);
       if (!file.existsSync()) {
+        // A directory is there, just not a file: list it rather than say
+        // nothing exists at a path the model can see does.
+        final dir = Directory(path);
+        if (dir.existsSync()) return _listing(args.path, dir);
         return ShellResult(
           returnCode: -1,
           output: "",
@@ -244,21 +248,39 @@ class ReadTool extends AgentTool {
       }
       final result = buf.toString();
       await _stamp(turn, path);
-      nested = turn.memory.nested
-          ? [
-              // An AGENTS.md read on purpose is already in front of the model.
-              for (final file in await findNestedInstructions(
-                path,
-                alreadyLoaded: turn.loadedInstructions,
-                excludes: turn.memory.excludes,
-              ))
-                if (file.path != path) file,
-            ]
+      final found = turn.memory.nested
+          ? await findNestedInstructions(
+              path,
+              alreadyLoaded: turn.loadedInstructions,
+              excludes: turn.memory.excludes,
+            )
           : const <InstructionFile>[];
-      final output = nested.isEmpty
-          ? (result.isEmpty ? "(empty file)" : result)
-          : "$result\n\n${renderInstructions(nested)}";
-      return ShellResult(returnCode: 0, output: output);
+      // Once per conversation, not once per turn: a file the conversation
+      // has already been shown — since its last compaction, which is where
+      // the claim set starts — is in front of the model in that earlier
+      // result, and a second copy is context spent on nothing. An AGENTS.md
+      // read on purpose is claimed and not appended to itself.
+      final claim = turn.claimInstruction;
+      final big = <InstructionFile>[];
+      nested = [];
+      for (final file in found) {
+        if (file.content.length > instructionBudgetChars) {
+          big.add(file);
+        } else if ((claim == null || claim(file.path)) && file.path != path) {
+          nested.add(file);
+        }
+      }
+      final parts = [
+        if (result.isEmpty && nested.isEmpty) "(empty file)" else result,
+        if (nested.isNotEmpty) renderInstructions(nested),
+        // Over the budget a turn's instructions are held to: named, not
+        // sent, so one read cannot spend a fifth of the window on rules.
+        for (final file in big)
+          "(${file.path} holds rules for this directory too, "
+              "${formatSize(file.content.length)} — too large to include. "
+              "Read the sections relevant to your task with $readToolName.)",
+      ];
+      return ShellResult(returnCode: 0, output: parts.join("\n\n"));
     }
 
     final outcome = GateOutcome();
@@ -278,15 +300,10 @@ class ReadTool extends AgentTool {
     // for a tool's files.
     if (attached != null) yield attached!;
     yield ToolResultEvent(outcome.resultOf(call));
-    // A successful read reports what it reached here, the claim deciding
-    // which of the findings are this conversation's first.
+    // A successful read reports what it reached here: [nested] is already
+    // the claim's answer, the conversation's first reach of each.
     if (nested.isNotEmpty) {
-      final claim = turn.claimInstruction;
-      final fresh = [
-        for (final file in nested)
-          if (claim == null || claim(file.path)) file.ref,
-      ];
-      if (fresh.isNotEmpty) yield InstructionsReadEvent(fresh);
+      yield InstructionsReadEvent([for (final file in nested) file.ref]);
     }
   }
 }
@@ -579,3 +596,30 @@ class AttachmentSaveTool extends AgentTool {
     });
   }
 }
+
+/// What `read` answers for a directory: its entries, directories marked with
+/// a trailing slash, sorted, and cut at [_listingMax] with the count left.
+ShellResult _listing(String shown, Directory dir) {
+  final List<String> names;
+  try {
+    names = [
+      for (final entry in dir.listSync(followLinks: false))
+        p.basename(entry.path) + (entry is Directory ? "/" : ""),
+    ]..sort();
+  } on FileSystemException catch (e) {
+    return ShellResult.failed("Could not list $shown: ${e.message}");
+  }
+  if (names.isEmpty) {
+    return ShellResult(returnCode: 0, output: "$shown is an empty directory.");
+  }
+  final shownNames = names.take(_listingMax).join("\n");
+  final more = names.length > _listingMax
+      ? "\n(${names.length - _listingMax} more)"
+      : "";
+  return ShellResult(
+    returnCode: 0,
+    output: "$shown is a directory:\n$shownNames$more",
+  );
+}
+
+const _listingMax = 500;
