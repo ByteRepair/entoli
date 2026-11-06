@@ -1940,6 +1940,32 @@ class FakeCli extends CliProvider {
   List<String> get signInArguments => const ["login"];
 
   @override
+  List<String> get signOutArguments => const ["logout"];
+
+  /// How many times an entry on it let its folders go.
+  var forgets = 0;
+
+  /// Every sign-out, oldest first.
+  var signOuts = 0;
+
+  @override
+  Future<void> signOut() async {
+    signOuts++;
+    isSignedIn = false;
+  }
+
+  @override
+  Future<void> forget() async => forgets++;
+
+  @override
+  Map<String, String> homeEnvironment(String home) => const {};
+
+  /// One program however many entries are on it, so a test drives the one it
+  /// made; the entry is the caller's to keep.
+  @override
+  CliProvider withConfig(LlmProviderConfig config) => this;
+
+  @override
   List<ModelInfo> get knownModels => const [];
 
   @override

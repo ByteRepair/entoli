@@ -8,7 +8,7 @@ import "../../core/log.dart";
 import "../../data/builtin/llm/providers/cli_sign_in.dart";
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/download.dart";
-import "../../domain/llm_provider.dart" show LlmApi;
+import "../../domain/llm_provider.dart";
 import "../../providers.dart";
 import "cli_downloads.dart";
 
@@ -271,14 +271,21 @@ class _SignInPage extends StatelessWidget {
   }
 }
 
-/// [cli]'s sign-in where a provider on it is set up: whether the program is
-/// signed in, as it says itself, and the way to sign it in where it is not —
-/// [CliSignInDialog], the one the welcome tour opens. The account is the
-/// program's, so this says the same for every entry on the same program.
-class CliAccountSection extends ConsumerStatefulWidget {
-  const CliAccountSection({super.key, required this.api});
+/// The program [config] runs, read for that entry: [cliProgramsProvider]'s
+/// for its API, its folders named by the entry's id.
+CliProvider programFor(WidgetRef ref, LlmProviderConfig config) => ref
+    .read(cliProgramsProvider)
+    .firstWhere((c) => c.config.api == config.api)
+    .withConfig(config);
 
-  final LlmApi api;
+/// The sign-in of [config]'s program where a provider on it is set up:
+/// whether the account in the entry's own folder is signed in, as the
+/// program says itself, and the way to sign it in — [CliSignInDialog], the
+/// one the welcome tour opens — or, signed in, out and into another.
+class CliAccountSection extends ConsumerStatefulWidget {
+  const CliAccountSection({super.key, required this.config});
+
+  final LlmProviderConfig config;
 
   @override
   ConsumerState<CliAccountSection> createState() => _CliAccountSectionState();
@@ -289,9 +296,7 @@ class _CliAccountSectionState extends ConsumerState<CliAccountSection> {
   /// there to ask, signing in being what installs it.
   bool? _signedIn;
 
-  late final CliProvider _cli = ref
-      .read(cliProgramsProvider)
-      .firstWhere((c) => c.config.api == widget.api);
+  late final CliProvider _cli = programFor(ref, widget.config);
 
   @override
   void initState() {
@@ -323,6 +328,19 @@ class _CliAccountSectionState extends ConsumerState<CliAccountSection> {
     }
   }
 
+  /// Out of the account first, so the sign-in that follows is a new one
+  /// rather than the program saying it already is. Given up on, it stays
+  /// signed out, and says so.
+  Future<void> _signInAgain() async {
+    setState(() => _signedIn = null);
+    try {
+      await _cli.signOut();
+    } catch (e) {
+      logFailure("cli", "signing ${_cli.config.displayName} out", e);
+    }
+    if (mounted) await _signIn();
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -343,6 +361,10 @@ class _CliAccountSectionState extends ConsumerState<CliAccountSection> {
           Icon(Icons.check_circle, color: scheme.primary),
           const SizedBox(width: 12),
           Expanded(child: Text("Signed in to your $plan account")),
+          TextButton(
+            onPressed: _signInAgain,
+            child: const Text("Sign in again"),
+          ),
         ],
       ),
       false => Row(

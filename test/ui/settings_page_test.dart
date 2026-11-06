@@ -6,6 +6,8 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
+import "package:agent_chat/data/builtin/llm/providers/presets.dart"
+    show CodexCliProvider;
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/llm_provider.dart";
@@ -386,6 +388,33 @@ void main() {
     codex.finishSignIn();
     await frames(tester);
     expect(find.text("Sign in to ChatGPT"), findsNothing);
+    expect(find.text("Signed in to your ChatGPT account"), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  // Signed in, an entry can sign out and into another account: the program
+  // is told to sign out first, so the sign-in is a new one.
+  testWidgets("a signed-in CLI entry signs in again", (tester) async {
+    final codex = FakeCli.codex();
+    app.dispose();
+    app = TestApp.create(clis: [FakeCli.claude(), codex]);
+    await io(
+      tester,
+      () =>
+          app.seedProviders([CodexCliProvider.preset.copyWith(id: "codex-1")]),
+    );
+    await pumpSettings(tester, app, SettingsCategory.providers);
+
+    await tester.tap(find.text("Codex CLI"));
+    await frames(tester);
+    expect(find.text("Signed in to your ChatGPT account"), findsOneWidget);
+
+    await tester.tap(find.text("Sign in again"));
+    await frames(tester);
+    expect(codex.signOuts, 1);
+    expect(find.text("Sign in to ChatGPT"), findsOneWidget);
+    codex.processes.single.say("https://auth.openai.com/oauth/authorize?x=1");
+    codex.finishSignIn();
+    await frames(tester);
     expect(find.text("Signed in to your ChatGPT account"), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 

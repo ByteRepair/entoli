@@ -90,7 +90,9 @@ on-device model downloaded fills those roles where nothing answers yet
 (`ModelDownloads.landed`), so Local Model needs no picking either.
 The same dialog is the way to sign in outside the tour: a CLI's
 entry in the provider dialog shows `CliAccountSection` above its fields —
-whether the program says it is signed in, and Sign in where it is not. The
+whether the account in the entry's own folder is signed in, Sign in where
+it is not, and Sign in again where it is, which signs the program out
+first so the sign-in is a new one, perhaps another account. The
 provider dialog is a shared widget and knows nothing of programs or
 downloads, so it takes the section as `promptForProvider`'s `cliAccount`
 builder, which `editProvider` fills in.

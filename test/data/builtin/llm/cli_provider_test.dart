@@ -87,6 +87,15 @@ class _ScriptedProvider extends CliProvider {
   List<String> get signInArguments => const [];
 
   @override
+  List<String> get signOutArguments => const [];
+
+  @override
+  Map<String, String> homeEnvironment(String home) => const {};
+
+  @override
+  CliProvider withConfig(LlmProviderConfig config) => this;
+
+  @override
   Future<CliRelease?> latestRelease(http.Client client) async => null;
 
   @override
@@ -520,10 +529,14 @@ void main() {
         expect(jsonDecode(File(mcp).readAsStringSync()), {
           "mcpServers": {"entoli": bridge.config},
         });
-        // Every session runs in the one folder in the cache, and its own
-        // files sit apart from it.
+        // Every session of an entry runs in that entry's folder in the
+        // cache, told its own data folder, and its own files sit apart.
         final root = p.join(dir.path, "cache", "claude-cli");
-        expect(process.workingDirectory, p.join(root, "work"));
+        expect(process.workingDirectory, p.join(root, "work", "c"));
+        expect(
+          process.environment["CLAUDE_CONFIG_DIR"],
+          p.join(root, "data", "c"),
+        );
         expect(p.isWithin(p.join(root, "sessions"), systemFile), isTrue);
         expect(process.environment["FROM_CONFIG"], "1");
 
@@ -792,7 +805,13 @@ void main() {
         );
         expect(
           process.workingDirectory,
-          p.join(dir.path, "cache", "codex-cli", "work"),
+          p.join(dir.path, "cache", "codex-cli", "work", "x"),
+        );
+        // The entry names its own home, and what an entry says wins over
+        // the folder Entoli would give it.
+        expect(
+          process.environment["CODEX_HOME"],
+          p.join(dir.path, "codex-home"),
         );
 
         client.close();
@@ -995,6 +1014,30 @@ void main() {
           }
           return http.Response("", 404);
         });
+
+    // Two entries on one program are two accounts: each is told its own
+    // folder for everything the program keeps, and works in its own.
+    test(
+      "each provider keeps the program's data in a folder of its own",
+      () async {
+        ClaudeCliProvider entry(String id) =>
+            ClaudeCliProvider(ClaudeCliProvider.preset.copyWith(id: id));
+        final (a, b) = (entry("a"), entry("b"));
+        final root = p.join(dir.path, "claude-cli");
+        expect(a.dataDirectory, p.join(root, "data", "a"));
+        expect(a.environment["CLAUDE_CONFIG_DIR"], a.dataDirectory);
+        expect(b.environment["CLAUDE_CONFIG_DIR"], p.join(root, "data", "b"));
+        expect(await a.workDirectory(), p.join(root, "work", "a"));
+        expect(Directory(a.dataDirectory).existsSync(), isTrue);
+
+        // Removed, it takes both with it, and the other entry keeps its own.
+        await b.workDirectory();
+        await a.forget();
+        expect(Directory(p.join(root, "data", "a")).existsSync(), isFalse);
+        expect(Directory(p.join(root, "work", "a")).existsSync(), isFalse);
+        expect(Directory(b.dataDirectory).existsSync(), isTrue);
+      },
+    );
 
     test(
       "Claude CLI's release is its manifest's entry for this machine",

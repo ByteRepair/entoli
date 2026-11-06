@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:uuid/uuid.dart";
 
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/llm_provider.dart";
@@ -8,10 +9,14 @@ import "../widgets/provider_dialog.dart";
 import "cli_sign_in_dialog.dart";
 
 /// [promptForProvider] with what the app knows filled in, saved through the
-/// settings notifier: an entry being edited keeps its id, and one being
-/// added, preset or not, has none until the notifier gives it one. The one
-/// way in for the Providers page and the welcome tour alike; [adopt] is the
-/// notifier's own, the tour's choosing a service by name.
+/// settings notifier. The one way in for the Providers page and the welcome
+/// tour alike; [adopt] is the notifier's own, the tour's choosing a service
+/// by name.
+///
+/// An entry being edited keeps its id, and one being added is given its id
+/// here, before the dialog opens: a CLI's account is kept in a folder named
+/// by it, and the dialog can sign one in before Save. Cancelled, a new
+/// entry's folders go, and any sign-in made in them.
 Future<void> editProvider(
   BuildContext context,
   WidgetRef ref, {
@@ -23,6 +28,9 @@ Future<void> editProvider(
   // open, and the save must outlive it rather than resume on a defunct ref.
   final notifier = ref.read(appSettingsProvider.notifier);
   final secrets = ref.read(appSecretsProvider);
+  final programs = ref.read(cliProgramsProvider);
+  final adding = initial == null || initial.id.isEmpty;
+  final id = adding ? const Uuid().v4() : initial.id;
   final saved = await promptForProvider(
     context,
     initial: initial,
@@ -34,11 +42,20 @@ Future<void> editProvider(
     title: title,
     openLink: ref.read(linkOpenerProvider).open,
     checkKey: ref.read(keyCheckProvider),
-    cliAccount: (api) => CliAccountSection(api: api),
+    cliAccount: (api) => CliAccountSection(
+      config: (initial ?? cliPresetOf(api).config).copyWith(api: api, id: id),
+    ),
   );
-  if (saved == null) return;
+  if (saved == null) {
+    if (adding) {
+      for (final cli in programs) {
+        await cli.withConfig(cli.config.copyWith(id: id)).forget();
+      }
+    }
+    return;
+  }
   await notifier.upsertProvider(
-    saved.config,
+    saved.config.id.isEmpty ? saved.config.copyWith(id: id) : saved.config,
     setKey: saved.setKey,
     adopt: adopt,
   );
@@ -74,19 +91,22 @@ Future<void> _connectCli(
   // Notifier first: the page that asked can go away while the dialog is
   // open, and the save must outlive it.
   final notifier = ref.read(appSettingsProvider.notifier);
-  final cli = ref
-      .read(cliProgramsProvider)
-      .firstWhere((c) => c.config.api == service.config.api);
+  final existing = ref
+      .read(appSettingsProvider)
+      .llmProviders
+      .where((p) => p.api == service.config.api && p.command == null)
+      .firstOrNull;
+  // A new entry's id first: its account is kept in a folder named by it.
+  final config = existing ?? service.config.copyWith(id: const Uuid().v4());
+  final cli = programFor(ref, config);
   final ready = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
     builder: (_) => CliSignInDialog(cli: cli),
   );
-  if (ready != true) return;
-  final existing = ref
-      .read(appSettingsProvider)
-      .llmProviders
-      .where((p) => p.api == cli.config.api && p.command == null)
-      .firstOrNull;
-  await notifier.upsertProvider(existing ?? cli.config, adopt: true);
+  if (ready != true) {
+    if (existing == null) await cli.forget();
+    return;
+  }
+  await notifier.upsertProvider(config, adopt: true);
 }

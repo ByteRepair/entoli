@@ -12,6 +12,7 @@ import "../../../../core/log.dart";
 import "../../../../core/platform/form_factor.dart";
 import "../../../../core/tls.dart";
 import "../../../../domain/download.dart";
+import "../../../../domain/llm_provider.dart";
 import "../../../../domain/model_capability.dart";
 import "../../../../domain/model_registry.dart";
 import "../../../download.dart";
@@ -67,7 +68,9 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   /// Whose account its prompts go to, for the provider list's tag.
   String get account => "Uses your $planName account";
 
-  /// The folder of [cacheRoot] this program's sessions run in.
+  /// The folder of [cacheRoot] that is this program's: `bin/` the program
+  /// itself, shared by every provider on it, and per provider `data/<id>/`
+  /// and `work/<id>/`.
   String get workFolder;
 
   Directory get workRoot => Directory(
@@ -77,12 +80,46 @@ abstract class CliProvider extends LlmProvider with KeyFree {
     ),
   );
 
-  /// The one empty folder every session runs in, so nothing a project keeps
-  /// for the program is picked up from it and what the program keeps per
-  /// working directory is kept once.
-  Future<String> workDirectory() async => (await Directory(
-    p.join(workRoot.path, "work"),
-  ).create(recursive: true)).path;
+  /// The provider's own name for its folders, which a provider not yet
+  /// saved does not have.
+  String get _folderId => config.id.isEmpty ? "unsaved" : config.id;
+
+  /// What the program keeps — its account above all, and its settings,
+  /// history and caches — in place of its own home under the user's: one per
+  /// provider, so two on the same program can be two accounts, and Entoli's
+  /// are apart from the user's own `claude` or `codex`. Told to the program
+  /// by [homeEnvironment].
+  String get dataDirectory => p.join(workRoot.path, "data", _folderId);
+
+  /// The variables that point the program at [home] for everything it keeps.
+  Map<String, String> homeEnvironment(String home);
+
+  /// The empty folder every session of this provider runs in, so nothing a
+  /// project keeps for the program is picked up from it. Kept apart from
+  /// [dataDirectory], so what the program keeps and what it works in never
+  /// mix. Made, with [dataDirectory], before anything runs.
+  Future<String> workDirectory() async {
+    await Directory(dataDirectory).create(recursive: true);
+    return (await Directory(
+      p.join(workRoot.path, "work", _folderId),
+    ).create(recursive: true)).path;
+  }
+
+  /// Takes this provider's [dataDirectory] and work folder away — its
+  /// sign-in with them — for a provider that is removed.
+  Future<void> forget() async {
+    for (final path in [
+      dataDirectory,
+      p.join(workRoot.path, "work", _folderId),
+    ]) {
+      final dir = Directory(path);
+      if (dir.existsSync()) await dir.delete(recursive: true);
+    }
+  }
+
+  /// This program for [config], the same ports kept: the way a provider
+  /// read from one entry is had for another — its folders are by id.
+  CliProvider withConfig(LlmProviderConfig config);
 
   /// The models the program takes by name, offered beside the user's own.
   List<ModelInfo> get knownModels;
@@ -107,6 +144,9 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   /// What signs the program in: it prints the page to sign in on, waits for
   /// the sign-in there, stores what it was given, and exits 0.
   List<String> get signInArguments;
+
+  /// What signs the program out of the account in [dataDirectory].
+  List<String> get signOutArguments;
 
   /// Entoli's own copy of the program, kept in [workRoot] beside the folder
   /// its sessions run in, which is what the cache is for: deleted, it is
@@ -213,6 +253,20 @@ abstract class CliProvider extends LlmProvider with KeyFree {
     return await process.exitCode == 0;
   }
 
+  /// Signs the program out, by its own [signOutArguments]; whether it was
+  /// signed in or not, it is not after.
+  Future<void> signOut() async {
+    final process = await launch(
+      executable(),
+      signOutArguments,
+      workingDirectory: await workDirectory(),
+      environment: environment,
+    );
+    unawaited(process.lines.drain<void>());
+    unawaited(process.errors.drain<void>());
+    await process.exitCode;
+  }
+
   /// The body at [url] as text, for a publisher that says its newest
   /// version in a file of its own.
   static Future<String> fetchText(http.Client client, Uri url) async {
@@ -237,6 +291,7 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   Map<String, String> get environment => {
     ...inheritedFrom(Platform.environment),
     "PATH": ?loginPath,
+    ...homeEnvironment(dataDirectory),
     ...config.env,
   };
 

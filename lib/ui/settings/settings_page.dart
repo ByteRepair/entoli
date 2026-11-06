@@ -41,6 +41,7 @@ import "agents_settings.dart";
 import "assistant_settings.dart";
 import "browser_settings.dart";
 import "byte_repair_settings.dart";
+import "cli_sign_in_dialog.dart" show programFor;
 import "connect_provider.dart";
 import "llm_settings.dart";
 import "running_models.dart";
@@ -937,7 +938,10 @@ class _RecommendedProviderState extends ConsumerState<_RecommendedProvider> {
 class _ProvidersEditor extends ConsumerWidget {
   const _ProvidersEditor();
 
+  /// A CLI's entry takes its folders with it — the account signed in there
+  /// is that entry's, and nothing else would ever delete it.
   Future<void> _remove(WidgetRef ref, LlmProviderConfig provider) async {
+    if (provider.api.isCli) await programFor(ref, provider).forget();
     final providers = ref
         .read(appSettingsProvider)
         .llmProviders

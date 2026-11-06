@@ -62,6 +62,17 @@ class CodexCliProvider extends CliProvider with OfferedByName {
   @override
   List<String> get signInArguments => const ["login"];
 
+  @override
+  List<String> get signOutArguments => const ["logout"];
+
+  /// Its `auth.json`, config, logs and state databases, all of it.
+  @override
+  Map<String, String> homeEnvironment(String home) => {"CODEX_HOME": home};
+
+  @override
+  CodexCliProvider withConfig(LlmProviderConfig config) =>
+      CodexCliProvider.over(config, launch: launch);
+
   /// OpenAI's newest release on GitHub. The API rather than the page's
   /// redirect: it is what states each asset's SHA-256.
   static final latestUrl = Uri.parse(

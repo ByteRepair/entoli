@@ -73,6 +73,21 @@ class ClaudeCliProvider extends CliProvider with OfferedByName {
   @override
   List<String> get signInArguments => const ["auth", "login", "--claudeai"];
 
+  @override
+  List<String> get signOutArguments => const ["auth", "logout"];
+
+  /// Its `.claude.json` moves with it, and on macOS its Keychain entry is
+  /// named for it — `Claude Code-credentials-` and the first eight hex of
+  /// the folder's SHA-256 — so each provider's sign-in is its own.
+  @override
+  Map<String, String> homeEnvironment(String home) => {
+    "CLAUDE_CONFIG_DIR": home,
+  };
+
+  @override
+  ClaudeCliProvider withConfig(LlmProviderConfig config) =>
+      ClaudeCliProvider.over(config, launch: launch, bindBridge: bindBridge);
+
   /// Where Anthropic's own installer fetches from: the newest version in
   /// `latest`, and per version a manifest of each platform's SHA-256.
   static const releases = "https://downloads.claude.ai/claude-code-releases";

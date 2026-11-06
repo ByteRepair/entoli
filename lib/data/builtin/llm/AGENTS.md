@@ -263,8 +263,29 @@ status`), and `CliSignIn` runs `signInArguments` (`claude auth login
 --claudeai`, `codex login`), takes the first `https` link it prints — error
 output read a whole line at a time, so a link split between two writes is
 not taken at its first half — and ends signed in when the program exits 0 and
-its status agrees. The credentials are where the program keeps them, so a
-copy on `PATH` or a later session finds them too.
+its status agrees. `signOutArguments` (`claude auth logout`, `codex
+logout`) are what Sign in again runs first.
+
+**Each provider is its own account, apart from the user's.** Under
+`<cache>/<workFolder>/`, `bin/` is the program, shared; `data/<provider-id>/`
+is what the program keeps — its sign-in, settings, history and caches — in
+place of the user's `~/.claude` or `~/.codex`; `work/<provider-id>/` is the
+empty folder that provider's sessions run in, kept apart from `data/` so the
+two never mix. `homeEnvironment` is what tells the program: `CLAUDE_CONFIG_DIR`,
+which moves `.claude.json` with it and on macOS names the Keychain entry
+`Claude Code-credentials-` and the first eight hex of the folder's SHA-256, so
+each folder is its own Keychain sign-in; and `CODEX_HOME`, which holds
+`auth.json`. An entry's own `env` wins over it. So two entries on one program
+are two accounts, and signing in through Entoli never signs the user's own
+`claude` or `codex` in or out. The folders are named by the entry's id, which
+is why a CLI entry has its id before it can sign in — `editProvider` and the
+tour's connect give a new one its id when they open, and take its folders back
+when it is cancelled — and `forget` deletes them when the entry is removed.
+In the cache rather than the data directory, deliberately: the data directory
+is backed up and synced, and a sign-in is a secret. A cleared cache costs a
+sign-in, not a leaked token. `withConfig` reads one program for another entry
+with the same ports, which is how the UI gets an entry's program from
+`cliProgramsProvider`.
 
 **The split is interface against lifecycle.** `CliProvider` owns what every
 such program shares: finding it, its environment, and `CliClient` — the
@@ -287,11 +308,11 @@ end, the exit and the close — is written once there; a subclass says what
 a line means and how input and results are written.
 
 `ClaudeCliProvider`'s session is one `claude -p` in stream-json on both
-sides, run in one empty folder every session shares —
-`<cache>/claude-cli/work/`, the cache `main` hands `CliProvider` — so
-no project's `CLAUDE.md` is picked up and what the CLI keeps per working
-directory (its cache's MCP logs, its project entry in `~/.claude.json`) is
-kept once rather than once per session; the files a session is handed sit
+sides, run in one empty folder every session of the entry shares —
+`<cache>/claude-cli/work/<provider-id>/`, the cache `main` hands
+`CliProvider` — so no project's `CLAUDE.md` is picked up and what the CLI
+keeps per working directory (its cache's MCP logs, its project entry in
+`.claude.json`) is kept once rather than once per session; the files a session is handed sit
 in `claude-cli/sessions/<id>/`, which goes with it. It runs with `--tools ""` (Claude's own tools off), `--permission-mode dontAsk`
 over an allow list of Entoli's server alone — `--tools ""` leaves
 `EndConversation` while MCP tools are present, and this refuses it and
@@ -332,7 +353,7 @@ process, line by line.
 
 **Codex CLI is a server rather than a pipe of messages.**
 `CodexCliProvider`'s session is one `codex app-server`, Codex's JSON-RPC
-over stdio, holding one ephemeral thread run in `<cache>/codex-cli/work/`:
+over stdio, holding one ephemeral thread run in `<cache>/codex-cli/work/<provider-id>/`:
 Entoli's system prompt is the thread's `baseInstructions`, each new user
 message a `turn/start`, and the reply streams back as item notifications.
 Entoli's tools are the thread's dynamic tools, so no MCP bridge is needed:
