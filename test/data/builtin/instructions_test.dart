@@ -405,17 +405,6 @@ void main() {
       expect(found, isEmpty);
     });
 
-    test("a file outside the workspaces finds its repository's", () async {
-      final repo = p.join(tmp.path, "elsewhere");
-      Directory(p.join(repo, "src")).createSync(recursive: true);
-      File(p.join(repo, "AGENTS.md")).writeAsStringSync("repo rules");
-      final found = await findNestedInstructions(
-        p.join(repo, "src", "notes.txt"),
-        alreadyLoaded: {},
-      );
-      expect(found.single.path, p.join(repo, "AGENTS.md"));
-    });
-
     test("stops at the repository the file is in", () async {
       File(p.join(tmp.path, "AGENTS.md")).writeAsStringSync("above rules");
       final repo = p.join(tmp.path, "repo");

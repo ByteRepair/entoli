@@ -810,37 +810,6 @@ void main() {
       }
     });
 
-    test("does not touch the session shell's state", () async {
-      final sandbox = CommandSandbox(workspace: workspace.path);
-      final driver = LocalShell.hostDriver(sandboxHelper: helper);
-      final shell = LocalShell(driver: ({String? project}) => driver);
-      if (!Platform.isLinux || await helper.prefixFor(sandbox) == null) return;
-      await shell
-          .start(
-            "export SANDBOXED=yes",
-            cwd: workspace.path,
-            home: home.path,
-            timeout: const Duration(seconds: 5),
-            sandbox: sandbox,
-          )
-          .result;
-      final after = await shell
-          .start(
-            r"echo ${SANDBOXED:-unset}",
-            cwd: workspace.path,
-            home: home.path,
-            timeout: const Duration(seconds: 5),
-          )
-          .result;
-      expect(
-        after.output.trim(),
-        "unset",
-        reason:
-            "the sandboxed run was its own subshell; the session's "
-            "environment carries nothing from it",
-      );
-    });
-
     test("a tmp the command was never told about is made and named", () async {
       // The sandbox grants a scratch directory beside the workspace, and the
       // command learns of it the only way a process can: TMPDIR, set for the

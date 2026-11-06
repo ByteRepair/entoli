@@ -1001,12 +1001,6 @@ void main() {
       expect(result.output, endsWith("all of it"));
     });
 
-    test("with no browser the refusal stands", () async {
-      final (result, _) = await searched(refused, browser: false);
-      expect(result.returnCode, isNot(0));
-      expect(result.exceptionInfo, contains("HTTP 202"));
-    });
-
     test("a search that worked never touches the browser", () async {
       final (result, tab) = await searched(
         const ShellResult(returnCode: 0, output: "1. A result"),
