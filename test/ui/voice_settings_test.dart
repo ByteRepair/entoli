@@ -197,7 +197,16 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(TextButton, "Delete"));
-    await settleIo(tester);
+    // A delete is the unpick's settings write, then the erase, then the
+    // rescan that turns the row back into a download. Waited for by that
+    // rather than by a number of rounds, which a loaded runner can outlast
+    // while the write is still landing.
+    final download = find.descendant(
+      of: row,
+      matching: find.byTooltip("Download"),
+    );
+    await pumpUntil(tester, download);
+    expect(download, findsOneWidget);
 
     // Left picked it would be voice mode failing to start with nothing on
     // screen to say why.
