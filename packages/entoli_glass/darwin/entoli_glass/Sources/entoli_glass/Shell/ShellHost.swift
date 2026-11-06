@@ -20,6 +20,7 @@ final class ShellHost {
   #if os(macOS)
     private weak var view: NSView?
     private var host: NSHostingController<ShellView>?
+    private var pointerMonitor: Any?
 
     init(messenger: FlutterBinaryMessenger, view: NSView?) {
       model = ShellModel(messenger: messenger)
@@ -58,6 +59,19 @@ final class ShellHost {
       window.contentViewController = host
       window.setFrame(frame, display: true)
       self.host = host
+      window.acceptsMouseMovedEvents = true
+      pointerMonitor = NSEvent.addLocalMonitorForEvents(
+        matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
+      ) { [weak self, weak window] event in
+        guard let self, let window, event.window === window,
+          let content = window.contentView
+        else { return event }
+        let point = content.convert(event.locationInWindow, from: nil)
+        self.model.say.window.pointer(
+          x: point.x - content.bounds.minX, y: content.bounds.maxY - point.y
+        ) { _ in }
+        return event
+      }
       // The app's, not the window's: popovers, menus and sheets are windows
       // of their own, and the system's glass follows the app. Nil follows
       // the system.
