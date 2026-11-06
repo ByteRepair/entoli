@@ -8,6 +8,7 @@ import "package:http/testing.dart";
 import "package:agent_chat/data/builtin/llm/gemini_client.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/openai_client.dart";
+import "package:agent_chat/data/builtin/llm/openai_platform_client.dart";
 
 import "sse.dart";
 
@@ -106,11 +107,33 @@ void main() {
       ]).stream(const [], model: "gpt-test").toList();
 
       final completion = chunks.whereType<LlmCompletion>().single;
-      expect(completion.finishReason, "tool_calls");
+      expect(completion.stop, LlmStop.toolUse);
       final call = completion.message.toolCalls.single;
       expect(call.id, "call_1");
       expect(call.name, "bash");
       expect(jsonDecode(call.argumentsJson), {"command": "ls"});
+    });
+
+    test("each finish_reason is read as the stop it means", () async {
+      const stops = {
+        "stop": LlmStop.answered,
+        "tool_calls": LlmStop.toolUse,
+        "length": LlmStop.truncated,
+        "content_filter": LlmStop.refused,
+        // A word the shape does not have is an answer, as it was before.
+        "something_new": LlmStop.answered,
+      };
+      for (final MapEntry(key: reason, value: stop) in stops.entries) {
+        final chunks = await clientStreaming([
+          delta({"content": "x"}, finishReason: reason),
+          "[DONE]",
+        ]).stream(const [], model: "gpt-test").toList();
+        expect(
+          chunks.whereType<LlmCompletion>().single.stop,
+          stop,
+          reason: reason,
+        );
+      }
     });
 
     test("two calls in one reply keep their own arguments", () async {
@@ -295,6 +318,49 @@ void main() {
       final with_ = sentBody();
       expect(with_["temperature"], 0.4);
       expect(with_["reasoning_effort"], "high");
+    });
+
+    test("a reply's length is capped only where the user set a cap", () async {
+      Future<Map<String, dynamic>> sent(LlmOutputLimit limit) async {
+        await clientStreaming([
+          "[DONE]",
+        ]).stream(const [], model: "gpt-test", outputLimit: limit).toList();
+        return sentBody();
+      }
+
+      // The model's own limit, or a guess at one, is left to the model.
+      final known = await sent(
+        const LlmOutputLimit(length: 4096, modelLimit: 128000),
+      );
+      expect(known.containsKey("max_tokens"), isFalse);
+      final guessed = await sent(const LlmOutputLimit(length: 4096));
+      expect(guessed.containsKey("max_tokens"), isFalse);
+
+      final capped = await sent(
+        const LlmOutputLimit(length: 4096, capped: true, modelLimit: 128000),
+      );
+      expect(capped["max_tokens"], 4096);
+    });
+
+    test("OpenAI's own API is capped by the field it renamed", () async {
+      requests = [];
+      await OpenAiPlatformClient(
+            baseUrl: Uri.parse("https://example.test/v1"),
+            httpClient: MockClient.streaming((request, _) async {
+              requests.add(request);
+              return sseResponse(["[DONE]"]);
+            }),
+          )
+          .stream(
+            const [],
+            model: "gpt-test",
+            outputLimit: const LlmOutputLimit(length: 4096, capped: true),
+          )
+          .toList();
+
+      final body = sentBody();
+      expect(body["max_completion_tokens"], 4096);
+      expect(body.containsKey("max_tokens"), isFalse);
     });
 
     test("the system messages at the head go as one", () async {

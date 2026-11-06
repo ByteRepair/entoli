@@ -491,6 +491,7 @@ class CliSessionSpec {
     required this.system,
     required this.tools,
     this.reasoningEffort,
+    this.responseCap,
   });
 
   final String model;
@@ -499,6 +500,11 @@ class CliSessionSpec {
   final String system;
   final List<LlmTool> tools;
   final String? reasoningEffort;
+
+  /// The user's cap on a reply, where they set one: a program that takes it
+  /// is told when it starts, so a session is only reused under the same.
+  /// Unset, each program writes to its model's own limit.
+  final int? responseCap;
 
   /// The tools as one string, compared by value: each step builds its
   /// definitions afresh, so two equal schemas are seldom the same map.
@@ -510,6 +516,7 @@ class CliSessionSpec {
       model == other.model &&
       system == other.system &&
       reasoningEffort == other.reasoningEffort &&
+      responseCap == other.responseCap &&
       toolsKey == other.toolsKey;
 }
 
@@ -753,6 +760,7 @@ class CliClient implements LlmClient {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
+    LlmOutputLimit outputLimit = const LlmOutputLimit(),
   }) async* {
     if (_closed) throw const LlmException("The client was closed");
     final leading = messages.takeWhile((m) => m.role == LlmRole.system);
@@ -762,6 +770,7 @@ class CliClient implements LlmClient {
       system: joinedSystemText(leading.toList()),
       tools: tools,
       reasoningEffort: reasoningEffort,
+      responseCap: outputLimit.cap,
     );
     var (session, seen) = _take(spec, conversation);
     if (session == null) {

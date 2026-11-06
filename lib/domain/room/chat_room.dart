@@ -979,9 +979,19 @@ class ChatRoom {
       case StepLimitEvent():
       case InfoEvent():
         break;
-      case ContextEvent(:final usage):
+      case ContextEvent(
+        :final usage,
+        :final provider,
+        :final model,
+        :final outputTokens,
+      ):
         // What the close will write, on screen before it does.
-        _updateMessage(turn.replyId, (m) => m.copyWith(context: usage));
+        _updateMessage(
+          turn.replyId,
+          (m) => m
+              .copyWith(context: usage)
+              .withUsage(provider, model, outputTokens),
+        );
       case ApprovalRequestEvent(:final approval):
         _view = state.copyWith(
           approvals: {

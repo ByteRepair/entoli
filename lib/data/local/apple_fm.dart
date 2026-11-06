@@ -145,6 +145,7 @@ class AppleFmClient implements LlmClient {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
+    LlmOutputLimit outputLimit = const LlmOutputLimit(),
   }) async* {
     if (probe.reason != "available") throw probe.unavailable;
     yield* ChannelGeneration(_channel, label: "Apple on-device model").run(
@@ -159,6 +160,8 @@ class AppleFmClient implements LlmClient {
             : channelText(messages.last),
         "tools": [for (final tool in tools) channelTool(tool)],
         "temperature": ?temperature,
+        // Only the user's cap: unasked, the framework's own limit stands.
+        "maxTokens": ?outputLimit.cap,
       },
     );
   }

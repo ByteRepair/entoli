@@ -429,6 +429,18 @@ abstract class Message with _$Message {
     /// on every reply written before the field existed.
     ContextUsage? context,
 
+    /// Who wrote a reply: the id of the provider it came through (as
+    /// `meta.json` and the settings name one) and the model's id, the latest
+    /// model call's (`UsageRecord`). Null on a user's message and on every
+    /// reply written before the fields existed.
+    String? provider,
+    String? model,
+
+    /// The tokens the reply took to write, summed over every model call in
+    /// it, however its turn ended. Null where no provider said — some local
+    /// servers report nothing — rather than a guess.
+    int? outputTokens,
+
     /// A reaction the user took back, and whether that was before its turn
     /// started (`RetractRecord`). Null on everything else.
     Retraction? retraction,
@@ -772,6 +784,21 @@ abstract class CompletionOption with _$CompletionOption {
     String? description,
     String? argumentHint,
   }) = _CompletionOption;
+}
+
+/// Who wrote a reply and what it took, one model call at a time.
+extension MessageUsage on Message {
+  /// This reply with one more model call's usage: the newest provider and
+  /// model, and its tokens added to the others'. One fold for the live reply
+  /// and the log's reading of a `UsageRecord`, so the two cannot disagree.
+  Message withUsage(String? provider, String? model, int? outputTokens) =>
+      copyWith(
+        provider: provider ?? this.provider,
+        model: model ?? this.model,
+        outputTokens: outputTokens == null
+            ? this.outputTokens
+            : (this.outputTokens ?? 0) + outputTokens,
+      );
 }
 
 /// Text and files are scattered across parts; almost every caller wants one

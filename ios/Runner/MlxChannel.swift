@@ -70,12 +70,16 @@ final class MlxChannel: GenerationChannel {
   /// client already has, of which `EntoliMLX` reads only what the model's
   /// cache does not hold.
   private func generate(_ id: String, _ args: [String: Any]) async {
+    // Dart always sends one; the fallback is its default, for a caller that
+    // somehow did not.
+    let maxTokens = args["maxTokens"] as? Int ?? 8192
     do {
       try await Mlx.generate(
         args["model"] as? String ?? "",
         messages: (args["messages"] as? [[String: Any]] ?? []).map(MlxMessage.init(channel:)),
         tools: (args["tools"] as? [[String: Any]] ?? []).map(MlxTool.init(channel:)),
-        temperature: args["temperature"] as? Double
+        temperature: args["temperature"] as? Double,
+        maxTokens: maxTokens
       ) { [weak self] event in
         switch event {
         case .reasoning(let text): self?.send("reasoning", ["id": id, "text": text])

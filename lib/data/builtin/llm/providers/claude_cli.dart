@@ -335,6 +335,10 @@ class ClaudeCliSession extends CliProcessSession {
       environment: {
         // A tool can wait on an approval for as long as the user takes.
         "MCP_TOOL_TIMEOUT": "${const Duration(days: 1).inMilliseconds}",
+        // The user's cap on a reply, where they set one; otherwise Claude
+        // Code writes to its model's own limit.
+        if (spec.responseCap case final cap?)
+          "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "$cap",
       },
     );
   }
@@ -400,7 +404,7 @@ class ClaudeCliSession extends CliProcessSession {
           end(
             last: LlmCompletion(
               message: LlmMessage(role: LlmRole.assistant, text: said),
-              finishReason: "stop",
+              stop: LlmStop.answered,
             ),
           );
         }
@@ -434,7 +438,7 @@ class ClaudeCliSession extends CliProcessSession {
           argumentsJson: call.argumentsJson,
         ),
     ];
-    if (done.finishReason == "tool_use") {
+    if (done.stop == LlmStop.toolUse) {
       for (final call in calls) {
         _uses.add(
           _ToolUse(
@@ -450,7 +454,7 @@ class ClaudeCliSession extends CliProcessSession {
     }
     end(
       last: LlmCompletion(
-        finishReason: done.finishReason,
+        stop: done.stop,
         usage: done.usage,
         message: LlmMessage(
           role: LlmRole.assistant,

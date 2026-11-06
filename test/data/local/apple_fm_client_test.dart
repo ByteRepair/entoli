@@ -34,6 +34,25 @@ void main() {
   setUp(channel.install);
   tearDown(channel.uninstall);
 
+  for (final (capped, sent) in [(true, 2048), (false, null)]) {
+    test("a reply's length is sent only where the user capped it "
+        "(capped: $capped)", () async {
+      final reply = AppleFmClient(const AppleFmProbe("available"))
+          .stream(
+            const [LlmMessage(role: LlmRole.user, text: "hello")],
+            model: appleModelId,
+            outputLimit: LlmOutputLimit(length: 2048, capped: capped),
+          )
+          .toList();
+      await breathe();
+
+      final generate = outgoing("generate");
+      expect(generate["maxTokens"], sent);
+      await incoming("done", {"id": generate["id"]});
+      await reply;
+    });
+  }
+
   test("text streams, and the completion closes the stream", () async {
     final reply = AppleFmClient(const AppleFmProbe("available")).stream(const [
       LlmMessage(role: LlmRole.user, text: "hello"),
@@ -53,7 +72,7 @@ void main() {
     final completion = chunks.whereType<LlmCompletion>().single;
     expect(completion.message.text, "Hello there.");
     expect(completion.message.toolCalls, isEmpty);
-    expect(completion.finishReason, "stop");
+    expect(completion.stop, LlmStop.answered);
     // A clean close cancels nothing: the generation is over when the client
     // stops reading.
     expect(asked.where((call) => call.method == "cancel"), isEmpty);
@@ -109,7 +128,7 @@ void main() {
     await incoming("done", {"id": id, "finish": "tool_calls"});
     final chunks = await reply;
     final completion = chunks.whereType<LlmCompletion>().single;
-    expect(completion.finishReason, "tool_calls");
+    expect(completion.stop, LlmStop.toolUse);
     expect(completion.message.toolCalls.single.name, "bash");
     expect(
       completion.message.toolCalls.single.argumentsJson,

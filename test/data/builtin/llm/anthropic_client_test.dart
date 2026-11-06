@@ -6,6 +6,7 @@ import "package:http/http.dart" as http;
 import "package:http/testing.dart";
 
 import "package:agent_chat/data/builtin/llm/anthropic_client.dart";
+import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 
 import "sse.dart";
@@ -62,7 +63,7 @@ void main() {
       ]);
       final completion = chunks.whereType<LlmCompletion>().single;
       expect(completion.message.text, "Hello");
-      expect(completion.finishReason, "end_turn");
+      expect(completion.stop, LlmStop.answered);
     });
 
     test("thinking keeps its signature, so the turn can be replayed", () async {
@@ -140,15 +141,29 @@ void main() {
       );
     });
 
-    test("being cut off is reported the way the other API words it", () async {
-      final chunks = await clientStreaming([
-        {
-          "type": "message_delta",
-          "delta": {"stop_reason": "max_tokens"},
-        },
-      ]).stream(const [], model: "claude-test").toList();
-
-      expect(chunks.whereType<LlmCompletion>().single.finishReason, "length");
+    test("each stop_reason is read as the stop it means", () async {
+      const stops = {
+        "end_turn": LlmStop.answered,
+        "stop_sequence": LlmStop.answered,
+        "tool_use": LlmStop.toolUse,
+        "max_tokens": LlmStop.truncated,
+        "refusal": LlmStop.refused,
+        // A word the API does not have yet is an answer, as it was before.
+        "something_new": LlmStop.answered,
+      };
+      for (final MapEntry(key: reason, value: stop) in stops.entries) {
+        final chunks = await clientStreaming([
+          {
+            "type": "message_delta",
+            "delta": {"stop_reason": reason},
+          },
+        ]).stream(const [], model: "claude-test").toList();
+        expect(
+          chunks.whereType<LlmCompletion>().single.stop,
+          stop,
+          reason: reason,
+        );
+      }
     });
 
     test("an error frame ends the stream with the reason", () async {
@@ -300,6 +315,66 @@ void main() {
         expect(body["max_tokens"], greaterThan(4096));
       },
     );
+
+    test("max_tokens is the cap, else the model's own limit, else the "
+        "fallback", () async {
+      Future<int> sent(LlmOutputLimit limit) async {
+        await clientStreaming(
+          [],
+        ).stream(const [], model: "claude-test", outputLimit: limit).toList();
+        return sentBody()["max_tokens"] as int;
+      }
+
+      expect(
+        await sent(
+          const LlmOutputLimit(length: 4096, capped: true, modelLimit: 128000),
+        ),
+        4096,
+      );
+      expect(
+        await sent(const LlmOutputLimit(length: 4096, modelLimit: 128000)),
+        128000,
+      );
+      expect(await sent(const LlmOutputLimit(length: 4096)), 4096);
+      expect(
+        await sent(const LlmOutputLimit()),
+        AppSettings.defaultResponseLength,
+      );
+    });
+
+    test("thinking fits inside a known limit and rides on top of a "
+        "fallback", () {
+      const budget = 16384;
+      // The model's own limit is the whole; thinking is inside it.
+      expect(
+        AnthropicClient.budgetOf(
+          const LlmOutputLimit(length: 8192, modelLimit: 128000),
+          budget,
+        ),
+        (maxTokens: 128000, thinking: budget),
+      );
+      // A guess leaves the reply its own room, as the fixed 8192 did.
+      expect(
+        AnthropicClient.budgetOf(const LlmOutputLimit(length: 8192), budget),
+        (maxTokens: 8192 + budget, thinking: budget),
+      );
+      // A cap below the budget shrinks the thinking to leave the reply room.
+      expect(
+        AnthropicClient.budgetOf(
+          const LlmOutputLimit(length: 8192, capped: true),
+          budget,
+        ),
+        (maxTokens: 8192, thinking: 8192 - 1024),
+      );
+      // Too small a cap for both: no thinking rather than a refused request.
+      expect(
+        AnthropicClient.budgetOf(
+          const LlmOutputLimit(length: 1024, capped: true),
+          budget,
+        ),
+        (maxTokens: 1024, thinking: null),
+      );
+    });
 
     test(
       "without effort there is no thinking and the temperature stands",

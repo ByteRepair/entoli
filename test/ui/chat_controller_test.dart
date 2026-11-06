@@ -931,6 +931,70 @@ void main() {
       }
     });
 
+    const context = ContextUsage(
+      system: 1,
+      tools: 1,
+      profile: 0,
+      instructions: 0,
+      chat: 1,
+    );
+
+    test("each model call records who answered and what it took, and the "
+        "reply sums them", () async {
+      app.backend.scriptedEvents = const [
+        ContextEvent(context, provider: "p1", model: "m1", outputTokens: 30),
+        // A provider that said nothing of one call leaves the sum as it was.
+        ContextEvent(context, provider: "p1", model: "m1"),
+        ContextEvent(context, provider: "p1", model: "m1", outputTokens: 12),
+        DoneEvent(),
+      ];
+      final (id, _) = await chatWithOneTurn("hello");
+
+      final usage = records(id).whereType<UsageRecord>().toList();
+      expect([for (final u in usage) u.outputTokens], [30, null, 12]);
+      expect(records(id).last, isA<TurnEndRecord>());
+      final live = messagesOf(id).last;
+      final read = replay(records(id)).last;
+      for (final reply in [live, read]) {
+        expect(
+          (reply.provider, reply.model, reply.outputTokens),
+          ("p1", "m1", 42),
+        );
+      }
+    });
+
+    test("an interrupted turn keeps what its calls took, with nothing "
+        "closing it", () async {
+      app.backend.scriptedEvents = const [
+        ContextEvent(context, provider: "p1", model: "m1", outputTokens: 30),
+      ];
+      final hold = app.backend.hold = Completer<void>();
+      // Released however the test ends, so a failure fails rather than hangs.
+      addTearDown(() {
+        if (!hold.isCompleted) hold.complete();
+      });
+      final (id, controller) = await startTurn("hello");
+
+      // Stopped once the call's end has reached the reply, as a real one
+      // has long before anything stops it: the state says when, not a wait.
+      final counted = Completer<void>();
+      final watching = app.container.listen(chatControllerProvider(id), (
+        _,
+        next,
+      ) {
+        final last = next.chat?.messages.lastOrNull;
+        if (last?.outputTokens == 30 && !counted.isCompleted) {
+          counted.complete();
+        }
+      }, fireImmediately: true);
+      addTearDown(watching.close);
+      await counted.future;
+      await controller.interrupt();
+
+      expect(records(id).whereType<TurnEndRecord>(), isEmpty);
+      expect(replay(records(id)).last.outputTokens, 30);
+    });
+
     test(
       "a turn the user stops is closed as aborted, not as an error",
       () async {

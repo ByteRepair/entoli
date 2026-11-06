@@ -29,6 +29,7 @@ class LocalClient implements LlmClient {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
+    LlmOutputLimit outputLimit = const LlmOutputLimit(),
   }) async* {
     final options = _options();
     final instance = await _serve(model, options);
@@ -41,7 +42,7 @@ class LocalClient implements LlmClient {
     final entry = _prompts?.lookup(instance, options, messages, tools);
     await entry?.warm();
 
-    String? finish;
+    LlmStop? stop;
     var finished = false;
     try {
       // One system message to the model: a chat template refuses a second.
@@ -50,8 +51,9 @@ class LocalClient implements LlmClient {
         tools: tools,
         temperature: temperature,
         reasoningEffort: reasoningEffort,
+        outputLimit: outputLimit,
       )) {
-        if (chunk is LlmCompletion) finish = chunk.finishReason;
+        if (chunk is LlmCompletion) stop = chunk.stop;
         yield chunk;
       }
       finished = true;
@@ -64,7 +66,7 @@ class LocalClient implements LlmClient {
     // Saved where the turn ends, not at every step of it: the next step is
     // served by what the model still holds, and a write of the whole state
     // per tool round would hold each one up for nothing.
-    if (finish != "tool_calls") await entry?.keep();
+    if (stop != LlmStop.toolUse) await entry?.keep();
   }
 
   @override

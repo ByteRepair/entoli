@@ -23,6 +23,7 @@ class GatedLlmClient implements LlmClient {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
+    LlmOutputLimit outputLimit = const LlmOutputLimit(),
   }) async* {
     await gate.acquire();
     try {
@@ -32,6 +33,7 @@ class GatedLlmClient implements LlmClient {
         tools: tools,
         temperature: temperature,
         reasoningEffort: reasoningEffort,
+        outputLimit: outputLimit,
       );
     } finally {
       gate.release();

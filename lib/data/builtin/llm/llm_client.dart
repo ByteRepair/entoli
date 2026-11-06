@@ -3,6 +3,7 @@ import "dart:typed_data";
 
 import "package:collection/collection.dart";
 
+import "../../../domain/app_settings.dart";
 import "../../../domain/provider_usage.dart";
 
 /// The conversation as a provider sees it. Deliberately not `Message` from the
@@ -232,14 +233,50 @@ class LlmPromptProgress extends LlmChunk {
       total <= 0 ? null : (processed / total).clamp(0.0, 1.0);
 }
 
+/// Why a reply ended, in one vocabulary whatever the provider calls it.
+///
+/// Each client maps the word its wire format uses in a `stopOf` of its own,
+/// which a client for a provider wording it differently overrides; nothing
+/// above the clients reads a provider's word. A word a client does not know
+/// is logged and read as [answered], so a provider that changes its words
+/// leaves a line rather than a guess.
+///
+/// Whether a reply's tool calls run is the loop's to decide, not this: a
+/// reply with calls runs them unless it was [truncated] or [refused], which
+/// covers a provider ending a call with its ordinary stop word.
+enum LlmStop {
+  /// The model ended its turn: the reply is its answer.
+  answered,
+
+  /// The model called tools and waits on their results.
+  toolUse,
+
+  /// Cut off at the output limit, mid-thought or mid-call.
+  truncated,
+
+  /// The provider withheld the reply or the model refused it.
+  refused,
+
+  /// The model ended with no tool call on words it marked as not its answer:
+  /// it said what it would do and stopped. Only a provider that labels its
+  /// words says this — Codex, whose messages carry a `phase` — and nothing
+  /// guesses it from the words themselves.
+  unfinished,
+}
+
 class LlmCompletion extends LlmChunk {
-  const LlmCompletion({required this.message, this.finishReason, this.usage});
+  const LlmCompletion({
+    required this.message,
+    this.stop = LlmStop.answered,
+    this.usage,
+  });
 
   final LlmMessage message;
 
-  /// Why the model stopped. `length` means it was cut off mid-thought, which
-  /// reads as a missing tool call and would otherwise be blamed on the model.
-  final String? finishReason;
+  /// Why the reply ended. [LlmStop.truncated] is a reply cut off mid-thought,
+  /// which reads as a missing tool call and would otherwise be blamed on the
+  /// model.
+  final LlmStop stop;
 
   /// What the provider said the request cost, where it said anything. The
   /// auto-compact threshold reads it — a provider that reports nothing leaves
@@ -286,6 +323,43 @@ class LlmException implements Exception {
       statusCode == null ? message : "HTTP $statusCode: $message";
 }
 
+/// How long a reply may be, as the facts behind it rather than one number:
+/// each client decides what its API is sent, since one must name a limit
+/// (Anthropic's), one is better left to the model's own (the OpenAI shape),
+/// and one takes it as an environment variable (Claude CLI).
+class LlmOutputLimit {
+  /// The bare default — the fallback length, uncapped, no model limit — is
+  /// what a request with no turn behind it (a title, a classifier's verdict)
+  /// runs under.
+  const LlmOutputLimit({
+    this.length = AppSettings.defaultResponseLength,
+    this.capped = false,
+    this.modelLimit,
+  });
+
+  /// The user's Maximum response length: the cap where [capped], and the
+  /// fallback for a model with no known limit where not.
+  final int length;
+
+  /// Whether every reply is held to [length], over the model's own limit.
+  final bool capped;
+
+  /// What models.dev says this model can write in one reply, where it says.
+  final int? modelLimit;
+
+  /// The most the reply may run to where a client must name a number: the
+  /// cap, else the model's own, else the fallback.
+  int get tokens => capped ? length : modelLimit ?? length;
+
+  /// The user's cap, where they set one: what a client sends that would
+  /// otherwise leave the length to the model.
+  int? get cap => capped ? length : null;
+
+  /// Whether [tokens] is a guess rather than the cap or the model's own — a
+  /// client that gives thinking its own room on top does so only here.
+  bool get isFallback => !capped && modelLimit == null;
+}
+
 abstract class LlmClient {
   Stream<LlmChunk> stream(
     List<LlmMessage> messages, {
@@ -293,6 +367,7 @@ abstract class LlmClient {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
+    LlmOutputLimit outputLimit = const LlmOutputLimit(),
   });
 
   void close();

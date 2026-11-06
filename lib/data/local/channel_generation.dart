@@ -2,6 +2,7 @@ import "dart:async";
 
 import "package:flutter/services.dart";
 
+import "../../core/log.dart";
 import "../builtin/llm/llm_client.dart";
 import "../model_host/host_connection.dart";
 import "../model_host/model_process.dart";
@@ -30,17 +31,26 @@ class ChannelGeneration {
     final textSoFar = StringBuffer();
     final thought = StringBuffer();
     final calls = <LlmToolCall>[];
+    // The length the reply was held to, where one was sent: a reply that
+    // reached it was cut off there. Read here, beside the count the native
+    // half reports, rather than in each native half.
+    final maxTokens = arguments["maxTokens"] as int?;
 
-    LlmCompletion completion(String finish, [LlmUsage? usage]) => LlmCompletion(
-      message: LlmMessage(
-        role: LlmRole.assistant,
-        text: textSoFar.toString(),
-        toolCalls: List.of(calls),
-        reasoning: thought.isEmpty ? null : thought.toString(),
-      ),
-      finishReason: finish,
-      usage: usage,
-    );
+    LlmCompletion completion(String finish, [LlmUsage? usage]) {
+      final stop = stopOf(finish);
+      final reachedCap =
+          maxTokens != null && usage != null && usage.outputTokens >= maxTokens;
+      return LlmCompletion(
+        message: LlmMessage(
+          role: LlmRole.assistant,
+          text: textSoFar.toString(),
+          toolCalls: List.of(calls),
+          reasoning: thought.isEmpty ? null : thought.toString(),
+        ),
+        stop: stop == LlmStop.answered && reachedCap ? LlmStop.truncated : stop,
+        usage: usage,
+      );
+    }
 
     // Registered before the request goes out, so a frame the platform sent
     // early cannot fall between the request and its listener.
@@ -124,6 +134,21 @@ class ChannelGeneration {
           // host with nothing behind the channel.
         }
       }
+    }
+  }
+
+  /// The word the native half ends a generation with, as an [LlmStop]: `stop`
+  /// or `tool_calls`. Whether a reply was cut off is not the native half's to
+  /// say; see `run`.
+  LlmStop stopOf(String finish) {
+    switch (finish) {
+      case "stop":
+        return LlmStop.answered;
+      case "tool_calls":
+        return LlmStop.toolUse;
+      default:
+        logFailure("llm", "unknown finish $finish from the $label");
+        return LlmStop.answered;
     }
   }
 }

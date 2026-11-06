@@ -116,6 +116,8 @@ class AppSettings {
     this.autoCompact = defaultAutoCompact,
     this.autoCompactPercent = defaultAutoCompactPercent,
     this.totalContext = defaultTotalContext,
+    this.capResponseLength = false,
+    this.responseLength = defaultResponseLength,
     this.licenceAccepted = false,
     this.autoUpdate = true,
     this.liquidGlass = true,
@@ -425,6 +427,17 @@ class AppSettings {
   /// and the check are one number.
   int totalContext;
 
+  /// Whether every reply is held to [responseLength], over what models.dev
+  /// says each model can write. Off, [responseLength] is only the fallback
+  /// for a model whose own limit is not known.
+  bool capResponseLength;
+
+  /// The most tokens one reply may run to: the cap where
+  /// [capResponseLength] is on, and the limit a model with no known one gets
+  /// where it is off. See "How long a reply may be" in
+  /// `lib/data/builtin/llm/AGENTS.md`.
+  int responseLength;
+
   /// Whether the welcome tour was finished with its licence ticked: what first
   /// launch reads to decide whether to show the tour, and what its Done
   /// writes. It replaced `welcomeSeen`, which a file from before still
@@ -479,6 +492,15 @@ class AppSettings {
   /// row's save — two sites that must agree, named once.
   static const minTotalContext = 1024;
   static const maxTotalContext = 1000000000;
+
+  /// The reply length a model with no known limit gets, and the cap's
+  /// starting point: the 8192 every Anthropic request used to send.
+  static const defaultResponseLength = 8192;
+
+  /// The bounds Maximum response length is clamped to, at load and at the
+  /// settings row's save.
+  static const minResponseLength = 1024;
+  static const maxResponseLength = 1000000;
 
   /// The default when nothing is set: on, at ten prefixes. A named constant so
   /// the UI's "Default (10)" label and the provider's effective count are one
@@ -630,6 +652,9 @@ class AppSettings {
       minTotalContext,
       maxTotalContext,
     ),
+    capResponseLength: json["capResponseLength"] as bool? ?? false,
+    responseLength: (json["responseLength"] as int? ?? defaultResponseLength)
+        .clamp(minResponseLength, maxResponseLength),
     licenceAccepted: json["licenceAccepted"] as bool? ?? false,
     // Written only when on is the default, so a file that predates it
     // says nothing and gets the on default — the same bargain the memory
@@ -759,6 +784,9 @@ class AppSettings {
     if (autoCompactPercent != defaultAutoCompactPercent)
       "autoCompactPercent": autoCompactPercent,
     if (totalContext != defaultTotalContext) "totalContext": totalContext,
+    if (capResponseLength) "capResponseLength": capResponseLength,
+    if (responseLength != defaultResponseLength)
+      "responseLength": responseLength,
     if (licenceAccepted) "licenceAccepted": licenceAccepted,
     if (!autoUpdate) "autoUpdate": autoUpdate,
     if (!liquidGlass) "liquidGlass": liquidGlass,

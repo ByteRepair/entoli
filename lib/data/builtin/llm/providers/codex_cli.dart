@@ -283,6 +283,10 @@ class CodexCliSession extends CliProcessSession {
   final _reasoning = StringBuffer();
   LlmUsage? _usage;
 
+  /// The `phase` of the exchange's last finished message: `commentary` is
+  /// words said on the way to the work, `final_answer` the answer.
+  String? _phase;
+
   /// Calls Codex made that no reply has carried yet.
   final _queued = <_Call>[];
 
@@ -463,6 +467,11 @@ class CodexCliSession extends CliProcessSession {
         if (item is Map && item["type"] == "agentMessage" && _text.isNotEmpty) {
           _say(_text, "\n\n", LlmTextChunk.new);
         }
+      case "item/completed":
+        final item = params["item"];
+        if (item is Map && item["type"] == "agentMessage") {
+          _phase = item["phase"] as String?;
+        }
       case "thread/tokenUsage/updated":
         final last = (params["tokenUsage"] as Map?)?["last"];
         if (last is Map) {
@@ -503,7 +512,9 @@ class CodexCliSession extends CliProcessSession {
     if (status == "completed") {
       end(
         last: LlmCompletion(
-          finishReason: "stop",
+          // A turn that ends on commentary ended on what the model would do
+          // next: Codex itself takes it as the end, so the loop is told.
+          stop: _phase == "commentary" ? LlmStop.unfinished : LlmStop.answered,
           usage: _usage,
           message: _reply(const []),
         ),
@@ -539,7 +550,7 @@ class CodexCliSession extends CliProcessSession {
       }
       end(
         last: LlmCompletion(
-          finishReason: "tool_use",
+          stop: LlmStop.toolUse,
           usage: _usage,
           message: _reply([
             for (final call in calls)
@@ -586,6 +597,7 @@ class CodexCliSession extends CliProcessSession {
     _text.clear();
     _reasoning.clear();
     _usage = null;
+    _phase = null;
     super.end(last: last, error: error);
   }
 

@@ -48,6 +48,7 @@ class FakeLlmClient implements LlmClient {
       List<LlmTool> tools,
       double? temperature,
       String? reasoningEffort,
+      LlmOutputLimit outputLimit,
     })
   >
   calls = [];
@@ -65,6 +66,7 @@ class FakeLlmClient implements LlmClient {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
+    LlmOutputLimit outputLimit = const LlmOutputLimit(),
   }) async* {
     final at = _at++;
     sent.add(List.of(messages));
@@ -73,6 +75,7 @@ class FakeLlmClient implements LlmClient {
       tools: tools,
       temperature: temperature,
       reasoningEffort: reasoningEffort,
+      outputLimit: outputLimit,
     ));
     final failure = failures[at];
     if (failure != null) throw failure;
@@ -103,6 +106,7 @@ class ConcurrentFakeLlmClient implements LlmClient {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
+    LlmOutputLimit outputLimit = const LlmOutputLimit(),
   }) async* {
     _inFlight++;
     if (_inFlight > maxConcurrent) maxConcurrent = _inFlight;
@@ -113,6 +117,7 @@ class ConcurrentFakeLlmClient implements LlmClient {
         tools: tools,
         temperature: temperature,
         reasoningEffort: reasoningEffort,
+        outputLimit: outputLimit,
       );
     } finally {
       _inFlight--;
@@ -303,10 +308,11 @@ LlmCompletion askCall(Object arguments, {String id = "ask-1"}) => LlmCompletion(
 );
 
 /// One assistant turn that says something and calls nothing.
-LlmCompletion saidOnly(String text, {String? finishReason}) => LlmCompletion(
-  finishReason: finishReason,
-  message: LlmMessage(role: LlmRole.assistant, text: text),
-);
+LlmCompletion saidOnly(String text, {LlmStop stop = LlmStop.answered}) =>
+    LlmCompletion(
+      stop: stop,
+      message: LlmMessage(role: LlmRole.assistant, text: text),
+    );
 
 /// One assistant turn that spawns several sub-agents at once, the fan-out a
 /// `task` batch is for. [tasks] is agent-name to prompt, and the call ids are

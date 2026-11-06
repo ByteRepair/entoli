@@ -12,6 +12,10 @@ class OpenAiPlatformClient extends RateLimitClient {
     super.httpClient,
   });
 
+  /// OpenAI renamed the field, and its reasoning models refuse the old one.
+  @override
+  String get maxTokensField => "max_completion_tokens";
+
   @override
   List<RateLimitHeader> get rateLimits => const [
     RateLimitHeader(

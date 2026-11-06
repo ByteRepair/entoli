@@ -112,6 +112,8 @@ final class AppleFmChannel: GenerationChannel {
     let instructions = args["instructions"] as? String ?? ""
     let prompt = args["prompt"] as? String ?? ""
     let temperature = args["temperature"] as? Double
+    // The user's cap, sent only where they set one.
+    let maxTokens = args["maxTokens"] as? Int
 
     var tools = [any Tool]()
     for spec in (args["tools"] as? [[String: Any]]) ?? [] {
@@ -154,7 +156,8 @@ final class AppleFmChannel: GenerationChannel {
       model: .default, tools: tools, transcript: Transcript(entries: entries))
     let stream = session.streamResponse(
       to: prompt,
-      options: GenerationOptions(temperature: temperature))
+      options: GenerationOptions(
+        temperature: temperature, maximumResponseTokens: maxTokens))
     // The snapshots arrive cumulative — `content` is the generation so far,
     // not the increment — and the client appends frames as deltas, so only
     // the suffix past what was last said crosses the channel. A snapshot

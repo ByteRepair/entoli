@@ -55,6 +55,20 @@ and on the log so a rewind or a thread change takes the chat page's Context
 bars with it. A `compaction` carries `chatTokens`, the conversation's estimate
 with the summary standing in, which the bars read until the next reply measures.
 
+Who wrote a reply, and what it took, is a `usage` record per model call, for
+transparency: `provider` (the provider's id, as `meta.json` names one),
+`model`, and `outputTokens`, what that call reported writing — left out where
+the provider reported nothing, rather than a guess. Per call and not on
+`turnEnd`, because a turn that is interrupted or killed has no `turnEnd`, and
+its calls cost what they cost. The recorder holds a call's record for the
+reply's next write rather than opening the file for it alone — a call's end is
+always followed by one: its tool call, an error, the close, or an interrupt's
+last checkpoint — so the record is on the log however the turn ends, short of
+a kill in the instant between. A reply's tokens are the sum
+of its records and its provider and model the last one's, folded by
+`Message.withUsage` both here and live from the `ContextEvent` each call ends
+with, so a reload and the screen agree. Nothing draws them yet.
+
 `callEvent` is the one record written **between turns**: a job outlives the
 turn that started it and usually ends when nothing is running. It goes
 through the room's one append queue like a turn's records, so lines never

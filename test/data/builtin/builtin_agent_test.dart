@@ -64,6 +64,8 @@ void main() {
     bool seesPdfs = false,
     bool attachments = false,
     SubAgents? subAgents,
+    LlmOutputLimit outputLimit = const LlmOutputLimit(),
+    String? provider,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-test");
     // Beside the workspaces, the way the layout keeps `chats/<id>/resources`.
@@ -78,6 +80,8 @@ void main() {
     shell = FakeShell(respond ?? (_) => ok(""), canRunCommands: canRunCommands);
     final allowed = [...approvals];
     return BuiltinAgent(
+      outputLimit: outputLimit,
+      provider: provider,
       session: session,
       client: client,
       shell: shell,
@@ -2531,6 +2535,99 @@ void main() {
         hasLength(BuiltinAgent.maxStopNudges + 1),
         reason: "the third stop ends the turn",
       );
+    });
+
+    test("a reply the provider marks unfinished is told so, "
+        "a bounded number of times", () async {
+      final client = FakeLlmClient([
+        [saidOnly("I'll check the guidance.", stop: LlmStop.unfinished)],
+        [saidOnly("I'll look now.", stop: LlmStop.unfinished)],
+        [saidOnly("Next I'll read it.", stop: LlmStop.unfinished)],
+        [finish],
+      ]);
+      final (agent, _) = planAgent(client);
+
+      final events = await agent.run(userMessage("any guidance?")).toList();
+
+      final nudges = events.whereType<SteerEvent>().toList();
+      expect(nudges, hasLength(BuiltinAgent.maxStopNudges));
+      expect(nudges.first.message.plainText, BuiltinAgent.saidButNotDone);
+      expect(
+        client.sent,
+        hasLength(BuiltinAgent.maxStopNudges + 1),
+        reason: "the third stop ends the turn",
+      );
+    });
+
+    test("a reply cut off at the limit runs none of its calls, and ends "
+        "failed for Continue", () async {
+      final client = FakeLlmClient([
+        [
+          LlmCompletion(
+            message: bashCall("ls", text: "Listing.").message,
+            stop: LlmStop.truncated,
+          ),
+        ],
+      ]);
+      final agent = agentOver(
+        client,
+        outputLimit: const LlmOutputLimit(length: 2048, capped: true),
+      );
+
+      final events = await agent.run(userMessage("list it")).toList();
+
+      expect(shell.ran, isEmpty);
+      expect(events.whereType<ToolResultEvent>(), isEmpty);
+      final error = events.whereType<ErrorEvent>().single;
+      expect(error.message, contains("maximum response length (2048 tokens)"));
+      expect(error.retryable, isFalse);
+      expect(client.sent, hasLength(1));
+    });
+
+    test("each reply says who wrote it and what it took", () async {
+      final client = FakeLlmClient([
+        [
+          const LlmCompletion(
+            message: LlmMessage(role: LlmRole.assistant, text: "hi"),
+            usage: LlmUsage(inputTokens: 100, outputTokens: 7),
+          ),
+        ],
+      ]);
+      final agent = agentOver(client, provider: "p1");
+
+      final events = await agent.run(userMessage("hello")).toList();
+
+      final said = events.whereType<ContextEvent>().single;
+      expect(
+        (said.provider, said.model, said.outputTokens),
+        ("p1", agent.model, 7),
+      );
+    });
+
+    test("a refused reply ends failed, saying so", () async {
+      final client = FakeLlmClient([
+        [saidOnly("", stop: LlmStop.refused)],
+      ]);
+
+      final events = await agentOver(client).run(userMessage("hi")).toList();
+
+      expect(
+        events.whereType<ErrorEvent>().single.message,
+        "The provider refused to answer this request.",
+      );
+    });
+
+    test("an answer is not a reason to keep going", () async {
+      final client = FakeLlmClient([
+        [saidOnly("There is none.")],
+        [finish],
+      ]);
+      final (agent, _) = planAgent(client);
+
+      final events = await agent.run(userMessage("any guidance?")).toList();
+
+      expect(events.whereType<SteerEvent>(), isEmpty);
+      expect(client.sent, hasLength(1));
     });
 
     test("a plan nobody has started is not a reason to keep going", () async {

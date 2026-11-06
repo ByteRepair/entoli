@@ -1469,6 +1469,7 @@ class FakeLocalInstance extends LocalInstance {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
+    LlmOutputLimit outputLimit = const LlmOutputLimit(),
   }) async* {
     _runtime.generated.add(messages);
     for (final (i, chunk) in _runtime.chunks.indexed) {

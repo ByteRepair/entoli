@@ -423,6 +423,29 @@ void main() {
       expect(client.calls.single.model, "fake-model");
     });
 
+    test("the turn's response length rides every request", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      await backend
+          .sendPrompt(
+            chatId,
+            participant: "athena",
+            userMessage("hi", at: sentAt),
+            settings: const TurnSettings(
+              model: "fake-model",
+              provider: "fake",
+              approveMode: ApproveMode.never,
+              responseLength: 2048,
+              capResponseLength: true,
+            ),
+          )
+          .toList();
+
+      final limit = client.calls.single.outputLimit;
+      expect((limit.length, limit.capped), (2048, true));
+    });
+
     test(
       "a provider whose models are listed but default unnamed cannot be guessed at",
       () async {
@@ -3219,6 +3242,7 @@ class _Held implements LlmClient {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
+    LlmOutputLimit outputLimit = const LlmOutputLimit(),
   }) async* {
     final chunks = await inner
         .stream(messages, model: model, tools: tools)
