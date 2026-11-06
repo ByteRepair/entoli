@@ -9,21 +9,21 @@ import "cli.dart";
 /// Apart from [CliProvider] rather than a method on it, since this holds a
 /// process for as long as the user takes, and the provider is a value.
 class CliSignIn {
-  CliSignIn._(this.provider, this._process) {
+  CliSignIn._(this._provider, this._process) {
     _subs = [
       _process.lines.listen(_scan),
       // Error output comes in chunks rather than lines, so it is read a
       // whole line at a time: a link split between two chunks is not taken
       // at its first half.
-      _process.errors.listen((chunk) => _scan(_errors.lines(chunk))),
+      _process.errors.listen((chunk) => _scan(_errors.add(chunk))),
     ];
     result = _process.exitCode.then((code) async {
-      _scan(_errors.all);
+      _scan(_errors.rest);
       if (!_page.isCompleted) _page.complete(null);
       for (final sub in _subs) {
         unawaited(sub.cancel());
       }
-      return code == 0 && !_cancelled && await provider.signedIn();
+      return code == 0 && !_cancelled && await _provider.signedIn();
     });
   }
 
@@ -31,10 +31,10 @@ class CliSignIn {
   static Future<CliSignIn> start(CliProvider provider) async =>
       CliSignIn._(provider, await provider.run(provider.signInArguments));
 
-  final CliProvider provider;
+  final CliProvider _provider;
   final CliProcess _process;
   late final List<StreamSubscription<String>> _subs;
-  final _errors = _Collected();
+  final _errors = _Lines();
   final _page = Completer<Uri?>();
   var _cancelled = false;
 
@@ -52,7 +52,7 @@ class CliSignIn {
   /// Stops waiting: the program is ended, and [result] is false.
   Future<void> cancel() {
     _cancelled = true;
-    return stopProcess(_process, provider.config.displayName);
+    return stopProcess(_process, _provider.config.displayName);
   }
 
   void _scan(String text) {
@@ -66,17 +66,23 @@ class CliSignIn {
   static final _link = RegExp("https://[^\\s\"'<>\\x1b]+");
 }
 
-/// What has arrived of a stream that comes in chunks.
-class _Collected {
-  final _buffer = StringBuffer();
+/// A stream that comes in chunks, read a whole line at a time: only the
+/// line not yet ended is kept.
+class _Lines {
+  var _pending = "";
 
-  /// Everything so far, the last line whether or not it has ended.
-  String get all => "$_buffer";
+  /// The line not yet ended, which the end of the stream ends.
+  String get rest => _pending;
 
-  /// [chunk] added, and every line so far that has ended.
-  String lines(String chunk) {
-    final text = (_buffer..write(chunk)).toString();
+  /// [chunk] added: the lines it ends, and nothing of the one it leaves open.
+  String add(String chunk) {
+    final text = _pending + chunk;
     final end = text.lastIndexOf("\n");
-    return end < 0 ? "" : text.substring(0, end);
+    if (end < 0) {
+      _pending = text;
+      return "";
+    }
+    _pending = text.substring(end + 1);
+    return text.substring(0, end);
   }
 }

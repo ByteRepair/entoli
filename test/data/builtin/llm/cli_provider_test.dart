@@ -18,6 +18,8 @@ import "package:http/testing.dart";
 import "package:path/path.dart" as p;
 import "package:flutter_test/flutter_test.dart";
 
+import "../../../harness.dart" show tempDir;
+
 /// A session that answers every exchange with one text reply, recording what
 /// it was fed.
 class _ScriptedSession extends CliSession {
@@ -986,13 +988,12 @@ void main() {
   group("Entoli's own copy", () {
     late Directory dir;
     setUp(() {
-      dir = Directory.systemTemp.createTempSync("cli-own-");
+      dir = tempDir("cli-own-");
       CliProvider.cacheRoot = dir.path;
     });
     tearDown(() {
       CliProvider.cacheRoot = null;
       CliProvider.abi = Abi.current();
-      dir.deleteSync(recursive: true);
     });
 
     /// Anthropic's two files, for version [version] with [checksum] stated
@@ -1304,7 +1305,7 @@ void main() {
     late Directory dir;
     late _Guest guest;
     setUp(() {
-      dir = Directory.systemTemp.createTempSync("cli-guest-");
+      dir = tempDir("cli-guest-");
       CliProvider.cacheRoot = dir.path;
       guest = _Guest();
       CliProvider.guest = guest;
@@ -1313,7 +1314,6 @@ void main() {
       CliProvider.guest = null;
       CliProvider.cacheRoot = null;
       CliProvider.abi = Abi.current();
-      dir.deleteSync(recursive: true);
     });
 
     test("Android's builds are the musl ones its Alpine runs", () {

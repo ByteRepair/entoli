@@ -19,7 +19,6 @@ import "../../../../domain/shell.dart" show guestHome, guestPath;
 import "../../../download.dart";
 import "../../../local/file_modes.dart";
 import "../hosted_models.dart";
-import "../http_stream.dart";
 import "../llm_client.dart";
 import "cli_release.dart";
 import "provider.dart";
@@ -121,21 +120,19 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   /// The empty folder every session of this provider runs in, so nothing a
   /// project keeps for the program is picked up from it. Kept apart from
   /// [dataDirectory], so what the program keeps and what it works in never
-  /// mix. Made, with [dataDirectory], before anything runs.
+  /// mix.
+  String get workPath => p.join(workRoot.path, "work", _folderId);
+
+  /// [workPath], made with [dataDirectory] before anything runs.
   Future<String> workDirectory() async {
     await Directory(dataDirectory).create(recursive: true);
-    return (await Directory(
-      p.join(workRoot.path, "work", _folderId),
-    ).create(recursive: true)).path;
+    return (await Directory(workPath).create(recursive: true)).path;
   }
 
   /// Takes this provider's [dataDirectory] and work folder away — its
   /// sign-in with them — for a provider that is removed.
   Future<void> forget() async {
-    for (final path in [
-      dataDirectory,
-      p.join(workRoot.path, "work", _folderId),
-    ]) {
+    for (final path in [dataDirectory, workPath]) {
       final dir = Directory(path);
       if (dir.existsSync()) await dir.delete(recursive: true);
     }
@@ -187,9 +184,16 @@ abstract class CliProvider extends LlmProvider with KeyFree {
 
   String get _bin => p.join(workRoot.path, "bin");
 
-  /// [name] as this platform names a program's file.
-  static String programFile(String name) =>
-      Platform.isWindows ? "$name.exe" : name;
+  /// [name] as [on] — [abi] unless named — names a program's file. One rule
+  /// for where a release is put and where it is looked for.
+  static String programFile(String name, [Abi? on]) =>
+      const {
+        Abi.windowsArm64,
+        Abi.windowsIA32,
+        Abi.windowsX64,
+      }.contains(on ?? abi)
+      ? "$name.exe"
+      : name;
 
   /// Programs the CLI runs from beside itself, which a copy is not whole
   /// without. None unless a subclass knows of one.
@@ -228,6 +232,11 @@ abstract class CliProvider extends LlmProvider with KeyFree {
               "${config.displayName} publishes no build for this computer",
             ));
         await Directory(_bin).create(recursive: true);
+        // Alongside the download rather than after it: the libraries do not
+        // wait on the program. Awaited before anything is put in place; its
+        // failure is the install's, and a download that fails first leaves
+        // it ignored.
+        final packages = _installGuestPackages()..ignore();
         final total = release.bytes;
         var done = 0;
         for (final file in release.files) {
@@ -256,7 +265,7 @@ abstract class CliProvider extends LlmProvider with KeyFree {
           await file.packing.place(File(part), staged);
           makeExecutable(staged);
         }
-        await _installGuestPackages();
+        await packages;
         for (final file in release.files) {
           await File(
             p.join(_bin, "${file.name}.new"),
@@ -272,26 +281,13 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   Future<void> _installGuestPackages() async {
     final guest = CliProvider.guest;
     if (guest == null || guestPackages.isEmpty) return;
-    final (:command, :environment) = guest.wrap(
-      guest.install(guestPackages),
-      cwd: workRoot.path,
-      shared: [workRoot.path],
+    final (:code, :said) = await _exitOf(
+      await _start(
+        guest.install(guestPackages),
+        cwd: workRoot.path,
+        environment: _guestBasics,
+      ),
     );
-    final process = await launch(
-      command.first,
-      command.sublist(1),
-      workingDirectory: workRoot.path,
-      environment: {
-        "HOME": guestHome,
-        "PATH": guestPath,
-        "LANG": "C.UTF-8",
-        ...environment,
-      },
-    );
-    final said = StderrTail();
-    unawaited(process.lines.drain<void>());
-    process.errors.listen(said.add);
-    final code = await process.exitCode;
     if (code != 0) {
       throw LlmException(
         "Installing ${guestPackages.join(", ")} in the Linux failed "
@@ -308,27 +304,27 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   }
 
   /// Whether the program is signed in, by its own [statusArguments].
-  Future<bool> signedIn() async {
-    final process = await run(statusArguments);
-    unawaited(process.lines.drain<void>());
-    unawaited(process.errors.drain<void>());
-    return await process.exitCode == 0;
-  }
+  Future<bool> signedIn() async =>
+      (await _exitOf(await run(statusArguments))).code == 0;
 
   /// Signs the program out, by its own [signOutArguments]; whether it was
   /// signed in or not, it is not after.
   Future<void> signOut() async {
-    final process = await run(signOutArguments);
-    unawaited(process.lines.drain<void>());
-    unawaited(process.errors.drain<void>());
-    await process.exitCode;
+    final (:code, said: _) = await _exitOf(await run(signOutArguments));
+    if (code != 0) {
+      logFailure("cli", "signing ${config.displayName} out exited $code");
+    }
   }
 
-  /// The body at [url] as text, for a publisher that says its newest
-  /// version in a file of its own.
-  static Future<String> fetchText(http.Client client, Uri url) async {
-    final response = await sendChecked(client, http.Request("GET", url));
-    return response.stream.bytesToString();
+  /// [process] to its end, both its outputs read so it never blocks on a
+  /// full pipe, and the tail of what it said on its error output kept.
+  static Future<({int code, StderrTail said})> _exitOf(
+    CliProcess process,
+  ) async {
+    final said = StderrTail();
+    unawaited(process.lines.drain<void>());
+    process.errors.listen(said.add);
+    return (code: await process.exitCode, said: said);
   }
 
   /// The program the config names, or null where it leaves it to the default.
@@ -353,44 +349,48 @@ abstract class CliProvider extends LlmProvider with KeyFree {
       ...inheritedFrom(Platform.environment),
       "PATH": ?loginPath,
     } else ...{
-      "HOME": guestHome,
-      "PATH": guestPath,
-      "LANG": "C.UTF-8",
+      ..._guestBasics,
       ...guestEnvironment,
     },
     ...homeEnvironment(dataDirectory),
     ...config.env,
   };
 
+  /// What every program in a [guest] starts with, in place of the app's own
+  /// environment, which is Android's.
+  static const _guestBasics = {
+    "HOME": guestHome,
+    "PATH": guestPath,
+    "LANG": "C.UTF-8",
+  };
+
   /// The program, started on [arguments] in its work folder, with
-  /// [environment] below its own — here, or in the [guest] where there is
-  /// one, its folder in the cache bound at its own path there.
+  /// [environment] below its own.
   Future<CliProcess> run(
     List<String> arguments, {
     Map<String, String> environment = const {},
-  }) async {
-    final cwd = await workDirectory();
-    final env = {...environment, ...this.environment};
-    final program = executable();
-    final guest = CliProvider.guest;
-    if (guest == null) {
-      return launch(
-        program,
-        arguments,
-        workingDirectory: cwd,
-        environment: env,
-      );
-    }
-    final (:command, environment: own) = guest.wrap(
-      [program, ...arguments],
-      cwd: cwd,
-      shared: [workRoot.path],
-    );
+  }) async => _start(
+    [executable(), ...arguments],
+    cwd: await workDirectory(),
+    environment: {...environment, ...this.environment},
+  );
+
+  /// [argv] started from [cwd] with [environment]: as it is here, or in the
+  /// [guest] where there is one, the program's cache folder bound at its own
+  /// path there and the guest's own variables over [environment].
+  Future<CliProcess> _start(
+    List<String> argv, {
+    required String cwd,
+    required Map<String, String> environment,
+  }) {
+    final (:command, environment: own) =
+        guest?.wrap(argv, cwd: cwd, shared: [workRoot.path]) ??
+        (command: argv, environment: const <String, String>{});
     return launch(
       command.first,
       command.sublist(1),
       workingDirectory: cwd,
-      environment: {...env, ...own},
+      environment: {...environment, ...own},
     );
   }
 

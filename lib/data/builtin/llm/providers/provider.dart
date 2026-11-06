@@ -164,17 +164,29 @@ abstract class LlmProvider {
     required Map<String, String> headers,
     http.Client? httpClient,
   }) async {
+    final json = jsonDecode(
+      await getText(url, headers: headers, httpClient: httpClient),
+    );
+    if (json is! Map<String, dynamic>) {
+      throw LlmException("$url answered something other than an object");
+    }
+    return json;
+  }
+
+  /// The body at [url] as text, asked with [headers]. Throws on anything but
+  /// a 200.
+  static Future<String> getText(
+    Uri url, {
+    Map<String, String> headers = const {},
+    http.Client? httpClient,
+  }) async {
     final client = httpClient ?? tlsClient();
     try {
       final response = await sendChecked(
         client,
         http.Request("GET", url)..headers.addAll(headers),
       );
-      final json = jsonDecode(await response.stream.bytesToString());
-      if (json is! Map<String, dynamic>) {
-        throw LlmException("$url answered something other than an object");
-      }
-      return json;
+      return await response.stream.bytesToString();
     } finally {
       if (httpClient == null) client.close();
     }

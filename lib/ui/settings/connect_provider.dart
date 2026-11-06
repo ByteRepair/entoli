@@ -47,15 +47,11 @@ Future<void> editProvider(
     ),
   );
   if (saved == null) {
-    if (adding) {
-      for (final cli in programs) {
-        await cli.withConfig(cli.config.copyWith(id: id)).forget();
-      }
-    }
+    if (adding) await _forgetDraft(programs, id);
     return;
   }
   await notifier.upsertProvider(
-    saved.config.id.isEmpty ? saved.config.copyWith(id: id) : saved.config,
+    saved.config.copyWith(id: id),
     setKey: saved.setKey,
     adopt: adopt,
   );
@@ -91,6 +87,7 @@ Future<void> _connectCli(
   // Notifier first: the page that asked can go away while the dialog is
   // open, and the save must outlive it.
   final notifier = ref.read(appSettingsProvider.notifier);
+  final programs = ref.read(cliProgramsProvider);
   final existing = ref
       .read(appSettingsProvider)
       .llmProviders
@@ -98,15 +95,24 @@ Future<void> _connectCli(
       .firstOrNull;
   // A new entry's id first: its account is kept in a folder named by it.
   final config = existing ?? service.config.copyWith(id: const Uuid().v4());
-  final cli = programFor(ref, config);
+  final cli = cliProgramOf(programs, config);
   final ready = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
     builder: (_) => CliSignInDialog(cli: cli),
   );
   if (ready != true) {
-    if (existing == null) await cli.forget();
+    if (existing == null) await _forgetDraft(programs, config.id);
     return;
   }
   await notifier.upsertProvider(config, adopt: true);
+}
+
+/// A new entry given up on: its folders under every program go, and any
+/// sign-in made in them — the dialog may have been switched to another
+/// program before it was cancelled.
+Future<void> _forgetDraft(List<CliProvider> programs, String id) async {
+  for (final cli in programs) {
+    await cli.withConfig(cli.config.copyWith(id: id)).forget();
+  }
 }

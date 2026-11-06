@@ -54,13 +54,7 @@ void _walk(String root, {required bool writable, required bool executable}) {
 /// its extension's business.
 void makeExecutable(String path) {
   if (Platform.isWindows) return;
-  final mode = FileStat.statSync(path).mode & 0x1ff;
-  final native = path.toNativeUtf8();
-  try {
-    _chmod(native, mode | 0x49); // a+x
-  } finally {
-    malloc.free(native);
-  }
+  _chmodTo(path, FileStat.statSync(path).mode & 0x1ff | 0x49); // a+x
 }
 
 typedef _ChmodC = Int32 Function(Pointer<Utf8>, Uint32);
@@ -81,10 +75,14 @@ void _setPosix(
       ? mode |
             0x80 // u+w
       : (mode & ~0x92) | (isDir || executable ? 0x49 : 0); // a-w, a+x
-  if (next == mode) return;
+  if (next != mode) _chmodTo(path, next);
+}
+
+/// libc's `chmod` of [path] to [mode].
+void _chmodTo(String path, int mode) {
   final native = path.toNativeUtf8();
   try {
-    _chmod(native, next);
+    _chmod(native, mode);
   } finally {
     malloc.free(native);
   }

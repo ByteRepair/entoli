@@ -181,7 +181,6 @@ ShellDriver? platformDriver({
   if (Platform.isAndroid) return null;
   return LocalShell.hostDriver(
     tools: tools,
-    projectHome: Platform.isAndroid,
     environment: isolated && byteRepairBinDir != null
         ? {
             "PATH":

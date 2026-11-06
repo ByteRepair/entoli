@@ -271,12 +271,9 @@ class _SignInPage extends StatelessWidget {
   }
 }
 
-/// The program [config] runs, read for that entry: [cliProgramsProvider]'s
-/// for its API, its folders named by the entry's id.
-CliProvider programFor(WidgetRef ref, LlmProviderConfig config) => ref
-    .read(cliProgramsProvider)
-    .firstWhere((c) => c.config.api == config.api)
-    .withConfig(config);
+/// [cliProgramOf] over this app's programs.
+CliProvider programFor(WidgetRef ref, LlmProviderConfig config) =>
+    cliProgramOf(ref.read(cliProgramsProvider), config);
 
 /// The sign-in of [config]'s program where a provider on it is set up:
 /// whether the account in the entry's own folder is signed in, as the

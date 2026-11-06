@@ -99,9 +99,9 @@ class ClaudeCliProvider extends CliProvider with OfferedByName {
   Future<CliRelease?> latestRelease(http.Client client) async {
     final platform = platformOf(CliProvider.abi, musl: _musl);
     if (platform == null) return null;
-    final version = (await CliProvider.fetchText(
-      client,
+    final version = (await LlmProvider.getText(
       Uri.parse("$releases/latest"),
+      httpClient: client,
     )).trim();
     if (!_version.hasMatch(version)) {
       throw FormatException("$releases/latest named no version: $version");
@@ -118,9 +118,8 @@ class ClaudeCliProvider extends CliProvider with OfferedByName {
     if (entry is! Map<String, dynamic>) return null;
     final checksum = entry["checksum"];
     if (checksum is! String) return null;
-    final program = platform.startsWith("win32") ? "claude.exe" : "claude";
+    final program = CliProvider.programFile(defaultCommand);
     return CliRelease(
-      version: version,
       files: [
         CliFile(
           name: program,

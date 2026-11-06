@@ -40,18 +40,20 @@ final cliDownloadsProvider = NotifierProvider<CliDownloads, DownloadState>(
 
 /// Which of [cliProgramsProvider] Entoli has its own copy of, by
 /// [CliProvider.workFolder]: read off the disk, and again whenever a
-/// download lands or a copy is deleted.
-class InstalledClis extends Notifier<Set<String>> {
+/// download lands or a copy is deleted. Read at once rather than seeded
+/// empty, since the first-run setup decides on its first frame whether there
+/// is anything left to install.
+class InstalledClis extends InstalledIds {
+  InstalledClis() : super(const {});
+
   @override
   Set<String> build() {
     ref.watch(cliProgramsProvider);
     return _scan();
   }
 
-  void refresh() {
-    final now = _scan();
-    if (now.length != state.length || !now.containsAll(state)) state = now;
-  }
+  @override
+  Future<Set<String>> scan() async => _scan();
 
   Set<String> _scan() => {
     for (final cli in ref.read(cliProgramsProvider))

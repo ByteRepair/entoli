@@ -113,7 +113,7 @@ class CodexCliProvider extends CliProvider with OfferedByName {
         throw FormatException("$name has no SHA-256 stated beside it");
       }
       return CliFile(
-        name: windows ? "$program.exe" : program,
+        name: CliProvider.programFile(program),
         url: Uri.parse(asset["browser_download_url"] as String),
         sha256: digest.substring("sha256:".length),
         packing: windows ? const ZipProgram() : const TarGzProgram(),
@@ -125,10 +125,7 @@ class CodexCliProvider extends CliProvider with OfferedByName {
       for (final program in [...companions, defaultCommand]) fileOf(program),
     ];
     if (files.contains(null)) return null;
-    return CliRelease(
-      version: "${release["tag_name"]}",
-      files: files.nonNulls.toList(),
-    );
+    return CliRelease(files: files.nonNulls.toList());
   }
 
   /// The target [abi]'s build is named for: musl on Linux, which runs on

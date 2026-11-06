@@ -281,7 +281,7 @@ are two accounts, and signing in through Entoli never signs the user's own
 `claude` or `codex` in or out. The folders are named by the entry's id, which
 is why a CLI entry has its id before it can sign in — `editProvider` and the
 tour's connect give a new one its id when they open, and take its folders back
-when it is cancelled — and `forget` deletes them when the entry is removed.
+when it is cancelled — and the settings notifier's `setProviders` `forget`s them when the entry is removed, beside its stored key.
 In the cache rather than the data directory, deliberately: the data directory
 is backed up and synced, and a sign-in is a secret. A cleared cache costs a
 sign-in, not a leaked token. `withConfig` reads one program for another entry

@@ -1090,15 +1090,21 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// rebuilt from them, so it is invalidated here rather than left showing
   /// the old one. Bulk and removal writes: no adoption. A provider removed
   /// here takes its stored key with it — nothing else would ever delete it,
-  /// and an entry nobody names is a secret kept for no one.
+  /// and an entry nobody names is a secret kept for no one. A CLI's takes
+  /// its folders, the account signed in there, for the same reason.
   Future<void> setProviders(List<LlmProviderConfig> providers) async {
-    final removed = state.llmProviders.map((p) => p.id).toSet()
-      ..removeAll(providers.map((p) => p.id));
+    final kept = providers.map((p) => p.id).toSet();
+    final removed = [
+      for (final p in state.llmProviders)
+        if (!kept.contains(p.id)) p,
+    ];
     // Deleted before the state change, for the same reason the upsert stores
     // first: the rebuild the state change starts reads the store.
     final secrets = ref.read(appSecretsProvider);
-    for (final id in removed) {
-      await secrets.setProviderKey(id, null);
+    final programs = ref.read(cliProgramsProvider);
+    for (final provider in removed) {
+      await secrets.setProviderKey(provider.id, null);
+      if (provider.api.isCli) await cliProgramOf(programs, provider).forget();
     }
     await _update((s) => s.llmProviders = List.unmodifiable(providers));
     ref.invalidate(availableModelsProvider);
@@ -1167,6 +1173,13 @@ typedef KeyCheck =
 final cliProgramsProvider = Provider<List<CliProvider>>(
   (ref) => cliProviderPresets,
 );
+
+/// The program [config] runs, read for that entry: [programs]' for its API,
+/// its folders named by the entry's id.
+CliProvider cliProgramOf(
+  List<CliProvider> programs,
+  LlmProviderConfig config,
+) => programs.firstWhere((c) => c.config.api == config.api).withConfig(config);
 
 final keyCheckProvider = Provider<KeyCheck>(
   (ref) =>

@@ -47,46 +47,35 @@ ShellDriver prootDriver({
   }
 
   return ShellDriver(
-    commandFor: (cwd, home, {readOnly = const []}) => [
-      proot.binary,
-      "-r", rootfsDir,
-      "--kill-on-exit",
-      "--link2symlink",
-      "-0",
-      // What [readOnly] names is read-only on disk, and the fake root `-0`
-      // grants would otherwise write through that: our patch to proot keeps
-      // it from overriding a refusal, or a chmod, under these.
-      for (final dir in readOnly) ...["--read-only", dir],
-      "-b", "/dev",
-      "-b", "/proc",
-      "-b", "/sys",
-      // The project workspace at a clean guest path, not its own Android
-      // path. The chat's workspace is inside it, so it is reachable at
-      // $guestHome + the suffix of cwd past home. The rest of the device
-      // is not there.
-      "-b", "$home:$guestHome",
-      // Skills need a real base directory so their scripts run; bound at
-      // clean paths so the model is told those, not the host's. A project's
-      // own skills dirs are bound beside the default's, so an inherited
-      // skill and a project override are both reachable.
-      ...binds,
-      // At their own host paths, so the path the model is told of an
-      // attachment is one answer whichever shell it runs in. A skills
-      // directory is bound at its clean path above already.
-      for (final dir in readOnly)
-        if (!hostToGuest.containsKey(dir)) ...["-b", "$dir:$dir"],
-      "-b", "${proot.tmpDir}:/tmp",
-      "-b", "${proot.resolvConf}:/etc/resolv.conf",
+    commandFor: (cwd, home, {readOnly = const []}) => _prootCommand(
+      proot,
+      rootfsDir,
+      readOnly: readOnly,
+      binds: [
+        // The project workspace at a clean guest path, not its own Android
+        // path. The chat's workspace is inside it, so it is reachable at
+        // $guestHome + the suffix of cwd past home. The rest of the device
+        // is not there.
+        "-b", "$home:$guestHome",
+        // Skills need a real base directory so their scripts run; bound at
+        // clean paths so the model is told those, not the host's. A
+        // project's own skills dirs are bound beside the default's, so an
+        // inherited skill and a project override are both reachable.
+        ...binds,
+        // At their own host paths, so the path the model is told of an
+        // attachment is one answer whichever shell it runs in. A skills
+        // directory is bound at its clean path above already.
+        for (final dir in readOnly)
+          if (!hostToGuest.containsKey(dir)) ...["-b", "$dir:$dir"],
+      ],
       // The guest path of the chat workspace, not "." — proot stores -w as
       // the guest cwd, and "." resolves against the guest root, not the
       // host's working directory.
-      "-w", guestWorkspacePath(guestHome, home, cwd),
-      "/bin/sh",
-    ],
+      cwd: guestWorkspacePath(guestHome, home, cwd),
+      argv: const ["/bin/sh"],
+    ),
     environment: {
-      "PROOT_LOADER": proot.loader,
-      if (proot.loader32 != null) "PROOT_LOADER_32": proot.loader32!,
-      "PROOT_TMP_DIR": proot.tmpDir,
+      ..._loaderEnvironment(proot),
       "PATH": guestPath,
       "LANG": "C.UTF-8",
       // Declared rather than probed, the catalog's own word — what the model
@@ -120,29 +109,57 @@ ShellDriver prootDriver({
   required String cwd,
   required List<String> argv,
 }) => (
-  command: [
-    proot.binary,
-    "-r", rootfsDir,
-    "--kill-on-exit",
-    "--link2symlink",
-    // Root to the guest, which a package install wants and which is still
-    // the app's own uid to the kernel.
-    "-0",
-    "-b", "/dev",
-    "-b", "/proc",
-    "-b", "/sys",
-    for (final dir in shared) ...["-b", "$dir:$dir"],
-    "-b", "${proot.tmpDir}:/tmp",
-    "-b", "${proot.resolvConf}:/etc/resolv.conf",
-    "-w", cwd,
-    ...argv,
-  ],
-  environment: {
-    "PROOT_LOADER": proot.loader,
-    if (proot.loader32 != null) "PROOT_LOADER_32": proot.loader32!,
-    "PROOT_TMP_DIR": proot.tmpDir,
-  },
+  command: _prootCommand(
+    proot,
+    rootfsDir,
+    binds: [
+      for (final dir in shared) ...["-b", "$dir:$dir"],
+    ],
+    cwd: cwd,
+    argv: argv,
+  ),
+  environment: _loaderEnvironment(proot),
 );
+
+/// proot over [rootfsDir], the one command line every start in it is: what
+/// every start shares around [binds] — the start's own — and then [cwd] and
+/// [argv]. One list, so the terminal's shell and a CLI's program run under
+/// the same proot.
+List<String> _prootCommand(
+  Proot proot,
+  String rootfsDir, {
+  List<String> readOnly = const [],
+  required List<String> binds,
+  required String cwd,
+  required List<String> argv,
+}) => [
+  proot.binary,
+  "-r", rootfsDir,
+  "--kill-on-exit",
+  "--link2symlink",
+  // Root to the guest, which a package install wants and which is still the
+  // app's own uid to the kernel.
+  "-0",
+  // What [readOnly] names is read-only on disk, and the fake root `-0`
+  // grants would otherwise write through that: our patch to proot keeps it
+  // from overriding a refusal, or a chmod, under these.
+  for (final dir in readOnly) ...["--read-only", dir],
+  "-b", "/dev",
+  "-b", "/proc",
+  "-b", "/sys",
+  ...binds,
+  "-b", "${proot.tmpDir}:/tmp",
+  "-b", "${proot.resolvConf}:/etc/resolv.conf",
+  "-w", cwd,
+  ...argv,
+];
+
+/// What proot itself needs in its environment to start anything.
+Map<String, String> _loaderEnvironment(Proot proot) => {
+  "PROOT_LOADER": proot.loader,
+  if (proot.loader32 != null) "PROOT_LOADER_32": proot.loader32!,
+  "PROOT_TMP_DIR": proot.tmpDir,
+};
 
 /// Android's Linux as where a CLI's program runs: [prootProgram] over the
 /// rootfs the Terminal settings picked, looked up at each start, so one
@@ -181,12 +198,16 @@ class ProotCliGuest implements CliGuest {
     );
   }
 
-  /// Alpine's, the one Linux the catalog has.
+  /// By the picked Linux's own package manager; `apk` is the one the
+  /// catalog has, and a Linux that declares another is said rather than
+  /// handed a command it has no program for.
   @override
-  List<String> install(List<String> packages) => [
-    "apk",
-    "add",
-    "--no-cache",
-    ...packages,
-  ];
+  List<String> install(List<String> packages) =>
+      switch (rootfsById(rootfsId())?.packageManager) {
+        "apk" => ["apk", "add", "--no-cache", ...packages],
+        final other => throw LlmException(
+          "Installing ${packages.join(", ")} with ${other ?? "no Linux"} is "
+          "not something Entoli knows how to do.",
+        ),
+      };
 }

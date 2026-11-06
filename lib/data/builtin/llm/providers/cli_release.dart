@@ -1,13 +1,12 @@
 import "dart:io";
+import "dart:isolate";
 
 import "package:archive/archive_io.dart";
 
 /// One release of a CLI for this machine: the program, and any program it
 /// runs beside itself, each a file of its own.
 class CliRelease {
-  const CliRelease({required this.version, required this.files});
-
-  final String version;
+  const CliRelease({required this.files});
 
   /// The programs, the CLI's own last: it is the one whose presence says the
   /// copy is installed, so it is put in place after the rest.
@@ -72,15 +71,20 @@ abstract class ArchivedProgram extends CliPacking {
 
   Archive decode(File archive);
 
+  /// In an isolate of its own: a release is a hundred-odd megabytes to
+  /// inflate, which the app's would otherwise stop drawing for.
   @override
   Future<void> place(File downloaded, String executable) async {
-    final files = decode(downloaded).files.where((f) => f.isFile).toList();
-    if (files.length != 1) {
-      throw FormatException(
-        "expected one program in ${downloaded.path}, found ${files.length}",
-      );
-    }
-    await File(executable).writeAsBytes(files.single.content);
+    final path = downloaded.path;
+    await Isolate.run(() {
+      final files = decode(File(path)).files.where((f) => f.isFile).toList();
+      if (files.length != 1) {
+        throw FormatException(
+          "expected one program in $path, found ${files.length}",
+        );
+      }
+      File(executable).writeAsBytesSync(files.single.content);
+    });
     await downloaded.delete();
   }
 }
