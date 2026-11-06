@@ -43,10 +43,6 @@ actor MlxConversation {
   /// they are the model's, not the conversation's.
   private var markers: ThinkingMarkers?
 
-  /// Long enough for any reply an agent's step has, short of a model that
-  /// never stops.
-  private static let maxTokens = 8192
-
   /// Stops the generation under way: a model let go of is not one a reply may
   /// go on coming from.
   private var stopGeneration: (@Sendable () -> Void)?
@@ -95,12 +91,12 @@ actor MlxConversation {
   }
 
   func generate(
-    messages: [MlxMessage], tools: [MlxTool], temperature: Double?,
+    messages: [MlxMessage], tools: [MlxTool], temperature: Double?, maxTokens: Int,
     emit: @escaping @Sendable (MlxEvent) -> Void
   ) async throws {
     try await operation { container in
       guard let last = messages.last else { return }
-      var parameters = GenerateParameters(maxTokens: Self.maxTokens)
+      var parameters = GenerateParameters(maxTokens: maxTokens)
       if let temperature { parameters.temperature = Float(temperature) }
 
       let fresh: [MlxMessage]

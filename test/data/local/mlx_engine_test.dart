@@ -183,8 +183,8 @@ void main() {
 
     await channel.incoming("done", {"id": generate["id"]});
     expect(
-      (await reply).whereType<LlmCompletion>().single.finishReason,
-      "stop",
+      (await reply).whereType<LlmCompletion>().single.stop,
+      LlmStop.answered,
     );
   });
 
@@ -204,6 +204,40 @@ void main() {
       {"role": "user", "content": "hi"},
     ]);
 
+    await channel.incoming("done", {"id": generate["id"]});
+    await reply;
+  });
+
+  test("the reply's limit goes to the Swift half, and a reply that reached "
+      "it comes back cut off", () async {
+    final reply = engine()
+        .client(() => AppSettings())
+        .stream(
+          const [LlmMessage(role: LlmRole.user, text: "hi")],
+          model: small.id,
+          outputLimit: const LlmOutputLimit(length: 2048, capped: true),
+        )
+        .toList();
+    await channel.until("generate");
+
+    final generate = channel.outgoing("generate");
+    expect(generate["maxTokens"], 2048);
+    await channel.incoming("done", {"id": generate["id"], "finish": "length"});
+    expect(
+      (await reply).whereType<LlmCompletion>().single.stop,
+      LlmStop.truncated,
+    );
+  });
+
+  test("with no turn behind it, the Swift half still gets a number to stop "
+      "at", () async {
+    final reply = engine().client(() => AppSettings()).stream(const [
+      LlmMessage(role: LlmRole.user, text: "hi"),
+    ], model: small.id).toList();
+    await channel.until("generate");
+
+    final generate = channel.outgoing("generate");
+    expect(generate["maxTokens"], AppSettings.defaultResponseLength);
     await channel.incoming("done", {"id": generate["id"]});
     await reply;
   });
@@ -256,7 +290,7 @@ void main() {
     await channel.incoming("done", {"id": id});
 
     final completion = (await reply).whereType<LlmCompletion>().single;
-    expect(completion.finishReason, "tool_calls");
+    expect(completion.stop, LlmStop.toolUse);
     expect(completion.message.toolCalls.map((c) => (c.id, c.name)), [
       ("c0", "read"),
       ("c1", "bash"),

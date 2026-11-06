@@ -2,6 +2,7 @@ import "dart:async";
 
 import "package:flutter/services.dart";
 
+import "../../core/log.dart";
 import "../builtin/llm/llm_client.dart";
 import "../model_host/host_connection.dart";
 import "../model_host/model_process.dart";
@@ -38,7 +39,7 @@ class ChannelGeneration {
         toolCalls: List.of(calls),
         reasoning: thought.isEmpty ? null : thought.toString(),
       ),
-      finishReason: finish,
+      stop: stopOf(finish),
       usage: usage,
     );
 
@@ -124,6 +125,23 @@ class ChannelGeneration {
           // host with nothing behind the channel.
         }
       }
+    }
+  }
+
+  /// The word the native half ends a generation with, as an [LlmStop]: `stop`,
+  /// `tool_calls`, or `length` where the reply reached the `maxTokens` it was
+  /// sent.
+  LlmStop stopOf(String finish) {
+    switch (finish) {
+      case "stop":
+        return LlmStop.answered;
+      case "tool_calls":
+        return LlmStop.toolUse;
+      case "length":
+        return LlmStop.truncated;
+      default:
+        logFailure("llm", "unknown finish $finish from the $label");
+        return LlmStop.answered;
     }
   }
 }

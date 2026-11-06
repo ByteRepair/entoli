@@ -5,6 +5,7 @@ import "dart:typed_data";
 import "package:flutter/foundation.dart" show protected;
 import "package:http/http.dart" as http;
 
+import "../../../core/log.dart";
 import "../../../core/tls.dart";
 
 import "http_stream.dart";
@@ -68,6 +69,30 @@ class OpenAiClient implements LlmClient {
   @protected
   void responded(Map<String, String> headers) {}
 
+  /// The field a reply's length is capped by. The shape's own is
+  /// `max_tokens`; a host that renamed it overrides this.
+  @protected
+  String get maxTokensField => "max_tokens";
+
+  /// The shape's `finish_reason` as an [LlmStop]. A host that words it
+  /// differently overrides this.
+  @protected
+  LlmStop stopOf(String? reason) {
+    switch (reason) {
+      case "stop" || null:
+        return LlmStop.answered;
+      case "tool_calls" || "function_call":
+        return LlmStop.toolUse;
+      case "length":
+        return LlmStop.truncated;
+      case "content_filter":
+        return LlmStop.refused;
+      default:
+        logFailure("llm", "unknown finish_reason $reason from $baseUrl");
+        return LlmStop.answered;
+    }
+  }
+
   @override
   Stream<LlmChunk> stream(
     List<LlmMessage> messages, {
@@ -75,6 +100,7 @@ class OpenAiClient implements LlmClient {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
+    LlmOutputLimit? outputLimit,
   }) async* {
     final response = await postStream(
       _http,
@@ -96,6 +122,10 @@ class OpenAiClient implements LlmClient {
         },
         "temperature": ?temperature,
         "reasoning_effort": ?reasoningEffort,
+        // Only the user's cap: unasked, the model writes to its own limit,
+        // which this shape lets it — there is no number to guess.
+        if (outputLimit != null && outputLimit.capped)
+          maxTokensField: outputLimit.length,
       },
     ).onError<LlmException>((e, _) => throw refused(e));
     responded(response.headers);
@@ -210,7 +240,7 @@ class OpenAiClient implements LlmClient {
     }
 
     yield LlmCompletion(
-      finishReason: finishReason,
+      stop: stopOf(finishReason),
       usage: usage,
       message: LlmMessage(
         role: LlmRole.assistant,

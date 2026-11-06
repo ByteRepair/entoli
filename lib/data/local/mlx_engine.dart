@@ -2,6 +2,7 @@ import "dart:async";
 
 import "package:flutter/services.dart";
 
+import "../../domain/app_settings.dart";
 import "../../domain/local_model.dart";
 import "../../domain/local_model_store.dart";
 import "../builtin/llm/llm_client.dart";
@@ -128,11 +129,15 @@ class MlxInstance extends LocalInstance {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
+    LlmOutputLimit? outputLimit,
   }) => ChannelGeneration(_channel, label: "on-device model").run("generate", {
     "model": model.id,
     "messages": [for (final message in messages) _wire(message)],
     "tools": [for (final tool in tools) channelTool(tool)],
     "temperature": ?temperature,
+    // Always a number: the Swift half has to stop somewhere, and says the
+    // reply was cut off where it stopped here.
+    "maxTokens": outputLimit?.tokens ?? AppSettings.defaultResponseLength,
   });
 
   /// A message as the Swift half reads it.

@@ -1,9 +1,12 @@
 import "dart:async";
 import "dart:convert";
 
+import "package:flutter/foundation.dart" show visibleForTesting;
 import "package:http/http.dart" as http;
 
+import "../../../core/log.dart";
 import "../../../core/tls.dart";
+import "../../../domain/app_settings.dart";
 
 import "http_stream.dart";
 import "llm_client.dart";
@@ -22,9 +25,6 @@ class AnthropicClient implements LlmClient {
 
   static const _version = "2023-06-01";
 
-  /// Room for the reply itself, on top of any thinking budget.
-  static const _maxTokens = 8192;
-
   /// How much of the budget each effort buys. Anthropic takes a token count
   /// where the OpenAI shape takes a word, so the words are mapped onto counts.
   static const _thinkingBudget = {
@@ -33,6 +33,34 @@ class AnthropicClient implements LlmClient {
     "medium": 8192,
     "high": 16384,
   };
+
+  /// The least a reply is left beside the thinking, and Anthropic's own
+  /// smallest thinking budget.
+  static const _minReply = 1024;
+  static const _minThinking = 1024;
+
+  /// What a request asks for: `max_tokens`, and the thinking budget inside
+  /// it, which Anthropic requires to be below it. A fallback limit gives the
+  /// reply its room on top of the thinking, as the old fixed 8192 did; the
+  /// user's cap or the model's own limit is the whole, thinking inside it
+  /// with room left for the reply — and where there is not room for both,
+  /// thinking is not asked for.
+  @visibleForTesting
+  static ({int maxTokens, int? thinking}) budgetOf(
+    LlmOutputLimit limit,
+    int? thinking,
+  ) {
+    if (thinking == null) return (maxTokens: limit.tokens, thinking: null);
+    if (limit.isFallback) {
+      return (maxTokens: limit.tokens + thinking, thinking: thinking);
+    }
+    final room = limit.tokens - _minReply;
+    if (room < _minThinking) return (maxTokens: limit.tokens, thinking: null);
+    return (
+      maxTokens: limit.tokens,
+      thinking: thinking < room ? thinking : room,
+    );
+  }
 
   Map<String, String> get _auth => authOf(apiKey);
 
@@ -57,10 +85,13 @@ class AnthropicClient implements LlmClient {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
+    LlmOutputLimit? outputLimit,
   }) async* {
-    final budget = reasoningEffort == null
-        ? null
-        : _thinkingBudget[reasoningEffort] ?? 8192;
+    final (:maxTokens, thinking: budget) = budgetOf(
+      outputLimit ??
+          const LlmOutputLimit(length: AppSettings.defaultResponseLength),
+      reasoningEffort == null ? null : _thinkingBudget[reasoningEffort] ?? 8192,
+    );
     final system = joinedSystemText(messages);
 
     final response = await postStream(
@@ -69,7 +100,7 @@ class AnthropicClient implements LlmClient {
       headers: _headers,
       body: {
         "model": model,
-        "max_tokens": budget == null ? _maxTokens : budget + _maxTokens,
+        "max_tokens": maxTokens,
         if (system.isNotEmpty) "system": system,
         "messages": _encodeMessages(messages),
         if (tools.isNotEmpty)
@@ -311,9 +342,7 @@ class AnthropicEventReader {
     }
 
     return LlmCompletion(
-      // `max_tokens` is what the OpenAI shape calls `length`; the agent reads
-      // one name for "it was cut off before it could call a tool".
-      finishReason: _stopReason == "max_tokens" ? "length" : _stopReason,
+      stop: stopOf(_stopReason),
       usage: _inputTokens == null && _outputTokens == null
           ? null
           : LlmUsage(
@@ -330,6 +359,25 @@ class AnthropicEventReader {
         toolCalls: calls,
       ),
     );
+  }
+
+  /// Anthropic's `stop_reason` as an [LlmStop]. `pause_turn` is not mapped:
+  /// it is Anthropic's own server tools running long, and none are sent.
+  /// Claude CLI's stream is these same events, so it reads them here too.
+  LlmStop stopOf(String? reason) {
+    switch (reason) {
+      case "end_turn" || "stop_sequence" || null:
+        return LlmStop.answered;
+      case "tool_use":
+        return LlmStop.toolUse;
+      case "max_tokens":
+        return LlmStop.truncated;
+      case "refusal":
+        return LlmStop.refused;
+      default:
+        logFailure("llm", "unknown stop_reason $reason");
+        return LlmStop.answered;
+    }
   }
 }
 

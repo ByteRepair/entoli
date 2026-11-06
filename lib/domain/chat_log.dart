@@ -126,6 +126,19 @@ sealed class ChatRecord with _$ChatRecord {
     ContextUsage? context,
   }) = TurnEndRecord;
 
+  /// One model call of the reply [messageId] is over: who answered it and
+  /// what it took to write. Written as the call ends, beside its parts, so it
+  /// is on the log however the turn ends — closed, stopped, or never, the app
+  /// gone or the process killed. The reply's [Message.outputTokens] is the
+  /// sum of its records; its [Message.provider] and [Message.model] the
+  /// last's. [outputTokens] is null where the provider said nothing.
+  const factory ChatRecord.usage({
+    required String messageId,
+    String? provider,
+    String? model,
+    int? outputTokens,
+  }) = UsageRecord;
+
   /// Read [messageId] rather than whichever of its siblings was being read.
   /// Appended as the user cycles through the threads at a branch, so which one
   /// they were on survives a reload; the last one written wins, the way a
@@ -332,6 +345,16 @@ Replayed replayTree(Iterable<ChatRecord> records) {
           addressees: addressees,
           context: context ?? into.context,
         );
+
+      case UsageRecord(
+        :final messageId,
+        :final provider,
+        :final model,
+        :final outputTokens,
+      ):
+        final into = nodes[messageId];
+        if (into == null || into.role != MessageRole.assistant) continue;
+        nodes[messageId] = into.withUsage(provider, model, outputTokens);
 
       case RewindRecord(:final messageId):
         if (nodes.containsKey(messageId)) forget(messageId);

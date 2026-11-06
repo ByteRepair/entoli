@@ -110,6 +110,7 @@ class _SingleCallClient implements LlmClient {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
+    LlmOutputLimit? outputLimit,
   }) => _stream;
 
   @override

@@ -164,6 +164,7 @@ abstract class LocalInstance {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
+    LlmOutputLimit? outputLimit,
   });
 
   /// What makes one model's saved state unreadable by another, which the

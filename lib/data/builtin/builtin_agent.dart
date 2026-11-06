@@ -15,6 +15,7 @@ import "../../domain/permission.dart";
 import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
+import "../../domain/system_notification.dart";
 import "../../domain/tone.dart";
 import "../../domain/tool_arg.dart";
 import "../../domain/trigger_manager.dart" show TriggerRegistry;
@@ -192,6 +193,8 @@ class BuiltinAgent implements Turn {
     this.classifier,
     this.temperature,
     this.reasoningEffort,
+    this.outputLimit,
+    this.provider,
     this.subAgents,
     this.rateLimitGate,
     this.caps = AgentCapabilities.full,
@@ -368,6 +371,14 @@ class BuiltinAgent implements Turn {
   final BuiltinOptions options;
   final double? temperature;
   final String? reasoningEffort;
+
+  /// How long each reply may be; see [LlmOutputLimit].
+  final LlmOutputLimit? outputLimit;
+
+  /// The id of the provider [model] is reached through, said with each reply
+  /// so the log records who wrote it. Null where nobody records it (a
+  /// sub-agent's own transcript).
+  final String? provider;
 
   /// How the agent handles a command before it runs, where the turn keeps a
   /// mode of its own (a sub-agent's); null reads the chat's live from
@@ -792,15 +803,41 @@ class BuiltinAgent implements Turn {
   /// progress report, and not a loop against a model that means to stop.
   static const maxStopNudges = 2;
 
-  /// The first offered tool's word on what is unfinished; see
-  /// [AgentTool.beforeStop].
-  Future<String?> _unfinished() async {
+  /// What to tell a reply that ended with no tool call, where its work is not
+  /// done: the first offered tool's word on what is left (see
+  /// [AgentTool.beforeStop]), which says the most, or else the provider's —
+  /// a reply it marked [LlmStop.unfinished].
+  Future<String?> _unfinished(LlmStop stop) async {
     for (final tool in _tools) {
       final left = await tool.beforeStop(this);
       if (left != null) return left;
     }
+    if (stop == LlmStop.unfinished) return saidButNotDone;
     return null;
   }
+
+  /// Why a reply that ended [stop] is not one the turn can go on from, or
+  /// null for one it can.
+  String? _endedShort(LlmStop stop) => switch (stop) {
+    LlmStop.truncated => switch (outputLimit) {
+      LlmOutputLimit(capped: true, :final length) =>
+        "The reply was cut off at your maximum response length "
+            "($length tokens). Raise it under Settings > LLMs, or press "
+            "Continue.",
+      _ =>
+        "The reply was cut off at the model's maximum response length. "
+            "Press Continue to carry on.",
+    },
+    LlmStop.refused => "The provider refused to answer this request.",
+    _ => null,
+  };
+
+  @visibleForTesting
+  static final saidButNotDone = systemNotification([
+    "Your last reply said what you would do next but made no tool call, so "
+        "nothing was done. Do it now, or, if you meant to stop, give the user "
+        "your answer.",
+  ]);
 
   /// The running turn's rebuild, set by [_recorded] and called by the loop.
   void Function() _sayWhatWasSaid = _nothingSaidYet;
@@ -840,15 +877,26 @@ class BuiltinAgent implements Turn {
       final completion = _completion;
       if (completion == null) break;
 
+      // A reply cut off or refused is not an answer, and its calls do not
+      // run: the last of a cut-off reply's may be half its arguments. The
+      // turn ends failed, so the chat offers to carry it on from the text
+      // that did arrive. Not retryable: the same request meets the same
+      // limit, or the same refusal.
+      if (_endedShort(completion.stop) case final why?) {
+        yield ErrorEvent(why);
+        break;
+      }
+
       // A reply with no tool calls is the finished answer — the text was
       // already streamed as TextDelta by _query. This is the native API
       // contract models are trained on, and works with or without a shell.
-      // The one exception is a plan under way with tasks left: a model that
-      // stops to report progress is told what remains, a bounded number of
-      // times, and stopping to ask is `ask_user`'s.
+      // The exceptions are work known to be unfinished — a plan under way with
+      // tasks left, or a reply the provider marked as not its answer: the
+      // model is told, a bounded number of times, and stopping to ask is
+      // `ask_user`'s.
       if (completion.message.toolCalls.isEmpty) {
         final left = _nudges < maxStopNudges && step < options.stepLimit - 1
-            ? await _unfinished()
+            ? await _unfinished(completion.stop)
             : null;
         if (left == null) break;
         _nudges++;
@@ -1147,6 +1195,7 @@ class BuiltinAgent implements Turn {
           tools: [for (final tool in _tools) tool.definition],
           temperature: temperature,
           reasoningEffort: reasoningEffort,
+          outputLimit: outputLimit,
         )) {
           if (_cancelled) return;
           switch (chunk) {
@@ -1230,7 +1279,12 @@ class BuiltinAgent implements Turn {
               if (chunk.usage != null && onUsage != null) {
                 onUsage!(chunk.usage!);
               }
-              yield ContextEvent(_contextOf(chunk));
+              yield ContextEvent(
+                _contextOf(chunk),
+                provider: provider,
+                model: model,
+                outputTokens: chunk.usage?.outputTokens,
+              );
               return;
           }
         }

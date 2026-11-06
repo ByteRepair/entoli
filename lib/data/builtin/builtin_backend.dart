@@ -383,6 +383,11 @@ class BuiltinBackend implements AgentBackend {
       final reasoningEffort = target.info?.reasoning == true
           ? settings.reasoningEffort.wire
           : null;
+      final outputLimit = LlmOutputLimit(
+        length: settings.responseLength,
+        capped: settings.capResponseLength,
+        modelLimit: target.info?.output,
+      );
       final runner = SubAgentRunner(
         client: gatedClient,
         shell: shell,
@@ -391,6 +396,7 @@ class BuiltinBackend implements AgentBackend {
         environment: settings.environment,
         model: target.modelId,
         reasoningEffort: reasoningEffort,
+        outputLimit: outputLimit,
         library: libraryFor(project),
         options: options,
         webSearch: webSearch,
@@ -543,7 +549,9 @@ class BuiltinBackend implements AgentBackend {
         projectWorkspace: projectWorkspace,
         environment: settings.environment,
         model: target.modelId,
+        provider: settings.provider,
         reasoningEffort: reasoningEffort,
+        outputLimit: outputLimit,
         // One attempt per request: the controller retries a failed turn itself,
         // and the two retrying would be the same patience twice. Sub-agents
         // keep the default — see the parent runner below. The step limit is

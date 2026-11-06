@@ -46,6 +46,37 @@ void main() {
     expect(textOf(messages[1]), "hi");
   });
 
+  test("a reply's usage records add up its tokens, and the last says who "
+      "wrote it, closed or not", () {
+    final reply = replay([
+      message("m1"),
+      part("m1", 0, "hello"),
+      message("m2", MessageRole.assistant),
+      part("m2", 0, "hi"),
+      const ChatRecord.usage(
+        messageId: "m2",
+        provider: "p1",
+        model: "m-old",
+        outputTokens: 30,
+      ),
+      // A call whose provider reported nothing keeps what went before.
+      const ChatRecord.usage(messageId: "m2", provider: "p1", model: "m-old"),
+      const ChatRecord.turnEnd(messageId: "m2", reason: TurnEnd.error),
+      // Carried on: the next attempt's calls add to the first's.
+      const ChatRecord.usage(
+        messageId: "m2",
+        provider: "p1",
+        model: "m-new",
+        outputTokens: 12,
+      ),
+    ]).last;
+
+    expect(
+      (reply.provider, reply.model, reply.outputTokens),
+      ("p1", "m-new", 42),
+    );
+  });
+
   test("a part written again at the same index supersedes it", () {
     final messages = replay([
       message("m1", MessageRole.assistant),

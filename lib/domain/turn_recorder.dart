@@ -173,8 +173,26 @@ class TurnRecorder {
             answer: "asked",
           ),
         );
-      case ContextEvent(:final usage):
+      case ContextEvent(
+        :final usage,
+        :final provider,
+        :final model,
+        :final outputTokens,
+      ):
         _context = usage;
+        // On the log as the call ends, behind the parts it wrote: see
+        // [UsageRecord].
+        flushDeltas();
+        final logging = _messageId;
+        if (_logs && logging != null) {
+          final record = ChatRecord.usage(
+            messageId: logging,
+            provider: provider,
+            model: model,
+            outputTokens: outputTokens,
+          );
+          unawaited(_enqueue(() => _appendChanged(logging, then: [record])));
+        }
       case QuestionRequestEvent():
       case SubAgentStartEvent():
       case SubAgentEndEvent():

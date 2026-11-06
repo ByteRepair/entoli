@@ -142,6 +142,7 @@ class TurnsSection extends ConsumerWidget {
         const _MaxStepsField(),
         const _TotalContextField(),
         const _AutoCompactField(),
+        const _ResponseLengthField(),
       ],
     );
   }
@@ -261,6 +262,80 @@ class _TotalContextField extends ConsumerWidget {
                 );
           },
         ),
+      ),
+    );
+  }
+}
+
+/// How long one reply may be. The number is always in use: off, it is what a
+/// model whose own limit models.dev does not give is held to; on, it caps
+/// every model's reply. Codex is the one provider it cannot reach — Codex
+/// builds its own requests and offers no setting for their length.
+class _ResponseLengthField extends ConsumerWidget {
+  const _ResponseLengthField();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final capped = ref.watch(
+      appSettingsProvider.select((s) => s.capResponseLength),
+    );
+    final length = ref.watch(
+      appSettingsProvider.select((s) => s.responseLength),
+    );
+    return LabelledField(
+      label: "Maximum response length",
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SwitchListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            title: const Text("Apply a maximum response length"),
+            value: capped,
+            onChanged: (value) => ref
+                .read(appSettingsProvider.notifier)
+                .setCapResponseLength(value),
+          ),
+          ResettableField(
+            onReset: () => ref
+                .read(appSettingsProvider.notifier)
+                .setResponseLength(AppSettings.defaultResponseLength),
+            resetLabel: "${AppSettings.defaultResponseLength.inK} (default)",
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+              title: Text("${length.inK} tokens"),
+              subtitle: const Text("Tap to change"),
+              onTap: () async {
+                final text = await promptForText(
+                  context,
+                  title: "Maximum response length",
+                  initial: "$length",
+                  hint: "Tokens, at least ${AppSettings.minResponseLength}",
+                  confirmLabel: "Save",
+                );
+                if (text == null || !context.mounted) return;
+                final parsed = int.tryParse(text.replaceAll(",", "").trim());
+                if (parsed == null) return;
+                ref
+                    .read(appSettingsProvider.notifier)
+                    .setResponseLength(
+                      parsed.clamp(
+                        AppSettings.minResponseLength,
+                        AppSettings.maxResponseLength,
+                      ),
+                    );
+              },
+            ),
+          ),
+          Text(
+            capped
+                ? "Every reply is cut off at ${length.inK} tokens, whatever "
+                      "the model could write. Not applied to Codex CLI, "
+                      "which sets its own."
+                : "Each model writes up to its own limit. ${length.inK} "
+                      "tokens is used for a model whose limit isn't known.",
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
       ),
     );
   }

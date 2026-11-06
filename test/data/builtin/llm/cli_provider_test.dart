@@ -471,7 +471,7 @@ void main() {
           },
         ], "tool_use");
         final first = await firstStep;
-        expect(first.finishReason, "tool_use");
+        expect(first.stop, LlmStop.toolUse);
         expect(first.message.text, "calling");
         final call = first.message.toolCalls.single;
         expect(
@@ -548,6 +548,47 @@ void main() {
         await bridge.closed;
       },
     );
+
+    test("the user's cap reaches the program, and only where they set one; "
+        "a different cap is a different program", () async {
+      final client = provider.client(null);
+
+      /// One reply under [limit], from the program it started.
+      Future<(_FakeProcess, LlmMessage)> answered(
+        List<LlmMessage> messages,
+        LlmOutputLimit limit,
+      ) async {
+        final reply = client
+            .stream(messages, model: "sonnet", outputLimit: limit)
+            .last;
+        final process = await launch.started.next;
+        await process.sent.next;
+        process.reply([
+          {"type": "text", "text": "ok"},
+        ], "end_turn");
+        return (process, ((await reply) as LlmCompletion).message);
+      }
+
+      final (unasked, said) = await answered([
+        _system,
+        ask,
+      ], const LlmOutputLimit(length: 4096, modelLimit: 64000));
+      expect(
+        unasked.environment.containsKey("CLAUDE_CODE_MAX_OUTPUT_TOKENS"),
+        isFalse,
+      );
+
+      // The same conversation carried on, under a cap: not the same program.
+      final (capped, _) = await answered([
+        _system,
+        ask,
+        said,
+        const LlmMessage(role: LlmRole.user, text: "again"),
+      ], const LlmOutputLimit(length: 4096, capped: true));
+      expect(capped.environment["CLAUDE_CODE_MAX_OUTPUT_TOKENS"], "4096");
+      expect(launch.calls, 2);
+      client.close();
+    });
 
     test("a program that ends mid-call says so, with what it said", () async {
       final client = provider.client(null);
@@ -737,7 +778,7 @@ void main() {
         call(process, 7, "c1", "a");
         call(process, 8, "c2", "b");
         final calls = await firstStep;
-        expect(calls.finishReason, "tool_use");
+        expect(calls.stop, LlmStop.toolUse);
         expect(calls.message.text, "calling");
         expect(
           [for (final c in calls.message.toolCalls) (c.id, c.argumentsJson)],
@@ -773,7 +814,7 @@ void main() {
         });
         completed(process);
         final second = await secondStep;
-        expect(second.finishReason, "stop");
+        expect(second.stop, LlmStop.answered);
         expect(second.message.text, "echo said one and two");
         expect(
           (second.usage?.inputTokens, second.usage?.cacheReadTokens),
@@ -840,9 +881,50 @@ void main() {
         result("c1", "one"),
       ]);
       expect((await process.sent.next)["id"], 7);
-      expect(second.finishReason, "tool_use");
+      expect(second.stop, LlmStop.toolUse);
       expect([for (final c in second.message.toolCalls) c.id], ["c2"]);
       expect(launch.calls, 1);
+      client.close();
+    });
+
+    test("a turn that ends on commentary is unfinished, and the next turn "
+        "starts with no phase", () async {
+      void message(_FakeProcess process, String text, String? phase) {
+        delta(process, text);
+        // A message never finished says no phase, and leaves none.
+        if (phase == null) return;
+        process.say({
+          "method": "item/completed",
+          "params": {
+            "item": {"type": "agentMessage", "text": text, "phase": phase},
+          },
+        });
+      }
+
+      final client = provider.client(null);
+      final firstStep = step(client, [_system, ask]);
+      final (process, _) = await opened();
+      await turn(process);
+      message(process, "I'll check the guidance.", "commentary");
+      completed(process);
+      final first = await firstStep;
+      expect(first.stop, LlmStop.unfinished);
+
+      // No phase said straight after commentary: the last turn's is not kept.
+      final history = [_system, ask, first.message];
+      for (final (phase, text) in [
+        (null, "There is none."),
+        ("final_answer", "Still none."),
+      ]) {
+        history.add(LlmMessage(role: LlmRole.user, text: "and $phase"));
+        final next = step(client, history);
+        await turn(process);
+        message(process, text, phase);
+        completed(process);
+        final reply = await next;
+        expect(reply.stop, LlmStop.answered, reason: "$phase");
+        history.add(reply.message);
+      }
       client.close();
     });
 

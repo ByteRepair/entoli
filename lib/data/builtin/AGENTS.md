@@ -24,17 +24,41 @@ tool call
 is a format error it retries — so the one behaviour the old name would have
 predicted is the one this does backwards.
 
-The one exception is work a tool knows is unfinished. Before a reply with no
-tool call ends the turn, the loop asks the tools it offered
-(`AgentTool.beforeStop`), and the first answer goes in as a
-`<system-notification>` steer and the turn carries on — at most
-`maxStopNudges` (two) times a turn, and never on the last step: the budget is
-the loop's, what is unfinished is the tool's. The plan's is the one today:
+The exceptions are work known to be unfinished, by a tool or by the provider.
+Before a reply with no tool call ends the turn, the loop asks the tools it
+offered (`AgentTool.beforeStop`), and failing them reads the reply's
+`LlmStop`; the first answer goes in as a `<system-notification>` steer and the
+turn carries on — at most `maxStopNudges` (two) times a turn, and never on the
+last step: the budget is the loop's, what is unfinished is the tool's or the
+provider's.
+
+The tools' is the plan's today:
 where `PLAN.md` has a task in progress (`planUnderWay`) — approved and its
 work taken — a stop is in the middle rather than an answer, and `plan_done`
 says what is left. A model that stopped to report progress
 was the "why did you stop?" every long task ended in; one that means to stop
 still can, and one that needs the user asks with `ask_user`. See "The plan".
+
+The provider's is `LlmStop.unfinished`: a reply the model itself labelled as
+not its answer. Only Codex CLI can say so — its messages carry a `phase`, and
+a turn that ends on `commentary` ended on what the model was about to do,
+which Codex itself takes as the end. No other API labels its words, and
+nothing guesses it from the words: a model that announces work and stops is
+the prompt's to prevent ("Finishing a turn" says a reply either acts or ends).
+
+How a reply ended is `LlmStop`, one vocabulary that each client maps its own
+wire word into (`stopOf` on `OpenAiClient`, `AnthropicEventReader` and
+`ChannelGeneration`); a word a client does not know is logged and read as an
+answer.
+
+Two endings are not answers at all. A reply cut off at its length limit
+(`truncated`) or refused by the provider (`refused`) runs none of its calls —
+a cut-off reply's last may be half its arguments — and the turn ends with an
+error: `TurnEnd.error`, which the chat offers to Continue, carrying on from the
+text that did arrive. Neither is retryable, so the automatic retry rounds leave
+it alone: the same request meets the same limit, or the same refusal. A cut-off
+under the user's cap names the cap and where to raise it; see "How long a
+reply may be" in `lib/data/builtin/llm/AGENTS.md`.
 
 What is not upstream's at all, and it is most of this directory: cost tracking
 and the cost limit that is upstream's real budget (this counts steps instead),

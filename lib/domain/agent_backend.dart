@@ -2,7 +2,8 @@ import "dart:async";
 
 import "package:flutter/foundation.dart" show ValueListenable;
 
-import "../domain/app_settings.dart" show ImageQuality, ReasoningEffort;
+import "../domain/app_settings.dart"
+    show AppSettings, ImageQuality, ReasoningEffort;
 import "../domain/ask.dart";
 import "../domain/shell_job.dart";
 import "../domain/builtin_project.dart";
@@ -102,11 +103,25 @@ class ShellOutputEvent extends AgentEvent {
   final String text;
 }
 
-/// What a request held, once its reply is in. The newest of a turn is the one
-/// its close writes; see [Message.context].
+/// What a request held, once its reply is in, and who answered it. The newest
+/// of a turn is the one its close writes; see [Message.context].
 class ContextEvent extends AgentEvent {
-  const ContextEvent(this.usage);
+  const ContextEvent(
+    this.usage, {
+    this.provider,
+    this.model,
+    this.outputTokens,
+  });
   final ContextUsage usage;
+
+  /// The provider's id and the model that wrote the reply; see
+  /// [Message.provider].
+  final String? provider;
+  final String? model;
+
+  /// What the reply cost to write, where the provider said; see
+  /// [Message.outputTokens].
+  final int? outputTokens;
 }
 
 /// An HTML artifact was rendered and saved. Persisted as a [MessagePart] rather
@@ -459,6 +474,12 @@ class TurnSettings {
   /// is the floor this can only name a value for, not widen.
   final int? turnMaxSteps;
 
+  /// The user's Maximum response length, and whether it caps every reply
+  /// rather than standing in for a model whose own limit is unknown. The
+  /// backend puts it beside the model's own limit for the client to read.
+  final int responseLength;
+  final bool capResponseLength;
+
   /// What the permission pages set, read whenever the gate asks rather than
   /// copied here: a rule saved mid-turn applies to the next call.
   final PolicyReader policy;
@@ -483,6 +504,8 @@ class TurnSettings {
     this.environment = const {},
     this.omada = false,
     this.turnMaxSteps,
+    this.responseLength = AppSettings.defaultResponseLength,
+    this.capResponseLength = false,
     this.tone = Tone.none,
     this.citations = false,
     this.policy = noPolicy,

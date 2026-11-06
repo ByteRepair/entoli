@@ -251,8 +251,11 @@ the chat back on the app's. Under it the **Agent** — command
 approval mode and the classifier model, which travel together because auto
 mode is unusable without one, and the standing permission rules the agent
 consults before any of it — and a **Turns** section — how a turn runs and is
-bounded: the retry rounds, the step limit, the Total Context window and the
-Auto-compact switch and share. The Agent was under General until it moved
+bounded: the retry rounds, the step limit, the Total Context window, the
+Auto-compact switch and share, and the Maximum response length, a number that
+is a fallback for models of unknown limit or, switched on, a cap on every
+reply (see "How long a reply may be" in `lib/data/builtin/llm/AGENTS.md`). The
+Agent was under General until it moved
 beside the model it runs. How long the model thinks and the image model's
 Quality are both a `ThinkingSlider` (see `lib/ui/widgets/AGENTS.md`). **Memory** is
 what one conversation leaves the others: the two `AGENTS.md` files every turn

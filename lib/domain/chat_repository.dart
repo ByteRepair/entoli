@@ -515,6 +515,8 @@ class ChatRepository {
       environment: projectSettings.environment ?? const {},
       policy: () => _policyOf(chatId),
       turnMaxSteps: projectSettings.turnMaxSteps ?? settings.turnMaxSteps,
+      responseLength: settings.responseLength,
+      capResponseLength: settings.capResponseLength,
       // The project's wording answers over the app's, like the step limit.
       tone: projectSettings.tone ?? settings.tone,
       citations: projectSettings.citations ?? settings.citations,

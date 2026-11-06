@@ -134,6 +134,41 @@ gate is distinct from `maxConcurrentSubAgents` (8), which bounds long-lived
 agent parallelism — one sub-agent makes up to `stepLimit` calls. Null for agents
 built against a raw client (tests), where the per-agent retry path governs.
 
+## How long a reply may be
+
+Settings > LLMs > Maximum response length is two settings: a number (8192 by
+default, at least 1024) and a switch over it. Off, every model writes to its
+own limit — models.dev's `limit.output`, the catalog the app already keeps —
+and the number is only the fallback for a model the catalog does not list. On,
+the number caps every reply, whatever the model could write.
+
+The backend puts the facts beside each other once per turn — the number, the
+switch, and the model's own limit — as an `LlmOutputLimit` on every request,
+the sub-agents' included, and each client decides what its API is sent:
+
+- **Anthropic** must name `max_tokens`, so it sends the cap, else the model's
+  own, else the fallback. Thinking goes inside a known limit, leaving the reply
+  at least 1024; a fallback gives the reply its own room on top of the thinking,
+  as the old fixed 8192 did; a cap too small for both drops the thinking rather
+  than send a request Anthropic refuses.
+- **The OpenAI shape** sends nothing unless capped: unasked, the model writes to
+  its own limit, and there is no number to guess. Capped, `max_tokens` —
+  `max_completion_tokens` on OpenAI's own API (`maxTokensField`), which its
+  reasoning models require. llama.cpp is this client too.
+- **Claude CLI** is told the cap as `CLAUDE_CODE_MAX_OUTPUT_TOKENS` when it
+  starts, so a session is reused only under the same cap; uncapped, Claude Code
+  writes to its own model's limit.
+- **MLX** is always sent a number, its Swift half having to stop somewhere, and
+  says `length` when a reply reached it. **Apple's model** is sent the cap alone,
+  as `maximumResponseTokens`, and says `length` where its counts show the reply
+  reached it.
+- **Codex CLI** is the exception the settings row names: Codex builds its own
+  requests, which carry no length field, and its config has no setting for one.
+
+A high `max_tokens` costs nothing it does not use: Anthropic's output rate
+limit counts the tokens generated, not the ones asked for. What a high ceiling
+does allow is a reply that runs away, which the switch is for.
+
 ## How much of an allowance is spent
 
 `LlmProvider.usage` answers it, as a list of `ProviderUsage`s

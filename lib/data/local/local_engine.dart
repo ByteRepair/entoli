@@ -216,6 +216,7 @@ class _NoClient implements LlmClient {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
+    LlmOutputLimit? outputLimit,
   }) =>
       Stream.error(const LlmException("This build runs no on-device models."));
 

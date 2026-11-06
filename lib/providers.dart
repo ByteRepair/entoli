@@ -791,6 +791,16 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setTotalContext(int value) =>
       _update((s) => s.totalContext = value);
 
+  /// Whether every reply is held to the response length, over each model's
+  /// own limit.
+  Future<void> setCapResponseLength(bool value) =>
+      _update((s) => s.capResponseLength = value);
+
+  /// The most tokens one reply may run to: the cap, or the fallback for a
+  /// model whose limit is not known.
+  Future<void> setResponseLength(int value) =>
+      _update((s) => s.responseLength = value);
+
   /// Whether `@path` references inside an AGENTS.md pull in more files.
   Future<void> setInstructionImports(bool value) =>
       _update((s) => s.instructionImports = value);

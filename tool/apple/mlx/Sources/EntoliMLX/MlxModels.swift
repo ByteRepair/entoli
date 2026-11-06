@@ -31,14 +31,18 @@ public enum Mlx {
   /// **The model is the one `load` kept, never loaded here.** Dart's
   /// residency is the one account of what is loaded, and a generation that
   /// loaded behind it would hold weights that account does not know of.
+  ///
+  /// `maxTokens` is the most the reply may run to, the app's Maximum response
+  /// length or the model's own; the reply that reaches it was cut off there.
   public static func generate(
     _ id: String,
-    messages: [MlxMessage], tools: [MlxTool], temperature: Double?,
+    messages: [MlxMessage], tools: [MlxTool], temperature: Double?, maxTokens: Int,
     emit: @escaping @Sendable (MlxEvent) -> Void
   ) async throws {
     guard let conversation = await MlxModels.shared.loaded(id) else { throw MlxNotLoaded() }
     try await conversation.generate(
-      messages: messages, tools: tools, temperature: temperature, emit: emit)
+      messages: messages, tools: tools, temperature: temperature, maxTokens: maxTokens,
+      emit: emit)
   }
 
   /// Writes what `id` holds to `path`. False where it holds nothing.
