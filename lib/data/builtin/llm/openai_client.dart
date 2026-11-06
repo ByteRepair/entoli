@@ -63,7 +63,8 @@ class OpenAiClient implements LlmClient {
   String? get unsignedCallSignature => null;
 
   /// The headers a reply arrived with, for a host that says something on
-  /// them worth keeping — Groq's allowances. Called before the body is read.
+  /// them worth keeping — a `RateLimitClient`'s limits. Called before the
+  /// body is read.
   @protected
   void responded(Map<String, String> headers) {}
 

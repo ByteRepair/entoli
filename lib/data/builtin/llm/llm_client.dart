@@ -302,7 +302,7 @@ abstract class LlmClient {
 /// receives, where its provider has nothing to ask. Read by the registry off
 /// the client turns already run over, never one built to ask.
 abstract interface class ReportsUsage {
-  /// What the last reply said. Empty before one.
+  /// What the last reply said, while it is still true. Empty before one.
   List<ProviderUsage> get reportedUsage;
 }
 

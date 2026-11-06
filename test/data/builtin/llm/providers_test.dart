@@ -35,10 +35,11 @@ void main() {
       );
     });
 
-    test("OpenAI uses its usage-reporting client", () {
+    test("OpenAI and Groq keep what their replies say of their limits", () {
       final provider = providerOf(OpenAiProvider.preset);
       expect(provider, isA<OpenAiProvider>());
       expect(provider.client(null), isA<ReportsUsage>());
+      expect(const GroqProvider().client(null), isA<ReportsUsage>());
     });
 
     test("every preset is read back as itself", () {

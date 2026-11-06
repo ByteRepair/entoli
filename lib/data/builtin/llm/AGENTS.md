@@ -143,17 +143,12 @@ window, and nothing at all for an empty list.
   it and whether it resets daily, weekly or monthly. Its periods are UTC's, so
   the reset is computed; a key with no cap has nothing to show.
 - **Groq** — no endpoint, but every reply carries documented
-  `x-ratelimit-*` headers. `OpenAiClient.responded` hands a reply's headers to
-  a subclass, and `GroqClient` keeps the requests-per-day pair from the last
-  one as a `ReportsUsage` — a client that learns usage from its replies rather
-  than a provider that asks. Nothing until a reply has arrived; the tokens pair
-  is per minute, a pace rather than an allowance, and is left out.
-- **OpenAI** — its documented response headers carry request and token rate
-  limit/remaining pairs, including project-token limits where present.
-  `OpenAiUsageClient` retains those pairs from its latest response. This is
-  rate-limit capacity, not account spend or completion-token usage; no separate
-  endpoint or elevated key is needed. Custom OpenAI-compatible endpoints do not
-  get this client.
+  `x-ratelimit-*` headers: the requests a day and the tokens a minute.
+- **OpenAI** — the same headers, documented, with the requests and tokens a
+  minute and the project's tokens a minute where a project-scoped limit
+  applies. Its spend is in usage reports that want an admin key and cover the
+  whole organisation, so the paces are what a normal key has. Only the preset
+  gets this; a custom OpenAI-compatible endpoint says nothing of the sort.
 - **Ollama Cloud** — `ollama.com/api/balance`, documented (outside the `/v1`
   the chat endpoint is under): the plan's included credits, an allowance in
   dollars that resets at the end of its monthly period, and the purchased
@@ -162,6 +157,20 @@ window, and nothing at all for an empty list.
   percentages remaining in the included credits' place, which become shares.
   `/api/usage` is not it: that is the request history, and the session and
   weekly fractions it once carried went in October 2026.
+
+The two that say it on their replies are one `RateLimitClient` each, a
+`ReportsUsage` — a client that learns usage from its replies rather than a
+provider that asks. `OpenAiClient.responded` hands it a reply's headers, and
+the subclass names the pairs its host documents and what period each is in,
+since the headers' names do not say. Nothing until a reply has arrived.
+
+**A pace is shown, and only while it is true.** A limit counted per minute is
+not an allowance: it is how fast, not how much, and the reading a reply left
+stops being true within the minute. It is still worth seeing — it is what a
+turn that waits on a 429 ran into — so it is shown, labelled with its minute,
+and a reading is dropped once the reset its reply named has passed, when the
+limit is whole again. The same holds for every window read off a reply. A pace
+with no reset is not kept, since nothing says how old it is.
 
 Z.ai's coding-plan quota, Claude CLI's `rate_limit_event` and Codex's
 `account/rateLimits/read` exist and are left out: none is documented, and
