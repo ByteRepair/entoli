@@ -56,6 +56,8 @@ import "package:agent_chat/domain/shell.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/domain/project.dart" show ProjectRef;
+import "package:agent_chat/data/builtin/llm/providers/presets.dart"
+    show CliProvider;
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
@@ -205,6 +207,7 @@ class TestApp {
     Future<bool> Function(String apiKey)? acceptsKey,
     AgentBrowser Function(AppConfig config)? browser,
     LiquidGlass liquidGlass = const LiquidGlass(),
+    List<CliProvider>? clis,
   }) {
     final config = tempConfig();
     seedCatalog(testProviderModels);
@@ -270,6 +273,11 @@ class TestApp {
           activityCatalogProvider.overrideWithValue(const ChatActivities()),
           shellProvider.overrideWithValue(shell ?? _defaultShell(proot, abi)),
           appConfigProvider.overrideWithValue(config),
+          // Installed and signed in unless a test says otherwise, and running
+          // nothing either way.
+          cliProgramsProvider.overrideWithValue(
+            clis ?? [FakeCli.claude(), FakeCli.codex()],
+          ),
           if (browser != null)
             agentBrowserProvider.overrideWithValue(browser(config)),
           appSecretsProvider.overrideWithValue(appSecrets),

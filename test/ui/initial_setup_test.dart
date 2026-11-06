@@ -7,6 +7,8 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/browser/cdp_browser.dart";
+import "package:agent_chat/data/builtin/llm/providers/presets.dart"
+    show CliProvider;
 import "package:agent_chat/domain/agent_browser.dart";
 import "package:agent_chat/domain/download.dart";
 
@@ -15,6 +17,7 @@ import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/initial_setup_gate.dart";
 import "package:agent_chat/ui/settings/downloads.dart" show DownloadState;
 
+import "../fakes.dart";
 import "../harness.dart";
 
 void main() {
@@ -27,14 +30,16 @@ void main() {
   String? browser() => app.container.read(appSettingsProvider).agentBrowser;
 
   /// A desktop: a browser the app launches, with [helium] as its download.
-  TestApp desktop(FakeHelium helium) => TestApp.create(
-    browser: (config) => CdpBrowser(
-      browserDir: p.join(config.dataDir, "browser"),
-      picked: () => AppSettings.load(config).agentBrowser,
-      visible: () => false,
-      embedded: helium,
-    ),
-  );
+  TestApp desktop(FakeHelium helium, {List<CliProvider>? clis}) =>
+      TestApp.create(
+        clis: clis,
+        browser: (config) => CdpBrowser(
+          browserDir: p.join(config.dataDir, "browser"),
+          picked: () => AppSettings.load(config).agentBrowser,
+          visible: () => false,
+          embedded: helium,
+        ),
+      );
 
   String? rootfs() => app.container.read(appSettingsProvider).rootfsId;
 
@@ -131,6 +136,26 @@ void main() {
     expect(browser(), embeddedBrowserId);
     expect(find.text("tour"), findsOneWidget);
   });
+
+  // Each program the tour signs a plan in with is Entoli's own copy,
+  // installed one after the other on the same screen before the tour.
+  testWidgets("a desktop installs its own copy of each CLI before the tour", (
+    tester,
+  ) async {
+    final claude = FakeCli.claude(installed: false)..installing = Completer();
+    final codex = FakeCli.codex(installed: false);
+    app = desktop(FakeHelium()..installedVersion = "1", clis: [claude, codex]);
+    await app.pump(tester, gate);
+    await settleIo(tester, least: 3);
+
+    expect(find.textContaining("Installing Claude CLI"), findsOneWidget);
+    expect(find.text("tour"), findsNothing);
+
+    claude.installing!.complete();
+    await settleIo(tester, least: 3);
+    expect([claude.installs, codex.installs], [1, 1]);
+    expect(find.text("tour"), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   testWidgets("a Helium already on disk is only picked", (tester) async {
     app = desktop(FakeHelium()..installedVersion = "1");

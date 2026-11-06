@@ -1,7 +1,9 @@
 import "dart:async";
 import "dart:convert";
+import "dart:ffi" show Abi;
 import "dart:io";
 
+import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
 import "../../../../core/log.dart";
@@ -41,7 +43,7 @@ class CodexCliProvider extends CliProvider with OfferedByName {
   String get defaultCommand => "codex";
 
   @override
-  String get account => "Uses your ChatGPT account";
+  String get planName => "ChatGPT";
 
   @override
   String get serviceName => "ChatGPT";
@@ -51,6 +53,65 @@ class CodexCliProvider extends CliProvider with OfferedByName {
 
   @override
   String get workFolder => "codex-cli";
+
+  @override
+  List<String> get statusArguments => const ["login", "status"];
+
+  /// The ChatGPT sign-in, whose page hands back to a server the program
+  /// runs on `localhost:1455` for as long as it waits.
+  @override
+  List<String> get signInArguments => const ["login"];
+
+  /// OpenAI's newest release on GitHub. The API rather than the page's
+  /// redirect: it is what states each asset's SHA-256.
+  static final latestUrl = Uri.parse(
+    "https://api.github.com/repos/openai/codex/releases/latest",
+  );
+
+  @override
+  Future<CliRelease?> latestRelease(http.Client client) async {
+    final triple = tripleOf(CliProvider.abi);
+    if (triple == null) return null;
+    final windows = triple.endsWith("windows-msvc");
+    final name = windows ? "codex-$triple.exe.zip" : "codex-$triple.tar.gz";
+    final release = await LlmProvider.getJson(
+      latestUrl,
+      headers: const {"Accept": "application/vnd.github+json"},
+      httpClient: client,
+    );
+    final asset = switch (release["assets"]) {
+      final List<dynamic> assets =>
+        assets
+            .whereType<Map<String, dynamic>>()
+            .where((a) => a["name"] == name)
+            .firstOrNull,
+      _ => null,
+    };
+    if (asset == null) return null;
+    final digest = asset["digest"];
+    if (digest is! String || !digest.startsWith("sha256:")) {
+      throw FormatException("$name has no SHA-256 stated beside it");
+    }
+    return CliRelease(
+      version: "${release["tag_name"]}",
+      url: Uri.parse(asset["browser_download_url"] as String),
+      sha256: digest.substring("sha256:".length),
+      packing: windows ? const ZipProgram() : const TarGzProgram(),
+      bytes: asset["size"] as int?,
+    );
+  }
+
+  /// The target [abi]'s build is named for: musl on Linux, which runs on
+  /// either C library; null for a machine OpenAI builds nothing for.
+  static String? tripleOf(Abi abi) => switch (abi) {
+    Abi.macosArm64 => "aarch64-apple-darwin",
+    Abi.macosX64 => "x86_64-apple-darwin",
+    Abi.linuxX64 => "x86_64-unknown-linux-musl",
+    Abi.linuxArm64 => "aarch64-unknown-linux-musl",
+    Abi.windowsX64 => "x86_64-pc-windows-msvc",
+    Abi.windowsArm64 => "aarch64-pc-windows-msvc",
+    _ => null,
+  };
 
   @override
   String get bundler => "the ChatGPT app";

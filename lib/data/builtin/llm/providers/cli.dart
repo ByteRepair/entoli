@@ -1,18 +1,28 @@
 import "dart:async";
 import "dart:convert";
+import "dart:ffi" show Abi;
 import "dart:io";
 
 import "package:collection/collection.dart";
 import "package:flutter/foundation.dart" show mustCallSuper, protected;
+import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
 import "../../../../core/log.dart";
 import "../../../../core/platform/form_factor.dart";
+import "../../../../core/tls.dart";
+import "../../../../domain/download.dart";
 import "../../../../domain/model_capability.dart";
 import "../../../../domain/model_registry.dart";
+import "../../../download.dart";
+import "../../../local/file_modes.dart";
 import "../hosted_models.dart";
+import "../http_stream.dart";
 import "../llm_client.dart";
+import "cli_release.dart";
 import "provider.dart";
+
+export "cli_release.dart";
 
 /// Another harness's command-line program — Claude CLI, Codex — answering in
 /// the model's place. What is configured is the program and the environment
@@ -50,8 +60,12 @@ abstract class CliProvider extends LlmProvider with KeyFree {
       "Runs ${config.displayName} on this computer, signed in as it already "
       "is. Its own tools are off; it uses Entoli's.";
 
+  /// Whose plan answers through it, by the name its user pays for: "Claude",
+  /// "ChatGPT".
+  String get planName;
+
   /// Whose account its prompts go to, for the provider list's tag.
-  String get account;
+  String get account => "Uses your $planName account";
 
   /// The folder of [cacheRoot] this program's sessions run in.
   String get workFolder;
@@ -77,6 +91,111 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   /// CLI entry synced onto one offers nothing rather than failing per turn.
   @override
   bool get supported => isDesktop;
+
+  /// The machine a release is chosen for: this one, unless a test names
+  /// another.
+  static Abi abi = Abi.current();
+
+  /// The newest release of the program for [abi], asked of its publisher
+  /// over [client]. Null where it publishes none for that machine.
+  Future<CliRelease?> latestRelease(http.Client client);
+
+  /// What the program is asked to say whether it is signed in: it exits 0
+  /// when it is.
+  List<String> get statusArguments;
+
+  /// What signs the program in: it prints the page to sign in on, waits for
+  /// the sign-in there, stores what it was given, and exits 0.
+  List<String> get signInArguments;
+
+  /// Entoli's own copy of the program, kept in [workRoot] beside the folder
+  /// its sessions run in, which is what the cache is for: deleted, it is
+  /// downloaded again rather than lost.
+  String get ownCopy => p.join(
+    workRoot.path,
+    "bin",
+    Platform.isWindows ? "$defaultCommand.exe" : defaultCommand,
+  );
+
+  bool get installed => File(ownCopy).existsSync();
+
+  /// [latestRelease] fetched, checked against the hash its publisher states,
+  /// taken out of whatever it is packed in and put at [ownCopy] — in one
+  /// rename, so a copy in use is replaced whole or not at all. Over [client]
+  /// where given, which the run closes.
+  Stream<DownloadProgress> install({http.Client? client}) {
+    final web = client ?? tlsClient();
+    final bin = p.dirname(ownCopy);
+    final part = p.join(bin, "download.part");
+    final staged = "$ownCopy.new";
+    Future<void> discard() async {
+      for (final path in [part, staged]) {
+        final file = File(path);
+        if (file.existsSync()) await file.delete();
+      }
+    }
+
+    return DownloadRun(
+      client: web,
+      discard: discard,
+      run: (run) async {
+        final release =
+            await latestRelease(web) ??
+            (throw UnsupportedError(
+              "${config.displayName} publishes no build for this computer",
+            ));
+        await Directory(bin).create(recursive: true);
+        final digest = await run.fetchSha256(
+          url: "${release.url}",
+          to: part,
+          total: release.bytes,
+        );
+        if (run.cancelled) return;
+        if (digest != release.sha256.toLowerCase()) {
+          throw FormatException(
+            "${release.url} does not match the checksum its publisher states",
+          );
+        }
+        run.report(
+          DownloadProgress(
+            received: release.bytes ?? 0,
+            total: release.bytes ?? 0,
+            unpacking: true,
+          ),
+        );
+        await release.packing.place(File(part), staged);
+        makeExecutable(staged);
+        await File(staged).rename(ownCopy);
+      },
+    ).stream;
+  }
+
+  /// Takes [ownCopy] away, and the program falls back to whatever else
+  /// [locate] finds.
+  Future<void> uninstall() async {
+    final file = File(ownCopy);
+    if (file.existsSync()) await file.delete();
+  }
+
+  /// Whether the program is signed in, by its own [statusArguments].
+  Future<bool> signedIn() async {
+    final process = await launch(
+      executable(),
+      statusArguments,
+      workingDirectory: await workDirectory(),
+      environment: environment,
+    );
+    unawaited(process.lines.drain<void>());
+    unawaited(process.errors.drain<void>());
+    return await process.exitCode == 0;
+  }
+
+  /// The body at [url] as text, for a publisher that says its newest
+  /// version in a file of its own.
+  static Future<String> fetchText(http.Client client, Uri url) async {
+    final response = await sendChecked(client, http.Request("GET", url));
+    return response.stream.bytesToString();
+  }
 
   /// The program the config names, or null where it leaves it to the default.
   String? get _named {
@@ -112,14 +231,16 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   /// The app [bundledCopies] come with, for saying where it was looked for.
   String get bundler => "";
 
-  /// [command] as a path to run, or null where there is none: a path is taken
-  /// as it is, a bare name is looked for on [environment]'s `PATH`, and the
-  /// default name, found nowhere there, is the first of [bundledCopies].
-  String? locate() =>
-      _onPath() ??
-      (_named != null
-          ? null
-          : bundledCopies.where((path) => File(path).existsSync()).firstOrNull);
+  /// [command] as a path to run, or null where there is none. A command the
+  /// config names is taken as it is, or looked for on [environment]'s `PATH`
+  /// where it is a bare name. Left to the default, it is Entoli's own copy
+  /// first — the one the welcome tour installs and signs in — then the
+  /// default name on `PATH`, then the first of [bundledCopies].
+  String? locate() => _named != null
+      ? _onPath()
+      : (installed ? ownCopy : null) ??
+            _onPath() ??
+            bundledCopies.where((path) => File(path).existsSync()).firstOrNull;
 
   String? _onPath() {
     final name = command;

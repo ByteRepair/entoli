@@ -72,6 +72,16 @@ thing `Downloads` owns that no page draws. `installing` on both store fakes
 holds a download open so there is a mid-flight to assert about, and `failWith`
 on the voice one is a download that stops.
 
+`TestApp.create(clis: …)` is the CLI programs the welcome tour signs in and
+first-run setup installs, and the default is a `FakeCli` of each, installed
+and signed in, so no test spawns a program. `installed: false` with an
+`installing` completer holds an install open; `signedIn: false` makes
+connecting one run a sign-in, a `FakeCliProcess` in `processes` that the test
+prints the page on (`say`, `complain`) and ends with `finishSignIn`. What the
+real programs are asked — the release each publisher states, the checksum,
+the unpacking, the link found in what a sign-in prints — is
+`cli_provider_test.dart`'s, over `MockClient` and a fake process.
+
 `TestApp.create(proot: …, linuxes: …)` is the two halves the Terminal page turns
 on — whether this build could run a Linux at all, and which are installed — with
 `FakeRootfsStore` behind them. Its `installing` completer holds a download open

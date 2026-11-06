@@ -1,8 +1,10 @@
 import "dart:async";
 import "dart:convert";
+import "dart:ffi" show Abi;
 import "dart:io";
 
 import "package:collection/collection.dart";
+import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
 import "../../../../core/log.dart";
@@ -54,7 +56,7 @@ class ClaudeCliProvider extends CliProvider with OfferedByName {
   bool get takesPdfs => true;
 
   @override
-  String get account => "Uses your Claude account";
+  String get planName => "Claude";
 
   @override
   String get serviceName => "Claude Pro";
@@ -64,6 +66,72 @@ class ClaudeCliProvider extends CliProvider with OfferedByName {
 
   @override
   String get workFolder => "claude-cli";
+
+  @override
+  List<String> get statusArguments => const ["auth", "status", "--json"];
+
+  @override
+  List<String> get signInArguments => const ["auth", "login", "--claudeai"];
+
+  /// Where Anthropic's own installer fetches from: the newest version in
+  /// `latest`, and per version a manifest of each platform's SHA-256.
+  static const releases = "https://downloads.claude.ai/claude-code-releases";
+
+  /// The program itself, not the installer: it runs from wherever it is put,
+  /// which is all `claude install` would add to it besides a launcher on the
+  /// user's `PATH`.
+  @override
+  Future<CliRelease?> latestRelease(http.Client client) async {
+    final platform = platformOf(CliProvider.abi, musl: _musl);
+    if (platform == null) return null;
+    final version = (await CliProvider.fetchText(
+      client,
+      Uri.parse("$releases/latest"),
+    )).trim();
+    if (!_version.hasMatch(version)) {
+      throw FormatException("$releases/latest named no version: $version");
+    }
+    final manifest = await LlmProvider.getJson(
+      Uri.parse("$releases/$version/manifest.json"),
+      headers: const {},
+      httpClient: client,
+    );
+    final platforms = manifest["platforms"];
+    final entry = platforms is Map<String, dynamic>
+        ? platforms[platform]
+        : null;
+    if (entry is! Map<String, dynamic>) return null;
+    final checksum = entry["checksum"];
+    if (checksum is! String) return null;
+    final program = platform.startsWith("win32") ? "claude.exe" : "claude";
+    return CliRelease(
+      version: version,
+      url: Uri.parse("$releases/$version/$platform/$program"),
+      sha256: checksum,
+      packing: const BareProgram(),
+      bytes: entry["size"] as int?,
+    );
+  }
+
+  static final _version = RegExp(r"^\d+\.\d+\.\d+$");
+
+  /// The manifest's name for [abi]'s build, the musl one for a Linux whose
+  /// C library is musl; null for a machine it builds nothing for.
+  static String? platformOf(Abi abi, {bool musl = false}) => switch (abi) {
+    Abi.macosArm64 => "darwin-arm64",
+    Abi.macosX64 => "darwin-x64",
+    Abi.linuxX64 => musl ? "linux-x64-musl" : "linux-x64",
+    Abi.linuxArm64 => musl ? "linux-arm64-musl" : "linux-arm64",
+    Abi.windowsX64 => "win32-x64",
+    Abi.windowsArm64 => "win32-arm64",
+    _ => null,
+  };
+
+  /// What Anthropic's installer looks for to tell musl from glibc.
+  static bool get _musl =>
+      Platform.isLinux &&
+      (File("/lib/libc.musl-x86_64.so.1").existsSync() ||
+          File("/lib/libc.musl-aarch64.so.1").existsSync());
 
   @override
   String get bundler => "Claude Desktop";

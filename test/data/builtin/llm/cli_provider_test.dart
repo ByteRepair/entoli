@@ -1,13 +1,19 @@
 import "dart:async";
 import "dart:convert";
+import "dart:ffi" show Abi;
 import "dart:io";
 
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/mcp_tool_bridge.dart";
+import "package:agent_chat/data/builtin/llm/providers/cli_sign_in.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/model_registry.dart";
 import "package:flutter/foundation.dart";
+import "package:archive/archive.dart";
+import "package:crypto/crypto.dart";
+import "package:http/http.dart" as http;
+import "package:http/testing.dart";
 import "package:path/path.dart" as p;
 import "package:flutter_test/flutter_test.dart";
 
@@ -69,10 +75,19 @@ class _ScriptedProvider extends CliProvider {
   String get defaultCommand => "scripted";
 
   @override
-  String get account => "";
+  String get planName => "";
 
   @override
   String get workFolder => "scripted";
+
+  @override
+  List<String> get statusArguments => const [];
+
+  @override
+  List<String> get signInArguments => const [];
+
+  @override
+  Future<CliRelease?> latestRelease(http.Client client) async => null;
 
   @override
   List<ModelInfo> get knownModels => const [];
@@ -945,6 +960,242 @@ void main() {
         ),
       );
       expect(provider.locate(), p.join(dir.path, "claude"));
+    });
+  });
+
+  group("Entoli's own copy", () {
+    late Directory dir;
+    setUp(() {
+      dir = Directory.systemTemp.createTempSync("cli-own-");
+      CliProvider.cacheRoot = dir.path;
+    });
+    tearDown(() {
+      CliProvider.cacheRoot = null;
+      CliProvider.abi = Abi.current();
+      dir.deleteSync(recursive: true);
+    });
+
+    /// Anthropic's two files, for version [version] with [checksum] stated
+    /// for darwin-arm64 and win32-x64.
+    http.Client claudeReleases(String version, String checksum) =>
+        MockClient((request) async {
+          final path = request.url.path;
+          if (path.endsWith("/latest")) return http.Response("$version\n", 200);
+          if (path.endsWith("/$version/manifest.json")) {
+            return http.Response(
+              jsonEncode({
+                "version": version,
+                "platforms": {
+                  for (final p in ["darwin-arm64", "win32-x64"])
+                    p: {"checksum": checksum, "size": 3},
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response("", 404);
+        });
+
+    test(
+      "Claude CLI's release is its manifest's entry for this machine",
+      () async {
+        CliProvider.abi = Abi.macosArm64;
+        final release = await const ClaudeCliProvider().latestRelease(
+          claudeReleases("2.1.320", "ab"),
+        );
+        expect(
+          "${release!.url}",
+          "${ClaudeCliProvider.releases}/2.1.320/darwin-arm64/claude",
+        );
+        expect(release.sha256, "ab");
+        expect(release.packing, isA<BareProgram>());
+
+        CliProvider.abi = Abi.windowsX64;
+        final windows = await const ClaudeCliProvider().latestRelease(
+          claudeReleases("2.1.320", "ab"),
+        );
+        expect(windows!.url.pathSegments.last, "claude.exe");
+
+        // A machine the manifest has no build for has no release.
+        CliProvider.abi = Abi.linuxArm64;
+        expect(
+          await const ClaudeCliProvider().latestRelease(
+            claudeReleases("2.1.320", "ab"),
+          ),
+          isNull,
+        );
+      },
+    );
+
+    /// GitHub's answer for the latest Codex release, its assets as given.
+    http.Client codexReleases(List<Map<String, dynamic>> assets) => MockClient(
+      (request) async => request.url == CodexCliProvider.latestUrl
+          ? http.Response(
+              jsonEncode({"tag_name": "rust-v0.170.0", "assets": assets}),
+              200,
+            )
+          : http.Response("", 404),
+    );
+
+    Map<String, dynamic> asset(String name, {String? digest = "sha256:cd"}) => {
+      "name": name,
+      "browser_download_url": "https://example.com/$name",
+      "size": 3,
+      "digest": ?digest,
+    };
+
+    test("Codex CLI's release is the asset built for this machine", () async {
+      final assets = [
+        asset("codex-x86_64-unknown-linux-musl.tar.gz"),
+        asset("codex-x86_64-pc-windows-msvc.exe.zip"),
+        asset("codex-aarch64-apple-darwin.tar.gz", digest: null),
+      ];
+      CliProvider.abi = Abi.linuxX64;
+      final linux = await const CodexCliProvider().latestRelease(
+        codexReleases(assets),
+      );
+      expect(
+        linux!.url.pathSegments.last,
+        "codex-x86_64-unknown-linux-musl.tar.gz",
+      );
+      expect(linux.sha256, "cd");
+      expect(linux.packing, isA<TarGzProgram>());
+
+      CliProvider.abi = Abi.windowsX64;
+      final windows = await const CodexCliProvider().latestRelease(
+        codexReleases(assets),
+      );
+      expect(windows!.packing, isA<ZipProgram>());
+
+      // No hash stated is nothing to check the download against.
+      CliProvider.abi = Abi.macosArm64;
+      await expectLater(
+        const CodexCliProvider().latestRelease(codexReleases(assets)),
+        throwsFormatException,
+      );
+    });
+
+    /// Codex's release for [abi] as one asset, [archive] served as it, its
+    /// digest [digest].
+    http.Client codexServing(List<int> archive, String digest) =>
+        MockClient((request) async {
+          if (request.url == CodexCliProvider.latestUrl) {
+            return http.Response(
+              jsonEncode({
+                "tag_name": "rust-v0.170.0",
+                "assets": [
+                  asset(
+                    "codex-x86_64-unknown-linux-musl.tar.gz",
+                    digest: "sha256:$digest",
+                  ),
+                ],
+              }),
+              200,
+            );
+          }
+          return http.Response.bytes(archive, 200);
+        });
+
+    List<int> tarGzOf(List<int> program) => GZipEncoder().encodeBytes(
+      TarEncoder().encodeBytes(
+        Archive()..addFile(
+          ArchiveFile.bytes("codex-x86_64-unknown-linux-musl", program),
+        ),
+      ),
+    );
+
+    test("an install unpacks the program it checked, runnable, and is found "
+        "first", () async {
+      CliProvider.abi = Abi.linuxX64;
+      final archive = tarGzOf(utf8.encode("#!/bin/sh\n"));
+      const codex = CodexCliProvider();
+      await codex
+          .install(client: codexServing(archive, "${sha256.convert(archive)}"))
+          .drain<void>();
+
+      expect(codex.installed, isTrue);
+      expect(File(codex.ownCopy).readAsStringSync(), "#!/bin/sh\n");
+      if (!Platform.isWindows) {
+        expect(File(codex.ownCopy).statSync().mode & 0x40, isNot(0));
+      }
+      // Ahead of one on PATH: the copy the tour signed in.
+      final path = Directory(p.join(dir.path, "path"))..createSync();
+      File(p.join(path.path, "codex")).writeAsStringSync("");
+      final withPath = CodexCliProvider(
+        CodexCliProvider.preset.copyWith(env: {"PATH": path.path}),
+      );
+      expect(withPath.locate(), codex.ownCopy);
+    });
+
+    test(
+      "a download that does not match its checksum is not installed",
+      () async {
+        CliProvider.abi = Abi.linuxX64;
+        const codex = CodexCliProvider();
+        await expectLater(
+          codex
+              .install(client: codexServing(tarGzOf([1, 2, 3]), "00"))
+              .drain<void>(),
+          throwsFormatException,
+        );
+        expect(codex.installed, isFalse);
+        expect(Directory(p.dirname(codex.ownCopy)).listSync(), isEmpty);
+      },
+    );
+  });
+
+  group("a sign-in", () {
+    /// [cli] launching [process] for its sign-in and [status] for its
+    /// status check, which exits [signedIn] 0 or 1.
+    ({CliProvider cli, _FakeProcess login}) signingIn({
+      required bool signedIn,
+    }) {
+      final login = _FakeProcess(const [], "", const {});
+      final cli = CodexCliProvider.over(
+        CodexCliProvider.preset.copyWith(command: Platform.resolvedExecutable),
+        launch:
+            (
+              executable,
+              arguments, {
+              required workingDirectory,
+              required environment,
+            }) async {
+              if (arguments.first == "login" && arguments.length == 1) {
+                return login;
+              }
+              return _FakeProcess(arguments, workingDirectory, environment)
+                ..exit(signedIn ? 0 : 1);
+            },
+      );
+      return (cli: cli, login: login);
+    }
+
+    test("finds the page in a line it prints, and ends signed in", () async {
+      final (:cli, :login) = signingIn(signedIn: true);
+      final signIn = await CliSignIn.start(cli);
+      login._stdout.add(
+        "Starting local login server on http://localhost:1455.",
+      );
+      login._stdout.add(
+        "If your browser did not open, navigate to this URL to authenticate:",
+      );
+      login._stdout.add(
+        "\x1b[94mhttps://auth.openai.com/oauth/authorize?x=1\x1b[0m",
+      );
+      expect(
+        await signIn.page,
+        Uri.parse("https://auth.openai.com/oauth/authorize?x=1"),
+      );
+      login.exit(0);
+      expect(await signIn.result, isTrue);
+    });
+
+    test("exited 0 is not signed in until the program says so", () async {
+      final (:cli, :login) = signingIn(signedIn: false);
+      final signIn = await CliSignIn.start(cli);
+      login.exit(0);
+      expect(await signIn.page, isNull);
+      expect(await signIn.result, isFalse);
     });
   });
 }

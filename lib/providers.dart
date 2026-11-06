@@ -16,7 +16,8 @@ import "../core/platform/platform.dart"
     show createFileWatches, createPromptSources, processEnv, setupComplete;
 import "data/builtin/llm/hosted_models.dart" show ModelHost;
 import "data/builtin/llm/on_device_provider.dart" show OnDeviceProvider;
-import "data/builtin/llm/providers/presets.dart" show providerOf;
+import "data/builtin/llm/providers/presets.dart"
+    show CliProvider, cliProviderPresets, providerOf;
 import "data/builtin/llm/providers/provider.dart" show LlmProvider, resolveIn;
 import "data/local/apple_fm.dart" show AppleFm;
 import "data/local/local_engine.dart";
@@ -1160,6 +1161,13 @@ typedef KeyCheck =
 
 /// Whether a provider accepts a key, asked of the provider itself. Throws where
 /// it could not be asked.
+/// The programs that can answer in a model's place, as the welcome tour and
+/// first-run setup install and sign them in: the presets, unless a test
+/// stands in fakes that run nothing.
+final cliProgramsProvider = Provider<List<CliProvider>>(
+  (ref) => cliProviderPresets,
+);
+
 final keyCheckProvider = Provider<KeyCheck>(
   (ref) =>
       (config, apiKey) => providerOf(config).checkKey(apiKey),

@@ -49,6 +49,20 @@ void _walk(String root, {required bool writable, required bool executable}) {
   if (!writable) set(top, true);
 }
 
+/// Gives [path] the execute bit for everyone who can read it, which a program
+/// arriving over HTTP has none of. Nothing on Windows, where running a file is
+/// its extension's business.
+void makeExecutable(String path) {
+  if (Platform.isWindows) return;
+  final mode = FileStat.statSync(path).mode & 0x1ff;
+  final native = path.toNativeUtf8();
+  try {
+    _chmod(native, mode | 0x49); // a+x
+  } finally {
+    malloc.free(native);
+  }
+}
+
 typedef _ChmodC = Int32 Function(Pointer<Utf8>, Uint32);
 typedef _ChmodDart = int Function(Pointer<Utf8>, int);
 

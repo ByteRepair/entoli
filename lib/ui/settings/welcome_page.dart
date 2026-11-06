@@ -17,9 +17,9 @@ import "../selection.dart";
 import "../app_licence.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
-import "../widgets/provider_dialog.dart";
 import "../widgets/scrolling.dart";
 import "llm_settings.dart";
+import "cli_sign_in_dialog.dart";
 import "settings_category.dart";
 
 /// The welcome tour as the home content on first launch. It is the root route,
@@ -765,18 +765,13 @@ class _SetupRow extends ConsumerWidget {
            openSettings(context, category: category, focus: true)),
        offered = category.offered;
 
-  /// [provider]'s preset, connected in its own dialog; the words are its own.
+  /// [provider], connected as its kind is: a CLI installed and signed in, an
+  /// API in its preset's dialog. The words are its own.
   _SetupRow.service(OfferedByName provider)
     : icon = Icons.cloud_outlined,
       title = provider.serviceName,
       detail = provider.connectHint,
-      open = ((context, ref) => editProvider(
-        context,
-        ref,
-        initial: provider.config,
-        title: "Connect ${provider.displayName}",
-        adopt: true,
-      )),
+      open = ((context, ref) => connectService(context, ref, provider)),
       offered = ((_) => provider.supported);
 
   final IconData icon;

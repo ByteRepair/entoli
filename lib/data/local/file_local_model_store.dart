@@ -9,7 +9,6 @@ import "../../domain/local_model.dart";
 import "../../domain/local_model_store.dart";
 import "../../domain/download.dart";
 import "../download.dart";
-import "file_rootfs_store.dart" show DownloadRunSha256;
 import "model_format.dart";
 
 /// A downloaded model in a directory of its own, outside the data directory —

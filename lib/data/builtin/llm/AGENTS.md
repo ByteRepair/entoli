@@ -235,6 +235,31 @@ reports the window it has rather than the 128k guess. The pickers, which hold
 a config and no endpoint, still ask `modelInfoOf`, which only costs them a
 display name.
 
+**Entoli keeps its own copy of each program, and signs it in.** `ownCopy` is
+`<cache>/<workFolder>/bin/<command>`, the cache being where a copy that goes
+missing is fetched again rather than lost. `install` asks the subclass's
+`latestRelease` for this machine's build (`CliProvider.abi`, which a test
+names): Claude CLI's is the program itself from
+`downloads.claude.ai/claude-code-releases` — `latest` for the version, that
+version's `manifest.json` for each platform's SHA-256 and size, the musl
+build on a musl Linux — taken as it is rather than run as an installer, since
+`claude install` would only add a launcher on the user's `PATH`; Codex CLI's
+is the asset GitHub's releases API names for the target (musl on Linux, a
+zip on Windows, a tarball elsewhere), whose `digest` is the hash, and a
+release stating none is refused. The download is checked against that hash,
+taken out of its packing (`CliPacking`: `BareProgram`, `TarGzProgram`,
+`ZipProgram`, read in Dart so no platform needs a `tar`), given its execute
+bit, and renamed into place, so a copy in use is replaced whole. `locate`
+prefers it over the default name on `PATH`, which is what makes the copy the
+tour signed in the one every session runs. Signing in is the program's own:
+`statusArguments` exit 0 when signed in (`claude auth status`, `codex login
+status`), and `CliSignIn` runs `signInArguments` (`claude auth login
+--claudeai`, `codex login`), takes the first `https` link it prints — error
+output read a whole line at a time, so a link split between two writes is
+not taken at its first half — and ends signed in when the program exits 0 and
+its status agrees. The credentials are where the program keeps them, so a
+copy on `PATH` or a later session finds them too.
+
 **The split is interface against lifecycle.** `CliProvider` owns what every
 such program shares: finding it, its environment, and `CliClient` — the
 `LlmClient` that pools `CliSession`s. The loop resends the whole

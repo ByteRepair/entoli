@@ -13,6 +13,7 @@ import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/settings/welcome_page.dart";
 import "package:agent_chat/ui/welcome_gate.dart";
 
+import "../fakes.dart";
 import "../harness.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
 
@@ -143,34 +144,90 @@ void main() {
     expect(find.byType(AlertDialog), findsNothing);
   });
 
-  // A service is offered by the name its user knows, and connecting it is
-  // its own preset: ChatGPT is Codex CLI, with nothing to type and no model
-  // to pick.
-  testWidgets("a service on the provider page connects its own preset", (
+  /// What answers new chats, titles and the classifier, in that order.
+  List<String?> answering() {
+    final s = settings();
+    return [s.defaultProviderId, s.titleProviderId, s.classifierProviderId];
+  }
+
+  // ChatGPT is Codex CLI. Signed in already, connecting it is nothing to
+  // type and no model to pick: it is added and answers everything a first
+  // model does, at its own defaults, over the default the walk was seeded
+  // with. Connected again, it is the same entry, not a second.
+  testWidgets("a signed-in service is added at once, and only once", (
     tester,
   ) async {
     await app.pump(tester, const WelcomePage());
     await walkToProviders(tester);
 
     await tester.tap(find.text("ChatGPT"));
-    await tester.pumpAndSettle();
-    expect(find.text("Connect Codex CLI"), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, "Save"));
     await settleIo(tester);
 
     expect(settings().llmProviders.map((p) => p.api), [LlmApi.codexCli]);
-    // Chosen by name, it answers everything a first model does at its own
-    // defaults, over the default the walk was seeded with.
     final id = settings().llmProviders.single.id;
+    expect(answering(), [id, id, id]);
     final s = settings();
-    expect(
-      [s.defaultProviderId, s.titleProviderId, s.classifierProviderId],
-      [id, id, id],
-    );
     expect(
       [s.defaultModelId, s.titleModelId, s.classifierModelId],
       [null, null, null],
     );
+
+    await tester.tap(find.text("ChatGPT"));
+    await settleIo(tester);
+    expect(settings().llmProviders.map((p) => p.id), [id]);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  // Not installed and not signed in: Entoli's own copy is fetched, its
+  // sign-in runs, and the page it prints is what the dialog opens. It is
+  // added only once the program says it is signed in.
+  testWidgets("a service is installed and signed in before it is added", (
+    tester,
+  ) async {
+    final codex = FakeCli.codex(installed: false, signedIn: false);
+    app.dispose();
+    app = TestApp.create(clis: [FakeCli.claude(), codex]);
+    await app.pump(tester, const WelcomePage());
+    await walkToProviders(tester);
+
+    await tester.tap(find.text("ChatGPT"));
+    await frames(tester);
+    expect(codex.installs, 1);
+    expect(codex.processes.single.arguments, codex.signInArguments);
+
+    // Split across two writes to its error output, as a terminal's may be.
+    codex.processes.single
+      ..complain("Open https://auth.openai.com/oauth/auth")
+      ..complain("orize?client_id=x\nWaiting…");
+    await frames(tester);
+    await tester.tap(find.text("Open the sign-in page"));
+    await tester.pump();
+    expect(app.linkOpener.opened, [
+      Uri.parse("https://auth.openai.com/oauth/authorize?client_id=x"),
+    ]);
+    expect(settings().llmProviders, isEmpty);
+
+    codex.finishSignIn();
+    await settleIo(tester);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(settings().llmProviders.map((p) => p.api), [LlmApi.codexCli]);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  // A sign-in given up on adds nothing, and leaves no program running.
+  testWidgets("a cancelled sign-in adds nothing", (tester) async {
+    final claude = FakeCli.claude(signedIn: false);
+    app.dispose();
+    app = TestApp.create(clis: [claude, FakeCli.codex()]);
+    await app.pump(tester, const WelcomePage());
+    await walkToProviders(tester);
+
+    await tester.tap(find.text("Claude Pro"));
+    await frames(tester);
+    await tester.tap(find.text("Cancel"));
+    await settleIo(tester);
+
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(settings().llmProviders, isEmpty);
+    await expectLater(claude.processes.single.exitCode, completes);
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   // A phone runs no programs, so the services that are one are not offered.

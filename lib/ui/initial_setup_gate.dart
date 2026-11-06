@@ -3,11 +3,13 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
 import "../core/formatting.dart";
+import "../data/builtin/llm/providers/presets.dart" show CliProvider;
 import "../domain/agent_browser.dart" show embeddedBrowserId;
 import "../domain/download.dart";
 import "../domain/rootfs.dart";
 import "../providers.dart";
 import "settings/browser_settings.dart";
+import "settings/cli_downloads.dart";
 import "settings/downloads.dart" show DownloadState;
 import "settings/rootfs_downloads.dart";
 import "widgets/app_mark.dart";
@@ -22,19 +24,22 @@ class SetupPlan {
 }
 
 /// The plan this device runs. A phone gets Alpine as where commands run —
-/// proot on Android, the emulator on iOS — and a desktop, whose agent drives
-/// a browser the app launches rather than its own WebView, gets Helium as that
-/// browser. Anywhere else nothing is set up.
+/// proot on Android, the emulator on iOS. A desktop gets Helium as the
+/// browser its agent drives, where the agent drives one the app launches
+/// rather than its own WebView, and its own copy of each CLI program, which is
+/// what the welcome tour signs a ChatGPT or Claude plan in with. Anywhere else
+/// nothing is set up.
 final setupPlanProvider = Provider<SetupPlan>((ref) {
   if (ref.watch(prootAvailableProvider) ||
       ref.watch(deviceAbiProvider) == "ios") {
     return const SetupPlan([AlpineSetup()]);
   }
   final browser = ref.watch(agentBrowserProvider);
-  if (browser.available && !browser.inApp) {
-    return const SetupPlan([HeliumSetup()], progress: PlanProgress());
-  }
-  return const SetupPlan([]);
+  return SetupPlan([
+    if (browser.available && !browser.inApp) const HeliumSetup(),
+    for (final cli in ref.watch(cliProgramsProvider))
+      if (cli.supported) CliSetup(cli),
+  ], progress: const PlanProgress());
 });
 
 /// One thing a [SetupPlan] installs and makes the setting it is for. Picking
@@ -205,6 +210,52 @@ class HeliumSetup extends SetupStep {
           .install(EmbeddedBrowserDownloads.id);
     }
   }
+}
+
+/// Entoli's own copy of a CLI program, which nothing picks: the program is
+/// found where it was put, and done is it being there.
+class CliSetup extends SetupStep {
+  const CliSetup(this.cli);
+
+  final CliProvider cli;
+
+  @override
+  String get name => cli.config.displayName;
+
+  @override
+  String get purpose => "your ${cli.planName} plan can answer here.";
+
+  /// Connecting the service on the tour installs it too.
+  @override
+  String get settingsPage => "Settings > Welcome";
+
+  @override
+  ProviderListenable<DownloadState> get downloads => cliDownloadsProvider;
+
+  @override
+  String get downloadId => cli.workFolder;
+
+  @override
+  bool done(WidgetRef ref) =>
+      ref.watch(installedClisProvider.select((s) => s.contains(downloadId)));
+
+  @override
+  void start(WidgetRef ref) {
+    if (cli.installed) {
+      ref.read(installedClisProvider.notifier).refresh();
+    } else {
+      ref.read(cliDownloadsProvider.notifier).install(cli);
+    }
+  }
+
+  /// One per program, whichever instance the plan was rebuilt with: a skip
+  /// is remembered by it.
+  @override
+  bool operator ==(Object other) =>
+      other is CliSetup && other.cli.workFolder == cli.workFolder;
+
+  @override
+  int get hashCode => cli.workFolder.hashCode;
 }
 
 /// Shows [SetupPage] over this device's [setupPlanProvider] while the welcome
