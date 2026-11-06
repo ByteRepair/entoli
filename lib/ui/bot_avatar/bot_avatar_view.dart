@@ -342,7 +342,7 @@ class _BotAvatarViewState extends State<BotAvatarView>
     return _prepared.frame(
       time: ms / 1000,
       mood: mood,
-      gaze: step.gaze ?? widget.gaze,
+      gaze: step.gaze ?? _stillGaze(mood, widget.gaze),
       blend: step.blend,
       view: ViewTurn(
         widget.view.yaw + _turn.yaw + spin,
