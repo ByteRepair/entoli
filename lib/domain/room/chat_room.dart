@@ -7,6 +7,7 @@ import "../../core/log.dart";
 import "../agent_backend.dart";
 import "../chat_log.dart";
 import "../chat_repository.dart";
+import "../goal.dart";
 import "../models.dart";
 import "../shell_job.dart" show ChatShellJobs, EndedJob, jobEndedNotification;
 import "../project_settings.dart" show OmadaOrdering;
@@ -324,15 +325,17 @@ class ChatRoom {
     if (state.chat == null) return;
     final wired = wiredSkillFromText(text);
     if (wired != null) {
-      if (state.isRunning) {
-        _view = state.copyWith(
-          status: "Wait for the turn to finish before compacting",
-        );
-        return;
-      }
       switch (wired.skill) {
         case WiredSkill.compact:
+          if (state.isRunning) {
+            _view = state.copyWith(
+              status: "Wait for the turn to finish before compacting",
+            );
+            return;
+          }
           await _promptCompacting(wired.arguments);
+        case WiredSkill.goal:
+          await _goalCommand(goalCommandOf(wired.arguments));
       }
       return;
     }
@@ -589,6 +592,59 @@ class ChatRoom {
     await _openTurn(chat: chat, prompt: userMsg);
   }
 
+  /// `/goal`'s callback. Setting a goal and resuming one write the goal and
+  /// then start the work — the message goes on the log as typed, and the
+  /// projection words it as the kickoff — so both wait for a running turn to
+  /// finish, as `/compact` does. Pausing and clearing write only the goal,
+  /// which the running turn reads at its next stop, so they land mid-turn;
+  /// nothing of them goes on the log. See "Goals" in `lib/domain/AGENTS.md`.
+  Future<void> _goalCommand(GoalCommand command) async {
+    final chat = state.chat;
+    if (chat == null) return;
+    final goal = await _repo.goalOf(chatId);
+    switch (command) {
+      case GoalShow():
+        _view = state.copyWith(status: goalSummary(goal));
+      case GoalPause():
+        if (goal == null || !goal.isActive) {
+          _view = state.copyWith(status: goalSummary(goal));
+          return;
+        }
+        await _repo.setGoal(
+          chatId,
+          goal.copyWith(status: GoalStatus.paused, reason: "Paused by you."),
+        );
+        _view = state.copyWith(status: "Goal paused");
+      case GoalClear():
+        await _repo.setGoal(chatId, null);
+        _view = state.copyWith(
+          status: goal == null ? "No goal was set" : "Goal cleared",
+        );
+      case GoalResume():
+        if (goal == null) {
+          _view = state.copyWith(status: goalSummary(goal));
+          return;
+        }
+        if (state.isRunning) {
+          _view = state.copyWith(
+            status: "Wait for the turn to finish before resuming the goal",
+          );
+          return;
+        }
+        await _repo.setGoal(chatId, goal.resumed());
+        await _prompt("/goal resume");
+      case GoalSet(:final objective):
+        if (state.isRunning) {
+          _view = state.copyWith(
+            status: "Wait for the turn to finish before setting a goal",
+          );
+          return;
+        }
+        await _repo.setGoal(chatId, ChatGoal(objective: objective));
+        await _prompt("/goal $objective");
+    }
+  }
+
   /// The compact turn's body, driven from [_openTurn] by the wired check on
   /// the prompt. The turn is already open — the entry seated, the prompt and
   /// its empty reply logged — so this runs the summarizer, writes the marker,
@@ -741,16 +797,18 @@ class ChatRoom {
     // compact machinery is the room's to drive, and the turn ends with the
     // marker it writes rather than an event stream. The dispatch switches on
     // the skill, the way send did — adding a wired skill is an enum entry and
-    // an arm here.
+    // an arm here. `/goal` is the one whose turn is a model's.
     final wired = prompt.role == MessageRole.user
         ? wiredSkillFromText(prompt.plainText)
         : null;
-    if (wired != null) {
-      switch (wired.skill) {
-        case WiredSkill.compact:
-          unawaited(_runCompactTurn(turn, wired.arguments));
-      }
-      return;
+    switch (wired?.skill) {
+      case WiredSkill.compact:
+        unawaited(_runCompactTurn(turn, wired!.arguments));
+        return;
+      // The goal is written by now; the turn is the work, the agent's like
+      // any other, the projection wording the message as the kickoff.
+      case WiredSkill.goal:
+      case null:
     }
     _listen(
       turn,

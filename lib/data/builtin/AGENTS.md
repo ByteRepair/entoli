@@ -46,6 +46,20 @@ which Codex itself takes as the end. No other API labels its words, and
 nothing guesses it from the words: a model that announces work and stops is
 the prompt's to prevent ("Finishing a turn" says a reply either acts or ends).
 
+Past those, a goal. Where the chat has an active one (see "Goals" in
+`lib/domain/AGENTS.md`), the stop is put to `GoalReviewer`: one call, no
+tools, a text digest of the conversation's last 40,000 characters — text
+because the reviewer may be another provider, and a transcript of tool calls
+it was never offered is a request some refuse. The model is the classifier
+model where one is set, as Claude Code's reviewer is a small fast model, else
+the turn's own, as OpenCode's is. Short of the goal, the reason and the next
+step go in as a `<system-notification>` steer and the turn carries on; met or
+blocked is written to the goal and the turn ends. The goal's budget is its
+own, kept on it across turns, not `maxStopNudges`; the last step is still
+never sent back. A review with no usable verdict ends the turn as a stop did
+before goals, and leaves the goal active. The goal is read again after the
+review, so a pause the user made while the reviewer read stands.
+
 How a reply ended is `LlmStop`, one vocabulary that each client maps its own
 wire word into (`stopOf` on `OpenAiClient`, `AnthropicEventReader` and
 `ChannelGeneration`); a word a client does not know is logged and read as an

@@ -8,6 +8,7 @@ import "../domain/ask.dart";
 import "../domain/shell_job.dart";
 import "../domain/builtin_project.dart";
 import "../domain/chat_log.dart";
+import "../domain/goal.dart";
 import "../domain/model_capability.dart";
 import "../domain/models.dart";
 import "../domain/permission.dart";
@@ -484,6 +485,11 @@ class TurnSettings {
   /// copied here: a rule saved mid-turn applies to the next call.
   final PolicyReader policy;
 
+  /// The chat's goal, read at every stop rather than copied here, so a pause
+  /// or a clear mid-turn lands before the next review. Null is a turn with
+  /// no goal to keep — a test's, or one with no chat behind it.
+  final GoalStore? goal;
+
   const TurnSettings({
     this.memory = MemorySettings.off,
     this.model,
@@ -509,6 +515,7 @@ class TurnSettings {
     this.tone = Tone.none,
     this.citations = false,
     this.policy = noPolicy,
+    this.goal,
   });
 }
 

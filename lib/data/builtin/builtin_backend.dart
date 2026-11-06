@@ -46,6 +46,7 @@ import "llm/hosted_models.dart";
 import "llm/readable_client.dart";
 import "llm/llm_registry.dart";
 import "llm/rate_limit_gate.dart";
+import "goal_reviewer.dart";
 import "permission_classifier.dart";
 import "projection.dart";
 import "sub_agent.dart";
@@ -571,6 +572,17 @@ class BuiltinBackend implements AgentBackend {
             : null,
         approveMode: settings.approveMode,
         classifier: classifier,
+        goal: settings.goal,
+        goalReviewer: settings.goal == null
+            ? null
+            : _goalReviewer(
+                settings.classifierProvider,
+                settings.classifierModel,
+                fallback: LlmGoalReviewer(
+                  client: gatedClient,
+                  model: target.modelId,
+                ),
+              ),
         approve: _awaitApproval,
         answer: _awaitAnswers,
         subAgents: runner,
@@ -1602,6 +1614,23 @@ class BuiltinBackend implements AgentBackend {
     );
     if (target == null) return null;
     return LlmClassifier(client: target.client, model: target.modelId);
+  }
+
+  /// Who reviews a goal at a stop: the classifier model where one is named —
+  /// a small fast model, as Claude Code's reviewer is — else [fallback], the
+  /// turn's own model, as OpenCode's is.
+  GoalReviewer _goalReviewer(
+    String? provider,
+    String? model, {
+    required GoalReviewer fallback,
+  }) {
+    final target = _resolveModel(
+      model,
+      provider,
+      defaultOf: LlmProviderConfig.lightDefaultOf,
+    );
+    if (target == null) return fallback;
+    return LlmGoalReviewer(client: target.client, model: target.modelId);
   }
 
   /// Null, and so no tool, where the image model is off or its provider makes

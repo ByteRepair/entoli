@@ -5,11 +5,13 @@ import "package:path/path.dart" as p;
 
 import "../../domain/ask.dart";
 import "../../domain/end_turn.dart";
+import "../../domain/goal.dart";
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/reaction.dart";
 import "../../domain/shell_command_analysis.dart" show isFileToolWork;
 import "../../domain/tool_arg.dart";
+import "../../domain/wired_skill.dart";
 import "../../domain/shell.dart" show bashToolName;
 import "llm/llm_client.dart";
 import "templates.dart";
@@ -237,11 +239,9 @@ String _userText(
 ) {
   final reaction = message.reaction;
   if (reaction != null) return reactionTurnText(reaction);
-  final text = expandedPrompt(
-    message.plainText,
-    message.references,
-    library,
-  ).trim();
+  final text =
+      _goalText(message.plainText) ??
+      expandedPrompt(message.plainText, message.references, library).trim();
   if (message.files.isEmpty) return text;
   final files = message.files
       .map(
@@ -254,6 +254,20 @@ String _userText(
       ? "(attached: $files)"
       : "(attached, read-only: $files)";
   return text.isEmpty ? note : "$text\n\n$note";
+}
+
+/// What the model reads for a `/goal` that hands it the work — the kickoff,
+/// or the word that it was resumed — or null for any other message. Worded
+/// here, off the text the log holds, so a reload and a resend read the same;
+/// the skill's body is the user's note and never reaches a model.
+String? _goalText(String text) {
+  final wired = wiredSkillFromText(text);
+  if (wired == null || wired.skill != WiredSkill.goal) return null;
+  return switch (goalCommandOf(wired.arguments)) {
+    GoalSet(:final objective) => goalKickoff(objective),
+    GoalResume() => goalResumedText,
+    _ => null,
+  };
 }
 
 final Future<Map<String, LlmAttachment>> _noFiles = Future.value(const {});

@@ -12,6 +12,7 @@ import "../domain/chat_log.dart";
 import "../domain/chat_meta.dart";
 import "../domain/chat_store.dart";
 import "../domain/chat_title.dart";
+import "../domain/goal.dart";
 import "../domain/models.dart";
 import "../domain/permission.dart";
 import "../domain/project.dart";
@@ -304,16 +305,26 @@ class ChatRepository {
   /// one turn the user routed away from a model — in a chat that may have no
   /// provider configured at all. A `invocation: callback` skill is the same:
   /// a callback turn is not a thing said, and naming one is a model call on
-  /// the turn the user routed away from a model.
+  /// the turn the user routed away from a model — except `/goal`'s, whose
+  /// objective is what the chat is about.
   Future<String?> suggestTitle(String text) async {
     final settings = _settings();
     final provider = settings.titleProviderId;
     final model = settings.titleModelId;
     if (provider == null || text.trim().isEmpty) return null;
     if (shellBypassCommand(text) != null) return null;
-    if (wiredSkillFromText(text) != null) return null;
+    // A goal names its chat by the objective: it is the one callback that is
+    // a thing said, and the slash and the name are not part of what.
+    var said = text;
+    if (wiredSkillFromText(text) case final wired?) {
+      if (goalObjectiveOf(wired) case final objective?) {
+        said = objective;
+      } else {
+        return null;
+      }
+    }
     final answer = await _backend.ask(
-      titlePrompt(text),
+      titlePrompt(said),
       model: model,
       provider: provider,
     );
@@ -330,6 +341,19 @@ class ChatRepository {
   }
 
   Future<ChatState?> loadState(String chatId) => _store.loadState(chatId);
+
+  /// [chatId]'s goal, as its meta holds it.
+  Future<ChatGoal?> goalOf(String chatId) async =>
+      (await loadMeta(chatId)).goal;
+
+  /// Set or clear [chatId]'s goal, leaving the rest of its meta alone. Read
+  /// and written in one go, so the chat page and a turn's review writing it
+  /// a moment apart each write over the other's goal, not its settings.
+  Future<void> setGoal(String chatId, ChatGoal? goal) async {
+    final meta = await loadMeta(chatId);
+    if (meta.goal == goal) return;
+    await saveMeta(chatId, meta.copy()..goal = goal);
+  }
 
   /// The chat's raw log, in order — what [openChat] replays and discards. The
   /// sync layer streams these to a mirror asking to follow from where it
@@ -514,6 +538,7 @@ class ChatRepository {
       // The project's own command variables, beside the app-level ones.
       environment: projectSettings.environment ?? const {},
       policy: () => _policyOf(chatId),
+      goal: _ChatGoalStore(this, chatId),
       turnMaxSteps: projectSettings.turnMaxSteps ?? settings.turnMaxSteps,
       responseLength: settings.responseLength,
       capResponseLength: settings.capResponseLength,
@@ -855,3 +880,18 @@ ModelChoice chatModelOf(ChatMeta meta, AppSettings settings) =>
         modelId: meta.model ?? settings.defaultModelId,
         providerId: meta.model != null ? null : settings.defaultProviderId,
       );
+
+/// A turn's hold on its chat's goal: the repository's reads and writes, bound
+/// to the chat.
+class _ChatGoalStore implements GoalStore {
+  _ChatGoalStore(this._repo, this._chatId);
+
+  final ChatRepository _repo;
+  final String _chatId;
+
+  @override
+  Future<ChatGoal?> read() => _repo.goalOf(_chatId);
+
+  @override
+  Future<void> write(ChatGoal? goal) => _repo.setGoal(_chatId, goal);
+}

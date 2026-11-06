@@ -482,8 +482,8 @@ expanding its body as a prompt template — the same one `/` namespace the
 opencode-era offered commands under, where frontmatter decided what a send
 meant, restored under the built-in backend with the key the spec's `metadata:`
 map carries. What the callback does is the closed set in
-`lib/domain/wired_skill.dart` (`WiredSkill`), and the bundled `compact` skill
-is the one that ships. The body of a wired skill is the user's documentation,
+`lib/domain/wired_skill.dart` (`WiredSkill`), and the bundled `compact` and
+`goal` skills are the ones that ship. The body of a wired skill is the user's documentation,
 never sent to a model — `promptReferences` does not record one and
 `expandedPrompt` refuses to expand one, so the
 conversation never gains prose pretending the model read it.
@@ -497,6 +497,45 @@ composer's dress-up, and the Omada author stamp. A name in the enum dispatches
 whether or not the library still holds the skill — the reader of a turn being
 resent cannot ask what the frontmatter said when it ran — which is also the
 one cost: a user's own skill shadowing a wired name is not offered as prose.
+
+`/goal` is the one callback whose turn can be a model's: setting a goal and
+resuming one change the goal and then start the work. `wiredRunsModel` says
+which, and the readers that keep a callback from a model ask it where it
+matters — such a turn is resumable (`endsUnfinished`), and the title namer
+names the chat from the objective. It still addresses nobody and never steers
+(`isCommand`), so it goes to Athena.
+
+### Goals
+
+`/goal <objective>` is Claude Code's `/goal` and OpenCode's, with the same
+split of who decides: the working model never marks its own goal done. Each
+time a reply ends with no tool call, a reviewer reads the conversation and
+answers met, carry on, or blocked; the agent's claim is not evidence. See
+"The agent loop" in `lib/data/builtin/AGENTS.md` for the review itself.
+
+The goal is a `ChatGoal` in the chat's `meta.json` — not the log, not
+`state.json`. A turn reads it at every stop through `TurnSettings.goal` (a
+`GoalStore` the repository binds to the chat, the way `policy` is a reader),
+so `/goal pause` or `/goal clear` mid-turn lands before the next review; and
+a mirror hears of it the way it hears of the rest of the meta. The chat
+settings page saves the meta whole, so it takes the goal from disk before it
+writes rather than the copy it read. A rewind does not unset it: a goal is
+the chat's, as in both tools, not a message's.
+
+What reaches the log is the two commands that start work. `/goal <objective>`
+and `/goal resume` are user messages as typed, and the projection words them —
+`goalKickoff`, `goalResumedText` — so the model is told the goal, that a
+reviewer will check the evidence, and to stop and say so when blocked.
+`/goal` alone, `pause` and `clear` (and Claude Code's `stop`, `off`,
+`reset`, `none`, `cancel`) write the goal and say so on the status row, and
+nothing else. A one-word verb is the verb; anything longer is an objective.
+
+`GoalStatus` is active, paused, met or blocked; only active is reviewed, the
+rest are kept for the composer's `GoalStrip` to show until cleared. A goal
+pauses itself after `maxGoalRounds` (50, OpenCode's) sends back, or
+`maxGoalStalls` (3) reviews in a row after stretches with no tool call — a
+model that only talks is not getting closer. `/goal resume` starts both
+counters over.
 
 ### Carrying on an interrupted turn
 

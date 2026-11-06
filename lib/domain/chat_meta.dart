@@ -1,12 +1,17 @@
 import "dart:convert";
 
 import "app_settings.dart" show ReasoningEffort;
+import "goal.dart";
 import "permission.dart";
 import "temp_chat_ttl.dart";
 
 /// A chat's overrides of the app defaults, persisted to `meta.json`. Edited via
 /// the chat settings page. Distinct from `state.json` (chat metadata) and
 /// `conv.jsonl` (message tree). Null everywhere means "inherit".
+///
+/// One field is not an override: [goal], which is here because a turn reads
+/// it live the way it reads [permissions], and because a mirror hears of it
+/// the way it hears of the rest — see "Goals" in `lib/domain/AGENTS.md`.
 class ChatMeta {
   ChatMeta({
     this.model,
@@ -19,6 +24,7 @@ class ChatMeta {
     this.memoryOff,
     this.sandbox,
     this.headless,
+    this.goal,
   });
 
   String? model;
@@ -58,6 +64,9 @@ class ChatMeta {
   /// means an ordinary chat the user drives.
   bool? headless;
 
+  /// What `/goal` set, and where it stands. Null is no goal.
+  ChatGoal? goal;
+
   factory ChatMeta.fromJson(Map<String, dynamic> json) => ChatMeta(
     model: json["model"] as String?,
     provider: json["provider"] as String?,
@@ -73,6 +82,7 @@ class ChatMeta {
     memoryOff: json["memoryOff"] as bool?,
     sandbox: json["sandbox"] as bool?,
     headless: json["headless"] as bool?,
+    goal: ChatGoal.fromJson(json["goal"]),
   );
 
   /// Null is a `meta.json` that was never written, which inherits everything —
@@ -114,6 +124,7 @@ class ChatMeta {
     if (memoryOff != null) "memoryOff": memoryOff,
     if (sandbox != null) "sandbox": sandbox,
     if (headless != null) "headless": headless,
+    if (goal != null) "goal": goal!.toJson(),
   };
 
   String encode() => jsonEncode(toJson());

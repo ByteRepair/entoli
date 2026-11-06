@@ -451,7 +451,9 @@ bool endsUnfinished(List<Message> messages, List<ChatRecord> records) {
   if (prompt != null && shellBypassCommand(prompt.plainText) != null) {
     return false;
   }
-  // A wired-callback turn (`/compact`) appends nothing either. Matched by
+  // A wired-callback turn (`/compact`) appends nothing either — unless it
+  // handed the work to a model (`/goal <objective>`), whose reply is any
+  // reply. Matched by
   // name alone rather than against the library: this runs on a reload, where
   // what the skill's frontmatter says today is not what it said when the turn
   // was sent, and a name in the enum is the closed set the dispatch reads.
@@ -459,7 +461,9 @@ bool endsUnfinished(List<Message> messages, List<ChatRecord> records) {
   // interrupted turn is then not offered, where it would have been resumable;
   // a name in the enum is the app's own, and shadowing one is not a state
   // worth a stamp on every message for.
-  if (prompt != null && wiredSkillFromText(prompt.plainText) != null) {
+  if (prompt != null &&
+      wiredSkillFromText(prompt.plainText) != null &&
+      !wiredRunsModel(prompt.plainText)) {
     return false;
   }
   TurnEnd? ended;

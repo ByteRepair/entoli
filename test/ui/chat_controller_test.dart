@@ -10,6 +10,7 @@ import "package:agent_chat/domain/end_turn.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/chat_meta.dart";
+import "package:agent_chat/domain/goal.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/room/chat_room.dart" show retryWait;
 import "package:agent_chat/domain/room/room_state.dart";
@@ -2654,6 +2655,108 @@ void main() {
         resolved.indexOf("chat rule *"),
         lessThan(resolved.indexOf("project rule *")),
       );
+    });
+  });
+
+  group("goal", () {
+    Future<(String, ChatController)> openChat() async {
+      final chat = await app.repo.createChat();
+      return (
+        chat.state.id,
+        app.container.read(chatControllerProvider(chat.state.id).notifier),
+      );
+    }
+
+    test("setting one writes it, then hands the work to a model", () async {
+      final (id, controller) = await openChat();
+      await controller.send("/goal the tests pass");
+      await waitIdle(id);
+
+      const goal = ChatGoal(objective: "the tests pass");
+      expect(await app.repo.goalOf(id), goal);
+      // The message goes on the log as typed — the projection words it — and
+      // the turn is a model's, which reads the goal live through its store.
+      final sent = app.backend.prompts.single;
+      expect(sent.prompt.plainText, "/goal the tests pass");
+      expect(await sent.settings.goal!.read(), goal);
+      // A turn a model answered: one cut off is offered to carry on.
+      expect(
+        endsUnfinished([sent.prompt, messagesOf(id).last], const []),
+        isTrue,
+      );
+    });
+
+    test(
+      "pause and clear land mid-turn and write nothing to the log",
+      () async {
+        final (id, controller) = await openChat();
+        app.backend.hold = Completer<void>();
+        await controller.send("/goal ship it");
+        await waitFor(
+          () => app.container.read(chatControllerProvider(id)).isRunning,
+          what: "the turn",
+        );
+        final logged = messagesOf(id).length;
+
+        await controller.send("/goal pause");
+        expect((await app.repo.goalOf(id))?.status, GoalStatus.paused);
+        await controller.send("/goal clear");
+        expect(await app.repo.goalOf(id), isNull);
+        expect(messagesOf(id), hasLength(logged));
+
+        app.backend.hold!.complete();
+        await waitIdle(id);
+        expect(app.backend.prompts, hasLength(1));
+      },
+    );
+
+    test(
+      "setting one while a turn runs is refused, and never queued",
+      () async {
+        final (id, controller) = await openChat();
+        app.backend.hold = Completer<void>();
+        await controller.send("hold the room");
+        await waitFor(
+          () => app.container.read(chatControllerProvider(id)).isRunning,
+          what: "the turn",
+        );
+        await controller.send("/goal ship it");
+        expect(await app.repo.goalOf(id), isNull);
+
+        app.backend.hold!.complete();
+        await waitIdle(id);
+        expect(app.backend.prompts, hasLength(1));
+      },
+    );
+
+    test("resume starts the counters over and carries on", () async {
+      final (id, controller) = await openChat();
+      await app.repo.setGoal(
+        id,
+        const ChatGoal(
+          objective: "ship it",
+          status: GoalStatus.paused,
+          rounds: maxGoalRounds,
+          reason: "Paused after 50 rounds.",
+        ),
+      );
+      await controller.send("/goal resume");
+      await waitIdle(id);
+
+      expect(await app.repo.goalOf(id), const ChatGoal(objective: "ship it"));
+      expect(app.backend.prompts.single.prompt.plainText, "/goal resume");
+    });
+
+    test("alone, it says what the goal is", () async {
+      final (id, controller) = await openChat();
+      await app.repo.setGoal(id, const ChatGoal(objective: "ship it"));
+      await controller.send("/goal");
+
+      expect(
+        app.container.read(chatControllerProvider(id)).status,
+        "Goal active: ship it",
+      );
+      expect(app.backend.prompts, isEmpty);
     });
   });
 

@@ -160,6 +160,9 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
     final chatId = widget.chatId;
     setState(() => _saving = true);
     final repo = ref.read(chatRepositoryProvider);
+    // The goal is not this page's: a turn's review may have moved it on
+    // since the page read the meta, and saving that copy would undo it.
+    _meta!.goal = (await repo.loadMeta(chatId)).goal;
     await repo.saveMeta(chatId, _meta!);
     // Re-anchor immediately so the sidebar hourglass and title-bar countdown
     // appear without waiting for a turn. `reanchor: true` so flipping the

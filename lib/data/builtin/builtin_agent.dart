@@ -10,6 +10,7 @@ import "../../domain/agent_definition.dart";
 import "../../domain/agent_browser.dart";
 import "../../domain/ask.dart";
 import "../../domain/file_tools.dart";
+import "../../domain/goal.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
 import "../../domain/profile.dart";
@@ -24,6 +25,7 @@ import "../../domain/web_search.dart";
 import "approval_gate.dart";
 import "background_jobs.dart";
 import "compact_prompt.dart" show estimateTokens;
+import "goal_reviewer.dart";
 import "llm/llm_client.dart";
 import "llm/rate_limit_gate.dart";
 import "memory/instructions.dart";
@@ -236,7 +238,17 @@ class BuiltinAgent implements Turn {
     this.policy = noPolicy,
     this.dataDir,
     this.claimInstruction,
+    this.goal,
+    this.goalReviewer,
   });
+
+  /// The chat's goal, read at each stop; null for a turn that keeps none — a
+  /// sub-agent's, or a test's. See "Goals" in `lib/domain/AGENTS.md`.
+  final GoalStore? goal;
+
+  /// Who decides, at a stop, whether [goal] is met. Without one the goal is
+  /// never reviewed and a stop ends the turn as it always did.
+  final GoalReviewer? goalReviewer;
 
   /// Who this turn answers as: the participant's bare name the room routed
   /// the say to, or null for a sub-agent, which answers as no one in a room.
@@ -893,24 +905,29 @@ class BuiltinAgent implements Turn {
       // tasks left, or a reply the provider marked as not its answer: the
       // model is told, a bounded number of times, and stopping to ask is
       // `ask_user`'s.
+      //
+      // Past those, a goal: the reply is put to the reviewer, and one it
+      // finds short of the goal is sent back with the reason. Its budget is
+      // the goal's own, kept on the goal across turns.
       if (completion.message.toolCalls.isEmpty) {
-        final left = _nudges < maxStopNudges && step < options.stepLimit - 1
+        final last = step >= options.stepLimit - 1;
+        final left = _nudges < maxStopNudges && !last
             ? await _unfinished(completion.stop)
             : null;
-        if (left == null) break;
-        _nudges++;
-        yield SteerEvent(
-          Message(
-            id: const Uuid().v4(),
-            role: MessageRole.user,
-            createdAt: DateTime.now(),
-            parts: [MessagePart.text(text: left)],
-          ),
-        );
-        continue;
+        if (left != null) {
+          _nudges++;
+          yield _nudge(left);
+          continue;
+        }
+        if (last) break;
+        _sentBack = false;
+        yield* _reviewGoal();
+        if (_sentBack && !_cancelled) continue;
+        break;
       }
 
       yield* _executeAll(completion.message.toolCalls);
+      _actedSinceReview = true;
       if (_cancelled || _ended) break;
 
       if (step == options.stepLimit - 1) {
@@ -919,6 +936,90 @@ class BuiltinAgent implements Turn {
     }
 
     yield const DoneEvent();
+  }
+
+  /// [text] said to the turn as the app, a step boundary's steer.
+  static SteerEvent _nudge(String text) => SteerEvent(
+    Message(
+      id: const Uuid().v4(),
+      role: MessageRole.user,
+      createdAt: DateTime.now(),
+      parts: [MessagePart.text(text: text)],
+    ),
+  );
+
+  /// Whether the last review sent the turn back to work.
+  bool _sentBack = false;
+
+  /// Whether the model called a tool since the goal last sent it back — or,
+  /// before then, this turn. A review that sends back a model that did
+  /// nothing since the last one is a stall.
+  bool _actedSinceReview = false;
+
+  /// The stop just made, put to the reviewer where the chat has an active
+  /// goal. Met or blocked ends the goal's run and the turn; short of it the
+  /// turn carries on with the reviewer's reason as a `<system-notification>`
+  /// — until the goal's rounds or stalls run out, which pauses it.
+  ///
+  /// The goal is read again after the review: the user may have paused,
+  /// cleared or replaced it while the reviewer read, and what they did then
+  /// stands over what the reviewer found.
+  Stream<AgentEvent> _reviewGoal() async* {
+    final store = goal;
+    final reviewer = goalReviewer;
+    if (store == null || reviewer == null) return;
+    final asked = await store.read();
+    if (asked == null || !asked.isActive) return;
+    // The reply that stopped is in the session before the reviewer reads it.
+    _sayWhatWasSaid();
+    yield const StatusEvent("Checking the goal");
+    final verdict = await reviewer.review(asked.objective, session.messages);
+    yield const StatusEvent(null);
+    if (verdict == null || _cancelled) return;
+    final current = await store.read();
+    if (current == null ||
+        !current.isActive ||
+        current.objective != asked.objective) {
+      return;
+    }
+    switch (verdict.kind) {
+      case GoalVerdictKind.met:
+        await store.write(
+          current.copyWith(status: GoalStatus.met, reason: verdict.reason),
+        );
+      case GoalVerdictKind.blocked:
+        await store.write(
+          current.copyWith(status: GoalStatus.blocked, reason: verdict.reason),
+        );
+      case GoalVerdictKind.carryOn:
+        final stalls = _actedSinceReview ? 0 : current.stalls + 1;
+        final rounds = current.rounds + 1;
+        if (stalls >= maxGoalStalls || rounds > maxGoalRounds) {
+          await store.write(
+            current.copyWith(
+              status: GoalStatus.paused,
+              stalls: stalls,
+              reason: stalls >= maxGoalStalls
+                  ? "Paused: the agent stopped $stalls times in a row "
+                        "without doing anything. ${verdict.reason}"
+                  : "Paused after $maxGoalRounds rounds. ${verdict.reason}",
+            ),
+          );
+          return;
+        }
+        await store.write(
+          current.copyWith(
+            rounds: rounds,
+            stalls: stalls,
+            reason: verdict.reason,
+          ),
+        );
+        _actedSinceReview = false;
+        _sentBack = true;
+        yield _nudge(
+          goalNudge(current.objective, verdict.reason, verdict.next),
+        );
+    }
   }
 
   /// What the user said since the last step, recorded so the rebuild below
