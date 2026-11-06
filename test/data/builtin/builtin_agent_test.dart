@@ -68,7 +68,7 @@ void main() {
     SubAgents? subAgents,
     LlmOutputLimit outputLimit = const LlmOutputLimit(),
     String? provider,
-    GoalStore? goal,
+    GoalReader? goal,
     GoalReviewer? goalReviewer,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-test");
@@ -889,6 +889,10 @@ void main() {
   });
 
   group("a goal", () {
+    /// What the turn said moved the goal.
+    List<GoalEvent> moved(List<AgentEvent> events) =>
+        events.whereType<GoalEvent>().toList();
+
     test("a stop short of the goal is sent back with the reviewer's reason, "
         "until the reviewer finds it met", () async {
       final client = FakeLlmClient([
@@ -896,7 +900,7 @@ void main() {
         [bashCall("flutter test")],
         [saidOnly("The tests pass.")],
       ]);
-      final store = FakeGoalStore(const ChatGoal(objective: "tests pass"));
+      final goal = FakeGoal(const ChatGoal(objective: "tests pass"));
       final reviewer = FakeGoalReviewer([
         const GoalVerdict(
           GoalVerdictKind.carryOn,
@@ -908,7 +912,7 @@ void main() {
 
       final events = await agentOver(
         client,
-        goal: store,
+        goal: goal.read,
         goalReviewer: reviewer,
       ).run(userMessage("/goal tests pass")).toList();
 
@@ -921,9 +925,11 @@ void main() {
       // The reviewer read each stop, the reply that stopped included.
       expect(reviewer.read, hasLength(2));
       expect(reviewer.read.first.last.text, "All done.");
-      expect(store.goal?.status, GoalStatus.met);
-      expect(store.goal?.rounds, 1);
-      expect(store.goal?.reason, "The test run passed.");
+      // Sending back moves nothing; met is said, for the room to log.
+      final met = moved(events).single;
+      expect(met.change, GoalChange.met);
+      expect(met.objective, "tests pass");
+      expect(met.reason, "The test run passed.");
     });
 
     test("the step limit is what bounds the send-backs, and leaves the "
@@ -932,49 +938,47 @@ void main() {
         [saidOnly("First go.")],
         [saidOnly("Second go.")],
       ]);
-      final store = FakeGoalStore(const ChatGoal(objective: "ship"));
       final reviewer = FakeGoalReviewer([
         const GoalVerdict(GoalVerdictKind.carryOn, "Not yet."),
       ]);
 
-      await agentOver(
+      final events = await agentOver(
         client,
         options: const BuiltinOptions(stepLimit: 2),
-        goal: store,
+        goal: FakeGoal(const ChatGoal(objective: "ship")).read,
         goalReviewer: reviewer,
       ).run(userMessage("go")).toList();
 
       // Sent back once; the last step's stop is never reviewed.
       expect(reviewer.read, hasLength(1));
       expect(client.sent, hasLength(2));
-      expect(store.goal?.status, GoalStatus.active);
+      expect(moved(events), isEmpty);
     });
 
     test("blocked ends the turn and says why", () async {
       final client = FakeLlmClient([
         [saidOnly("I need the API key.")],
       ]);
-      final store = FakeGoalStore(const ChatGoal(objective: "deploy"));
       final reviewer = FakeGoalReviewer([
         const GoalVerdict(GoalVerdictKind.blocked, "Needs the user's key."),
       ]);
 
       final events = await agentOver(
         client,
-        goal: store,
+        goal: FakeGoal(const ChatGoal(objective: "deploy")).read,
         goalReviewer: reviewer,
       ).run(userMessage("go")).toList();
 
       expect(events.whereType<SteerEvent>(), isEmpty);
-      expect(store.goal?.status, GoalStatus.blocked);
-      expect(store.goal?.reason, "Needs the user's key.");
+      final blocked = moved(events).single;
+      expect(blocked.change, GoalChange.blocked);
+      expect(blocked.reason, "Needs the user's key.");
     });
 
     test("stopping again and again without acting pauses it", () async {
       final client = FakeLlmClient([
         for (var i = 0; i < maxGoalStalls; i++) [saidOnly("Working on it.")],
       ]);
-      final store = FakeGoalStore(const ChatGoal(objective: "ship"));
       final reviewer = FakeGoalReviewer([
         for (var i = 0; i < maxGoalStalls; i++)
           const GoalVerdict(GoalVerdictKind.carryOn, "Nothing done."),
@@ -982,20 +986,21 @@ void main() {
 
       final events = await agentOver(
         client,
-        goal: store,
+        goal: FakeGoal(const ChatGoal(objective: "ship")).read,
         goalReviewer: reviewer,
       ).run(userMessage("go")).toList();
 
       // Sent back twice; the third stall pauses rather than sending back.
       expect(events.whereType<SteerEvent>(), hasLength(maxGoalStalls - 1));
       expect(client.sent, hasLength(maxGoalStalls));
-      expect(store.goal?.status, GoalStatus.paused);
-      expect(store.goal?.reason, startsWith("Paused: the agent stopped"));
+      final paused = moved(events).single;
+      expect(paused.change, GoalChange.paused);
+      expect(paused.reason, startsWith("The agent stopped"));
     });
 
     test("a paused goal, or a review with no verdict, ends the turn as "
         "a stop always did", () async {
-      for (final (goal, verdicts) in [
+      for (final (standing, verdicts) in [
         (
           const ChatGoal(objective: "ship", status: GoalStatus.paused),
           [const GoalVerdict(GoalVerdictKind.carryOn, "Not yet.")],
@@ -1005,16 +1010,15 @@ void main() {
         final client = FakeLlmClient([
           [saidOnly("Done.")],
         ]);
-        final store = FakeGoalStore(goal);
         final events = await agentOver(
           client,
-          goal: store,
+          goal: FakeGoal(standing).read,
           goalReviewer: FakeGoalReviewer(verdicts),
         ).run(userMessage("go")).toList();
 
         expect(events.whereType<SteerEvent>(), isEmpty);
+        expect(moved(events), isEmpty);
         expect(client.sent, hasLength(1));
-        expect(store.goal, goal);
       }
     });
 
@@ -1022,22 +1026,23 @@ void main() {
       final client = FakeLlmClient([
         [saidOnly("Done.")],
       ]);
-      final store = FakeGoalStore(const ChatGoal(objective: "ship"));
+      final goal = FakeGoal(const ChatGoal(objective: "ship"));
       final reviewer = FakeGoalReviewer(
         [const GoalVerdict(GoalVerdictKind.carryOn, "Not yet.")],
-        whileReading: () =>
-            store.goal = store.goal!.copyWith(status: GoalStatus.paused),
+        whileReading: () => goal.goal = const ChatGoal(
+          objective: "ship",
+          status: GoalStatus.paused,
+        ),
       );
 
       final events = await agentOver(
         client,
-        goal: store,
+        goal: goal.read,
         goalReviewer: reviewer,
       ).run(userMessage("go")).toList();
 
       expect(events.whereType<SteerEvent>(), isEmpty);
-      expect(store.goal?.status, GoalStatus.paused);
-      expect(store.goal?.rounds, 0);
+      expect(moved(events), isEmpty);
     });
   });
 

@@ -552,18 +552,14 @@ class FakeClassifier implements PermissionClassifier {
   }
 }
 
-/// A chat's goal held in memory: what the agent reads at each stop, and what
-/// its review last wrote.
-class FakeGoalStore implements GoalStore {
-  FakeGoalStore(this.goal);
+/// A chat's goal held where a test can move it, as the room's log would:
+/// [read] is the reader a turn is handed.
+class FakeGoal {
+  FakeGoal(this.goal);
 
   ChatGoal? goal;
 
-  @override
-  Future<ChatGoal?> read() async => goal;
-
-  @override
-  Future<void> write(ChatGoal? goal) async => this.goal = goal;
+  ChatGoal? read() => goal;
 }
 
 /// A reviewer that answers [verdicts] in order — null being one that gave no

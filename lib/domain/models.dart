@@ -258,9 +258,37 @@ abstract class Chat with _$Chat {
     /// from `callEvent` records, every kind kept whether this build reads it
     /// or not; the typed reading is [CallEvents].
     @Default({}) Map<String, Map<String, Map<String, dynamic>>> callEvents,
+
+    /// What happened to the chat's goal on the thread being read, in order —
+    /// see [GoalMark]. Derived by `replayTree` from `goal` records, so a
+    /// restart rebuilds the goal from the log and a rewind past where one was
+    /// set takes it away with the message. The goal as it stands is
+    /// `ChatGoals.goal`, the fold of these.
+    @Default([]) List<GoalMark> goals,
   }) = _Chat;
 
   factory Chat.fromJson(Map<String, dynamic> json) => _$ChatFromJson(json);
+}
+
+/// What happened to a chat's goal, as a [GoalMark] records it.
+enum GoalChange { set, resumed, paused, cleared, met, blocked }
+
+/// One change to the chat's goal, said after the message [afterMessageId] —
+/// the `/goal` that set it, the reply whose review found it met, the last
+/// message when the user paused it. [objective] is the goal it was about;
+/// [reason] why it stands where it does now, where there is one. See "Goals"
+/// in `lib/domain/AGENTS.md`.
+@freezed
+abstract class GoalMark with _$GoalMark {
+  const factory GoalMark({
+    required String afterMessageId,
+    required GoalChange change,
+    required String objective,
+    String? reason,
+  }) = _GoalMark;
+
+  factory GoalMark.fromJson(Map<String, dynamic> json) =>
+      _$GoalMarkFromJson(json);
 }
 
 /// The `callEvent` kind saying a background job ended, its data a [JobEnd].

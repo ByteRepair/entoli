@@ -668,6 +668,19 @@ as the plan's label watches `planProvider`; the `ToolUI` itself holds no state. 
 every `ToolUI` names a tool the registry has, since the two are paired by
 that string alone.
 
+## A goal, on screen
+
+The goal shows twice. **Where it stands now** is the row above the composer —
+`GoalStrip` in Flutter, `goalRow` in the native shell — with its pause or
+resume and its clear, each sent as the `/goal` command it is. **Where it
+moved** is a `GoalMarkRow` in the conversation for each `goal` record, after
+the message it names: an activity label in the reply's gutter, "Goal set: …",
+"Goal paused: …", "Goal met: …", opening the same kind of drawer every
+activity has (a sheet, a page under the native shell). The drawer says the
+state the goal was left in, why — the user's pause, the reviewer's verdict —
+and the goal prompt as the model was given it. Off the log, so a restart
+draws the same rows and a rewind takes them away with their message.
+
 ## The plan, on screen
 
 A `present_plan` call is drawn as the plan it put to the user (`PresentPlanUI`):

@@ -24,7 +24,8 @@ the conversation up to a message is summarized for the model, and still there
 for the user to read — see "Compaction" below.
 `callEvent` says something happened to a call after its turn — today, that
 the background job it started ended (`jobEnded`). `retract` takes back a
-reaction — see "Reactions".
+reaction — see "Reactions". `goal` says the chat's goal moved, after a
+message — see "Goals".
 
 Nothing is mutable, so a part that changed is **superseded**: the same index
 written again wins, and `replay` applies records in order, so the last one
@@ -513,22 +514,44 @@ time a reply ends with no tool call, a reviewer reads the conversation and
 answers met, carry on, or blocked; the agent's claim is not evidence. See
 "The agent loop" in `lib/data/builtin/AGENTS.md` for the review itself.
 
-The goal is a `ChatGoal` in the chat's `meta.json` — not the log, not
-`state.json`. A turn reads it at every stop through `TurnSettings.goal` (a
-`GoalStore` the repository binds to the chat, the way `policy` is a reader),
-so `/goal pause` or `/goal clear` mid-turn lands before the next review; and
-a mirror hears of it the way it hears of the rest of the meta. The chat
-settings page saves the meta whole, so it takes the goal from disk before it
-writes rather than the copy it read. A rewind does not unset it: a goal is
-the chat's, as in both tools, not a message's.
+**The goal is the log's.** Every change to it is a `goal` record —
+`set`, `resumed`, `paused`, `cleared`, `met`, `blocked` — naming the message
+it comes after, as a `compaction` names its boundary. Replay keeps the ones
+whose message is live, in thread order, as `Chat.goals` (`GoalMark`s), and
+the goal as it stands is their fold (`goalOf`, read as `chat.goal`): a set
+starts one, a clear ends it, the rest move the one there is, and a mark about
+another objective — a verdict landing after a new `/goal` — moves nothing.
+So a restart reloads the goal by reading the log, and a rewind past the
+`/goal` that set it takes it away with the message, as a rewind takes a
+compaction. Nothing keeps the goal beside the log; it used to live in
+`meta.json`, and was moved here so that what the conversation shows and what
+the goal is cannot disagree. A new record type is what a build from before
+this stops decoding at, as `compaction` was when it landed.
 
-What reaches the log is the two commands that start work. `/goal <objective>`
-and `/goal resume` are user messages as typed, and the projection words them —
-`goalKickoff`, `goalResumedText` — so the model is told the goal, that a
-reviewer will check the evidence, and to stop and say so when blocked.
-`/goal` alone, `pause` and `clear` (and Claude Code's `stop`, `off`,
-`reset`, `none`, `cancel`) write the goal and say so on the status row, and
-nothing else. A one-word verb is the verb; anything longer is an objective.
+**The room is the one writer.** `/goal <objective>` and `/goal resume` write
+theirs in `_openTurn`, after the prompt; `pause` and `clear` write theirs
+after the last message, mid-turn or not, and nothing else — no message, no
+turn. The review is the agent's but the record is not: a verdict that moves
+the goal (met, blocked, or the stall pause) goes out as a `GoalEvent`, and the
+room appends it after the reply through the one append queue, as it does a
+job's end. Each is applied to the room's chat at once, which is what the
+running turn reads — `TurnSettings.goal` is a reader over the room's copy,
+handed through `Agent` — so a pause mid-turn lands before the next review.
+
+**Each mark is a row.** `entriesOf` puts a `GoalEntry` after the message the
+mark names, drawn as an activity label — "Goal set: …", "Goal met: …" — that
+opens a drawer with where the goal stood after it, why, and the goal prompt
+the model was given (`goalKickoff`). See "A goal, on screen" in
+`lib/ui/chat/AGENTS.md`.
+
+What reaches the model is the two commands that start work. `/goal
+<objective>` and `/goal resume` are user messages as typed, and the
+projection words them — `goalKickoff`, `goalResumedText` — so the model is
+told the goal, that a reviewer will check the evidence, and to stop and say so
+when blocked. The records are never projected. `/goal` alone (and Claude
+Code's `stop`, `off`, `reset`, `none`, `cancel` for clear) says where the goal
+stands on the status row. A one-word verb is the verb; anything longer is an
+objective.
 
 `GoalStatus` is active, paused, met or blocked; only active is reviewed, the
 rest are kept for the goal row above the composer to show until cleared —
@@ -545,8 +568,7 @@ the same thing, and one the user cannot set. A turn that hits it ends as any
 does at its limit, offered to Continue, with the goal still active. What the
 step limit cannot catch is a model that stops without doing anything, which
 spends a step each time to no end: `maxGoalStalls` (3) reviews in a row after
-stretches with no tool call pause the goal. `/goal resume` starts the
-counters over.
+stretches with no tool call, in one turn, pause the goal.
 
 ### Carrying on an interrupted turn
 

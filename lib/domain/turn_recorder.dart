@@ -204,6 +204,8 @@ class TurnRecorder {
       case StatusEvent():
       case ShellOutputEvent():
       case InfoEvent():
+      // The room's to write, as a record beside the reply rather than a part.
+      case GoalEvent():
       case DoneEvent():
         break;
     }

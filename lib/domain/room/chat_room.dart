@@ -204,7 +204,10 @@ class ChatRoom {
             });
   }
 
-  Agent _agent(String handle) => Agent(_repo, chatId, handle);
+  /// A participant, reading the goal off this room's copy of the log — the
+  /// one the goal records land in as they are written.
+  Agent _agent(String handle) =>
+      Agent(_repo, chatId, handle, goal: () => state.chat?.goal);
 
   Roster _roster(Chat chat) => _host.roster(chat.state.project);
 
@@ -592,16 +595,17 @@ class ChatRoom {
     await _openTurn(chat: chat, prompt: userMsg);
   }
 
-  /// `/goal`'s callback. Setting a goal and resuming one write the goal and
-  /// then start the work — the message goes on the log as typed, and the
-  /// projection words it as the kickoff — so both wait for a running turn to
-  /// finish, as `/compact` does. Pausing and clearing write only the goal,
-  /// which the running turn reads at its next stop, so they land mid-turn;
-  /// nothing of them goes on the log. See "Goals" in `lib/domain/AGENTS.md`.
+  /// `/goal`'s callback. Setting a goal and resuming one start the work: the
+  /// message goes on the log as typed, the projection words it as the
+  /// kickoff, and [_openTurn] writes the goal record after it — so both wait
+  /// for a running turn to finish, as `/compact` does. Pausing and clearing
+  /// are a goal record alone, after the last message, and land mid-turn too:
+  /// the running turn reads the goal at its next stop. `/goal` alone writes
+  /// nothing. See "Goals" in `lib/domain/AGENTS.md`.
   Future<void> _goalCommand(GoalCommand command) async {
     final chat = state.chat;
     if (chat == null) return;
-    final goal = await _repo.goalOf(chatId);
+    final goal = chat.goal;
     switch (command) {
       case GoalShow():
         _view = state.copyWith(status: goalSummary(goal));
@@ -610,16 +614,17 @@ class ChatRoom {
           _view = state.copyWith(status: goalSummary(goal));
           return;
         }
-        await _repo.setGoal(
-          chatId,
-          goal.copyWith(status: GoalStatus.paused, reason: "Paused by you."),
+        await _markGoal(
+          GoalChange.paused,
+          goal.objective,
+          reason: "Paused by you.",
         );
-        _view = state.copyWith(status: "Goal paused");
       case GoalClear():
-        await _repo.setGoal(chatId, null);
-        _view = state.copyWith(
-          status: goal == null ? "No goal was set" : "Goal cleared",
-        );
+        if (goal == null) {
+          _view = state.copyWith(status: "No goal was set");
+          return;
+        }
+        await _markGoal(GoalChange.cleared, goal.objective);
       case GoalResume():
         if (goal == null) {
           _view = state.copyWith(status: goalSummary(goal));
@@ -631,7 +636,6 @@ class ChatRoom {
           );
           return;
         }
-        await _repo.setGoal(chatId, goal.resumed());
         await _prompt("/goal resume");
       case GoalSet(:final objective):
         if (state.isRunning) {
@@ -640,9 +644,40 @@ class ChatRoom {
           );
           return;
         }
-        await _repo.setGoal(chatId, ChatGoal(objective: objective));
         await _prompt("/goal $objective");
     }
+  }
+
+  /// A goal record after [after] — the last message on the thread where the
+  /// caller names none — on the log through the one append queue and on the
+  /// chat on screen at once, so the turn reading the goal next sees it. The
+  /// goal itself is never kept beside the log: it is what these fold to.
+  /// Completes when the line has landed; a turn's event does not wait on it.
+  Future<void> _markGoal(
+    GoalChange change,
+    String objective, {
+    String? reason,
+    String? after,
+  }) {
+    final chat = state.chat;
+    final anchor = after ?? chat?.messages.lastOrNull?.id;
+    if (chat == null || anchor == null) return Future.value();
+    final mark = GoalMark(
+      afterMessageId: anchor,
+      change: change,
+      objective: objective,
+      reason: reason,
+    );
+    final written = _append([
+      ChatRecord.goal(
+        afterMessageId: anchor,
+        change: change,
+        objective: objective,
+        reason: reason,
+      ),
+    ]);
+    _view = state.copyWith(chat: chat.copyWith(goals: [...chat.goals, mark]));
+    return written;
   }
 
   /// The compact turn's body, driven from [_openTurn] by the wired check on
@@ -805,9 +840,21 @@ class ChatRoom {
       case WiredSkill.compact:
         unawaited(_runCompactTurn(turn, wired!.arguments));
         return;
-      // The goal is written by now; the turn is the work, the agent's like
-      // any other, the projection wording the message as the kickoff.
+      // Setting or resuming a goal: its record goes after the prompt, then
+      // the turn is the work, the agent's like any other, the projection
+      // wording the message as the kickoff.
       case WiredSkill.goal:
+        switch (goalCommandOf(wired!.arguments)) {
+          case GoalSet(:final objective):
+            unawaited(_markGoal(GoalChange.set, objective, after: prompt.id));
+          case GoalResume():
+            if (state.chat?.goal case final goal?) {
+              unawaited(
+                _markGoal(GoalChange.resumed, goal.objective, after: prompt.id),
+              );
+            }
+          default:
+        }
       case null:
     }
     _listen(
@@ -1037,6 +1084,10 @@ class ChatRoom {
       case StepLimitEvent():
       case InfoEvent():
         break;
+      case GoalEvent(:final change, :final objective, :final reason):
+        unawaited(
+          _markGoal(change, objective, reason: reason, after: turn.replyId),
+        );
       case ContextEvent(
         :final usage,
         :final provider,

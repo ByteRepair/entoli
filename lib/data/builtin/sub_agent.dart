@@ -229,6 +229,7 @@ class SubAgentRunner implements SubAgents {
           case ContextEvent():
           case StepLimitEvent():
           case InfoEvent():
+          case GoalEvent():
           case InstructionsReadEvent():
           case SteerEvent():
           case DoneEvent():

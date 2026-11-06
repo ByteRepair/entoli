@@ -36,3 +36,9 @@ agent stops three times in a row without doing anything in between.
 One goal per chat: setting another replaces it. New Goal in the composer's
 `+` menu starts one, making whatever is typed the objective, and the row
 above the composer shows the goal with its pause, resume and clear buttons.
+
+Every change to the goal — set, resumed, paused, cleared, met, blocked — is
+kept in the conversation as a row after the message it happened at. Tap one
+to see the goal's prompt and where it stood after the change. The goal is
+read back from those rows when the app restarts, and deleting the message
+that set a goal removes the goal with it.

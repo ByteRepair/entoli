@@ -197,6 +197,19 @@ sealed class ChatRecord with _$ChatRecord {
     required Retraction retraction,
   }) = RetractRecord;
 
+  /// The chat's goal changed: set, resumed, paused, cleared, or found met or
+  /// blocked by the reviewer. Said after [afterMessageId], like a
+  /// [CompactionRecord]'s boundary, so a rewind past that message un-applies
+  /// it; the goal as it stands is the fold of the live ones, which is how a
+  /// restart reloads it. Written by the room alone, through its append queue.
+  /// See "Goals" in `lib/domain/AGENTS.md`.
+  const factory ChatRecord.goal({
+    required String afterMessageId,
+    required GoalChange change,
+    required String objective,
+    String? reason,
+  }) = GoalRecord;
+
   factory ChatRecord.fromJson(Map<String, dynamic> json) =>
       _$ChatRecordFromJson(json);
 }
@@ -209,6 +222,7 @@ class Replayed {
     required this.branches,
     this.compactions = const [],
     this.callEvents = const {},
+    this.goals = const [],
   });
 
   /// The thread being read, oldest message first.
@@ -226,6 +240,9 @@ class Replayed {
 
   /// See [Chat.callEvents].
   final Map<String, Map<String, Map<String, dynamic>>> callEvents;
+
+  /// See [Chat.goals]: thread order, and log order after any one message.
+  final List<GoalMark> goals;
 }
 
 /// Fold a log into the conversation it describes, and the thread of it to show.
@@ -240,6 +257,7 @@ Replayed replayTree(Iterable<ChatRecord> records) {
   final children = <String?, List<String>>{};
   final shown = <String?, String>{};
   final compactions = <String, ConversationCompaction>{};
+  final goals = <String, List<GoalMark>>{};
   var callEvents = <String, Map<String, Map<String, dynamic>>>{};
 
   /// The child of [of] the thread runs through: the one last selected, or
@@ -383,6 +401,25 @@ Replayed replayTree(Iterable<ChatRecord> records) {
 
       case CallEventRecord(:final callId, :final kind, :final data):
         callEvents = withCallEvent(callEvents, callId, kind, data);
+
+      case GoalRecord(
+        :final afterMessageId,
+        :final change,
+        :final objective,
+        :final reason,
+      ):
+        // Kept where the message it follows is live, as a compaction marker
+        // is; read in thread order below, which is the order the goal moved.
+        if (nodes.containsKey(afterMessageId)) {
+          (goals[afterMessageId] ??= []).add(
+            GoalMark(
+              afterMessageId: afterMessageId,
+              change: change,
+              objective: objective,
+              reason: reason,
+            ),
+          );
+        }
     }
   }
 
@@ -393,7 +430,9 @@ Replayed replayTree(Iterable<ChatRecord> records) {
   // rewound away is gone from [compactions] with the message it named, so
   // what is left here is live.
   final liveCompactions = <ConversationCompaction>[];
+  final liveGoals = <GoalMark>[];
   for (final id in thread()) {
+    liveGoals.addAll(goals[id] ?? const []);
     messages.add(nodes[id]!);
     final kids = children[parent[id]]!;
     if (kids.length > 1) branches[id] = List.unmodifiable(kids);
@@ -406,6 +445,7 @@ Replayed replayTree(Iterable<ChatRecord> records) {
     branches: branches,
     compactions: liveCompactions,
     callEvents: callEvents,
+    goals: liveGoals,
   );
 }
 
@@ -425,6 +465,7 @@ Chat chatFrom(ChatState state, List<ChatRecord> records) {
     unfinished: endsUnfinished(replayed.messages, records),
     compactions: replayed.compactions,
     callEvents: replayed.callEvents,
+    goals: replayed.goals,
   );
 }
 

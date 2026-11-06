@@ -342,19 +342,6 @@ class ChatRepository {
 
   Future<ChatState?> loadState(String chatId) => _store.loadState(chatId);
 
-  /// [chatId]'s goal, as its meta holds it.
-  Future<ChatGoal?> goalOf(String chatId) async =>
-      (await loadMeta(chatId)).goal;
-
-  /// Set or clear [chatId]'s goal, leaving the rest of its meta alone. Read
-  /// and written in one go, so the chat page and a turn's review writing it
-  /// a moment apart each write over the other's goal, not its settings.
-  Future<void> setGoal(String chatId, ChatGoal? goal) async {
-    final meta = await loadMeta(chatId);
-    if (meta.goal == goal) return;
-    await saveMeta(chatId, meta.copy()..goal = goal);
-  }
-
   /// The chat's raw log, in order — what [openChat] replays and discards. The
   /// sync layer streams these to a mirror asking to follow from where it
   /// already is.
@@ -396,6 +383,7 @@ class ChatRepository {
     required String participant,
     bool mayDecline = false,
     SteerInbox? steers,
+    GoalReader? goal,
   }) async* {
     if (replaces) {
       await _backend.resetSession(chatId);
@@ -407,7 +395,7 @@ class ChatRepository {
       compactions: compactions,
       participant: participant,
       mayDecline: mayDecline,
-      settings: await _turnSettings(chatId),
+      settings: await _turnSettings(chatId, goal: goal),
       steers: steers,
     );
   }
@@ -421,13 +409,14 @@ class ChatRepository {
     List<ConversationCompaction> compactions = const [],
     required String participant,
     SteerInbox? steers,
+    GoalReader? goal,
   }) async* {
     yield* _backend.resumeTurn(
       chatId,
       history: history,
       compactions: compactions,
       participant: participant,
-      settings: await _turnSettings(chatId),
+      settings: await _turnSettings(chatId, goal: goal),
       steers: steers,
     );
   }
@@ -481,7 +470,7 @@ class ChatRepository {
   /// chat alone, and where the project already took it away it cannot be given
   /// it back from here. `headless` is the other: a chat nobody watches (a
   /// reminder's) drops `ask_user` and `task`, since nobody is there to answer.
-  Future<TurnSettings> _turnSettings(String chatId) async {
+  Future<TurnSettings> _turnSettings(String chatId, {GoalReader? goal}) async {
     final meta = await loadMeta(chatId);
     final settings = _settings();
     final project = await projectOf(chatId);
@@ -538,7 +527,7 @@ class ChatRepository {
       // The project's own command variables, beside the app-level ones.
       environment: projectSettings.environment ?? const {},
       policy: () => _policyOf(chatId),
-      goal: _ChatGoalStore(this, chatId),
+      goal: goal,
       turnMaxSteps: projectSettings.turnMaxSteps ?? settings.turnMaxSteps,
       responseLength: settings.responseLength,
       capResponseLength: settings.capResponseLength,
@@ -880,18 +869,3 @@ ModelChoice chatModelOf(ChatMeta meta, AppSettings settings) =>
         modelId: meta.model ?? settings.defaultModelId,
         providerId: meta.model != null ? null : settings.defaultProviderId,
       );
-
-/// A turn's hold on its chat's goal: the repository's reads and writes, bound
-/// to the chat.
-class _ChatGoalStore implements GoalStore {
-  _ChatGoalStore(this._repo, this._chatId);
-
-  final ChatRepository _repo;
-  final String _chatId;
-
-  @override
-  Future<ChatGoal?> read() => _repo.goalOf(_chatId);
-
-  @override
-  Future<void> write(ChatGoal? goal) => _repo.setGoal(_chatId, goal);
-}

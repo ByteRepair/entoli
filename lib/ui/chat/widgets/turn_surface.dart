@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 
 import "../../../domain/permission.dart" show addDirectoryName;
+import "../../../domain/goal.dart" show ChatGoals;
 import "../../../domain/models.dart";
 import "../../../domain/room/room_state.dart";
 import "../chat_controller.dart";
@@ -69,8 +70,7 @@ class TurnSurface extends StatelessWidget {
             notice: view.unfinishedNotice,
           ),
         if (chat != null) BrowserPrompts(chatId: chat.state.id),
-        if (chat != null)
-          GoalStrip(chatId: chat.state.id, onCommand: notifier.send),
+        GoalStrip(goal: chat?.goal, onCommand: notifier.send),
         RunningStrip(view: view),
         SteerStrip(
           steering: view.steering,

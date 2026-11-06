@@ -5,7 +5,6 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/goal.dart";
 import "../../domain/models.dart";
 import "../../domain/room/room_state.dart";
-import "../../providers.dart" show chatGoalProvider;
 import "../chat/chat_controller.dart";
 import "../chat/widgets/approval_banner.dart";
 import "../chat/widgets/resume_bar.dart";
@@ -147,12 +146,9 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface>
     final asked = view.roomPhase == RoomPhase.waitingOnYou
         ? view.questions.values.expand((q) => q).firstOrNull
         : null;
-    final goal = chatId == null
-        ? null
-        : ref.watch(chatGoalProvider(chatId)).value;
     _outbox.turn(
       TurnSnapshot(
-        goal: goalSnapshotOf(goal),
+        goal: goalSnapshotOf(chat?.goal),
         resume: chat != null && chat.unfinished && !view.isRunning
             ? ResumeBar.lineOf(
                 chat.messages.last.createdAt,

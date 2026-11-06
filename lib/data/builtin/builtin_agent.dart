@@ -243,8 +243,10 @@ class BuiltinAgent implements Turn {
   });
 
   /// The chat's goal, read at each stop; null for a turn that keeps none — a
-  /// sub-agent's, or a test's. See "Goals" in `lib/domain/AGENTS.md`.
-  final GoalStore? goal;
+  /// sub-agent's, or a test's. The turn never writes it: what a review finds
+  /// goes out as a [GoalEvent], which the room puts on the log the goal is
+  /// folded from. See "Goals" in `lib/domain/AGENTS.md`.
+  final GoalReader? goal;
 
   /// Who decides, at a stop, whether [goal] is met. Without one the goal is
   /// never reviewed and a stop ends the turn as it always did.
@@ -956,20 +958,25 @@ class BuiltinAgent implements Turn {
   /// nothing since the last one is a stall.
   bool _actedSinceReview = false;
 
+  /// Reviews in a row this turn that sent back a model that had done nothing
+  /// since the last. Per turn: a stall is a model talking instead of acting,
+  /// which is a thing one turn does.
+  int _stalls = 0;
+
   /// The stop just made, put to the reviewer where the chat has an active
   /// goal. Met or blocked ends the goal's run and the turn; short of it the
   /// turn carries on with the reviewer's reason as a `<system-notification>`
   /// — until the step limit ends the turn, or the stalls run out, which
-  /// pauses the goal.
+  /// pauses the goal. What moves the goal is said as a [GoalEvent].
   ///
   /// The goal is read again after the review: the user may have paused,
   /// cleared or replaced it while the reviewer read, and what they did then
   /// stands over what the reviewer found.
   Stream<AgentEvent> _reviewGoal() async* {
-    final store = goal;
+    final read = goal;
     final reviewer = goalReviewer;
-    if (store == null || reviewer == null) return;
-    final asked = await store.read();
+    if (read == null || reviewer == null) return;
+    final asked = read();
     if (asked == null || !asked.isActive) return;
     // The reply that stopped is in the session before the reviewer reads it.
     _sayWhatWasSaid();
@@ -977,49 +984,35 @@ class BuiltinAgent implements Turn {
     final verdict = await reviewer.review(asked.objective, session.messages);
     yield const StatusEvent(null);
     if (verdict == null || _cancelled) return;
-    final current = await store.read();
+    final current = read();
     if (current == null ||
         !current.isActive ||
         current.objective != asked.objective) {
       return;
     }
+    final objective = current.objective;
     switch (verdict.kind) {
       case GoalVerdictKind.met:
-        await store.write(
-          current.copyWith(status: GoalStatus.met, reason: verdict.reason),
-        );
+        yield GoalEvent(GoalChange.met, objective, reason: verdict.reason);
       case GoalVerdictKind.blocked:
-        await store.write(
-          current.copyWith(status: GoalStatus.blocked, reason: verdict.reason),
-        );
+        yield GoalEvent(GoalChange.blocked, objective, reason: verdict.reason);
       case GoalVerdictKind.carryOn:
         // No cap on rounds of its own: a send-back is a step of this turn,
         // so the step limit the user set is what bounds a run of them.
-        final stalls = _actedSinceReview ? 0 : current.stalls + 1;
-        if (stalls >= maxGoalStalls) {
-          await store.write(
-            current.copyWith(
-              status: GoalStatus.paused,
-              stalls: stalls,
-              reason:
-                  "Paused: the agent stopped $stalls times in a row "
-                  "without doing anything. ${verdict.reason}",
-            ),
+        _stalls = _actedSinceReview ? 0 : _stalls + 1;
+        if (_stalls >= maxGoalStalls) {
+          yield GoalEvent(
+            GoalChange.paused,
+            objective,
+            reason:
+                "The agent stopped $_stalls times in a row without doing "
+                "anything. ${verdict.reason}",
           );
           return;
         }
-        await store.write(
-          current.copyWith(
-            rounds: current.rounds + 1,
-            stalls: stalls,
-            reason: verdict.reason,
-          ),
-        );
         _actedSinceReview = false;
         _sentBack = true;
-        yield _nudge(
-          goalNudge(current.objective, verdict.reason, verdict.next),
-        );
+        yield _nudge(goalNudge(objective, verdict.reason, verdict.next));
     }
   }
 

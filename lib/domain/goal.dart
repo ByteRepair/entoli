@@ -3,6 +3,7 @@
 /// met. See "Goals" in `lib/domain/AGENTS.md`.
 library;
 
+import "models.dart";
 import "system_notification.dart";
 
 /// Where a goal stands. Only [active] is reviewed when the agent stops; the
@@ -12,8 +13,8 @@ enum GoalStatus {
   /// Reviewed whenever a reply ends with no tool call.
   active,
 
-  /// The user paused it, or the loop did: too many rounds, or a model that
-  /// kept stopping without doing anything. `/goal resume` carries on.
+  /// The user paused it, or the turn did, for a model that kept stopping
+  /// without doing anything. `/goal resume` carries on.
   paused,
 
   /// The reviewer found the objective met.
@@ -23,15 +24,12 @@ enum GoalStatus {
   blocked,
 }
 
-/// One chat's goal, kept in its `meta.json`: read at every stop rather than
-/// copied into the turn, so pausing or clearing it mid-turn lands before the
-/// next review.
+/// A chat's goal as it stands: the fold of the `goal` records on the thread
+/// being read ([goalOf]), so it is the log's, and a restart rebuilds it.
 class ChatGoal {
   const ChatGoal({
     required this.objective,
     this.status = GoalStatus.active,
-    this.rounds = 0,
-    this.stalls = 0,
     this.reason,
   });
 
@@ -40,86 +38,71 @@ class ChatGoal {
 
   final GoalStatus status;
 
-  /// How many times the reviewer sent the agent back to work on this goal:
-  /// said, not capped. The turn's step limit is what bounds a run of them,
-  /// each send-back being a step of the turn it happens in.
-  final int rounds;
-
-  /// Reviews in a row that sent the agent back after a stretch in which it
-  /// called no tool: a model saying it is done, or that it will carry on,
-  /// without doing anything. [maxGoalStalls] of them pause it.
-  final int stalls;
-
   /// The reviewer's last word on it, or why it was paused.
   final String? reason;
 
   bool get isActive => status == GoalStatus.active;
-
-  ChatGoal copyWith({
-    GoalStatus? status,
-    int? rounds,
-    int? stalls,
-    String? reason,
-  }) => ChatGoal(
-    objective: objective,
-    status: status ?? this.status,
-    rounds: rounds ?? this.rounds,
-    stalls: stalls ?? this.stalls,
-    reason: reason ?? this.reason,
-  );
-
-  /// Running again from nothing: what `/goal resume` does to the counters, so
-  /// a goal paused by a cap is not paused again by the next stop.
-  ChatGoal resumed() => ChatGoal(objective: objective);
-
-  /// Null where the JSON is not a goal, so a hand-edited file loses the goal
-  /// rather than the chat's other overrides.
-  static ChatGoal? fromJson(Object? json) {
-    if (json is! Map<String, dynamic>) return null;
-    final objective = json["objective"];
-    if (objective is! String || objective.trim().isEmpty) return null;
-    return ChatGoal(
-      objective: objective,
-      status:
-          GoalStatus.values.asNameMap()[json["status"]] ?? GoalStatus.paused,
-      rounds: json["rounds"] as int? ?? 0,
-      stalls: json["stalls"] as int? ?? 0,
-      reason: json["reason"] as String?,
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-    "objective": objective,
-    "status": status.name,
-    if (rounds != 0) "rounds": rounds,
-    if (stalls != 0) "stalls": stalls,
-    if (reason != null) "reason": reason,
-  };
 
   @override
   bool operator ==(Object other) =>
       other is ChatGoal &&
       other.objective == objective &&
       other.status == status &&
-      other.rounds == rounds &&
-      other.stalls == stalls &&
       other.reason == reason;
 
   @override
-  int get hashCode => Object.hash(objective, status, rounds, stalls, reason);
+  int get hashCode => Object.hash(objective, status, reason);
 }
 
-/// How many reviews in a row may follow a stretch with no tool call before
-/// the goal pauses: a model that only talks is not getting closer.
+/// The goal [marks] leave, in order: a set starts one, a clear ends it, and
+/// everything else moves the one there is. A mark about a goal that is not
+/// the one standing — a stale verdict landing after a new `/goal` — moves
+/// nothing.
+ChatGoal? goalOf(Iterable<GoalMark> marks) {
+  ChatGoal? goal;
+  for (final mark in marks) {
+    if (mark.change == GoalChange.set) {
+      goal = ChatGoal(objective: mark.objective);
+      continue;
+    }
+    if (goal == null || goal.objective != mark.objective) continue;
+    goal = switch (mark.change) {
+      GoalChange.set ||
+      GoalChange.resumed => ChatGoal(objective: goal.objective),
+      GoalChange.cleared => null,
+      GoalChange.paused => ChatGoal(
+        objective: goal.objective,
+        status: GoalStatus.paused,
+        reason: mark.reason,
+      ),
+      GoalChange.met => ChatGoal(
+        objective: goal.objective,
+        status: GoalStatus.met,
+        reason: mark.reason,
+      ),
+      GoalChange.blocked => ChatGoal(
+        objective: goal.objective,
+        status: GoalStatus.blocked,
+        reason: mark.reason,
+      ),
+    };
+  }
+  return goal;
+}
+
+/// The goal a chat's log leaves it with.
+extension ChatGoals on Chat {
+  ChatGoal? get goal => goalOf(goals);
+}
+
+/// How many reviews in a row, in one turn, may follow a stretch with no tool
+/// call before the goal pauses: a model that only talks is not getting closer.
 const maxGoalStalls = 3;
 
-/// One chat's goal, as the turn reaches it: read at every stop, written with
-/// what the review found. `ChatRepository` is the implementation, over the
-/// chat's `meta.json`.
-abstract interface class GoalStore {
-  Future<ChatGoal?> read();
-  Future<void> write(ChatGoal? goal);
-}
+/// The chat's goal as a turn reaches it: read at every stop, off the room's
+/// copy of the log, so a pause or a clear mid-turn lands before the next
+/// review.
+typedef GoalReader = ChatGoal? Function();
 
 /// What `/goal` was asked to do, read off the arguments after the name.
 sealed class GoalCommand {
@@ -215,18 +198,29 @@ String goalNudge(String objective, String reason, String? next) =>
           "evidence. If you are blocked, say so plainly and stop.",
     ]);
 
-/// The status line for `/goal` alone, and the composer pill's tooltip.
+/// The status line for `/goal` alone, and the goal row's tooltip.
 String goalSummary(ChatGoal? goal) {
   if (goal == null) return "No goal is set. Set one with /goal <objective>";
-  final state = switch (goal.status) {
-    GoalStatus.active => "Goal active",
-    GoalStatus.paused => "Goal paused",
-    GoalStatus.met => "Goal met",
-    GoalStatus.blocked => "Goal blocked",
-  };
   return [
-    "$state: ${goal.objective}",
-    if (goal.rounds > 0) "${goal.rounds} round(s)",
+    "${goalStatusLabel(goal.status)}: ${goal.objective}",
     ?goal.reason,
   ].join(" · ");
 }
+
+/// What a goal standing at [status] is called on screen.
+String goalStatusLabel(GoalStatus status) => switch (status) {
+  GoalStatus.active => "Goal active",
+  GoalStatus.paused => "Goal paused",
+  GoalStatus.met => "Goal met",
+  GoalStatus.blocked => "Goal blocked",
+};
+
+/// What a [GoalMark] says happened, as its row in the conversation reads.
+String goalChangeLabel(GoalChange change) => switch (change) {
+  GoalChange.set => "Goal set",
+  GoalChange.resumed => "Goal resumed",
+  GoalChange.paused => "Goal paused",
+  GoalChange.cleared => "Goal cleared",
+  GoalChange.met => "Goal met",
+  GoalChange.blocked => "Goal blocked",
+};

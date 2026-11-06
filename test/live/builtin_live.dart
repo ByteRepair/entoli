@@ -183,6 +183,8 @@ void main() {
           log("step limit: $limit");
         case InstructionsReadEvent(:final files):
           log("instructions: ${files.map((f) => f.path).join(", ")}");
+        case GoalEvent(:final change):
+          log("goal: ${change.name}");
         case ContextEvent(:final usage):
           log("context: ${usage.total} tokens");
         case DoneEvent():

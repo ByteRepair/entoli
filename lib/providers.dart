@@ -46,7 +46,6 @@ import "domain/backup_handoff.dart";
 import "domain/background_work.dart";
 import "domain/builtin_project.dart";
 import "domain/chat_repository.dart";
-import "domain/goal.dart" show ChatGoal;
 import "domain/corner_radius.dart";
 import "domain/chat_store.dart";
 import "domain/file_handoff.dart";
@@ -1672,20 +1671,6 @@ final availableModelsProvider = FutureProvider<List<ModelOption>>((ref) {
   ref.onDispose(() => ModelCatalog.notifier.removeListener(catalogChanged));
   ref.watch(installedLocalModelsProvider);
   return ref.watch(agentBackendProvider).models();
-});
-
-/// [chatId]'s goal, as its meta holds it, read again whenever the meta is
-/// written — by a `/goal` command, or by a turn's review moving it on.
-final chatGoalProvider = FutureProvider.autoDispose.family<ChatGoal?, String>((
-  ref,
-  chatId,
-) async {
-  final repo = ref.watch(chatRepositoryProvider);
-  final sub = repo.changes.listen((event) {
-    if (event is MetaChanged && event.chatId == chatId) ref.invalidateSelf();
-  });
-  ref.onDispose(sub.cancel);
-  return repo.goalOf(chatId);
 });
 
 /// The window [chatId]'s model runs in: the chat's own choice, else the app

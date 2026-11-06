@@ -2667,18 +2667,30 @@ void main() {
       );
     }
 
-    test("setting one writes it, then hands the work to a model", () async {
+    /// The goal as the room holds it, and as a restart would read it back.
+    ChatGoal? goalOn(String id) =>
+        app.container.read(chatControllerProvider(id)).chat?.goal;
+    Future<ChatGoal?> goalAfterRestart(String id) async =>
+        (await app.repo.openChat(id)).goal;
+
+    test("setting one logs it after the /goal, then hands the work to a "
+        "model", () async {
       final (id, controller) = await openChat();
       await controller.send("/goal the tests pass");
       await waitIdle(id);
 
       const goal = ChatGoal(objective: "the tests pass");
-      expect(await app.repo.goalOf(id), goal);
-      // The message goes on the log as typed — the projection words it — and
-      // the turn is a model's, which reads the goal live through its store.
+      expect(goalOn(id), goal);
+      expect(await goalAfterRestart(id), goal);
+      // The message goes on the log as typed — the projection words it —
+      // and the goal record after it, the row the conversation draws.
       final sent = app.backend.prompts.single;
       expect(sent.prompt.plainText, "/goal the tests pass");
-      expect(await sent.settings.goal!.read(), goal);
+      final chat = await app.repo.openChat(id);
+      expect(chat.goals.single.afterMessageId, sent.prompt.id);
+      expect(chat.goals.single.change, GoalChange.set);
+      // The turn reads the goal live, off the room.
+      expect(sent.settings.goal!(), goal);
       // A turn a model answered: one cut off is offered to carry on.
       expect(
         endsUnfinished([sent.prompt, messagesOf(id).last], const []),
@@ -2686,29 +2698,55 @@ void main() {
       );
     });
 
-    test(
-      "pause and clear land mid-turn and write nothing to the log",
-      () async {
-        final (id, controller) = await openChat();
-        app.backend.hold = Completer<void>();
-        await controller.send("/goal ship it");
-        await waitFor(
-          () => app.container.read(chatControllerProvider(id)).isRunning,
-          what: "the turn",
-        );
-        final logged = messagesOf(id).length;
+    test("pause and clear land mid-turn as records, and no message", () async {
+      final (id, controller) = await openChat();
+      app.backend.hold = Completer<void>();
+      await controller.send("/goal ship it");
+      // The turn has reached the backend, holding the reader it stops on.
+      await waitFor(() => app.backend.prompts.isNotEmpty, what: "the turn");
+      final logged = messagesOf(id).length;
 
-        await controller.send("/goal pause");
-        expect((await app.repo.goalOf(id))?.status, GoalStatus.paused);
-        await controller.send("/goal clear");
-        expect(await app.repo.goalOf(id), isNull);
-        expect(messagesOf(id), hasLength(logged));
+      await controller.send("/goal pause");
+      expect(goalOn(id)?.status, GoalStatus.paused);
+      // What the running turn reads at its next stop.
+      expect(app.backend.prompts.single.settings.goal!()?.isActive, isFalse);
+      await controller.send("/goal clear");
+      expect(goalOn(id), isNull);
+      expect(messagesOf(id), hasLength(logged));
 
-        app.backend.hold!.complete();
-        await waitIdle(id);
-        expect(app.backend.prompts, hasLength(1));
-      },
-    );
+      app.backend.hold!.complete();
+      await waitIdle(id);
+      expect(app.backend.prompts, hasLength(1));
+      final chat = await app.repo.openChat(id);
+      expect(chat.goals.map((g) => g.change), [
+        GoalChange.set,
+        GoalChange.paused,
+        GoalChange.cleared,
+      ]);
+      expect(chat.goal, isNull);
+    });
+
+    test("a verdict the turn reports is logged after its reply", () async {
+      final (id, controller) = await openChat();
+      app.backend.scriptedEvents = [
+        const GoalEvent(GoalChange.met, "ship it", reason: "It shipped."),
+        const DoneEvent(),
+      ];
+      await controller.send("/goal ship it");
+      await waitIdle(id);
+
+      const met = ChatGoal(
+        objective: "ship it",
+        status: GoalStatus.met,
+        reason: "It shipped.",
+      );
+      expect(goalOn(id), met);
+      expect(await goalAfterRestart(id), met);
+      expect(
+        (await app.repo.openChat(id)).goals.last.afterMessageId,
+        messagesOf(id).last.id,
+      );
+    });
 
     test(
       "setting one while a turn runs is refused, and never queued",
@@ -2721,7 +2759,7 @@ void main() {
           what: "the turn",
         );
         await controller.send("/goal ship it");
-        expect(await app.repo.goalOf(id), isNull);
+        expect(goalOn(id), isNull);
 
         app.backend.hold!.complete();
         await waitIdle(id);
@@ -2729,35 +2767,33 @@ void main() {
       },
     );
 
-    test("resume starts the counters over and carries on", () async {
+    test("resume runs the paused goal again and carries on", () async {
       final (id, controller) = await openChat();
-      await app.repo.setGoal(
-        id,
-        const ChatGoal(
-          objective: "ship it",
-          status: GoalStatus.paused,
-          rounds: 7,
-          stalls: maxGoalStalls,
-          reason: "Paused: the agent stopped 3 times in a row.",
-        ),
-      );
+      await controller.send("/goal ship it");
+      await waitIdle(id);
+      await controller.send("/goal pause");
       await controller.send("/goal resume");
       await waitIdle(id);
 
-      expect(await app.repo.goalOf(id), const ChatGoal(objective: "ship it"));
-      expect(app.backend.prompts.single.prompt.plainText, "/goal resume");
+      expect(goalOn(id), const ChatGoal(objective: "ship it"));
+      expect(app.backend.prompts.last.prompt.plainText, "/goal resume");
+      expect(
+        (await app.repo.openChat(id)).goals.last.change,
+        GoalChange.resumed,
+      );
     });
 
     test("alone, it says what the goal is", () async {
       final (id, controller) = await openChat();
-      await app.repo.setGoal(id, const ChatGoal(objective: "ship it"));
+      await controller.send("/goal ship it");
+      await waitIdle(id);
       await controller.send("/goal");
 
       expect(
         app.container.read(chatControllerProvider(id)).status,
         "Goal active: ship it",
       );
-      expect(app.backend.prompts, isEmpty);
+      expect(app.backend.prompts, hasLength(1));
     });
   });
 
