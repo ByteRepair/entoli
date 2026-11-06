@@ -203,8 +203,7 @@ environment still wins over it. The chat page's setup gate asks after the
 binary itself on the host, since `<cacheDir>` can be emptied between setups —
 the marker alone said a thing the cache may have since taken away. Inside a
 guest the marker alone is enough, and on every guest platform the pick of a
-rootfs is the gate itself — Android because the "Host" env has no package
-manager, iOS because its "Host" is no shell at all. Two
+rootfs is the gate itself, since neither phone has a shell without one. Two
 consequences worth knowing: the script's in-script fetches (`releases/latest`
 for gh and ESBMC) are the one deliberate exception to the checksum pinning
 everywhere else in this app, because "Run Setup" is a button the user pressed

@@ -9,7 +9,17 @@ import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/llm/hosted_models.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:agent_chat/data/builtin/llm/providers/presets.dart"
+    show
+        CliProvider,
+        CliProcess,
+        CliRelease,
+        CliSession,
+        CliSessionSpec,
+        ClaudeCliProvider,
+        CodexCliProvider;
 import "package:agent_chat/data/builtin/llm/providers/provider.dart";
+import "package:http/http.dart" as http;
 import "package:agent_chat/data/local/local_instance.dart";
 import "package:agent_chat/data/local/local_prefill.dart";
 import "package:agent_chat/data/sync/channel.dart";
@@ -1835,4 +1845,174 @@ class StubRuns implements TriggerRuns {
       targetGone: false,
     );
   }
+}
+
+/// A CLI program that runs nothing. Whether Entoli has its own copy and
+/// whether it is signed in are fields; an install lands when [installing]
+/// completes, at once where it is null; a sign-in is a [FakeCliProcess] in
+/// [processes] that the test drives, printing its page and ending it with
+/// [finishSignIn].
+class FakeCli extends CliProvider {
+  FakeCli._(
+    super.config,
+    this.planName,
+    this.workFolder,
+    this.processes, {
+    required this.isInstalled,
+    required this.isSignedIn,
+  }) : super(
+         launch:
+             (
+               executable,
+               arguments, {
+               required workingDirectory,
+               required environment,
+             }) async {
+               final process = FakeCliProcess(arguments);
+               processes.add(process);
+               return process;
+             },
+       );
+
+  factory FakeCli.claude({bool installed = true, bool signedIn = true}) =>
+      FakeCli._(
+        ClaudeCliProvider.preset,
+        "Claude",
+        "claude-cli",
+        [],
+        isInstalled: installed,
+        isSignedIn: signedIn,
+      );
+
+  factory FakeCli.codex({bool installed = true, bool signedIn = true}) =>
+      FakeCli._(
+        CodexCliProvider.preset,
+        "ChatGPT",
+        "codex-cli",
+        [],
+        isInstalled: installed,
+        isSignedIn: signedIn,
+      );
+
+  @override
+  final String planName;
+
+  @override
+  final String workFolder;
+
+  /// Every sign-in started, oldest first.
+  final List<FakeCliProcess> processes;
+
+  bool isInstalled;
+  bool isSignedIn;
+  Completer<void>? installing;
+  var installs = 0;
+
+  @override
+  bool get installed => isInstalled;
+
+  @override
+  Stream<DownloadProgress> install({http.Client? client}) async* {
+    installs++;
+    yield const DownloadProgress(received: 0, total: 0);
+    await installing?.future;
+    isInstalled = true;
+  }
+
+  @override
+  Future<bool> signedIn() async => isSignedIn;
+
+  /// The latest sign-in ends having signed in.
+  void finishSignIn() {
+    isSignedIn = true;
+    processes.last.exit(0);
+  }
+
+  @override
+  String executable() => "fake";
+
+  @override
+  Future<String> workDirectory() async => Directory.systemTemp.path;
+
+  @override
+  String get defaultCommand => "fake";
+
+  @override
+  List<String> get statusArguments => const ["status"];
+
+  @override
+  List<String> get signInArguments => const ["login"];
+
+  @override
+  List<String> get signOutArguments => const ["logout"];
+
+  /// How many times an entry on it let its folders go.
+  var forgets = 0;
+
+  /// Every sign-out, oldest first.
+  var signOuts = 0;
+
+  @override
+  Future<void> signOut() async {
+    signOuts++;
+    isSignedIn = false;
+  }
+
+  @override
+  Future<void> forget() async => forgets++;
+
+  @override
+  Map<String, String> homeEnvironment(String home) => const {};
+
+  /// One program however many entries are on it, so a test drives the one it
+  /// made; the entry is the caller's to keep.
+  @override
+  CliProvider withConfig(LlmProviderConfig config) => this;
+
+  @override
+  List<ModelInfo> get knownModels => const [];
+
+  @override
+  Future<CliRelease?> latestRelease(http.Client client) async => null;
+
+  @override
+  Future<CliSession> start(CliSessionSpec spec) => throw UnimplementedError();
+}
+
+/// A CLI's process as a test drives it: [say] prints a line, [complain]
+/// writes to its error output, [exit] ends it, and what it was sent is
+/// [sent].
+class FakeCliProcess implements CliProcess {
+  FakeCliProcess(this.arguments);
+
+  final List<String> arguments;
+  final sent = <String>[];
+  final _out = StreamController<String>();
+  final _err = StreamController<String>();
+  final _exit = Completer<int>();
+
+  void say(String line) => _out.add(line);
+  void complain(String chunk) => _err.add(chunk);
+
+  void exit(int code) {
+    if (!_exit.isCompleted) _exit.complete(code);
+  }
+
+  @override
+  Stream<String> get lines => _out.stream;
+
+  @override
+  Stream<String> get errors => _err.stream;
+
+  @override
+  void writeLine(String line) => sent.add(line);
+
+  @override
+  Future<void> closeInput() async => exit(0);
+
+  @override
+  Future<int> get exitCode => _exit.future;
+
+  @override
+  void kill({bool force = false}) => exit(force ? -9 : -15);
 }

@@ -2,6 +2,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/installable.dart";
 import "../../domain/local_model.dart";
+import "../../domain/local_model_store.dart" show InstallableLocalModel;
 import "../../providers.dart";
 import "downloads.dart";
 
@@ -71,6 +72,16 @@ class ModelDownloads extends Downloads<Installable> {
 
   @override
   Future<void> erase(Installable model) => model.delete();
+
+  /// A text model is the first thing that answers where nothing yet does, so
+  /// the Local Model way through the welcome tour asks for no picking.
+  @override
+  Future<void> landed(Installable model) async {
+    if (model is! InstallableLocalModel) return;
+    await ref
+        .read(appSettingsProvider.notifier)
+        .adoptIfUnset(localProviderId, model.id);
+  }
 }
 
 final modelDownloadsProvider = NotifierProvider<ModelDownloads, DownloadState>(

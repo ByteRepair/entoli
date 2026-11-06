@@ -2,7 +2,6 @@ import "package:file_selector/file_selector.dart";
 import "package:flutter/material.dart";
 
 import "../../core/log.dart";
-import "../../core/platform/form_factor.dart";
 import "../../data/builtin/llm/llm_client.dart" show LlmException;
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/llm_provider.dart";
@@ -33,6 +32,7 @@ Future<ProviderEdit?> promptForProvider(
   String title = "Add provider",
   void Function(BuildContext, Uri)? openLink,
   Future<bool> Function(LlmProviderConfig config, String apiKey)? checkKey,
+  Widget Function(LlmApi api)? cliAccount,
 }) => showDialog<ProviderEdit>(
   context: context,
   builder: (context) => _ProviderDialog(
@@ -43,6 +43,7 @@ Future<ProviderEdit?> promptForProvider(
     title: title,
     openLink: openLink,
     checkKey: checkKey,
+    cliAccount: cliAccount,
   ),
 );
 
@@ -64,6 +65,7 @@ class _ProviderDialog extends StatefulWidget {
     required this.title,
     required this.openLink,
     required this.checkKey,
+    required this.cliAccount,
   });
 
   final LlmProviderConfig? initial;
@@ -74,6 +76,11 @@ class _ProviderDialog extends StatefulWidget {
   final void Function(BuildContext, Uri)? openLink;
   final Future<bool> Function(LlmProviderConfig config, String apiKey)?
   checkKey;
+
+  /// What a CLI's entry shows of the program's sign-in, above its fields:
+  /// the caller's, since signing in runs and installs things this dialog
+  /// knows nothing of. Nothing where it is not given.
+  final Widget Function(LlmApi api)? cliAccount;
 
   @override
   State<_ProviderDialog> createState() => _ProviderDialogState();
@@ -384,10 +391,10 @@ class _ProviderDialogState extends State<_ProviderDialog> {
           value: LlmApi.anthropic,
           child: Text("Anthropic"),
         ),
-        // A program run here, which a phone cannot do; an entry synced onto
-        // one still shows what it is.
+        // A program run here — a desktop's own, or in Android's Linux — which
+        // iOS cannot do; an entry synced onto it still shows what it is.
         for (final cli in cliProviderPresets)
-          if (isDesktop || _api == cli.config.api)
+          if (cli.supported || _api == cli.config.api)
             DropdownMenuItem(
               value: cli.config.api,
               child: Text(cli.config.displayName),
@@ -406,6 +413,11 @@ class _ProviderDialogState extends State<_ProviderDialog> {
     return [
       Text(cli.about, style: Theme.of(context).textTheme.bodySmall),
       const SizedBox(height: 16),
+      if (widget.cliAccount case final account?) ...[
+        // Keyed by the program, so switching the API asks the other one.
+        KeyedSubtree(key: ValueKey(_api), child: account(_api)),
+        const SizedBox(height: 16),
+      ],
       TextField(
         controller: _command,
         decoration: InputDecoration(

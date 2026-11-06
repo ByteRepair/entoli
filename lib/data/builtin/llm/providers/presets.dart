@@ -49,6 +49,15 @@ final _cliKinds = <LlmApi, CliProvider Function([LlmProviderConfig])>{
 /// The programs that can answer in a model's place, offered on a desktop.
 final cliProviderPresets = [for (final kind in _cliKinds.values) kind()];
 
+/// What the welcome tour offers by the service's name, in the order it offers
+/// them. A plan someone already pays for, not an API key: an API is
+/// Advanced's, where the Providers page lists every one.
+const welcomeProviders = <OfferedByName>[
+  OllamaCloudProvider(),
+  CodexCliProvider(),
+  ClaudeCliProvider(),
+];
+
 /// The preset of the program [api] runs.
 CliProvider cliPresetOf(LlmApi api) => _cliKinds[api]!();
 

@@ -1,15 +1,24 @@
 import "dart:async";
 import "dart:convert";
+import "dart:ffi" show Abi;
 import "dart:io";
 
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/mcp_tool_bridge.dart";
+import "package:agent_chat/data/builtin/llm/providers/cli_sign_in.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart";
 import "package:agent_chat/domain/llm_provider.dart";
+import "package:agent_chat/domain/shell.dart" show guestHome, guestPath;
 import "package:agent_chat/domain/model_registry.dart";
 import "package:flutter/foundation.dart";
+import "package:archive/archive.dart";
+import "package:crypto/crypto.dart";
+import "package:http/http.dart" as http;
+import "package:http/testing.dart";
 import "package:path/path.dart" as p;
 import "package:flutter_test/flutter_test.dart";
+
+import "../../../harness.dart" show tempDir;
 
 /// A session that answers every exchange with one text reply, recording what
 /// it was fed.
@@ -69,10 +78,28 @@ class _ScriptedProvider extends CliProvider {
   String get defaultCommand => "scripted";
 
   @override
-  String get account => "";
+  String get planName => "";
 
   @override
   String get workFolder => "scripted";
+
+  @override
+  List<String> get statusArguments => const [];
+
+  @override
+  List<String> get signInArguments => const [];
+
+  @override
+  List<String> get signOutArguments => const [];
+
+  @override
+  Map<String, String> homeEnvironment(String home) => const {};
+
+  @override
+  CliProvider withConfig(LlmProviderConfig config) => this;
+
+  @override
+  Future<CliRelease?> latestRelease(http.Client client) async => null;
 
   @override
   List<ModelInfo> get knownModels => const [];
@@ -505,10 +532,14 @@ void main() {
         expect(jsonDecode(File(mcp).readAsStringSync()), {
           "mcpServers": {"entoli": bridge.config},
         });
-        // Every session runs in the one folder in the cache, and its own
-        // files sit apart from it.
+        // Every session of an entry runs in that entry's folder in the
+        // cache, told its own data folder, and its own files sit apart.
         final root = p.join(dir.path, "cache", "claude-cli");
-        expect(process.workingDirectory, p.join(root, "work"));
+        expect(process.workingDirectory, p.join(root, "work", "c"));
+        expect(
+          process.environment["CLAUDE_CONFIG_DIR"],
+          p.join(root, "data", "c"),
+        );
         expect(p.isWithin(p.join(root, "sessions"), systemFile), isTrue);
         expect(process.environment["FROM_CONFIG"], "1");
 
@@ -777,7 +808,13 @@ void main() {
         );
         expect(
           process.workingDirectory,
-          p.join(dir.path, "cache", "codex-cli", "work"),
+          p.join(dir.path, "cache", "codex-cli", "work", "x"),
+        );
+        // The entry names its own home, and what an entry says wins over
+        // the folder Entoli would give it.
+        expect(
+          process.environment["CODEX_HOME"],
+          p.join(dir.path, "codex-home"),
         );
 
         client.close();
@@ -947,4 +984,498 @@ void main() {
       expect(provider.locate(), p.join(dir.path, "claude"));
     });
   });
+
+  group("Entoli's own copy", () {
+    late Directory dir;
+    setUp(() {
+      dir = tempDir("cli-own-");
+      CliProvider.cacheRoot = dir.path;
+    });
+    tearDown(() {
+      CliProvider.cacheRoot = null;
+      CliProvider.abi = Abi.current();
+    });
+
+    /// Anthropic's two files, for version [version] with [checksum] stated
+    /// for darwin-arm64 and win32-x64.
+    http.Client claudeReleases(String version, String checksum) =>
+        MockClient((request) async {
+          final path = request.url.path;
+          if (path.endsWith("/latest")) return http.Response("$version\n", 200);
+          if (path.endsWith("/$version/manifest.json")) {
+            return http.Response(
+              jsonEncode({
+                "version": version,
+                "platforms": {
+                  for (final p in ["darwin-arm64", "win32-x64"])
+                    p: {"checksum": checksum, "size": 3},
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response("", 404);
+        });
+
+    // Two entries on one program are two accounts: each is told its own
+    // folder for everything the program keeps, and works in its own.
+    test(
+      "each provider keeps the program's data in a folder of its own",
+      () async {
+        ClaudeCliProvider entry(String id) =>
+            ClaudeCliProvider(ClaudeCliProvider.preset.copyWith(id: id));
+        final (a, b) = (entry("a"), entry("b"));
+        final root = p.join(dir.path, "claude-cli");
+        expect(a.dataDirectory, p.join(root, "data", "a"));
+        expect(a.environment["CLAUDE_CONFIG_DIR"], a.dataDirectory);
+        expect(b.environment["CLAUDE_CONFIG_DIR"], p.join(root, "data", "b"));
+        expect(await a.workDirectory(), p.join(root, "work", "a"));
+        expect(Directory(a.dataDirectory).existsSync(), isTrue);
+
+        // Removed, it takes both with it, and the other entry keeps its own.
+        await b.workDirectory();
+        await a.forget();
+        expect(Directory(p.join(root, "data", "a")).existsSync(), isFalse);
+        expect(Directory(p.join(root, "work", "a")).existsSync(), isFalse);
+        expect(Directory(b.dataDirectory).existsSync(), isTrue);
+      },
+    );
+
+    test(
+      "Claude CLI's release is its manifest's entry for this machine",
+      () async {
+        CliProvider.abi = Abi.macosArm64;
+        final release = await const ClaudeCliProvider().latestRelease(
+          claudeReleases("2.1.320", "ab"),
+        );
+        final claude = release!.files.single;
+        expect(
+          "${claude.url}",
+          "${ClaudeCliProvider.releases}/2.1.320/darwin-arm64/claude",
+        );
+        expect(claude.sha256, "ab");
+        expect(claude.packing, isA<BareProgram>());
+
+        CliProvider.abi = Abi.windowsX64;
+        final windows = await const ClaudeCliProvider().latestRelease(
+          claudeReleases("2.1.320", "ab"),
+        );
+        expect(windows!.files.single.name, "claude.exe");
+
+        // A machine the manifest has no build for has no release.
+        CliProvider.abi = Abi.linuxArm64;
+        expect(
+          await const ClaudeCliProvider().latestRelease(
+            claudeReleases("2.1.320", "ab"),
+          ),
+          isNull,
+        );
+      },
+    );
+
+    /// GitHub's answer for the latest Codex release, its assets as given.
+    http.Client codexReleases(List<Map<String, dynamic>> assets) => MockClient(
+      (request) async => request.url == CodexCliProvider.latestUrl
+          ? http.Response(
+              jsonEncode({"tag_name": "rust-v0.170.0", "assets": assets}),
+              200,
+            )
+          : http.Response("", 404),
+    );
+
+    Map<String, dynamic> asset(String name, {String? digest = "sha256:cd"}) => {
+      "name": name,
+      "browser_download_url": "https://example.com/$name",
+      "size": 3,
+      "digest": ?digest,
+    };
+
+    test("Codex CLI's release is its program and its code-mode host, each "
+        "built for this machine", () async {
+      final assets = [
+        for (final program in ["codex", "codex-code-mode-host"]) ...[
+          asset("$program-x86_64-unknown-linux-musl.tar.gz"),
+          asset("$program-x86_64-pc-windows-msvc.exe.zip"),
+        ],
+        asset("codex-aarch64-apple-darwin.tar.gz", digest: null),
+        asset("codex-code-mode-host-aarch64-apple-darwin.tar.gz"),
+        asset("codex-x86_64-apple-darwin.tar.gz"),
+      ];
+      CliProvider.abi = Abi.linuxX64;
+      final linux = await const CodexCliProvider().latestRelease(
+        codexReleases(assets),
+      );
+      // The host first, Codex last: its arrival is what says installed.
+      expect(linux!.files.map((f) => f.name), [
+        "codex-code-mode-host",
+        "codex",
+      ]);
+      expect(
+        linux.files.last.url.pathSegments.last,
+        "codex-x86_64-unknown-linux-musl.tar.gz",
+      );
+      expect(linux.files.last.sha256, "cd");
+      expect(linux.files.last.packing, isA<TarGzProgram>());
+
+      CliProvider.abi = Abi.windowsX64;
+      final windows = await const CodexCliProvider().latestRelease(
+        codexReleases(assets),
+      );
+      expect(windows!.files.map((f) => f.name), [
+        "codex-code-mode-host.exe",
+        "codex.exe",
+      ]);
+      expect(windows.files.last.packing, isA<ZipProgram>());
+
+      // No hash stated is nothing to check the download against.
+      CliProvider.abi = Abi.macosArm64;
+      await expectLater(
+        const CodexCliProvider().latestRelease(codexReleases(assets)),
+        throwsFormatException,
+      );
+      // A Codex without its host is not a release worth installing.
+      CliProvider.abi = Abi.macosX64;
+      expect(
+        await const CodexCliProvider().latestRelease(codexReleases(assets)),
+        isNull,
+      );
+    });
+
+    List<int> tarGzOf(String program, List<int> bytes) =>
+        GZipEncoder().encodeBytes(
+          TarEncoder().encodeBytes(
+            Archive()..addFile(
+              ArchiveFile.bytes("$program-x86_64-unknown-linux-musl", bytes),
+            ),
+          ),
+        );
+
+    /// Codex's release for Linux, each program served as [archives] has it
+    /// and stated to hash to what [digests] says.
+    http.Client codexServing(
+      Map<String, List<int>> archives,
+      Map<String, String> digests,
+    ) => MockClient((request) async {
+      if (request.url == CodexCliProvider.latestUrl) {
+        return http.Response(
+          jsonEncode({
+            "tag_name": "rust-v0.170.0",
+            "assets": [
+              for (final program in archives.keys)
+                asset(
+                  "$program-x86_64-unknown-linux-musl.tar.gz",
+                  digest: "sha256:${digests[program]}",
+                ),
+            ],
+          }),
+          200,
+        );
+      }
+      final program = archives.keys.firstWhere(
+        (p) =>
+            request.url.path.endsWith("/$p-x86_64-unknown-linux-musl.tar.gz"),
+      );
+      return http.Response.bytes(archives[program]!, 200);
+    });
+
+    /// Both programs as tarballs of [contents], and their true digests.
+    ({Map<String, List<int>> archives, Map<String, String> digests}) codexOf(
+      String contents,
+    ) {
+      final archives = {
+        for (final program in ["codex", "codex-code-mode-host"])
+          program: tarGzOf(program, utf8.encode("$contents $program")),
+      };
+      return (
+        archives: archives,
+        digests: {
+          for (final MapEntry(:key, :value) in archives.entries)
+            key: "${sha256.convert(value)}",
+        },
+      );
+    }
+
+    test("an install unpacks each program it checked, runnable, and is "
+        "found first", () async {
+      CliProvider.abi = Abi.linuxX64;
+      final (:archives, :digests) = codexOf("#!/bin/sh");
+      const codex = CodexCliProvider();
+      await codex
+          .install(client: codexServing(archives, digests))
+          .drain<void>();
+
+      expect(codex.installed, isTrue);
+      final bin = p.dirname(codex.ownCopy);
+      for (final program in ["codex", "codex-code-mode-host"]) {
+        final file = File(p.join(bin, program));
+        expect(file.readAsStringSync(), "#!/bin/sh $program");
+        if (!Platform.isWindows) {
+          expect(file.statSync().mode & 0x40, isNot(0));
+        }
+      }
+      // Ahead of one on PATH: the copy the tour signed in.
+      final path = Directory(p.join(dir.path, "path"))..createSync();
+      File(p.join(path.path, "codex")).writeAsStringSync("");
+      final withPath = CodexCliProvider(
+        CodexCliProvider.preset.copyWith(env: {"PATH": path.path}),
+      );
+      expect(withPath.locate(), codex.ownCopy);
+
+      // Without its host the copy is not whole, and is fetched again.
+      File(p.join(bin, "codex-code-mode-host")).deleteSync();
+      expect(codex.installed, isFalse);
+    });
+
+    test(
+      "a download that does not match its checksum installs nothing",
+      () async {
+        CliProvider.abi = Abi.linuxX64;
+        final (:archives, :digests) = codexOf("#!/bin/sh");
+        const codex = CodexCliProvider();
+        await expectLater(
+          codex
+              .install(
+                client: codexServing(archives, {...digests, "codex": "00"}),
+              )
+              .drain<void>(),
+          throwsFormatException,
+        );
+        expect(codex.installed, isFalse);
+        expect(Directory(p.dirname(codex.ownCopy)).listSync(), isEmpty);
+      },
+    );
+  });
+
+  group("a sign-in", () {
+    /// [cli] launching [process] for its sign-in and [status] for its
+    /// status check, which exits [signedIn] 0 or 1.
+    ({CliProvider cli, _FakeProcess login}) signingIn({
+      required bool signedIn,
+    }) {
+      final login = _FakeProcess(const [], "", const {});
+      final cli = CodexCliProvider.over(
+        CodexCliProvider.preset.copyWith(command: Platform.resolvedExecutable),
+        launch:
+            (
+              executable,
+              arguments, {
+              required workingDirectory,
+              required environment,
+            }) async {
+              if (arguments.first == "login" && arguments.length == 1) {
+                return login;
+              }
+              return _FakeProcess(arguments, workingDirectory, environment)
+                ..exit(signedIn ? 0 : 1);
+            },
+      );
+      return (cli: cli, login: login);
+    }
+
+    test("finds the page in a line it prints, and ends signed in", () async {
+      final (:cli, :login) = signingIn(signedIn: true);
+      final signIn = await CliSignIn.start(cli);
+      login._stdout.add(
+        "Starting local login server on http://localhost:1455.",
+      );
+      login._stdout.add(
+        "If your browser did not open, navigate to this URL to authenticate:",
+      );
+      login._stdout.add(
+        "\x1b[94mhttps://auth.openai.com/oauth/authorize?x=1\x1b[0m",
+      );
+      expect(
+        await signIn.page,
+        Uri.parse("https://auth.openai.com/oauth/authorize?x=1"),
+      );
+      login.exit(0);
+      expect(await signIn.result, isTrue);
+    });
+
+    test("exited 0 is not signed in until the program says so", () async {
+      final (:cli, :login) = signingIn(signedIn: false);
+      final signIn = await CliSignIn.start(cli);
+      login.exit(0);
+      expect(await signIn.page, isNull);
+      expect(await signIn.result, isFalse);
+    });
+  });
+
+  group("in Android's Linux", () {
+    late Directory dir;
+    late _Guest guest;
+    setUp(() {
+      dir = tempDir("cli-guest-");
+      CliProvider.cacheRoot = dir.path;
+      guest = _Guest();
+      CliProvider.guest = guest;
+    });
+    tearDown(() {
+      CliProvider.guest = null;
+      CliProvider.cacheRoot = null;
+      CliProvider.abi = Abi.current();
+    });
+
+    test("Android's builds are the musl ones its Alpine runs", () {
+      expect(
+        ClaudeCliProvider.platformOf(Abi.androidArm64),
+        "linux-arm64-musl",
+      );
+      expect(
+        CodexCliProvider.tripleOf(Abi.androidArm64),
+        "aarch64-unknown-linux-musl",
+      );
+    });
+
+    // Started through the guest with the program as its own first word, the
+    // program's folder shared at its own path, and the guest's basics in
+    // place of the app's environment, which is Android's.
+    test(
+      "a program is started in the guest, told the guest's basics",
+      () async {
+        final launched = <_FakeProcess>[];
+        final claude = ClaudeCliProvider.over(
+          ClaudeCliProvider.preset.copyWith(id: "g"),
+          launch:
+              (
+                executable,
+                arguments, {
+                required workingDirectory,
+                required environment,
+              }) async {
+                final process = _FakeProcess(
+                  [executable, ...arguments],
+                  workingDirectory,
+                  environment,
+                )..exit(0);
+                launched.add(process);
+                return process;
+              },
+        );
+        File(claude.ownCopy).createSync(recursive: true);
+
+        expect(await claude.signedIn(), isTrue);
+        final process = launched.single;
+        expect(process.arguments, [
+          "proot",
+          "-w",
+          p.join(dir.path, "claude-cli", "work", "g"),
+          claude.ownCopy,
+          ...claude.statusArguments,
+        ]);
+        expect(guest.shared.single, [p.join(dir.path, "claude-cli")]);
+        expect(process.environment["PATH"], guestPath);
+        expect(process.environment["HOME"], guestHome);
+        expect(process.environment["USE_BUILTIN_RIPGREP"], "0");
+        expect(process.environment["CLAUDE_CONFIG_DIR"], claude.dataDirectory);
+        expect(process.environment["PROOT_TMP_DIR"], "/guest/tmp");
+      },
+    );
+
+    /// Anthropic's release of [program] for Android, its checksum true.
+    http.Client claudeForAndroid(List<int> program) =>
+        MockClient((request) async {
+          final path = request.url.path;
+          if (path.endsWith("/latest")) return http.Response("2.1.320", 200);
+          if (path.endsWith("/manifest.json")) {
+            return http.Response(
+              jsonEncode({
+                "platforms": {
+                  "linux-arm64-musl": {
+                    "checksum": "${sha256.convert(program)}",
+                    "size": program.length,
+                  },
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response.bytes(program, 200);
+        });
+
+    /// Claude CLI whose package installs in the guest exit with [code].
+    ({ClaudeCliProvider claude, List<List<String>> ran}) installing(int code) {
+      final ran = <List<String>>[];
+      final claude = ClaudeCliProvider.over(
+        ClaudeCliProvider.preset,
+        launch:
+            (
+              executable,
+              arguments, {
+              required workingDirectory,
+              required environment,
+            }) async {
+              ran.add([executable, ...arguments]);
+              return _FakeProcess(arguments, workingDirectory, environment)
+                ..exit(code);
+            },
+      );
+      return (claude: claude, ran: ran);
+    }
+
+    // What it needs on Alpine is installed in the guest before the program
+    // is in place, so a copy that is installed has what it runs with.
+    test(
+      "an install puts the program's libraries in the guest first",
+      () async {
+        CliProvider.abi = Abi.androidArm64;
+        final (:claude, :ran) = installing(0);
+        await claude
+            .install(client: claudeForAndroid(utf8.encode("#!/bin/sh")))
+            .drain<void>();
+
+        expect(claude.installed, isTrue);
+        expect(ran.single, [
+          "proot",
+          "-w",
+          p.join(dir.path, "claude-cli"),
+          "apk",
+          "add",
+          "--no-cache",
+          "libgcc",
+          "libstdc++",
+          "ripgrep",
+        ]);
+      },
+    );
+
+    test("an install whose libraries fail is not installed", () async {
+      CliProvider.abi = Abi.androidArm64;
+      final (:claude, ran: _) = installing(1);
+      await expectLater(
+        claude
+            .install(client: claudeForAndroid(utf8.encode("#!/bin/sh")))
+            .drain<void>(),
+        throwsA(isA<LlmException>()),
+      );
+      expect(claude.installed, isFalse);
+    });
+  });
+}
+
+/// A guest that runs nothing: what it was asked to run is `proot -w <cwd>`
+/// and the program's own words, what it shared is in [shared].
+class _Guest implements CliGuest {
+  final shared = <List<String>>[];
+
+  @override
+  ({List<String> command, Map<String, String> environment}) wrap(
+    List<String> argv, {
+    required String cwd,
+    required List<String> shared,
+  }) {
+    this.shared.add(shared);
+    return (
+      command: ["proot", "-w", cwd, ...argv],
+      environment: const {"PROOT_TMP_DIR": "/guest/tmp"},
+    );
+  }
+
+  @override
+  List<String> install(List<String> packages) => [
+    "apk",
+    "add",
+    "--no-cache",
+    ...packages,
+  ];
 }

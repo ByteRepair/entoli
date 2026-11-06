@@ -63,7 +63,9 @@ Linux can run (proot on Android, the emulator on iOS) Alpine as the terminal,
 so a phone user never has to find the Terminal page, its bar the download
 alone (`StepProgress`); where the agent's browser is one the app launches —
 the desktops — Helium as that browser, which makes the embedded browser the
-desktops' default where it used to be off, its bar the whole plan
+desktops' default where it used to be off, then on every desktop Entoli's own
+copy of each CLI program (`CliSetup`, one per `cliProgramsProvider` entry,
+done when the copy is on disk), its bar the whole plan
 (`PlanProgress`, each step an equal share and unpacking its `unpackShare` of
 that, so it only moves forward). The page runs the steps one after another,
 each started when the one before is done or skipped; a step is done when its
@@ -74,9 +76,29 @@ bar is "Downloading" or "Unpacking" and that name. The tour is four
 pages, and a page is added only when what it says cannot ride one already
 there. The intro says what the app is, a short list under the name rather than
 a slide per point. The model page holds Next until some model is reachable and
-a default is picked: the provider rows first, then — once a model is reachable
-— `DefaultsSection` from `llm_settings.dart`, so a row added there is on the
-tour too. The extras page is optional throughout: a row into each extra, a row
+a default is picked, and picks nothing itself: its rows are the services a
+plan someone pays for answers through (`welcomeProviders`), then Local Model
+and Advanced. A service is connected by `connectService`
+(`connect_provider.dart`, beside `editProvider`, the Providers page's way in)
+as its kind is — a CLI installed if Entoli has no
+copy of it and signed in if it is not (`CliSignInDialog` in `cli_sign_in_dialog.dart`: the program's own
+sign-in run, the page it prints opened from the dialog, a code the page shows
+pasted back), an API in its preset's dialog — and adopted, answering new
+chats, titles and the classifier at its own defaults; connecting one already
+configured adopts that entry rather than adding a second. The first
+on-device model downloaded fills those roles where nothing answers yet
+(`ModelDownloads.landed`), so Local Model needs no picking either.
+The same dialog is the way to sign in outside the tour: a CLI's
+entry in the provider dialog shows `CliAccountSection` above its fields —
+whether the account in the entry's own folder is signed in, Sign in where
+it is not, and Sign in again where it is, which signs the program out
+first so the sign-in is a new one, perhaps another account. The
+provider dialog is a shared widget and knows nothing of programs or
+downloads, so it takes the section as `promptForProvider`'s `cliAccount`
+builder, which `editProvider` fills in.
+`DefaultsSection` is drawn only where models are reachable and nothing
+answers new chats — a setup from before this — which is the one case Next
+would otherwise wait on with nothing to press. The extras page is optional throughout: a row into each extra, a row
 dropped where its category is not offered. Memory is not among them, its own
 page's switch being the one place it is turned on, nor is anything already on
 by the time the tour runs: the terminal, which the setup page installs where
@@ -180,9 +202,8 @@ installed, and its confirm says that.
 See "Byte Repair's environment, in four variables" in `lib/data/local/AGENTS.md`.
 The
 banner asks the same env question everywhere, the store naming the platform's
-own answer: a "Host" env on Android has no package manager, while iOS's has
-no shell at all — so both hide the rest until a rootfs is picked from
-Terminal, and a setup run by either guest installs through its own `apk`.
+own answer: a phone with no Linux has no shell at all — so both hide the
+rest until a rootfs is picked from Terminal, and a setup run by either guest installs through its own `apk`.
 The desktops'
 host shells are each given an install destination and so are capable.
 The delete sits below the banner everywhere the

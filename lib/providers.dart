@@ -16,7 +16,8 @@ import "../core/platform/platform.dart"
     show createFileWatches, createPromptSources, processEnv, setupComplete;
 import "data/builtin/llm/hosted_models.dart" show ModelHost;
 import "data/builtin/llm/on_device_provider.dart" show OnDeviceProvider;
-import "data/builtin/llm/providers/presets.dart" show providerOf;
+import "data/builtin/llm/providers/presets.dart"
+    show CliProvider, cliProviderPresets, providerOf;
 import "data/builtin/llm/providers/provider.dart" show LlmProvider, resolveIn;
 import "data/local/apple_fm.dart" show AppleFm;
 import "data/local/local_engine.dart";
@@ -1026,9 +1027,15 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// done — until the user picks something themselves. A role the user has
   /// already picked is left where it is; importing a backup and other bulk
   /// writes stay on [setProviders], which adopts nothing.
+  ///
+  /// [adopt] goes further, and is what choosing a service by name means: it
+  /// answers new chats, their titles and the command classifier whatever was
+  /// picked before, each at the provider's own default for the role — the
+  /// model ids are cleared, which is how a role names that default.
   Future<void> upsertProvider(
     LlmProviderConfig provider, {
     String? setKey,
+    bool adopt = false,
   }) async {
     if (provider.id.isEmpty) {
       provider = provider.copyWith(id: const Uuid().v4());
@@ -1043,8 +1050,8 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     }
     final existing = state.llmProviders;
     final isNew = existing.every((p) => p.id != provider.id);
-    await _update(
-      (s) => s
+    await _update((s) {
+      s
         ..llmProviders = List.unmodifiable([
           ...existing.where((p) => p.id != provider.id),
           provider,
@@ -1054,24 +1061,50 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
         ..titleProviderId = s.titleProviderId ?? (isNew ? provider.id : null)
         ..memoryProviderId = s.memoryProviderId ?? (isNew ? provider.id : null)
         ..classifierProviderId =
-            s.classifierProviderId ?? (isNew ? provider.id : null),
-    );
+            s.classifierProviderId ?? (isNew ? provider.id : null);
+      if (adopt) _answerWith(s, provider.id);
+    });
     ref.invalidate(availableModelsProvider);
+  }
+
+  /// [modelId] of [providerId] answering new chats, their titles and the
+  /// command classifier, unless something already answers new chats: what a
+  /// model the user fetched rather than picked fills, so the first one is
+  /// used with nothing more asked.
+  Future<void> adoptIfUnset(String providerId, String modelId) async {
+    if (state.defaultProviderId != null) return;
+    await _update((s) => _answerWith(s, providerId, modelId));
+  }
+
+  static void _answerWith(AppSettings s, String providerId, [String? modelId]) {
+    s
+      ..defaultProviderId = providerId
+      ..defaultModelId = modelId
+      ..titleProviderId = providerId
+      ..titleModelId = modelId
+      ..classifierProviderId = providerId
+      ..classifierModelId = modelId;
   }
 
   /// The endpoints the agent can call, written as given. The model list is
   /// rebuilt from them, so it is invalidated here rather than left showing
   /// the old one. Bulk and removal writes: no adoption. A provider removed
   /// here takes its stored key with it — nothing else would ever delete it,
-  /// and an entry nobody names is a secret kept for no one.
+  /// and an entry nobody names is a secret kept for no one. A CLI's takes
+  /// its folders, the account signed in there, for the same reason.
   Future<void> setProviders(List<LlmProviderConfig> providers) async {
-    final removed = state.llmProviders.map((p) => p.id).toSet()
-      ..removeAll(providers.map((p) => p.id));
+    final kept = providers.map((p) => p.id).toSet();
+    final removed = [
+      for (final p in state.llmProviders)
+        if (!kept.contains(p.id)) p,
+    ];
     // Deleted before the state change, for the same reason the upsert stores
     // first: the rebuild the state change starts reads the store.
     final secrets = ref.read(appSecretsProvider);
-    for (final id in removed) {
-      await secrets.setProviderKey(id, null);
+    final programs = ref.read(cliProgramsProvider);
+    for (final provider in removed) {
+      await secrets.setProviderKey(provider.id, null);
+      if (provider.api.isCli) await cliProgramOf(programs, provider).forget();
     }
     await _update((s) => s.llmProviders = List.unmodifiable(providers));
     ref.invalidate(availableModelsProvider);
@@ -1134,6 +1167,20 @@ typedef KeyCheck =
 
 /// Whether a provider accepts a key, asked of the provider itself. Throws where
 /// it could not be asked.
+/// The programs that can answer in a model's place, as the welcome tour and
+/// first-run setup install and sign them in: the presets, unless a test
+/// stands in fakes that run nothing.
+final cliProgramsProvider = Provider<List<CliProvider>>(
+  (ref) => cliProviderPresets,
+);
+
+/// The program [config] runs, read for that entry: [programs]' for its API,
+/// its folders named by the entry's id.
+CliProvider cliProgramOf(
+  List<CliProvider> programs,
+  LlmProviderConfig config,
+) => programs.firstWhere((c) => c.config.api == config.api).withConfig(config);
+
 final keyCheckProvider = Provider<KeyCheck>(
   (ref) =>
       (config, apiKey) => providerOf(config).checkKey(apiKey),

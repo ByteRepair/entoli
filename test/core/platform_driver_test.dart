@@ -183,9 +183,9 @@ void main() {
   });
 
   test("a guest env with no rootfs picked gates the marker alone too", () {
-    // The env half of the same gate, at the seam it lives on: Android's
-    // and iOS's "Host" env cannot run a setup, so a marker left from an
-    // earlier one under a rootfs is not "done".
+    // The env half of the same gate, at the seam it lives on: a phone with
+    // no Linux picked has no shell to run a setup in, so a marker left from
+    // an earlier one under a rootfs is not "done".
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     try {
       final project = ByteRepairProject().dir;

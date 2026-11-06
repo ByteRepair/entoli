@@ -49,8 +49,8 @@ class TerminalSection extends ConsumerWidget {
     final description =
         "What driver to use when running commands. Determines "
         "the environment commands will run in."
-        "${available ? " The host system is quite limited. It's recommended to install "
-                  "a virtual file-system to be able to install binaries." : ""}";
+        "${canHostALinux ? " Commands run in a Linux installed below; with "
+                  "none, the agent has no terminal." : ""}";
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -73,12 +73,13 @@ class TerminalSection extends ConsumerWidget {
           ),
         InstalledPicker(
           label: "Commands run on",
-          // Null is an answer here rather than an absence, so it is an entry
-          // rather than a hint: the host is where commands ran before any of
-          // this and where they go back to. An installed rootfs is offered
-          // wherever a Linux can run at all — proot on Android, the emulator
-          // on iOS. Whether each enforces the sandbox is the status card's.
-          none: "Host",
+          // A phone — the one platform with an ABI to answer — offers no
+          // shell of its own: a Linux, proot on Android and the emulator on
+          // iOS, is the only place commands run, so nothing picked is no
+          // terminal rather than an entry. On a desktop null is the
+          // machine's own shell, an answer. Whether each enforces the
+          // sandbox is the status card's.
+          none: abi != null ? null : "Host",
           options: {
             for (final rootfs in rootfsCatalog)
               if ((available || abi == "ios") && installed.contains(rootfs.id))
@@ -260,8 +261,8 @@ class _Action extends ConsumerWidget {
     // What it costs to agree depends on whether commands are running in it.
     deleteMessage:
         ref.watch(appSettingsProvider.select((s) => s.rootfsId)) == rootfs.id
-        ? "Everything installed in it goes with it, and commands go back "
-              "to running on the host."
+        ? "Everything installed in it goes with it, and the agent has no "
+              "terminal until a Linux is installed again."
         : "Everything installed in it goes with it.",
     // An architecture with no image is a row drawn dead rather than left
     // out, so the reader can see the distribution exists.

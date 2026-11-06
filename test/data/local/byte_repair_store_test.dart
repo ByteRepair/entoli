@@ -615,14 +615,12 @@ exit 0""");
     installDir: installDir,
   );
 
-  test('iOS: the "Host" env is gated, an installed Alpine is not', () async {
+  test("a phone with no Linux is gated, an installed Alpine is not", () async {
     withTarget(TargetPlatform.iOS, () {
       expect(
         storeAt(guestEsbmcInstallDir).capabilityBanner,
-        'Byte Repair does not work when using the "Host" terminal '
-        "environment on this platform, which has no shell to run "
-        "anything in. Please install a Linux from the Terminal "
-        "settings.",
+        "Byte Repair needs a Linux to run in, and this device has none "
+        "installed. Please install one from the Terminal settings.",
       );
     });
     // Picked is installed on iOS: the picker offers only what is on disk,
@@ -633,12 +631,12 @@ exit 0""");
     });
   });
 
-  test("the Android arm is unchanged, and the desktops answer by the "
+  test("Android is gated as iOS is, and the desktops answer by the "
       "destination they were built with", () {
     withTarget(TargetPlatform.android, () {
       expect(
         storeAt(guestEsbmcInstallDir).capabilityBanner,
-        contains('"Host" terminal environment on this device'),
+        contains("needs a Linux to run in"),
       );
     });
     withTarget(TargetPlatform.macOS, () {

@@ -1,8 +1,10 @@
 import "dart:async";
 import "dart:convert";
+import "dart:ffi" show Abi;
 import "dart:io";
 
 import "package:collection/collection.dart";
+import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
 import "../../../../core/log.dart";
@@ -13,6 +15,7 @@ import "../anthropic_client.dart";
 import "../llm_client.dart";
 import "../mcp_tool_bridge.dart";
 import "cli.dart";
+import "provider.dart";
 
 /// Claude CLI (`claude`, Claude Code) as a provider: the user's own sign-in,
 /// whatever plan it is on, answering Entoli's turns.
@@ -23,7 +26,7 @@ import "cli.dart";
 /// all off; Entoli's are offered over a [ToolBridge], so a tool the model
 /// calls runs in Entoli's loop, and the CLI waits on the held call until the
 /// loop's next step brings the result.
-class ClaudeCliProvider extends CliProvider {
+class ClaudeCliProvider extends CliProvider with OfferedByName {
   const ClaudeCliProvider([LlmProviderConfig config = preset])
     : this.over(config);
 
@@ -53,10 +56,114 @@ class ClaudeCliProvider extends CliProvider {
   bool get takesPdfs => true;
 
   @override
-  String get account => "Uses your Claude account";
+  String get planName => "Claude";
+
+  @override
+  String get serviceName => "Claude Pro";
+
+  @override
+  String get connectHint => "Use your Claude plan, through Claude CLI.";
 
   @override
   String get workFolder => "claude-cli";
+
+  @override
+  List<String> get statusArguments => const ["auth", "status", "--json"];
+
+  @override
+  List<String> get signInArguments => const ["auth", "login", "--claudeai"];
+
+  @override
+  List<String> get signOutArguments => const ["auth", "logout"];
+
+  /// Its `.claude.json` moves with it, and on macOS its Keychain entry is
+  /// named for it — `Claude Code-credentials-` and the first eight hex of
+  /// the folder's SHA-256 — so each provider's sign-in is its own.
+  @override
+  Map<String, String> homeEnvironment(String home) => {
+    "CLAUDE_CONFIG_DIR": home,
+  };
+
+  @override
+  ClaudeCliProvider withConfig(LlmProviderConfig config) =>
+      ClaudeCliProvider.over(config, launch: launch, bindBridge: bindBridge);
+
+  /// Where Anthropic's own installer fetches from: the newest version in
+  /// `latest`, and per version a manifest of each platform's SHA-256.
+  static const releases = "https://downloads.claude.ai/claude-code-releases";
+
+  /// The program itself, not the installer: it runs from wherever it is put,
+  /// which is all `claude install` would add to it besides a launcher on the
+  /// user's `PATH`.
+  @override
+  Future<CliRelease?> latestRelease(http.Client client) async {
+    final platform = platformOf(CliProvider.abi, musl: _musl);
+    if (platform == null) return null;
+    final version = (await LlmProvider.getText(
+      Uri.parse("$releases/latest"),
+      httpClient: client,
+    )).trim();
+    if (!_version.hasMatch(version)) {
+      throw FormatException("$releases/latest named no version: $version");
+    }
+    final manifest = await LlmProvider.getJson(
+      Uri.parse("$releases/$version/manifest.json"),
+      headers: const {},
+      httpClient: client,
+    );
+    final platforms = manifest["platforms"];
+    final entry = platforms is Map<String, dynamic>
+        ? platforms[platform]
+        : null;
+    if (entry is! Map<String, dynamic>) return null;
+    final checksum = entry["checksum"];
+    if (checksum is! String) return null;
+    final program = CliProvider.programFile(defaultCommand);
+    return CliRelease(
+      files: [
+        CliFile(
+          name: program,
+          url: Uri.parse("$releases/$version/$platform/$program"),
+          sha256: checksum,
+          packing: const BareProgram(),
+          bytes: entry["size"] as int?,
+        ),
+      ],
+    );
+  }
+
+  static final _version = RegExp(r"^\d+\.\d+\.\d+$");
+
+  /// Its own docs: on Alpine and other musl Linuxes, the program wants these
+  /// beside it, and the system's `rg` rather than the one it carries.
+  @override
+  List<String> get guestPackages => const ["libgcc", "libstdc++", "ripgrep"];
+
+  @override
+  Map<String, String> get guestEnvironment => const {
+    "USE_BUILTIN_RIPGREP": "0",
+  };
+
+  /// The manifest's name for [abi]'s build, the musl one for a Linux whose
+  /// C library is musl — and on Android, whose Linux is Alpine; null for a
+  /// machine it builds nothing for.
+  static String? platformOf(Abi abi, {bool musl = false}) => switch (abi) {
+    Abi.androidArm64 => "linux-arm64-musl",
+    Abi.androidX64 => "linux-x64-musl",
+    Abi.macosArm64 => "darwin-arm64",
+    Abi.macosX64 => "darwin-x64",
+    Abi.linuxX64 => musl ? "linux-x64-musl" : "linux-x64",
+    Abi.linuxArm64 => musl ? "linux-arm64-musl" : "linux-arm64",
+    Abi.windowsX64 => "win32-x64",
+    Abi.windowsArm64 => "win32-arm64",
+    _ => null,
+  };
+
+  /// What Anthropic's installer looks for to tell musl from glibc.
+  static bool get _musl =>
+      Platform.isLinux &&
+      (File("/lib/libc.musl-x86_64.so.1").existsSync() ||
+          File("/lib/libc.musl-aarch64.so.1").existsSync());
 
   @override
   String get bundler => "Claude Desktop";
@@ -164,20 +271,18 @@ class ClaudeCliSession extends CliProcessSession {
     ClaudeCliProvider provider,
     CliSessionSpec spec,
   ) async {
-    final executable = provider.executable();
+    // Looked for now, so a program that is not there fails the start with
+    // where it was looked for.
+    provider.executable();
     // The files it is handed go in a folder of the session's own, which
     // goes with it.
     final sessions = Directory(p.join(provider.workRoot.path, "sessions"));
     await sessions.create(recursive: true);
     final session = ClaudeCliSession._(spec, await sessions.createTemp());
-    return opened(
-      provider,
-      session,
-      () => session._launch(provider, executable),
-    );
+    return opened(provider, session, () => session._launch(provider));
   }
 
-  Future<void> _launch(ClaudeCliProvider provider, String executable) async {
+  Future<void> _launch(ClaudeCliProvider provider) async {
     final tools = spec.tools;
     final bridge = tools.isEmpty
         ? null
@@ -194,7 +299,6 @@ class ClaudeCliSession extends CliProcessSession {
     final effort = effortOf(spec.reasoningEffort);
     await run(
       provider,
-      executable,
       [
         "-p",
         "--input-format",
@@ -225,13 +329,12 @@ class ClaudeCliSession extends CliProcessSession {
         if (spec.system.isNotEmpty) ...["--system-prompt-file", system.path],
         if (effort != null) ...["--effort", effort],
       ],
-      // No project's CLAUDE.md or settings are picked up from it, and its
-      // cache's MCP logs and project entry are kept once.
-      workingDirectory: await provider.workDirectory(),
+      // Run in the provider's empty work folder, so no project's CLAUDE.md
+      // or settings are picked up, and its cache's MCP logs and project
+      // entry are kept once.
       environment: {
         // A tool can wait on an approval for as long as the user takes.
         "MCP_TOOL_TIMEOUT": "${const Duration(days: 1).inMilliseconds}",
-        ...provider.environment,
       },
     );
   }

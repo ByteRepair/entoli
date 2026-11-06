@@ -34,7 +34,6 @@ import "../widgets/editable_row.dart";
 import "../widgets/environment_section.dart";
 import "../../core/formatting.dart";
 import "../widgets/side_panel_frame.dart";
-import "../widgets/provider_dialog.dart";
 import "../widgets/model_picker.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
@@ -42,6 +41,7 @@ import "agents_settings.dart";
 import "assistant_settings.dart";
 import "browser_settings.dart";
 import "byte_repair_settings.dart";
+import "connect_provider.dart";
 import "llm_settings.dart";
 import "running_models.dart";
 import "local_model_settings.dart";
@@ -937,34 +937,6 @@ class _RecommendedProviderState extends ConsumerState<_RecommendedProvider> {
 class _ProvidersEditor extends ConsumerWidget {
   const _ProvidersEditor();
 
-  /// One upsert for both routes in: an entry being edited keeps its id, and
-  /// one being added, preset or not, has none until the notifier gives it one.
-  Future<void> _upsert(
-    BuildContext context,
-    WidgetRef ref, {
-    LlmProviderConfig? initial,
-    String title = "Add provider",
-  }) async {
-    // Notifier first: this page can go away while the dialog is open, and the
-    // save must outlive it rather than resume on a defunct ref.
-    final notifier = ref.read(appSettingsProvider.notifier);
-    final secrets = ref.read(appSecretsProvider);
-    final saved = await promptForProvider(
-      context,
-      initial: initial,
-      storedKey: initial == null ? null : secrets.providerKey(initial.id),
-      nameTaken: (name) => ref
-          .read(appSettingsProvider)
-          .providerNameTaken(name, exceptId: initial?.id),
-      encrypted: secrets.encrypted,
-      title: title,
-      openLink: ref.read(linkOpenerProvider).open,
-      checkKey: ref.read(keyCheckProvider),
-    );
-    if (saved == null) return;
-    await notifier.upsertProvider(saved.config, setKey: saved.setKey);
-  }
-
   Future<void> _remove(WidgetRef ref, LlmProviderConfig provider) async {
     final providers = ref
         .read(appSettingsProvider)
@@ -994,7 +966,7 @@ class _ProvidersEditor extends ConsumerWidget {
             title: provider.displayName,
             subtitle: _describe(ref, provider),
             removeLabel: "Remove ${provider.displayName}",
-            onTap: () => _upsert(
+            onTap: () => editProvider(
               context,
               ref,
               initial: provider,
@@ -1018,7 +990,7 @@ class _ProvidersEditor extends ConsumerWidget {
     final chosen = await pickProviderPreset(context);
     if (chosen != null && context.mounted) {
       final preset = chosen.preset;
-      await _upsert(
+      await editProvider(
         context,
         ref,
         initial: preset,

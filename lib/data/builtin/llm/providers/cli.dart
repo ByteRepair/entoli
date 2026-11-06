@@ -1,18 +1,29 @@
 import "dart:async";
 import "dart:convert";
+import "dart:ffi" show Abi;
 import "dart:io";
 
 import "package:collection/collection.dart";
 import "package:flutter/foundation.dart" show mustCallSuper, protected;
+import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
 import "../../../../core/log.dart";
 import "../../../../core/platform/form_factor.dart";
+import "../../../../core/tls.dart";
+import "../../../../domain/download.dart";
+import "../../../../domain/llm_provider.dart";
 import "../../../../domain/model_capability.dart";
 import "../../../../domain/model_registry.dart";
+import "../../../../domain/shell.dart" show guestHome, guestPath;
+import "../../../download.dart";
+import "../../../local/file_modes.dart";
 import "../hosted_models.dart";
 import "../llm_client.dart";
+import "cli_release.dart";
 import "provider.dart";
+
+export "cli_release.dart";
 
 /// Another harness's command-line program — Claude CLI, Codex — answering in
 /// the model's place. What is configured is the program and the environment
@@ -24,6 +35,25 @@ import "provider.dart";
 /// one harness process carries a conversation across the steps of a turn.
 /// What a session *is* — a process per call, a long-lived one fed over stdin,
 /// a server it talks to — is the subclass's, through [start].
+/// A Linux a CLI's program runs in, where the platform's own processes are
+/// not Linux's: Android, whose Alpine is arm64 musl under proot. iOS has none
+/// — its Alpine is emulated 32-bit x86, which neither program is built for.
+abstract class CliGuest {
+  /// [argv] as it is started in the guest from [cwd], each of [shared] bound
+  /// at its own host path, so a path the app hands the program is one
+  /// answer inside the guest and out; and the environment the starting
+  /// process needs of its own. Throws an [LlmException] where there is no
+  /// Linux to run it in yet.
+  ({List<String> command, Map<String, String> environment}) wrap(
+    List<String> argv, {
+    required String cwd,
+    required List<String> shared,
+  });
+
+  /// The guest's own way of installing [packages].
+  List<String> install(List<String> packages);
+}
+
 abstract class CliProvider extends LlmProvider with KeyFree {
   const CliProvider(super.config, {this.launch = launchProcess});
 
@@ -35,6 +65,10 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   /// adds, which is where a program like `claude` is usually installed. Null
   /// leaves the inherited one.
   static String? loginPath;
+
+  /// Where programs run where it is not this machine — Android's Linux —
+  /// set once by `main` where the build carries one; null runs them here.
+  static CliGuest? guest;
 
   /// Where the programs' sessions keep what they run with, set once by
   /// `main` to the app's cache. Null — a test, a build that never set it —
@@ -50,10 +84,16 @@ abstract class CliProvider extends LlmProvider with KeyFree {
       "Runs ${config.displayName} on this computer, signed in as it already "
       "is. Its own tools are off; it uses Entoli's.";
 
-  /// Whose account its prompts go to, for the provider list's tag.
-  String get account;
+  /// Whose plan answers through it, by the name its user pays for: "Claude",
+  /// "ChatGPT".
+  String get planName;
 
-  /// The folder of [cacheRoot] this program's sessions run in.
+  /// Whose account its prompts go to, for the provider list's tag.
+  String get account => "Uses your $planName account";
+
+  /// The folder of [cacheRoot] that is this program's: `bin/` the program
+  /// itself, shared by every provider on it, and per provider `data/<id>/`
+  /// and `work/<id>/`.
   String get workFolder;
 
   Directory get workRoot => Directory(
@@ -63,19 +103,229 @@ abstract class CliProvider extends LlmProvider with KeyFree {
     ),
   );
 
-  /// The one empty folder every session runs in, so nothing a project keeps
-  /// for the program is picked up from it and what the program keeps per
-  /// working directory is kept once.
-  Future<String> workDirectory() async => (await Directory(
-    p.join(workRoot.path, "work"),
-  ).create(recursive: true)).path;
+  /// The provider's own name for its folders, which a provider not yet
+  /// saved does not have.
+  String get _folderId => config.id.isEmpty ? "unsaved" : config.id;
+
+  /// What the program keeps — its account above all, and its settings,
+  /// history and caches — in place of its own home under the user's: one per
+  /// provider, so two on the same program can be two accounts, and Entoli's
+  /// are apart from the user's own `claude` or `codex`. Told to the program
+  /// by [homeEnvironment].
+  String get dataDirectory => p.join(workRoot.path, "data", _folderId);
+
+  /// The variables that point the program at [home] for everything it keeps.
+  Map<String, String> homeEnvironment(String home);
+
+  /// The empty folder every session of this provider runs in, so nothing a
+  /// project keeps for the program is picked up from it. Kept apart from
+  /// [dataDirectory], so what the program keeps and what it works in never
+  /// mix.
+  String get workPath => p.join(workRoot.path, "work", _folderId);
+
+  /// [workPath], made with [dataDirectory] before anything runs.
+  Future<String> workDirectory() async {
+    await Directory(dataDirectory).create(recursive: true);
+    return (await Directory(workPath).create(recursive: true)).path;
+  }
+
+  /// Takes this provider's [dataDirectory] and work folder away — its
+  /// sign-in with them — for a provider that is removed.
+  Future<void> forget() async {
+    for (final path in [dataDirectory, workPath]) {
+      final dir = Directory(path);
+      if (dir.existsSync()) await dir.delete(recursive: true);
+    }
+  }
+
+  /// This program for [config], the same ports kept: the way a provider
+  /// read from one entry is had for another — its folders are by id.
+  CliProvider withConfig(LlmProviderConfig config);
 
   /// The models the program takes by name, offered beside the user's own.
   List<ModelInfo> get knownModels;
 
-  /// Whether this platform can run a program at all. A phone cannot, so a
-  /// CLI entry synced onto one offers nothing rather than failing per turn.
-  bool get supported => isDesktop;
+  /// Whether this platform can run a program at all: a desktop, or Android in
+  /// its Linux. iOS cannot, so a CLI entry synced onto one offers nothing
+  /// rather than failing per turn.
+  @override
+  bool get supported => isDesktop || guest != null;
+
+  /// What the program needs installed in a [guest] beside it, by the
+  /// guest's package names: nothing, unless a subclass knows better.
+  List<String> get guestPackages => const [];
+
+  /// What the program is told in a [guest] beyond the guest's own basics.
+  Map<String, String> get guestEnvironment => const {};
+
+  /// The machine a release is chosen for: this one, unless a test names
+  /// another.
+  static Abi abi = Abi.current();
+
+  /// The newest release of the program for [abi], asked of its publisher
+  /// over [client]. Null where it publishes none for that machine.
+  Future<CliRelease?> latestRelease(http.Client client);
+
+  /// What the program is asked to say whether it is signed in: it exits 0
+  /// when it is.
+  List<String> get statusArguments;
+
+  /// What signs the program in: it prints the page to sign in on, waits for
+  /// the sign-in there, stores what it was given, and exits 0.
+  List<String> get signInArguments;
+
+  /// What signs the program out of the account in [dataDirectory].
+  List<String> get signOutArguments;
+
+  /// Entoli's own copy of the program, kept in [workRoot] beside the folder
+  /// its sessions run in, which is what the cache is for: deleted, it is
+  /// downloaded again rather than lost.
+  String get ownCopy => p.join(_bin, programFile(defaultCommand));
+
+  String get _bin => p.join(workRoot.path, "bin");
+
+  /// [name] as [on] — [abi] unless named — names a program's file. One rule
+  /// for where a release is put and where it is looked for.
+  static String programFile(String name, [Abi? on]) =>
+      const {
+        Abi.windowsArm64,
+        Abi.windowsIA32,
+        Abi.windowsX64,
+      }.contains(on ?? abi)
+      ? "$name.exe"
+      : name;
+
+  /// Programs the CLI runs from beside itself, which a copy is not whole
+  /// without. None unless a subclass knows of one.
+  List<String> get companions => const [];
+
+  /// [ownCopy] there, with every one of its [companions].
+  bool get installed => [
+    ownCopy,
+    for (final name in companions) p.join(_bin, programFile(name)),
+  ].every((path) => File(path).existsSync());
+
+  /// [latestRelease] fetched, each of its files checked against the hash its
+  /// publisher states, taken out of whatever it is packed in, and put in
+  /// [ownCopy]'s folder — each in one rename, the CLI's own last, so a copy
+  /// in use is replaced whole and one only half fetched is not [installed].
+  /// Over [client] where given, which the run closes.
+  Stream<DownloadProgress> install({http.Client? client}) {
+    final web = client ?? tlsClient();
+    Future<void> discard() async {
+      final bin = Directory(_bin);
+      if (!bin.existsSync()) return;
+      await for (final entry in bin.list()) {
+        if (entry.path.endsWith(".part") || entry.path.endsWith(".new")) {
+          await entry.delete();
+        }
+      }
+    }
+
+    return DownloadRun(
+      client: web,
+      discard: discard,
+      run: (run) async {
+        final release =
+            await latestRelease(web) ??
+            (throw UnsupportedError(
+              "${config.displayName} publishes no build for this computer",
+            ));
+        await Directory(_bin).create(recursive: true);
+        // Alongside the download rather than after it: the libraries do not
+        // wait on the program. Awaited before anything is put in place; its
+        // failure is the install's, and a download that fails first leaves
+        // it ignored.
+        final packages = _installGuestPackages()..ignore();
+        final total = release.bytes;
+        var done = 0;
+        for (final file in release.files) {
+          final part = p.join(_bin, "${file.name}.part");
+          final digest = await run.fetchSha256(
+            url: "${file.url}",
+            to: part,
+            total: total,
+            done: done,
+          );
+          if (run.cancelled) return;
+          if (digest != file.sha256.toLowerCase()) {
+            throw FormatException(
+              "${file.url} does not match the checksum its publisher states",
+            );
+          }
+          done += File(part).lengthSync();
+          run.report(
+            DownloadProgress(
+              received: done,
+              total: total ?? 0,
+              unpacking: true,
+            ),
+          );
+          final staged = p.join(_bin, "${file.name}.new");
+          await file.packing.place(File(part), staged);
+          makeExecutable(staged);
+        }
+        await packages;
+        for (final file in release.files) {
+          await File(
+            p.join(_bin, "${file.name}.new"),
+          ).rename(p.join(_bin, file.name));
+        }
+      },
+    ).stream;
+  }
+
+  /// [guestPackages] into the [guest], before the program is in place, so a
+  /// copy that is [installed] has what it runs with. Nothing where there is
+  /// no guest or nothing to install.
+  Future<void> _installGuestPackages() async {
+    final guest = CliProvider.guest;
+    if (guest == null || guestPackages.isEmpty) return;
+    final (:code, :said) = await _exitOf(
+      await _start(
+        guest.install(guestPackages),
+        cwd: workRoot.path,
+        environment: _guestBasics,
+      ),
+    );
+    if (code != 0) {
+      throw LlmException(
+        "Installing ${guestPackages.join(", ")} in the Linux failed "
+        "($code): $said",
+      );
+    }
+  }
+
+  /// Takes [ownCopy] and its [companions] away, and the program falls back
+  /// to whatever else [locate] finds.
+  Future<void> uninstall() async {
+    final bin = Directory(_bin);
+    if (bin.existsSync()) await bin.delete(recursive: true);
+  }
+
+  /// Whether the program is signed in, by its own [statusArguments].
+  Future<bool> signedIn() async =>
+      (await _exitOf(await run(statusArguments))).code == 0;
+
+  /// Signs the program out, by its own [signOutArguments]; whether it was
+  /// signed in or not, it is not after.
+  Future<void> signOut() async {
+    final (:code, said: _) = await _exitOf(await run(signOutArguments));
+    if (code != 0) {
+      logFailure("cli", "signing ${config.displayName} out exited $code");
+    }
+  }
+
+  /// [process] to its end, both its outputs read so it never blocks on a
+  /// full pipe, and the tail of what it said on its error output kept.
+  static Future<({int code, StderrTail said})> _exitOf(
+    CliProcess process,
+  ) async {
+    final said = StderrTail();
+    unawaited(process.lines.drain<void>());
+    process.errors.listen(said.add);
+    return (code: await process.exitCode, said: said);
+  }
 
   /// The program the config names, or null where it leaves it to the default.
   String? get _named {
@@ -91,11 +341,58 @@ abstract class CliProvider extends LlmProvider with KeyFree {
 
   /// The app's own environment less what [inherits] keeps out, the login
   /// `PATH` over it, and the config's variables over both.
+  ///
+  /// In a [guest], none of the app's own: it is Android's, and means nothing
+  /// to a Linux program. The guest's basics stand in its place.
   Map<String, String> get environment => {
-    ...inheritedFrom(Platform.environment),
-    "PATH": ?loginPath,
+    if (guest == null) ...{
+      ...inheritedFrom(Platform.environment),
+      "PATH": ?loginPath,
+    } else ...{
+      ..._guestBasics,
+      ...guestEnvironment,
+    },
+    ...homeEnvironment(dataDirectory),
     ...config.env,
   };
+
+  /// What every program in a [guest] starts with, in place of the app's own
+  /// environment, which is Android's.
+  static const _guestBasics = {
+    "HOME": guestHome,
+    "PATH": guestPath,
+    "LANG": "C.UTF-8",
+  };
+
+  /// The program, started on [arguments] in its work folder, with
+  /// [environment] below its own.
+  Future<CliProcess> run(
+    List<String> arguments, {
+    Map<String, String> environment = const {},
+  }) async => _start(
+    [executable(), ...arguments],
+    cwd: await workDirectory(),
+    environment: {...environment, ...this.environment},
+  );
+
+  /// [argv] started from [cwd] with [environment]: as it is here, or in the
+  /// [guest] where there is one, the program's cache folder bound at its own
+  /// path there and the guest's own variables over [environment].
+  Future<CliProcess> _start(
+    List<String> argv, {
+    required String cwd,
+    required Map<String, String> environment,
+  }) {
+    final (:command, environment: own) =
+        guest?.wrap(argv, cwd: cwd, shared: [workRoot.path]) ??
+        (command: argv, environment: const <String, String>{});
+    return launch(
+      command.first,
+      command.sublist(1),
+      workingDirectory: cwd,
+      environment: {...environment, ...own},
+    );
+  }
 
   /// [inherited] less what [inherits] keeps out.
   Map<String, String> inheritedFrom(Map<String, String> inherited) => {
@@ -111,14 +408,16 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   /// The app [bundledCopies] come with, for saying where it was looked for.
   String get bundler => "";
 
-  /// [command] as a path to run, or null where there is none: a path is taken
-  /// as it is, a bare name is looked for on [environment]'s `PATH`, and the
-  /// default name, found nowhere there, is the first of [bundledCopies].
-  String? locate() =>
-      _onPath() ??
-      (_named != null
-          ? null
-          : bundledCopies.where((path) => File(path).existsSync()).firstOrNull);
+  /// [command] as a path to run, or null where there is none. A command the
+  /// config names is taken as it is, or looked for on [environment]'s `PATH`
+  /// where it is a bare name. Left to the default, it is Entoli's own copy
+  /// first — the one the welcome tour installs and signs in — then the
+  /// default name on `PATH`, then the first of [bundledCopies].
+  String? locate() => _named != null
+      ? _onPath()
+      : (installed ? ownCopy : null) ??
+            _onPath() ??
+            bundledCopies.where((path) => File(path).existsSync()).firstOrNull;
 
   String? _onPath() {
     final name = command;
@@ -313,22 +612,15 @@ abstract class CliProcessSession extends CliSession {
   @protected
   void answer(List<LlmMessage> results);
 
-  /// Starts the program and reads it: each line of its output that is a JSON
-  /// object goes to [line].
+  /// Starts the program, by [CliProvider.run], and reads it: each line of
+  /// its output that is a JSON object goes to [line].
   @protected
   Future<void> run(
     CliProvider provider,
-    String executable,
     List<String> arguments, {
-    required String workingDirectory,
-    required Map<String, String> environment,
+    Map<String, String> environment = const {},
   }) async {
-    final process = await provider.launch(
-      executable,
-      arguments,
-      workingDirectory: workingDirectory,
-      environment: environment,
-    );
+    final process = await provider.run(arguments, environment: environment);
     _process = process;
     process.lines.listen(_read, onError: (Object e) => fail("$e"));
     process.errors.listen(_stderr.add);

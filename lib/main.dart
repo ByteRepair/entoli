@@ -15,6 +15,7 @@ import "core/platform/system_palette.dart";
 import "core/tls.dart";
 import "data/backup.dart" show recoverRestore;
 import "data/builtin/llm/providers/cli.dart" show CliProvider;
+import "data/local/proot.dart" show ProotCliGuest;
 import "data/builtin/llm/providers/provider.dart" show LlmProvider;
 import "data/local/mlx_engine.dart" show mlxChannel;
 import "data/local/file_trigger_store.dart";
@@ -229,6 +230,15 @@ class AppSession {
     // as a command is.
     CliProvider.loginPath = await loginPath;
     CliProvider.cacheRoot = cache;
+    // Android runs a CLI's program in its Linux, under the proot its
+    // terminal runs commands under; a build without proot runs none.
+    if (toolset?.proot case final proot?) {
+      CliProvider.guest = ProotCliGuest(
+        proot: proot,
+        store: rootfs,
+        rootfsId: () => AppSettings.load(config).rootfsId,
+      );
+    }
     final backend = platform.createBackend(
       config,
       libraries,

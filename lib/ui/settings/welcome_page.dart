@@ -9,6 +9,7 @@ import "../../core/log.dart";
 import "../../domain/chat_log.dart";
 import "../../domain/local_model.dart" show isTitleOnlyModel;
 import "../../domain/models.dart";
+import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/project.dart";
 import "../../providers.dart";
 import "../marketplace/marketplace_page.dart";
@@ -18,6 +19,7 @@ import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/scrolling.dart";
 import "llm_settings.dart";
+import "connect_provider.dart";
 import "settings_category.dart";
 
 /// The welcome tour as the home content on first launch. It is the root route,
@@ -451,28 +453,37 @@ int _agentModels(List<ModelOption>? models) => (models ?? const [])
     .where((m) => !isTitleOnlyModel(m.providerId, m.modelId))
     .length;
 
-/// Where the model runs, and once one is reachable, which answers a new chat.
-/// Next waits here until some model is reachable and a default is picked.
+/// Where the model runs: a service by the name its user knows it by, which
+/// connects with that provider's recommended models, or the settings that
+/// hold everything else. Next waits here until some model is reachable and
+/// answers new chats. A service chosen here answers them at its own defaults,
+/// and so does the first model downloaded, so nothing is picked on this page —
+/// unless models are reachable with nothing answering, a setup from before,
+/// which is the one case that gets the pickers.
 class _ModelPage extends ConsumerWidget {
   const _ModelPage();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final count = _agentModels(ref.watch(availableModelsProvider).value);
+    final unanswered = ref.watch(
+      appSettingsProvider.select((s) => s.defaultProviderId == null),
+    );
     final scheme = Theme.of(context).colorScheme;
     return _Slide(
       icon: Icons.hub_outlined,
       title: "Connect a model",
-      body: "Run one on this device, or reach one over the network.",
+      body: "Choose a service. Entoli uses its recommended model.",
       children: [
+        for (final provider in welcomeProviders) _SetupRow.service(provider),
         _SetupRow.category(
-          title: "On this device",
+          title: "Local Model",
           detail: "Download a model. No key, no network.",
           category: SettingsCategory.onDevice,
         ),
         _SetupRow.category(
-          title: "A provider",
-          detail: "Anthropic, OpenAI, OpenRouter and more, with your key.",
+          title: "Advanced",
+          detail: "Other providers, and endpoints by URL.",
           category: SettingsCategory.providers,
         ),
         const SizedBox(height: 16),
@@ -497,8 +508,10 @@ class _ModelPage extends ConsumerWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    const DefaultsSection(),
+                    if (unanswered) ...[
+                      const SizedBox(height: 16),
+                      const DefaultsSection(),
+                    ],
                   ],
                 )
               : Text(
@@ -527,7 +540,7 @@ class _ExtrasPage extends StatelessWidget {
         icon: Icons.storefront_outlined,
         title: "Marketplace",
         detail: "Install skills and agents others have shared.",
-        open: openMarketplace,
+        open: (context, _) => openMarketplace(context),
       ),
       _SetupRow.category(
         title: "Byte Repair",
@@ -732,35 +745,46 @@ class _ScrollHint extends StatelessWidget {
 }
 
 /// A way into something set up elsewhere: a settings category pushed on its
-/// own, or a page of its own.
+/// own, a provider's dialog, or a page of its own. Not drawn where what it
+/// leads to is not offered here.
 class _SetupRow extends ConsumerWidget {
   const _SetupRow({
     required this.icon,
     required this.title,
     required this.detail,
     required this.open,
-  }) : category = null;
+  }) : offered = _always;
 
   /// The icon is the category's own — one place an icon is named per category.
   _SetupRow.category({
     required this.title,
     required this.detail,
-    required SettingsCategory this.category,
+    required SettingsCategory category,
   }) : icon = category.icon,
-       open = ((context) =>
-           openSettings(context, category: category, focus: true));
+       open = ((context, ref) =>
+           openSettings(context, category: category, focus: true)),
+       offered = category.offered;
+
+  /// [provider], connected as its kind is: a CLI installed and signed in, an
+  /// API in its preset's dialog. The words are its own.
+  _SetupRow.service(OfferedByName provider)
+    : icon = Icons.cloud_outlined,
+      title = provider.serviceName,
+      detail = provider.connectHint,
+      open = ((context, ref) => connectService(context, ref, provider)),
+      offered = ((_) => provider.supported);
 
   final IconData icon;
   final String title;
   final String detail;
-  final void Function(BuildContext context) open;
+  final void Function(BuildContext context, WidgetRef ref) open;
+  final bool Function(WidgetRef ref) offered;
 
-  /// Where the row leads, if a category: not drawn where it is not offered.
-  final SettingsCategory? category;
+  static bool _always(WidgetRef _) => true;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (category?.offered(ref) == false) return const SizedBox.shrink();
+    if (!offered(ref)) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
@@ -770,7 +794,7 @@ class _SetupRow extends ConsumerWidget {
         title: Text(title),
         subtitle: Text(detail),
         trailing: const Icon(Icons.chevron_right),
-        onTap: () => open(context),
+        onTap: () => open(context, ref),
       ),
     );
   }

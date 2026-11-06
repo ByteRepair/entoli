@@ -1,7 +1,9 @@
 import "dart:async";
 import "dart:convert";
+import "dart:ffi" show Abi;
 import "dart:io";
 
+import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
 import "../../../../core/log.dart";
@@ -10,6 +12,7 @@ import "../../../../domain/model_info.dart";
 import "../llm_client.dart";
 import "../openai_client.dart" show inlineText;
 import "cli.dart";
+import "provider.dart";
 
 /// Codex CLI (`codex`) as a provider: the user's own ChatGPT sign-in
 /// answering Entoli's turns.
@@ -20,7 +23,7 @@ import "cli.dart";
 /// are switched off; Entoli's are the thread's dynamic tools, which Codex
 /// calls back over the same pipe and waits on until the loop's next step
 /// brings the result.
-class CodexCliProvider extends CliProvider {
+class CodexCliProvider extends CliProvider with OfferedByName {
   const CodexCliProvider([LlmProviderConfig config = preset])
     : this.over(config);
 
@@ -40,10 +43,105 @@ class CodexCliProvider extends CliProvider {
   String get defaultCommand => "codex";
 
   @override
-  String get account => "Uses your ChatGPT account";
+  String get planName => "ChatGPT";
+
+  @override
+  String get serviceName => "ChatGPT";
+
+  @override
+  String get connectHint => "Use your ChatGPT plan, through Codex CLI.";
 
   @override
   String get workFolder => "codex-cli";
+
+  @override
+  List<String> get statusArguments => const ["login", "status"];
+
+  /// The ChatGPT sign-in, whose page hands back to a server the program
+  /// runs on `localhost:1455` for as long as it waits.
+  @override
+  List<String> get signInArguments => const ["login"];
+
+  @override
+  List<String> get signOutArguments => const ["logout"];
+
+  /// Its `auth.json`, config, logs and state databases, all of it.
+  @override
+  Map<String, String> homeEnvironment(String home) => {"CODEX_HOME": home};
+
+  @override
+  CodexCliProvider withConfig(LlmProviderConfig config) =>
+      CodexCliProvider.over(config, launch: launch);
+
+  /// OpenAI's newest release on GitHub. The API rather than the page's
+  /// redirect: it is what states each asset's SHA-256.
+  static final latestUrl = Uri.parse(
+    "https://api.github.com/repos/openai/codex/releases/latest",
+  );
+
+  /// Code mode runs the model's scripts in a program of its own, which
+  /// Codex looks for beside itself; without it every `exec` call fails, and
+  /// with it every one of Entoli's tools a code-mode model calls from inside
+  /// one.
+  @override
+  List<String> get companions => const ["codex-code-mode-host"];
+
+  /// Each program its own asset, named for the target: Codex and its
+  /// [companions], the same way.
+  @override
+  Future<CliRelease?> latestRelease(http.Client client) async {
+    final triple = tripleOf(CliProvider.abi);
+    if (triple == null) return null;
+    final windows = triple.endsWith("windows-msvc");
+    final release = await LlmProvider.getJson(
+      latestUrl,
+      headers: const {"Accept": "application/vnd.github+json"},
+      httpClient: client,
+    );
+    final assets = switch (release["assets"]) {
+      final List<dynamic> assets => assets.whereType<Map<String, dynamic>>(),
+      _ => const <Map<String, dynamic>>[],
+    };
+    CliFile? fileOf(String program) {
+      final name = windows
+          ? "$program-$triple.exe.zip"
+          : "$program-$triple.tar.gz";
+      final asset = assets.where((a) => a["name"] == name).firstOrNull;
+      if (asset == null) return null;
+      final digest = asset["digest"];
+      if (digest is! String || !digest.startsWith("sha256:")) {
+        throw FormatException("$name has no SHA-256 stated beside it");
+      }
+      return CliFile(
+        name: CliProvider.programFile(program),
+        url: Uri.parse(asset["browser_download_url"] as String),
+        sha256: digest.substring("sha256:".length),
+        packing: windows ? const ZipProgram() : const TarGzProgram(),
+        bytes: asset["size"] as int?,
+      );
+    }
+
+    final files = [
+      for (final program in [...companions, defaultCommand]) fileOf(program),
+    ];
+    if (files.contains(null)) return null;
+    return CliRelease(files: files.nonNulls.toList());
+  }
+
+  /// The target [abi]'s build is named for: musl on Linux, which runs on
+  /// either C library; null for a machine OpenAI builds nothing for.
+  static String? tripleOf(Abi abi) => switch (abi) {
+    // Android's Linux is Alpine, which these run in.
+    Abi.androidArm64 => "aarch64-unknown-linux-musl",
+    Abi.androidX64 => "x86_64-unknown-linux-musl",
+    Abi.macosArm64 => "aarch64-apple-darwin",
+    Abi.macosX64 => "x86_64-apple-darwin",
+    Abi.linuxX64 => "x86_64-unknown-linux-musl",
+    Abi.linuxArm64 => "aarch64-unknown-linux-musl",
+    Abi.windowsX64 => "x86_64-pc-windows-msvc",
+    Abi.windowsArm64 => "aarch64-pc-windows-msvc",
+    _ => null,
+  };
 
   @override
   String get bundler => "the ChatGPT app";
@@ -199,7 +297,9 @@ class CodexCliSession extends CliProcessSession {
     CodexCliProvider provider,
     CliSessionSpec spec,
   ) async {
-    final executable = provider.executable();
+    // Looked for now, so a program that is not there fails the start with
+    // where it was looked for.
+    provider.executable();
     final env = provider.environment;
     final cwd = await provider.workDirectory();
     final arguments = CodexCliProvider.argumentsFor(
@@ -207,13 +307,7 @@ class CodexCliSession extends CliProcessSession {
     );
     final session = CodexCliSession._(spec);
     return opened(provider, session, () async {
-      await session.run(
-        provider,
-        executable,
-        arguments,
-        workingDirectory: cwd,
-        environment: env,
-      );
+      await session.run(provider, arguments);
       await session._open(cwd);
     });
   }

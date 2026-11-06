@@ -39,6 +39,9 @@ abstract class LlmProvider {
   /// False for a server nothing guards, whose key the dialog does not ask for.
   bool get needsKey => true;
 
+  /// Whether this platform can reach it at all.
+  bool get supported => true;
+
   /// Whether a PDF goes to it as a block. Most compatible servers reject the
   /// `file` part outright, so it is off unless the provider is known to take
   /// one.
@@ -161,17 +164,29 @@ abstract class LlmProvider {
     required Map<String, String> headers,
     http.Client? httpClient,
   }) async {
+    final json = jsonDecode(
+      await getText(url, headers: headers, httpClient: httpClient),
+    );
+    if (json is! Map<String, dynamic>) {
+      throw LlmException("$url answered something other than an object");
+    }
+    return json;
+  }
+
+  /// The body at [url] as text, asked with [headers]. Throws on anything but
+  /// a 200.
+  static Future<String> getText(
+    Uri url, {
+    Map<String, String> headers = const {},
+    http.Client? httpClient,
+  }) async {
     final client = httpClient ?? tlsClient();
     try {
       final response = await sendChecked(
         client,
         http.Request("GET", url)..headers.addAll(headers),
       );
-      final json = jsonDecode(await response.stream.bytesToString());
-      if (json is! Map<String, dynamic>) {
-        throw LlmException("$url answered something other than an object");
-      }
-      return json;
+      return await response.stream.bytesToString();
     } finally {
       if (httpClient == null) client.close();
     }
@@ -187,6 +202,17 @@ T? resolveIn<T extends Model>(
 ) {
   final provider = providers.where((p) => p.id == ref.providerId).firstOrNull;
   return provider?.resolve<T>(ref.modelId, host(provider));
+}
+
+/// A provider the welcome tour offers by the name of the service, to someone
+/// who knows they pay for ChatGPT rather than which API answers for it. Which
+/// ones it offers, and in what order, is `welcomeProviders`'.
+mixin OfferedByName on LlmProvider {
+  /// The service as its user knows it: "ChatGPT", not "Codex CLI".
+  String get serviceName;
+
+  /// One line on what connecting it takes.
+  String get connectHint;
 }
 
 /// A server nothing guards: no key is asked for, and any key is a yes.

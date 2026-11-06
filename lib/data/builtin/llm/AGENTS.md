@@ -69,6 +69,18 @@ entry there. A provider nothing guards — a local server, the on-device ones �
 takes `KeyFree`, whose `needsKey` is what the dialog and the provider list
 read.
 
+The welcome tour offers a few of them by the service's name rather than the
+API's — ChatGPT is Codex CLI, Claude Pro is Claude CLI — to someone who knows
+what they pay for and not what answers for it; no API key is asked for there,
+the APIs being Advanced's. A class offered there takes
+`OfferedByName`, whose `serviceName` and `connectHint` are its words on the
+tour, and `welcomeProviders` is which of them and in what order; one its
+`supported` says this platform cannot reach (a CLI on a phone) is not drawn.
+Connecting one is its preset in the ordinary provider dialog, adopted
+(`upsertProvider`'s `adopt`): it answers new chats, titles and the classifier
+at the preset's defaults, whatever was picked before, and nothing on the tour
+asks for a model.
+
 **What a model can do is its type.** A provider `serve`s a model id as one
 `Model` per thing it does (`lib/domain/model_capability.dart`): a
 `ChatModel`, an `ImageModel`, a `TranscriptionModel`, a `SynthesisModel`.
@@ -209,8 +221,9 @@ it falls back to a copy another app ships (`bundledCopies`): on macOS,
 Claude Desktop keeps its own `claude` under
 `~/Library/Application Support/Claude/claude-code/<version>/<build>/`,
 replaced on each update, so the newest is looked up per session rather than
-stored — run outside a Desktop session it signs in as any `claude` does. A phone runs no programs, so there
-it offers no models, and the dialog offers the API only on a desktop.
+stored — run outside a Desktop session it signs in as any `claude` does. Android runs the
+programs in its Linux (below); iOS runs none, so there a CLI entry offers no
+models and the dialog offers the API only where `supported` says it can run.
 What of the app's own environment reaches the program is the subclass's
 (`inherits`): an Entoli started from inside a Claude Code session — a
 Claude Code terminal, a Claude Desktop session — carries that session's
@@ -231,6 +244,81 @@ read, and `_resolveModel`'s image and PDF gate — so a chat on either program
 reports the window it has rather than the 128k guess. The pickers, which hold
 a config and no endpoint, still ask `modelInfoOf`, which only costs them a
 display name.
+
+**Entoli keeps its own copy of each program, and signs it in.** `ownCopy` is
+`<cache>/<workFolder>/bin/<command>`, the cache being where a copy that goes
+missing is fetched again rather than lost. `install` asks the subclass's
+`latestRelease` for this machine's build (`CliProvider.abi`, which a test
+names): Claude CLI's is the program itself from
+`downloads.claude.ai/claude-code-releases` — `latest` for the version, that
+version's `manifest.json` for each platform's SHA-256 and size, the musl
+build on a musl Linux — taken as it is rather than run as an installer, since
+`claude install` would only add a launcher on the user's `PATH`; Codex CLI's
+is two assets GitHub's releases API names for the target (musl on Linux, a
+zip on Windows, a tarball elsewhere) — `codex` and `codex-code-mode-host`,
+its `companions`, the program code mode runs the model's scripts in and which
+Codex looks for beside itself. Without it every `exec` a code-mode model such
+as `gpt-6-luna` makes fails inside Codex, and with it every one of Entoli's
+tools called from such a script, before anything reaches the loop. Each
+asset's `digest` is its hash, and a release stating none is refused; a copy
+missing a companion is not `installed`, so it is fetched again. Each file is checked against its hash,
+taken out of its packing (`CliPacking`: `BareProgram`, `TarGzProgram`,
+`ZipProgram`, read in Dart so no platform needs a `tar`), given its execute
+bit, and renamed into place, the CLI's own last, so a copy in use is
+replaced whole. `locate`
+prefers it over the default name on `PATH`, which is what makes the copy the
+tour signed in the one every session runs. Signing in is the program's own:
+`statusArguments` exit 0 when signed in (`claude auth status`, `codex login
+status`), and `CliSignIn` runs `signInArguments` (`claude auth login
+--claudeai`, `codex login`), takes the first `https` link it prints — error
+output read a whole line at a time, so a link split between two writes is
+not taken at its first half — and ends signed in when the program exits 0 and
+its status agrees. `signOutArguments` (`claude auth logout`, `codex
+logout`) are what Sign in again runs first.
+
+**Each provider is its own account, apart from the user's.** Under
+`<cache>/<workFolder>/`, `bin/` is the program, shared; `data/<provider-id>/`
+is what the program keeps — its sign-in, settings, history and caches — in
+place of the user's `~/.claude` or `~/.codex`; `work/<provider-id>/` is the
+empty folder that provider's sessions run in, kept apart from `data/` so the
+two never mix. `homeEnvironment` is what tells the program: `CLAUDE_CONFIG_DIR`,
+which moves `.claude.json` with it and on macOS names the Keychain entry
+`Claude Code-credentials-` and the first eight hex of the folder's SHA-256, so
+each folder is its own Keychain sign-in; and `CODEX_HOME`, which holds
+`auth.json`. An entry's own `env` wins over it. So two entries on one program
+are two accounts, and signing in through Entoli never signs the user's own
+`claude` or `codex` in or out. The folders are named by the entry's id, which
+is why a CLI entry has its id before it can sign in — `editProvider` and the
+tour's connect give a new one its id when they open, and take its folders back
+when it is cancelled — and the settings notifier's `setProviders` `forget`s them when the entry is removed, beside its stored key.
+In the cache rather than the data directory, deliberately: the data directory
+is backed up and synced, and a sign-in is a secret. A cleared cache costs a
+sign-in, not a leaked token. `withConfig` reads one program for another entry
+with the same ports, which is how the UI gets an entry's program from
+`cliProgramsProvider`.
+
+**On Android the program runs in the Linux.** Android's own processes are
+not Linux's, so `main` sets `CliProvider.guest` to a `ProotCliGuest` where the
+build carries proot, and every start — a session, a status check, a sign-in
+— goes through `CliProvider.run`, which hands the program's own words to the
+guest. `prootProgram` (`data/local/proot.dart`) is the terminal driver's proot
+running one program rather than a shell, with the program's cache folder
+bound at its own host path, so its file, its `data/<id>/`, its `work/<id>/` and
+a Claude session's files are one path inside the guest and out and nothing is
+translated; the guest's `PATH`, `HOME` and the subclass's `guestEnvironment`
+stand in for the app's environment, which is Android's. The rootfs is looked
+up at each start, so the one the first-run setup installs is used without a
+restart, and with none the start says to install one. The builds are the musl
+ones (`linux-arm64-musl`, `aarch64-unknown-linux-musl`), which is what Alpine
+runs; Claude CLI's docs ask for `libgcc`, `libstdc++` and the system's
+`ripgrep` on a musl Linux, so its `guestPackages` are `apk add`ed in the guest
+before the program is put in place, and a failure there is a failed install.
+The sign-in's callback is the program's own `localhost` server, which proot
+shares with the phone, so the phone's browser reaches it. iOS has no guest:
+its Alpine is iSH's, which emulates 32-bit x86 and loads no 64-bit program,
+and neither program is built for anything else. What is not known is how
+either behaves under proot on a real device — Codex's own exec sandbox above
+all; nothing here has run on one.
 
 **The split is interface against lifecycle.** `CliProvider` owns what every
 such program shares: finding it, its environment, and `CliClient` — the
@@ -253,11 +341,11 @@ end, the exit and the close — is written once there; a subclass says what
 a line means and how input and results are written.
 
 `ClaudeCliProvider`'s session is one `claude -p` in stream-json on both
-sides, run in one empty folder every session shares —
-`<cache>/claude-cli/work/`, the cache `main` hands `CliProvider` — so
-no project's `CLAUDE.md` is picked up and what the CLI keeps per working
-directory (its cache's MCP logs, its project entry in `~/.claude.json`) is
-kept once rather than once per session; the files a session is handed sit
+sides, run in one empty folder every session of the entry shares —
+`<cache>/claude-cli/work/<provider-id>/`, the cache `main` hands
+`CliProvider` — so no project's `CLAUDE.md` is picked up and what the CLI
+keeps per working directory (its cache's MCP logs, its project entry in
+`.claude.json`) is kept once rather than once per session; the files a session is handed sit
 in `claude-cli/sessions/<id>/`, which goes with it. It runs with `--tools ""` (Claude's own tools off), `--permission-mode dontAsk`
 over an allow list of Entoli's server alone — `--tools ""` leaves
 `EndConversation` while MCP tools are present, and this refuses it and
@@ -298,7 +386,7 @@ process, line by line.
 
 **Codex CLI is a server rather than a pipe of messages.**
 `CodexCliProvider`'s session is one `codex app-server`, Codex's JSON-RPC
-over stdio, holding one ephemeral thread run in `<cache>/codex-cli/work/`:
+over stdio, holding one ephemeral thread run in `<cache>/codex-cli/work/<provider-id>/`:
 Entoli's system prompt is the thread's `baseInstructions`, each new user
 message a `turn/start`, and the reply streams back as item notifications.
 Entoli's tools are the thread's dynamic tools, so no MCP bridge is needed:

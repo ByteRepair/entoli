@@ -6,6 +6,8 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
+import "package:agent_chat/data/builtin/llm/providers/presets.dart"
+    show CodexCliProvider;
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/llm_provider.dart";
@@ -15,6 +17,7 @@ import "package:agent_chat/ui/chat/widgets/code_block.dart" show CodeBlock;
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
+import "../fakes.dart";
 import "../harness.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
 
@@ -359,6 +362,62 @@ void main() {
     });
   });
 
+  // A CLI's entry says whether its program is signed in, and signs it in
+  // through the same dialog the welcome tour opens.
+  testWidgets("a CLI's dialog signs its program in", (tester) async {
+    final codex = FakeCli.codex(signedIn: false);
+    app.dispose();
+    app = TestApp.create(clis: [FakeCli.claude(), codex]);
+    await pumpSettings(tester, app, SettingsCategory.providers);
+
+    await tester.tap(find.text("Add provider"));
+    await settleIo(tester);
+    await tester.ensureVisible(find.text("Codex CLI"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Codex CLI"));
+    await frames(tester);
+    expect(find.text("Not signed in"), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, "Sign in"));
+    await frames(tester);
+    expect(find.text("Sign in to ChatGPT"), findsOneWidget);
+    codex.processes.single.say("https://auth.openai.com/oauth/authorize?x=1");
+    await frames(tester);
+    expect(find.text("Open the sign-in page"), findsOneWidget);
+
+    codex.finishSignIn();
+    await frames(tester);
+    expect(find.text("Sign in to ChatGPT"), findsNothing);
+    expect(find.text("Signed in to your ChatGPT account"), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  // Signed in, an entry can sign out and into another account: the program
+  // is told to sign out first, so the sign-in is a new one.
+  testWidgets("a signed-in CLI entry signs in again", (tester) async {
+    final codex = FakeCli.codex();
+    app.dispose();
+    app = TestApp.create(clis: [FakeCli.claude(), codex]);
+    await io(
+      tester,
+      () =>
+          app.seedProviders([CodexCliProvider.preset.copyWith(id: "codex-1")]),
+    );
+    await pumpSettings(tester, app, SettingsCategory.providers);
+
+    await tester.tap(find.text("Codex CLI"));
+    await frames(tester);
+    expect(find.text("Signed in to your ChatGPT account"), findsOneWidget);
+
+    await tester.tap(find.text("Sign in again"));
+    await frames(tester);
+    expect(codex.signOuts, 1);
+    expect(find.text("Sign in to ChatGPT"), findsOneWidget);
+    codex.processes.single.say("https://auth.openai.com/oauth/authorize?x=1");
+    codex.finishSignIn();
+    await frames(tester);
+    expect(find.text("Signed in to your ChatGPT account"), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
   testWidgets("selecting a model persists it with its provider", (
     tester,
   ) async {
@@ -678,11 +737,11 @@ void main() {
 
     // iOS carries the guest-shaped store: the install destination is the
     // guest's own /usr/local/bin and the gate is the rootfs pick, the way
-    // Android's is — its "Host" env being no shell at all. With nothing
+    // Android's is — with none there is no shell at all. With nothing
     // picked the banner asks for the Linux, the buttons are not drawn, and
     // the delete stays behind a message that names only the data.
     targetTest(
-      'iOS with the "Host" env drawn the guest gate and keeps the delete',
+      "iOS with no Linux draws the guest gate and keeps the delete",
       TargetPlatform.iOS,
       (tester) async {
         // The install dir stays the guest const the harness defaults to; the
@@ -691,10 +750,7 @@ void main() {
 
         expect(find.text("Run Setup"), findsNothing);
         expect(find.text("Import ESBMC"), findsNothing);
-        expect(
-          find.textContaining('using the "Host" terminal environment'),
-          findsOneWidget,
-        );
+        expect(find.textContaining("needs a Linux to run in"), findsOneWidget);
 
         expect(
           await deleteDialogMessage(tester),
@@ -838,16 +894,13 @@ void main() {
     // install dir — which is exactly why the banner asks about the pick and
     // the dialog names no host tree.
     targetTest(
-      "Android's Host env draws the env banner and keeps the delete",
+      "Android with no Linux draws the env banner and keeps the delete",
       TargetPlatform.android,
       (tester) async {
         await pumpSettings(tester, app, SettingsCategory.byteRepair);
 
         expect(find.text("Run Setup"), findsNothing);
-        expect(
-          find.textContaining('when using the "Host" terminal environment'),
-          findsOneWidget,
-        );
+        expect(find.textContaining("needs a Linux to run in"), findsOneWidget);
 
         expect(await deleteDialogMessage(tester), isNot(contains("rootfs")));
       },

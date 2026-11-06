@@ -29,8 +29,14 @@ class LocalShell extends Shell {
   LocalShell({
     Map<String, String> Function()? environment,
     ShellDriver? Function({String? project})? driver,
+    this.withoutDriver,
   }) : _environment = environment ?? (() => const {}),
        _driver = driver ?? _hostDriver;
+
+  /// What the model is told while there is no driver, where the platform
+  /// knows why — Android with no Linux installed — rather than the bare
+  /// "no shell".
+  final String? withoutDriver;
 
   /// What the commands run under, read at each command for the reason
   /// [_environment] is: installing a Linux from the settings page, or going
@@ -131,21 +137,22 @@ class LocalShell extends Shell {
   String get platformDescription {
     final driver = _driver();
     if (driver != null) return driver.description;
-    return "${Platform.operatingSystem} ${Platform.operatingSystemVersion}, "
-        "commands run under no shell";
+    return withoutDriver ??
+        "${Platform.operatingSystem} ${Platform.operatingSystemVersion}, "
+            "commands run under no shell";
   }
 
-  /// False where there is no shell to offer at all. Android is why this is
-  /// not a constant: it has no `/bin` at all, and a device whose `PATH` turns
-  /// up nothing is one where every command would otherwise fail one at a time.
-  /// A guest brings its own shell, so it answers for itself.
+  /// False where there is no shell to offer at all: Android with no Linux,
+  /// whose own shell is not offered, and a machine whose `PATH` turns up
+  /// nothing, where every command would otherwise fail one at a time. A
+  /// guest brings its own shell, so it answers for itself.
   @override
   bool get canRunCommands => _driver() != null;
 
   @override
   bool get canRunInBackground => canRunCommands;
 
-  /// Where this shell reaches a guest or Android: the home is one directory
+  /// Where this shell reaches a guest: the home is one directory
   /// every project would share, so a command gets the project workspace as
   /// its `HOME` and one project is one environment. On a desktop it is false,
   /// where the machine user's own `HOME` stands.
@@ -216,9 +223,6 @@ class LocalShell extends Shell {
     final bundled = tools?.names;
     final description = bundled != null
         ? "$where, with $bundled bundled with the app"
-        : tools?.proot != null
-        ? "$where. There is no git and no package manager here; installing "
-              "a Linux from the Terminal settings gives you both"
         : where;
     return ShellDriver(
       commandFor: (_, _, {readOnly = const []}) => [path],

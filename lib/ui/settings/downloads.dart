@@ -53,6 +53,9 @@ abstract class Downloads<T> extends Notifier<DownloadState> {
   /// Take it off the disk.
   Future<void> erase(T item);
 
+  /// [item] arrived whole and the catalog has seen it: what else follows.
+  Future<void> landed(T item) async {}
+
   @override
   DownloadState build() {
     final work = ref.watch(backgroundWorkProvider);
@@ -94,7 +97,7 @@ abstract class Downloads<T> extends Notifier<DownloadState> {
         },
         onDone: () {
           _finish(id);
-          unawaited(rescan());
+          unawaited(rescan().then((_) => landed(item)));
         },
       ),
     );

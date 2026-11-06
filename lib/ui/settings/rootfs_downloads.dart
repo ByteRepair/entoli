@@ -31,9 +31,10 @@ class RootfsDownloads extends Downloads<Rootfs> {
   @override
   Future<void> rescan() => ref.read(installedRootfsProvider.notifier).refresh();
 
-  /// Commands go back to running on Android. Without this the setting would
-  /// take the shell all the way to a proot with nothing to chroot into, which
-  /// moves the complaint from a settings page to the middle of somebody's turn.
+  /// The agent is left with no terminal until another is installed. Without
+  /// this the setting would take the shell all the way to a proot with
+  /// nothing to chroot into, which moves the complaint from a settings page
+  /// to the middle of somebody's turn.
   @override
   Future<void> unpick(Rootfs rootfs) async {
     if (ref.read(appSettingsProvider).rootfsId != rootfs.id) return;
