@@ -52,17 +52,17 @@ class LlmGoalReviewer implements GoalReviewer {
     List<LlmMessage> transcript,
   ) async {
     try {
-      final chunks = await client
-          .stream([
-            const LlmMessage(role: LlmRole.system, text: _systemPrompt),
-            LlmMessage(
-              role: LlmRole.user,
-              text: reviewPrompt(objective, transcript),
-            ),
-          ], model: model)
-          .timeout(_timeout)
-          .toList();
-      final answer = chunks.whereType<LlmCompletion>().lastOrNull?.message.text;
+      final answer = await client.complete(
+        [
+          const LlmMessage(role: LlmRole.system, text: _systemPrompt),
+          LlmMessage(
+            role: LlmRole.user,
+            text: reviewPrompt(objective, transcript),
+          ),
+        ],
+        model: model,
+        timeout: _timeout,
+      );
       final verdict = parseVerdict(answer);
       if (verdict == null) {
         logFailure("goal", "the reviewer gave no usable verdict");
@@ -109,8 +109,13 @@ class LlmGoalReviewer implements GoalReviewer {
   /// another provider, and a transcript of tool calls it was never offered
   /// tools for is a request some providers refuse.
   static String reviewPrompt(String objective, List<LlmMessage> transcript) {
-    final lines = <String>[];
-    for (final m in transcript) {
+    // Walked from the end, so a long run costs the budget rather than the
+    // whole transcript: the head the budget leaves out is never built.
+    final entries = <String>[];
+    var length = 0;
+    var omitted = false;
+    outer:
+    for (final m in transcript.reversed) {
       if (m.role == LlmRole.system) continue;
       final who = switch (m.role) {
         LlmRole.user => "USER",
@@ -118,17 +123,23 @@ class LlmGoalReviewer implements GoalReviewer {
         LlmRole.tool => "TOOL RESULT",
         LlmRole.system => "SYSTEM",
       };
-      if (m.text.trim().isNotEmpty) lines.add("[$who]\n${_clip(m.text)}");
-      for (final call in m.toolCalls) {
-        lines.add("[TOOL CALL ${call.name}]\n${_clip(call.argumentsJson)}");
+      for (final entry in [
+        if (m.text.trim().isNotEmpty) "[$who]\n${_clip(m.text)}",
+        for (final call in m.toolCalls)
+          "[TOOL CALL ${call.name}]\n${_clip(call.argumentsJson)}",
+      ].reversed) {
+        if (length + entry.length > transcriptBudget) {
+          omitted = true;
+          break outer;
+        }
+        entries.add(entry);
+        length += entry.length + 2;
       }
     }
-    var digest = lines.join("\n\n");
-    if (digest.length > transcriptBudget) {
-      digest =
-          "[… earlier conversation omitted …]\n\n"
-          "${digest.substring(digest.length - transcriptBudget)}";
-    }
+    final digest = [
+      if (omitted) "[… earlier conversation omitted …]",
+      ...entries.reversed,
+    ].join("\n\n");
     return [
       "<goal>",
       objective,

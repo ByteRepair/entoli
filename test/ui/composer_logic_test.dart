@@ -82,10 +82,8 @@ void main() {
   });
 
   test("the send button names the callback typed, not every callback's", () {
-    String label() => logic.mode.sendLabel(
-      queues: false,
-      callback: logic.callbackLabel,
-    );
+    String label() =>
+        logic.mode.sendLabel(queues: false, callback: logic.callbackLabel);
 
     controller.text = "/compact";
     expect(logic.mode, ComposerMode.callback);

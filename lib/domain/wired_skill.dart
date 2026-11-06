@@ -50,17 +50,8 @@ WiredCall? wiredSkillFromText(String text) {
 /// message is worded for the model by the projection rather than kept from
 /// it; every other callback appends nothing a model wrote.
 bool wiredRunsModel(String text) => switch (wiredSkillFromText(text)) {
-  (skill: WiredSkill.goal, :final arguments) => goalCommandRunsModel(arguments),
-  _ => false,
-};
-
-/// The objective a `/goal` message sets, or null where [wired] sets none.
-String? goalObjectiveOf(WiredCall wired) => switch (wired) {
-  (skill: WiredSkill.goal, :final arguments) => switch (goalCommandOf(
+  (skill: WiredSkill.goal, :final arguments) => goalCommandOf(
     arguments,
-  )) {
-    GoalSet(:final objective) => objective,
-    _ => null,
-  },
-  _ => null,
+  ).runsModel,
+  _ => false,
 };

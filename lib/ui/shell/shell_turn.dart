@@ -76,11 +76,11 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface>
   /// Flutter's `GoalStrip` sends it.
   @override
   Future<void> goal(GoalAction action) => widget.notifier.send(
-    "/goal ${switch (action) {
-      GoalAction.pause => "pause",
-      GoalAction.resume => "resume",
-      GoalAction.clear => "clear",
-    }}",
+    switch (action) {
+      GoalAction.pause => const GoalPause(),
+      GoalAction.resume => const GoalResume(),
+      GoalAction.clear => const GoalClear(),
+    }.text,
   );
 
   /// A pill, by its index in [_running].
@@ -243,5 +243,6 @@ GoalSnapshot? goalSnapshotOf(ChatGoal? goal) => goal == null
           GoalStatus.met => GoalPhase.met,
           GoalStatus.blocked => GoalPhase.blocked,
         },
+        label: goalStatusLabel(goal.status),
         summary: goalSummary(goal),
       );

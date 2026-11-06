@@ -144,7 +144,7 @@ the exit code in the status line.
 shell's, over the one Flutter view a sheet is drawn in, so a sheet came up
 under it. A pushed page is what the shell already steps its composer and
 turn surface aside for, and its `PageBar` is the window's title bar, so
-`LabelledActivity.open` pushes `ActivityCard` as a page while Liquid Glass is
+`openActivityCard` pushes `ActivityCard` as a page while Liquid Glass is
 on: the title and actions in the window's bar, its back the way out, the
 status line and the spinner at the top of the body. A sub-agent's activity
 opened from its transcript is a page over that one. Everywhere else it stays

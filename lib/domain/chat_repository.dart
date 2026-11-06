@@ -317,7 +317,8 @@ class ChatRepository {
     // a thing said, and the slash and the name are not part of what.
     var said = text;
     if (wiredSkillFromText(text) case final wired?) {
-      if (goalObjectiveOf(wired) case final objective?) {
+      if (wired.skill != WiredSkill.goal) return null;
+      if (goalCommandOf(wired.arguments) case GoalSet(:final objective)) {
         said = objective;
       } else {
         return null;

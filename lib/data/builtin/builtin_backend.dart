@@ -1465,24 +1465,13 @@ class BuiltinBackend implements AgentBackend {
     }
   }
 
-  /// The one-shot read, in the three shapes that ask it: the last completion
-  /// the model streams within the window, trimmed, and null where it streamed
-  /// nothing. The three call sites differ only in the timeout and in what an
-  /// empty answer means to them; the window keeps a stuck provider from
-  /// holding the call forever, and the timeout is on the stream rather than
-  /// the future it collects, a timed-out future leaving the response being
-  /// read to nobody.
+  /// The one-shot read on [target]'s model; see [OneCompletion.complete].
   Future<String?> _oneCompletion(
     _Target target,
     List<LlmMessage> messages, {
     required Duration timeout,
-  }) async {
-    final chunks = await target.client
-        .stream(messages, model: target.modelId)
-        .timeout(timeout)
-        .toList();
-    return chunks.whereType<LlmCompletion>().lastOrNull?.message.text.trim();
-  }
+  }) =>
+      target.client.complete(messages, model: target.modelId, timeout: timeout);
 
   /// The maintenance JSON, read as liberally as the model writes it: the old
   /// shape — an array of strings, or an object holding one — reads as new
@@ -1604,14 +1593,18 @@ class BuiltinBackend implements AgentBackend {
   }
 
   /// The classifier model, resolved the same way the main model is. Null when
-  /// no classifier provider is named — auto mode falls back to asking. A
-  /// provider named without a model resolves to its light default.
+  /// no classifier provider is named. A provider named without a model
+  /// resolves to its light default.
+  _Target? _classifierTarget(String? provider, String? model) => _resolveModel(
+    model,
+    provider,
+    defaultOf: LlmProviderConfig.lightDefaultOf,
+  );
+
+  /// The permission classifier on the classifier model; null, and auto mode
+  /// falls back to asking, where none is named.
   PermissionClassifier? _resolveClassifier(String? provider, String? model) {
-    final target = _resolveModel(
-      model,
-      provider,
-      defaultOf: LlmProviderConfig.lightDefaultOf,
-    );
+    final target = _classifierTarget(provider, model);
     if (target == null) return null;
     return LlmClassifier(client: target.client, model: target.modelId);
   }
@@ -1624,11 +1617,7 @@ class BuiltinBackend implements AgentBackend {
     String? model, {
     required GoalReviewer fallback,
   }) {
-    final target = _resolveModel(
-      model,
-      provider,
-      defaultOf: LlmProviderConfig.lightDefaultOf,
-    );
+    final target = _classifierTarget(provider, model);
     if (target == null) return fallback;
     return LlmGoalReviewer(client: target.client, model: target.modelId);
   }

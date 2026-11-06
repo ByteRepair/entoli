@@ -909,8 +909,8 @@ class BuiltinAgent implements Turn {
       // `ask_user`'s.
       //
       // Past those, a goal: the reply is put to the reviewer, and one it
-      // finds short of the goal is sent back with the reason. Its budget is
-      // the goal's own, kept on the goal across turns.
+      // finds short of the goal is sent back with the reason. Each send-back
+      // is a step, so the step limit bounds a run of them.
       if (completion.message.toolCalls.isEmpty) {
         final last = step >= options.stepLimit - 1;
         final left = _nudges < maxStopNudges && !last
@@ -922,9 +922,16 @@ class BuiltinAgent implements Turn {
           continue;
         }
         if (last) break;
-        _sentBack = false;
-        yield* _reviewGoal();
-        if (_sentBack && !_cancelled) continue;
+        if (_activeGoal() case final asked?) {
+          // The reply that stopped is in the session before the reviewer
+          // reads it.
+          _sayWhatWasSaid();
+          yield const StatusEvent("Checking the goal");
+          final review = await _reviewGoal(asked);
+          yield const StatusEvent(null);
+          if (review != null) yield review.event;
+          if (review != null && review.carriesOn && !_cancelled) continue;
+        }
         break;
       }
 
@@ -950,9 +957,6 @@ class BuiltinAgent implements Turn {
     ),
   );
 
-  /// Whether the last review sent the turn back to work.
-  bool _sentBack = false;
-
   /// Whether the model called a tool since the goal last sent it back — or,
   /// before then, this turn. A review that sends back a model that did
   /// nothing since the last one is a stall.
@@ -963,56 +967,63 @@ class BuiltinAgent implements Turn {
   /// which is a thing one turn does.
   int _stalls = 0;
 
-  /// The stop just made, put to the reviewer where the chat has an active
-  /// goal. Met or blocked ends the goal's run and the turn; short of it the
-  /// turn carries on with the reviewer's reason as a `<system-notification>`
-  /// — until the step limit ends the turn, or the stalls run out, which
-  /// pauses the goal. What moves the goal is said as a [GoalEvent].
+  /// The chat's goal, where it is one to review: there is a reviewer, and the
+  /// goal is active.
+  ChatGoal? _activeGoal() => switch (goal?.call()) {
+    final asked? when goalReviewer != null && asked.isActive => asked,
+    _ => null,
+  };
+
+  /// The stop just made, put to the reviewer against [asked]. Met or blocked
+  /// ends the goal's run and the turn; short of it the turn carries on with
+  /// the reviewer's reason as a `<system-notification>` — until the step
+  /// limit ends the turn, or the stalls run out, which pauses the goal. What
+  /// moves the goal is said as a [GoalEvent]; null says nothing and ends the
+  /// turn.
   ///
   /// The goal is read again after the review: the user may have paused,
   /// cleared or replaced it while the reviewer read, and what they did then
   /// stands over what the reviewer found.
-  Stream<AgentEvent> _reviewGoal() async* {
-    final read = goal;
-    final reviewer = goalReviewer;
-    if (read == null || reviewer == null) return;
-    final asked = read();
-    if (asked == null || !asked.isActive) return;
-    // The reply that stopped is in the session before the reviewer reads it.
-    _sayWhatWasSaid();
-    yield const StatusEvent("Checking the goal");
-    final verdict = await reviewer.review(asked.objective, session.messages);
-    yield const StatusEvent(null);
-    if (verdict == null || _cancelled) return;
-    final current = read();
-    if (current == null ||
-        !current.isActive ||
-        current.objective != asked.objective) {
-      return;
-    }
+  Future<({AgentEvent event, bool carriesOn})?> _reviewGoal(
+    ChatGoal asked,
+  ) async {
+    final verdict = await goalReviewer!.review(
+      asked.objective,
+      session.messages,
+    );
+    if (verdict == null || _cancelled) return null;
+    final current = _activeGoal();
+    if (current == null || current.objective != asked.objective) return null;
     final objective = current.objective;
+    GoalEvent ends(GoalChange change, String reason) =>
+        GoalEvent(change, objective, reason: reason);
     switch (verdict.kind) {
       case GoalVerdictKind.met:
-        yield GoalEvent(GoalChange.met, objective, reason: verdict.reason);
+        return (event: ends(GoalChange.met, verdict.reason), carriesOn: false);
       case GoalVerdictKind.blocked:
-        yield GoalEvent(GoalChange.blocked, objective, reason: verdict.reason);
+        return (
+          event: ends(GoalChange.blocked, verdict.reason),
+          carriesOn: false,
+        );
       case GoalVerdictKind.carryOn:
         // No cap on rounds of its own: a send-back is a step of this turn,
         // so the step limit the user set is what bounds a run of them.
         _stalls = _actedSinceReview ? 0 : _stalls + 1;
         if (_stalls >= maxGoalStalls) {
-          yield GoalEvent(
-            GoalChange.paused,
-            objective,
-            reason:
-                "The agent stopped $_stalls times in a row without doing "
-                "anything. ${verdict.reason}",
+          return (
+            event: ends(
+              GoalChange.paused,
+              "The agent stopped $_stalls times in a row without doing "
+              "anything. ${verdict.reason}",
+            ),
+            carriesOn: false,
           );
-          return;
         }
         _actedSinceReview = false;
-        _sentBack = true;
-        yield _nudge(goalNudge(objective, verdict.reason, verdict.next));
+        return (
+          event: _nudge(goalNudge(objective, verdict.reason, verdict.next)),
+          carriesOn: true,
+        );
     }
   }
 

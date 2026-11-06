@@ -402,23 +402,11 @@ Replayed replayTree(Iterable<ChatRecord> records) {
       case CallEventRecord(:final callId, :final kind, :final data):
         callEvents = withCallEvent(callEvents, callId, kind, data);
 
-      case GoalRecord(
-        :final afterMessageId,
-        :final change,
-        :final objective,
-        :final reason,
-      ):
+      case final GoalRecord goal:
         // Kept where the message it follows is live, as a compaction marker
         // is; read in thread order below, which is the order the goal moved.
-        if (nodes.containsKey(afterMessageId)) {
-          (goals[afterMessageId] ??= []).add(
-            GoalMark(
-              afterMessageId: afterMessageId,
-              change: change,
-              objective: objective,
-              reason: reason,
-            ),
-          );
+        if (nodes.containsKey(goal.afterMessageId)) {
+          (goals[goal.afterMessageId] ??= []).add(goal.mark);
         }
     }
   }
@@ -599,4 +587,15 @@ List<ChatRecord> decodeLog(String text) {
     }
   }
   return records;
+}
+
+/// The goal change a `goal` record holds, as the chat carries it — one
+/// construction for the replay and the room's live copy.
+extension GoalRecordMark on GoalRecord {
+  GoalMark get mark => GoalMark(
+    afterMessageId: afterMessageId,
+    change: change,
+    objective: objective,
+    reason: reason,
+  );
 }

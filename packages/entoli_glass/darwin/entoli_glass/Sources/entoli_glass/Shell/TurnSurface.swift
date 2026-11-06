@@ -74,16 +74,16 @@ struct TurnSurfaceView: View {
   /// what it is, and its pause or resume and its clear, each sent back as the
   /// `/goal` command it is.
   private func goalRow(_ goal: GoalSnapshot) -> some View {
-    let (symbol, label, tint): (String, String, Color) =
+    let (symbol, tint): (String, Color) =
       switch goal.phase {
-      case .active: ("scope", "Goal", .accentColor)
-      case .paused: ("pause.circle", "Goal paused", .secondary)
-      case .met: ("checkmark.circle", "Goal met", .accentColor)
-      case .blocked: ("nosign", "Goal blocked", .red)
+      case .active: ("scope", .accentColor)
+      case .paused: ("pause.circle", .secondary)
+      case .met: ("checkmark.circle", .accentColor)
+      case .blocked: ("nosign", .red)
       }
     return HStack(spacing: 8) {
       Image(systemName: symbol).foregroundStyle(tint)
-      (Text(label + "  ").foregroundStyle(.secondary) + Text(goal.objective))
+      (Text(goal.label + "  ").foregroundStyle(.secondary) + Text(goal.objective))
         .font(.callout)
         .lineLimit(1)
       Spacer(minLength: 4)

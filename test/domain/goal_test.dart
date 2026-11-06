@@ -25,6 +25,20 @@ void main() {
     );
   });
 
+  test("a command's text reads back as that command", () {
+    for (final command in const <GoalCommand>[
+      GoalSet("ship it"),
+      GoalShow(),
+      GoalPause(),
+      GoalResume(),
+      GoalClear(),
+    ]) {
+      final wired = wiredSkillFromText(command.text)!;
+      expect(wired.skill, WiredSkill.goal);
+      expect(goalCommandOf(wired.arguments).runtimeType, command.runtimeType);
+    }
+  });
+
   test("setting and resuming a goal are the callbacks a model answers", () {
     expect(wiredSkillFromText("/goal")?.skill, WiredSkill.goal);
     expect(wiredRunsModel("/goal the tests pass"), isTrue);
@@ -32,11 +46,6 @@ void main() {
     expect(wiredRunsModel("/goal pause"), isFalse);
     expect(wiredRunsModel("/goal"), isFalse);
     expect(wiredRunsModel("/compact"), isFalse);
-    expect(
-      goalObjectiveOf(wiredSkillFromText("/goal the tests pass")!),
-      "the tests pass",
-    );
-    expect(goalObjectiveOf(wiredSkillFromText("/goal clear")!), isNull);
   });
 
   group("the goal is the log's", () {

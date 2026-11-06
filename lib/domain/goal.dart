@@ -54,6 +54,15 @@ class ChatGoal {
   int get hashCode => Object.hash(objective, status, reason);
 }
 
+/// Where a goal stands after [change], or null where it leaves no goal.
+GoalStatus? goalStatusAfter(GoalChange change) => switch (change) {
+  GoalChange.set || GoalChange.resumed => GoalStatus.active,
+  GoalChange.paused => GoalStatus.paused,
+  GoalChange.met => GoalStatus.met,
+  GoalChange.blocked => GoalStatus.blocked,
+  GoalChange.cleared => null,
+};
+
 /// The goal [marks] leave, in order: a set starts one, a clear ends it, and
 /// everything else moves the one there is. A mark about a goal that is not
 /// the one standing — a stale verdict landing after a new `/goal` — moves
@@ -61,29 +70,14 @@ class ChatGoal {
 ChatGoal? goalOf(Iterable<GoalMark> marks) {
   ChatGoal? goal;
   for (final mark in marks) {
-    if (mark.change == GoalChange.set) {
-      goal = ChatGoal(objective: mark.objective);
-      continue;
-    }
-    if (goal == null || goal.objective != mark.objective) continue;
-    goal = switch (mark.change) {
-      GoalChange.set ||
-      GoalChange.resumed => ChatGoal(objective: goal.objective),
-      GoalChange.cleared => null,
-      GoalChange.paused => ChatGoal(
-        objective: goal.objective,
-        status: GoalStatus.paused,
-        reason: mark.reason,
-      ),
-      GoalChange.met => ChatGoal(
-        objective: goal.objective,
-        status: GoalStatus.met,
-        reason: mark.reason,
-      ),
-      GoalChange.blocked => ChatGoal(
-        objective: goal.objective,
-        status: GoalStatus.blocked,
-        reason: mark.reason,
+    final starts = mark.change == GoalChange.set;
+    if (!starts && goal?.objective != mark.objective) continue;
+    goal = switch (goalStatusAfter(mark.change)) {
+      null => null,
+      final status => ChatGoal(
+        objective: mark.objective,
+        status: status,
+        reason: status == GoalStatus.active ? null : mark.reason,
       ),
     };
   }
@@ -107,32 +101,60 @@ typedef GoalReader = ChatGoal? Function();
 /// What `/goal` was asked to do, read off the arguments after the name.
 sealed class GoalCommand {
   const GoalCommand();
+
+  /// The message that sends this command — the inverse of [goalCommandOf].
+  String get text;
+
+  /// Whether it hands a turn to a model: setting a goal and resuming one do,
+  /// the rest only change the goal.
+  bool get runsModel => false;
 }
 
 /// `/goal <objective>`: replace whatever goal there was and start working.
 class GoalSet extends GoalCommand {
   const GoalSet(this.objective);
   final String objective;
+
+  @override
+  String get text => "/goal $objective";
+
+  @override
+  bool get runsModel => true;
 }
 
 /// `/goal` alone: say what the goal is and where it stands.
 class GoalShow extends GoalCommand {
   const GoalShow();
+
+  @override
+  String get text => "/goal";
 }
 
 /// `/goal pause`: stop reviewing, keep the goal.
 class GoalPause extends GoalCommand {
   const GoalPause();
+
+  @override
+  String get text => "/goal pause";
 }
 
 /// `/goal resume`: review again, and start a turn to carry on.
 class GoalResume extends GoalCommand {
   const GoalResume();
+
+  @override
+  String get text => "/goal resume";
+
+  @override
+  bool get runsModel => true;
 }
 
 /// `/goal clear`, and the words Claude Code takes for it.
 class GoalClear extends GoalCommand {
   const GoalClear();
+
+  @override
+  String get text => "/goal clear";
 }
 
 const _clearWords = {"clear", "stop", "off", "reset", "none", "cancel"};
@@ -150,14 +172,6 @@ GoalCommand goalCommandOf(String arguments) {
     _ => GoalSet(words),
   };
 }
-
-/// Whether `/goal` with [arguments] hands a turn to a model: setting one and
-/// resuming one do, the rest only change the goal.
-bool goalCommandRunsModel(String arguments) =>
-    switch (goalCommandOf(arguments)) {
-      GoalSet() || GoalResume() => true,
-      _ => false,
-    };
 
 /// What the model reads in place of `/goal <objective>`: the work, and how it
 /// will be judged. Worded from the log by the projection, so a reload and a

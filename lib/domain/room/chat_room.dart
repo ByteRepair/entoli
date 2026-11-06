@@ -636,15 +636,15 @@ class ChatRoom {
           );
           return;
         }
-        await _prompt("/goal resume");
-      case GoalSet(:final objective):
+        await _prompt(command.text);
+      case GoalSet():
         if (state.isRunning) {
           _view = state.copyWith(
             status: "Wait for the turn to finish before setting a goal",
           );
           return;
         }
-        await _prompt("/goal $objective");
+        await _prompt(command.text);
     }
   }
 
@@ -662,21 +662,16 @@ class ChatRoom {
     final chat = state.chat;
     final anchor = after ?? chat?.messages.lastOrNull?.id;
     if (chat == null || anchor == null) return Future.value();
-    final mark = GoalMark(
+    final record = GoalRecord(
       afterMessageId: anchor,
       change: change,
       objective: objective,
       reason: reason,
     );
-    final written = _append([
-      ChatRecord.goal(
-        afterMessageId: anchor,
-        change: change,
-        objective: objective,
-        reason: reason,
-      ),
-    ]);
-    _view = state.copyWith(chat: chat.copyWith(goals: [...chat.goals, mark]));
+    final written = _append([record]);
+    _view = state.copyWith(
+      chat: chat.copyWith(goals: [...chat.goals, record.mark]),
+    );
     return written;
   }
 

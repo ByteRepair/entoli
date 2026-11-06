@@ -422,8 +422,12 @@ class GoalSnapshot {
   String objective;
   GoalPhase phase;
 
-  /// The goal in full — its rounds and the reviewer's last word — for the
-  /// row's tooltip.
+  /// What a goal at [phase] is called — "Goal paused" — worded by Dart, so
+  /// the two rows read alike.
+  String label;
+
+  /// The goal in full — where it stands and the reviewer's last word — for
+  /// the row's tooltip.
   String summary;
 }
 

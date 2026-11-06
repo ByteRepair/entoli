@@ -22,19 +22,10 @@ class GoalStrip extends StatelessWidget {
     if (goal == null) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final (icon, label, colour) = switch (goal.status) {
-      GoalStatus.active => (Icons.track_changes, "Goal", scheme.primary),
-      GoalStatus.paused => (
-        Icons.pause_circle_outline,
-        "Goal paused",
-        scheme.onSurfaceVariant,
-      ),
-      GoalStatus.met => (
-        Icons.check_circle_outline,
-        "Goal met",
-        scheme.primary,
-      ),
-      GoalStatus.blocked => (Icons.block, "Goal blocked", scheme.error),
+    final colour = switch (goal.status) {
+      GoalStatus.active || GoalStatus.met => scheme.primary,
+      GoalStatus.paused => scheme.onSurfaceVariant,
+      GoalStatus.blocked => scheme.error,
     };
     final quiet = theme.textTheme.bodySmall?.copyWith(
       color: scheme.onSurfaceVariant,
@@ -50,13 +41,16 @@ class GoalStrip extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(icon, size: 16, color: colour),
+            Icon(goalStatusIcon(goal.status), size: 16, color: colour),
             const SizedBox(width: 8),
             Expanded(
               child: Text.rich(
                 TextSpan(
                   children: [
-                    TextSpan(text: "$label  ", style: quiet),
+                    TextSpan(
+                      text: "${goalStatusLabel(goal.status)}  ",
+                      style: quiet,
+                    ),
                     TextSpan(
                       text: goal.objective,
                       style: theme.textTheme.bodyMedium,
@@ -71,18 +65,18 @@ class GoalStrip extends StatelessWidget {
               ActionIcon(
                 icon: Icons.pause,
                 tooltip: "Pause the goal",
-                onPressed: () => onCommand("/goal pause"),
+                onPressed: () => onCommand(const GoalPause().text),
               )
             else if (goal.status != GoalStatus.met)
               ActionIcon(
                 icon: Icons.play_arrow,
                 tooltip: "Resume the goal",
-                onPressed: () => onCommand("/goal resume"),
+                onPressed: () => onCommand(const GoalResume().text),
               ),
             ActionIcon(
               icon: Icons.close,
               tooltip: "Clear the goal",
-              onPressed: () => onCommand("/goal clear"),
+              onPressed: () => onCommand(const GoalClear().text),
             ),
           ],
         ),
@@ -90,3 +84,12 @@ class GoalStrip extends StatelessWidget {
     );
   }
 }
+
+/// A goal standing at [status], as an icon — the row's, and the marks that
+/// leave it there.
+IconData goalStatusIcon(GoalStatus status) => switch (status) {
+  GoalStatus.active => Icons.track_changes,
+  GoalStatus.paused => Icons.pause_circle_outline,
+  GoalStatus.met => Icons.check_circle_outline,
+  GoalStatus.blocked => Icons.block,
+};
