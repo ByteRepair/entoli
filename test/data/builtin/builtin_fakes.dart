@@ -48,7 +48,7 @@ class FakeLlmClient implements LlmClient {
       List<LlmTool> tools,
       double? temperature,
       String? reasoningEffort,
-      LlmOutputLimit? outputLimit,
+      LlmOutputLimit outputLimit,
     })
   >
   calls = [];
@@ -66,7 +66,7 @@ class FakeLlmClient implements LlmClient {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
-    LlmOutputLimit? outputLimit,
+    LlmOutputLimit outputLimit = const LlmOutputLimit(),
   }) async* {
     final at = _at++;
     sent.add(List.of(messages));
@@ -106,7 +106,7 @@ class ConcurrentFakeLlmClient implements LlmClient {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
-    LlmOutputLimit? outputLimit,
+    LlmOutputLimit outputLimit = const LlmOutputLimit(),
   }) async* {
     _inFlight++;
     if (_inFlight > maxConcurrent) maxConcurrent = _inFlight;

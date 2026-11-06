@@ -37,7 +37,7 @@ class SubAgentRunner implements SubAgents {
     this.options = const BuiltinOptions(),
     this.temperature,
     this.reasoningEffort,
-    this.outputLimit,
+    this.outputLimit = const LlmOutputLimit(),
     this.webSearch,
     this.rateLimitGate,
     this.log = const NoSubAgentLog(),
@@ -60,7 +60,7 @@ class SubAgentRunner implements SubAgents {
   final BuiltinOptions options;
   final double? temperature;
   final String? reasoningEffort;
-  final LlmOutputLimit? outputLimit;
+  final LlmOutputLimit outputLimit;
   final WebSearch? webSearch;
 
   /// What the parent turn is offered. A sub-agent runs unattended, so it takes

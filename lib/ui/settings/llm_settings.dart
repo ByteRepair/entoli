@@ -232,39 +232,63 @@ class _TotalContextField extends ConsumerWidget {
     final total = ref.watch(appSettingsProvider.select((s) => s.totalContext));
     return LabelledField(
       label: "Total Context",
-      child: ResettableField(
-        onReset: () => ref
-            .read(appSettingsProvider.notifier)
-            .setTotalContext(AppSettings.defaultTotalContext),
-        resetLabel: "${AppSettings.defaultTotalContext.inK} (default)",
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-          title: Text("${total.inK} tokens"),
-          subtitle: const Text("Tap to change"),
-          onTap: () async {
-            final text = await promptForText(
-              context,
-              title: "Total Context",
-              initial: "$total",
-              hint: "The model's context window, in tokens",
-              confirmLabel: "Save",
-            );
-            if (text == null || !context.mounted) return;
-            final parsed = int.tryParse(text.replaceAll(",", "").trim());
-            if (parsed == null) return;
-            ref
-                .read(appSettingsProvider.notifier)
-                .setTotalContext(
-                  parsed.clamp(
-                    AppSettings.minTotalContext,
-                    AppSettings.maxTotalContext,
-                  ),
-                );
-          },
-        ),
+      child: _TokenCountTile(
+        title: "Total Context",
+        hint: "The model's context window, in tokens",
+        value: total,
+        defaultValue: AppSettings.defaultTotalContext,
+        min: AppSettings.minTotalContext,
+        max: AppSettings.maxTotalContext,
+        onSet: ref.read(appSettingsProvider.notifier).setTotalContext,
       ),
     );
   }
+}
+
+/// A count of tokens, typed in a dialog rather than slid to — a value set
+/// occasionally — kept within [min] and [max], with a reset to its default.
+class _TokenCountTile extends StatelessWidget {
+  const _TokenCountTile({
+    required this.title,
+    required this.hint,
+    required this.value,
+    required this.defaultValue,
+    required this.min,
+    required this.max,
+    required this.onSet,
+  });
+
+  final String title;
+  final String hint;
+  final int value;
+  final int defaultValue;
+  final int min;
+  final int max;
+  final Future<void> Function(int) onSet;
+
+  @override
+  Widget build(BuildContext context) => ResettableField(
+    onReset: () => onSet(defaultValue),
+    resetLabel: "${defaultValue.inK} (default)",
+    child: ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+      title: Text("${value.inK} tokens"),
+      subtitle: const Text("Tap to change"),
+      onTap: () async {
+        final text = await promptForText(
+          context,
+          title: title,
+          initial: "$value",
+          hint: hint,
+          confirmLabel: "Save",
+        );
+        if (text == null || !context.mounted) return;
+        final parsed = int.tryParse(text.replaceAll(",", "").trim());
+        if (parsed == null) return;
+        await onSet(parsed.clamp(min, max));
+      },
+    ),
+  );
 }
 
 /// How long one reply may be. The number is always in use: off, it is what a
@@ -295,36 +319,14 @@ class _ResponseLengthField extends ConsumerWidget {
                 .read(appSettingsProvider.notifier)
                 .setCapResponseLength(value),
           ),
-          ResettableField(
-            onReset: () => ref
-                .read(appSettingsProvider.notifier)
-                .setResponseLength(AppSettings.defaultResponseLength),
-            resetLabel: "${AppSettings.defaultResponseLength.inK} (default)",
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              title: Text("${length.inK} tokens"),
-              subtitle: const Text("Tap to change"),
-              onTap: () async {
-                final text = await promptForText(
-                  context,
-                  title: "Maximum response length",
-                  initial: "$length",
-                  hint: "Tokens, at least ${AppSettings.minResponseLength}",
-                  confirmLabel: "Save",
-                );
-                if (text == null || !context.mounted) return;
-                final parsed = int.tryParse(text.replaceAll(",", "").trim());
-                if (parsed == null) return;
-                ref
-                    .read(appSettingsProvider.notifier)
-                    .setResponseLength(
-                      parsed.clamp(
-                        AppSettings.minResponseLength,
-                        AppSettings.maxResponseLength,
-                      ),
-                    );
-              },
-            ),
+          _TokenCountTile(
+            title: "Maximum response length",
+            hint: "Tokens, at least ${AppSettings.minResponseLength}",
+            value: length,
+            defaultValue: AppSettings.defaultResponseLength,
+            min: AppSettings.minResponseLength,
+            max: AppSettings.maxResponseLength,
+            onSet: ref.read(appSettingsProvider.notifier).setResponseLength,
           ),
           Text(
             capped

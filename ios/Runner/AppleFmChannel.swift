@@ -188,10 +188,7 @@ final class AppleFmChannel: GenerationChannel {
         ]
       }
     }
-    // A reply as long as the cap was cut off by it; where the runtime counts
-    // nothing, a cut-off reply cannot be told from a finished one.
-    let reachedCap = maxTokens.map { (usage["outputTokens"] as? Int ?? 0) >= $0 } ?? false
-    var done = ["id": id, "finish": reachedCap ? "length" : "stop"] as [String: Any]
+    var done = ["id": id, "finish": "stop"] as [String: Any]
     done.merge(usage) { first, _ in first }
     send("done", done)
   }

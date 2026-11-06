@@ -97,6 +97,12 @@ class TurnRecorder {
   /// [TurnEndRecord.context].
   ContextUsage? _context;
 
+  /// Records waiting for the reply's next write: each model call's
+  /// [UsageRecord], held rather than written on its own, since a call's end is
+  /// always followed by a write — its tool call, an error, the close, or the
+  /// interrupt's last checkpoint.
+  final _unwritten = <ChatRecord>[];
+
   /// Begin recording [messageId]. [existing] is what the log already holds of
   /// it — nothing for a new turn, its parts so far for one being carried on, so
   /// a checkpoint writes only what this turn adds.
@@ -180,18 +186,16 @@ class TurnRecorder {
         :final outputTokens,
       ):
         _context = usage;
-        // On the log as the call ends, behind the parts it wrote: see
-        // [UsageRecord].
-        flushDeltas();
         final logging = _messageId;
         if (_logs && logging != null) {
-          final record = ChatRecord.usage(
-            messageId: logging,
-            provider: provider,
-            model: model,
-            outputTokens: outputTokens,
+          _unwritten.add(
+            ChatRecord.usage(
+              messageId: logging,
+              provider: provider,
+              model: model,
+              outputTokens: outputTokens,
+            ),
           );
-          unawaited(_enqueue(() => _appendChanged(logging, then: [record])));
         }
       case QuestionRequestEvent():
       case SubAgentStartEvent():
@@ -465,9 +469,14 @@ class TurnRecorder {
             : ChatRecord.append(messageId: forMessage, index: i, text: grown),
       );
     }
-    records.addAll(then);
+    final held = List.of(_unwritten);
+    records
+      ..addAll(held)
+      ..addAll(then);
     if (records.isEmpty) return;
     await append(records);
+    // Only once written, so a failed write keeps them for the next.
+    _unwritten.removeRange(0, held.length);
     // After the write, so a failed one is retried by the next checkpoint
     // rather than treated as landed.
     if (parts.isNotEmpty) _logged = List.of(parts);

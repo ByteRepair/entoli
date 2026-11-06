@@ -6,7 +6,6 @@ import "package:http/http.dart" as http;
 
 import "../../../core/log.dart";
 import "../../../core/tls.dart";
-import "../../../domain/app_settings.dart";
 
 import "http_stream.dart";
 import "llm_client.dart";
@@ -85,11 +84,10 @@ class AnthropicClient implements LlmClient {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
-    LlmOutputLimit? outputLimit,
+    LlmOutputLimit outputLimit = const LlmOutputLimit(),
   }) async* {
     final (:maxTokens, thinking: budget) = budgetOf(
-      outputLimit ??
-          const LlmOutputLimit(length: AppSettings.defaultResponseLength),
+      outputLimit,
       reasoningEffort == null ? null : _thinkingBudget[reasoningEffort] ?? 8192,
     );
     final system = joinedSystemText(messages);

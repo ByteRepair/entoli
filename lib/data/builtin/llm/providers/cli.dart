@@ -760,7 +760,7 @@ class CliClient implements LlmClient {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
-    LlmOutputLimit? outputLimit,
+    LlmOutputLimit outputLimit = const LlmOutputLimit(),
   }) async* {
     if (_closed) throw const LlmException("The client was closed");
     final leading = messages.takeWhile((m) => m.role == LlmRole.system);
@@ -770,9 +770,7 @@ class CliClient implements LlmClient {
       system: joinedSystemText(leading.toList()),
       tools: tools,
       reasoningEffort: reasoningEffort,
-      responseCap: outputLimit != null && outputLimit.capped
-          ? outputLimit.length
-          : null,
+      responseCap: outputLimit.cap,
     );
     var (session, seen) = _take(spec, conversation);
     if (session == null) {

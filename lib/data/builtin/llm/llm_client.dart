@@ -3,6 +3,7 @@ import "dart:typed_data";
 
 import "package:collection/collection.dart";
 
+import "../../../domain/app_settings.dart";
 import "../../../domain/provider_usage.dart";
 
 /// The conversation as a provider sees it. Deliberately not `Message` from the
@@ -327,8 +328,11 @@ class LlmException implements Exception {
 /// (Anthropic's), one is better left to the model's own (the OpenAI shape),
 /// and one takes it as an environment variable (Claude CLI).
 class LlmOutputLimit {
+  /// The bare default — the fallback length, uncapped, no model limit — is
+  /// what a request with no turn behind it (a title, a classifier's verdict)
+  /// runs under.
   const LlmOutputLimit({
-    required this.length,
+    this.length = AppSettings.defaultResponseLength,
     this.capped = false,
     this.modelLimit,
   });
@@ -347,21 +351,23 @@ class LlmOutputLimit {
   /// cap, else the model's own, else the fallback.
   int get tokens => capped ? length : modelLimit ?? length;
 
+  /// The user's cap, where they set one: what a client sends that would
+  /// otherwise leave the length to the model.
+  int? get cap => capped ? length : null;
+
   /// Whether [tokens] is a guess rather than the cap or the model's own — a
   /// client that gives thinking its own room on top does so only here.
   bool get isFallback => !capped && modelLimit == null;
 }
 
 abstract class LlmClient {
-  /// [outputLimit] is null where the caller has no turn behind it — a title,
-  /// a classifier's verdict — and the client's own default stands.
   Stream<LlmChunk> stream(
     List<LlmMessage> messages, {
     required String model,
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
-    LlmOutputLimit? outputLimit,
+    LlmOutputLimit outputLimit = const LlmOutputLimit(),
   });
 
   void close();

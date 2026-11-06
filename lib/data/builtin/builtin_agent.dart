@@ -193,7 +193,7 @@ class BuiltinAgent implements Turn {
     this.classifier,
     this.temperature,
     this.reasoningEffort,
-    this.outputLimit,
+    this.outputLimit = const LlmOutputLimit(),
     this.provider,
     this.subAgents,
     this.rateLimitGate,
@@ -373,7 +373,7 @@ class BuiltinAgent implements Turn {
   final String? reasoningEffort;
 
   /// How long each reply may be; see [LlmOutputLimit].
-  final LlmOutputLimit? outputLimit;
+  final LlmOutputLimit outputLimit;
 
   /// The id of the provider [model] is reached through, said with each reply
   /// so the log records who wrote it. Null where nobody records it (a
@@ -812,8 +812,7 @@ class BuiltinAgent implements Turn {
       final left = await tool.beforeStop(this);
       if (left != null) return left;
     }
-    if (stop == LlmStop.unfinished) return saidButNotDone;
-    return null;
+    return stop == LlmStop.unfinished ? saidButNotDone : null;
   }
 
   /// Why a reply that ended [stop] is not one the turn can go on from, or

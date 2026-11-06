@@ -19,7 +19,7 @@ class ReadableClient implements LlmClient {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
-    LlmOutputLimit? outputLimit,
+    LlmOutputLimit outputLimit = const LlmOutputLimit(),
   }) => inner.stream(
     readable(messages, images: images, pdfs: pdfs),
     model: model,

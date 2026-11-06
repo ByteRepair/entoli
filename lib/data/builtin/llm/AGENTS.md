@@ -158,10 +158,11 @@ the sub-agents' included, and each client decides what its API is sent:
 - **Claude CLI** is told the cap as `CLAUDE_CODE_MAX_OUTPUT_TOKENS` when it
   starts, so a session is reused only under the same cap; uncapped, Claude Code
   writes to its own model's limit.
-- **MLX** is always sent a number, its Swift half having to stop somewhere, and
-  says `length` when a reply reached it. **Apple's model** is sent the cap alone,
-  as `maximumResponseTokens`, and says `length` where its counts show the reply
-  reached it.
+- **MLX** is always sent a number, its Swift half having to stop somewhere;
+  **Apple's model** is sent the cap alone, as `maximumResponseTokens`. Neither
+  native half decides whether a reply was cut off: `ChannelGeneration` knows
+  the `maxTokens` it sent and the `outputTokens` the reply came back with, and
+  a reply that reached the one is `truncated` there, once, in Dart.
 - **Codex CLI** is the exception the settings row names: Codex builds its own
   requests, which carry no length field, and its config has no setting for one.
 

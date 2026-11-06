@@ -364,7 +364,7 @@ class LlamaInstance extends LocalInstance {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
-    LlmOutputLimit? outputLimit,
+    LlmOutputLimit outputLimit = const LlmOutputLimit(),
   }) =>
       (_client ??= OpenAiClient(
         baseUrl: Uri.parse("http://127.0.0.1:${_at!.port}/v1"),

@@ -100,7 +100,7 @@ class OpenAiClient implements LlmClient {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
-    LlmOutputLimit? outputLimit,
+    LlmOutputLimit outputLimit = const LlmOutputLimit(),
   }) async* {
     final response = await postStream(
       _http,
@@ -124,8 +124,7 @@ class OpenAiClient implements LlmClient {
         "reasoning_effort": ?reasoningEffort,
         // Only the user's cap: unasked, the model writes to its own limit,
         // which this shape lets it — there is no number to guess.
-        if (outputLimit != null && outputLimit.capped)
-          maxTokensField: outputLimit.length,
+        maxTokensField: ?outputLimit.cap,
       },
     ).onError<LlmException>((e, _) => throw refused(e));
     responded(response.headers);

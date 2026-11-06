@@ -442,7 +442,7 @@ void main() {
           )
           .toList();
 
-      final limit = client.calls.single.outputLimit!;
+      final limit = client.calls.single.outputLimit;
       expect((limit.length, limit.capped), (2048, true));
     });
 
@@ -3242,7 +3242,7 @@ class _Held implements LlmClient {
     List<LlmTool> tools = const [],
     double? temperature,
     String? reasoningEffort,
-    LlmOutputLimit? outputLimit,
+    LlmOutputLimit outputLimit = const LlmOutputLimit(),
   }) async* {
     final chunks = await inner
         .stream(messages, model: model, tools: tools)

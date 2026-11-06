@@ -318,7 +318,7 @@ void main() {
 
     test("max_tokens is the cap, else the model's own limit, else the "
         "fallback", () async {
-      Future<int> sent(LlmOutputLimit? limit) async {
+      Future<int> sent(LlmOutputLimit limit) async {
         await clientStreaming(
           [],
         ).stream(const [], model: "claude-test", outputLimit: limit).toList();
@@ -336,7 +336,10 @@ void main() {
         128000,
       );
       expect(await sent(const LlmOutputLimit(length: 4096)), 4096);
-      expect(await sent(null), AppSettings.defaultResponseLength);
+      expect(
+        await sent(const LlmOutputLimit()),
+        AppSettings.defaultResponseLength,
+      );
     });
 
     test("thinking fits inside a known limit and rides on top of a "

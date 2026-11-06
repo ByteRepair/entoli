@@ -64,7 +64,7 @@ void main() {
     bool seesPdfs = false,
     bool attachments = false,
     SubAgents? subAgents,
-    LlmOutputLimit? outputLimit,
+    LlmOutputLimit outputLimit = const LlmOutputLimit(),
     String? provider,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-test");

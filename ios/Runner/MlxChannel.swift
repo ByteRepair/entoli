@@ -89,10 +89,8 @@ final class MlxChannel: GenerationChannel {
             "id": id, "callId": call.id, "name": call.name, "arguments": call.arguments,
           ])
         case .done(let prompt, let generated):
-          // A reply that reached the limit was cut off there, not finished.
           self?.send("done", [
-            "id": id, "finish": generated >= maxTokens ? "length" : "stop",
-            "inputTokens": prompt, "outputTokens": generated,
+            "id": id, "finish": "stop", "inputTokens": prompt, "outputTokens": generated,
           ])
         @unknown default: break
         }

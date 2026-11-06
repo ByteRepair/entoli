@@ -222,7 +222,12 @@ void main() {
 
     final generate = channel.outgoing("generate");
     expect(generate["maxTokens"], 2048);
-    await channel.incoming("done", {"id": generate["id"], "finish": "length"});
+    // The reply ran to the limit it was sent: cut off there, not finished.
+    await channel.incoming("done", {
+      "id": generate["id"],
+      "inputTokens": 10,
+      "outputTokens": 2048,
+    });
     expect(
       (await reply).whereType<LlmCompletion>().single.stop,
       LlmStop.truncated,
