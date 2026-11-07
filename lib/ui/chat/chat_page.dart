@@ -508,9 +508,10 @@ class _ProjectBadges extends ConsumerWidget {
 }
 
 /// A chat with nothing said in it yet, which is also the page the app opens
-/// on. Athena, the question, the project it would happen in, and what the
-/// composer's `/` and `@` menus hold — which is the only place those are named
-/// before the user has typed the character that opens them.
+/// on. Athena, the question, the project it would happen in, and — while the
+/// user has asked for them — the start page's chips, which are the only place
+/// the composer's `/` and `@` menus are named before their trigger is typed.
+/// See [_StarterChips] for what "asked for" means.
 ///
 /// Its rows are `settled`, so what the user arrives on is static and every
 /// change from their first interaction on animates.
@@ -568,8 +569,7 @@ class _EmptyChat extends ConsumerWidget {
               ),
             if (showSyncedCards) const PairedProjectBadges(),
             _StarterChips(
-              device: device,
-              project: project,
+              at: (device: device, project: project),
               controller: controller,
             ),
           ],
@@ -589,18 +589,11 @@ class _EmptyChat extends ConsumerWidget {
 /// project's prompts and comes back through here, and there is no reason for
 /// that to rebuild a screen drawing nothing about it.
 class _StarterChips extends ConsumerWidget {
-  const _StarterChips({
-    required this.device,
-    required this.project,
-    required this.controller,
-  });
+  const _StarterChips({required this.at, required this.controller});
 
-  /// The paired device the library is read from, or null for this one.
-  final String? device;
-
-  /// The project whose library it is — on the new-chat screen the one the
-  /// next chat goes to.
-  final String? project;
+  /// The project whose library is read, and whose paired device it is on — the
+  /// same reference the badges above are given.
+  final ProjectRef at;
 
   /// The composer's, so a chip can type into it.
   final TextEditingController controller;
@@ -609,13 +602,14 @@ class _StarterChips extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (!ref.watch(showCommandChipsProvider)) return const SizedBox.shrink();
     final theme = Theme.of(context);
+    // Hoisted out of the loop: one style for every chip, built once a build.
+    final labelStyle = theme.textTheme.bodySmall?.copyWith(
+      fontFamily: monoFamily,
+    );
     final starters = [
       for (final kind in CompletionKind.values)
         for (final option in ref.watch(
-          completionsProvider((
-            project: (device: device, project: project),
-            kind: kind,
-          )),
+          completionsProvider((project: at, kind: kind)),
         ))
           (kind: kind, option: option),
     ];
@@ -648,9 +642,7 @@ class _StarterChips extends ConsumerWidget {
                       label: Text(
                         "${starter.kind.trigger}${starter.option.name}",
                       ),
-                      labelStyle: theme.textTheme.bodySmall?.copyWith(
-                        fontFamily: monoFamily,
-                      ),
+                      labelStyle: labelStyle,
                       // Null rather than the empty string: `Chip` builds a
                       // `Tooltip` for whatever it is given, and an empty one
                       // is a blank box on a long press.

@@ -1167,11 +1167,10 @@ final paletteAccentProvider = Provider<int?>(
 );
 
 /// Whether the start page names the library's commands and agents as chips.
-/// One provider because three surfaces ask — the Flutter screen, the native
-/// shell's copy of it, and the settings row — and a `select` on the field
-/// rather than the settings object, so an unrelated write does not rebuild
-/// them: `AppSettings` has no equality, so its notifier publishes a new
-/// instance for every save.
+/// One provider because both copies of the screen ask — the Flutter one and
+/// the native shell's — and a `select` on the field rather than the settings
+/// object, so an unrelated write does not rebuild either: `AppSettings` has no
+/// equality, so its notifier publishes a new instance for every save.
 final showCommandChipsProvider = Provider<bool>(
   (ref) => ref.watch(appSettingsProvider.select((s) => s.showCommandChips)),
 );

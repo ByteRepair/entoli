@@ -113,6 +113,19 @@ void main() {
     Future<List<ChatState>> stored(WidgetTester tester) =>
         io(tester, () => app.repo.listChats());
 
+    /// Turn the command chips on through the notifier, the way the Appearance
+    /// switch does, and let the settings file land. Every test in this group
+    /// that needs a chip wants this first, since off is the default.
+    Future<void> showChips(WidgetTester tester) async {
+      await io(
+        tester,
+        () => app.container
+            .read(appSettingsProvider.notifier)
+            .setShowCommandChips(true),
+      );
+      await settleIo(tester);
+    }
+
     // The whole of the design: a screen nobody typed into leaves nothing on
     // disk, so there is no draft to hold and nothing to sweep up.
     testWidgets("leaving without typing writes nothing", (tester) async {
@@ -147,11 +160,7 @@ void main() {
       expect(find.byType(ActionChip), findsNothing);
       expect(find.text("Type / for commands, @ for agents."), findsNothing);
 
-      await io(tester, () async {
-        final settings = app.container.read(appSettingsProvider.notifier);
-        await settings.setShowCommandChips(true);
-      });
-      await settleIo(tester);
+      await showChips(tester);
 
       expect(find.byType(ActionChip), findsWidgets);
     });
@@ -213,13 +222,7 @@ void main() {
       // the same way this device's does: off, the row is absent.
       expect(find.byType(ActionChip), findsNothing);
 
-      await io(
-        tester,
-        () => app.container
-            .read(appSettingsProvider.notifier)
-            .setShowCommandChips(true),
-      );
-      await settleIo(tester);
+      await showChips(tester);
 
       expect(find.widgetWithText(ActionChip, "/deploy"), findsOneWidget);
       expect(app.container.read(selectedChatIdProvider), isNull);

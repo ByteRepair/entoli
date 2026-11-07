@@ -91,9 +91,8 @@ struct NewChatView: View {
   }
 
   /// A chip per `/skill` and `@agent` the library holds, or the line saying how
-  /// to reach them where it holds nothing — two different screens, which is
-  /// why [NewChatSnapshot.showStarters] is its own answer rather than one
-  /// inferred from an empty list.
+  /// to reach them where it holds nothing. Drawn only while `showStarters`,
+  /// which is what tells a hidden row from an empty one.
   @ViewBuilder private var starters: some View {
     if state.starters.isEmpty {
       Text("Type / for commands, @ for agents.")
