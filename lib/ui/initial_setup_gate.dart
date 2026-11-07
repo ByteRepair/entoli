@@ -1,3 +1,5 @@
+import "dart:io" show Platform;
+
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
@@ -133,8 +135,12 @@ class PlanProgress extends SetupProgress {
 class AlpineSetup extends SetupStep {
   const AlpineSetup();
 
+  /// The rootfs first startup installs. iOS defaults to the x86-64 (blinkish)
+  /// guest; Android keeps the i386 Alpine, since alpine64 has no Android image.
+  Rootfs get _default => Platform.isIOS ? alpine64 : alpine;
+
   @override
-  String get name => alpine.name;
+  String get name => _default.name;
 
   @override
   String get purpose => "the agent has a terminal to work in.";
@@ -146,7 +152,7 @@ class AlpineSetup extends SetupStep {
   ProviderListenable<DownloadState> get downloads => rootfsDownloadsProvider;
 
   @override
-  String get downloadId => alpine.id;
+  String get downloadId => _default.id;
 
   @override
   bool done(WidgetRef ref) =>
@@ -154,18 +160,18 @@ class AlpineSetup extends SetupStep {
 
   @override
   void start(WidgetRef ref) {
-    if (ref.read(installedRootfsProvider).contains(alpine.id)) {
-      ref.read(appSettingsProvider.notifier).setRootfs(alpine.id);
+    if (ref.read(installedRootfsProvider).contains(_default.id)) {
+      ref.read(appSettingsProvider.notifier).setRootfs(_default.id);
     } else {
-      ref.read(rootfsDownloadsProvider.notifier).install(alpine);
+      ref.read(rootfsDownloadsProvider.notifier).install(_default);
     }
   }
 
   @override
   void listen(WidgetRef ref) =>
       ref.listen(installedRootfsProvider, (_, installed) {
-        if (installed.contains(alpine.id)) {
-          ref.read(appSettingsProvider.notifier).setRootfs(alpine.id);
+        if (installed.contains(_default.id)) {
+          ref.read(appSettingsProvider.notifier).setRootfs(_default.id);
         }
       });
 }
