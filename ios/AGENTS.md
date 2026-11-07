@@ -63,7 +63,15 @@ instead.
 The emulator is iSH, a git submodule under `tool/ios/ish/src/` (shallow —
 `shallow = true` in `.gitmodules`, so `git submodule update --init` fetches
 one commit, not the full history) and built as a static library linked into
-the app (see "The iSH driver" below). It runs a Linux
+the app (see "The iSH driver" below). The submodule is our fork,
+`ByteRepair/ish`, on its `blinkish` branch: what Entoli changes in iSH is
+commits there, one per change, rather than patch files applied here. Its
+`master` tracks `ish-app/ish` untouched. **`blinkish` is never force-pushed**:
+every commit an Entoli commit has pinned must stay reachable from it, or an
+old checkout's shallow fetch of that commit can fail. Upstream arrives by a
+merge, or by a rebase onto a new branch the submodule then names, never by
+rewriting this one. The fork also carries blink (`deps/blink`, shallow), the
+x86-64 interpreter blinkish is to run on. It runs a Linux
 userspace **in-process**: no child process, and no writable-executable memory
 either, which is the other iOS ban. iSH's threaded-code interpreter is a table
 of function pointers with tail-calls rather than a JIT that emits machine code,
@@ -517,8 +525,8 @@ host paths (`bind_read_only`, through `ish_session_init`'s `read_only`), over
 the data-directory bind
 that already reaches it: the longer mount point wins the lookup. Upstream
 records `MS_READONLY_` and only ever shows it in `/proc/mounts`;
-`tool/ios/ish/patches/read-only-mounts.patch`, applied by `build.sh` to the
-submodule's working tree, makes the generic filesystem layer refuse a write,
+a commit on the fork's `blinkish` branch makes the generic filesystem layer
+refuse a write,
 create, unlink, rename, link, mkdir, rmdir, `chmod` or truncate through such a
 mount with `EROFS`. The host's modes refuse most of that already, since a
 realfs mount calls the host's own `open`; what the mount adds is `chmod`, which

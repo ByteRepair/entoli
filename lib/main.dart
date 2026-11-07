@@ -41,7 +41,7 @@ import "ui/bot_avatar/licence.dart";
 import "ui/chat/activity/activities.dart" show ChatActivities;
 import "ui/chat/activity/activity.dart" show activityCatalogProvider;
 import "ui/chat/remote_turns.dart";
-import "ui/app_licence.dart";
+import "ui/app_licence.dart" show registerAppLicence, registerBlinkLicence;
 import "ui/app_menu_bar.dart";
 import "ui/app_shell.dart";
 import "ui/chat_actions.dart" show chatEditsProvider;
@@ -83,6 +83,7 @@ void main() async {
   registerBotAvatarLicence();
   registerBundledSkillLicences();
   registerAppLicence();
+  registerBlinkLicence();
   platform.registerVoiceLicences();
   platform.registerRecorder();
   // Built here rather than by the root, so the platform's splash covers the

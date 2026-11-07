@@ -3,12 +3,21 @@
 # producing an XCFramework the app links. iSH runs the whole guest in-process
 # (see ios/AGENTS.md), so this is a library, not an executable the app spawns.
 #
+# Two cores are built into the one framework: i386 (asbestos, the iSH that
+# always was) and x86-64 (blink, "blinkish"). They share every kernel and fs
+# source, compiled twice with different guest and engine defines, so their
+# thousands of internal symbols are the same names. The i386 core keeps its
+# symbols global; the blinkish core is partially linked (`ld -r`) with an
+# exported-symbols list naming only its `blinkish_*` bridge entry points, so
+# every internal symbol becomes local and the two cores never meet at the
+# final link. See docs/blinkish.md.
+#
 #   tool/ios/ish/build.sh
 #
 # Needs macOS and Xcode (xcrun, the iOS SDK) plus LLVM's clang and lld for the
 # i386 vdso (brew install llvm; the script says so if they are missing).
 # Produces, in dist/:
-#   IshCore.xcframework  — the emulator core + bridge, for device and sim.
+#   IshCore.xcframework  — both emulator cores + the bridge, device and sim.
 #
 # Not run by the app build, the way tool/android/build.sh is not: without it an
 # iOS build has no emulator to link. See "The iSH driver" in ios/AGENTS.md.
@@ -29,13 +38,6 @@ fi
 if [ ! -f "$src/kernel/calls.h" ]; then
     echo "iSH source is not present. Run 'git submodule update --init --recursive' from the repo root." >&2
     exit 1
-fi
-
-# Read-only mounts that refuse writes, which upstream records and never checks.
-# Applied to the submodule's working tree, so the pinned commit stays the one
-# named; a tree it is already applied to is left alone.
-if ! git -C "$src" apply --reverse --check "$here/patches/read-only-mounts.patch" 2>/dev/null; then
-    git -C "$src" apply "$here/patches/read-only-mounts.patch"
 fi
 
 # The source files the kernel=ish build compiles, taken from src/meson.build's
@@ -74,8 +76,8 @@ done < <(cd "$src/deps/libarchive/libarchive" && ls *.c)
 # it stays out.
 fakefsify_src=(tools/fakefs.c)
 
-# The emulator (asbestos) is hand-written assembly gadgets per host arch. The
-# iOS device and the simulator are both arm64 (cpu_family aarch64, which is
+# The i386 emulator (asbestos) is hand-written assembly gadgets per host arch.
+# The iOS device and the simulator are both arm64 (cpu_family aarch64, which is
 # the gadgets-aarch64 directory — meson picks it by host_machine.cpu_family),
 # and they are the only slice built: an x86_64 simulator slice would need a
 # second gadget set that does not exist, so it is not offered.
@@ -88,12 +90,57 @@ emu_src=(
   asbestos/gadgets-aarch64/misc.S
 )
 
+# The x86-64 emulator is blink's interpreter, the same list src/meson.build
+# builds with -Dengine=blink. Pure C, so it compiles for arm64 like any other.
+blink_files=(
+  abort address alu alu1 alu2 alui assert bcd bit bitscan bmi2 bus clmul
+  cmpxchg cpuid crc32 cvt divmul errfd errno flags fpu instruction jit ldbl
+  legacy log machine memory mmx modrm op101 popcount pte32 random rdrand reset
+  sse sse2 ssefloat ssemov stack string time uop x86 xadd xchg breg vigna dll
+  memccpy
+)
+blink_src=(emu/blink/interp.c)
+for f in "${blink_files[@]}"; do
+  blink_src+=("deps/blink/blink/$f.c")
+done
+
 # Flags shared across every target. iSH's meson build sets c_std=gnu11 and
 # -Wno-switch; LOG_HANDLER_DPRINTF is the handler the default options pick.
 common_cflags=(
   -std=gnu11 -Wno-switch -Wno-implicit-fallthrough
-  -DENGINE_ASBESTOS=1 -DLOG_HANDLER_DPRINTF=1
+  -DLOG_HANDLER_DPRINTF=1
   -I"$src"
+)
+
+# blink's own configuration, the flags meson.build's blink static_library
+# carries plus its config.h directory. config.h (emu/blink/config) holds the
+# interpreter's host probes and its DISABLE_* defines; it must be first on the
+# include path, because libarchive's deps/config.h is also on it (via the
+# shared -I"$src/deps") and would otherwise shadow blink's, leaving HAVE_JIT
+# set and the JIT's iOS-banned pthread_jit_write_protect_np compiled.
+blink_cflags=(
+  -DNOLINEAR -DNDEBUG -D_GNU_SOURCE -D_DARWIN_C_SOURCE -D_DEFAULT_SOURCE
+  -D_BSD_SOURCE -D_FILE_OFFSET_BITS=64
+  -Wno-unused-parameter -Wno-sign-compare -Wno-missing-field-initializers
+  -I"$src/emu/blink/config" -I"$src/deps/blink"
+)
+
+# The bridge's public entry points, renamed to their blinkish twins when the
+# x86-64 core is built. Compiling the same source twice with a -D rename is
+# what gives the second core its bridge without forking the file. fakefsify is
+# not renamed: the rootfs unpack is guest-independent (one fakefs format), so
+# Dart always unpacks through the i386 core's ish_fakefsify, and the blinkish
+# core's copy stays local (not exported) and unused.
+blinkish_bridge_renames=(
+  -Dish_boot=blinkish_boot
+  -Dish_session_init=blinkish_session_init
+  -Dish_session_drain_wake=blinkish_session_drain_wake
+  -Dish_session_write_stdin=blinkish_session_write_stdin
+  -Dish_session_poll=blinkish_session_poll
+  -Dish_session_read=blinkish_session_read
+  -Dish_session_interrupt=blinkish_session_interrupt
+  -Dish_session_hangup=blinkish_session_hangup
+  -Dish_session_destroy=blinkish_session_destroy
 )
 
 # cpu-offsets.h is generated, not checked in: meson builds it from
@@ -139,56 +186,127 @@ build_vdso() {
 
 build_vdso
 
-build_lib() {
-  local sdk=$1 outname=$2
+# The flags every slice's objects are compiled with: the common ones, the
+# SDK, the target triple, and the include paths libarchive and the vdso need.
+slice_cflags() {
+  local sdk=$1 target=$2 outname=$3
+  local sdkroot; sdkroot=$(xcrun --sdk "$sdk" --show-sdk-path)
+  printf '%s\n' "${common_cflags[@]}" \
+    -isysroot "$sdkroot" -target "$target" -fPIC -O2 -g \
+    -I"$work/offsets-$outname" -I"$work" \
+    -DHAVE_CONFIG_H -I"$src/deps" -I"$src/deps/libarchive/libarchive"
+}
+
+# Compile one source into $destdir, answering its object path. The bridge is
+# ours; the rest are under src/. The x86-64 core renames the bridge's entry
+# points and adds the blink flags and guest/engine defines.
+compile_one() {
+  local destdir=$1 f=$2
+  local extra=("${@:3}")
+  local rel="${f//\//_}"
+  local outobj="$destdir/$rel.o"
+  if [[ "$f" == "$bridge" ]]; then
+    cc "${extra[@]}" -c "$f" -o "$outobj"
+  else
+    cc "${extra[@]}" -c "$src/$f" -o "$outobj"
+  fi
+  printf '%s\n' "$outobj"
+}
+
+# The i386 core: the kernel + fakefs + libarchive + fakefsify + asbestos + the
+# bridge, one static lib per slice.
+build_i386_lib() {
+  local sdk=$1 outname=$2 target=$3
   local destdir="$work/$outname"
   mkdir -p "$destdir"
-  local sdkroot; sdkroot=$(xcrun --sdk "$sdk" --show-sdk-path)
-  # A deployment target at or below the app's: without it every object
-  # carries the SDK's own minimum and linking them into the app fails on the
-  # version check. Simulator slices get the -simulator suffix clang wants.
-  local minios=14.0
-  local target
-  if [ "$sdk" = iphoneos ]; then
-    target="arm64-apple-ios$minios"
-  else
-    target="arm64-apple-ios$minios-simulator"
-  fi
-  # The vdso is embedded by kernel/vdso.c's `.incbin "vdso/libvdso.so.elf"`,
-  # which resolves against the include path — so the path added is $work, the
-  # parent of the vdso/ directory the build above writes into.
-  local cflags=("${common_cflags[@]}" -isysroot "$sdkroot" \
-    -target "$target" -fPIC -O2 -g \
-    -I"$work/offsets-$outname" -I"$work" \
-    -DHAVE_CONFIG_H -I"$src/deps" -I"$src/deps/libarchive/libarchive")
-  # Compile each .c to a .o, then the assembly gadgets the same way.
+  local -a cflags; cflags=($(slice_cflags "$sdk" "$target" "$outname"))
+  cflags+=(-DENGINE_ASBESTOS=1)
   local objs=()
-  for f in "${all_src[@]}"; do
-    local rel="${f//\//_}"
-    # The bridge is ours; the rest are under src/.
-    if [[ "$f" == "$bridge" ]]; then
-      cc "${cflags[@]}" -c "$f" -o "$destdir/$rel.o"
-    else
-      cc "${cflags[@]}" -c "$src/$f" -o "$destdir/$rel.o"
-    fi
-    objs+=("$destdir/$rel.o")
+  local srcs=("${kernel_src[@]}" "${fakefs_src[@]}" "${libarchive_src[@]}"
+    "${fakefsify_src[@]}" "${emu_src[@]}" "$bridge")
+  for f in "${srcs[@]}"; do
+    objs+=("$(compile_one "$destdir" "$f" "${cflags[@]}")")
   done
   libtool -static -o "$out/libishcore_$outname.a" "${objs[@]}"
 }
 
-all_src=("${kernel_src[@]}" "${fakefs_src[@]}" "${libarchive_src[@]}"
-  "${fakefsify_src[@]}" "${emu_src[@]}" "$bridge")
+# The x86-64 core: the same kernel, fakefs, libarchive and fakefsify sources,
+# plus blink's interpreter and the engine glue, compiled with the x86-64 guest
+# and blink engine, then partially linked with only the blinkish_* bridge
+# symbols exported so its internals stay local. One static lib per slice.
+build_blinkish_lib() {
+  local sdk=$1 outname=$2 target=$3
+  local destdir="$work/$outname"
+  mkdir -p "$destdir"
+  local sdkroot; sdkroot=$(xcrun --sdk "$sdk" --show-sdk-path)
+  local -a cflags; cflags=($(slice_cflags "$sdk" "$target" "$outname"))
+  cflags+=(-DENGINE_BLINK=1 -DGUEST_X86_64=1)
+  local objs=()
+  local srcs=("${kernel_src[@]}" "${fakefs_src[@]}" "${libarchive_src[@]}"
+    "${fakefsify_src[@]}" "emu/tlb.c" "emu/blink/engine.c")
+  for f in "${srcs[@]}"; do
+    objs+=("$(compile_one "$destdir" "$f" "${cflags[@]}")")
+  done
+  # blink's sources need blink's config.h (DISABLE_JIT and friends) ahead of
+  # libarchive's deps/config.h, which the shared cflags put on the include
+  # path; they need nothing of libarchive, so they get their own flags with
+  # the blink config first and no deps/ include at all.
+  local -a bcflags; bcflags=("${blink_cflags[@]}")
+  bcflags+=(-isysroot "$sdkroot" -target "$target" -fPIC -O2 -g)
+  bcflags+=("${common_cflags[@]}")
+  for f in "${blink_src[@]}"; do
+    objs+=("$(compile_one "$destdir" "$f" "${bcflags[@]}")")
+  done
+  # The bridge, with its entry points renamed to blinkish_*.
+  objs+=("$(compile_one "$destdir" "$bridge" "${cflags[@]}" "${blinkish_bridge_renames[@]}")")
 
-# Offsets are generated per slice: the printer compiles against that slice's
-# SDK target, and the .h lands in the include path build_lib adds.
+  # Partial-link: keep only the blinkish_* entry points global; every internal
+  # symbol — the kernel's syscalls, fs ops, blink's interpreter — becomes local
+  # so it cannot collide with the i386 core's same-named symbols at the final
+  # link. The exported list uses the C underscore macOS mangles symbols with.
+  local exportlist="$work/blinkish-exports-$outname.txt"
+  {
+    printf '_blinkish_boot\n'
+    printf '_blinkish_session_init\n'
+    printf '_blinkish_session_drain_wake\n'
+    printf '_blinkish_session_write_stdin\n'
+    printf '_blinkish_session_poll\n'
+    printf '_blinkish_session_read\n'
+    printf '_blinkish_session_interrupt\n'
+    printf '_blinkish_session_hangup\n'
+    printf '_blinkish_session_destroy\n'
+  } > "$exportlist"
+  local partial="$destdir/blinkish.o"
+  ld -r "${objs[@]}" -exported_symbols_list "$exportlist" -o "$partial"
+  # The partial object is a static lib on its own, but it sits beside the
+  # i386 core under one framework, so it is archived the same way.
+  libtool -static -o "$out/libblinkish_$outname.a" "$partial"
+}
+
 rm -rf "$out"
 mkdir -p "$out"
 
-# Device (arm64) and simulator (arm64).
+# Device (arm64) and simulator (arm64), both cores each.
 gen_offsets iphoneos arm64-apple-ios14.0 device
-build_lib iphoneos device
+build_i386_lib iphoneos device arm64-apple-ios14.0
+build_blinkish_lib iphoneos device arm64-apple-ios14.0
+
 gen_offsets iphonesimulator arm64-apple-ios14.0-simulator sim-arm64
-build_lib iphonesimulator sim-arm64
+build_i386_lib iphonesimulator sim-arm64 arm64-apple-ios14.0-simulator
+build_blinkish_lib iphonesimulator sim-arm64 arm64-apple-ios14.0-simulator
+
+# Both cores, one framework per slice. The app's Ish.xcconfig force-loads each
+# slice's single library by its canonical name (libishcore_device.a and
+# libishcore_sim-arm64.a), so the two cores are merged into that one archive:
+# the i386 core's symbols are global, the blinkish core's are local except its
+# blinkish_* entry points, so nothing collides. The merge writes a temp and
+# moves it over the i386 archive, whose name is the input.
+for name in device sim-arm64; do
+  libtool -static \
+    -o "$out/libishcore_${name}_merged.a" \
+    "$out/libishcore_${name}.a" "$out/libblinkish_${name}.a"
+  mv "$out/libishcore_${name}_merged.a" "$out/libishcore_${name}.a"
+done
 
 xcodebuild -create-xcframework \
   -library "$out/libishcore_device.a" \

@@ -127,7 +127,32 @@ const alpine = Rootfs(
   },
 );
 
-const rootfsCatalog = [alpine];
+/// iOS's x86-64 guest, blinkish: a second catalog entry beside [alpine]. The
+/// same Alpine the i386 one ships, but the x86_64 tarball run under blink's
+/// interpreter rather than asbestos. Its `images` holds only the iOS key — the
+/// "ios" ABI every iOS device answers with — so a non-iOS device sees no
+/// download for it, and it cannot collide with [alpine]'s Android x86_64
+/// image. `rootfsById("alpine64")` is how the Terminal setting and the setup
+/// step name it.
+const alpine64 = Rootfs(
+  id: "alpine64",
+  name: "Alpine Linux (x86-64)",
+  version: "3.24.1",
+  packageManager: "apk",
+  images: {
+    "ios": RootfsImage(
+      arch: "x86_64",
+      url:
+          "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/"
+          "alpine-minirootfs-3.24.1-x86_64.tar.gz",
+      bytes: 3698422,
+      sha256:
+          "41f73e3cf5fa919b8aa5ca6b30dc48f0da2720776d7423e2a7748211456fe081",
+    ),
+  },
+);
+
+const rootfsCatalog = [alpine, alpine64];
 
 /// The wire name the guest drivers and the install environment name the
 /// distribution's installer by — what `byte-repair-setup.sh` reads. One

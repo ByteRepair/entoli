@@ -157,6 +157,9 @@ flutter:
     # path, so this is copied out of the bundle on first use.
     - assets/models/silero_vad.onnx
     - assets/models/silero-vad-LICENSE.txt
+    # blink's ISC licence, the x86-64 emulator blinkish runs on. Read into
+    # `LicenseRegistry` at startup, the way the font licences are.
+    - assets/third_party/blink-ISC.txt
     # Byte Repair's install script, run through the configured terminal env to
     # install make, github-cli and ESBMC.
     - assets/scripts/byte-repair-setup.sh
