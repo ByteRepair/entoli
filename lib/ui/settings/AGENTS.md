@@ -120,7 +120,8 @@ project and leaves settings for it: its log is seeded with a
 skill's instructions ride every later turn without a system record, and the
 skill's greeting as a finished assistant turn under it. **General** is the app itself:
 **Appearance** — the theme, the two colours the palette is seeded from, how
-round a corner is, and the app icon, which are what the app looks like; where
+round a corner is, the app icon, and the switch that puts the new-chat screen's
+command chips on it, which are what the app looks like; where
 the system has a palette of its own a Material 3 Expressive switch takes the
 place of the colours, on iOS and macOS a Liquid Glass switch in the same
 place says whether Apple's own controls draw the app's chrome from the next

@@ -496,6 +496,7 @@ class NewChatSnapshot {
     this.devices = const [],
     this.selected,
     this.starters = const [],
+    this.showStarters = false,
     this.starting = false,
   });
 
@@ -514,6 +515,13 @@ class NewChatSnapshot {
   List<DeviceSnapshot> devices;
   ProjectPick? selected;
   List<StarterSnapshot> starters;
+
+  /// Whether [starters] is drawn at all: the "Show command chips in start
+  /// page" switch, which is off by default. Sent rather than left to the
+  /// client to empty, because an empty library and a hidden row are two
+  /// different screens — one says how to reach the library, the other says
+  /// nothing.
+  bool showStarters;
 
   /// A paired device is making the chat: a spinner in the screen's place.
   bool starting;
