@@ -17,6 +17,6 @@
 // architecture arm64") and a -u there has nothing to resolve against, failing
 // the link on every name. That slice has no iSH at all, -u or not.
 ISH_KEEP[arch=arm64] = $(ISH_KEEP_NAMES)
-ISH_KEEP_NAMES = -Wl,-u,_ish_fakefsify -Wl,-u,_ish_session_destroy -Wl,-u,_ish_session_drain_wake -Wl,-u,_ish_session_hangup -Wl,-u,_ish_session_init -Wl,-u,_ish_session_interrupt -Wl,-u,_ish_session_poll -Wl,-u,_ish_session_read -Wl,-u,_ish_session_write_stdin
+ISH_KEEP_NAMES = -Wl,-u,_ish_fakefsify -Wl,-u,_ish_session_destroy -Wl,-u,_ish_session_drain_wake -Wl,-u,_ish_session_hangup -Wl,-u,_ish_session_init -Wl,-u,_ish_session_interrupt -Wl,-u,_ish_session_poll -Wl,-u,_ish_session_read -Wl,-u,_ish_session_write_stdin -Wl,-u,_blinkish_session_destroy -Wl,-u,_blinkish_session_drain_wake -Wl,-u,_blinkish_session_hangup -Wl,-u,_blinkish_session_init -Wl,-u,_blinkish_session_interrupt -Wl,-u,_blinkish_session_poll -Wl,-u,_blinkish_session_read -Wl,-u,_blinkish_session_write_stdin
 OTHER_LDFLAGS[sdk=iphoneos*] = $(inherited) -lz -lbz2 -lxml2 -lsqlite3 -liconv -weak_framework FoundationModels -Wl,-force_load,"$(SRCROOT)/../tool/ios/ish/dist/IshCore.xcframework/ios-arm64/libishcore_device.a" $(ISH_KEEP)
 OTHER_LDFLAGS[sdk=iphonesimulator*] = $(inherited) -lz -lbz2 -lxml2 -lsqlite3 -liconv -weak_framework FoundationModels -Wl,-force_load,"$(SRCROOT)/../tool/ios/ish/dist/IshCore.xcframework/ios-arm64-simulator/libishcore_sim-arm64.a" $(ISH_KEEP)
