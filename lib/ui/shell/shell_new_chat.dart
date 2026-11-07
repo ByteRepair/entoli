@@ -78,6 +78,7 @@ class ShellNewChatState extends ConsumerState<ShellNewChat>
     _slots.newChat.claim(this);
     final at = widget.at;
     final question = ref.watch(newChatQuestionProvider(at));
+    final showStarters = ref.watch(showCommandChipsProvider);
     final named = ref.watch(projectListProvider).value ?? const <String>[];
     final peers = ref.watch(syncPeersProvider);
     final entries = remoteEntries(
@@ -122,20 +123,28 @@ class ShellNewChatState extends ConsumerState<ShellNewChat>
             ),
         ],
         selected: ProjectPick(device: at.device, project: at.project),
-        starters: [
-          for (final kind in CompletionKind.values)
-            for (final option in ref.watch(
-              completionsProvider((project: at, kind: kind)),
-            ))
-              StarterSnapshot(
-                trigger: triggerOf(kind),
-                name: option.name,
-                detail: option.description,
-              ),
-        ].take(_starters).toList(),
+        // Only while the row is drawn: a hidden row's list is work the Swift
+        // throws away, and watching the library for it keeps this screen
+        // subscribed to every reload for nothing.
+        starters: showStarters ? _starterChips(at) : const [],
+        showStarters: showStarters,
         starting: widget.starting,
       ),
     );
     return const SizedBox.shrink();
   }
+
+  /// The `_starters`-many things the composer's menus would offer here, as the
+  /// chips that name them.
+  List<StarterSnapshot> _starterChips(ProjectRef at) => [
+    for (final kind in CompletionKind.values)
+      for (final option in ref.watch(
+        completionsProvider((project: at, kind: kind)),
+      ))
+        StarterSnapshot(
+          trigger: triggerOf(kind),
+          name: option.name,
+          detail: option.description,
+        ),
+  ].take(_starters).toList();
 }

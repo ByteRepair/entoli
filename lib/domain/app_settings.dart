@@ -85,6 +85,7 @@ class AppSettings {
     this.secondaryColour = ThemeColour.apple,
     this.cornerRadius = CornerRadius.medium,
     this.systemPalette = false,
+    this.showCommandChips = false,
     this.tempChatTtl = TempChatTtl.off,
     this.voiceRecognitionModelId,
     this.voiceSpeechModelId,
@@ -255,6 +256,12 @@ class AppSettings {
   /// above — Android's Material 3 Expressive, which follows the wallpaper.
   /// Ignored where the platform has no accent to give.
   bool systemPalette;
+
+  /// Whether the new-chat screen offers a chip per `/skill` and `@agent` the
+  /// library holds. Off, the row is absent from the screen rather than a
+  /// blank one, and the composer's menus are the only place those are named.
+  /// App-level only, like the theme and the icon.
+  bool showCommandChips;
 
   /// How long a temporary chat lives once its TTL is enabled. App-level
   /// default; a project and a chat can override it. [TempChatTtl.off] means
@@ -593,6 +600,7 @@ class AppSettings {
         CornerRadius.values.asNameMap()[json["cornerRadius"]] ??
         CornerRadius.medium,
     systemPalette: json["systemPalette"] as bool? ?? false,
+    showCommandChips: json["showCommandChips"] as bool? ?? false,
     tempChatTtl:
         TempChatTtl.values.asNameMap()[json["tempChatTtl"]] ?? TempChatTtl.off,
     voiceRecognitionModelId: _orNull(
@@ -745,6 +753,7 @@ class AppSettings {
     "secondaryColour": secondaryColour.name,
     "cornerRadius": cornerRadius.name,
     "systemPalette": systemPalette,
+    if (showCommandChips) "showCommandChips": showCommandChips,
     "tempChatTtl": tempChatTtl.name,
     if (voiceRecognitionModelId != null)
       "voiceRecognitionModelId": voiceRecognitionModelId,

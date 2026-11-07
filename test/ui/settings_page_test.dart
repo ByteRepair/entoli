@@ -233,6 +233,7 @@ void main() {
     // scrollTo ends in ensureVisible, which throws unless the finder matches
     // exactly one widget — reaching each section is the assertion.
     await scrollTo(tester, find.text("Appearance"));
+    await scrollTo(tester, find.text("Show command chips in start page"));
     await scrollTo(tester, find.text("Environment"));
     await scrollTo(tester, find.text("Delete all chats"));
     expect(find.text("Running commands"), findsNothing);

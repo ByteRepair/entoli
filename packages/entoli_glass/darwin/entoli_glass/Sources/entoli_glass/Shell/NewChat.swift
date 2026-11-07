@@ -13,7 +13,8 @@ extension ComposerTrigger {
 
 extension NewChatSnapshot {
   static let initial = NewChatSnapshot(
-    present: false, question: "", projects: [], devices: [], starters: [], starting: false)
+    present: false, question: "", projects: [], devices: [], starters: [],
+    showStarters: false, starting: false)
 
   func isSelected(_ choice: ProjectChoice) -> Bool {
     selected?.device == choice.device && selected?.project == choice.project
@@ -22,8 +23,9 @@ extension NewChatSnapshot {
 
 /// The new-chat screen: Athena, the question, the projects as badges to pick
 /// where the next chat goes, and a starter per `/skill` and `@agent` — the
-/// only place those are named before their trigger is typed. Dart's
-/// `ShellNewChat` says what is there; a badge or a starter is an intent.
+/// only place those are named before their trigger is typed, while "Show
+/// Command Chips in start page" is on. Dart's `ShellNewChat` says what is
+/// there; a badge or a starter is an intent.
 struct NewChatView: View {
   @ObservedObject var model: ShellModel
 
@@ -72,23 +74,7 @@ struct NewChatView: View {
               }
             }
           }
-          if state.starters.isEmpty {
-            Text("Type / for commands, @ for agents.")
-              .font(.callout)
-              .foregroundStyle(.secondary)
-          } else {
-            FlowLayout(spacing: 8) {
-              ForEach(state.starters, id: \.self) { starter in
-                Button {
-                  say.starter(trigger: starter.trigger, name: starter.name) { _ in }
-                } label: {
-                  Text("\(starter.trigger.glyph)\(starter.name)").font(.callout.monospaced())
-                }
-                .glassButton()
-                .help(starter.detail ?? "")
-              }
-            }
-          }
+          if state.showStarters { starters }
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 32)
@@ -102,6 +88,30 @@ struct NewChatView: View {
 
   private var line: some View {
     Rectangle().fill(.quaternary).frame(height: 1)
+  }
+
+  /// A chip per `/skill` and `@agent` the library holds, or the line saying how
+  /// to reach them where it holds nothing — two different screens, which is
+  /// why [NewChatSnapshot.showStarters] is its own answer rather than one
+  /// inferred from an empty list.
+  @ViewBuilder private var starters: some View {
+    if state.starters.isEmpty {
+      Text("Type / for commands, @ for agents.")
+        .font(.callout)
+        .foregroundStyle(.secondary)
+    } else {
+      FlowLayout(spacing: 8) {
+        ForEach(state.starters, id: \.self) { starter in
+          Button {
+            say.starter(trigger: starter.trigger, name: starter.name) { _ in }
+          } label: {
+            Text("\(starter.trigger.glyph)\(starter.name)").font(.callout.monospaced())
+          }
+          .glassButton()
+          .help(starter.detail ?? "")
+        }
+      }
+    }
   }
 
   private func badge(_ choice: ProjectChoice) -> some View {

@@ -280,6 +280,26 @@ void main() {
     });
   });
 
+  // The start page's chips are the one place a `/skill` or `@agent` is named
+  // before its trigger is typed, so they are a switch rather than something
+  // always on: a page that says nothing about the library is what a fresh
+  // install opens. That the field survives a write to another one is the
+  // icon's test's job above — `copy()` is the same mechanism for every field.
+  group("the command chips", () {
+    testWidgets("are offered off, and turning them on persists it", (
+      tester,
+    ) async {
+      await pumpAppearance(tester, app);
+      expect(AppSettings.load(app.config).showCommandChips, isFalse);
+
+      await scrollTo(tester, find.text("Show command chips in start page"));
+      await tester.tap(find.text("Show command chips in start page"));
+      await settleIo(tester);
+
+      expect(AppSettings.load(app.config).showCommandChips, isTrue);
+    });
+  });
+
   group("Liquid Glass", () {
     testWidgets("a platform without it is not offered it", (tester) async {
       await pumpAppearance(tester, app);

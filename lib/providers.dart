@@ -879,6 +879,11 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setSystemPalette(bool follow) =>
       _update((s) => s.systemPalette = follow);
 
+  /// Whether the new-chat screen names the library's commands and agents as
+  /// chips, or leaves the composer's menus as the only place they are named.
+  Future<void> setShowCommandChips(bool value) =>
+      _update((s) => s.showCommandChips = value);
+
   /// Whether the app replaces itself with a newer release it finds at
   /// startup, where the platform it is on can do that.
   Future<void> setAutoUpdate(bool value) =>
@@ -1159,6 +1164,16 @@ final paletteAccentProvider = Provider<int?>(
   (ref) => ref.watch(appSettingsProvider.select((s) => s.systemPalette))
       ? ref.watch(systemAccentProvider)
       : null,
+);
+
+/// Whether the start page names the library's commands and agents as chips.
+/// One provider because three surfaces ask — the Flutter screen, the native
+/// shell's copy of it, and the settings row — and a `select` on the field
+/// rather than the settings object, so an unrelated write does not rebuild
+/// them: `AppSettings` has no equality, so its notifier publishes a new
+/// instance for every save.
+final showCommandChipsProvider = Provider<bool>(
+  (ref) => ref.watch(appSettingsProvider.select((s) => s.showCommandChips)),
 );
 
 final linkOpenerProvider = Provider<LinkOpener>(

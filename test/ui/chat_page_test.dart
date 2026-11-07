@@ -135,6 +135,27 @@ void main() {
       expect(find.text("hello"), findsOneWidget);
     });
 
+    // The row is discovery, and discovery is a choice: Settings > General >
+    // Appearance > "Show command chips in start page". Off is the default, so
+    // the screen a fresh install opens says nothing about the library — the
+    // composer's `/` and `@` menus are the only place those are named.
+    testWidgets("no chips until the Appearance switch asks for them", (
+      tester,
+    ) async {
+      await openEmpty(tester);
+
+      expect(find.byType(ActionChip), findsNothing);
+      expect(find.text("Type / for commands, @ for agents."), findsNothing);
+
+      await io(tester, () async {
+        final settings = app.container.read(appSettingsProvider.notifier);
+        await settings.setShowCommandChips(true);
+      });
+      await settleIo(tester);
+
+      expect(find.byType(ActionChip), findsWidgets);
+    });
+
     // A paired device's project is a new chat there: the composer and that
     // device's library, and none of what names this device's own models.
     testWidgets("a paired device's project offers a chat there", (
@@ -188,6 +209,18 @@ void main() {
             .where((chip) => chip.selected),
         hasLength(1),
       );
+      // The switch is app-level, so a paired device's start page answers it
+      // the same way this device's does: off, the row is absent.
+      expect(find.byType(ActionChip), findsNothing);
+
+      await io(
+        tester,
+        () => app.container
+            .read(appSettingsProvider.notifier)
+            .setShowCommandChips(true),
+      );
+      await settleIo(tester);
+
       expect(find.widgetWithText(ActionChip, "/deploy"), findsOneWidget);
       expect(app.container.read(selectedChatIdProvider), isNull);
     });
@@ -792,7 +825,12 @@ void main() {
   });
 
   group("a chat with nothing said in it", () {
+    /// The starters are off by default now — Settings > General > Appearance >
+    /// "Show command chips in start page" — and every test in this group is
+    /// about a chip, so each opens the screen with the switch on. Seeded
+    /// rather than tapped: what the switch does is `theme_test.dart`'s.
     Future<void> openBlank(WidgetTester tester) async {
+      app.seedSettings(AppSettings(showCommandChips: true));
       final chat = await io(tester, () => app.seedChat(title: "brand new"));
       await open(tester, chat.state.id);
     }
