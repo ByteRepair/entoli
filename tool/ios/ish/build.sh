@@ -127,7 +127,10 @@ blink_cflags=(
 
 # The bridge's public entry points, renamed to their blinkish twins when the
 # x86-64 core is built. Compiling the same source twice with a -D rename is
-# what gives the second core its bridge without forking the file.
+# what gives the second core its bridge without forking the file. fakefsify is
+# not renamed: the rootfs unpack is guest-independent (one fakefs format), so
+# Dart always unpacks through the i386 core's ish_fakefsify, and the blinkish
+# core's copy stays local (not exported) and unused.
 blinkish_bridge_renames=(
   -Dish_boot=blinkish_boot
   -Dish_session_init=blinkish_session_init
@@ -138,7 +141,6 @@ blinkish_bridge_renames=(
   -Dish_session_interrupt=blinkish_session_interrupt
   -Dish_session_hangup=blinkish_session_hangup
   -Dish_session_destroy=blinkish_session_destroy
-  -Dish_fakefsify=blinkish_fakefsify
 )
 
 # cpu-offsets.h is generated, not checked in: meson builds it from
@@ -273,7 +275,6 @@ build_blinkish_lib() {
     printf '_blinkish_session_interrupt\n'
     printf '_blinkish_session_hangup\n'
     printf '_blinkish_session_destroy\n'
-    printf '_blinkish_fakefsify\n'
   } > "$exportlist"
   local partial="$destdir/blinkish.o"
   ld -r "${objs[@]}" -exported_symbols_list "$exportlist" -o "$partial"
