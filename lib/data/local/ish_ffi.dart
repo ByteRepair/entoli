@@ -87,6 +87,17 @@ IshHangupDart? _hangupFn;
 IshDestroyDart? _destroyFn;
 IshFakefsifyDart? _fakefsifyFn;
 
+// The blinkish (x86-64) core's twin entry points. Same signatures, looked up
+// by the blinkish_* names the bridge's second core exports.
+IshInitDart? _blinkishInitFn;
+IshDrainWakeDart? _blinkishDrainWakeFn;
+IshWriteStdinDart? _blinkishWriteStdinFn;
+IshPollDart? _blinkishPollFn;
+IshReadDart? _blinkishReadFn;
+IshInterruptDart? _blinkishInterruptFn;
+IshHangupDart? _blinkishHangupFn;
+IshDestroyDart? _blinkishDestroyFn;
+
 bool _resolved = false;
 
 void _resolve() {
@@ -114,6 +125,31 @@ void _resolve() {
   );
   _fakefsifyFn = lib.lookupFunction<IshFakefsifyC, IshFakefsifyDart>(
     "ish_fakefsify",
+  );
+  _blinkishInitFn = lib.lookupFunction<IshInitC, IshInitDart>(
+    "blinkish_session_init",
+  );
+  _blinkishDrainWakeFn = lib.lookupFunction<IshDrainWakeC, IshDrainWakeDart>(
+    "blinkish_session_drain_wake",
+  );
+  _blinkishWriteStdinFn =
+      lib.lookupFunction<IshWriteStdinC, IshWriteStdinDart>(
+    "blinkish_session_write_stdin",
+  );
+  _blinkishPollFn = lib.lookupFunction<IshPollC, IshPollDart>(
+    "blinkish_session_poll",
+  );
+  _blinkishReadFn = lib.lookupFunction<IshReadC, IshReadDart>(
+    "blinkish_session_read",
+  );
+  _blinkishInterruptFn = lib.lookupFunction<IshInterruptC, IshInterruptDart>(
+    "blinkish_session_interrupt",
+  );
+  _blinkishHangupFn = lib.lookupFunction<IshHangupC, IshHangupDart>(
+    "blinkish_session_hangup",
+  );
+  _blinkishDestroyFn = lib.lookupFunction<IshDestroyC, IshDestroyDart>(
+    "blinkish_session_destroy",
   );
 }
 
@@ -179,4 +215,48 @@ IshDestroyDart? get ishDestroyFn {
 IshFakefsifyDart? get ishFakefsifyFn {
   _resolve();
   return _fakefsifyFn;
+}
+
+/// The blinkish (x86-64) core's twin entry points, or null. The same shape as
+/// the iSH ones above, looked up by the `blinkish_*` names; both cores share
+/// one fakefsify (the unpack is the same, whichever guest runs the rootfs), so
+/// there is no blinkish fakefsify twin.
+IshInitDart? get blinkishInitFn {
+  _resolve();
+  return _blinkishInitFn;
+}
+
+IshDrainWakeDart? get blinkishDrainWakeFn {
+  _resolve();
+  return _blinkishDrainWakeFn;
+}
+
+IshWriteStdinDart? get blinkishWriteStdinFn {
+  _resolve();
+  return _blinkishWriteStdinFn;
+}
+
+IshPollDart? get blinkishPollFn {
+  _resolve();
+  return _blinkishPollFn;
+}
+
+IshReadDart? get blinkishReadFn {
+  _resolve();
+  return _blinkishReadFn;
+}
+
+IshInterruptDart? get blinkishInterruptFn {
+  _resolve();
+  return _blinkishInterruptFn;
+}
+
+IshHangupDart? get blinkishHangupFn {
+  _resolve();
+  return _blinkishHangupFn;
+}
+
+IshDestroyDart? get blinkishDestroyFn {
+  _resolve();
+  return _blinkishDestroyFn;
 }
