@@ -17,8 +17,7 @@ void registerAppLicence() => LicenseRegistry.addLicense(() async* {
 /// blink's ISC licence, for the x86-64 emulator blinkish runs on. The notice
 /// travels with the binary, so it is registered beside the app's own.
 void registerBlinkLicence() => LicenseRegistry.addLicense(() async* {
-  yield LicenseEntryWithLineBreaks(
-    const ["blink"],
-    await rootBundle.loadString("assets/third_party/blink-ISC.txt"),
-  );
+  yield LicenseEntryWithLineBreaks(const [
+    "blink",
+  ], await rootBundle.loadString("assets/third_party/blink-ISC.txt"));
 });

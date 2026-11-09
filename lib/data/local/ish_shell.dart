@@ -1035,11 +1035,10 @@ class IshWorker implements IshTransport {
   Future<void> _spawn() async {
     final replies = ReceivePort();
     final exitPort = ReceivePort();
-    await Isolate.spawn(
-      _entry,
-      (replies.sendPort, blinkish),
-      onExit: exitPort.sendPort,
-    );
+    await Isolate.spawn(_entry, (
+      replies.sendPort,
+      blinkish,
+    ), onExit: exitPort.sendPort);
     spawnCount++;
     // One listener for the port's whole life: a ReceivePort is a
     // single-subscription stream, so reading the entry's hello with `.first`
@@ -1147,10 +1146,8 @@ class IshWorker implements IshTransport {
   }
 
   @override
-  void interrupt(int handle) => _poke(
-    blinkish ? blinkishInterruptFn : ishInterruptFn,
-    handle,
-  );
+  void interrupt(int handle) =>
+      _poke(blinkish ? blinkishInterruptFn : ishInterruptFn, handle);
 
   @override
   void hangup(int handle) =>
