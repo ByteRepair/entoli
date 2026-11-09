@@ -29,6 +29,9 @@
 #include <limits.h>
 #include <poll.h>
 #include <sys/stat.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <resolv.h>
 
 #include "tools/fakefs.h"
 #include "kernel/calls.h"
@@ -60,6 +63,62 @@ static fd_t guest_fd_from_host(int real_fd) {
 
 // ---- lifecycle ----
 
+// Write the guest's /etc/resolv.conf from the host's resolvers, the same
+// configureDns iSH's own app runs (AppDelegate.m): a fresh Alpine ships no
+// resolver, so name lookups fail until one is written. The host answer changes
+// with the network the device is on, so it is rewritten here on every boot
+// rather than once at install. Unlike the app's, a failed probe is not fatal —
+// this runs inside the app as a library, so it reports and lets the guest boot
+// with whatever resolv.conf the rootfs already has.
+static void configure_dns(void) {
+    struct __res_state res;
+    if (res_ninit(&res) != EXIT_SUCCESS) {
+        printk("ish: res_ninit failed; /etc/resolv.conf left as shipped\n");
+        return;
+    }
+    char buf[4096];
+    size_t used = 0;
+    if (res.dnsrch[0] != NULL) {
+        int n = snprintf(buf + used, sizeof(buf) - used, "search");
+        if (n > 0) used += (size_t) n;
+        for (int i = 0; res.dnsrch[i] != NULL && used < sizeof(buf); i++) {
+            n = snprintf(buf + used, sizeof(buf) - used, " %s", res.dnsrch[i]);
+            if (n < 0) break;
+            used += (size_t) n;
+        }
+        if (used < sizeof(buf)) {
+            buf[used++] = '\n';
+            buf[used] = '\0';
+        }
+    }
+    union res_sockaddr_union servers[NI_MAXSERV];
+    int found = res_getservers(&res, servers, NI_MAXSERV);
+    for (int i = 0; i < found && used < sizeof(buf); i++) {
+        union res_sockaddr_union s = servers[i];
+        if (s.sin.sin_len == 0) continue;
+        char address[NI_MAXHOST];
+        if (getnameinfo(
+                (struct sockaddr *) &s.sin, s.sin.sin_len, address,
+                sizeof(address), NULL, 0, NI_NUMERICHOST) != 0) {
+            continue;
+        }
+        int n = snprintf(buf + used, sizeof(buf) - used, "nameserver %s\n",
+                address);
+        if (n < 0) break;
+        used += (size_t) n;
+    }
+    res_ndestroy(&res);
+
+    struct fd *fd =
+            generic_open("/etc/resolv.conf", O_WRONLY_ | O_CREAT_ | O_TRUNC_, 0666);
+    if (IS_ERR(fd)) {
+        printk("ish: could not open /etc/resolv.conf for writing\n");
+        return;
+    }
+    fd->ops->write(fd, buf, used);
+    fd_close(fd);
+}
+
 void ish_boot(const char *rootfs_dir) {
     if (ish_booted) return;
     // The subset of xX_main_Xx + the app's own boot (AppDelegate -boot) that
@@ -84,6 +143,7 @@ void ish_boot(const char *rootfs_dir) {
     create_some_device_nodes();
     do_mount(&procfs, "proc", "/proc", "", 0);
     do_mount(&devptsfs, "devpts", "/dev/pts", "", 0);
+    configure_dns();
     ish_booted = true;
 }
 
