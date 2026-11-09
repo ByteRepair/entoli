@@ -1,5 +1,6 @@
 import "dart:async";
 
+import "../../../../core/log.dart";
 import "cli.dart";
 
 /// One sign-in of a CLI's program, run the way the program runs its own: it
@@ -18,12 +19,18 @@ class CliSignIn {
       _process.errors.listen((chunk) => _scan(_errors.add(chunk))),
     ];
     result = _process.exitCode.then((code) async {
-      _scan(_errors.rest);
+      final said = _errors.rest.trim();
+      _scan(said);
       if (!_page.isCompleted) _page.complete(null);
       for (final sub in _subs) {
         unawaited(sub.cancel());
       }
-      return code == 0 && !_cancelled && await _provider.signedIn();
+      final signedIn = code == 0 && !_cancelled && await _provider.signedIn();
+      if (!signedIn) {
+        _failure = "sign-in exited $code${said.isEmpty ? "" : ":\n$said"}";
+        logFailure("cli", _failure!);
+      }
+      return signedIn;
     });
   }
 
@@ -37,6 +44,14 @@ class CliSignIn {
   final _errors = _Lines();
   final _page = Completer<Uri?>();
   var _cancelled = false;
+
+  /// What the program said on its error output as it ended, for a failed
+  /// sign-in to explain itself; null once it succeeded.
+  String? _failure;
+
+  /// Why the sign-in failed, once [result] is false: the exit code and the
+  /// program's own last words on its error output.
+  String? get failure => _failure;
 
   /// The first link the program prints, which is the page to sign in on;
   /// null where it exits having printed none.

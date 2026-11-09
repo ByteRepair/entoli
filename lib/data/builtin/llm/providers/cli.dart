@@ -309,8 +309,16 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   }
 
   /// Whether the program is signed in, by its own [statusArguments].
-  Future<bool> signedIn() async =>
-      (await _exitOf(await run(statusArguments))).code == 0;
+  Future<bool> signedIn() async {
+    final (code: code, said: said) = await _exitOf(await run(statusArguments));
+    if (code != 0 && said.toString().isNotEmpty) {
+      logFailure(
+        "cli",
+        "${config.displayName} sign-in status exited $code: $said",
+      );
+    }
+    return code == 0;
+  }
 
   /// Signs the program out, by its own [signOutArguments]; whether it was
   /// signed in or not, it is not after.

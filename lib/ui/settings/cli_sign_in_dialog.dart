@@ -99,7 +99,7 @@ class _CliSignInDialogState extends ConsumerState<CliSignInDialog> {
         }),
       );
       if (await signIn.result) return _finish(true);
-      _show(const _Failed("The sign-in did not finish."));
+      _show(_Failed(signIn.failure ?? "The sign-in did not finish."));
     } catch (e) {
       logFailure("cli", "connecting ${_cli.config.displayName} failed", e);
       _show(_Failed("$e"));
