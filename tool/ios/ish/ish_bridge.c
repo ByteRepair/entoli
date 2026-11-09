@@ -487,9 +487,15 @@ static ish_pipe_session *pipe_sessions = NULL;
 // then one byte in the wake pipe so a poll parked beside the program's stdio
 // returns. Nothing here may take pids_lock again, and the write is a single
 // byte into a pipe nothing else fills, so it cannot block a do_exit.
+//
+// The match is on tgid, not pid: the hook fires with `current` as the *last*
+// thread of the group to die, and its pid is its own thread id — only the
+// group leader's pid equals the tgid stored at init. A multi-threaded program
+// (codex, claude — tokio, jemalloc) always exits from a non-leader thread, so
+// a pid match would never fire and the exit code would read -1 forever.
 static void pipe_exit_hook(struct task *task, int code) {
     for (ish_pipe_session *s = pipe_sessions; s != NULL; s = s->next) {
-        if (s->pid != task->pid) continue;
+        if (s->pid != task->tgid) continue;
         atomic_store(&s->exited, true);
         // code & 0xff != 0 is a signal death (the bare signal number); a
         // normal exit has status in the high byte. Report the shell's shape:
