@@ -494,15 +494,8 @@ static ish_pipe_session *pipe_sessions = NULL;
 // (codex, claude — tokio, jemalloc) always exits from a non-leader thread, so
 // a pid match would never fire and the exit code would read -1 forever.
 static void pipe_exit_hook(struct task *task, int code) {
-    fprintf(stderr,
-            "[ish-pipe] exit hook: tgid=%d pid=%d code=%d\n",
-            (int) task->tgid, (int) task->pid, code);
     for (ish_pipe_session *s = pipe_sessions; s != NULL; s = s->next) {
-        fprintf(stderr, "[ish-pipe]   session pid=%d\n", (int) s->pid);
         if (s->pid != task->tgid) continue;
-        fprintf(stderr, "[ish-pipe]   MATCH pid=%d -> code8=%d\n",
-                (int) s->pid,
-                (code & 0xff) != 0 ? 128 + (code & 0xff) : (code >> 8));
         atomic_store(&s->exited, true);
         // code & 0xff != 0 is a signal death (the bare signal number); a
         // normal exit has status in the high byte. Report the shell's shape:
@@ -516,7 +509,6 @@ static void pipe_exit_hook(struct task *task, int code) {
         }
         return;
     }
-    fprintf(stderr, "[ish-pipe]   NO MATCH for tgid=%d\n", (int) task->tgid);
 }
 
 ish_pipe_session *ish_pipe_init(
@@ -652,9 +644,6 @@ ish_pipe_session *ish_pipe_init(
     pipe_sessions = s;
     unlock(&pids_lock);
 
-    fprintf(stderr, "[ish-pipe] init: pid=%d tgid=%d\n",
-            (int) task->pid, (int) task->tgid);
-
     task_start(task);
 
     *error = NULL;
@@ -698,17 +687,29 @@ int32_t ish_pipe_poll(ish_pipe_session *session) {
             if (errno == EINTR) continue;
             return -1;
         }
+        // The wake byte is the single authoritative end signal: do_exit closes
+        // the process's fds before it runs the exit hook, so a stream's EOF is
+        // always visible before the exit code the hook stores. Reading that EOF
+        // as the end races ahead of the code and reports -1. So a stream at EOF
+        // is dropped from the poll (fd set to -1, which poll ignores) and the
+        // wait goes on for the wake pipe alone.
+        if ((fds[2].revents & (POLLIN | POLLHUP | POLLERR)) != 0) return 4;
         int32_t flags = 0;
-        // POLLIN alone, never POLLHUP/POLLERR: a write-end close is not the
-        // end of the process. do_exit releases the fds before it runs the exit
-        // hook, so the stdout EOF is visible here before the exit code the
-        // hook stores. Reading the EOF as the end races ahead of that code and
-        // reports -1. The wake byte is the authoritative end; until it lands,
-        // the poll parks on the wake pipe.
-        if ((fds[0].revents & POLLIN) != 0) flags |= 1;
-        if ((fds[1].revents & POLLIN) != 0) flags |= 2;
-        if ((fds[2].revents & POLLIN) != 0) flags |= 4;
-        return flags;
+        if (fds[0].fd >= 0) {
+            if ((fds[0].revents & POLLIN) != 0) {
+                flags |= 1;
+            } else if ((fds[0].revents & (POLLHUP | POLLERR)) != 0) {
+                fds[0].fd = -1;
+            }
+        }
+        if (fds[1].fd >= 0) {
+            if ((fds[1].revents & POLLIN) != 0) {
+                flags |= 2;
+            } else if ((fds[1].revents & (POLLHUP | POLLERR)) != 0) {
+                fds[1].fd = -1;
+            }
+        }
+        if (flags != 0) return flags;
     }
 }
 
