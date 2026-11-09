@@ -688,8 +688,14 @@ int32_t ish_pipe_poll(ish_pipe_session *session) {
             return -1;
         }
         int32_t flags = 0;
-        if ((fds[0].revents & (POLLIN | POLLHUP | POLLERR)) != 0) flags |= 1;
-        if ((fds[1].revents & (POLLIN | POLLHUP | POLLERR)) != 0) flags |= 2;
+        // POLLIN alone, never POLLHUP/POLLERR: a write-end close is not the
+        // end of the process. do_exit releases the fds before it runs the exit
+        // hook, so the stdout EOF is visible here before the exit code the
+        // hook stores. Reading the EOF as the end races ahead of that code and
+        // reports -1. The wake byte is the authoritative end; until it lands,
+        // the poll parks on the wake pipe.
+        if ((fds[0].revents & POLLIN) != 0) flags |= 1;
+        if ((fds[1].revents & POLLIN) != 0) flags |= 2;
         if ((fds[2].revents & POLLIN) != 0) flags |= 4;
         return flags;
     }
