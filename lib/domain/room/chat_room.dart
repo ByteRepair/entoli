@@ -602,9 +602,11 @@ class ChatRoom {
   /// are a goal record alone, after the last message, and land mid-turn too:
   /// the running turn reads the goal at its next stop. A command that changes
   /// nothing — `/goal` alone, a clear with nothing to clear, a pause of one
-  /// already paused, a set refused mid-turn — writes a [GoalChange.answered]
-  /// row instead, so the answer reads where every other change is read. See
-  /// "Goals" in `lib/domain/AGENTS.md`.
+  /// already paused, a resume of nothing — writes a [GoalChange.answered] row
+  /// instead, so the answer reads where every other change is read. A set or
+  /// resume refused because a turn is running is not one of those: it is not
+  /// answerable yet, only too early, and it still writes `status`. See "Goals"
+  /// in `lib/domain/AGENTS.md`.
   Future<void> _goalCommand(GoalCommand command) async {
     final chat = state.chat;
     if (chat == null) return;
