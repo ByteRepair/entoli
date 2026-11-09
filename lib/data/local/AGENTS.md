@@ -208,8 +208,7 @@ for gh and ESBMC) are the one deliberate exception to the checksum pinning
 everywhere else in this app, because "Run Setup" is a button the user pressed
 rather than a download the app decided on; Android and iOS share the selected
 guest rootfs across projects, so setup installs packages once into that global
-tree. Migration 7.6.0 removes the obsolete per-project Byte Repair rootfs copy
-from earlier releases. iSH's fakefs is also no host tree of the store's:
+tree. iSH's fakefs is also no host tree of the store's:
 imports cannot write into it, and environment deletion leaves its shared
 packages alone.
 
@@ -302,9 +301,7 @@ one and a `cp` that has to read one does too — both were live on a device. So
 The selected rootfs is shared across projects, so setup does not copy it.
 Terminal rootfs deletion still goes through `removeTree`, which `chmod -R u+rwX`es
 first because a guest `chmod` is a real one on the host and may have closed
-directories that have to be reopened to be deleted. Migration 7.6.0 removes the
-legacy Byte Repair copy and clears its setup marker, since that marker certified
-tools in the removed copy.
+directories that have to be reopened to be deleted.
 
 **`HOME` inside the guest is the project's workspace, not `/root`.** The rootfs
 is one directory shared by every project and outside what a backup carries, so a

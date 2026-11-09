@@ -3,7 +3,6 @@ import "dart:io";
 
 import "package:path/path.dart" as p;
 
-import "../data/local/tree_ops.dart" show removeTree;
 import "../domain/documents.dart";
 
 /// A change to the data directory that a release makes once, to files an
@@ -28,23 +27,7 @@ String migrationStamp(String dataDir) => p.join(dataDir, "version");
 
 /// The chain, oldest first: each entry moves what the one above it left, and
 /// nothing older.
-const List<Migration> migrations = [
-  Migration("7.5.0", _athena),
-  Migration("7.6.0", _sharedTerminal),
-];
-
-/// 7.6.0: guest root filesystems are shared across projects. Remove the old
-/// Byte Repair copy; its packages are replaced by setup in the shared rootfs.
-Future<void> _sharedTerminal(String dataDir) async {
-  final byteRepair = p.join(dataDir, "projects", "byte-repair");
-  final oldRootfs = Directory(p.join(byteRepair, "rootfs"));
-  final error = await removeTree(oldRootfs.path);
-  if (error != null) throw FileSystemException(error, oldRootfs.path);
-  // The marker certified setup inside that copy. It cannot certify tools in
-  // the shared rootfs, so require setup to run again there.
-  final marker = File(p.join(byteRepair, ".setup-complete"));
-  if (marker.existsSync()) await marker.delete();
-}
+const List<Migration> migrations = [Migration("7.5.0", _athena)];
 
 /// 7.5.0: the main agent is Athena, a participant like any other. Every
 /// reply names its author and every say whom it was for, so a reply with no
