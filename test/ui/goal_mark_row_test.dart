@@ -37,6 +37,31 @@ void main() {
     expect(find.text(goalKickoff("the tests pass")), findsOneWidget);
   });
 
+  testWidgets("an answer says no change rather than naming a state it has not "
+      "left the goal in", (tester) async {
+    const answered = GoalMark(
+      afterMessageId: "ask",
+      change: GoalChange.answered,
+      objective: "Goal: none was set",
+      reason: "No goal was set",
+    );
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(body: GoalMarkRow(mark: answered)),
+        ),
+      ),
+    );
+    expect(find.text("Goal answered: Goal: none was set"), findsOneWidget);
+
+    await tester.tap(find.text("Goal answered: Goal: none was set"));
+    await tester.pumpAndSettle();
+
+    // Not "Now: no goal": the row moved nothing, and a goal may still stand.
+    expect(find.text("No change"), findsOneWidget);
+    expect(find.text("No goal was set"), findsOneWidget);
+  });
+
   test("the row goes after the message its record names", () {
     final at = DateTime.utc(2026, 11, 6);
     final chat = Chat(
