@@ -368,37 +368,44 @@ class _NewChatState extends ConsumerState<_NewChat> {
     final at = ref.watch(selectedProjectProvider);
     final project = at.project;
     if (_starting) return const SizedBox.shrink();
-    // A paired device's project: its setup and its voice are that device's.
-    if (at.device != null) {
-      if (ref.watch(projectFrozenProvider(at))) return const ViewOnlyBar();
-      return _composerOf(
-        ref,
-        Composer(
-          controller: _controller,
-          agentSpeaking: false,
-          onSend: _send,
-          onAbort: () {},
-          project: project,
-          device: at.device,
-          workspace: null,
-        ),
-      );
-    }
-    if (ref.watch(setupCompleteProvider(project))) {
-      return _composerOf(
-        ref,
-        Composer(
-          controller: _controller,
-          agentSpeaking: false,
-          onSend: _send,
-          onAbort: () {},
-          project: project,
-          onVoice: () => startVoiceChat(context, ref, meta: _meta),
-          workspace: null,
-        ),
-      );
-    }
-    return const NeedsSetupBar();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const _CommandHint(),
+        if (at.device != null)
+          // A paired device's project: its setup and its voice are that
+          // device's.
+          ref.watch(projectFrozenProvider(at))
+              ? const ViewOnlyBar()
+              : _composerOf(
+                  ref,
+                  Composer(
+                    controller: _controller,
+                    agentSpeaking: false,
+                    onSend: _send,
+                    onAbort: () {},
+                    project: project,
+                    device: at.device,
+                    workspace: null,
+                  ),
+                )
+        else if (ref.watch(setupCompleteProvider(project)))
+          _composerOf(
+            ref,
+            Composer(
+              controller: _controller,
+              agentSpeaking: false,
+              onSend: _send,
+              onAbort: () {},
+              project: project,
+              onVoice: () => startVoiceChat(context, ref, meta: _meta),
+              workspace: null,
+            ),
+          )
+        else
+          const NeedsSetupBar(),
+      ],
+    );
   }
 
   @override
@@ -579,10 +586,10 @@ class _EmptyChat extends ConsumerWidget {
   }
 }
 
-/// The start page's chips: a `/skill` or `@agent` per thing the library holds,
-/// or the line saying how to reach them where it holds nothing. Discovery is a
-/// choice, so the row is drawn only while `showCommandChipsProvider` says the
-/// user asked for it — see "The chat page" in AGENTS.md.
+/// The start page's chips: a `/skill` or `@agent` per thing the library holds.
+/// Discovery is a choice, so the row is drawn only while
+/// `showCommandChipsProvider` says the user asked for it — see "The chat page"
+/// in AGENTS.md.
 ///
 /// A widget of its own rather than a block of `_EmptyChat` so the library is
 /// watched only while the row is on screen: a library reload walks every
@@ -617,44 +624,44 @@ class _StarterChips extends ConsumerWidget {
       padding: const EdgeInsets.only(top: 20),
       child: ChipRow(
         settled: true,
-        entries: starters.isEmpty
-            ? [
-                // Nothing to offer is said as an entry of the same row, so a
-                // library emptying or filling animates it the way any chip
-                // arrives and leaves.
-                ChipRowEntry(
-                  key: const ValueKey("empty"),
-                  child: Text(
-                    "Type / for commands, @ for agents.",
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
+        entries: [
+          for (final starter in starters)
+            ChipRowEntry(
+              key: ValueKey("${starter.kind.trigger}${starter.option.name}"),
+              child: ActionChip(
+                label: Text("${starter.kind.trigger}${starter.option.name}"),
+                labelStyle: labelStyle,
+                // Null rather than the empty string: `Chip` builds a
+                // `Tooltip` for whatever it is given, and an empty one is a
+                // blank box on a long press.
+                tooltip: starter.option.description,
+                onPressed: () => insertCompletion(
+                  controller,
+                  starter.kind,
+                  starter.option.name,
                 ),
-              ]
-            : [
-                for (final starter in starters)
-                  ChipRowEntry(
-                    key: ValueKey(
-                      "${starter.kind.trigger}${starter.option.name}",
-                    ),
-                    child: ActionChip(
-                      label: Text(
-                        "${starter.kind.trigger}${starter.option.name}",
-                      ),
-                      labelStyle: labelStyle,
-                      // Null rather than the empty string: `Chip` builds a
-                      // `Tooltip` for whatever it is given, and an empty one
-                      // is a blank box on a long press.
-                      tooltip: starter.option.description,
-                      onPressed: () => insertCompletion(
-                        controller,
-                        starter.kind,
-                        starter.option.name,
-                      ),
-                    ),
-                  ),
-              ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CommandHint extends StatelessWidget {
+  const _CommandHint();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
+      child: Text(
+        "Type / for commands, @ for agents.",
+        textAlign: TextAlign.center,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.outline,
+        ),
       ),
     );
   }

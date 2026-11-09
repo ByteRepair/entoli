@@ -158,7 +158,6 @@ void main() {
       await openEmpty(tester);
 
       expect(find.byType(ActionChip), findsNothing);
-      expect(find.text("Type / for commands, @ for agents."), findsNothing);
 
       await showChips(tester);
 
@@ -878,16 +877,6 @@ void main() {
       expect(typed(tester), "look here @explore ");
     });
 
-    testWidgets("with nothing to offer it says how to reach them", (
-      tester,
-    ) async {
-      app.dispose();
-      app = TestApp.create(library: PromptLibrary.empty);
-      await openBlank(tester);
-
-      expect(find.text("Type / for commands, @ for agents."), findsOneWidget);
-    });
-
     // Everything the user has written is a menu, and `/` opens the menu. The
     // screen scrolls, so nothing is held back to keep the page short.
     testWidgets("offers every command there is, not a handful of them", (
@@ -1502,6 +1491,9 @@ void main() {
         mirrorOf("d1", "Desktop", makeState("r1", project: "work")),
       ]);
 
+      // The screen scrolls, and a paired device's badges sit under this
+      // device's: on a short window they are past the fold.
+      await scrollTo(tester, deviceChip("work"));
       await tester.tap(deviceChip("work"));
       await tester.pumpAndSettle();
       expect(app.container.read(selectedProjectProvider), (
