@@ -33,6 +33,9 @@
 #include "tools/fakefs.h"
 #include "kernel/calls.h"
 #include "kernel/errno.h"
+#include "kernel/init.h"
+#include "kernel/task.h"
+#include "kernel/signal.h"
 #include "fs/path.h"
 #include "fs/real.h"
 
@@ -408,6 +411,277 @@ void ish_session_destroy(ish_session *session) {
     }
     free(session);
 }
+
+// ---- pipe sessions (a guest program run directly) ----
+
+// The registry of live pipe sessions the exit hook walks, one node per session.
+// Guarded by pids_lock: the hook runs under it (do_exit holds it), and
+// init/destroy take it around their own list edits.
+static ish_pipe_session *pipe_sessions = NULL;
+
+// The kernel's exit hook for pipe sessions. do_exit calls it under pids_lock
+// when a task's whole thread group has exited, with the task and its raw status
+// (status << 8 for a normal exit, the bare signal number for a signal death —
+// the same encoding xX_main_Xx's exit_handler decodes). It finds the session
+// whose pid matches and announces the exit: the atomics for the worker to read,
+// then one byte in the wake pipe so a poll parked beside the program's stdio
+// returns. Nothing here may take pids_lock again, and the write is a single
+// byte into a pipe nothing else fills, so it cannot block a do_exit.
+static void pipe_exit_hook(struct task *task, int code) {
+    for (ish_pipe_session *s = pipe_sessions; s != NULL; s = s->next) {
+        if (s->pid != task->pid) continue;
+        atomic_store(&s->exited, true);
+        // code & 0xff != 0 is a signal death (the bare signal number); a
+        // normal exit has status in the high byte. Report the shell's shape:
+        // 0-255, or 128+signal.
+        int code8 = (code & 0xff) != 0 ? 128 + (code & 0xff) : (code >> 8);
+        atomic_store(&s->exit_code, code8);
+        if (s->wake_write >= 0) {
+            char wake = 0;
+            ssize_t unused = write(s->wake_write, &wake, 1);
+            (void) unused;
+        }
+        return;
+    }
+}
+
+ish_pipe_session *ish_pipe_init(
+    const char *rootfs_dir,
+    const char *data_dir,
+    const char *home,
+    const char *cwd,
+    const char **argv,
+    int32_t argc,
+    const char **env,
+    int32_t env_count,
+    const char **read_only,
+    int32_t read_only_count,
+    const char **error)
+{
+    if (!ish_booted) {
+        ish_boot(rootfs_dir);
+        if (!ish_booted) {
+            *error = "the rootfs could not be mounted; is it installed?";
+            return NULL;
+        }
+    }
+    if (data_dir[0] != '\0') {
+        bind_data_dir(data_dir);
+        bind_read_only(read_only, read_only_count);
+    }
+    if (home[0] != '\0' && cwd[0] != '\0') {
+        bind_workspace(home);
+    }
+
+    ish_pipe_session *s = calloc(1, sizeof(*s));
+    if (!s) {
+        *error = "out of memory";
+        return NULL;
+    }
+    s->stdin_write = -1;
+    s->stdout_read = -1;
+    s->stderr_read = -1;
+    s->wake_read = -1;
+    s->wake_write = -1;
+    atomic_init(&s->exited, false);
+    atomic_init(&s->exit_code, -1);
+
+    // Three host pipes — stdin, stdout, and a separate stderr so the program's
+    // diagnostics do not mix into the JSON lines the caller parses — plus the
+    // wake pipe the exit's byte lands in.
+    int stdin_pipe[2] = {-1, -1};
+    int stdout_pipe[2] = {-1, -1};
+    int stderr_pipe[2] = {-1, -1};
+    int wake_pipe[2] = {-1, -1};
+    if (pipe(stdin_pipe) < 0 || pipe(stdout_pipe) < 0 ||
+        pipe(stderr_pipe) < 0 || pipe(wake_pipe) < 0) {
+        *error = "failed to create the session pipes";
+        goto fail;
+    }
+    int wake_flags = fcntl(wake_pipe[0], F_GETFL, 0);
+    if (wake_flags >= 0) {
+        fcntl(wake_pipe[0], F_SETFL, wake_flags | O_NONBLOCK);
+    }
+
+    if (become_new_init_child() < 0) {
+        *error = "failed to create the guest task";
+        goto fail;
+    }
+    struct task *task = current;
+
+    // fds 0, 1 and 2, each to its own host pipe end.
+    fd_t in = guest_fd_from_host(stdin_pipe[0]);
+    fd_t out = guest_fd_from_host(stdout_pipe[1]);
+    fd_t errfd = guest_fd_from_host(stderr_pipe[1]);
+    if (in != 0 || out != 1 || errfd != 2) {
+        *error = "failed to wire the guest stdio";
+        goto fail;
+    }
+
+    struct fd *pwd = generic_open(cwd, O_RDONLY_, 0);
+    if (IS_ERR(pwd)) {
+        *error = "the working directory could not be opened in the guest";
+        goto fail;
+    }
+    fs_chdir(task->fs, pwd);
+
+    // The program runs under `exec "$@"`, so a bare name resolves through the
+    // guest's PATH and the arguments reach it unsplit; the exec replaces the
+    // shell, so the pid the signals go through is the program's own.
+    const char *parts[] = {"/bin/sh", "-c", "exec \"$@\"", "sh", NULL};
+    char argv_flat[4096];
+    size_t pos = 0;
+    size_t nparts = 0;
+    for (size_t i = 0; parts[i] != NULL; i++) {
+        size_t len = strlen(parts[i]) + 1;
+        if (pos + len > sizeof(argv_flat)) break;
+        memcpy(&argv_flat[pos], parts[i], len);
+        pos += len;
+        nparts++;
+    }
+    for (int32_t i = 0; i < argc; i++) {
+        size_t len = strlen(argv[i]) + 1;
+        if (pos + len > sizeof(argv_flat)) break;
+        memcpy(&argv_flat[pos], argv[i], len);
+        pos += len;
+        nparts++;
+    }
+    argv_flat[pos] = '\0';
+
+    char envp[8192];
+    pos = 0;
+    for (int32_t i = 0; i < env_count; i++) {
+        size_t len = strlen(env[i]) + 1;
+        if (pos + len > sizeof(envp) - 1) break;
+        memcpy(&envp[pos], env[i], len);
+        pos += len;
+    }
+    envp[pos] = '\0';
+
+    if (do_execve("/bin/sh", nparts, argv_flat, envp) < 0) {
+        *error = "failed to exec the program in the guest";
+        goto fail;
+    }
+
+    s->pid = task->pid;
+    s->stdin_write = stdin_pipe[1];
+    s->stdout_read = stdout_pipe[0];
+    s->stderr_read = stderr_pipe[0];
+    s->wake_read = wake_pipe[0];
+    s->wake_write = wake_pipe[1];
+
+    // Register before the task starts, so an exit that races the first poll is
+    // still announced. The hook runs under pids_lock; take it here too.
+    lock(&pids_lock);
+    exit_hook = pipe_exit_hook;
+    s->next = pipe_sessions;
+    pipe_sessions = s;
+    unlock(&pids_lock);
+
+    task_start(task);
+
+    *error = NULL;
+    return s;
+
+fail:
+    for (int i = 0; i < 2; i++) {
+        if (stdin_pipe[i] >= 0) close(stdin_pipe[i]);
+        if (stdout_pipe[i] >= 0) close(stdout_pipe[i]);
+        if (stderr_pipe[i] >= 0) close(stderr_pipe[i]);
+        if (wake_pipe[i] >= 0) close(wake_pipe[i]);
+    }
+    free(s);
+    return NULL;
+}
+
+void ish_pipe_write(ish_pipe_session *session, const char *buf, int32_t len) {
+    if (!session || len <= 0 || session->stdin_write < 0) return;
+    ssize_t unused = write(session->stdin_write, buf, (size_t) len);
+    (void) unused;
+}
+
+void ish_pipe_close_input(ish_pipe_session *session) {
+    if (!session || session->stdin_write < 0) return;
+    close(session->stdin_write);
+    session->stdin_write = -1;
+}
+
+int32_t ish_pipe_poll(ish_pipe_session *session) {
+    if (!session) return -1;
+    struct pollfd fds[3];
+    fds[0].fd = session->stdout_read;
+    fds[0].events = POLLIN;
+    fds[1].fd = session->stderr_read;
+    fds[1].events = POLLIN;
+    fds[2].fd = session->wake_read;
+    fds[2].events = POLLIN;
+    for (;;) {
+        int nready = poll(fds, 3, -1);
+        if (nready < 0) {
+            if (errno == EINTR) continue;
+            return -1;
+        }
+        int32_t flags = 0;
+        if ((fds[0].revents & (POLLIN | POLLHUP | POLLERR)) != 0) flags |= 1;
+        if ((fds[1].revents & (POLLIN | POLLHUP | POLLERR)) != 0) flags |= 2;
+        if ((fds[2].revents & POLLIN) != 0) flags |= 4;
+        return flags;
+    }
+}
+
+int32_t ish_pipe_read(
+    ish_pipe_session *session, int32_t stream, char *buf, int32_t cap) {
+    if (!session || cap < 0) return -1;
+    int fd = stream == 0 ? session->stdout_read : session->stderr_read;
+    if (fd < 0) return -1;
+    ssize_t n = read(fd, buf, (size_t) cap);
+    if (n > 0) return (int32_t) n;
+    if (n == 0) return 0;
+    if (errno == EINTR || errno == EAGAIN) return -2;
+    return -1;
+}
+
+void ish_pipe_terminate(ish_pipe_session *session) {
+    if (!session || session->pid <= 0) return;
+    send_group_signal(session->pid, SIGTERM_, SIGINFO_NIL);
+}
+
+void ish_pipe_hangup(ish_pipe_session *session) {
+    if (!session) return;
+    if (session->pid > 0) {
+        send_group_signal(session->pid, SIGKILL_, SIGINFO_NIL);
+    }
+    if (session->wake_write >= 0) {
+        char wake = 0;
+        ssize_t unused = write(session->wake_write, &wake, 1);
+        (void) unused;
+    }
+}
+
+void ish_pipe_destroy(ish_pipe_session *session) {
+    if (!session) return;
+    if (session->pid > 0) {
+        send_group_signal(session->pid, SIGKILL_, SIGINFO_NIL);
+    }
+    if (session->stdin_write >= 0) close(session->stdin_write);
+    if (session->stdout_read >= 0) close(session->stdout_read);
+    if (session->stderr_read >= 0) close(session->stderr_read);
+    if (session->wake_read >= 0) close(session->wake_read);
+    if (session->wake_write >= 0) close(session->wake_write);
+    // Unlink from the registry.
+    lock(&pids_lock);
+    ish_pipe_session **link = &pipe_sessions;
+    while (*link != NULL && *link != session) link = &(*link)->next;
+    if (*link == session) *link = session->next;
+    unlock(&pids_lock);
+    free(session);
+}
+
+int32_t ish_pipe_exit_code(ish_pipe_session *session) {
+    if (!session) return -1;
+    return atomic_load(&session->exited) ? atomic_load(&session->exit_code) : -1;
+}
+
 
 // Convert a tarball into iSH's fakefs layout, in-process. iSH's own
 // tools/fakefsify does this against libarchive; this wraps the same

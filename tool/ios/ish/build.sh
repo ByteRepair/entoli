@@ -141,6 +141,15 @@ blinkish_bridge_renames=(
   -Dish_session_interrupt=blinkish_session_interrupt
   -Dish_session_hangup=blinkish_session_hangup
   -Dish_session_destroy=blinkish_session_destroy
+  -Dish_pipe_init=blinkish_pipe_init
+  -Dish_pipe_write=blinkish_pipe_write
+  -Dish_pipe_close_input=blinkish_pipe_close_input
+  -Dish_pipe_poll=blinkish_pipe_poll
+  -Dish_pipe_read=blinkish_pipe_read
+  -Dish_pipe_terminate=blinkish_pipe_terminate
+  -Dish_pipe_hangup=blinkish_pipe_hangup
+  -Dish_pipe_destroy=blinkish_pipe_destroy
+  -Dish_pipe_exit_code=blinkish_pipe_exit_code
 )
 
 # cpu-offsets.h is generated, not checked in: meson builds it from
@@ -275,6 +284,15 @@ build_blinkish_lib() {
     printf '_blinkish_session_interrupt\n'
     printf '_blinkish_session_hangup\n'
     printf '_blinkish_session_destroy\n'
+    printf '_blinkish_pipe_init\n'
+    printf '_blinkish_pipe_write\n'
+    printf '_blinkish_pipe_close_input\n'
+    printf '_blinkish_pipe_poll\n'
+    printf '_blinkish_pipe_read\n'
+    printf '_blinkish_pipe_terminate\n'
+    printf '_blinkish_pipe_hangup\n'
+    printf '_blinkish_pipe_destroy\n'
+    printf '_blinkish_pipe_exit_code\n'
   } > "$exportlist"
   local partial="$destdir/blinkish.o"
   ld -r "${objs[@]}" -exported_symbols_list "$exportlist" -o "$partial"

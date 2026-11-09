@@ -1006,6 +1006,43 @@ void main() {
       expect(provider.models(ModelCatalog.current), isEmpty);
     });
 
+    test("offers its models where the terminal environment can run it", () {
+      addTearDown(() => CliProvider.supportedOnDevice = null);
+      final provider = ClaudeCliProvider(
+        const LlmProviderConfig(id: "c", api: LlmApi.claudeCli, baseUrl: ""),
+      );
+      // A 64-bit guest that can install: offered.
+      CliProvider.supportedOnDevice = () => true;
+      expect(provider.models(ModelCatalog.current), isNotEmpty);
+      // Anything else (i386 guest, or no guest): not offered.
+      CliProvider.supportedOnDevice = () => false;
+      expect(provider.models(ModelCatalog.current), isEmpty);
+    });
+
+    test("hands the bare command and its own env through in the guest", () {
+      addTearDown(() {
+        CliProvider.guestMode = false;
+        CliProvider.guestWorkRoot = null;
+        CliProvider.guestHomeDir = null;
+        CliProvider.guestLaunch = null;
+      });
+      CliProvider.guestMode = true;
+      final provider = ClaudeCliProvider(
+        const LlmProviderConfig(
+          id: "c",
+          api: LlmApi.claudeCli,
+          baseUrl: "",
+          command: "claude",
+          env: {"FROM_CONFIG": "1"},
+        ),
+      );
+      // No host lookup in the guest: the bare name goes through as-is.
+      expect(provider.locate(), isNull);
+      expect(provider.executable(), "claude");
+      // Only the config's own variables: no host PATH or inherited env.
+      expect(provider.environment, {"FROM_CONFIG": "1"});
+    });
+
     test("leaves a parent Claude Code session's variables behind", () {
       const provider = ClaudeCliProvider(
         LlmProviderConfig(id: "c", api: LlmApi.claudeCli, baseUrl: ""),

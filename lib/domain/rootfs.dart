@@ -167,3 +167,28 @@ Rootfs? rootfsById(String? id) {
   }
   return null;
 }
+
+/// The terminal environment's ability to run a program: its architecture and
+/// whether a binary can be installed into it. [rootfsId] names the picked Linux
+/// (null is the host); [deviceAbi] the device's own ABI, which selects the
+/// rootfs image. A guest's `arch` is the one `uname -m` reports inside it; the
+/// host's is the device's own, except iOS, whose "ios" names no architecture
+/// because its host can run nothing at all.
+({String? arch, bool supportsInstalls}) terminalEnvironment({
+  required String? rootfsId,
+  required String? deviceAbi,
+}) {
+  final rootfs = rootfsById(rootfsId);
+  if (rootfs != null) {
+    return (
+      arch: rootfs.imageFor(deviceAbi)?.arch,
+      supportsInstalls: rootfs.packageManager.isNotEmpty,
+    );
+  }
+  return (arch: deviceAbi == "ios" ? null : deviceAbi, supportsInstalls: false);
+}
+
+/// Whether [arch] is a 64-bit one a prebuilt CLI binary (`claude`, `codex`)
+/// ships for, in the spellings the catalog and the Android ABI use.
+bool is64BitArch(String? arch) =>
+    const {"x86_64", "amd64", "aarch64", "arm64", "arm64-v8a"}.contains(arch);

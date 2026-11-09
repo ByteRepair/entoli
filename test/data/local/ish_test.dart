@@ -43,7 +43,7 @@ void main() {
       final bridge = File("tool/ios/ish/ish_bridge.c").readAsStringSync();
       for (final name in _lookedUp()) {
         final definedName = name.startsWith("blinkish_")
-            ? name.substring("blinkish_".length)
+            ? "ish_${name.substring("blinkish_".length)}"
             : name;
         final head = RegExp(
           "^[A-Za-z_][\\w \\t*]*\\b$definedName\\s*\\(",
@@ -68,7 +68,8 @@ void main() {
 
 /// The names ish_ffi.dart hands to `lookupFunction` — the lookups themselves,
 /// not every quoted `ish_` string the file may come to hold.
-Set<String> _lookedUp() => RegExp(r'lookupFunction<[^>]*>\(\s*"((?:ish|blinkish)_[a-z_]+)"')
-    .allMatches(File("lib/data/local/ish_ffi.dart").readAsStringSync())
-    .map((m) => m[1]!)
-    .toSet();
+Set<String> _lookedUp() =>
+    RegExp(r'lookupFunction<[^>]*>\(\s*"((?:ish|blinkish)_[a-z_]+)"')
+        .allMatches(File("lib/data/local/ish_ffi.dart").readAsStringSync())
+        .map((m) => m[1]!)
+        .toSet();
