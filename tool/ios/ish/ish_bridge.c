@@ -494,8 +494,15 @@ static ish_pipe_session *pipe_sessions = NULL;
 // (codex, claude — tokio, jemalloc) always exits from a non-leader thread, so
 // a pid match would never fire and the exit code would read -1 forever.
 static void pipe_exit_hook(struct task *task, int code) {
+    fprintf(stderr,
+            "[ish-pipe] exit hook: tgid=%d pid=%d code=%d\n",
+            (int) task->tgid, (int) task->pid, code);
     for (ish_pipe_session *s = pipe_sessions; s != NULL; s = s->next) {
+        fprintf(stderr, "[ish-pipe]   session pid=%d\n", (int) s->pid);
         if (s->pid != task->tgid) continue;
+        fprintf(stderr, "[ish-pipe]   MATCH pid=%d -> code8=%d\n",
+                (int) s->pid,
+                (code & 0xff) != 0 ? 128 + (code & 0xff) : (code >> 8));
         atomic_store(&s->exited, true);
         // code & 0xff != 0 is a signal death (the bare signal number); a
         // normal exit has status in the high byte. Report the shell's shape:
@@ -509,6 +516,7 @@ static void pipe_exit_hook(struct task *task, int code) {
         }
         return;
     }
+    fprintf(stderr, "[ish-pipe]   NO MATCH for tgid=%d\n", (int) task->tgid);
 }
 
 ish_pipe_session *ish_pipe_init(
@@ -643,6 +651,9 @@ ish_pipe_session *ish_pipe_init(
     s->next = pipe_sessions;
     pipe_sessions = s;
     unlock(&pids_lock);
+
+    fprintf(stderr, "[ish-pipe] init: pid=%d tgid=%d\n",
+            (int) task->pid, (int) task->tgid);
 
     task_start(task);
 

@@ -5,6 +5,7 @@ import "dart:isolate" show Isolate, ReceivePort, SendPort;
 import "dart:typed_data" show Uint8List;
 
 import "package:ffi/ffi.dart";
+import "package:flutter/foundation.dart" show debugPrint;
 
 import "../../domain/shell.dart" show guestPath;
 import "../builtin/llm/llm_client.dart" show LlmException;
@@ -77,6 +78,7 @@ class GuestCliProcess implements CliProcess {
           final delta = utf8.decode(msg[2] as Uint8List, allowMalformed: true);
           (stream == 0 ? stdout : stderr).add(delta);
         case _kExit:
+          debugPrint("[ish-pipe] main got exit ${msg[1] as int}");
           if (!exitCode.isCompleted) exitCode.complete(msg[1] as int);
           unawaited(sub.cancel());
           exitPort.close();
@@ -339,20 +341,29 @@ void _pipeEntry(
   // and end on the wake byte the exit hook (or a hangup) drops. The exit code
   // is the hook's atomic, read after the byte announces it.
   final buf = calloc<Uint8>(65536);
+  var ended = "?";
   try {
     while (true) {
       final flags = pollFn(handle);
-      if (flags < 0) break;
-      if (flags & 4 != 0) break; // the wake byte: exit, or a hangup
+      if (flags < 0) {
+        ended = "poll<0";
+        break;
+      }
+      if (flags & 4 != 0) {
+        ended = "wake";
+        break; // the wake byte: exit, or a hangup
+      }
       if (flags & 1 != 0) {
         final n = readFn(handle, 0, buf, 65536);
         if (n > 0) {
           main.send([_kOutput, 0, Uint8List.fromList(buf.asTypedList(n))]);
         } else if (n == 0) {
+          ended = "stdout-eof";
           break;
         } else if (n == -2) {
           continue;
         } else {
+          ended = "stdout-read<$n";
           break;
         }
       }
@@ -361,10 +372,12 @@ void _pipeEntry(
         if (n > 0) {
           main.send([_kOutput, 1, Uint8List.fromList(buf.asTypedList(n))]);
         } else if (n == 0) {
+          ended = "stderr-eof";
           break;
         } else if (n == -2) {
           continue;
         } else {
+          ended = "stderr-read<$n";
           break;
         }
       }
@@ -372,7 +385,9 @@ void _pipeEntry(
   } finally {
     calloc.free(buf);
   }
-  main.send([_kExit, exitCodeFn(handle)]);
+  final code = exitCodeFn(handle);
+  main.send([_kExit, code]);
+  debugPrint("[ish-pipe] worker loop ended via $ended, exitCode=$code");
 
   // The process is gone; the isolate has nothing left but a stop or destroy.
   receive.listen((msg) {
