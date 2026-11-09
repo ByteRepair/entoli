@@ -275,7 +275,20 @@ abstract class Chat with _$Chat {
 /// [answered] is the one that changes nothing: a `/goal` that had no goal to
 /// clear, or a goal to pause, and said so. It is kept so that "nothing
 /// changed" is still a row the user can read, where every other change is.
-enum GoalChange { set, resumed, paused, cleared, met, blocked, answered }
+enum GoalChange {
+  set,
+  resumed,
+  paused,
+  cleared,
+  met,
+  blocked,
+  answered;
+
+  /// Whether this moved the goal. [answered] only says what it found, so the
+  /// fold skips it and the drawer says "No change" rather than naming a state
+  /// it never left the goal in. The one place that fact is written.
+  bool get changesGoal => this != GoalChange.answered;
+}
 
 /// One change to the chat's goal, said after the message [afterMessageId] —
 /// the `/goal` that set it, the reply whose review found it met, the last

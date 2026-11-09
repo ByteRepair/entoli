@@ -2670,8 +2670,9 @@ void main() {
     /// The goal as the room holds it, and as a restart would read it back.
     ChatGoal? goalOn(String id) =>
         app.container.read(chatControllerProvider(id)).chat?.goal;
+    Future<Chat> restartedChat(String id) => app.repo.openChat(id);
     Future<ChatGoal?> goalAfterRestart(String id) async =>
-        (await app.repo.openChat(id)).goal;
+        (await restartedChat(id)).goal;
 
     test("setting one logs it after the /goal, then hands the work to a "
         "model", () async {
@@ -2789,12 +2790,11 @@ void main() {
       await waitIdle(id);
       await controller.send("/goal");
 
-      final chat = await app.repo.openChat(id);
-      final answered = chat.goals.last;
+      final answered = (await restartedChat(id)).goals.last;
       expect(answered.change, GoalChange.answered);
       expect(answered.objective, "Goal active: ship it");
       // A row, not a change: the goal stands as it did.
-      expect(chat.goal, const ChatGoal(objective: "ship it"));
+      expect(await goalAfterRestart(id), const ChatGoal(objective: "ship it"));
       expect(app.backend.prompts, hasLength(1));
     });
 
@@ -2804,10 +2804,9 @@ void main() {
 
       await controller.send("/goal clear");
 
-      final chat = await app.repo.openChat(id);
+      final chat = await restartedChat(id);
       expect(chat.goals.single.change, GoalChange.answered);
-      expect(chat.goals.single.objective, "Goal: none was set");
-      expect(chat.goals.single.reason, "No goal was set");
+      expect(chat.goals.single.objective, "No goal was set");
       expect(chat.goal, isNull);
       // A chat with nothing said in it has no message for a record to stand
       // after, so the answer is said as one — and is a row on screen for it.
@@ -2821,7 +2820,7 @@ void main() {
       await controller.send("/goal pause");
       await controller.send("/goal pause");
 
-      final chat = await app.repo.openChat(id);
+      final chat = await restartedChat(id);
       expect(chat.goals.map((g) => g.change), [
         GoalChange.set,
         GoalChange.paused,
@@ -2843,12 +2842,11 @@ void main() {
       await waitIdle(id);
       await controller.send("/goal");
 
-      final restarted = await app.repo.openChat(id);
-      expect(restarted.goals.map((g) => g.change), [
+      expect((await restartedChat(id)).goals.map((g) => g.change), [
         GoalChange.set,
         GoalChange.answered,
       ]);
-      expect(restarted.goal, const ChatGoal(objective: "ship it"));
+      expect(await goalAfterRestart(id), const ChatGoal(objective: "ship it"));
     });
   });
 
