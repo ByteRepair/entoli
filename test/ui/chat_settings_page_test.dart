@@ -47,6 +47,11 @@ void main() {
 
   // Pushes the page on a route so the save button's pop() has somewhere to go,
   // and so a second tap re-creates the page the way reopening it does.
+  //
+  // The "open" button is the root's, so its presence is also what says a saved
+  // page has finished popping. [save] waits for that, which is why this guard
+  // can trust it: deciding from a page still on its way out would pump a fresh
+  // root over the one mid-pop.
   Future<void> openPage(WidgetTester tester) async {
     if (!tester.any(find.text("open"))) {
       await app.pump(
@@ -69,9 +74,19 @@ void main() {
     await settleIo(tester);
   }
 
+  /// Save, and wait for the write rather than for the tree: `_save` lands the
+  /// meta, then the state's re-anchor, then pops, and until the pop is over the
+  /// page is still on screen writing. [settleIo]'s rounds are a guess at how long
+  /// that takes and a loaded machine outlasts it — which left a later read
+  /// seeing the old meta, and [openPage] pushing over a page still popping.
+  /// The root is what says the pop is done.
   Future<void> save(WidgetTester tester) async {
     await tester.tap(find.byTooltip("Save"));
-    await settleIo(tester);
+    await settleUntil(
+      tester,
+      () => tester.any(find.text("open")),
+      what: "the settings page to save and pop",
+    );
   }
 
   testWidgets(

@@ -22,6 +22,23 @@ void main() {
     context: context,
   );
 
+  /// The page draws its empty pane until the chat is read off disk, so a test
+  /// asserting on a card waits for the first handle rather than for the tree to
+  /// go quiet: [settleIo]'s rounds are a guess at how long that read takes, and
+  /// a loaded machine outlasts it.
+  Future<void> openUntil(
+    WidgetTester tester,
+    String chatId,
+    Finder until,
+  ) async {
+    await app.pump(tester, ContextPage(chatId: chatId), settle: false);
+    await settleUntil(
+      tester,
+      () => tester.any(until),
+      what: "the page to load",
+    );
+  }
+
   Future<String> seed(WidgetTester tester, List<Message> messages) async {
     late String id;
     await io(tester, () async {
@@ -57,8 +74,7 @@ void main() {
         author: "@reviewer",
       ),
     ]);
-    await app.pump(tester, ContextPage(chatId: id));
-    await settleIo(tester);
+    await openUntil(tester, id, find.text("@athena"));
 
     final athena = tester.getTopLeft(find.text("@athena"));
     final member = tester.getTopLeft(find.text("@reviewer"));
@@ -83,8 +99,7 @@ void main() {
         ),
       ),
     ]);
-    await app.pump(tester, ContextPage(chatId: id));
-    await settleIo(tester);
+    await openUntil(tester, id, find.text("@athena"));
 
     expect(find.byTooltip("Instructions: 3.0k tokens"), findsOneWidget);
   });

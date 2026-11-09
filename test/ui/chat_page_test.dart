@@ -1742,6 +1742,14 @@ void main() {
     });
 
     await open(tester, chat.state.id);
+    // The plan is read off disk after the page is up, so the composer being
+    // there says nothing about it: wait for the plan rather than for the tree
+    // to go quiet, which a loaded machine outlasts.
+    await settleUntil(
+      tester,
+      () => tester.any(find.text("1 of 2 tasks done")),
+      what: "the plan to be read",
+    );
 
     expect(find.text("The fix"), findsOneWidget);
     expect(find.text("1 of 2 tasks done"), findsOneWidget);
