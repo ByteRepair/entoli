@@ -1,5 +1,5 @@
 import "dart:async";
-import "dart:convert" show utf8;
+import "dart:convert" show LineSplitter, utf8;
 import "dart:ffi";
 import "dart:isolate" show Isolate, ReceivePort, SendPort;
 import "dart:typed_data" show Uint8List;
@@ -138,7 +138,7 @@ class GuestCliProcess implements CliProcess {
   bool _closed = false;
 
   @override
-  Stream<String> get lines => stdout.stream;
+  Stream<String> get lines => stdout.stream.transform(const LineSplitter());
 
   @override
   Stream<String> get errors => stderr.stream;
@@ -148,8 +148,9 @@ class GuestCliProcess implements CliProcess {
     if (_closed) return;
     final fn = blinkish ? blinkishPipeWriteFn : ishPipeWriteFn;
     if (fn == null) return;
-    final ptr = line.toNativeUtf8();
-    fn(Pointer.fromAddress(handle), ptr, line.length);
+    final text = "$line\n";
+    final ptr = text.toNativeUtf8();
+    fn(Pointer.fromAddress(handle), ptr, text.length);
     calloc.free(ptr);
   }
 
