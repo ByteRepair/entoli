@@ -1023,49 +1023,31 @@ void main() {
     });
 
     test(
-      "a goal CLEARED while the reviewer reads is not sent back either",
+      "a goal cleared or paused while the reviewer reads is not sent back",
       () async {
-        final client = FakeLlmClient([
-          [saidOnly("Done.")],
-        ]);
-        final goal = FakeGoal(const ChatGoal(objective: "ship"));
-        final reviewer = FakeGoalReviewer([
-          const GoalVerdict(GoalVerdictKind.carryOn, "Not yet."),
-        ], whileReading: () => goal.goal = null);
+        for (final left in [
+          null,
+          const ChatGoal(objective: "ship", status: GoalStatus.paused),
+        ]) {
+          final client = FakeLlmClient([
+            [saidOnly("Done.")],
+          ]);
+          final goal = FakeGoal(const ChatGoal(objective: "ship"));
+          final reviewer = FakeGoalReviewer([
+            const GoalVerdict(GoalVerdictKind.carryOn, "Not yet."),
+          ], whileReading: () => goal.goal = left);
 
-        final events = await agentOver(
-          client,
-          goal: goal.read,
-          goalReviewer: reviewer,
-        ).run(userMessage("go")).toList();
+          final events = await agentOver(
+            client,
+            goal: goal.read,
+            goalReviewer: reviewer,
+          ).run(userMessage("go")).toList();
 
-        expect(events.whereType<SteerEvent>(), isEmpty);
-        expect(moved(events), isEmpty);
+          expect(events.whereType<SteerEvent>(), isEmpty);
+          expect(moved(events), isEmpty);
+        }
       },
     );
-
-    test("a goal paused while the reviewer reads is not sent back", () async {
-      final client = FakeLlmClient([
-        [saidOnly("Done.")],
-      ]);
-      final goal = FakeGoal(const ChatGoal(objective: "ship"));
-      final reviewer = FakeGoalReviewer(
-        [const GoalVerdict(GoalVerdictKind.carryOn, "Not yet.")],
-        whileReading: () => goal.goal = const ChatGoal(
-          objective: "ship",
-          status: GoalStatus.paused,
-        ),
-      );
-
-      final events = await agentOver(
-        client,
-        goal: goal.read,
-        goalReviewer: reviewer,
-      ).run(userMessage("go")).toList();
-
-      expect(events.whereType<SteerEvent>(), isEmpty);
-      expect(moved(events), isEmpty);
-    });
   });
 
   group("with no shell to run anything", () {

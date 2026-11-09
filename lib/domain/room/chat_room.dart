@@ -613,17 +613,26 @@ class ChatRoom {
       case GoalShow():
         await _answerGoal(command, goal);
       case GoalPause():
-        if (goal == null || !goal.isActive) return _answerGoal(command, goal);
+        if (goal == null || !goal.isActive) {
+          await _answerGoal(command, goal);
+          return;
+        }
         await _markGoal(
           GoalChange.paused,
           goal.objective,
           reason: "Paused by you.",
         );
       case GoalClear():
-        if (goal == null) return _answerGoal(command, goal);
+        if (goal == null) {
+          await _answerGoal(command, goal);
+          return;
+        }
         await _markGoal(GoalChange.cleared, goal.objective);
       case GoalResume():
-        if (goal == null) return _answerGoal(command, goal);
+        if (goal == null) {
+          await _answerGoal(command, goal);
+          return;
+        }
         if (state.isRunning) {
           // Said on the running turn's next step, which is the only place it
           // can be read: a resume is a turn, and one turn per participant.
@@ -650,19 +659,13 @@ class ChatRoom {
   /// A record names the message it stands after, and a chat with nothing said
   /// in it has none — so the answer lands as a message of its own first, as
   /// `!` and `/compact` do. Without it a clear on a fresh chat would be the one
-  /// command with nothing to show, which is the case that started this.
+  /// command with nothing to show, which is the case that started this. That
+  /// message is the answer's own; nothing addresses a model with it.
   Future<void> _answerGoal(GoalCommand command, ChatGoal? goal) async {
-    final objective = goalAnswer(goal);
-    final reason = goal == null ? "No goal was set" : null;
-    final chat = state.chat;
-    if (chat == null) return;
-    if (chat.messages.isEmpty) {
-      await _land([
-        _repo.composeUserPrompt(command.text, project: chat.state.project),
-      ]);
-      if (state.chat == null) return;
+    if (state.chat?.messages.isEmpty ?? false) {
+      await _land([_composeSay(command.text, const [])]);
     }
-    await _markGoal(GoalChange.answered, objective, reason: reason);
+    await _markGoal(GoalChange.answered, goalAnswer(goal));
   }
 
   /// A goal record after [after] — the last message on the thread where the

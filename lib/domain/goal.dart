@@ -74,7 +74,7 @@ GoalStatus? goalStatusAfter(GoalChange change) => switch (change) {
 ChatGoal? goalOf(Iterable<GoalMark> marks) {
   ChatGoal? goal;
   for (final mark in marks) {
-    if (mark.change == GoalChange.answered) continue;
+    if (!mark.change.changesGoal) continue;
     final starts = mark.change == GoalChange.set;
     if (!starts && goal?.objective != mark.objective) continue;
     goal = switch (goalStatusAfter(mark.change)) {
@@ -217,27 +217,24 @@ String goalNudge(String objective, String reason, String? next) =>
           "evidence. If you are blocked, say so plainly and stop.",
     ]);
 
-/// The status line for `/goal` alone, and the goal row's tooltip.
-String goalSummary(ChatGoal? goal) {
-  if (goal == null) return "No goal is set. Set one with /goal <objective>";
-  return [
-    "${goalStatusLabel(goal.status)}: ${goal.objective}",
-    ?goal.reason,
-  ].join(" · ");
-}
+/// Where a goal stands, in one line: "Goal active: ship it". The one wording
+/// for it, so the strip's tooltip and a row that reports one cannot drift.
+String goalHeadline(ChatGoal goal) =>
+    "${goalStatusLabel(goal.status)}: ${goal.objective}";
 
-/// What a `/goal` that changed nothing says, as the row it leaves.
+/// The status line for the goal row's tooltip.
+String goalSummary(ChatGoal? goal) => goal == null
+    ? "No goal is set. Set one with /goal <objective>"
+    : [goalHeadline(goal), ?goal.reason].join(" · ");
+
+/// What a `/goal` that changed nothing found, as the row it leaves.
 ///
 /// A command that changes no goal — a clear with nothing to clear, a pause of
-/// a goal already paused, `/goal` alone — writes no `goal` record, because a
-/// record is a change and there was none. It still has to be answered, and the
-/// answer is the same row every other change leaves: a change that was asked
-/// for and not made is worth reading, and a status line is drawn only beside a
-/// running turn's spinner, which is not where a goal command is usually said.
-String goalAnswer(ChatGoal? goal) => switch (goal) {
-  null => "Goal: none was set",
-  final goal => "${goalStatusLabel(goal.status)}: ${goal.objective}",
-};
+/// a goal already paused, `/goal` alone — reports rather than changes, so its
+/// row is worded as the answer it is: the state it found, or that there was
+/// none. See [GoalChange.answered].
+String goalAnswer(ChatGoal? goal) =>
+    goal == null ? "No goal was set" : goalHeadline(goal);
 
 /// What a goal standing at [status] is called on screen.
 String goalStatusLabel(GoalStatus status) => switch (status) {
