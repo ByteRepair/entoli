@@ -1,10 +1,12 @@
 import "dart:async";
+import "dart:ffi" show Abi;
 import "dart:ui" show AppExitResponse;
 
 import "package:flutter/foundation.dart" show defaultTargetPlatform;
 import "package:flutter/material.dart";
 import "package:flutter/scheduler.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:path/path.dart" as p;
 
 import "core/config.dart";
 import "core/platform/app_icon.dart";
@@ -16,6 +18,7 @@ import "core/tls.dart";
 import "data/backup.dart" show recoverRestore;
 import "data/builtin/llm/providers/cli.dart" show CliProvider;
 import "data/local/proot.dart" show ProotCliGuest;
+import "data/local/ish_pipe.dart" show IshCliGuest;
 import "data/builtin/llm/providers/provider.dart" show LlmProvider;
 import "data/local/mlx_engine.dart" show mlxChannel;
 import "data/local/file_trigger_store.dart";
@@ -34,6 +37,7 @@ import "domain/intent_action.dart" show IntentRegistry;
 import "domain/app_settings.dart" show AppSettings;
 import "domain/trigger_manager.dart" show TriggerRegistryFactory;
 import "domain/project.dart" show everyProject;
+import "domain/rootfs.dart" show alpine64;
 import "domain/prompt_library.dart";
 import "domain/sync/identity.dart";
 import "providers.dart";
@@ -230,7 +234,9 @@ class AppSession {
     // A CLI provider's program is found on the PATH the user's shell has,
     // as a command is.
     CliProvider.loginPath = await loginPath;
-    CliProvider.cacheRoot = cache;
+    CliProvider.cacheRoot = defaultTargetPlatform == TargetPlatform.iOS
+        ? p.join(config.dataDir, "cli-cache")
+        : cache;
     // Android runs a CLI's program in its Linux, under the proot its
     // terminal runs commands under; a build without proot runs none.
     if (toolset?.proot case final proot?) {
@@ -238,6 +244,14 @@ class AppSession {
         proot: proot,
         store: rootfs,
         rootfsId: () => AppSettings.load(config).rootfsId,
+      );
+    } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+      // CLI release assets must target Linux x86-64 musl, not the iPhone's
+      // arm64 host ABI. The guest is alpine64.
+      CliProvider.abi = Abi.linuxX64;
+      CliProvider.guest = IshCliGuest(
+        rootfsDir: () => rootfs.directoryOfSync(alpine64.id) ?? "",
+        dataDir: config.dataDir,
       );
     }
     final backend = platform.createBackend(

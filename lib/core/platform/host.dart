@@ -156,14 +156,7 @@ ShellDriver? platformDriver({
   final baseDir = rootfs != null && store != null
       ? store.directoryOfSync(rootfs.id)
       : null;
-  final isolated =
-      project != null && builtinProjectOf(project)?.rootfsIsolation == true;
   if (rootfs != null && proot != null && baseDir != null) {
-    // An isolated project runs its own rootfs copy so guest installs do not
-    // leak between projects; the cached download is only the template.
-    final dir = (isolated && config != null)
-        ? _projectRootfsDir(config, project, rootfs.id) ?? baseDir
-        : baseDir;
     // proot refuses a binding whose host path is missing ("can't sanitize
     // binding"), and a project's skill dirs exist only after a setup or a
     // first turn. The default project's two are always there.
@@ -172,7 +165,7 @@ ShellDriver? platformDriver({
     return prootDriver(
       proot: proot,
       rootfs: rootfs,
-      rootfsDir: dir,
+      rootfsDir: baseDir,
       defaultSkillsBundledDir: defaultSkillsBundledDir,
       defaultUserSkillsDir: defaultUserSkillsDir,
       projectSkillsBundledDir: bindIfThere(projectSkillsBundledDir),
@@ -187,7 +180,10 @@ ShellDriver? platformDriver({
   if (Platform.isAndroid) return null;
   return LocalShell.hostDriver(
     tools: tools,
-    environment: isolated && byteRepairBinDir != null
+    environment:
+        project != null &&
+            builtinProjectOf(project)?.requiresSetup == true &&
+            byteRepairBinDir != null
         ? {
             "PATH":
                 "$byteRepairBinDir${LocalShell.listSeparator()}"
@@ -208,12 +204,6 @@ ShellDriver? platformDriver({
 /// Where the Landlock helper is compiled: the data directory rather than the
 /// OS cache, so a cache clear does not cost the compile again.
 String landlockCacheDir(AppConfig config) => p.join(config.dataDir, "landlock");
-
-/// The per-project rootfs copy, or null where it has not been made yet.
-String? _projectRootfsDir(AppConfig config, String project, String rootfsId) {
-  final dir = config.projectRootfsDir(project: project, rootfsId: rootfsId);
-  return File(p.join(dir, ".complete")).existsSync() ? dir : null;
-}
 
 /// Which rootfs a download fetches: Android's ABI, "ios" on iOS (iSH emulates
 /// x86, not the device's arm64), null on the desktops, which have no catalog.

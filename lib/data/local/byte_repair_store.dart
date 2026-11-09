@@ -21,9 +21,9 @@ import "tree_ops.dart";
 /// "Byte Repair's environment, in four variables" in the directory's
 /// AGENTS.md.
 ///
-/// "Run Setup" owns the lifecycle: copy the base rootfs into the project (for
-/// a project that opts into rootfs isolation), run the script, write the
-/// `.setup-complete` marker the chat page gates the composer on.
+/// "Run Setup" installs into the selected shared guest environment (or the
+/// desktop host), then writes the `.setup-complete` marker the chat page gates
+/// the composer on.
 ///
 class ByteRepairStore {
   ByteRepairStore({
@@ -48,7 +48,7 @@ class ByteRepairStore {
 
   final Duration installTimeout;
 
-  /// The base rootfs a copy is made from. Null where there is none.
+  /// The shared installed rootfs, used for guest imports and package metadata.
   final RootfsStore? rootfsStore;
 
   /// [homebrewPaths], or a test's own.
@@ -79,30 +79,6 @@ class ByteRepairStore {
     }
   }
 
-  /// Copies the base rootfs into the project's data directory, for a project
-  /// that opted into rootfs isolation. A no-op where no rootfs is selected;
-  /// an error string where it cannot.
-  Future<String?> ensureRootfs() async {
-    // The copy is the proot guest's filesystem: off Android nothing reads it,
-    // and a rootfsId left over from another device must not pay for one.
-    if (!Platform.isAndroid) return null;
-    final id = AppSettings.load(config).rootfsId;
-    if (id == null || rootfsStore == null) return null;
-    final baseDir = rootfsStore!.directoryOfSync(id);
-    if (baseDir == null) {
-      return "No rootfs is installed. Download one from Terminal settings.";
-    }
-    final target = config.projectRootfsDir(project: project, rootfsId: id);
-    if (_rootfsComplete(target).existsSync()) return null;
-    final err = await copyTree(baseDir, target);
-    if (err != null) {
-      logFailure("byte-repair", "rootfs copy failed", err);
-      return "Failed to copy rootfs: $err";
-    }
-    _rootfsComplete(target).writeAsStringSync(id);
-    return null;
-  }
-
   /// Writes the `.setup-complete` marker that lifts the chat page's gate.
   Future<void> markSetupComplete() async {
     // Recursive: setup can run before any byte-repair chat has made the
@@ -112,11 +88,8 @@ class ByteRepairStore {
     marker.writeAsStringSync("done");
   }
 
-  /// [ensureRootfs], then the bundled install script through [shell], then
-  /// the marker on success.
+  /// The bundled install script through [shell], then the marker on success.
   Future<ShellResult> install(Shell shell) async {
-    final err = await ensureRootfs();
-    if (err != null) return ShellResult.failed(err);
     final body = await rootBundle.loadString(
       "assets/scripts/byte-repair-setup.sh",
     );
@@ -146,13 +119,12 @@ class ByteRepairStore {
   }
 
   /// Copies a user-picked ESBMC binary next to the tools the setup fetched,
-  /// making it executable. The rootfs must already exist — run [install]
-  /// first. Null on success, an error message on failure.
+  /// making it executable. The selected shared rootfs must already be
+  /// installed. Null on success, an error message on failure.
   Future<String?> importEsbmc(XFile file) async {
-    // Where an install lands: the proot guest's rootfs copy on Android, the
-    // bin directory on a desktop. iSH's filesystem is the emulator's fakefs,
-    // which no host path reaches.
-    final destDirPath = Platform.isAndroid ? _guestEsbmcDir : _hostInstallDir;
+    // The shared guest rootfs is not host-accessible on iSH, but is a regular
+    // tree on Android. Desktop installs use the app's bin directory.
+    final destDirPath = isPhone ? _guestEsbmcDir : _hostInstallDir;
     if (destDirPath == null) {
       return Platform.isIOS
           ? "Importing an ESBMC binary is not possible inside the iSH "
@@ -173,13 +145,11 @@ class ByteRepairStore {
     }
   }
 
-  /// Deletes the environment: the per-project rootfs copy (Android) or the
-  /// fetched tools (desktops), plus the workspace and the marker. An iSH
-  /// guest's installs live in the base Alpine and go with Terminal settings'
-  /// rootfs delete instead. Null on success, an error message on failure.
+  /// Deletes this project's setup data, workspace and marker, plus desktop
+  /// tools. Shared guest packages remain installed for other projects. Null on
+  /// success, an error message on failure.
   Future<String?> deleteEnvironment() async {
     final errors = await Future.wait([
-      removeTree(_rootfsTree),
       removeTree(config.projectWorkspaceDir(project: project)),
       if (_hostInstallDir != null) removeTree(p.dirname(_hostInstallDir!)),
     ]);
@@ -292,10 +262,6 @@ class ByteRepairStore {
   /// What [deleteEnvironment] clears beyond the workspace, for the confirm
   /// dialog, read off the disk: null where the setup left no host tree.
   String? get environmentDeletion {
-    if (Directory(_rootfsTree).existsSync()) {
-      return "the Byte Repair rootfs (the Linux copy and everything "
-          "installed into it)";
-    }
     if (_hostInstallDir != null && Directory(_hostInstallDir!).existsSync()) {
       return _usesHomebrew
           ? "the links the setup made to Homebrew's tools (Homebrew keeps "
@@ -310,19 +276,12 @@ class ByteRepairStore {
   String? get _hostInstallDir =>
       installDir == guestEsbmcInstallDir ? null : installDir;
 
-  /// Every per-project rootfs copy.
-  String get _rootfsTree =>
-      p.join(config.projectDir(project: project), "rootfs");
-
-  /// `/usr/local/bin` inside the selected rootfs's project copy, or null
-  /// where setup has not made the copy yet.
+  /// `/usr/local/bin` inside the shared selected rootfs, or null where it is
+  /// not installed.
   String? get _guestEsbmcDir {
     final id = AppSettings.load(config).rootfsId;
-    if (id == null) return null;
-    final dir = config.projectRootfsDir(project: project, rootfsId: id);
-    return _rootfsComplete(dir).existsSync()
-        ? p.join(dir, "usr", "local", "bin")
-        : null;
+    final dir = id == null ? null : rootfsStore?.directoryOfSync(id);
+    return dir == null ? null : p.join(dir, "usr", "local", "bin");
   }
 }
 
@@ -355,6 +314,3 @@ const homebrewInstallCommand =
 /// Intel's. The only two it supports, so asking them is asking whether it is
 /// installed.
 const homebrewPaths = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"];
-
-/// The marker a finished rootfs copy at [dir] carries, naming its rootfs.
-File _rootfsComplete(String dir) => File(p.join(dir, ".complete"));

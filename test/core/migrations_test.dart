@@ -105,6 +105,31 @@ void main() {
     expect(ran, ["0.2.0", "1.0.0"]);
   });
 
+  test(
+    "the shared-terminal migration removes only the legacy Byte Repair rootfs",
+    () async {
+      final legacy = Directory(
+        "${config.dataDir}/projects/byte-repair/rootfs/alpine",
+      )..createSync(recursive: true);
+      File("${legacy.path}/installed.txt").writeAsStringSync("old");
+      final marker = File(
+        "${config.dataDir}/projects/byte-repair/.setup-complete",
+      )..writeAsStringSync("done");
+      final otherProject = Directory(
+        "${config.dataDir}/projects/other-project/rootfs",
+      )..createSync(recursive: true);
+      File("${otherProject.path}/keep.txt").writeAsStringSync("keep");
+      await stamp("7.5.0");
+
+      await runMigrations(config.dataDir, fresh: false);
+
+      expect(legacy.existsSync(), isFalse);
+      expect(marker.existsSync(), isFalse);
+      expect(File("${otherProject.path}/keep.txt").readAsStringSync(), "keep");
+      expect(await stamped(), "7.6.0");
+    },
+  );
+
   // A release naming a version an earlier entry already used would truncate
   // the chain at the first of the two, and every entry after it would be
   // skipped without a word.

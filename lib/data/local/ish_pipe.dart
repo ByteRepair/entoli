@@ -7,7 +7,9 @@ import "dart:typed_data" show Uint8List;
 import "package:ffi/ffi.dart";
 
 import "../../domain/shell.dart" show guestPath;
-import "../builtin/llm/providers/cli.dart" show CliProcess, LaunchCli;
+import "../builtin/llm/llm_client.dart" show LlmException;
+import "../builtin/llm/providers/cli.dart"
+    show CliGuest, CliProcess, CliProcessLauncher, LaunchCli;
 import "ish_ffi.dart";
 
 /// A [CliProcess] that runs a CLI program (`claude`, `codex`) inside the
@@ -180,49 +182,56 @@ class GuestCliProcess implements CliProcess {
   }
 }
 
-/// A [LaunchCli] that runs the program inside the guest, for the CLI providers
-/// on iOS. The desktop's [launchProcess] stays for every other platform; this
-/// is the phone's implementation of the same port. The factory is handed plain
-/// values so it stays testable, the way [launchProcess] is.
-///
-/// [rootfsDir] is the booted guest's rootfs, resolved when a session starts
-/// (a Linux installed after launch still reaches the next session); [dataDir]
-/// the app's data dir (bound into the guest at its own host path, so the
-/// program's working directory and [homeDir] are reachable from both sides);
-/// [homeDir] is the program's `HOME` — a persistent, user-scoped directory where
-/// `~/.claude` and `~/.codex` keep their sign-in, not the per-project `/root`.
-LaunchCli guestLaunch({
-  required String Function() rootfsDir,
-  required String dataDir,
-  required String homeDir,
-}) {
-  return (
-    String executable,
-    List<String> arguments, {
-    required String workingDirectory,
-    required Map<String, String> environment,
-  }) {
-    // The CLI provider's environment is host-shaped (Platform.environment plus
-    // login PATH); the guest wants its own PATH and HOME, so those are set
-    // here and the host's PATH/HOME dropped. No workspace bind at /root: the
-    // program runs under the data dir, which the bridge already binds. The
-    // program is always x86-64, so the blinkish core is always the one.
-    final env = <String, String>{
-      ...environment,
-      "PATH": guestPath,
-      "HOME": homeDir,
-    };
-    return GuestCliProcess.start(
-      argv: [executable, ...arguments],
-      env: env,
-      rootfsDir: rootfsDir(),
-      dataDir: dataDir,
-      home: "",
-      cwd: workingDirectory,
-      readOnly: const [],
-      blinkish: true,
-    );
-  };
+/// iOS's in-process Linux for the CLI provider's common guest contract. The
+/// app data directory is mounted at its host path, so the provider's cache and
+/// working directory remain visible to both Dart and the guest.
+class IshCliGuest implements CliGuest, CliProcessLauncher {
+  IshCliGuest({required this.rootfsDir, required this.dataDir});
+
+  final String Function() rootfsDir;
+  final String dataDir;
+
+  @override
+  ({List<String> command, Map<String, String> environment}) wrap(
+    List<String> argv, {
+    required String cwd,
+    required List<String> shared,
+  }) => (command: argv, environment: const {});
+
+  @override
+  List<String> install(List<String> packages) => [
+    "apk",
+    "add",
+    "--no-cache",
+    ...packages,
+  ];
+
+  @override
+  LaunchCli get processLauncher =>
+      (
+        String executable,
+        List<String> arguments, {
+        required String workingDirectory,
+        required Map<String, String> environment,
+      }) {
+        final rootfs = rootfsDir();
+        if (rootfs.isEmpty) {
+          throw LlmException(
+            "No Linux is installed to run it in. Install one from the "
+            "Terminal settings.",
+          );
+        }
+        return GuestCliProcess.start(
+          argv: [executable, ...arguments],
+          env: {...environment, "PATH": guestPath},
+          rootfsDir: rootfs,
+          dataDir: dataDir,
+          home: "",
+          cwd: workingDirectory,
+          readOnly: const [],
+          blinkish: true,
+        );
+      };
 }
 
 // Message tags between the main isolate and the pipe worker.

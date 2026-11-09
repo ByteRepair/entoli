@@ -54,6 +54,12 @@ abstract class CliGuest {
   List<String> install(List<String> packages);
 }
 
+/// Optional transport for guests whose programs cannot be launched as host
+/// processes. Proot needs no separate transport; iSH launches in-process.
+abstract interface class CliProcessLauncher {
+  LaunchCli get processLauncher;
+}
+
 abstract class CliProvider extends LlmProvider with KeyFree {
   const CliProvider(super.config, {this.launch = launchProcess});
 
@@ -145,9 +151,8 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   /// The models the program takes by name, offered beside the user's own.
   List<ModelInfo> get knownModels;
 
-  /// Whether this platform can run a program at all: a desktop, or Android in
-  /// its Linux. iOS cannot, so a CLI entry synced onto one offers nothing
-  /// rather than failing per turn.
+  /// Whether this platform can run a program at all: a desktop, or a phone
+  /// with a Linux to run it in (Android's proot, iOS's blinkish).
   @override
   bool get supported => isDesktop || guest != null;
 
@@ -386,7 +391,10 @@ abstract class CliProvider extends LlmProvider with KeyFree {
     final (:command, environment: own) =
         guest?.wrap(argv, cwd: cwd, shared: [workRoot.path]) ??
         (command: argv, environment: const <String, String>{});
-    return launch(
+    final runner = guest is CliProcessLauncher
+        ? (guest as CliProcessLauncher).processLauncher
+        : launch;
+    return runner(
       command.first,
       command.sublist(1),
       workingDirectory: cwd,

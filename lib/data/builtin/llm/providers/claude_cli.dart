@@ -161,9 +161,10 @@ class ClaudeCliProvider extends CliProvider with OfferedByName {
 
   /// What Anthropic's installer looks for to tell musl from glibc.
   static bool get _musl =>
-      Platform.isLinux &&
-      (File("/lib/libc.musl-x86_64.so.1").existsSync() ||
-          File("/lib/libc.musl-aarch64.so.1").existsSync());
+      CliProvider.guest != null ||
+      (Platform.isLinux &&
+          (File("/lib/libc.musl-x86_64.so.1").existsSync() ||
+              File("/lib/libc.musl-aarch64.so.1").existsSync()));
 
   @override
   String get bundler => "Claude Desktop";
