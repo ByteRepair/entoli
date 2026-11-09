@@ -17,10 +17,6 @@ import "shell_sidebar.dart" show projectSymbol;
 /// The asset the new-chat screen stands its figure on.
 const _athena = "assets/images/athena.png";
 
-/// How many starters the screen offers: a row or two of chips, not a
-/// catalogue.
-const _starters = 6;
-
 /// The new-chat screen's body — `_EmptyChat` on the new-chat screen — drawn
 /// by the native shell: the same question, badges and starters, read the same
 /// way, sent as a [NewChatSnapshot]. A badge switches project through
@@ -134,29 +130,24 @@ class ShellNewChatState extends ConsumerState<ShellNewChat>
     return const SizedBox.shrink();
   }
 
-  /// The `_starters`-many things the composer's menus would offer here, as the
-  /// chips that name them. Build only, since it watches the library.
+  /// The things the composer's menus would offer here, as the chips that name
+  /// them. Build only, since it watches the library.
   ///
-  /// Stops at `_starters` rather than building every snapshot and cutting the
-  /// list: a library of a hundred skills would otherwise allocate a hundred to
-  /// send six.
+  /// No cap: everything the library holds is on offer, as on the Flutter row,
+  /// since the screen scrolls and everything the user has written is a menu
+  /// that `/` opens anyway.
   List<StarterSnapshot> _starterChips() {
     final at = widget.at;
-    final chips = <StarterSnapshot>[];
-    for (final kind in CompletionKind.values) {
-      for (final option in ref.watch(
-        completionsProvider((project: at, kind: kind)),
-      )) {
-        if (chips.length == _starters) return chips;
-        chips.add(
+    return [
+      for (final kind in CompletionKind.values)
+        for (final option in ref.watch(
+          completionsProvider((project: at, kind: kind)),
+        ))
           StarterSnapshot(
             trigger: triggerOf(kind),
             name: option.name,
             detail: option.description,
           ),
-        );
-      }
-    }
-    return chips;
+    ];
   }
 }
