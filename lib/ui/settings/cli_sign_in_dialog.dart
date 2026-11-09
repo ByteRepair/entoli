@@ -58,6 +58,7 @@ class CliSignInDialog extends ConsumerStatefulWidget {
 class _CliSignInDialogState extends ConsumerState<CliSignInDialog> {
   _Stage _stage = const _Checking();
   final _code = TextEditingController();
+  var _finished = false;
 
   CliProvider get _cli => widget.cli;
 
@@ -133,6 +134,10 @@ class _CliSignInDialogState extends ConsumerState<CliSignInDialog> {
   /// Out of [_SigningIn] first, so closing does not stop a program that
   /// has already finished.
   void _finish(bool signedIn) {
+    // Once only: [_run] can pop on success while [_cancel] is still awaiting
+    // [CliSignIn.cancel], and its own pop after would find the navigator empty.
+    if (_finished) return;
+    _finished = true;
     _stage = const _Checking();
     if (mounted) Navigator.pop(context, signedIn);
   }
