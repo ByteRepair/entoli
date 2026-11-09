@@ -1022,6 +1022,28 @@ void main() {
       }
     });
 
+    test(
+      "a goal CLEARED while the reviewer reads is not sent back either",
+      () async {
+        final client = FakeLlmClient([
+          [saidOnly("Done.")],
+        ]);
+        final goal = FakeGoal(const ChatGoal(objective: "ship"));
+        final reviewer = FakeGoalReviewer([
+          const GoalVerdict(GoalVerdictKind.carryOn, "Not yet."),
+        ], whileReading: () => goal.goal = null);
+
+        final events = await agentOver(
+          client,
+          goal: goal.read,
+          goalReviewer: reviewer,
+        ).run(userMessage("go")).toList();
+
+        expect(events.whereType<SteerEvent>(), isEmpty);
+        expect(moved(events), isEmpty);
+      },
+    );
+
     test("a goal paused while the reviewer reads is not sent back", () async {
       final client = FakeLlmClient([
         [saidOnly("Done.")],

@@ -2783,17 +2783,72 @@ void main() {
       );
     });
 
-    test("alone, it says what the goal is", () async {
+    test("alone, it says where the goal stands, as a row", () async {
       final (id, controller) = await openChat();
       await controller.send("/goal ship it");
       await waitIdle(id);
       await controller.send("/goal");
 
-      expect(
-        app.container.read(chatControllerProvider(id)).status,
-        "Goal active: ship it",
-      );
+      final chat = await app.repo.openChat(id);
+      final answered = chat.goals.last;
+      expect(answered.change, GoalChange.answered);
+      expect(answered.objective, "Goal active: ship it");
+      // A row, not a change: the goal stands as it did.
+      expect(chat.goal, const ChatGoal(objective: "ship it"));
       expect(app.backend.prompts, hasLength(1));
+    });
+
+    test("a command with nothing to change leaves a row saying so, where a "
+        "status line was drawn only beside a running turn's spinner", () async {
+      final (id, controller) = await openChat();
+
+      await controller.send("/goal clear");
+
+      final chat = await app.repo.openChat(id);
+      expect(chat.goals.single.change, GoalChange.answered);
+      expect(chat.goals.single.objective, "Goal: none was set");
+      expect(chat.goals.single.reason, "No goal was set");
+      expect(chat.goal, isNull);
+      // A chat with nothing said in it has no message for a record to stand
+      // after, so the answer is said as one — and is a row on screen for it.
+      expect(chat.messages.single.plainText, "/goal clear");
+    });
+
+    test("pausing one already paused answers, and leaves it paused", () async {
+      final (id, controller) = await openChat();
+      await controller.send("/goal ship it");
+      await waitIdle(id);
+      await controller.send("/goal pause");
+      await controller.send("/goal pause");
+
+      final chat = await app.repo.openChat(id);
+      expect(chat.goals.map((g) => g.change), [
+        GoalChange.set,
+        GoalChange.paused,
+        GoalChange.answered,
+      ]);
+      expect(
+        chat.goal,
+        const ChatGoal(
+          objective: "ship it",
+          status: GoalStatus.paused,
+          reason: "Paused by you.",
+        ),
+      );
+    });
+
+    test("an answer survives a restart, and still moves no goal", () async {
+      final (id, controller) = await openChat();
+      await controller.send("/goal ship it");
+      await waitIdle(id);
+      await controller.send("/goal");
+
+      final restarted = await app.repo.openChat(id);
+      expect(restarted.goals.map((g) => g.change), [
+        GoalChange.set,
+        GoalChange.answered,
+      ]);
+      expect(restarted.goal, const ChatGoal(objective: "ship it"));
     });
   });
 

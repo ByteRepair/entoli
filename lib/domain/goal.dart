@@ -61,15 +61,20 @@ GoalStatus? goalStatusAfter(GoalChange change) => switch (change) {
   GoalChange.met => GoalStatus.met,
   GoalChange.blocked => GoalStatus.blocked,
   GoalChange.cleared => null,
+  // Nothing moved, so there is no status to leave it in; [goalOf] reads this
+  // as "no change", which is the whole of what an answer is.
+  GoalChange.answered => null,
 };
 
-/// The goal [marks] leave, in order: a set starts one, a clear ends it, and
-/// everything else moves the one there is. A mark about a goal that is not
-/// the one standing — a stale verdict landing after a new `/goal` — moves
-/// nothing.
+/// The goal [marks] leave, in order: a set starts one, a clear ends it,
+/// everything else moves the one there is, and an answer moves nothing at all
+/// — it is a row the user reads, not a change to what stands. A mark about a
+/// goal that is not the one standing — a stale verdict landing after a new
+/// `/goal` — moves nothing either.
 ChatGoal? goalOf(Iterable<GoalMark> marks) {
   ChatGoal? goal;
   for (final mark in marks) {
+    if (mark.change == GoalChange.answered) continue;
     final starts = mark.change == GoalChange.set;
     if (!starts && goal?.objective != mark.objective) continue;
     goal = switch (goalStatusAfter(mark.change)) {
@@ -221,6 +226,19 @@ String goalSummary(ChatGoal? goal) {
   ].join(" · ");
 }
 
+/// What a `/goal` that changed nothing says, as the row it leaves.
+///
+/// A command that changes no goal — a clear with nothing to clear, a pause of
+/// a goal already paused, `/goal` alone — writes no `goal` record, because a
+/// record is a change and there was none. It still has to be answered, and the
+/// answer is the same row every other change leaves: a change that was asked
+/// for and not made is worth reading, and a status line is drawn only beside a
+/// running turn's spinner, which is not where a goal command is usually said.
+String goalAnswer(ChatGoal? goal) => switch (goal) {
+  null => "Goal: none was set",
+  final goal => "${goalStatusLabel(goal.status)}: ${goal.objective}",
+};
+
 /// What a goal standing at [status] is called on screen.
 String goalStatusLabel(GoalStatus status) => switch (status) {
   GoalStatus.active => "Goal active",
@@ -237,4 +255,5 @@ String goalChangeLabel(GoalChange change) => switch (change) {
   GoalChange.cleared => "Goal cleared",
   GoalChange.met => "Goal met",
   GoalChange.blocked => "Goal blocked",
+  GoalChange.answered => "Goal answered",
 };

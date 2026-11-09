@@ -600,37 +600,33 @@ class ChatRoom {
   /// kickoff, and [_openTurn] writes the goal record after it — so both wait
   /// for a running turn to finish, as `/compact` does. Pausing and clearing
   /// are a goal record alone, after the last message, and land mid-turn too:
-  /// the running turn reads the goal at its next stop. `/goal` alone writes
-  /// nothing. See "Goals" in `lib/domain/AGENTS.md`.
+  /// the running turn reads the goal at its next stop. A command that changes
+  /// nothing — `/goal` alone, a clear with nothing to clear, a pause of one
+  /// already paused, a set refused mid-turn — writes a [GoalChange.answered]
+  /// row instead, so the answer reads where every other change is read. See
+  /// "Goals" in `lib/domain/AGENTS.md`.
   Future<void> _goalCommand(GoalCommand command) async {
     final chat = state.chat;
     if (chat == null) return;
     final goal = chat.goal;
     switch (command) {
       case GoalShow():
-        _view = state.copyWith(status: goalSummary(goal));
+        await _answerGoal(command, goal);
       case GoalPause():
-        if (goal == null || !goal.isActive) {
-          _view = state.copyWith(status: goalSummary(goal));
-          return;
-        }
+        if (goal == null || !goal.isActive) return _answerGoal(command, goal);
         await _markGoal(
           GoalChange.paused,
           goal.objective,
           reason: "Paused by you.",
         );
       case GoalClear():
-        if (goal == null) {
-          _view = state.copyWith(status: "No goal was set");
-          return;
-        }
+        if (goal == null) return _answerGoal(command, goal);
         await _markGoal(GoalChange.cleared, goal.objective);
       case GoalResume():
-        if (goal == null) {
-          _view = state.copyWith(status: goalSummary(goal));
-          return;
-        }
+        if (goal == null) return _answerGoal(command, goal);
         if (state.isRunning) {
+          // Said on the running turn's next step, which is the only place it
+          // can be read: a resume is a turn, and one turn per participant.
           _view = state.copyWith(
             status: "Wait for the turn to finish before resuming the goal",
           );
@@ -646,6 +642,27 @@ class ChatRoom {
         }
         await _prompt(command.text);
     }
+  }
+
+  /// Say what a command that changed nothing found, as the row every change
+  /// leaves: `Goal answered: …`, after the message it was said at.
+  ///
+  /// A record names the message it stands after, and a chat with nothing said
+  /// in it has none — so the answer lands as a message of its own first, as
+  /// `!` and `/compact` do. Without it a clear on a fresh chat would be the one
+  /// command with nothing to show, which is the case that started this.
+  Future<void> _answerGoal(GoalCommand command, ChatGoal? goal) async {
+    final objective = goalAnswer(goal);
+    final reason = goal == null ? "No goal was set" : null;
+    final chat = state.chat;
+    if (chat == null) return;
+    if (chat.messages.isEmpty) {
+      await _land([
+        _repo.composeUserPrompt(command.text, project: chat.state.project),
+      ]);
+      if (state.chat == null) return;
+    }
+    await _markGoal(GoalChange.answered, objective, reason: reason);
   }
 
   /// A goal record after [after] — the last message on the thread where the

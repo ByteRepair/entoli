@@ -271,7 +271,11 @@ abstract class Chat with _$Chat {
 }
 
 /// What happened to a chat's goal, as a [GoalMark] records it.
-enum GoalChange { set, resumed, paused, cleared, met, blocked }
+///
+/// [answered] is the one that changes nothing: a `/goal` that had no goal to
+/// clear, or a goal to pause, and said so. It is kept so that "nothing
+/// changed" is still a row the user can read, where every other change is.
+enum GoalChange { set, resumed, paused, cleared, met, blocked, answered }
 
 /// One change to the chat's goal, said after the message [afterMessageId] —
 /// the `/goal` that set it, the reply whose review found it met, the last

@@ -40,7 +40,14 @@ ActivityCard goalMarkCard(GoalMark mark, {bool page = false}) => ActivityCard(
   title: goalChangeLabel(mark.change),
   icon: goalChangeIcon(mark.change),
   status: (
-    text: "Now: ${goalStatusAfter(mark.change)?.name ?? "no goal"}",
+    // An answer changed nothing, so there is no "now" to name: saying
+    // "no goal" over a goal that still stands would be the one lie this row
+    // could tell.
+    text: switch (goalStatusAfter(mark.change)) {
+      final status? => "Now: ${status.name}",
+      null when mark.change == GoalChange.answered => "No change",
+      null => "Now: no goal",
+    },
     isError: mark.change == GoalChange.blocked,
   ),
   sections: [
@@ -63,5 +70,7 @@ ActivityCard goalMarkCard(GoalMark mark, {bool page = false}) => ActivityCard(
 IconData goalChangeIcon(GoalChange change) => switch (change) {
   GoalChange.resumed => Icons.play_circle_outline,
   GoalChange.cleared => Icons.highlight_off,
+  // Nothing moved; the icon says the command was heard and answered.
+  GoalChange.answered => Icons.info_outline,
   _ => goalStatusIcon(goalStatusAfter(change)!),
 };
