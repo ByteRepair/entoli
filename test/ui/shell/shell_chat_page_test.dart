@@ -6,6 +6,7 @@ import "package:super_sliver_list/super_sliver_list.dart";
 
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/project.dart" show defaultEmptyChatQuestion;
+import "package:agent_chat/providers.dart" show appSettingsProvider;
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/shell/shell_new_chat.dart";
@@ -98,6 +99,30 @@ void main() {
     await screen.pick(null, first.project);
     await tester.pump();
     expect(app.container.read(selectedProjectProvider).project, isNull);
+  });
+
+  // The row is off by default — Settings > General > Appearance > "Show
+  // command chips in start page" — and the snapshot says which, so the Swift
+  // draws no row rather than an empty one: an empty library says how to reach
+  // the library, and a hidden row says nothing. A hidden row ships no list
+  // either, since the Swift would only throw it away.
+  testWidgets("the shell is told whether to draw the starter row", (
+    tester,
+  ) async {
+    await pump(tester);
+    expect(shell.lastNewChat?.showStarters, isFalse);
+    expect(shell.lastNewChat?.starters, isEmpty);
+
+    await io(
+      tester,
+      () => app.container
+          .read(appSettingsProvider.notifier)
+          .setShowCommandChips(true),
+    );
+    await tester.pump();
+
+    expect(shell.lastNewChat?.showStarters, isTrue);
+    expect(shell.lastNewChat?.starters, isNotEmpty);
   });
 
   testWidgets("a starter types its trigger into the composer", (tester) async {

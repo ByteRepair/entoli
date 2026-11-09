@@ -369,37 +369,44 @@ class _NewChatState extends ConsumerState<_NewChat> {
     final at = ref.watch(selectedProjectProvider);
     final project = at.project;
     if (_starting) return const SizedBox.shrink();
-    // A paired device's project: its setup and its voice are that device's.
-    if (at.device != null) {
-      if (ref.watch(projectFrozenProvider(at))) return const ViewOnlyBar();
-      return _composerOf(
-        ref,
-        Composer(
-          controller: _controller,
-          agentSpeaking: false,
-          onSend: _send,
-          onAbort: () {},
-          project: project,
-          device: at.device,
-          workspace: null,
-        ),
-      );
-    }
-    if (ref.watch(setupCompleteProvider(project))) {
-      return _composerOf(
-        ref,
-        Composer(
-          controller: _controller,
-          agentSpeaking: false,
-          onSend: _send,
-          onAbort: () {},
-          project: project,
-          onVoice: () => startVoiceChat(context, ref, meta: _meta),
-          workspace: null,
-        ),
-      );
-    }
-    return const NeedsSetupBar();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const _CommandHint(),
+        if (at.device != null)
+          // A paired device's project: its setup and its voice are that
+          // device's.
+          ref.watch(projectFrozenProvider(at))
+              ? const ViewOnlyBar()
+              : _composerOf(
+                  ref,
+                  Composer(
+                    controller: _controller,
+                    agentSpeaking: false,
+                    onSend: _send,
+                    onAbort: () {},
+                    project: project,
+                    device: at.device,
+                    workspace: null,
+                  ),
+                )
+        else if (ref.watch(setupCompleteProvider(project)))
+          _composerOf(
+            ref,
+            Composer(
+              controller: _controller,
+              agentSpeaking: false,
+              onSend: _send,
+              onAbort: () {},
+              project: project,
+              onVoice: () => startVoiceChat(context, ref, meta: _meta),
+              workspace: null,
+            ),
+          )
+        else
+          const NeedsSetupBar(),
+      ],
+    );
   }
 
   @override
@@ -509,9 +516,10 @@ class _ProjectBadges extends ConsumerWidget {
 }
 
 /// A chat with nothing said in it yet, which is also the page the app opens
-/// on. Athena, the question, the project it would happen in, and what the
-/// composer's `/` and `@` menus hold — which is the only place those are named
-/// before the user has typed the character that opens them.
+/// on. Athena, the question, the project it would happen in, and — while the
+/// user has asked for them — the start page's chips, which are the only place
+/// the composer's `/` and `@` menus are named before their trigger is typed.
+/// See [_StarterChips] for what "asked for" means.
 ///
 /// Its rows are `settled`, so what the user arrives on is static and every
 /// change from their first interaction on animates.
@@ -543,16 +551,6 @@ class _EmptyChat extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final remote = device != null;
-    final starters = [
-      for (final kind in CompletionKind.values)
-        for (final option in ref.watch(
-          completionsProvider((
-            project: (device: device, project: project),
-            kind: kind,
-          )),
-        ))
-          (kind: kind, option: option),
-    ];
     final question = ref.watch(
       newChatQuestionProvider((device: device, project: project)),
     );
@@ -578,51 +576,92 @@ class _EmptyChat extends ConsumerWidget {
                 settled: true,
               ),
             if (showSyncedCards) const PairedProjectBadges(),
-            const SizedBox(height: 20),
-            ChipRow(
-              settled: true,
-              entries: starters.isEmpty
-                  ? [
-                      // Nothing to offer is said as an entry of the same row,
-                      // so a library emptying or filling animates it the way
-                      // any chip arrives and leaves.
-                      ChipRowEntry(
-                        key: const ValueKey("empty"),
-                        child: Text(
-                          "Type / for commands, @ for agents.",
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                    ]
-                  : [
-                      for (final starter in starters)
-                        ChipRowEntry(
-                          key: ValueKey(
-                            "${starter.kind.trigger}${starter.option.name}",
-                          ),
-                          child: ActionChip(
-                            label: Text(
-                              "${starter.kind.trigger}${starter.option.name}",
-                            ),
-                            labelStyle: theme.textTheme.bodySmall?.copyWith(
-                              fontFamily: monoFamily,
-                            ),
-                            // Null rather than the empty string: `Chip` builds
-                            // a `Tooltip` for whatever it is given, and an
-                            // empty one is a blank box on a long press.
-                            tooltip: starter.option.description,
-                            onPressed: () => insertCompletion(
-                              controller,
-                              starter.kind,
-                              starter.option.name,
-                            ),
-                          ),
-                        ),
-                    ],
+            _StarterChips(
+              at: (device: device, project: project),
+              controller: controller,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The start page's chips: a `/skill` or `@agent` per thing the library holds.
+/// Discovery is a choice, so the row is drawn only while
+/// `showCommandChipsProvider` says the user asked for it — see "The chat page"
+/// in AGENTS.md.
+///
+/// A widget of its own rather than a block of `_EmptyChat` so the library is
+/// watched only while the row is on screen: a library reload walks every
+/// project's prompts and comes back through here, and there is no reason for
+/// that to rebuild a screen drawing nothing about it.
+class _StarterChips extends ConsumerWidget {
+  const _StarterChips({required this.at, required this.controller});
+
+  /// The project whose library is read, and whose paired device it is on — the
+  /// same reference the badges above are given.
+  final ProjectRef at;
+
+  /// The composer's, so a chip can type into it.
+  final TextEditingController controller;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!ref.watch(showCommandChipsProvider)) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    // Hoisted out of the loop: one style for every chip, built once a build.
+    final labelStyle = theme.textTheme.bodySmall?.copyWith(
+      fontFamily: monoFamily,
+    );
+    final starters = [
+      for (final kind in CompletionKind.values)
+        for (final option in ref.watch(
+          completionsProvider((project: at, kind: kind)),
+        ))
+          (kind: kind, option: option),
+    ];
+    return Padding(
+      padding: const EdgeInsets.only(top: 20),
+      child: ChipRow(
+        settled: true,
+        entries: [
+          for (final starter in starters)
+            ChipRowEntry(
+              key: ValueKey("${starter.kind.trigger}${starter.option.name}"),
+              child: ActionChip(
+                label: Text("${starter.kind.trigger}${starter.option.name}"),
+                labelStyle: labelStyle,
+                // Null rather than the empty string: `Chip` builds a
+                // `Tooltip` for whatever it is given, and an empty one is a
+                // blank box on a long press.
+                tooltip: starter.option.description,
+                onPressed: () => insertCompletion(
+                  controller,
+                  starter.kind,
+                  starter.option.name,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CommandHint extends StatelessWidget {
+  const _CommandHint();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
+      child: Text(
+        "Type / for commands, @ for agents.",
+        textAlign: TextAlign.center,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.outline,
         ),
       ),
     );

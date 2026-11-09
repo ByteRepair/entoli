@@ -959,11 +959,18 @@ leave. It draws the mark, the question, the projects as badges, and a chip
 per `/skill` and `@agent` the library holds. The chips are discovery: the
 composer's menus are the only place those are named, and nothing names them
 until the character that opens one has been typed, so a user who does not know
-they exist never finds out. Six at most, because everything the user has
-written is a menu and `/` is what opens the menu; with nothing at all in the
-library it says how to reach them instead. A paired device's project offers
+they exist never finds out. Everything the library holds is offered, on this
+screen and on the native shell's copy of it: everything the user has written
+is a menu and `/` is what opens the menu, and the screen scrolls, so nothing is
+held back to keep the page short. A paired device's project offers
 that device's library, through `promptLibraryOf` like its menus; its badges
 are left off, since they name this device's projects.
+
+**The row is off until it is asked for**, by the switch in Settings > General >
+Appearance > "Show command chips in start page" — `showCommandChips` in
+`settings.json`, false by default and written only when on, the way `autoUpdate`
+is written only when off. The native shell's copy of the screen reads the same
+setting, sent as `showStarters` on `NewChatSnapshot`.
 
 **Both rows are `ChipRow`s** (see "Shared UI" in `lib/ui/widgets/AGENTS.md`),
 which is why nothing here snaps when the set changes: picking a badge grows

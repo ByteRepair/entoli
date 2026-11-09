@@ -375,6 +375,19 @@ class _AppearanceSection extends ConsumerWidget {
               ),
           ],
         ),
+        // Discovery rather than decoration: the chips are the one place a
+        // `/skill` or `@agent` is named before its trigger is typed, so it is
+        // a choice the user makes rather than something always on.
+        SwitchListTile(
+          title: const Text("Show command chips in start page"),
+          subtitle: const Text(
+            "Names the commands and agents a new chat can start with, under "
+            "its question. Off, typing / or @ in the composer is what shows "
+            "them.",
+          ),
+          value: settings.showCommandChips,
+          onChanged: notifier.setShowCommandChips,
+        ),
       ],
     );
   }

@@ -13,7 +13,8 @@ extension ComposerTrigger {
 
 extension NewChatSnapshot {
   static let initial = NewChatSnapshot(
-    present: false, question: "", projects: [], devices: [], starters: [], starting: false)
+    present: false, question: "", projects: [], devices: [], starters: [],
+    showStarters: false, starting: false)
 
   func isSelected(_ choice: ProjectChoice) -> Bool {
     selected?.device == choice.device && selected?.project == choice.project
@@ -22,8 +23,9 @@ extension NewChatSnapshot {
 
 /// The new-chat screen: Athena, the question, the projects as badges to pick
 /// where the next chat goes, and a starter per `/skill` and `@agent` — the
-/// only place those are named before their trigger is typed. Dart's
-/// `ShellNewChat` says what is there; a badge or a starter is an intent.
+/// only place those are named before their trigger is typed, while "Show
+/// Command Chips in start page" is on. Dart's `ShellNewChat` says what is
+/// there; a badge or a starter is an intent.
 struct NewChatView: View {
   @ObservedObject var model: ShellModel
 
@@ -34,74 +36,84 @@ struct NewChatView: View {
     if state.starting {
       ProgressView().controlSize(.large)
     } else {
-      ScrollView {
-        VStack(spacing: 18) {
-          if let image = state.image.flatMap(flutterAsset) {
-            image
-              .resizable()
-              .scaledToFit()
-              .frame(maxHeight: 240)
-              // The feet fade into the page, so the figure stands on the
-              // question rather than ending above it.
-              .mask(
-                LinearGradient(
-                  stops: [.init(color: .black, location: 0.82), .init(color: .clear, location: 1)],
-                  startPoint: .top, endPoint: .bottom))
-              .accessibilityLabel("Athena")
-          }
-          if !state.question.isEmpty {
-            Text(state.question)
-              .font(.title3.weight(.semibold))
-              .multilineTextAlignment(.center)
-              .contentTransition(.interpolate)
-          }
-          FlowLayout(spacing: 8) {
-            ForEach(state.projects, id: \.self) { badge($0) }
-          }
-          ForEach(state.devices, id: \.self) { device in
-            VStack(spacing: 8) {
-              HStack {
-                line
-                Text(device.offline ? "\(device.name) · offline" : device.name)
-                  .font(.caption)
-                  .foregroundStyle(.secondary)
-                line
-              }
-              FlowLayout(spacing: 8) {
-                ForEach(device.projects, id: \.self) { badge($0) }
-              }
+      VStack(spacing: 0) {
+        page
+        Text("Type / for commands, @ for agents.")
+          .font(.caption)
+          .foregroundStyle(.tertiary)
+          .multilineTextAlignment(.center)
+          .padding(.horizontal, 24)
+          .padding(.vertical, 12)
+      }
+    }
+  }
+
+  private var page: some View {
+    ScrollView {
+      VStack(spacing: 18) {
+        if let image = state.image.flatMap(flutterAsset) {
+          image
+            .resizable()
+            .scaledToFit()
+            .frame(maxHeight: 240)
+            // The feet fade into the page, so the figure stands on the
+            // question rather than ending above it.
+            .mask(
+              LinearGradient(
+                stops: [.init(color: .black, location: 0.82), .init(color: .clear, location: 1)],
+                startPoint: .top, endPoint: .bottom))
+            .accessibilityLabel("Athena")
+        }
+        if !state.question.isEmpty {
+          Text(state.question)
+            .font(.title3.weight(.semibold))
+            .multilineTextAlignment(.center)
+            .contentTransition(.interpolate)
+        }
+        FlowLayout(spacing: 8) {
+          ForEach(state.projects, id: \.self) { badge($0) }
+        }
+        ForEach(state.devices, id: \.self) { device in
+          VStack(spacing: 8) {
+            HStack {
+              line
+              Text(device.offline ? "\(device.name) · offline" : device.name)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+              line
             }
-          }
-          if state.starters.isEmpty {
-            Text("Type / for commands, @ for agents.")
-              .font(.callout)
-              .foregroundStyle(.secondary)
-          } else {
             FlowLayout(spacing: 8) {
-              ForEach(state.starters, id: \.self) { starter in
-                Button {
-                  say.starter(trigger: starter.trigger, name: starter.name) { _ in }
-                } label: {
-                  Text("\(starter.trigger.glyph)\(starter.name)").font(.callout.monospaced())
-                }
-                .glassButton()
-                .help(starter.detail ?? "")
-              }
+              ForEach(device.projects, id: \.self) { badge($0) }
             }
           }
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 32)
-        .frame(maxWidth: ShellView.readableWidth)
-        .frame(maxWidth: .infinity)
+        if state.showStarters { starters }
       }
-      .scrollBounceBehavior(.basedOnSize)
-      .animation(ComposerView.motion, value: state)
+      .padding(.horizontal, 24)
+      .padding(.vertical, 32)
+      .frame(maxWidth: ShellView.readableWidth)
+      .frame(maxWidth: .infinity)
     }
+    .scrollBounceBehavior(.basedOnSize)
+    .animation(ComposerView.motion, value: state)
   }
 
   private var line: some View {
     Rectangle().fill(.quaternary).frame(height: 1)
+  }
+
+  private var starters: some View {
+    FlowLayout(spacing: 8) {
+      ForEach(state.starters, id: \.self) { starter in
+        Button {
+          say.starter(trigger: starter.trigger, name: starter.name) { _ in }
+        } label: {
+          Text("\(starter.trigger.glyph)\(starter.name)").font(.callout.monospaced())
+        }
+        .glassButton()
+        .help(starter.detail ?? "")
+      }
+    }
   }
 
   private func badge(_ choice: ProjectChoice) -> some View {

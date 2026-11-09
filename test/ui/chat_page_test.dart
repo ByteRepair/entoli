@@ -113,6 +113,19 @@ void main() {
     Future<List<ChatState>> stored(WidgetTester tester) =>
         io(tester, () => app.repo.listChats());
 
+    /// Turn the command chips on through the notifier, the way the Appearance
+    /// switch does, and let the settings file land. Every test in this group
+    /// that needs a chip wants this first, since off is the default.
+    Future<void> showChips(WidgetTester tester) async {
+      await io(
+        tester,
+        () => app.container
+            .read(appSettingsProvider.notifier)
+            .setShowCommandChips(true),
+      );
+      await settleIo(tester);
+    }
+
     // The whole of the design: a screen nobody typed into leaves nothing on
     // disk, so there is no draft to hold and nothing to sweep up.
     testWidgets("leaving without typing writes nothing", (tester) async {
@@ -133,6 +146,22 @@ void main() {
       expect(chats, hasLength(1));
       expect(app.container.read(selectedChatIdProvider), chats.single.id);
       expect(find.text("hello"), findsOneWidget);
+    });
+
+    // The row is discovery, and discovery is a choice: Settings > General >
+    // Appearance > "Show command chips in start page". Off is the default, so
+    // the screen a fresh install opens says nothing about the library — the
+    // composer's `/` and `@` menus are the only place those are named.
+    testWidgets("no chips until the Appearance switch asks for them", (
+      tester,
+    ) async {
+      await openEmpty(tester);
+
+      expect(find.byType(ActionChip), findsNothing);
+
+      await showChips(tester);
+
+      expect(find.byType(ActionChip), findsWidgets);
     });
 
     // A paired device's project is a new chat there: the composer and that
@@ -188,6 +217,12 @@ void main() {
             .where((chip) => chip.selected),
         hasLength(1),
       );
+      // The switch is app-level, so a paired device's start page answers it
+      // the same way this device's does: off, the row is absent.
+      expect(find.byType(ActionChip), findsNothing);
+
+      await showChips(tester);
+
       expect(find.widgetWithText(ActionChip, "/deploy"), findsOneWidget);
       expect(app.container.read(selectedChatIdProvider), isNull);
     });
@@ -792,7 +827,12 @@ void main() {
   });
 
   group("a chat with nothing said in it", () {
+    /// The starters are off by default now — Settings > General > Appearance >
+    /// "Show command chips in start page" — and every test in this group is
+    /// about a chip, so each opens the screen with the switch on. Seeded
+    /// rather than tapped: what the switch does is `theme_test.dart`'s.
     Future<void> openBlank(WidgetTester tester) async {
+      app.seedSettings(AppSettings(showCommandChips: true));
       final chat = await io(tester, () => app.seedChat(title: "brand new"));
       await open(tester, chat.state.id);
     }
@@ -835,16 +875,6 @@ void main() {
       await tester.pump();
 
       expect(typed(tester), "look here @explore ");
-    });
-
-    testWidgets("with nothing to offer it says how to reach them", (
-      tester,
-    ) async {
-      app.dispose();
-      app = TestApp.create(library: PromptLibrary.empty);
-      await openBlank(tester);
-
-      expect(find.text("Type / for commands, @ for agents."), findsOneWidget);
     });
 
     // Everything the user has written is a menu, and `/` opens the menu. The
@@ -1461,6 +1491,9 @@ void main() {
         mirrorOf("d1", "Desktop", makeState("r1", project: "work")),
       ]);
 
+      // The screen scrolls, and a paired device's badges sit under this
+      // device's: on a short window they are past the fold.
+      await scrollTo(tester, deviceChip("work"));
       await tester.tap(deviceChip("work"));
       await tester.pumpAndSettle();
       expect(app.container.read(selectedProjectProvider), (
@@ -1709,6 +1742,14 @@ void main() {
     });
 
     await open(tester, chat.state.id);
+    // The plan is read off disk after the page is up, so the composer being
+    // there says nothing about it: wait for the plan rather than for the tree
+    // to go quiet, which a loaded machine outlasts.
+    await settleUntil(
+      tester,
+      () => tester.any(find.text("1 of 2 tasks done")),
+      what: "the plan to be read",
+    );
 
     expect(find.text("The fix"), findsOneWidget);
     expect(find.text("1 of 2 tasks done"), findsOneWidget);

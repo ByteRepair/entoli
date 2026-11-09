@@ -17,10 +17,6 @@ import "shell_sidebar.dart" show projectSymbol;
 /// The asset the new-chat screen stands its figure on.
 const _athena = "assets/images/athena.png";
 
-/// How many starters the screen offers: a row or two of chips, not a
-/// catalogue.
-const _starters = 6;
-
 /// The new-chat screen's body — `_EmptyChat` on the new-chat screen — drawn
 /// by the native shell: the same question, badges and starters, read the same
 /// way, sent as a [NewChatSnapshot]. A badge switches project through
@@ -78,6 +74,7 @@ class ShellNewChatState extends ConsumerState<ShellNewChat>
     _slots.newChat.claim(this);
     final at = widget.at;
     final question = ref.watch(newChatQuestionProvider(at));
+    final showStarters = ref.watch(showCommandChipsProvider);
     final named = ref.watch(projectListProvider).value ?? const <String>[];
     final peers = ref.watch(syncPeersProvider);
     final entries = remoteEntries(
@@ -122,20 +119,35 @@ class ShellNewChatState extends ConsumerState<ShellNewChat>
             ),
         ],
         selected: ProjectPick(device: at.device, project: at.project),
-        starters: [
-          for (final kind in CompletionKind.values)
-            for (final option in ref.watch(
-              completionsProvider((project: at, kind: kind)),
-            ))
-              StarterSnapshot(
-                trigger: triggerOf(kind),
-                name: option.name,
-                detail: option.description,
-              ),
-        ].take(_starters).toList(),
+        // Only while the row is drawn: a hidden row's list is work the Swift
+        // throws away, and watching the library for it keeps this screen
+        // subscribed to every reload for nothing.
+        starters: showStarters ? _starterChips() : const [],
+        showStarters: showStarters,
         starting: widget.starting,
       ),
     );
     return const SizedBox.shrink();
+  }
+
+  /// The things the composer's menus would offer here, as the chips that name
+  /// them. Build only, since it watches the library.
+  ///
+  /// No cap: everything the library holds is on offer, as on the Flutter row,
+  /// since the screen scrolls and everything the user has written is a menu
+  /// that `/` opens anyway.
+  List<StarterSnapshot> _starterChips() {
+    final at = widget.at;
+    return [
+      for (final kind in CompletionKind.values)
+        for (final option in ref.watch(
+          completionsProvider((project: at, kind: kind)),
+        ))
+          StarterSnapshot(
+            trigger: triggerOf(kind),
+            name: option.name,
+            detail: option.description,
+          ),
+    ];
   }
 }
