@@ -238,15 +238,19 @@ class OpenAiCompatibleProvider extends LlmProvider {
   );
 
   /// The field [modelId]'s earlier reasoning is sent back to it in, or null
-  /// for a model that is not sent it: what models.dev says the model reads.
-  /// `reasoning_details` is OpenRouter's structured form, a list of blocks
-  /// rather than the text a reply's reasoning is kept as, so it is not one.
-  /// A server whose own field is known overrides this.
-  String? replayedReasoningField(String modelId) =>
-      switch (modelInfo(modelId)?.interleavedField) {
-        final field? when field != "reasoning_details" => field,
-        _ => null,
-      };
+  /// for a request it is not sent on: what models.dev says the model reads.
+  /// Only beside [tools], DeepSeek's rule — without them it ignores the field,
+  /// so it would be bytes for nothing. `reasoning_details` is OpenRouter's
+  /// structured form, a list of blocks rather than the text a reply's
+  /// reasoning is kept as, so it is not one. A server whose own field is known
+  /// overrides this.
+  String? replayedReasoningField(String modelId, {required bool tools}) {
+    if (!tools) return null;
+    return switch (modelInfo(modelId)?.interleavedField) {
+      final field? when field != "reasoning_details" => field,
+      _ => null,
+    };
+  }
 
   @override
   List<Model> serve(String id, ModelInfo? info, ModelHost host) {
@@ -304,6 +308,19 @@ class OpenAiCompatibleProvider extends LlmProvider {
 /// A one-token reply from the light model, for a provider whose model list is
 /// public or not there: a completion is the one thing every one of them keeps
 /// behind the key.
+/// An Ollama server, local or hosted. Its compat layer reads an assistant's
+/// earlier thinking from `reasoning` and drops a field it does not know, so
+/// DeepSeek's name would arrive as nothing. Every model: the server puts it in
+/// the model's own template, which keeps it or leaves it out as the model was
+/// trained to. Only beside tools, where a thinking model reads it between its
+/// steps; a request without them is a title or a classifier's, with nothing
+/// earlier to replay.
+mixin OllamaCompat on OpenAiCompatibleProvider {
+  @override
+  String? replayedReasoningField(String modelId, {required bool tools}) =>
+      tools ? "reasoning" : null;
+}
+
 mixin ChecksKeyByCompletion on OpenAiCompatibleProvider {
   @override
   Future<bool> checkKey(String apiKey, {http.Client? httpClient}) {

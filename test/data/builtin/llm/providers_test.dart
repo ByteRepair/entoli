@@ -91,14 +91,19 @@ void main() {
     });
     tearDown(() => ModelCatalog.notifier.value = ModelCatalog.empty);
 
-    String? fieldOf(LlmProvider provider, String model) =>
-        (provider.client(null) as OpenAiClient).reasoningFieldOf?.call(model);
+    String? fieldOf(LlmProvider provider, String model, {bool tools = true}) =>
+        (provider.client(null) as OpenAiClient).reasoningFieldOf?.call(
+          model,
+          tools: tools,
+        );
 
     test("goes in the field models.dev names for the model", () {
       final provider = providerOf(deepseek);
       expect(fieldOf(provider, "deepseek-v4-pro"), "reasoning_content");
       expect(fieldOf(provider, "deepseek-chat"), isNull);
       expect(fieldOf(provider, "unlisted"), isNull);
+      // DeepSeek ignores it on a request without tools.
+      expect(fieldOf(provider, "deepseek-v4-pro", tools: false), isNull);
     });
 
     test("survives the catalog's cache, which is written through toJson", () {
@@ -121,6 +126,10 @@ void main() {
       expect(
         fieldOf(const OllamaCloudProvider(), "deepseek-v4-pro"),
         "reasoning",
+      );
+      expect(
+        fieldOf(const OllamaProvider(), "deepseek-v4-pro", tools: false),
+        isNull,
       );
     });
 

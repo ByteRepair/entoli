@@ -41,8 +41,9 @@ earlier turn goes back (not only the current tool loop's), and the official API
 answers 400 without it. Without `tools` it is ignored, so it is sent only
 beside them. The projection already keeps `LlmMessage.reasoning` for every
 reply, live and reloaded, so the encoder was the only thing missing.
-`OpenAiClient.reasoningFieldOf` names the field per model, and null sends
-nothing. A strict host rejects a field it does not know, so the field comes
+`OpenAiClient.reasoningFieldOf` names the field per model and per whether the
+request carries tools, and null sends nothing. The rule is the host's, so the
+provider answers it, not the encoder. A strict host rejects a field it does not know, so the field comes
 from something explicit and never from a model's name:
 
 - **models.dev's `interleaved.field`**, which `ModelInfo.interleavedField`
@@ -55,8 +56,9 @@ from something explicit and never from a model's name:
   thinking from `reasoning` and silently drops `reasoning_content`. That is
   how a whole DeepSeek V4 Pro chat through Ollama Cloud ran each of its
   tool-calling steps without the reasoning of the ones before, with no error
-  to say so. Both classes override `replayedReasoningField` to `reasoning` for
-  every model, and the server's template decides what the model sees of it.
+  to say so. Both classes take `OllamaCompat`, which answers `reasoning` for
+  every model beside tools, and the server's template decides what the model
+  sees of it.
 
 Its compat surface has no audio endpoints, so speech and transcription are
 native `generateContent` calls in `GeminiClient` too — see "A provider's

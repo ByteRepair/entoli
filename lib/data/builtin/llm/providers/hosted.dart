@@ -67,7 +67,7 @@ class ZaiProvider extends OpenAiCompatibleProvider with ChecksKeyByCompletion {
 
 // shortcut: not known to keep a model list behind the key.
 class OllamaCloudProvider extends OpenAiCompatibleProvider
-    with ChecksKeyByCompletion, OfferedByName {
+    with ChecksKeyByCompletion, OfferedByName, OllamaCompat {
   const OllamaCloudProvider([LlmProviderConfig config = preset])
     : super(config, _terms);
 
@@ -81,13 +81,6 @@ class OllamaCloudProvider extends OpenAiCompatibleProvider
     defaultModelId: "glm-5.3-flash",
     defaultLightModelId: "gemma4:31b",
   );
-
-  /// Ollama's compat layer reads an assistant's earlier thinking from
-  /// `reasoning` and drops a field it does not know, so DeepSeek's name would
-  /// arrive as nothing. Every model: the server puts it in the model's own
-  /// template, which keeps it or leaves it out as the model was trained to.
-  @override
-  String? replayedReasoningField(String modelId) => "reasoning";
 
   static const _terms = PresetTerms(
     blurb: "Open models, hosted by Ollama.",

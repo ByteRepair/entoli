@@ -514,7 +514,9 @@ void main() {
     ];
     const bash = LlmTool(name: "bash", description: "run", schema: {});
 
-    OpenAiClient replaying(String? Function(String) fieldOf) {
+    OpenAiClient replaying(
+      String? Function(String, {required bool tools}) fieldOf,
+    ) {
       requests = [];
       return OpenAiClient(
         baseUrl: Uri.parse("https://example.test/v1"),
@@ -531,7 +533,8 @@ void main() {
 
     test("goes back in the field the model reads, beside tools", () async {
       await replaying(
-        (model) => model == "deepseek-v4-pro" ? "reasoning_content" : null,
+        (model, {required tools}) =>
+            model == "deepseek-v4-pro" ? "reasoning_content" : null,
       ).stream(history, model: "deepseek-v4-pro", tools: [bash]).toList();
       expect(sentReply()["reasoning_content"], "the file is missing");
       expect(sentReply()["tool_calls"], hasLength(1));
@@ -539,7 +542,8 @@ void main() {
 
     test("is not sent to a model the field is not named for", () async {
       await replaying(
-        (model) => model == "deepseek-v4-pro" ? "reasoning_content" : null,
+        (model, {required tools}) =>
+            model == "deepseek-v4-pro" ? "reasoning_content" : null,
       ).stream(history, model: "other", tools: [bash]).toList();
       expect(
         sentReply().keys,
@@ -547,11 +551,15 @@ void main() {
       );
     });
 
-    test("is not sent without tools, where it would be ignored", () async {
-      await replaying(
-        (_) => "reasoning_content",
-      ).stream(history, model: "deepseek-v4-pro").toList();
+    test("the provider is told whether tools ride the request", () async {
+      final asked = <bool>[];
+      final client = replaying((_, {required tools}) {
+        asked.add(tools);
+        return tools ? "reasoning_content" : null;
+      });
+      await client.stream(history, model: "deepseek-v4-pro").toList();
       expect(sentReply().containsKey("reasoning_content"), isFalse);
+      expect(asked, [false]);
     });
 
     test("is not sent by a client with no field, OpenAI's included", () async {

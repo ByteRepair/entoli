@@ -35,13 +35,14 @@ class OpenAiClient implements LlmClient {
   final bool returnProgress;
 
   /// The assistant-message field a model's earlier reasoning goes back to it
-  /// in, or null for a model that is not sent it. A thinking model that
-  /// interleaves reasoning with tool calls reads its own earlier thoughts on
-  /// every step, and DeepSeek answers 400 to a tool-calling request without
-  /// them. The name is the server's: `reasoning_content` is DeepSeek's,
-  /// `reasoning` is ollama's. Unset, nothing is sent, since a strict host
-  /// rejects a field it has never heard of.
-  final String? Function(String model)? reasoningFieldOf;
+  /// in, on a request that does or does not carry [tools], or null for one it
+  /// is not sent on. A thinking model that interleaves reasoning with tool
+  /// calls reads its own earlier thoughts on every step, and DeepSeek answers
+  /// 400 to a tool-calling request without them. The name and the rule are
+  /// the server's — `reasoning_content` is DeepSeek's, `reasoning` is
+  /// ollama's — so the provider answers. Unset, nothing is sent, since a
+  /// strict host rejects a field it has never heard of.
+  final String? Function(String model, {required bool tools})? reasoningFieldOf;
 
   final http.Client _http;
 
@@ -120,9 +121,10 @@ class OpenAiClient implements LlmClient {
         "model": model,
         "messages": _encodeAll(
           mergeLeadingSystem(messages),
-          // Only alongside tools: without them DeepSeek ignores the field, so
-          // it would be bytes for nothing.
-          reasoningField: tools.isEmpty ? null : reasoningFieldOf?.call(model),
+          reasoningField: reasoningFieldOf?.call(
+            model,
+            tools: tools.isNotEmpty,
+          ),
         ),
         "stream": true,
         // Ask for the usage object on the final frame: OpenAI's streaming

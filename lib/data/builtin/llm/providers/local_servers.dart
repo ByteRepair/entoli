@@ -13,7 +13,7 @@ abstract class LocalServerProvider extends OpenAiCompatibleProvider
   Uri? get modelsUrl => super.modelsUrl ?? under(baseUrl, "models");
 }
 
-class OllamaProvider extends LocalServerProvider {
+class OllamaProvider extends LocalServerProvider with OllamaCompat {
   const OllamaProvider([LlmProviderConfig config = preset])
     : super(config, _terms);
 
@@ -25,13 +25,6 @@ class OllamaProvider extends LocalServerProvider {
     defaultModelId: "glm-5.3-flash",
     defaultLightModelId: "nemotron-3-nano:30b",
   );
-
-  /// Ollama's compat layer reads an assistant's earlier thinking from
-  /// `reasoning` and drops a field it does not know, so DeepSeek's name would
-  /// arrive as nothing. Every model: the server puts it in the model's own
-  /// template, which keeps it or leaves it out as the model was trained to.
-  @override
-  String? replayedReasoningField(String modelId) => "reasoning";
 
   static const _terms = PresetTerms(
     blurb: "Models you run yourself with Ollama.",
