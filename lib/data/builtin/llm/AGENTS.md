@@ -34,6 +34,32 @@ with no signature at all — logged before they were kept, or made by another
 model — goes to Gemini's host with LiteLLM's placeholder
 `skip_thought_signature_validator` on its first call.
 
+A model that thinks between tool calls is handed its earlier reasoning back
+as text, on the assistant message it came with. DeepSeek's thinking mode
+requires it: on a request carrying `tools`, the `reasoning_content` of every
+earlier turn goes back (not only the current tool loop's), and the official API
+answers 400 without it. Without `tools` it is ignored, so it is sent only
+beside them. The projection already keeps `LlmMessage.reasoning` for every
+reply, live and reloaded, so the encoder was the only thing missing.
+`OpenAiClient.reasoningFieldOf` names the field per model and per whether the
+request carries tools, and null sends nothing. The rule is the host's, so the
+provider answers it, not the encoder. A strict host rejects a field it does not know, so the field comes
+from something explicit and never from a model's name:
+
+- **models.dev's `interleaved.field`**, which `ModelInfo.interleavedField`
+  keeps (and the catalog cache writes back). `OpenAiCompatibleProvider` reads
+  it, so DeepSeek's own endpoint, Z.ai and any hand-typed host models.dev
+  describes get `reasoning_content`. OpenAI's models name no field, and
+  `OpenAiProvider`'s client takes none. `reasoning_details` is OpenRouter's
+  structured block list, not the text kept here, so it is not replayed.
+- **Ollama, local and Cloud, by class.** Its compat layer reads earlier
+  thinking from `reasoning` and silently drops `reasoning_content`. That is
+  how a whole DeepSeek V4 Pro chat through Ollama Cloud ran each of its
+  tool-calling steps without the reasoning of the ones before, with no error
+  to say so. Both classes take `OllamaCompat`, which answers `reasoning` for
+  every model beside tools, and the server's template decides what the model
+  sees of it.
+
 Its compat surface has no audio endpoints, so speech and transcription are
 native `generateContent` calls in `GeminiClient` too — see "A provider's
 models" in `lib/data/voice/AGENTS.md`.
@@ -277,7 +303,7 @@ of models no catalog lists, and `CliProvider` falls back to `knownModels`
 there. The backend asks an endpoint it holds rather than `modelInfoOf`
 directly — `contextWindowOf`, which the context page and auto-compaction
 read, and `_resolveModel`'s image and PDF gate — so a chat on either program
-reports the window it has rather than the 128k guess. The pickers, which hold
+reports the window it has rather than the Total Context guess. The pickers, which hold
 a config and no endpoint, still ask `modelInfoOf`, which only costs them a
 display name.
 

@@ -517,8 +517,36 @@ back, and at least one segment must match — and `writes` are the union of
 the matched rules'. The turn's grant is the chat's workspace, its tmp, the
 project's workspace beside it, and the tiers' `writableDirs`.
 
-Beside those, two grants a build needs and a user should never have had to
-make (`sandbox_grants.dart`). **The toolchain caches** under the machine
+Beside those, three grants a build needs and a user should never have had
+to make (`sandbox_grants.dart`), each into the sandbox's `extraWrites` from
+`_sandboxFor`, so a `CommandSandbox` is always the whole write set and a
+helper renders it and adds nothing of its own. **The system's temp
+folders** (`systemTemps`): on macOS `/private/tmp` and the per-user folder
+`getconf DARWIN_USER_TEMP_DIR` names (Seatbelt's helper resolves it to the
+real path, like every grant), on Linux `/tmp` and `/var/tmp` where they
+exist, and nothing elsewhere. Found once per process as a future the gate
+starts before its policy read, so parallel sub-agents' first commands share
+one `getconf`. `TMPDIR` still names the chat's `.entoli-tmp`, and a program
+that honours it writes there; the grant is for the ones that do not.
+macOS's `mktemp` asks `_CS_DARWIN_USER_TEMP_DIR` before `TMPDIR` (its manual
+says so), so it failed whatever `TMPDIR` said, meson's compiler check with
+it; the system's bash 3.2 never reads `TMPDIR` for a here document — it
+tries `/var/tmp`, `/tmp`, then the working directory — so `python3 - <<'EOF'`
+worked in the workspace and failed after a `cd` out of it. `TMPDIR` reached
+every one of those commands; they did not ask it. **The cost is accepted,
+and it is this**: those folders are shared with every program the user
+runs, so a confined command can overwrite or delete another app's temp
+files there. The alternative was a stream of failures in ordinary tools,
+each one sending the model out of the sandbox altogether, which grants far
+more. The phones, the guests and Windows change nothing: a phone's host
+shell is inside the app's own OS sandbox, a guest Linux (proot, iSH) has
+its own `/tmp` inside the rootfs, and Windows has no sandbox to grant it
+in. With them writable, the parse no longer counts a `TMPDIR` assignment as
+an escalation: it picks no program and no configuration, only where scratch
+lands, and the parse gate stands only where the sandbox already bounds
+that.
+
+**The toolchain caches** under the machine
 user's home that exist, looked up once per turn — `~/.cache`, `~/Library/Caches`, Xcode's
 DerivedData, `~/.pub-cache`, `~/.npm`, `~/.gradle`, Cargo's registry, Go's
 module cache and their kin, the variables that move them, and the `bin/cache`
@@ -1417,6 +1445,27 @@ oldest half of the span is dropped and the ask is made again, three attempts.
 The boundary handed back covers only what was read, so a conversation too big
 for its own summarizer still gets a marker for its newest half.
 
+**The half dropped is of what the ask reads**, the messages after the newest
+marker the span holds (`verbatimFrom`, the projection's own rule), not of the
+span whole. Everything behind that marker costs one summary however many
+messages it is, so halving them leaves the ask the size it was: a chat
+compacted once and grown past half its window again made three asks of the
+same size and gave up without calling the model. Once the old boundary is
+dropped the marker no longer applies, and the prior summary rides the prompt
+as `<prior-summary>` instead.
+
+**A compaction that lands nothing says why, on screen and in the log.**
+`compact` answers a `CompactOutcome`: `Compacted` with the marker, or
+`NotCompacted` with a sentence for the user — a turn running, no model,
+nothing to read, a ladder still over budget after its last halving (with the
+numbers), a summarizer that said nothing or failed. The manual turn ends as
+`error` with "The conversation could not be compacted." and the reason on its
+reply, the red an error part is drawn in, since a `done` with nothing after
+it is the compact that seemed never to run. An automatic one has no turn, so
+the reason is `ChatViewState.compactFailure`, which the chat draws as a
+divider with the reason in red where the marker would have been; see "A
+compact turn, and its divider" in `lib/ui/chat/AGENTS.md`.
+
 **Usage is parsed, not estimated, where the provider says anything.**
 `LlmUsage` rides `LlmCompletion` — Anthropic's `message_start` and
 `message_delta` usage objects, OpenAI's final-chunk `usage` (asked for with
@@ -1429,9 +1478,17 @@ business. The window is the chat's model's, not the last turn's:
 `contextWindowProvider` resolves the chat's choice from its meta the way a
 turn does (`chatModelOf`) and asks `contextWindowOf` for the catalog's number
 among the endpoints a turn would reach, so it is there before any turn after a
-restart and follows a model change. Where the catalog does not know the model,
-`AppSettings.totalContext` ("Total Context" under Settings > LLMs, 128k
-default) is the guess.
+restart and follows a model change.
+
+**Total Context is a ceiling, not only a guess.** `AppSettings.totalContext`
+("Total Context" under Settings > LLMs, 256k default) is the most any chat is
+let grow to: the window the threshold is a share of is the model's or it,
+whichever is smaller, and it where the catalog does not know the model. A
+share of a million-token window is a context no model reads well — 80% of
+1M is 838k, and a chat that long has gone wrong well before. The context page draws the same capped
+window, so its 80% mark is where compaction fires. The summarizer is not
+held to it: its budget is half the model's real window where that is known,
+since reading more in one ask is what the ladder wants.
 
 The marker lands through `ChatRepository.appendCompaction` —
 `_rethread` with a `CompactionRecord`, the same append/reload/rebuild walk a

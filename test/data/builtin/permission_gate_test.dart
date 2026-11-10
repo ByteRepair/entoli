@@ -4,6 +4,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
+import "package:agent_chat/data/builtin/sandbox_grants.dart" show systemTemps;
 import "package:agent_chat/data/builtin/tools/agent_tool.dart" show ToolOffer;
 import "package:agent_chat/data/builtin/tools/bash_tool.dart" show BashTool;
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
@@ -1097,6 +1098,23 @@ void main() {
       expect(offers(const ToolOffer(sandboxed: true)), isTrue);
       expect(offers(const ToolOffer()), isFalse);
       expect(offers(const ToolOffer(sandboxed: true, oneShot: true)), isFalse);
+    });
+
+    test("the machine's temp folders reach the sandbox", () async {
+      final client = FakeLlmClient([
+        [bashCall("python3 build.py")],
+        [finish],
+      ]);
+      await agentOver(
+        client,
+        approveMode: ApproveMode.never,
+      ).run(userMessage("go")).toList();
+      // Granted by the gate, into the sandbox's own write set, so whatever
+      // reads a `CommandSandbox` sees every folder the command could write.
+      expect(
+        shell.sandboxes.single!.extraWrites,
+        containsAll(await systemTemps()),
+      );
     });
 
     test("the turn's writableDirs reach the sandbox while they are folders "
