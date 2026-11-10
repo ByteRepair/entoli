@@ -517,8 +517,36 @@ back, and at least one segment must match — and `writes` are the union of
 the matched rules'. The turn's grant is the chat's workspace, its tmp, the
 project's workspace beside it, and the tiers' `writableDirs`.
 
-Beside those, two grants a build needs and a user should never have had to
-make (`sandbox_grants.dart`). **The toolchain caches** under the machine
+Beside those, three grants a build needs and a user should never have had
+to make (`sandbox_grants.dart`), each into the sandbox's `extraWrites` from
+`_sandboxFor`, so a `CommandSandbox` is always the whole write set and a
+helper renders it and adds nothing of its own. **The system's temp
+folders** (`systemTemps`): on macOS `/private/tmp` and the per-user folder
+`getconf DARWIN_USER_TEMP_DIR` names (Seatbelt's helper resolves it to the
+real path, like every grant), on Linux `/tmp` and `/var/tmp` where they
+exist, and nothing elsewhere. Found once per process as a future the gate
+starts before its policy read, so parallel sub-agents' first commands share
+one `getconf`. `TMPDIR` still names the chat's `.entoli-tmp`, and a program
+that honours it writes there; the grant is for the ones that do not.
+macOS's `mktemp` asks `_CS_DARWIN_USER_TEMP_DIR` before `TMPDIR` (its manual
+says so), so it failed whatever `TMPDIR` said, meson's compiler check with
+it; the system's bash 3.2 never reads `TMPDIR` for a here document — it
+tries `/var/tmp`, `/tmp`, then the working directory — so `python3 - <<'EOF'`
+worked in the workspace and failed after a `cd` out of it. `TMPDIR` reached
+every one of those commands; they did not ask it. **The cost is accepted,
+and it is this**: those folders are shared with every program the user
+runs, so a confined command can overwrite or delete another app's temp
+files there. The alternative was a stream of failures in ordinary tools,
+each one sending the model out of the sandbox altogether, which grants far
+more. The phones, the guests and Windows change nothing: a phone's host
+shell is inside the app's own OS sandbox, a guest Linux (proot, iSH) has
+its own `/tmp` inside the rootfs, and Windows has no sandbox to grant it
+in. With them writable, the parse no longer counts a `TMPDIR` assignment as
+an escalation: it picks no program and no configuration, only where scratch
+lands, and the parse gate stands only where the sandbox already bounds
+that.
+
+**The toolchain caches** under the machine
 user's home that exist, looked up once per turn — `~/.cache`, `~/Library/Caches`, Xcode's
 DerivedData, `~/.pub-cache`, `~/.npm`, `~/.gradle`, Cargo's registry, Go's
 module cache and their kin, the variables that move them, and the `bin/cache`
