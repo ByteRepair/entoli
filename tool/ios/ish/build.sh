@@ -96,7 +96,7 @@ blink_files=(
   abort address alu alu1 alu2 alui assert bcd bit bitscan bmi2 bus clmul
   cmpxchg cpuid crc32 cvt divmul errfd errno flags fpu instruction jit ldbl
   legacy log machine memory mmx modrm op101 popcount pte32 random rdrand reset
-  sse sse2 ssefloat ssemov stack string time uop x86 xadd xchg breg vigna dll
+  sse sse2 sse4 ssefloat ssemov stack string time uop x86 xadd xchg breg vigna dll
   memccpy
 )
 blink_src=(emu/blink/interp.c)
