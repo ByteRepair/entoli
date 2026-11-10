@@ -31,10 +31,12 @@ abstract class _PlanTool extends AgentTool {
   bool get offered => !offer.oneShot;
 }
 
-String _planPath(Turn turn) => p.join(turn.workspace, planFileName);
+/// Where [turn]'s plan is, and what it holds — null where there is none. The
+/// one reader the plan tools and the agent share.
+String planPath(Turn turn) => p.join(turn.workspace, planFileName);
 
-Future<String?> _readPlan(Turn turn) async {
-  final file = File(_planPath(turn));
+Future<String?> readPlan(Turn turn) async {
+  final file = File(planPath(turn));
   if (!file.existsSync()) return null;
   return file.readAsString();
 }
@@ -122,10 +124,10 @@ class PlanAddTool extends _PlanTool {
     }
     final section = stringArg(call.argumentsJson, "section");
     yield toolCalled(call, task);
-    final path = _planPath(turn);
+    final path = planPath(turn);
     yield* gatedFileRun(turn, call, path, planAddToolName, () async {
       final updated = planAddTask(
-        await _readPlan(turn),
+        await readPlan(turn),
         task,
         section: section,
         details: details,
@@ -162,7 +164,7 @@ class PlanNextTool extends _PlanTool {
   @override
   Stream<AgentEvent> run(LlmToolCall call, Turn turn) async* {
     yield toolCalled(call);
-    final plan = await _readPlan(turn);
+    final plan = await readPlan(turn);
     final missing = _planMissing(plan);
     final next = planNext(plan);
     if (next == null) {
@@ -179,7 +181,7 @@ class PlanNextTool extends _PlanTool {
 /// from the text just read, so the mark cannot miss.
 Future<String> _take(Turn turn, String plan, PlanTask task) async {
   final marked = planMark(plan, task.index, PlanTaskStatus.inProgress)!;
-  await File(_planPath(turn)).writeAsString(marked);
+  await File(planPath(turn)).writeAsString(marked);
   return planNextResult(task, planProgress(marked));
 }
 
@@ -225,7 +227,7 @@ class PlanDoneTool extends _PlanTool {
       return;
     }
     yield toolCalled(call, task);
-    final plan = await _readPlan(turn);
+    final plan = await readPlan(turn);
     final missing = _planMissing(plan);
     if (missing != null) {
       yield toolFailed(call, missing);
@@ -260,7 +262,7 @@ class PlanDoneTool extends _PlanTool {
       );
       return;
     }
-    await File(_planPath(turn)).writeAsString(marked);
+    await File(planPath(turn)).writeAsString(marked);
     final (finished, total) = planProgress(marked);
     yield toolOk(call, finished == total ? "$done\n\nAll tasks done." : done);
   }
@@ -270,7 +272,7 @@ class PlanDoneTool extends _PlanTool {
   /// one plan tool, so it is said once and only where the plan is offered.
   @override
   Future<String?> beforeStop(Turn turn) async {
-    final plan = await _readPlan(turn);
+    final plan = await readPlan(turn);
     if (!planUnderWay(plan)) return null;
     final open = [
       for (final t in planTasksFrom(plan))
@@ -345,7 +347,7 @@ class PresentPlanTool extends AgentTool {
       return;
     }
     yield toolCalled(call, args.title ?? planFileName);
-    final plan = await _readPlan(turn);
+    final plan = await readPlan(turn);
     final missing = _planMissing(plan);
     if (missing != null) {
       yield toolFailed(call, missing);

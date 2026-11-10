@@ -15,24 +15,12 @@ import "templates.dart" show notExecuted;
 import "tool_outcome.dart";
 
 /// How one gated call came out, filled in by the gate for the call that made
-/// it: what ran or refused it ([result]), what decided ([decision]), and
-/// whether a person answered a banner before the run ([byPerson]). A value
-/// the caller holds rather than state on the gate, so nothing of one call can
-/// be read as another's.
+/// it: what ran or refused it ([result]) and what decided ([decision]). A
+/// value the caller holds rather than state on the gate, so nothing of one
+/// call can be read as another's.
 class GateOutcome {
   ShellResult? result;
   Decision? decision;
-
-  /// The run sits behind a banner a person read and answered. The command
-  /// parse reads it to stand down: a parse vetoing what a person approved is
-  /// the machine overriding its keeper.
-  bool byPerson = false;
-
-  /// The classifier allowed the run having read the whole command beside
-  /// the parse's findings on it. The parse stands down for this too: its
-  /// findings are what the classifier was asked to judge, so refusing on
-  /// them again would be asking a question and ignoring the answer.
-  bool judgedWhole = false;
 
   /// The outcome as [call]'s result.
   ToolResult resultOf(LlmToolCall call) =>
@@ -115,7 +103,10 @@ class ApprovalGate {
   Future<StandingPermissions> permissions() => _callPolicy ??= _read();
 
   /// A new call: the policy is read again when it is next asked for.
-  void nextCall() => _callPolicy = null;
+  void nextCall() {
+    _callPolicy = null;
+    _confinement = null;
+  }
 
   Future<StandingPermissions> _read() async {
     final read = await policy();
@@ -139,6 +130,7 @@ class ApprovalGate {
   void grant(Iterable<String> dirs) {
     _runtimeDirs.addAll(dirs);
     _callPolicy = null;
+    _confinement = null;
   }
 
   /// The confinement a command runs under, from the shell's driver. Only
@@ -188,7 +180,19 @@ class ApprovalGate {
   /// word on it — none where a no-sandbox rule covers every segment that
   /// could write, the rules' own folders added where they match. One answer
   /// for the gate asking whether leaving it is being asked for, and the run.
-  Future<CommandSandbox?> confinementOf(ShellCommandAnalysis analysis) async {
+  /// Worked out once per call: the gate and the run ask about the same
+  /// analysis.
+  Future<CommandSandbox?> confinementOf(ShellCommandAnalysis analysis) {
+    final held = _confinement;
+    if (held != null && identical(held.$1, analysis)) return held.$2;
+    final confined = _confine(analysis);
+    _confinement = (analysis, confined);
+    return confined;
+  }
+
+  (ShellCommandAnalysis, Future<CommandSandbox?>)? _confinement;
+
+  Future<CommandSandbox?> _confine(ShellCommandAnalysis analysis) async {
     final permissions = await this.permissions();
     final sandbox = _sandboxFor(permissions);
     if (sandbox == null) return null;
@@ -213,9 +217,10 @@ class ApprovalGate {
   /// the path for a file tool, the URL for a fetch, null where the rules
   /// match the tool alone — or [analysis] for a command, judged segment by
   /// segment, so an allow that covers the head but not the tail escalates
-  /// the whole. The rule's reach stops where the parse's does: a
-  /// command with findings is escalated to the banner even under an allow
-  /// rule, and refused in `never` mode, where nobody is there to ask.
+  /// the whole. The rule's reach stops where the parse's does: a command
+  /// with findings, where a sandbox would confine it, is judged whole even
+  /// under an allow rule — the banner in `ask`, the classifier in `auto` —
+  /// and refused in `never` mode, where nobody is there to judge it.
   ///
   /// [argumentsText] is what the banner shows, worded where the call is in
   /// hand rather than parsed back out of the JSON by whoever draws it. [mode]
@@ -241,53 +246,52 @@ class ApprovalGate {
       url: ruleSubject,
       segments: analysis?.modelableSegments,
     );
-    switch (verdict?.decision) {
-      case PermissionDecision.deny:
-        outcome.decision = (
-          source: PermissionSource.rule,
-          tiers: verdict!.tiers,
-          decided: PermissionDecision.deny,
-        );
-        outcome.result = const ShellResult.failed(_deniedByRule);
-        return;
-      case PermissionDecision.allow:
-        // Allowing a command is not allowing it out of the sandbox.
-        if (unsandboxed) break;
-        // An allow rule is a standing decision, but only for commands the
-        // parse can vouch for: a compound command whose later segments the
-        // rule does not cover runs with them unanswered. Findings here are a
-        // banner, in every mode but never — where nobody is watching.
-        final note = analysis?.escalationNote;
-        if (note != null) {
-          if (turnMode == ApproveMode.never) {
-            outcome.result = ShellResult.failed(note);
-            return;
-          }
-          if (turnMode == ApproveMode.auto) {
-            yield* _judgeWhole(
-              call,
-              toolName,
-              run,
-              outcome,
-              argumentsText,
-              analysis!,
-              rules,
-            );
-            return;
-          }
+    if (verdict?.decision == PermissionDecision.deny) {
+      outcome.decision = (
+        source: PermissionSource.rule,
+        tiers: verdict!.tiers,
+        decided: PermissionDecision.deny,
+      );
+      outcome.result = const ShellResult.failed(_deniedByRule);
+      return;
+    }
+    final callMode = mode ?? turnMode;
+    // A command the parse has findings on, where a sandbox would hold the
+    // run to them: decided here, once, for every rule and mode short of a
+    // deny. An allow rule is a standing decision only for commands the parse
+    // can vouch for; past that the command is judged whole — by the banner
+    // in ask, by the classifier in auto — and refused in never, where nothing
+    // is there to judge it. Without a sandbox the parse has nothing to hold
+    // the run to, and the mode decides as for any command.
+    if (analysis?.escalationNote case final note?
+        when !unsandboxed && await confinementOf(analysis!) != null) {
+      switch (callMode) {
+        case ApproveMode.never:
+          outcome.result = ShellResult.failed(note);
+        case ApproveMode.ask:
           yield* _ask(call, toolName, run, outcome, argumentsText);
-          return;
-        }
-        outcome.decision = (
-          source: PermissionSource.rule,
-          tiers: verdict!.tiers,
-          decided: PermissionDecision.allow,
-        );
-        outcome.result = await run();
-        return;
-      case PermissionDecision.ask:
-      case null:
-        break;
+        case ApproveMode.auto:
+          yield* _judgeWhole(
+            call,
+            toolName,
+            run,
+            outcome,
+            argumentsText,
+            analysis,
+            rules,
+          );
+      }
+      return;
+    }
+    // Allowing a command is not allowing it out of the sandbox.
+    if (verdict?.decision == PermissionDecision.allow && !unsandboxed) {
+      outcome.decision = (
+        source: PermissionSource.rule,
+        tiers: verdict!.tiers,
+        decided: PermissionDecision.allow,
+      );
+      outcome.result = await run();
+      return;
     }
     // Where the rules left the command uncovered, the deterministic tiers
     // answer before any mode does: a segment the parse proves
@@ -305,27 +309,7 @@ class ApprovalGate {
         return;
       }
     }
-    // A command the parse has findings on, where a sandbox would hold the
-    // parse to them: in auto mode the classifier judges it whole rather than
-    // the run refusing it unjudged. Ask mode's banner already does, and never
-    // mode has nobody to judge it — the run refuses it there.
-    if (analysis != null &&
-        !unsandboxed &&
-        (mode ?? turnMode) == ApproveMode.auto &&
-        analysis.escalationNote != null &&
-        await confinementOf(analysis) != null) {
-      yield* _judgeWhole(
-        call,
-        toolName,
-        run,
-        outcome,
-        argumentsText,
-        analysis,
-        rules,
-      );
-      return;
-    }
-    switch (mode ?? turnMode) {
+    switch (callMode) {
       case ApproveMode.ask:
         yield* _ask(
           call,
@@ -438,7 +422,6 @@ class ApprovalGate {
       ],
       decided: allowed ? PermissionDecision.allow : PermissionDecision.deny,
     );
-    outcome.byPerson = true;
     outcome.result = allowed
         ? await run()
         : const ShellResult.failed(_deniedByUser);
@@ -484,8 +467,7 @@ class ApprovalGate {
 
   /// Classify the call, then allow (run), deny (refuse), or ask (escalate to
   /// the banner). [findings] are what the command parse could not answer for,
-  /// handed to the classifier beside the call; an allow given with them in
-  /// hand marks the run [GateOutcome.judgedWhole]. [refusal] is what a deny
+  /// handed to the classifier beside the call. [refusal] is what a deny
   /// answers with, where the caller has something better to say than that
   /// the call was dangerous.
   Stream<AgentEvent> _classify(
@@ -512,6 +494,10 @@ class ApprovalGate {
 
     // Raced with a stop: a turn outliving its abort ran on into the next
     // turn, clearing its banner and rewriting the session under it.
+    final (policy, asked) = await (
+      permissions(),
+      request?.call() ?? Future<ClassifierRequest?>.value(),
+    ).wait;
     final decision = await Future.any([
       (classifier ?? const NoClassifier()).classify(
         toolName,
@@ -519,10 +505,10 @@ class ApprovalGate {
         workspace: workspace,
         alsoWritable: [
           if (projectWorkspace != workspace) projectWorkspace,
-          ...(await permissions()).writableDirs,
+          ...policy.writableDirs,
         ],
         findings: findings,
-        request: await request?.call(),
+        request: asked,
       ),
       stopped.then((_) => PermissionDecision.ask),
     ]);
@@ -541,7 +527,6 @@ class ApprovalGate {
     }
     switch (decision) {
       case PermissionDecision.allow:
-        outcome.judgedWhole = findings.isNotEmpty;
         outcome.result = await run();
       case PermissionDecision.deny:
         outcome.result = ShellResult.failed(

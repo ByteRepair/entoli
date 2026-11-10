@@ -71,6 +71,7 @@ void main() {
     GoalReader? goal,
     GoalReviewer? goalReviewer,
     bool oneShot = false,
+    String? said,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-test");
     // Beside the workspaces, the way the layout keeps `chats/<id>/resources`.
@@ -117,6 +118,7 @@ void main() {
       goal: goal,
       goalReviewer: goalReviewer,
       oneShot: oneShot,
+      said: said,
     );
   }
 
@@ -2352,40 +2354,29 @@ void main() {
       expect(shell.ran, hasLength(1));
     });
 
-    test("in auto mode the parse stands down for a judged command", () async {
-      // The classifier asks: the banner is the decision, as in ask mode.
-      final client = FakeLlmClient([
-        [bashCall(r'echo "unclosed')],
-        [finish],
-      ]);
-      await agentOver(
-        client,
-        sandboxHelper: _StubSandboxHelper(),
-        approveMode: ApproveMode.auto,
-        classifier: FakeClassifier(decision: PermissionDecision.ask),
-        approvals: [ApprovalResponse.allow, ApprovalResponse.allow],
-      ).run(userMessage("go")).toList();
+    test(
+      "in auto mode the banner judges what the classifier asks about",
+      () async {
+        // The classifier asks: the banner is the decision, as in ask mode.
+        final client = FakeLlmClient([
+          [bashCall(r'echo "unclosed')],
+          [finish],
+        ]);
+        await agentOver(
+          client,
+          sandboxHelper: _StubSandboxHelper(),
+          approveMode: ApproveMode.auto,
+          classifier: FakeClassifier(decision: PermissionDecision.ask),
+          approvals: [ApprovalResponse.allow, ApprovalResponse.allow],
+        ).run(userMessage("go")).toList();
 
-      expect(
-        shell.ran,
-        hasLength(1),
-        reason: "the banner is the decision, in auto mode as in ask",
-      );
-
-      // The classifier allows, told what the parse found: it judged the
-      // command whole, and the run does not refuse it again.
-      final allowed = FakeLlmClient([
-        [bashCall(r'echo "unclosed')],
-        [finish],
-      ]);
-      await agentOver(
-        allowed,
-        sandboxHelper: helper,
-        approveMode: ApproveMode.auto,
-        classifier: FakeClassifier(decision: PermissionDecision.allow),
-      ).run(userMessage("go")).toList();
-      expect(shell.ran, [r'echo "unclosed']);
-    });
+        expect(
+          shell.ran,
+          hasLength(1),
+          reason: "the banner is the decision, in auto mode as in ask",
+        );
+      },
+    );
   });
 
   group("what the classifier is told the user asked for", () {
@@ -2406,6 +2397,7 @@ void main() {
           approveMode: ApproveMode.auto,
           classifier: classifier,
           goal: FakeGoal(const ChatGoal(objective: "ship the release")).read,
+          said: "run the test suite",
         );
         planUnderWay(agent);
         await agent.run(userMessage("run the test suite")).toList();
@@ -2429,7 +2421,7 @@ void main() {
           const ChatGoal(objective: "ship", status: GoalStatus.paused),
         ).read,
       ).run(userMessage("go")).toList();
-      expect(classifier.requests.single!.goal, isNull);
+      expect(classifier.requests.single?.goal, isNull);
     });
 
     test("a sub-agent's is its task, not the chat's plan", () async {
@@ -2444,6 +2436,7 @@ void main() {
         approveMode: ApproveMode.auto,
         classifier: classifier,
         oneShot: true,
+        said: "find why the build fails",
       );
       planUnderWay(agent);
       await agent.run(userMessage("find why the build fails")).toList();

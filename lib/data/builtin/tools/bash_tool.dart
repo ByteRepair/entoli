@@ -165,7 +165,7 @@ class BashTool extends AgentTool {
     yield* turn.gate.decide(
       call,
       bashToolName,
-      () => _execute(turn, call, command, analysis, outcome, unconfined: leave),
+      () => _execute(turn, call, command, analysis, unconfined: leave),
       outcome,
       argumentsText: command,
       analysis: analysis,
@@ -178,8 +178,7 @@ class BashTool extends AgentTool {
     Turn turn,
     LlmToolCall call,
     String command,
-    ShellCommandAnalysis analysis,
-    GateOutcome outcome, {
+    ShellCommandAnalysis analysis, {
     bool unconfined = false,
   }) async {
     if (turn.cancelled) {
@@ -197,29 +196,10 @@ class BashTool extends AgentTool {
           ? cap
           : requested.clamp(0, cap),
     );
-    // What the command parses to, decided before anything asks a model about
-    // it. The parse answers for the deterministic safe side — reads, and
-    // writes the workspace can hold — and refuses what it cannot answer for:
-    // a command that cannot be modeled is one the model decided the wording
-    // of, and one that assigns to a variable that rewrites where its own
-    // writes land is not answering for itself.
-    //
-    // The gate is on only where a sandbox exists to make the boundary hold:
-    // without one the parse has nothing to enforce, and refusing on its word
-    // would be trusting the same text-only read the sandbox exists to back.
-    // And it stands down where a person has decided: a run behind the
-    // approval banner was read and answered by a human, and a parse vetoing
-    // what the human approved is the machine overriding its keeper. The
-    // banner, not the mode, is what carries that — auto mode reaches the
-    // banner through the classifier's ask — so the gate reads what the
-    // outcome says of the run. The same holds for auto mode's classifier
-    // where it allowed the command told the parse's findings: it judged the
-    // command whole, which is what the parse could not do.
+    // Whether the parse's findings let the command run is the gate's to
+    // have decided: by here it has been allowed, by a rule the parse could
+    // vouch for, a person, or the classifier judging it whole.
     final sandbox = unconfined ? null : await turn.gate.confinementOf(analysis);
-    if (sandbox != null && !outcome.byPerson && !outcome.judgedWhole) {
-      final note = analysis.escalationNote;
-      if (note != null) return ShellResult.failed(note);
-    }
     final jobs = turn.backgroundJobs;
     if (jobs != null && boolArg(call.argumentsJson, "background")) {
       return _startBackground(turn, jobs, call.id, command, sandbox);

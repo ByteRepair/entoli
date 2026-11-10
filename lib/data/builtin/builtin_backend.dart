@@ -537,7 +537,13 @@ class BuiltinBackend implements AgentBackend {
         viewer: participant,
         compactions: compactions,
       );
+      // A resumed turn has no prompt of its own to read `@agent` mentions out
+      // of, or to tell the classifier what was asked, so both come off the
+      // message that started it.
+      final said =
+          prompt ?? history.lastWhereOrNull((m) => m.role == MessageRole.user);
       final agent = BuiltinAgent(
+        said: said?.plainText,
         session: session,
         viewer: participant,
         agent: AgentDefinition.of(file),
@@ -675,13 +681,9 @@ class BuiltinBackend implements AgentBackend {
       // The real kill replaces the placeholder.
       _running.replace(stopKey, agent.cancel);
 
-      // A resumed turn has no prompt of its own to read `@agent` mentions out
-      // of, so they come off the message that started it.
-      final said =
-          prompt ?? history.lastWhereOrNull((m) => m.role == MessageRole.user);
       final mentions = mentionedAgents(said?.references ?? const []);
       final events = prompt == null
-          ? agent.resume(mentions: mentions, said: said?.plainText)
+          ? agent.resume(mentions: mentions)
           : agent.run(
               prompt,
               mentions: mentions,

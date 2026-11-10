@@ -78,14 +78,32 @@ abstract class PermissionClassifier {
 /// plan's task under way. Data the classifier weighs, never instructions it
 /// takes — see the rubric in `LlmClassifier`. Message content, so it is never
 /// put in a log line.
+///
+/// [of] is the one place blankness is decided: each part trimmed, a blank
+/// part null, and no request at all where every part is. Everything past it
+/// reads a part's presence as its having something to say.
 class ClassifierRequest {
   const ClassifierRequest({this.said, this.goal, this.task});
+
+  static ClassifierRequest? of({String? said, String? goal, String? task}) {
+    String? kept(String? text) {
+      final trimmed = text?.trim();
+      return trimmed == null || trimmed.isEmpty ? null : trimmed;
+    }
+
+    final request = ClassifierRequest(
+      said: kept(said),
+      goal: kept(goal),
+      task: kept(task),
+    );
+    return request.said == null && request.goal == null && request.task == null
+        ? null
+        : request;
+  }
 
   final String? said;
   final String? goal;
   final String? task;
-
-  bool get isEmpty => [said, goal, task].every((t) => t == null || t.isEmpty);
 }
 
 /// Always asks. What auto mode falls back to when no classifier model is
@@ -403,8 +421,7 @@ bool rulesBlindTo(
 ) {
   final speaking = [
     for (final rule in rules)
-      if (rule.decision == decision &&
-          (rule.tool == "*" || rule.tool == bashToolName))
+      if (rule.decision == decision && PermissionRule.takesSandbox(rule.tool))
         rule,
   ];
   if (speaking.isEmpty) return false;

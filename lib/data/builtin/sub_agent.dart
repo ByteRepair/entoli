@@ -128,6 +128,7 @@ class SubAgentRunner implements SubAgents {
       session,
       _definitionOf(agentName),
       callId,
+      task: prompt,
       // The task is dressed: a fresh session's first own mail, what the
       // instance template frames it as.
       (agent) => agent.run(said, mayDress: true),
@@ -138,19 +139,16 @@ class SubAgentRunner implements SubAgents {
   /// its own transcript. The same thing the user's Continue does one level up,
   /// and the same three steps: project the log back, nudge, run the loop.
   Future<ShellResult> resume(String agentName, String callId) async {
-    final transcript = await log.read(callId);
     final session = BuiltinSession()
-      ..replaceWith(await projectionOf(transcript, load: noResources));
-    // The task it was set, which is what it is carrying on.
-    final task = transcript
-        .where((m) => m.role == MessageRole.user)
-        .firstOrNull
-        ?.plainText;
+      ..replaceWith(
+        await projectionOf(await log.read(callId), load: noResources),
+      );
+    // No task to say: the transcript opens on the sub-agent's own message.
     return _drive(
       session,
       _definitionOf(agentName),
       callId,
-      (agent) => agent.resume(said: task),
+      (agent) => agent.resume(),
     );
   }
 
@@ -165,8 +163,9 @@ class SubAgentRunner implements SubAgents {
     BuiltinSession session,
     AgentDefinition definition,
     String? callId,
-    Stream<AgentEvent> Function(BuiltinAgent) start,
-  ) async {
+    Stream<AgentEvent> Function(BuiltinAgent) start, {
+    String? task,
+  }) async {
     String? error;
 
     final agent = BuiltinAgent(
@@ -200,6 +199,7 @@ class SubAgentRunner implements SubAgents {
       readOnlyDirs: readOnlyDirs,
       webSearch: webSearch,
       rateLimitGate: rateLimitGate,
+      said: task,
     );
     final recorder = callId == null ? null : await _recorderFor(callId);
 

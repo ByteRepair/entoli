@@ -1,10 +1,8 @@
 import "dart:async";
 import "dart:convert";
-import "dart:io";
 import "dart:typed_data";
 
 import "package:flutter/foundation.dart" show visibleForTesting;
-import "package:path/path.dart" as p;
 import "package:uuid/uuid.dart";
 
 import "../../core/log.dart" show logFailure;
@@ -16,8 +14,7 @@ import "../../domain/file_tools.dart";
 import "../../domain/goal.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
-import "../../domain/plan.dart"
-    show PlanTaskStatus, planFileName, planTasksFrom;
+import "../../domain/plan.dart" show planInProgress, writesPlan;
 import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
@@ -39,6 +36,7 @@ import "projection.dart";
 import "templates.dart";
 import "tools/agent_tool.dart";
 import "tools/customization_tools.dart";
+import "tools/plan_tools.dart" show readPlan;
 import "tools/registry.dart";
 import "tools/skill_tool.dart" show skillToolName;
 import "tools/turn.dart";
@@ -245,7 +243,15 @@ class BuiltinAgent implements Turn {
     this.claimInstruction,
     this.goal,
     this.goalReviewer,
+    this.said,
   });
+
+  /// The text of the message this turn opened on, as the user typed it — a
+  /// sub-agent's, its task — for the classifier's account of what was asked.
+  /// The caller's to say, since it holds the message: the session holds only
+  /// its projection, dressed, and a resumed turn has no prompt at all. Null
+  /// where nobody said.
+  final String? said;
 
   /// The chat's goal, read at each stop; null for a turn that keeps none — a
   /// sub-agent's, or a test's. The turn never writes it: what a review finds
@@ -669,39 +675,32 @@ class BuiltinAgent implements Turn {
     request: _classifierRequest,
   );
 
-  /// The text of the message this turn opened on, as the user typed it: set
-  /// by [run] from its prompt, by [resume] from what its caller says started
-  /// the turn. For a sub-agent, its task.
-  String? _said;
-
-  /// What the classifier is told the user asked for: [_said], the chat's
+  /// What the classifier is told the user asked for: [said], the chat's
   /// active goal, and the plan's task under way. The plan is the chat's own
   /// and a one-shot agent does not keep it (the plan tools are not offered
   /// there), so a sub-agent's request is its task alone.
-  Future<ClassifierRequest?> _classifierRequest() async {
-    final objective = switch (goal?.call()) {
-      final asked? when asked.isActive => asked.objective,
-      _ => null,
-    };
-    final task = oneShot ? null : await _planTaskUnderWay();
-    final request = ClassifierRequest(said: _said, goal: objective, task: task);
-    return request.isEmpty ? null : request;
-  }
+  Future<ClassifierRequest?> _classifierRequest() async => ClassifierRequest.of(
+    said: said,
+    goal: _standingGoal()?.objective,
+    task: oneShot ? null : await _planTask(),
+  );
 
-  /// The plan's task in progress, read off the chat's `PLAN.md`; null where
-  /// there is none, or the file is not there to read.
-  Future<String?> _planTaskUnderWay() async {
-    final file = File(p.join(workspace, planFileName));
-    if (!file.existsSync()) return null;
-    try {
-      return planTasksFrom(
-        await file.readAsString(),
-      ).where((t) => t.status == PlanTaskStatus.inProgress).firstOrNull?.text;
-    } on FileSystemException catch (e) {
-      logFailure("agent", "plan unreadable for the classifier", e.message);
+  /// The plan's task in progress, read once and kept until a call that can
+  /// write the plan has run: every classifier call of a turn asks, and the
+  /// file moves only under a plan writer. A `bash` rewriting it is missed
+  /// until the next writer, as the plan's revision count misses it.
+  Future<String?> _planTask() => _planTaskHeld ??= readPlan(this).then(
+    (plan) => planInProgress(plan)?.text,
+    onError: (Object e) {
+      logFailure("agent", "plan unreadable for the classifier", "$e");
       return null;
-    }
-  }
+    },
+  );
+  Future<String?>? _planTaskHeld;
+
+  /// The call last dispatched could write the plan: [_planTaskHeld] is
+  /// stale once it has run.
+  bool _plannedLast = false;
 
   /// Resolve a file-tool path through the workspaces, the guest root and the
   /// shell's home, so every call site carries the translation without
@@ -775,7 +774,6 @@ class BuiltinAgent implements Turn {
     List<String> mentions = const [],
     bool mayDress = false,
   }) async* {
-    _said = prompt.plainText;
     await _openTurn(prompt, mayDress, mentions);
     yield* _recorded(_loop)();
   }
@@ -794,14 +792,7 @@ class BuiltinAgent implements Turn {
   /// rather than added to. Nothing logs it, so a session that kept it would
   /// hold a message no reload could rebuild; see "The projection" in
   /// `lib/domain/AGENTS.md` for what that cost.
-  ///
-  /// [said] is the message that started the turn being carried on, for the
-  /// classifier's account of what was asked.
-  Stream<AgentEvent> resume({
-    List<String> mentions = const [],
-    String? said,
-  }) async* {
-    _said = said;
+  Stream<AgentEvent> resume({List<String> mentions = const []}) async* {
     _setSystemPrompt(mentions);
     final turn = _recorded(_loop);
     // Wrapped either way: the branch decides whether the reason goes in, not
@@ -827,6 +818,8 @@ class BuiltinAgent implements Turn {
   /// the conversation, projected.
   Stream<AgentEvent> Function() _recorded(Stream<AgentEvent> Function() turn) =>
       () async* {
+        // A plan read in an earlier turn is not this one's.
+        _planTaskHeld = null;
         final said = TurnRecorder.parts();
         final from = session.messages.length;
         void sayWhatWasSaid() {
@@ -1017,8 +1010,12 @@ class BuiltinAgent implements Turn {
 
   /// The chat's goal, where it is one to review: there is a reviewer, and the
   /// goal is active.
-  ChatGoal? _activeGoal() => switch (goal?.call()) {
-    final asked? when goalReviewer != null && asked.isActive => asked,
+  ChatGoal? _activeGoal() => goalReviewer == null ? null : _standingGoal();
+
+  /// The chat's goal while it is active, reviewed or not: what the classifier
+  /// is told the turn is working towards.
+  ChatGoal? _standingGoal() => switch (goal?.call()) {
+    final asked? when asked.isActive => asked,
     _ => null,
   };
 
@@ -1190,6 +1187,8 @@ class BuiltinAgent implements Turn {
         continue;
       }
       gate.nextCall();
+      if (_plannedLast) _planTaskHeld = null;
+      _plannedLast = writesPlan(call.name);
       if (_cancelled) {
         // The call as well as the answer: a result whose call is not in the
         // parts is a result the projection has nothing to pair it to.
