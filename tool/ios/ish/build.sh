@@ -162,7 +162,7 @@ gen_offsets() {
   mkdir -p "$destdir"
   local sdkroot; sdkroot=$(xcrun --sdk "$sdk" --show-sdk-path)
   clang -S -std=gnu11 -isysroot "$sdkroot" -target "$target" -O2 \
-    -I"$src" -MD -MQ "$destdir/cpu-offsets.h.d" \
+    -I"$src" -MD -MF "$destdir/cpu-offsets.h.d" -MQ "$destdir/cpu-offsets.h" \
     "$src/asbestos/offsets.c" -include "$src/tools/staticdefine.h" -o - |
   sed -ne 's:^[[:space:]]*\.ascii[[:space:]]*"\(.*\)".*:\1:;
            /^->/{s:->#\(.*\):/* \1 */:;

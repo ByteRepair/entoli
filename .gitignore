@@ -180,4 +180,3 @@ tool/apple/mlx/.swiftpm/
 
 # Claude Code's agent worktrees, each a git checkout of its own.
 /.claude/worktrees/
--.d
