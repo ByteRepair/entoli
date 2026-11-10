@@ -7,6 +7,7 @@ library;
 import "dart:io";
 
 import "package:flutter/foundation.dart" show ValueListenable;
+import "package:path/path.dart" as p;
 
 /// The command tool's name: the log records it, the chat draws it, and the
 /// permission rules are typed by it.
@@ -63,14 +64,22 @@ class ShellResult {
   /// tells the model a failure was the sandbox's rather than the command's.
   final List<String> violations;
 
-  /// This result naming [violations] as the sandbox's refusals.
-  ShellResult withViolations(List<String> violations) => ShellResult(
-    returnCode: returnCode,
-    output: output,
-    exceptionInfo: exceptionInfo,
-    cwd: cwd,
-    jobId: jobId,
-    violations: violations,
+  /// This result with the fields given replaced. A null keeps the field as
+  /// it is, so a field is not cleared through this.
+  ShellResult copyWith({
+    int? returnCode,
+    String? output,
+    String? exceptionInfo,
+    String? cwd,
+    int? jobId,
+    List<String>? violations,
+  }) => ShellResult(
+    returnCode: returnCode ?? this.returnCode,
+    output: output ?? this.output,
+    exceptionInfo: exceptionInfo ?? this.exceptionInfo,
+    cwd: cwd ?? this.cwd,
+    jobId: jobId ?? this.jobId,
+    violations: violations ?? this.violations,
   );
 }
 
@@ -127,6 +136,12 @@ class CommandSandbox {
   /// Granted the full write set the workspace gets.
   final List<String> extraWrites;
 
+  /// Every directory (or file) the command may write to: [workspace], [tmp]
+  /// and [extraWrites]. What each helper grants and what a refusal is
+  /// checked against. The devices the helpers also open (`/dev/null` and
+  /// their kin) are each helper's own and not here.
+  List<String> get writes => [workspace, ?tmp, ...extraWrites];
+
   /// What the model reads of the writes a sandbox refused, beside the output
   /// they failed in.
   static String violationsNote(List<String> violations) =>
@@ -167,6 +182,42 @@ bool pathsOverlap(String a, String b) {
   } on FileSystemException {
     return false;
   }
+}
+
+/// [path] with its symlinks resolved, since Seatbelt matches the path the
+/// kernel resolved: a grant of `/tmp/x` matches nothing, every write there
+/// landing at `/private/tmp/x`. A path not there yet resolves its nearest
+/// existing ancestor and keeps the rest as written.
+String realPath(String path) {
+  var head = p.normalize(p.absolute(path));
+  final tail = <String>[];
+  while (true) {
+    try {
+      return p.joinAll([Directory(head).resolveSymbolicLinksSync(), ...tail]);
+    } on FileSystemException {
+      final parent = p.dirname(head);
+      if (parent == head) return p.normalize(p.absolute(path));
+      tail.insert(0, p.basename(head));
+      head = parent;
+    }
+  }
+}
+
+/// The repository [dir] is in: the nearest directory from [dir] up holding a
+/// `.git` — a directory for a checkout, a file for a worktree — or null
+/// where there is none below [stopAt] (exclusive) or the root.
+String? repositoryRootOf(String dir, {String? stopAt}) {
+  var at = p.normalize(dir);
+  while (at != stopAt) {
+    if (FileSystemEntity.typeSync(p.join(at, ".git"), followLinks: false) !=
+        FileSystemEntityType.notFound) {
+      return at;
+    }
+    final parent = p.dirname(at);
+    if (parent == at) return null;
+    at = parent;
+  }
+  return null;
 }
 
 String _trimSlash(String path) => path.length > 1 && path.endsWith("/")

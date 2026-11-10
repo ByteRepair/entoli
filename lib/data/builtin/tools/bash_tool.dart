@@ -9,7 +9,6 @@ import "../../../domain/shell_command_analysis.dart";
 import "../../../domain/shell_job.dart" show backgroundLog;
 import "../../../domain/tool_arg.dart";
 import "../approval_gate.dart";
-import "../sandbox_denials.dart";
 import "../background_jobs.dart";
 import "../llm/llm_client.dart";
 import "agent_tool.dart";
@@ -170,14 +169,26 @@ class BashTool extends AgentTool {
     }
     // Leaving the sandbox is part of what is asked: where one would confine
     // the run and no no-sandbox rule covers it, the call goes to the mode.
-    final leave = leavesSandbox && boolArg(call.argumentsJson, "unsandboxed");
-    final escaping = leave && await turn.gate.confinementOf(analysis) != null;
+    // Where the command starts, worked out once: the gate's sandbox, the run
+    // and the grant note all read it.
     final standing = turn.shell.standingIn(turn.workspace) ?? turn.workspace;
+    final leave = leavesSandbox && boolArg(call.argumentsJson, "unsandboxed");
+    final escaping =
+        leave &&
+        await turn.gate.confinementOf(analysis, standing: standing) != null;
     final outcome = GateOutcome();
     yield* turn.gate.decide(
       call,
       bashToolName,
-      () => _execute(turn, call, command, analysis, outcome, unconfined: leave),
+      () => _execute(
+        turn,
+        call,
+        command,
+        analysis,
+        outcome,
+        standing,
+        unconfined: leave,
+      ),
       outcome,
       argumentsText: command,
       analysis: analysis,
@@ -210,11 +221,11 @@ class BashTool extends AgentTool {
     String standing, {
     required bool unsandboxed,
   }) async {
-    if (!leavesSandbox || !grantsDirectories(offer)) return null;
-    // A banner the user said no to is their answer about this command.
-    if (result.decided == PermissionDecision.deny) return null;
     final denied = result.violations;
     if (!unsandboxed && denied.isEmpty) return null;
+    // A banner the user said no to is their answer about this command.
+    if (result.decided == PermissionDecision.deny) return null;
+    if (!leavesSandbox || !grantsDirectories(offer)) return null;
     final folder = grantFolder(
       unsandboxed
           ? [?_cdTarget(analysis, standing, turn), ?result.cwd, standing]
@@ -252,7 +263,8 @@ class BashTool extends AgentTool {
     LlmToolCall call,
     String command,
     ShellCommandAnalysis analysis,
-    GateOutcome outcome, {
+    GateOutcome outcome,
+    String standing, {
     bool unconfined = false,
   }) async {
     if (turn.cancelled) {
@@ -286,17 +298,18 @@ class BashTool extends AgentTool {
     // banner, not the mode, is what carries that — auto mode reaches the
     // banner through the classifier's ask — so the gate reads what the
     // outcome says of the run.
-    final sandbox = unconfined ? null : await turn.gate.confinementOf(analysis);
+    final sandbox = unconfined
+        ? null
+        : await turn.gate.confinementOf(analysis, standing: standing);
     if (sandbox != null && !outcome.byPerson) {
       final note = analysis.escalationNote;
       if (note != null) return ShellResult.failed(note);
     }
     final jobs = turn.backgroundJobs;
     if (jobs != null && boolArg(call.argumentsJson, "background")) {
-      return _startBackground(turn, jobs, call.id, command, sandbox);
+      return _startBackground(turn, jobs, call.id, command, sandbox, standing);
     }
-    final startIn = turn.shell.standingIn(turn.workspace) ?? turn.workspace;
-    final result = await turn.track(
+    return turn.track(
       call,
       turn.shell.start(
         command,
@@ -311,17 +324,6 @@ class BashTool extends AgentTool {
         readOnly: turn.readOnlyDirs,
       ),
     );
-    if (sandbox == null) return result;
-    // What the sandbox refused, read off the kernel's own errors: the one
-    // thing that says a failure was the sandbox's. See "Approvals".
-    final denied = sandboxDenials(
-      result.output,
-      sandbox,
-      cwd: result.cwd ?? startIn,
-      home: turn.shell.machineHome,
-      readOnly: turn.readOnlyDirs,
-    );
-    return denied.isEmpty ? result : result.withViolations(denied);
   }
 
   /// Start [command] as a background job and answer with where it went. A
@@ -334,12 +336,13 @@ class BashTool extends AgentTool {
     String callId,
     String command,
     CommandSandbox? sandbox,
+    String standing,
   ) async {
     final job = await jobs.start(
       command,
       callId: callId,
       workspace: turn.workspace,
-      startIn: turn.shell.standingIn(turn.workspace),
+      startIn: standing == turn.workspace ? null : standing,
       spawn: (script) => turn.shell.start(
         script,
         cwd: turn.workspace,

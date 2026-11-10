@@ -8,6 +8,7 @@ import "package:uuid/uuid.dart";
 
 import "../../core/log.dart";
 import "../../domain/file_tools.dart";
+import "../../domain/sandbox_denials.dart";
 import "../../domain/shell.dart";
 
 const _appImageVars = {"APPIMAGE", "APPDIR", "ARGV0", "OWD"};
@@ -304,6 +305,7 @@ class LocalShell extends Shell {
         includeParentEnvironment: driver?.includeParentEnvironment ?? true,
         sandbox: sandbox,
         sandboxHelper: driver?.sandboxHelper,
+        readOnly: readOnly,
       );
       // Registered here, ahead of whoever awaits the result, so the next
       // command already starts where this one left the chat.
@@ -1013,9 +1015,30 @@ class _OneShotRun extends ShellRun {
     this.includeParentEnvironment = true,
     this.sandbox,
     this.sandboxHelper,
+    this.readOnly = const [],
     this.reportsDir = false,
   }) {
-    result = _run();
+    result = _run().then(_withDenials);
+  }
+
+  /// What the command may read and must not write, left out of the
+  /// sandbox's refusals: those are the app's own file modes.
+  final List<String> readOnly;
+
+  /// [result] naming the writes the sandbox refused, read where the confined
+  /// run ends so every run under one hears it — a foreground command, a
+  /// background job, the user's own. See "Approvals" in
+  /// `lib/data/builtin/AGENTS.md`.
+  ShellResult _withDenials(ShellResult result) {
+    final sandbox = this.sandbox;
+    if (sandbox == null) return result;
+    final denied = sandboxDenials(
+      result.output,
+      sandbox,
+      cwd: result.cwd ?? cwd,
+      readOnly: readOnly,
+    );
+    return denied.isEmpty ? result : result.copyWith(violations: denied);
   }
 
   /// Whether the run says where the command finished, as the result's

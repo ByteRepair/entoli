@@ -584,7 +584,8 @@ refuses), so no folder grant could have been the answer there. Old results
 carry a `rerun` decision, still worded so their logs read.
 
 **What the sandbox refused is read off the kernel's own error**
-(`sandbox_denials.dart`), since neither enforcer reports a denial to anyone.
+(`lib/domain/sandbox_denials.dart`), since neither enforcer reports a denial
+to anyone.
 Seatbelt logs none for a `sandbox-exec` profile nested under another sandbox
 (checked: neither `(debug deny)` nor `log show --info --debug` shows one, and
 `(with report)` is refused on a deny), and a `log show` over the run's window
@@ -592,12 +593,17 @@ costs a second or two on every failing command. Landlock logs nothing, and
 its helper has exec'd the command before the write happens, so it has nothing
 to report either. What both leave is the errno, printed by whatever made the
 call: Seatbelt's EPERM ("Operation not permitted") and Landlock's EACCES
-("Permission denied"). A confined run's output is read for those lines. The
-path is the quoted string on the line, or the field just before the error,
-must hold a slash (a bare name is a program, as in `execvp() of 'ps'`), and
-counts only if it is outside every write the sandbox granted, resolved
-through symlinks as Seatbelt resolves them, and outside the read-only
-directories, whose EACCES is the app's file modes. That is the OS's error,
+("Permission denied"). The output is read for those lines where the
+confined run ends, in `LocalShell`'s one-shot run, so every run under a
+sandbox reports them on its `ShellResult` — the model's command and a
+background job alike — and output with neither errno is answered before
+anything is resolved. The path is the quoted string on the line, or the
+field just before the error, must hold a slash (a bare name is a program, as
+in `execvp() of 'ps'`), and counts only if it is outside
+`CommandSandbox.writes` — the one list the helpers grant from — resolved
+through symlinks as Seatbelt resolves them, outside the read-only
+directories, whose EACCES is the app's file modes, and outside `/dev`, a
+device being no folder to grant. That is the OS's error,
 not the model's words. What it finds is the result's `violations`, at most
 five, which the observation words as "Denied by the sandbox" beside the
 output and the activity draws under "Sandbox": the model is told the failure
@@ -610,10 +616,12 @@ folder, the nearest directory of it that exists. The other is a second
 `unsandboxed` request for one folder in a turn (the first is the one-off the
 argument is for), whose folder is where the command's leading `cd` goes,
 where the shell was left, or where it stood before. Either is widened to the
-nearest directory above it with a `.git` short of the home, since a build
-writes across the tree. It rides `ToolResult.notes`, names each folder once a
+nearest directory above it with a `.git` short of the home
+(`repositoryRootOf`, the walk the instruction files and a worktree's git
+directory share), since a build writes across the tree. It rides `ToolResult.notes`, names each folder once a
 turn, and is left off where `add_directory` is not the turn's to call
-(`grantsDirectories`: offered and in the agent's tools), or would be
+(`grantsDirectories`: `AgentTool.handed`, the predicate the tool list is
+built from), or would be
 refused: the root, the home or anything holding it, the app's data, anything
 holding the workspaces. A banner the user denied gets none, being their
 answer.

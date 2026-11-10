@@ -14,8 +14,7 @@
 
 import "package:path/path.dart" as p;
 
-import "../../domain/shell.dart" show CommandSandbox, pathInside;
-import "../local/seatbelt.dart" show realPath;
+import "shell.dart" show CommandSandbox, pathInside, realPath;
 
 /// The errno texts a sandbox's refused write prints: Seatbelt's EPERM and
 /// Landlock's EACCES.
@@ -29,30 +28,26 @@ final _quoted = RegExp("['\"‘`]([^'\"‘’`\n]+)['\"’`]");
 /// directory being one fact rather than a thousand.
 const _most = 5;
 
-/// The paths [output] says were refused a write that [sandbox] did not grant,
-/// in the order printed, at most a handful. Relative paths are read from
-/// [cwd], `~` from [home]. [readOnly] is left out, its denials being the
-/// app's own file modes rather than the sandbox. Empty where nothing printed
-/// one.
+/// The paths [output] says were refused a write that [sandbox] did not
+/// grant, in the order printed, at most a handful. Relative paths are read
+/// from [cwd], `~` from the sandbox's home. [readOnly] is left out, its
+/// denials being the app's own file modes rather than the sandbox, and so is
+/// `/dev`: a device is no folder to grant, and the helpers each open their
+/// own few. Empty where nothing printed one — the common case, answered
+/// before anything is resolved.
 List<String> sandboxDenials(
   String output,
   CommandSandbox sandbox, {
   required String cwd,
-  String? home,
   List<String> readOnly = const [],
 }) {
-  final grants = [
-    sandbox.workspace,
-    ?sandbox.tmp,
-    ...sandbox.extraWrites,
-    "/dev",
-  ];
-  final resolvedGrants = [for (final g in grants) realPath(g)];
+  if (!_denied.hasMatch(output)) return const [];
+  final grants = [...sandbox.writes, ...readOnly, "/dev"];
+  late final resolved = [for (final g in grants) realPath(g)];
   bool granted(String path) {
+    if (grants.any((g) => pathInside(path, g))) return true;
     final real = realPath(path);
-    return grants.any((g) => pathInside(path, g)) ||
-        resolvedGrants.any((g) => pathInside(real, g)) ||
-        readOnly.any((d) => pathInside(path, d) || pathInside(real, d));
+    return resolved.any((g) => pathInside(real, g));
   }
 
   final found = <String>[];
@@ -60,8 +55,8 @@ List<String> sandboxDenials(
     final error = _denied.firstMatch(line);
     if (error == null) continue;
     for (final named in _pathsOn(line, error.start)) {
-      final path = _absolute(named, cwd, home);
-      if (path == null || granted(path) || found.contains(path)) continue;
+      final path = _absolute(named, cwd, sandbox.home);
+      if (path == null || found.contains(path) || granted(path)) continue;
       found.add(path);
       if (found.length == _most) return found;
     }
@@ -84,13 +79,14 @@ Iterable<String> _pathsOn(String line, int at) {
 /// [named] as an absolute path, or null where it is not one. A name with no
 /// slash is left out: `ps: Operation not permitted` and `execvp() of 'ps'`
 /// name a program, not a write, and a bare file name is what that looks like.
+/// Not `resolveWorkspacePath`: a command's relative path is from where it
+/// stood, `..` included, not a file-tool path under the workspace.
 String? _absolute(String named, String cwd, String? home) {
   if (!named.contains("/") || named.contains(RegExp(r"[\x00-\x1f]"))) {
     return null;
   }
   if (named == "~" || named.startsWith("~/")) {
-    if (home == null) return null;
-    return p.normalize(p.join(home, named.substring(1).replaceFirst("/", "")));
+    return home == null ? null : p.normalize(home + named.substring(1));
   }
   return p.normalize(p.isAbsolute(named) ? named : p.join(cwd, named));
 }

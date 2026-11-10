@@ -3,7 +3,7 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
-import "package:agent_chat/data/builtin/sandbox_denials.dart";
+import "package:agent_chat/domain/sandbox_denials.dart";
 import "package:agent_chat/data/local/seatbelt.dart";
 import "package:agent_chat/domain/shell.dart";
 

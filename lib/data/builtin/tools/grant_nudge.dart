@@ -16,13 +16,14 @@ import "package:path/path.dart" as p;
 
 import "../../../domain/permission.dart" show addDirectoryName;
 import "../../../domain/file_tools.dart" show outsideWorkspaces;
-import "../../../domain/shell.dart" show pathInside, pathsOverlap;
+import "../../../domain/shell.dart"
+    show pathInside, pathsOverlap, repositoryRootOf;
 
 /// One turn's account of which folders it has suggested a grant for, and how
 /// often it asked to leave the sandbox in each. A folder is named once a
 /// turn: a note on every command would be the noise the model learns to skip.
 class GrantNudges {
-  final _unsandboxed = <String, int>{};
+  final _askedOnce = <String>{};
   final _named = <String>{};
 
   /// The note for a call whose work is in [folder], or null where there is
@@ -30,14 +31,7 @@ class GrantNudges {
   /// which says so the second time in one folder — once is the one-off the
   /// argument is for; otherwise the sandbox refused the call's writes there.
   String? note(String folder, {required bool unsandboxed}) {
-    if (unsandboxed) {
-      final asked = _unsandboxed.update(
-        folder,
-        (n) => n + 1,
-        ifAbsent: () => 1,
-      );
-      if (asked < 2) return null;
-    }
+    if (unsandboxed && _askedOnce.add(folder)) return null;
     if (!_named.add(folder)) return null;
     final grant =
         "call `$addDirectoryName` with $folder once: one approval covers "
@@ -88,7 +82,7 @@ String? grantFolder(
     )) {
       continue;
     }
-    final repo = _repositoryOf(dir, home);
+    final repo = repositoryRootOf(dir, stopAt: home);
     if (repo != null && grantable(repo)) return repo;
     if (grantable(dir)) return dir;
   }
@@ -103,19 +97,4 @@ String existingDirectoryOf(String path) {
     at = p.dirname(at);
   }
   return at;
-}
-
-/// The nearest directory from [dir] up holding a `.git`, file or directory,
-/// stopping short of [home] and the root.
-String? _repositoryOf(String dir, String? home) {
-  var at = dir;
-  while (at != home && p.dirname(at) != at) {
-    final dotGit = p.join(at, ".git");
-    if (FileSystemEntity.typeSync(dotGit, followLinks: false) !=
-        FileSystemEntityType.notFound) {
-      return at;
-    }
-    at = p.dirname(at);
-  }
-  return null;
 }

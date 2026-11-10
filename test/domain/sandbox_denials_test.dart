@@ -3,7 +3,7 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
-import "package:agent_chat/data/builtin/sandbox_denials.dart";
+import "package:agent_chat/domain/sandbox_denials.dart";
 import "package:agent_chat/domain/shell.dart";
 
 void main() {
@@ -20,17 +20,15 @@ void main() {
     outside = p.join(root, "repo");
     Directory(workspace).createSync();
     Directory(outside).createSync();
-    sandbox = CommandSandbox(workspace: workspace, tmp: p.join(root, "tmp"));
+    sandbox = CommandSandbox(
+      workspace: workspace,
+      tmp: p.join(root, "tmp"),
+      home: "/home/u",
+    );
   });
 
   List<String> denials(String output, {List<String> readOnly = const []}) =>
-      sandboxDenials(
-        output,
-        sandbox,
-        cwd: outside,
-        home: "/home/u",
-        readOnly: readOnly,
-      );
+      sandboxDenials(output, sandbox, cwd: outside, readOnly: readOnly);
 
   test("reads the path each tool's error names", () {
     final file = p.join(outside, "f");

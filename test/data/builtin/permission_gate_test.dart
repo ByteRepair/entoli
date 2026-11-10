@@ -1105,9 +1105,11 @@ void main() {
         ]);
         final events = await agentOver(
           client,
+          // What the shell reports of a run the sandbox refused a write.
           respond: (_) => ShellResult(
             returnCode: 1,
             output: "touch: $denied: Operation not permitted",
+            violations: [denied],
           ),
         ).run(userMessage("go")).toList();
         expect(shell.sandboxes.single, isNotNull);

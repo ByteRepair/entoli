@@ -145,7 +145,10 @@ class ApprovalGate {
   /// The sandbox a command runs in under [permissions]: the chat's workspace,
   /// its tmp, the project's workspace beside it — where work another
   /// conversation should find goes — and the granted directories.
-  CommandSandbox? _sandboxFor(StandingPermissions permissions) {
+  CommandSandbox? _sandboxFor(
+    StandingPermissions permissions, {
+    String? standing,
+  }) {
     if (!permissions.sandboxed) return null;
     if (helper == null) return null;
     final granted = [
@@ -154,7 +157,7 @@ class ApprovalGate {
       ...permissions.writableDirs,
     ];
     final gitDir = worktreeGitDir(
-      shell.standingIn(workspace) ?? workspace,
+      standing ?? shell.standingIn(workspace) ?? workspace,
       granted,
     );
     return CommandSandbox(
@@ -176,9 +179,15 @@ class ApprovalGate {
   /// word on it — none where a no-sandbox rule covers every segment that
   /// could write, the rules' own folders added where they match. One answer
   /// for the gate asking whether leaving it is being asked for, and the run.
-  Future<CommandSandbox?> confinementOf(ShellCommandAnalysis analysis) async {
+  ///
+  /// [standing] is where the command starts, where the caller has worked it
+  /// out already; the shell is asked otherwise.
+  Future<CommandSandbox?> confinementOf(
+    ShellCommandAnalysis analysis, {
+    String? standing,
+  }) async {
     final permissions = await this.permissions();
-    final sandbox = _sandboxFor(permissions);
+    final sandbox = _sandboxFor(permissions, standing: standing);
     if (sandbox == null) return null;
     final ruled = rulesSandbox(
       permissions.permissions,

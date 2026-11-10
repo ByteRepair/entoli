@@ -191,11 +191,7 @@ class AddDirectoryTool extends AgentTool {
 /// Whether [offer]'s turn is handed `add_directory`: offered, and in the
 /// agent's tools. What a `bash` result's steering toward it reads, so it
 /// names no tool the model cannot call.
-bool grantsDirectories(ToolOffer offer) {
-  final tool = AddDirectoryTool(offer);
-  return tool.offered &&
-      offer.agent.offers(tool.id, byDefault: tool.onByDefault);
-}
+bool grantsDirectories(ToolOffer offer) => AddDirectoryTool(offer).handed;
 
 /// The turn's writable set, named. The workspaces stand first, every write
 /// in them being free; what `add_directory` granted, standing or mid-turn,
