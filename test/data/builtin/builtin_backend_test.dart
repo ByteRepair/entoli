@@ -2784,7 +2784,7 @@ void main() {
         said(13, "kept"),
       ];
 
-      final marker = await backend.compact(
+      final outcome = await backend.compact(
         chatId,
         history: history,
         compactions: const [
@@ -2798,14 +2798,39 @@ void main() {
         instructions: null,
       );
 
-      expect(marker?.summary, "the newer half");
-      expect(marker?.upToMessageId, "m13");
+      final marker = (outcome as Compacted).marker;
+      expect(marker.summary, "the newer half");
+      expect(marker.upToMessageId, "m13");
       // One ask, of the newest half of what followed the marker, with the
       // marker's summary carried as the prior one.
       final asked = client.sent.single.map((m) => m.text).join("\n");
       expect(asked, contains("keep this"));
       expect(asked, isNot(contains("b" * 100)));
       expect(asked, contains("earlier work"));
+    });
+
+    test("a conversation that never fits says why, without asking", () async {
+      await (AppSettings.load(config)..totalContext = 8192).save(config);
+      final backend = backendOver([]);
+
+      final outcome = await backend.compact(
+        chatId,
+        history: [for (var n = 0; n < 4; n++) said(n, "x" * 40000)],
+        compactions: const [],
+        settings: const TurnSettings(
+          model: "fake-model",
+          provider: "fake",
+          approveMode: ApproveMode.never,
+        ),
+        instructions: null,
+      );
+
+      expect(
+        (outcome as NotCompacted).reason,
+        "What is left to summarize is about 10k tokens, more than the 4k "
+        "the summarizer can read at once.",
+      );
+      expect(client.sent, isEmpty);
     });
   });
 

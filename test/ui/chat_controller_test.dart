@@ -2918,7 +2918,8 @@ void main() {
       // never having run: the reply carries the failure, on disk as well.
       expect(
         chat.messages.last.parts.whereType<ErrorPart>().single.message,
-        "The conversation could not be compacted",
+        "The conversation could not be compacted. "
+        "${FakeBackend.compactFailure}",
       );
     });
 
@@ -2958,7 +2959,8 @@ void main() {
       "a turn that pushed the context past the share compacts on its own",
       () async {
         final (id, controller) = await chatWithCompactSkill();
-        // Well under any share of the 128k window the fake reports.
+        // Well under any share of Total Context, the window a model the
+        // catalog does not know runs in.
         app.backend.usageHolder[id] = 60000;
         await controller.send("grow a little");
         await waitIdle(id);
@@ -2968,7 +2970,7 @@ void main() {
         await app.container
             .read(appSettingsProvider.notifier)
             .setAutoCompactPercent(60);
-        app.backend.usageHolder[id] = 120000;
+        app.backend.usageHolder[id] = 160000;
         app.backend.scriptedSummary = "Everything so far.";
         await controller.send("grow a lot");
         await waitIdle(id);
@@ -3012,18 +3014,65 @@ void main() {
       expect(app.backend.compactionCalls, hasLength(1));
     });
 
+    test("the share is of the chat's model's window where it is the "
+        "smaller", () async {
+      final (id, controller) = await chatWithCompactSkill();
+      await app.repo.saveMeta(id, ChatMeta(model: "small", provider: "fake"));
+      app.backend.windowHolder["small"] = 100000;
+      // Past 80% of the model's own window, a third of Total Context.
+      app.backend.usageHolder[id] = 85000;
+      app.backend.scriptedSummary = "Everything so far.";
+      await controller.send("grow");
+      await waitFor(
+        () async => (await app.repo.openChat(id)).compactions.isNotEmpty,
+        what: "the compaction",
+      );
+      expect(app.backend.compactionCalls, hasLength(1));
+    });
+
+    test("a window bigger than Total Context is held to it", () async {
+      final (id, controller) = await chatWithCompactSkill();
+      await app.repo.saveMeta(id, ChatMeta(model: "big", provider: "fake"));
+      app.backend.windowHolder["big"] = 1000000;
+      // Past 80% of the 256k ceiling, a fifth of the model's own: a share of
+      // a million is a context no model reads well.
+      app.backend.usageHolder[id] = 210000;
+      app.backend.scriptedSummary = "Everything so far.";
+      await controller.send("grow");
+      await waitFor(
+        () async => (await app.repo.openChat(id)).compactions.isNotEmpty,
+        what: "the compaction",
+      );
+      expect(app.backend.compactionCalls, hasLength(1));
+    });
+
     test(
-      "the share is of the chat's model's window, not the global guess",
+      "an automatic compaction that lands nothing says why, in the chat",
       () async {
         final (id, controller) = await chatWithCompactSkill();
-        await app.repo.saveMeta(id, ChatMeta(model: "big", provider: "fake"));
-        app.backend.windowHolder["big"] = 1000000;
-        // Past 80% of the 128k guess, a ninth of the model's own.
-        app.backend.usageHolder[id] = 120000;
-        app.backend.scriptedSummary = "Everything so far.";
+        app.backend.usageHolder[id] = 210000;
+        // scriptedSummary null: the summarizer said nothing.
         await controller.send("grow");
+        await waitFor(
+          () =>
+              app.container.read(chatControllerProvider(id)).compactFailure !=
+              null,
+          what: "the failure",
+        );
+        expect(
+          app.container.read(chatControllerProvider(id)).compactFailure,
+          FakeBackend.compactFailure,
+        );
+        expect((await app.repo.openChat(id)).compactions, isEmpty);
+
+        // The next turn is the next try; it clears the old one as it opens.
+        app.backend.usageHolder[id] = 1000;
+        await controller.send("go on");
         await waitIdle(id);
-        expect(app.backend.compactionCalls, isEmpty);
+        expect(
+          app.container.read(chatControllerProvider(id)).compactFailure,
+          isNull,
+        );
       },
     );
   });

@@ -855,6 +855,14 @@ class CompactionEntry extends ConversationEntry {
   final String summary;
 }
 
+/// The divider an automatic compaction would have left, saying in red why
+/// it did not — [ChatViewState.compactFailure], at the end of the thread.
+class CompactionFailedEntry extends ConversationEntry {
+  const CompactionFailedEntry(this.reason);
+
+  final String reason;
+}
+
 /// A change to the chat's goal, after the message its record names.
 class GoalEntry extends ConversationEntry {
   const GoalEntry(this.mark);
@@ -1442,7 +1450,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   }) {
     final lines = [..._details(chat.state), ...details];
     final barHeight = _barHeight(context, lines.length);
-    final entries = entriesOf(chat);
+    final failure = view.compactFailure;
+    final entries = [
+      ...entriesOf(chat),
+      if (failure != null) CompactionFailedEntry(failure),
+    ];
     final title = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -1663,6 +1675,16 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                   body: MessageText(
                     text: summary,
                     isError: false,
+                    isWaiting: false,
+                    caret: false,
+                    onTapLink: (href) => _openLink(context, href),
+                  ),
+                ),
+                CompactionFailedEntry(:final reason) => ConversationSeparator(
+                  text: "Could not compact the conversation",
+                  body: MessageText(
+                    text: reason,
+                    isError: true,
                     isWaiting: false,
                     caret: false,
                     onTapLink: (href) => _openLink(context, href),
