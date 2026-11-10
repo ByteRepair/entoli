@@ -25,17 +25,8 @@ void main() {
   });
   tearDown(() => root.deleteSync(recursive: true));
 
-  /// Runs [script] confined. The root is under the per-user temp folder, and
-  /// so is every "outside" here, so the helper grants no system temp folder
-  /// unless [helper] is one that does.
-  Future<ProcessResult> run(
-    CommandSandbox sandbox,
-    String script, {
-    SeatbeltSandboxHelper? helper,
-  }) async {
-    final prefix =
-        await (helper ?? SeatbeltSandboxHelper(systemTemps: const []))
-            .prefixFor(sandbox);
+  Future<ProcessResult> run(CommandSandbox sandbox, String script) async {
+    final prefix = await SeatbeltSandboxHelper().prefixFor(sandbox);
     expect(prefix, isNotNull);
     return Process.run(prefix!.first, [
       ...prefix.skip(1),
@@ -84,24 +75,6 @@ void main() {
     expect(File(p.join(extraDir, "d")).existsSync(), isTrue);
     expect(File(extraFile).readAsStringSync(), "f\n");
     expect(File(p.join(outside, "sibling")).existsSync(), isFalse);
-  }, skip: skip);
-
-  test("the system's temp folders are granted: mktemp and a here document "
-      "away from the workspace", () async {
-    // `mktemp` asks for the per-user folder before TMPDIR, and the system's
-    // bash 3.2 writes a here document to /var/tmp or /tmp and else the
-    // working directory — so standing at / with nothing but the workspace
-    // granted, both failed with "Operation not permitted".
-    final result = await run(
-      CommandSandbox(workspace: workspace),
-      'cd / && rm "\$(mktemp)" && rm "\$(mktemp -t entoli)" && '
-      'f=/private/tmp/entoli-seatbelt-\$\$ && echo t > "\$f" && rm "\$f" && '
-      'cat <<EOF\nhere ok\nEOF\n',
-      helper: SeatbeltSandboxHelper(),
-    );
-
-    expect(result.exitCode, 0, reason: "${result.stderr}");
-    expect(result.stdout, contains("here ok"));
   }, skip: skip);
 
   test("a missing binary fails closed", () async {

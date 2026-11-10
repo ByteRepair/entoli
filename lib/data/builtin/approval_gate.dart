@@ -144,8 +144,12 @@ class ApprovalGate {
 
   /// The sandbox a command runs in under [permissions]: the chat's workspace,
   /// its tmp, the project's workspace beside it — where work another
-  /// conversation should find goes — and the granted directories.
-  CommandSandbox? _sandboxFor(StandingPermissions permissions) {
+  /// conversation should find goes — the granted directories, and the
+  /// machine's [systemTemps].
+  CommandSandbox? _sandboxFor(
+    StandingPermissions permissions,
+    List<String> systemTemps,
+  ) {
     if (!permissions.sandboxed) return null;
     if (helper == null) return null;
     final granted = [
@@ -167,6 +171,8 @@ class ApprovalGate {
         // the repository a worktree the chat owns commits into: denied, they
         // sent every build out of the sandbox altogether.
         ..._toolchainCaches,
+        // The machine's temp folders, for the tools that do not ask TMPDIR.
+        ...systemTemps,
         ?gitDir,
       ],
     );
@@ -177,8 +183,11 @@ class ApprovalGate {
   /// could write, the rules' own folders added where they match. One answer
   /// for the gate asking whether leaving it is being asked for, and the run.
   Future<CommandSandbox?> confinementOf(ShellCommandAnalysis analysis) async {
+    // Started before the policy read rather than after it: the first
+    // command of a process pays one `getconf`, and it overlaps the read.
+    final temps = systemTemps();
     final permissions = await this.permissions();
-    final sandbox = _sandboxFor(permissions);
+    final sandbox = _sandboxFor(permissions, await temps);
     if (sandbox == null) return null;
     final ruled = rulesSandbox(
       permissions.permissions,

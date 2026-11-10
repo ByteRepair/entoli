@@ -6,6 +6,7 @@ import "package:path/path.dart" as p;
 import "package:agent_chat/data/builtin/background_jobs.dart"
     show backgroundScript;
 import "package:agent_chat/data/builtin/local_shell.dart";
+import "package:agent_chat/data/builtin/sandbox_grants.dart" show systemTemps;
 import "package:agent_chat/data/local/landlock.dart";
 import "package:agent_chat/data/local/seatbelt.dart";
 import "package:agent_chat/domain/shell.dart";
@@ -777,11 +778,8 @@ void main() {
     // fail-closed one, which is the contract everywhere.
     late LandlockSandboxHelper helper;
     setUp(() {
-      // The outside these write to is under the machine's temp root, which
-      // the real helper grants; the grant is the test below's.
       helper = LandlockSandboxHelper(
         cacheDir: Directory.systemTemp.createTempSync("agent_chat_ll_").path,
-        systemTemps: const [],
       );
     });
 
@@ -855,10 +853,11 @@ void main() {
   });
 
   group("a sandboxed command and the system's temp folders", () {
-    // The helper this machine's sandbox is, with its real grant: the tools
-    // that failed did not ask TMPDIR — macOS's mktemp prefers the per-user
-    // folder, the system's bash 3.2 puts a here document in /tmp or else the
-    // working directory — so standing outside the workspace both failed.
+    // The tools that failed did not ask TMPDIR — macOS's mktemp prefers the
+    // per-user folder, the system's bash 3.2 puts a here document in /tmp or
+    // else the working directory — so standing outside the workspace both
+    // failed. The gate grants [systemTemps]; this is that grant, under the
+    // helper this machine's sandbox is, run for real.
     final SandboxHelper? helper = Platform.isMacOS
         ? SeatbeltSandboxHelper()
         : Platform.isLinux
@@ -873,6 +872,7 @@ void main() {
       final sandbox = CommandSandbox(
         workspace: workspace.path,
         tmp: p.join(workspace.path, ".entoli-tmp"),
+        extraWrites: await systemTemps(),
       );
       if (helper == null || await helper.prefixFor(sandbox) == null) return;
       final driver = LocalShell.hostDriver(sandboxHelper: helper);

@@ -2,7 +2,6 @@ import "dart:io";
 
 import "package:path/path.dart" as p;
 
-import "../../core/log.dart";
 import "../../domain/shell.dart";
 
 /// Seatbelt confinement for one command, on a Mac.
@@ -12,8 +11,8 @@ import "../../domain/shell.dart";
 /// and execs the command, which inherits it, and nothing inside can loosen it.
 /// That is Landlock's contract — an unprivileged process restricting its own
 /// descendants — so this answers the same [SandboxHelper] slot with the same
-/// ruleset: read everywhere, write only the workspace, tmp, the system's temp
-/// folders and the granted directories. Nothing changes a live profile; each confined command gets
+/// ruleset: read everywhere, write only the workspace, tmp and the granted
+/// directories. Nothing changes a live profile; each confined command gets
 /// one built from its own [CommandSandbox], which is how a grant made
 /// mid-chat reaches the next command.
 ///
@@ -24,28 +23,12 @@ import "../../domain/shell.dart";
 /// the command closed. A process already under App Sandbox cannot take a
 /// second profile, which is the probe's other failure.
 class SeatbeltSandboxHelper implements SandboxHelper {
-  SeatbeltSandboxHelper({
-    this.binary = "/usr/bin/sandbox-exec",
-    this.systemTemps,
-  });
+  SeatbeltSandboxHelper({this.binary = "/usr/bin/sandbox-exec"});
 
   final String binary;
 
-  /// The machine's own temp folders, granted to every confined command:
-  /// `/private/tmp` and the per-user folder under `/var/folders`. `TMPDIR`
-  /// still names the chat's own tmp, but the tools a build reaches for most
-  /// do not ask it: `mktemp` prefers the per-user folder
-  /// (`_CS_DARWIN_USER_TEMP_DIR`) to `TMPDIR`, as its manual says, and the
-  /// system's bash 3.2 writes a here document to `/var/tmp` or `/tmp` and
-  /// else the working directory, never to `TMPDIR`. Denied, each failed
-  /// wherever the command stood outside the workspace. Null asks the machine;
-  /// a test that needs an outside under the temp root passes none.
-  final List<String>? systemTemps;
-
   /// Learned once, by trying, for the reason Landlock's compile is.
   bool? _usable;
-
-  List<String>? _discovered;
 
   @override
   Future<List<String>?> prefixFor(CommandSandbox sandbox) async {
@@ -53,7 +36,6 @@ class SeatbeltSandboxHelper implements SandboxHelper {
     final writes = [
       sandbox.workspace,
       if (sandbox.tmp != null) sandbox.tmp!,
-      ...(systemTemps ?? await _machineTemps()),
       ...sandbox.extraWrites,
     ];
     return [
@@ -66,33 +48,6 @@ class SeatbeltSandboxHelper implements SandboxHelper {
       ],
       "--",
     ];
-  }
-
-  /// `/private/tmp` rather than `/tmp`, which is a symlink [realPath] would
-  /// resolve anyway, and the per-user folder as `getconf` names it, asked
-  /// once: it is fixed for the user, and the app runs as the same user its
-  /// commands do. A `getconf` that will not answer leaves `/private/tmp`.
-  Future<List<String>> _machineTemps() async {
-    if (_discovered != null) return _discovered!;
-    String? user;
-    try {
-      final result = await Process.run("/usr/bin/getconf", [
-        "DARWIN_USER_TEMP_DIR",
-      ]);
-      final out = "${result.stdout}".trim();
-      if (result.exitCode == 0 && out.isNotEmpty) {
-        user = out;
-      } else {
-        logFailure(
-          "sandbox",
-          "the per-user temp folder is not known",
-          "getconf exited ${result.exitCode}",
-        );
-      }
-    } on Exception catch (e) {
-      logFailure("sandbox", "the per-user temp folder is not known", "$e");
-    }
-    return _discovered = ["/private/tmp", ?user];
   }
 
   Future<bool> _probe() async {
