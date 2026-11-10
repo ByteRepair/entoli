@@ -22,6 +22,7 @@ class OpenAiClient implements LlmClient {
     required this.baseUrl,
     this.apiKey,
     this.returnProgress = false,
+    this.reasoningFieldOf,
     http.Client? httpClient,
   }) : _http = httpClient ?? tlsClient();
 
@@ -32,6 +33,16 @@ class OpenAiClient implements LlmClient {
   /// unless the endpoint is known to be one — a hosted provider is entitled to
   /// reject a field it has never heard of, and the strict ones do.
   final bool returnProgress;
+
+  /// The assistant-message field a model's earlier reasoning goes back to it
+  /// in, on a request that does or does not carry [tools], or null for one it
+  /// is not sent on. A thinking model that interleaves reasoning with tool
+  /// calls reads its own earlier thoughts on every step, and DeepSeek answers
+  /// 400 to a tool-calling request without them. The name and the rule are
+  /// the server's — `reasoning_content` is DeepSeek's, `reasoning` is
+  /// ollama's — so the provider answers. Unset, nothing is sent, since a
+  /// strict host rejects a field it has never heard of.
+  final String? Function(String model, {required bool tools})? reasoningFieldOf;
 
   final http.Client _http;
 
@@ -108,7 +119,13 @@ class OpenAiClient implements LlmClient {
       headers: _headers,
       body: {
         "model": model,
-        "messages": _encodeAll(mergeLeadingSystem(messages)),
+        "messages": _encodeAll(
+          mergeLeadingSystem(messages),
+          reasoningField: reasoningFieldOf?.call(
+            model,
+            tools: tools.isNotEmpty,
+          ),
+        ),
         "stream": true,
         // Ask for the usage object on the final frame: OpenAI's streaming
         // shape sends it only when asked, and the auto-compact threshold
@@ -365,11 +382,14 @@ class OpenAiClient implements LlmClient {
 
   /// A tool message takes text alone, so the images and PDFs on a run of
   /// results go in one user message straight after it.
-  List<Map<String, dynamic>> _encodeAll(List<LlmMessage> messages) {
+  List<Map<String, dynamic>> _encodeAll(
+    List<LlmMessage> messages, {
+    String? reasoningField,
+  }) {
     final out = <Map<String, dynamic>>[];
     final files = <LlmAttachment>[];
     for (final (i, message) in messages.indexed) {
-      out.add(_encodeMessage(message));
+      out.add(_encodeMessage(message, reasoningField: reasoningField));
       if (message.role == LlmRole.tool) {
         files.addAll(message.attachments.where((a) => a.isBlock));
       }
@@ -405,7 +425,10 @@ class OpenAiClient implements LlmClient {
           "image_url": {"url": file.dataUrl},
         };
 
-  Map<String, dynamic> _encodeMessage(LlmMessage message) {
+  Map<String, dynamic> _encodeMessage(
+    LlmMessage message, {
+    String? reasoningField,
+  }) {
     switch (message.role) {
       case LlmRole.tool:
         return {
@@ -420,6 +443,11 @@ class OpenAiClient implements LlmClient {
         return {
           "role": "assistant",
           "content": message.text,
+          if ((reasoningField, message.reasoning) case (
+            final field?,
+            final reasoning?,
+          ))
+            field: reasoning,
           if (message.toolCalls.isNotEmpty)
             "tool_calls": [
               for (final (i, call) in message.toolCalls.indexed)

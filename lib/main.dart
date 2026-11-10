@@ -321,6 +321,9 @@ class AppSession {
         appConfigProvider.overrideWithValue(config),
         appSecretsProvider.overrideWithValue(secrets),
         attachmentPickerProvider.overrideWithValue(const FileSelectorPicker()),
+        folderPickerProvider.overrideWithValue(
+          const FileSelectorFolderPicker(),
+        ),
         clipboardFilesProvider.overrideWithValue(createClipboardFiles()),
         // Seed every project's library at startup: each family member gets its
         // own seeded library, so nothing downstream waits on disk.

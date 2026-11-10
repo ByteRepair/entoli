@@ -784,6 +784,23 @@ void main() {
     );
   });
 
+  test("a folder granted at two tiers reaches the turn once", () async {
+    final repo = repoWith(AppSettings());
+    final chat = await repo.createChat(project: "work");
+    await writeChatVia(repo, chat);
+    await repo
+        .sendPrompt(participant: "athena", chat.state.id, userMessage("go"))
+        .toList();
+    final policy = backend.prompts.last.settings.policy;
+    await (ProjectSettings.load(
+      config,
+      project: "work",
+    )..writableDirs = ["/srv/repo", "/srv/data"]).save(config, project: "work");
+    await repo.saveMeta(chat.state.id, ChatMeta(writableDirs: ["/srv/repo"]));
+
+    expect((await policy()).writableDirs, ["/srv/repo", "/srv/data"]);
+  });
+
   group("a rule written from a banner answer", () {
     test(
       "\"Allow in Chat\" writes the derived rule on the chat's meta.json",

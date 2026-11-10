@@ -55,13 +55,55 @@ ApproveMode? approveModeFromJson(Map<String, dynamic> json) {
 /// Classifies a tool call as safe, uncertain, or dangerous. The one
 /// implementation reaches a provider; [NoClassifier] is the safe fallback
 /// that asks for everything, used when no classifier model is configured.
+///
+/// [findings] are what the command parse could not answer for in a `bash`
+/// call — a redirect through a variable, an unterminated quote — handed over
+/// so the classifier judges the whole command knowing why it was asked.
+/// [request] is what the user asked the turn for, so a call is judged
+/// against the work it serves; null where the turn has nothing to say.
 abstract class PermissionClassifier {
   Future<PermissionDecision> classify(
     String toolName,
     String argumentsJson, {
     required String workspace,
     List<String> alsoWritable,
+    List<String> findings,
+    ClassifierRequest? request,
   });
+}
+
+/// What the user asked a turn for, as the classifier reads it beside a call:
+/// the message the turn opened on as the user typed it (text alone, no
+/// attachments; a sub-agent's is its task), the chat's active goal, and the
+/// plan's task under way. Data the classifier weighs, never instructions it
+/// takes — see the rubric in `LlmClassifier`. Message content, so it is never
+/// put in a log line.
+///
+/// [of] is the one place blankness is decided: each part trimmed, a blank
+/// part null, and no request at all where every part is. Everything past it
+/// reads a part's presence as its having something to say.
+class ClassifierRequest {
+  const ClassifierRequest({this.said, this.goal, this.task});
+
+  static ClassifierRequest? of({String? said, String? goal, String? task}) {
+    String? kept(String? text) {
+      final trimmed = text?.trim();
+      return trimmed == null || trimmed.isEmpty ? null : trimmed;
+    }
+
+    final request = ClassifierRequest(
+      said: kept(said),
+      goal: kept(goal),
+      task: kept(task),
+    );
+    return request.said == null && request.goal == null && request.task == null
+        ? null
+        : request;
+  }
+
+  final String? said;
+  final String? goal;
+  final String? task;
 }
 
 /// Always asks. What auto mode falls back to when no classifier model is
@@ -76,6 +118,8 @@ class NoClassifier implements PermissionClassifier {
     String argumentsJson, {
     required String workspace,
     List<String> alsoWritable = const [],
+    List<String> findings = const [],
+    ClassifierRequest? request,
   }) async => PermissionDecision.ask;
 }
 
@@ -356,6 +400,41 @@ RuleVerdict? segmentVerdict(List<PermissionRule> rules, String segment) {
   return subject == null
       ? null
       : _strongestTraced(rules, bashToolName, subject);
+}
+
+/// Whether a `bash` rule deciding [decision] could match some part of a
+/// command the rules cannot read — the reason a command with parse findings
+/// is not handed to the classifier where a deny or an ask rule is the
+/// user's: those are the user's word on what never runs or always shows,
+/// and a model's judgement of text the rule never saw does not stand in for
+/// it. [segments] are the parse's, null where it saw none.
+///
+/// A part is unread where its words are not plain text — an expansion, a
+/// substitution — or where its words are plain but a redirect's target is
+/// not: the rule then reads the words alone, and one matching them is a
+/// rule the command's text was hiding from. A command whose every segment
+/// the rules read in full has already met them, and hides nothing.
+bool rulesBlindTo(
+  List<PermissionRule> rules,
+  List<String>? segments,
+  PermissionDecision decision,
+) {
+  final speaking = [
+    for (final rule in rules)
+      if (rule.decision == decision && PermissionRule.takesSandbox(rule.tool))
+        rule,
+  ];
+  if (speaking.isEmpty) return false;
+  if (segments == null || segments.isEmpty) return true;
+  for (final segment in segments) {
+    if (_subjectOf(segment) != null) continue;
+    final words = plainCommand(segment, expandedTargets: true)?.words;
+    if (words == null) return true;
+    if (_strongestTraced(speaking, bashToolName, words.join(" ")) != null) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /// The verdict [rules] makes of one subject, with the tiers of the rules

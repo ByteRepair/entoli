@@ -725,11 +725,21 @@ class ChatRoom {
     // the row that says nothing.
     _view = state.copyWith(status: "Compacting the conversation");
     try {
-      await compact(
+      final failure = await compact(
         instructions: arguments.trim().isEmpty ? null : arguments.trim(),
       );
-    } catch (e) {
+      // A turn the user asked for ends as one that failed, where it wrote no
+      // marker, and says why on its reply: a `done` with nothing after it is
+      // the compact that seemed never to run.
+      if (failure != null && !_disposed) {
+        final message = "The conversation could not be compacted. $failure";
+        turn.errorLine = message;
+        turn.recorder.handle(ErrorEvent(message));
+      }
+    } catch (e, trace) {
       logFailure("compact", "compact turn failed", e);
+      turn.errorLine = "$e".split("\n").first;
+      turn.recorder.handle(ErrorEvent("$e", trace: trace.toString()));
     } finally {
       // Unconditional, like the stream path's onDone: the finish is
       // idempotent and `_endTurn` guards its own state, and a turn disposed
@@ -751,23 +761,46 @@ class ChatRoom {
   /// it is true, the landing is skipped whole — no marker, so the next settle
   /// may retry. The manual compact turn is its own running turn and lands
   /// unconditionally.
-  Future<void> compact({
+  ///
+  /// Answers why no marker landed, or null where one did — or where
+  /// [recheck] stood the landing down for a turn that started meanwhile,
+  /// which the next settle retries and is no failure. An automatic one's
+  /// reason is [ChatViewState.compactFailure], there being no turn to put it
+  /// on; the manual turn puts its own on its reply.
+  Future<String?> compact({
     required String? instructions,
     bool recheck = false,
   }) async {
     final chat = state.chat;
-    final result = chat == null
-        ? null
-        : await _repo.compact(
-            chatId,
-            history: chat.messages,
-            compactions: chat.compactions,
-            instructions: instructions,
-          );
-    if (_disposed || result == null || (recheck && state.isRunning)) return;
-    // The wrapper's own guard is the reentrancy flag, and it sets the chat on
-    // the way through — so nothing to hand back here.
-    await _rethread((repo) => repo.appendCompaction(chatId, result));
+    CompactOutcome? result;
+    try {
+      result = chat == null
+          ? null
+          : await _repo.compact(
+              chatId,
+              history: chat.messages,
+              compactions: chat.compactions,
+              instructions: instructions,
+            );
+    } catch (e) {
+      logFailure("compact", "compact failed for $chatId", e);
+      result = NotCompacted("Compacting failed: ${"$e".split("\n").first}");
+    }
+    if (_disposed || (recheck && state.isRunning)) return null;
+    switch (result) {
+      case null:
+        // No chat to compact: nothing to say, and nobody asked.
+        return null;
+      case NotCompacted(:final reason):
+        if (recheck) _view = state.copyWith(compactFailure: reason);
+        return reason;
+      case Compacted(:final marker):
+        // The wrapper's own guard is the reentrancy flag, and it sets the chat
+        // on the way through — so nothing to hand back here.
+        await _rethread((repo) => repo.appendCompaction(chatId, marker));
+        _view = state.copyWith(clearCompactFailure: true);
+        return null;
+    }
   }
 
   /// Open a turn: put the prompt, where it is not on the log yet, and the
@@ -834,6 +867,9 @@ class ChatRoom {
       isRunning: true,
       clearRetry: true,
       clearStatus: true,
+      // An automatic compaction's failure is about the conversation as it
+      // stood; the next turn's settle is the next try.
+      clearCompactFailure: true,
     );
     // The prompt and the empty reply go down before the turn starts, so a chat
     // killed before the model says anything still shows what was asked. What
@@ -1305,10 +1341,19 @@ class ChatRoom {
     // answered its own outstanding questions with nothing, so a banner or a
     // panel still on screen would send its reply into the void. Only this
     // turn's — a sibling still running keeps its own.
+    // What a reload would now make of the log, so a turn that gave up is
+    // offered straight away rather than only once the chat is opened again —
+    // and only one a reload would offer: a callback that failed has nothing
+    // to carry on.
+    final messages = state.chat?.messages ?? const <Message>[];
+    final at = messages.indexWhere((m) => m.id == turn.replyId);
+    final prompt = at < 1 ? null : messages[at - 1];
     _view = state.copyWith(
-      // What a reload would now make of the log, so a turn that gave up is
-      // offered straight away rather than only once the chat is opened again.
-      chat: state.chat?.copyWith(unfinished: reason?.resumable ?? true),
+      chat: state.chat?.copyWith(
+        unfinished:
+            (reason?.resumable ?? true) &&
+            (prompt == null || carriesOn(prompt)),
+      ),
       isRunning: _turns.isNotEmpty,
       approvals: _withoutTurn(state.approvals, turn.replyId),
       questions: _withoutTurn(state.questions, turn.replyId),

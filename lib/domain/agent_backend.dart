@@ -630,11 +630,12 @@ abstract class AgentBackend {
   /// loses what the previous one kept. [instructions] are the user's own focus
   /// for the summary, from `/compact <instructions>`; null is the plain one.
   ///
-  /// Returns the marker's shape — boundary and summary — or null when
-  /// nothing answered: a provider that is not configured, a turn already
-  /// running, a summarizer that failed. The caller wants a marker to append,
-  /// and there is no turn to report a failure on; [logFailure] has said why.
-  Future<ConversationCompaction?> compact(
+  /// Returns the marker's shape — boundary and summary — to append, or why
+  /// there is none: a provider that is not configured, a turn already
+  /// running, a conversation the ladder could not bring under the budget, a
+  /// summarizer that failed. The reason is the user's to read, in red where
+  /// the marker would have been, as well as the log's.
+  Future<CompactOutcome> compact(
     String chatId, {
     required List<Message> history,
     required List<ConversationCompaction> compactions,
@@ -727,4 +728,23 @@ abstract class AgentBackend {
   /// [ref] as a [T], ready to run, where a provider serves one: voice mode's
   /// models, on the device or a provider's.
   T? resolveModel<T extends Model>(ModelRef ref);
+}
+
+/// What a compaction came back with: the marker to land, or why there is
+/// none. A failure is a sentence for the user — the chat draws it in red —
+/// so it says what happened, not what threw.
+sealed class CompactOutcome {
+  const CompactOutcome();
+}
+
+/// The marker a compaction produced, for the log to land.
+final class Compacted extends CompactOutcome {
+  const Compacted(this.marker);
+  final ConversationCompaction marker;
+}
+
+/// No marker, and the reason.
+final class NotCompacted extends CompactOutcome {
+  const NotCompacted(this.reason);
+  final String reason;
 }

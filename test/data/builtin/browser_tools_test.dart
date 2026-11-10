@@ -250,6 +250,8 @@ class _StubClassifier implements PermissionClassifier {
     String argumentsJson, {
     required String workspace,
     List<String> alsoWritable = const [],
+    List<String> findings = const [],
+    ClassifierRequest? request,
   }) async {
     asked.add((toolName, argumentsJson));
     return decision;

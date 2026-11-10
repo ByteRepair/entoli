@@ -6,7 +6,9 @@ import "package:path/path.dart" as p;
 import "package:agent_chat/data/builtin/background_jobs.dart"
     show backgroundScript;
 import "package:agent_chat/data/builtin/local_shell.dart";
+import "package:agent_chat/data/builtin/sandbox_grants.dart" show systemTemps;
 import "package:agent_chat/data/local/landlock.dart";
+import "package:agent_chat/data/local/seatbelt.dart";
 import "package:agent_chat/domain/shell.dart";
 
 List<String> _hostCommand(
@@ -774,6 +776,52 @@ void main() {
     );
   });
 
+  group("the sandbox's refusals", () {
+    // The platform's real helper, since what is refused is the kernel's to
+    // say and what it prints is what the shell reads: Seatbelt on a Mac,
+    // Landlock on Linux, and nothing to check anywhere else.
+    late SandboxHelper helper;
+    late CommandSandbox sandbox;
+    late LocalShell shell;
+    late String outside;
+    setUp(() {
+      helper = Platform.isMacOS
+          ? SeatbeltSandboxHelper()
+          : LandlockSandboxHelper(
+              cacheDir: Directory.systemTemp
+                  .createTempSync("agent_chat_ll_")
+                  .path,
+            );
+      sandbox = CommandSandbox(workspace: workspace.path);
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      shell = LocalShell(driver: ({String? project}) => driver);
+      outside = (Directory(p.join(home.path, "repo"))..createSync()).path;
+    });
+
+    Future<ShellResult> run(String command) => shell
+        .start(
+          command,
+          cwd: workspace.path,
+          home: home.path,
+          timeout: const Duration(seconds: 10),
+          sandbox: sandbox,
+        )
+        .result;
+
+    test("a refused write is named on the result; a plain failure names "
+        "none", () async {
+      if (await helper.prefixFor(sandbox) == null) return;
+      final denied = p.join(outside, "new");
+      final refused = await run("touch $denied");
+      expect(refused.returnCode, isNot(0));
+      expect(refused.violations, [denied]);
+
+      final failed = await run("cd $outside && grep -r nothing-here .");
+      expect(failed.returnCode, isNot(0));
+      expect(failed.violations, isEmpty);
+    }, skip: Platform.isMacOS || Platform.isLinux ? null : "no sandbox here");
+  });
+
   group("a sandboxed command", () {
     // Landlock is where the deny is decided, so these run the real helper;
     // a machine without it skips the confined assertions and keeps the
@@ -851,6 +899,51 @@ void main() {
         isTrue,
         reason: "the tmp is made for the confined run",
       );
+    });
+  });
+
+  group("a sandboxed command and the system's temp folders", () {
+    // The tools that failed did not ask TMPDIR — macOS's mktemp prefers the
+    // per-user folder, the system's bash 3.2 puts a here document in /tmp or
+    // else the working directory — so standing outside the workspace both
+    // failed. The gate grants [systemTemps]; this is that grant, under the
+    // helper this machine's sandbox is, run for real.
+    final SandboxHelper? helper = Platform.isMacOS
+        ? SeatbeltSandboxHelper()
+        : Platform.isLinux
+        ? LandlockSandboxHelper(
+            cacheDir: Directory.systemTemp
+                .createTempSync("agent_chat_ll_tmp_")
+                .path,
+          )
+        : null;
+
+    test("a here document and mktemp work away from the workspace", () async {
+      final sandbox = CommandSandbox(
+        workspace: workspace.path,
+        tmp: p.join(workspace.path, ".entoli-tmp"),
+        extraWrites: await systemTemps(),
+      );
+      if (helper == null || await helper.prefixFor(sandbox) == null) return;
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      final shell = LocalShell(driver: ({String? project}) => driver);
+      final result = await shell
+          .start(
+            'cd / && rm "\$(mktemp)" && cat <<\'EOF\'\n'
+            'here ok\n'
+            'EOF\n',
+            cwd: workspace.path,
+            home: home.path,
+            timeout: const Duration(seconds: 10),
+            sandbox: sandbox,
+          )
+          .result;
+      expect(
+        result.returnCode,
+        0,
+        reason: "out=${result.output} info=${result.exceptionInfo}",
+      );
+      expect(result.output, contains("here ok"));
     });
   });
 

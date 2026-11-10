@@ -426,9 +426,8 @@ class ChatRepository {
   /// settings a turn in this chat would run. The boundary is the one the
   /// summarizer actually read to — the caller's last message, or newer after
   /// a ladder halve — and the answer is the pair a [CompactionRecord] is made
-  /// of. Null when nothing answered; the controller reads a log line, there
-  /// being no turn to fail.
-  Future<ConversationCompaction?> compact(
+  /// of, or why there is none.
+  Future<CompactOutcome> compact(
     String chatId, {
     required List<Message> history,
     required List<ConversationCompaction> compactions,
@@ -565,14 +564,16 @@ class ChatRepository {
           (r) => r.copyWith(origin: PermissionTier.defaultProject),
         ),
       ],
-      // The project's writable roots and the chat's own grants, where an
-      // `add_directory` always answer lands. A rule's writes are the agent's to
-      // apply, to the commands that rule matches.
-      writableDirs: [
+      // The project's writable roots — its work folders, granted up front —
+      // and the chat's own grants, where an `add_directory` always answer
+      // lands; once each, a folder granted at two tiers being one grant. The
+      // turn drops what grants nothing on this machine. A rule's writes are
+      // the agent's to apply, to the commands that rule matches.
+      writableDirs: {
         ...meta.writableDirs,
         ...projectSettings.writableDirs,
         ...defaultProjectSettings.writableDirs,
-      ],
+      }.toList(),
       sandboxed:
           meta.sandbox ??
           projectSettings.sandbox ??

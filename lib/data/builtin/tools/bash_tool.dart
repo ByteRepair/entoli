@@ -1,4 +1,9 @@
+import "package:path/path.dart" as p;
+
 import "../../../domain/agent_backend.dart";
+import "../../../domain/models.dart" show ToolResult;
+import "../../../domain/permission.dart"
+    show PermissionDecision, PermissionSource;
 import "../../../domain/safe_command.dart" show readsOnly;
 import "../../../domain/shell.dart";
 import "../../../domain/shell_command_analysis.dart";
@@ -11,6 +16,8 @@ import "../llm/llm_client.dart";
 import "../saved_output.dart" show shellPath;
 import "../templates.dart" show previewChars;
 import "agent_tool.dart";
+import "directory_tools.dart" show grantsDirectories;
+import "grant_nudge.dart";
 import "turn.dart";
 
 /// What the spinner says while a command runs, the user's `!` one included.
@@ -142,10 +149,14 @@ class BashTool extends AgentTool {
           "Run this command outside the sandbox. Commands normally run "
           "sandboxed: they can write only to the workspaces and the folders "
           "the user granted, and a write anywhere else fails with "
-          "\"Permission denied\" or \"Operation not permitted\". When a "
-          "command needs to write elsewhere (container tools like podman or "
-          "toolbox, installers, caches under ~), call it again with this "
-          "set. Package and build caches (~/.cache, ~/.pub-cache, ~/.npm, "
+          "\"Permission denied\" or \"Operation not permitted\". Work that "
+          "keeps writing in one folder outside the workspaces — a repository, "
+          "a worktree, a build directory — calls for `add_directory` on that "
+          "folder once, where it is offered: after one approval every "
+          "command there runs sandboxed without asking. Set this for a "
+          "one-off need to write elsewhere: container tools like podman or "
+          "toolbox, installers, caches under ~. Package and build caches "
+          "(~/.cache, ~/.pub-cache, ~/.npm, "
           "the Flutter SDK's cache and the like) are already writable. A "
           "setuid program such as `ps` cannot start sandboxed at all: use "
           "`pgrep`, or set this. The user is asked to approve it unless a "
@@ -196,19 +207,91 @@ class BashTool extends AgentTool {
     }
     // Leaving the sandbox is part of what is asked: where one would confine
     // the run and no no-sandbox rule covers it, the call goes to the mode.
+    // Where the command starts, worked out once: the gate's sandbox, the run
+    // and the grant note all read it.
+    final standing = turn.shell.standingIn(turn.workspace) ?? turn.workspace;
     final leave = leavesSandbox && boolArg(call.argumentsJson, "unsandboxed");
-    final escaping = leave && await turn.gate.confinementOf(analysis) != null;
+    final escaping =
+        leave &&
+        await turn.gate.confinementOf(analysis, standing: standing) != null;
     final outcome = GateOutcome();
     yield* turn.gate.decide(
       call,
       bashToolName,
-      () => _execute(turn, call, command, analysis, outcome, unconfined: leave),
+      () =>
+          _execute(turn, call, command, analysis, standing, unconfined: leave),
       outcome,
       argumentsText: command,
       analysis: analysis,
       unsandboxed: escaping,
     );
-    yield ToolResultEvent(outcome.resultOf(call));
+    final result = outcome.resultOf(call);
+    final note = await _grantNote(
+      turn,
+      analysis,
+      result,
+      standing,
+      unsandboxed: escaping,
+    );
+    yield ToolResultEvent(
+      note == null ? result : result.copyWith(notes: [...result.notes, note]),
+    );
+  }
+
+  /// The note steering [result]'s work toward `add_directory`, where the
+  /// sandbox refused a write outside the writable set (the result's
+  /// `violations`), or the call asked to leave the sandbox ([unsandboxed])
+  /// again for one folder. A denial names its own folder; a request's is
+  /// where the command's leading `cd` goes, where the shell left it, or
+  /// where it stood before ([standing]). Only where `add_directory` is this
+  /// turn's to call; see "Approvals" in AGENTS.md.
+  Future<String?> _grantNote(
+    Turn turn,
+    ShellCommandAnalysis analysis,
+    ToolResult result,
+    String standing, {
+    required bool unsandboxed,
+  }) async {
+    final denied = result.violations;
+    if (!unsandboxed && denied.isEmpty) return null;
+    // A banner the user said no to is their answer about this command. A
+    // classifier's or a rule's refusal is not, and a grant is still the way
+    // on from one.
+    if (result.decidedBy == PermissionSource.human &&
+        result.decided == PermissionDecision.deny) {
+      return null;
+    }
+    if (!leavesSandbox || !grantsDirectories(offer)) return null;
+    final folder = grantFolder(
+      unsandboxed
+          ? [?_cdTarget(analysis, standing, turn), ?result.cwd, standing]
+          : [for (final path in denied) existingDirectoryOf(path)],
+      workspace: turn.workspace,
+      projectWorkspace: turn.projectWorkspace,
+      granted: (await turn.gate.permissions()).writableDirs,
+      home: turn.shell.machineHome,
+      dataDir: turn.dataDir,
+    );
+    if (folder == null) return null;
+    return turn.grantNudges.note(folder, unsandboxed: unsandboxed);
+  }
+
+  /// Where the command's first segment `cd`s to, resolved against [standing]
+  /// and `~`, or null where it starts with anything else or the target is
+  /// not plain text.
+  static String? _cdTarget(
+    ShellCommandAnalysis analysis,
+    String standing,
+    Turn turn,
+  ) {
+    final first = analysis.modelableSegments?.firstOrNull;
+    final words = first == null ? null : plainCommand(first)?.words;
+    if (words == null || words.length != 2 || words[0] != "cd") return null;
+    final target = words[1];
+    if (target == "~" || target.startsWith("~/")) {
+      return turn.resolvePath(target);
+    }
+    return p.isAbsolute(target) ? target : p.join(standing, target);
   }
 
   Future<ShellResult> _execute(
@@ -216,7 +299,7 @@ class BashTool extends AgentTool {
     LlmToolCall call,
     String command,
     ShellCommandAnalysis analysis,
-    GateOutcome outcome, {
+    String standing, {
     bool unconfined = false,
   }) async {
     if (turn.cancelled) {
@@ -234,30 +317,15 @@ class BashTool extends AgentTool {
           ? turn.options.commandTimeout.inMilliseconds.clamp(0, cap)
           : requested.clamp(0, cap),
     );
-    // What the command parses to, decided before anything asks a model about
-    // it. The parse answers for the deterministic safe side — reads, and
-    // writes the workspace can hold — and refuses what it cannot answer for:
-    // a command that cannot be modeled is one the model decided the wording
-    // of, and one that assigns to a variable that rewrites where its own
-    // writes land is not answering for itself.
-    //
-    // The gate is on only where a sandbox exists to make the boundary hold:
-    // without one the parse has nothing to enforce, and refusing on its word
-    // would be trusting the same text-only read the sandbox exists to back.
-    // And it stands down where a person has decided: a run behind the
-    // approval banner was read and answered by a human, and a parse vetoing
-    // what the human approved is the machine overriding its keeper. The
-    // banner, not the mode, is what carries that — auto mode reaches the
-    // banner through the classifier's ask — so the gate reads what the
-    // outcome says of the run.
-    final sandbox = unconfined ? null : await turn.gate.confinementOf(analysis);
-    if (sandbox != null && !outcome.byPerson) {
-      final note = analysis.escalationNote;
-      if (note != null) return ShellResult.failed(note);
-    }
+    // Whether the parse's findings let the command run is the gate's to
+    // have decided: by here it has been allowed, by a rule the parse could
+    // vouch for, a person, or the classifier judging it whole.
+    final sandbox = unconfined
+        ? null
+        : await turn.gate.confinementOf(analysis, standing: standing);
     final jobs = turn.backgroundJobs;
     if (jobs != null && boolArg(call.argumentsJson, "background")) {
-      return _startBackground(turn, jobs, call.id, command, sandbox);
+      return _startBackground(turn, jobs, call.id, command, sandbox, standing);
     }
     final result = await turn.track(
       call,
@@ -282,17 +350,15 @@ class BashTool extends AgentTool {
   /// A timed-out [result], told where a run that long goes. Claude Code
   /// moves such a command to the background and carries on; here it was
   /// killed, since the chat's shell is one process every later command
-  /// waits behind, so the model is told how to run it again.
-  static ShellResult _pointedAtTheBackground(ShellResult result) => ShellResult(
-    returnCode: result.returnCode,
-    output: result.output,
-    cwd: result.cwd,
-    timedOut: true,
-    exceptionInfo:
-        "${result.exceptionInfo ?? "The command timed out."} To run "
-        "something that takes this long, start it again with "
-        "`background: true`: you are told when it ends.",
-  );
+  /// waits behind, so the model is told how to run it again. Every other
+  /// field stands, the sandbox's refusals among them.
+  static ShellResult _pointedAtTheBackground(ShellResult result) =>
+      result.copyWith(
+        exceptionInfo:
+            "${result.exceptionInfo ?? "The command timed out."} To run "
+            "something that takes this long, start it again with "
+            "`background: true`: you are told when it ends.",
+      );
 
   /// Start [command] as a background job and answer with where it went. A
   /// one-shot run, so its own shell is all it holds, under the sandbox the
@@ -304,12 +370,13 @@ class BashTool extends AgentTool {
     String callId,
     String command,
     CommandSandbox? sandbox,
+    String standing,
   ) async {
     final job = await jobs.start(
       command,
       callId: callId,
       workspace: turn.workspace,
-      startIn: turn.shell.standingIn(turn.workspace),
+      startIn: standing == turn.workspace ? null : standing,
       spawn: (script) => turn.shell.start(
         script,
         cwd: turn.workspace,

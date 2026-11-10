@@ -216,6 +216,13 @@ abstract class AgentTool {
   /// offered is answered as an unknown tool.
   bool get offered => true;
 
+  /// Whether this turn is handed it: [offered], and among the agent's tools
+  /// where it is one an agent's list grants. What the tool list is built
+  /// from, and what a tool naming another to the model checks first.
+  bool get handed =>
+      offered &&
+      (group == null || offer.agent.offers(id, byDefault: onByDefault));
+
   /// What the spinner says while it runs, or null for the ones that finish
   /// too fast to be worth naming: a label that flashes is worse than none.
   String? get runningLabel => null;

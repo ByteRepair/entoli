@@ -176,6 +176,36 @@ void main() {
     },
   );
 
+  test(
+    "an earlier turn's thinking is rebuilt as well as the latest's",
+    () async {
+      // DeepSeek reads every earlier turn's reasoning on a request with
+      // tools, so a reload has to give it back for all of them.
+      final projected = await project([
+        asked("list the files"),
+        said(MessageRole.assistant, [
+          const MessagePart.reasoning(text: "first thought", responseId: "r1"),
+          call("c1", "bash", '{"command":"ls"}', response: "r1"),
+          ran("c1", "notes.txt"),
+          const MessagePart.text(text: "notes.txt", responseId: "r2"),
+        ]),
+        asked("and now?"),
+        said(MessageRole.assistant, const [
+          MessagePart.reasoning(text: "second thought", responseId: "r3"),
+          MessagePart.text(text: "done", responseId: "r3"),
+        ]),
+      ]);
+
+      expect(
+        [
+          for (final m in projected)
+            if (m.role == LlmRole.assistant) m.reasoning,
+        ],
+        ["first thought", null, "second thought"],
+      );
+    },
+  );
+
   test("a turn of several responses goes back as one message each", () async {
     final projected = await project([
       asked("list the files"),

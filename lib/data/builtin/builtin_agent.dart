@@ -5,6 +5,7 @@ import "dart:typed_data";
 import "package:flutter/foundation.dart" show visibleForTesting;
 import "package:uuid/uuid.dart";
 
+import "../../core/log.dart" show logFailure;
 import "../../domain/agent_backend.dart";
 import "../../domain/agent_definition.dart";
 import "../../domain/agent_browser.dart";
@@ -13,12 +14,14 @@ import "../../domain/file_tools.dart";
 import "../../domain/goal.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
+import "../../domain/plan.dart" show planInProgress, writesPlan;
 import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
 import "../../domain/system_notification.dart";
 import "../../domain/tone.dart";
 import "../../domain/tool_arg.dart";
+import "../../domain/work_folders.dart" show grantsNow;
 import "../../domain/trigger_manager.dart" show TriggerRegistry;
 import "../../domain/turn_recorder.dart";
 import "../../domain/web_search.dart";
@@ -35,6 +38,8 @@ import "projection.dart";
 import "templates.dart";
 import "tools/agent_tool.dart";
 import "tools/customization_tools.dart";
+import "tools/grant_nudge.dart";
+import "tools/plan_tools.dart" show readPlan;
 import "tools/registry.dart";
 import "tools/skill_tool.dart" show skillToolName;
 import "tools/turn.dart";
@@ -241,7 +246,15 @@ class BuiltinAgent implements Turn {
     this.claimInstruction,
     this.goal,
     this.goalReviewer,
+    this.said,
   });
+
+  /// The text of the message this turn opened on, as the user typed it — a
+  /// sub-agent's, its task — for the classifier's account of what was asked.
+  /// The caller's to say, since it holds the message: the session holds only
+  /// its projection, dressed, and a resumed turn has no prompt at all. Null
+  /// where nobody said.
+  final String? said;
 
   /// The chat's goal, read at each stop; null for a turn that keeps none — a
   /// sub-agent's, or a test's. The turn never writes it: what a review finds
@@ -649,9 +662,44 @@ class BuiltinAgent implements Turn {
   /// by the request, the context count and the dispatch alike.
   List<AgentTool> _tools = const [];
 
+  /// Which persisted writable directories grant anything this turn, each
+  /// looked up once: the policy is read at every call, and a folder does not
+  /// come and go under one turn often enough to stat it per call.
+  final Map<String, bool> _grantable = {};
+
+  /// [policy] less the persisted writable directories that grant nothing
+  /// here (`grantsNow`): gone from this machine, or a folder no grant may
+  /// name. What the gate and the turn's context both read, so the folders
+  /// the model is told are the ones the sandbox carries.
+  Future<StandingPermissions> _grantedPolicy() async {
+    final read = await policy();
+    final home = shell.machineHome;
+    return StandingPermissions(
+      permissions: read.permissions,
+      writableDirs: [
+        for (final dir in read.writableDirs)
+          if (_grantable.putIfAbsent(
+            dir,
+            () => grantsNow(
+              dir,
+              dataDir: dataDir,
+              home: home,
+              workspaces: [workspace, projectWorkspace],
+            ),
+          ))
+            dir,
+      ],
+      sandboxed: read.sandboxed,
+      approveMode: read.approveMode,
+    );
+  }
+
+  @override
+  final GrantNudges grantNudges = GrantNudges();
+
   @override
   late final ApprovalGate gate = ApprovalGate(
-    policy: policy,
+    policy: _grantedPolicy,
     approveMode: approveMode,
     classifier: classifier,
     approve: approve,
@@ -662,7 +710,35 @@ class BuiltinAgent implements Turn {
     cancelled: () => _cancelled,
     stopped: _stopped.future,
     sandboxHelper: sandboxHelper,
+    request: _classifierRequest,
   );
+
+  /// What the classifier is told the user asked for: [said], the chat's
+  /// active goal, and the plan's task under way. The plan is the chat's own
+  /// and a one-shot agent does not keep it (the plan tools are not offered
+  /// there), so a sub-agent's request is its task alone.
+  Future<ClassifierRequest?> _classifierRequest() async => ClassifierRequest.of(
+    said: said,
+    goal: _standingGoal()?.objective,
+    task: oneShot ? null : await _planTask(),
+  );
+
+  /// The plan's task in progress, read once and kept until a call that can
+  /// write the plan has run: every classifier call of a turn asks, and the
+  /// file moves only under a plan writer. A `bash` rewriting it is missed
+  /// until the next writer, as the plan's revision count misses it.
+  Future<String?> _planTask() => _planTaskHeld ??= readPlan(this).then(
+    (plan) => planInProgress(plan)?.text,
+    onError: (Object e) {
+      logFailure("agent", "plan unreadable for the classifier", "$e");
+      return null;
+    },
+  );
+  Future<String?>? _planTaskHeld;
+
+  /// The call last dispatched could write the plan: [_planTaskHeld] is
+  /// stale once it has run.
+  bool _plannedLast = false;
 
   /// Resolve a file-tool path through the workspaces, the guest root and the
   /// shell's home, so every call site carries the translation without
@@ -755,7 +831,7 @@ class BuiltinAgent implements Turn {
   /// hold a message no reload could rebuild; see "The projection" in
   /// `lib/domain/AGENTS.md` for what that cost.
   Stream<AgentEvent> resume({List<String> mentions = const []}) async* {
-    _setSystemPrompt(mentions);
+    await _setSystemPrompt(mentions);
     final turn = _recorded(_loop);
     // Wrapped either way: the branch decides whether the reason goes in, not
     // whether the turn is recorded.
@@ -780,6 +856,8 @@ class BuiltinAgent implements Turn {
   /// the conversation, projected.
   Stream<AgentEvent> Function() _recorded(Stream<AgentEvent> Function() turn) =>
       () async* {
+        // A plan read in an earlier turn is not this one's.
+        _planTaskHeld = null;
         final said = TurnRecorder.parts();
         final from = session.messages.length;
         void sayWhatWasSaid() {
@@ -970,8 +1048,12 @@ class BuiltinAgent implements Turn {
 
   /// The chat's goal, where it is one to review: there is a reviewer, and the
   /// goal is active.
-  ChatGoal? _activeGoal() => switch (goal?.call()) {
-    final asked? when goalReviewer != null && asked.isActive => asked,
+  ChatGoal? _activeGoal() => goalReviewer == null ? null : _standingGoal();
+
+  /// The chat's goal while it is active, reviewed or not: what the classifier
+  /// is told the turn is working towards.
+  ChatGoal? _standingGoal() => switch (goal?.call()) {
+    final asked? when asked.isActive => asked,
     _ => null,
   };
 
@@ -1049,7 +1131,7 @@ class BuiltinAgent implements Turn {
     bool mayDress,
     List<String> mentions,
   ) async {
-    _setSystemPrompt(mentions);
+    await _setSystemPrompt(mentions);
     // The wording the live turn sends is the wording a reload rebuilds: both
     // call the projection, and the dress decision — may this message dress —
     // is the caller's, computed against the history it holds: the viewer's
@@ -1078,7 +1160,16 @@ class BuiltinAgent implements Turn {
   /// what a restore can find. See [turnPrompt]. Two only as far as the KV keys:
   /// a chat template renders one system block, so `mergeLeadingSystem` joins
   /// them on the way out.
-  void _setSystemPrompt(List<String> mentions) {
+  ///
+  /// The folders the policy grants are read here, once per turn: a work
+  /// folder added between turns is named in the next, and none is named
+  /// where the gate confines nothing — no sandbox here, or the switch off —
+  /// since there is nothing for the model to stay inside.
+  Future<void> _setSystemPrompt(List<String> mentions) async {
+    final policy = await _grantedPolicy();
+    final workFolders = gate.confines(policy)
+        ? policy.writableDirs
+        : const <String>[];
     final offer = this.offer;
     // A participant is told its handle whatever its file says. A mention of
     // an agent not in the room is one to delegate to, so only where there is
@@ -1106,6 +1197,7 @@ class BuiltinAgent implements Turn {
       projectHome: shell.projectHome,
       guestRoot: shell.guestRoot,
       homePath: shell.homeFor(projectWorkspace),
+      workFolders: workFolders,
     );
     final head = [
       agentSystemMessage(
@@ -1143,6 +1235,8 @@ class BuiltinAgent implements Turn {
         continue;
       }
       gate.nextCall();
+      if (_plannedLast) _planTaskHeld = null;
+      _plannedLast = writesPlan(call.name);
       if (_cancelled) {
         // The call as well as the answer: a result whose call is not in the
         // parts is a result the projection has nothing to pair it to.

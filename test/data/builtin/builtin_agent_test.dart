@@ -72,6 +72,8 @@ void main() {
     String? provider,
     GoalReader? goal,
     GoalReviewer? goalReviewer,
+    bool oneShot = false,
+    String? said,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-test");
     // Beside the workspaces, the way the layout keeps `chats/<id>/resources`.
@@ -117,6 +119,8 @@ void main() {
       subAgents: subAgents,
       goal: goal,
       goalReviewer: goalReviewer,
+      oneShot: oneShot,
+      said: said,
     );
   }
 
@@ -2422,44 +2426,95 @@ void main() {
       expect(shell.ran, hasLength(1));
     });
 
-    test("in auto mode the parse holds only where nobody decided", () async {
-      // The classifier asks: the banner is the decision, as in ask mode.
-      final client = FakeLlmClient([
-        [bashCall(r'echo "unclosed')],
-        [finish],
-      ]);
+    test(
+      "in auto mode the banner judges what the classifier asks about",
+      () async {
+        // The classifier asks: the banner is the decision, as in ask mode.
+        final client = FakeLlmClient([
+          [bashCall(r'echo "unclosed')],
+          [finish],
+        ]);
+        await agentOver(
+          client,
+          sandboxHelper: _StubSandboxHelper(),
+          approveMode: ApproveMode.auto,
+          classifier: FakeClassifier(decision: PermissionDecision.ask),
+          approvals: [ApprovalResponse.allow, ApprovalResponse.allow],
+        ).run(userMessage("go")).toList();
+
+        expect(
+          shell.ran,
+          hasLength(1),
+          reason: "the banner is the decision, in auto mode as in ask",
+        );
+      },
+    );
+  });
+
+  group("what the classifier is told the user asked for", () {
+    /// A plan whose second task is under way, in [agent]'s workspace.
+    void planUnderWay(BuiltinAgent agent) => File(
+      p.join(agent.workspace, "PLAN.md"),
+    ).writeAsStringSync("# Plan\n- [x] read the code\n- [~] run the tests\n");
+
+    test(
+      "the message the turn opened on, the goal and the plan's task",
+      () async {
+        final classifier = FakeClassifier();
+        final agent = agentOver(
+          FakeLlmClient([
+            [bashCall("npm test")],
+            [finish],
+          ]),
+          approveMode: ApproveMode.auto,
+          classifier: classifier,
+          goal: FakeGoal(const ChatGoal(objective: "ship the release")).read,
+          said: "run the test suite",
+        );
+        planUnderWay(agent);
+        await agent.run(userMessage("run the test suite")).toList();
+        final request = classifier.requests.single!;
+        expect(request.said, "run the test suite");
+        expect(request.goal, "ship the release");
+        expect(request.task, "run the tests");
+      },
+    );
+
+    test("a goal that is not active is not part of it", () async {
+      final classifier = FakeClassifier();
       await agentOver(
-        client,
-        sandboxHelper: _StubSandboxHelper(),
+        FakeLlmClient([
+          [bashCall("npm test")],
+          [finish],
+        ]),
         approveMode: ApproveMode.auto,
-        classifier: FakeClassifier(decision: PermissionDecision.ask),
-        approvals: [ApprovalResponse.allow, ApprovalResponse.allow],
+        classifier: classifier,
+        goal: FakeGoal(
+          const ChatGoal(objective: "ship", status: GoalStatus.paused),
+        ).read,
       ).run(userMessage("go")).toList();
+      expect(classifier.requests.single?.goal, isNull);
+    });
 
-      expect(
-        shell.ran,
-        hasLength(1),
-        reason: "the banner is the decision, in auto mode as in ask",
+    test("a sub-agent's is its task, not the chat's plan", () async {
+      // A sub-agent is a one-shot agent over the chat's own workspace, run
+      // on its task; the plan beside it is the parent's.
+      final classifier = FakeClassifier();
+      final agent = agentOver(
+        FakeLlmClient([
+          [bashCall("npm test")],
+          [finish],
+        ]),
+        approveMode: ApproveMode.auto,
+        classifier: classifier,
+        oneShot: true,
+        said: "find why the build fails",
       );
-
-      // The classifier allows: no human read the text, so the gate's refusal
-      // is what says why.
-      final allowed = FakeLlmClient([
-        [bashCall(r'echo "unclosed')],
-        [finish],
-      ]);
-      final events = await agentOver(
-        allowed,
-        sandboxHelper: helper,
-        approveMode: ApproveMode.auto,
-        classifier: FakeClassifier(decision: PermissionDecision.allow),
-      ).run(userMessage("go")).toList();
-      final text = events
-          .whereType<ToolResultEvent>()
-          .map((r) => [r.result.output, r.result.exceptionInfo ?? ""].join(" "))
-          .join();
-      expect(text.toLowerCase(), contains("cannot be checked as one piece"));
-      expect(shell.ran, isEmpty);
+      planUnderWay(agent);
+      await agent.run(userMessage("find why the build fails")).toList();
+      final request = classifier.requests.single!;
+      expect(request.said, "find why the build fails");
+      expect(request.task, isNull);
     });
   });
 
