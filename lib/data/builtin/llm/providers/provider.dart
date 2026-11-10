@@ -231,8 +231,22 @@ class OpenAiCompatibleProvider extends LlmProvider {
   const OpenAiCompatibleProvider(super.config, [super.terms]);
 
   @override
-  OpenAiClient client(String? apiKey) =>
-      OpenAiClient(baseUrl: baseUrl, apiKey: apiKey);
+  OpenAiClient client(String? apiKey) => OpenAiClient(
+    baseUrl: baseUrl,
+    apiKey: apiKey,
+    reasoningFieldOf: replayedReasoningField,
+  );
+
+  /// The field [modelId]'s earlier reasoning is sent back to it in, or null
+  /// for a model that is not sent it: what models.dev says the model reads.
+  /// `reasoning_details` is OpenRouter's structured form, a list of blocks
+  /// rather than the text a reply's reasoning is kept as, so it is not one.
+  /// A server whose own field is known overrides this.
+  String? replayedReasoningField(String modelId) =>
+      switch (modelInfo(modelId)?.interleavedField) {
+        final field? when field != "reasoning_details" => field,
+        _ => null,
+      };
 
   @override
   List<Model> serve(String id, ModelInfo? info, ModelHost host) {

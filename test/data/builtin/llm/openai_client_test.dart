@@ -501,6 +501,80 @@ void main() {
     );
   });
 
+  group("earlier reasoning", () {
+    const thought = LlmMessage(
+      role: LlmRole.assistant,
+      reasoning: "the file is missing",
+      toolCalls: [LlmToolCall(id: "c1", name: "bash", argumentsJson: "{}")],
+    );
+    const history = [
+      LlmMessage(role: LlmRole.user, text: "why does it fail?"),
+      thought,
+      LlmMessage(role: LlmRole.tool, toolCallId: "c1", text: "no such file"),
+    ];
+    const bash = LlmTool(name: "bash", description: "run", schema: {});
+
+    OpenAiClient replaying(String? Function(String) fieldOf) {
+      requests = [];
+      return OpenAiClient(
+        baseUrl: Uri.parse("https://example.test/v1"),
+        reasoningFieldOf: fieldOf,
+        httpClient: MockClient.streaming((request, _) async {
+          requests.add(request);
+          return sseResponse(["[DONE]"]);
+        }),
+      );
+    }
+
+    Map<String, dynamic> sentReply() =>
+        (sentBody()["messages"] as List)[1] as Map<String, dynamic>;
+
+    test("goes back in the field the model reads, beside tools", () async {
+      await replaying(
+        (model) => model == "deepseek-v4-pro" ? "reasoning_content" : null,
+      ).stream(history, model: "deepseek-v4-pro", tools: [bash]).toList();
+      expect(sentReply()["reasoning_content"], "the file is missing");
+      expect(sentReply()["tool_calls"], hasLength(1));
+    });
+
+    test("is not sent to a model the field is not named for", () async {
+      await replaying(
+        (model) => model == "deepseek-v4-pro" ? "reasoning_content" : null,
+      ).stream(history, model: "other", tools: [bash]).toList();
+      expect(
+        sentReply().keys,
+        unorderedEquals(["role", "content", "tool_calls"]),
+      );
+    });
+
+    test("is not sent without tools, where it would be ignored", () async {
+      await replaying(
+        (_) => "reasoning_content",
+      ).stream(history, model: "deepseek-v4-pro").toList();
+      expect(sentReply().containsKey("reasoning_content"), isFalse);
+    });
+
+    test("is not sent by a client with no field, OpenAI's included", () async {
+      for (final client in [
+        clientStreaming(["[DONE]"]),
+        OpenAiPlatformClient(
+          baseUrl: Uri.parse("https://api.openai.com/v1"),
+          httpClient: MockClient.streaming((request, _) async {
+            requests.add(request);
+            return sseResponse(["[DONE]"]);
+          }),
+        ),
+      ]) {
+        requests = [];
+        await client.stream(history, model: "gpt-test", tools: [bash]).toList();
+        expect(
+          sentReply().keys,
+          unorderedEquals(["role", "content", "tool_calls"]),
+        );
+      }
+    });
+  });
+
   group("attachments", () {
     test("a text file is inlined so the model can just read it", () async {
       await clientStreaming(["[DONE]"]).stream([
