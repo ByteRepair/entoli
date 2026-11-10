@@ -609,6 +609,12 @@ class FakeShellJobs implements ChatShellJobs {
 
   @override
   void told(int id) => toldOf.add(id);
+
+  /// The jobs whose end a tool result carried to the agent.
+  final Set<int> heardOf = {};
+
+  @override
+  bool heard(int id) => heardOf.contains(id) || toldOf.contains(id);
 }
 
 class FakeBackend implements AgentBackend {

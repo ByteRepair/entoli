@@ -1,3 +1,4 @@
+import "dart:convert";
 import "dart:typed_data";
 
 import "package:flutter_test/flutter_test.dart";
@@ -245,6 +246,47 @@ void main() {
     ]);
 
     expect(projected.last.text, observation(returnCode: 1, output: "nope"));
+  });
+
+  test("a result saved to a file is worded as its preview and the path, on "
+      "every reading", () async {
+    final output = "${"a" * 2500}\n";
+    final projected = await project([
+      said(MessageRole.assistant, [
+        call("c1", "bash", '{"command":"make"}', response: "r1"),
+        MessagePart.toolResult(
+          result: ToolResult(
+            callId: "c1",
+            returnCode: 0,
+            output: output,
+            outputFile: "/w/.entoli-output/c1.txt",
+          ),
+        ),
+      ]),
+    ]);
+
+    final worded = projected.last.text;
+    expect(worded, contains("Full output saved to: /w/.entoli-output/c1.txt"));
+    expect(worded, isNot(contains("a" * 2001)));
+  });
+
+  test("a long result nothing saved is cut to its ends past the ceiling, and "
+      "worded whole below it", () async {
+    final long = "${"h" * 5000}${"m" * 50000}${"t" * 5000}";
+    final projected = await project([
+      said(MessageRole.assistant, [
+        call("c1", "bash", '{"command":"a"}', response: "r1"),
+        ran("c1", long),
+        call("c2", "bash", '{"command":"b"}', response: "r1"),
+        ran("c2", "w" * 40000),
+      ]),
+    ]);
+
+    final cut = jsonDecode(projected[1].text) as Map;
+    expect(cut["output_head"], "h" * 5000);
+    expect(cut["output_tail"], "t" * 5000);
+    expect(cut["elided_chars"], 50000);
+    expect(jsonDecode(projected[2].text)["output"], "w" * 40000);
   });
 
   MessagePart moved(String id, String cwd, {String output = ""}) =>

@@ -2,6 +2,7 @@ import "dart:convert";
 import "dart:io";
 import "dart:typed_data";
 
+import "package:flutter/foundation.dart" show visibleForTesting;
 import "package:path/path.dart" as p;
 
 import "../../../core/formatting.dart";
@@ -115,6 +116,11 @@ Stream<AgentEvent> gatedFileRun(
 class ReadTool extends AgentTool {
   ReadTool(super.offer);
 
+  /// Bounded by its own cap, which pages, rather than saved to a file: the
+  /// file is already one.
+  @override
+  int? get inlineLimit => null;
+
   @override
   ToolGroup get group => ToolGroup.files;
 
@@ -135,7 +141,10 @@ class ReadTool extends AgentTool {
       "contents with line numbers. Paths are relative to the workspace; "
       "prefix with `project:` to read from the project workspace; an absolute "
       "path reads the machine directly, and the user is asked before it runs. "
-      "Use `offset` and `limit` (1-indexed) to read a slice of a large file. "
+      "Reads up to $readLineLimit lines from `offset` unless `limit` says "
+      "otherwise; use `offset` and `limit` (1-indexed) to read a slice of a "
+      "large file. A read of more than $readTokenCap tokens is cut to the "
+      "lines that fit, and says where to carry on from. "
       "An image or a PDF comes back as itself, for you to look at, where this "
       "model can take one. Any AGENTS.md in the directories above the file "
       "comes back with it: follow those instructions.";
@@ -238,15 +247,16 @@ class ReadTool extends AgentTool {
               "Inspect binary files with a command instead of $readToolName.",
         );
       }
-      final lines = content.split("\n");
-      final offset = (args.offset ?? 1).clamp(1, lines.length + 1);
-      final limit = args.limit ?? lines.length;
-      final end = (offset + limit - 1).clamp(1, lines.length);
-      final buf = StringBuffer();
-      for (var i = offset; i <= end; i++) {
-        buf.writeln("$i: ${lines[i - 1]}");
+      final page = readPage(
+        content,
+        path: args.path,
+        offset: args.offset,
+        limit: args.limit,
+      );
+      if (page.refused case final refused?) {
+        return ShellResult(returnCode: -1, output: "", exceptionInfo: refused);
       }
-      final result = buf.toString();
+      final result = page.text;
       await _stamp(turn, path);
       final found = turn.memory.nested
           ? await findNestedInstructions(
@@ -306,6 +316,88 @@ class ReadTool extends AgentTool {
       yield InstructionsReadEvent([for (final file in nested) file.ref]);
     }
   }
+}
+
+/// How many lines a `read` with no `limit` returns, and the most a read may
+/// come to: Claude Code's own 2,000 lines and 25,000 tokens, the tokens
+/// counted the way the rest of the app estimates them, four characters each
+/// (see `estimateTokens`). See "Tools" in `lib/data/builtin/AGENTS.md`.
+const readLineLimit = 2000;
+const readTokenCap = 25000;
+const _charsPerToken = 4;
+
+/// [content] as `read` answers with it: lines [offset] on, [limit] of them
+/// or [readLineLimit], each numbered. Over [readTokenCap] a read of the
+/// whole file — no offset past the first line, no limit — is cut to the
+/// whole lines that fit and says where the next page starts, and a read that
+/// asked for a range is [refused], the range being the model's to narrow.
+/// Both in Claude Code's words. Where the default window stops short of the
+/// end, the page says so, which Claude Code leaves its description to say.
+@visibleForTesting
+({String text, String? refused}) readPage(
+  String content, {
+  required String path,
+  int? offset,
+  int? limit,
+}) {
+  final lines = content.split("\n");
+  // A last line break ends the last line rather than starting another.
+  final total = content.endsWith("\n") ? lines.length - 1 : lines.length;
+  final from = (offset ?? 1).clamp(1, lines.length + 1);
+  final end = (from + (limit ?? readLineLimit) - 1).clamp(1, lines.length);
+  final numbered = [for (var i = from; i <= end; i++) "$i: ${lines[i - 1]}\n"];
+  final chars = numbered.fold(0, (n, line) => n + line.length);
+  final tokens = (chars / _charsPerToken).ceil();
+  const capChars = readTokenCap * _charsPerToken;
+  if (tokens <= readTokenCap) {
+    final shown = end < total && limit == null
+        ? "\n[Showing lines $from-$end of $total. Call $readToolName with "
+              "offset=${end + 1} for the rest.]\n"
+        : "";
+    return (text: numbered.join() + shown, refused: null);
+  }
+  if (from > 1 || limit != null) {
+    return (
+      text: "",
+      refused:
+          "File content ($tokens tokens) exceeds maximum allowed tokens "
+          "($readTokenCap). Use offset and limit parameters to read specific "
+          "portions of the file, or search for specific content instead of "
+          "reading the whole file.",
+    );
+  }
+  var fit = 0;
+  var used = 0;
+  while (fit < numbered.length && used + numbered[fit].length <= capChars) {
+    used += numbered[fit++].length;
+  }
+  const answer =
+      " Do NOT answer from this page alone if the answer may be further in "
+      "the file.]";
+  if (fit == 0) {
+    // One line past the cap on its own: there is no line to stop after.
+    var cut = capChars;
+    final last = numbered.first.codeUnitAt(cut - 1);
+    if (last >= 0xD800 && last <= 0xDBFF) cut--;
+    return (
+      text:
+          "${numbered.first.substring(0, cut)}\n"
+          "[Truncated: PARTIAL view — $path: showing the first $cut of "
+          "${content.length} characters ($tokens tokens, cap $readTokenCap); "
+          "this file has very long lines and cannot be paginated by line. "
+          "Search it for the section you need.$answer",
+      refused: null,
+    );
+  }
+  return (
+    text:
+        "${numbered.take(fit).join()}"
+        "[Truncated: PARTIAL view — $path: showing lines 1-$fit of $total "
+        "total ($tokens tokens, cap $readTokenCap). Call $readToolName with "
+        "offset=${fit + 1} limit=$fit for the next page, or search the file "
+        "for the section you need.$answer",
+    refused: null,
+  );
 }
 
 /// Write a file, creating or overwriting. The same gate as `read`.

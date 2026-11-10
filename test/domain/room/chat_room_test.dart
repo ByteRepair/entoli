@@ -326,6 +326,41 @@ void main() {
         await room.abort();
       },
     );
+
+    test("and one that ended during a turn whose calls never heard of it, "
+        "once that turn is over", () async {
+      final (room, _) = await openRoom();
+      final hold = app.backend.hold = Completer<void>();
+      await room.send("build it");
+      await waitFor(() => room.state.isRunning, what: "the turn under way");
+      final jobs = app.backend.jobsOf(room.chatId);
+      // Job 2's end rode a later call of the turn; job 3's came after its
+      // last call, while its reply was being written.
+      jobs.heardOf.add(2);
+      for (final id in [2, 3]) {
+        jobs.endings.add((
+          callId: "c$id",
+          command: job.command,
+          end: JobEnd(jobId: id, exitCode: 1, tail: "Error $id"),
+        ));
+      }
+      await waitFor(
+        () => room.state.chat?.jobEndOf("c3") != null,
+        what: "the ends on the chat",
+      );
+      expect(jobs.toldOf, isEmpty, reason: "no wake while the turn runs");
+
+      app.backend.hold = null;
+      hold.complete();
+      await waitFor(() => app.backend.prompts.length == 2, what: "the wake");
+
+      final said = app.backend.prompts.last.prompt.plainText;
+      expect(isSystemNotification(said), isTrue);
+      expect(said, contains("Background job 3 (`flutter run --profile`)"));
+      expect(said, isNot(contains("Background job 2")));
+      expect(jobs.toldOf, [3]);
+      await waitFor(() => !room.state.isRunning, what: "the woken turn");
+    });
   });
 
   test("a job goes from running to ended with no step between, the end "

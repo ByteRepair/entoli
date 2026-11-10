@@ -6,7 +6,9 @@ import "../../../domain/shell_job.dart" show backgroundLog;
 import "../../../domain/tool_arg.dart";
 import "../approval_gate.dart";
 import "../background_jobs.dart";
+import "../builtin_options.dart";
 import "../llm/llm_client.dart";
+import "../templates.dart" show bashInlineLimit, previewChars;
 import "agent_tool.dart";
 import "turn.dart";
 
@@ -37,6 +39,11 @@ class BashTool extends AgentTool {
 
   @override
   String get runningLabel => runningCommand;
+
+  /// Claude Code's `bash` limit, below every other tool's: a command's output
+  /// is most often a log, whose start and path say what to look for in it.
+  @override
+  int? get inlineLimit => bashInlineLimit;
 
   @override
   String get fragment => "`bash` to run a command";
@@ -70,7 +77,8 @@ class BashTool extends AgentTool {
   Map<String, dynamic> get schema => {
     "type": "object",
     "properties": {
-      ..._common,
+      "command": _command,
+      "timeout": _timeout(background: !offer.oneShot && offer.background),
       if (!offer.oneShot) ..._restart,
       if (leavesSandbox) ..._unsandboxed,
       if (!offer.oneShot && offer.background) ..._background,
@@ -78,15 +86,39 @@ class BashTool extends AgentTool {
     "required": ["command"],
   };
 
-  static const _common = {
-    "command": {"type": "string", "description": "The bash command to execute"},
-    "timeout": {
-      "type": "integer",
-      "description":
-          "How long the command may run, in milliseconds. Set this to give a "
-          "command a different deadline than the default 60000; values above "
-          "180000 (3 minutes) are capped to it.",
-    },
+  /// What a call's output comes back as, said where the command is written,
+  /// since it is the command that `| tail` would be added to. The tail loses
+  /// twice: the middle of a log, and all of it where the timeout kills the
+  /// pipeline, `tail` having printed nothing yet — the log of the chat this
+  /// was written after had 14 of its 21 timeouts come back empty that way.
+  static final _command = {
+    "type": "string",
+    "description":
+        "The bash command to execute. Its whole output, stdout and stderr "
+        "together, comes back to you; one longer than $bashInlineLimit "
+        "characters is saved to a file instead, and you get its first "
+        "$previewChars characters and the file's path, to read or search "
+        "for the rest. So run a command as it is rather than trimming its "
+        "output through `| tail` or `| head`: a pipeline killed at its "
+        "timeout loses everything `tail` was holding, where the command's "
+        "own output is kept up to the moment it stopped.",
+  };
+
+  static final _defaultTimeout =
+      BuiltinOptions.defaultCommandTimeout.inMilliseconds;
+  static final _maxTimeout =
+      BuiltinOptions.defaultMaxCommandTimeout.inMilliseconds;
+
+  static Map<String, dynamic> _timeout({required bool background}) => {
+    "type": "integer",
+    "description":
+        "How long the command may run, in milliseconds: $_defaultTimeout "
+        "(${_defaultTimeout ~/ 60000} minutes) unless set, and at most "
+        "$_maxTimeout (${_maxTimeout ~/ 60000} minutes). A command still "
+        "running then is killed, keeping what it printed."
+        "${background ? " Anything that may take longer — a full build, a "
+                  "test suite, an install, waiting on CI — runs with "
+                  "`background` instead." : ""}",
   };
 
   static const _restart = {
@@ -124,7 +156,8 @@ class BashTool extends AgentTool {
       "description":
           "Start the command and answer at once, leaving it running: for a "
           "server, a watcher, a build, or anything that does not exit on "
-          "its own or soon. It runs in a fresh shell that starts in the "
+          "its own or soon — anything that may outlast the timeout, which "
+          "would kill it in the foreground. It runs in a fresh shell that starts in the "
           "directory your commands are standing in, with no input, and "
           "everything it prints goes to a log file the answer names: read it "
           "with `tail` or the read tool. The answer gives its process id to "
@@ -190,11 +223,11 @@ class BashTool extends AgentTool {
     // The model's own bound for this command, capped at what the chat allows:
     // a small model's estimate of a build is as likely to be too short as too
     // long, and a cap is the only one that is never wrong.
-    final cap = turn.options.commandTimeout.inMilliseconds;
+    final cap = turn.options.maxCommandTimeout.inMilliseconds;
     final requested = intArg(call.argumentsJson, "timeout");
     final timeout = Duration(
       milliseconds: requested == null || requested <= 0
-          ? cap
+          ? turn.options.commandTimeout.inMilliseconds.clamp(0, cap)
           : requested.clamp(0, cap),
     );
     // What the command parses to, decided before anything asks a model about
@@ -222,7 +255,7 @@ class BashTool extends AgentTool {
     if (jobs != null && boolArg(call.argumentsJson, "background")) {
       return _startBackground(turn, jobs, call.id, command, sandbox);
     }
-    return turn.track(
+    final result = await turn.track(
       call,
       turn.shell.start(
         command,
@@ -237,7 +270,25 @@ class BashTool extends AgentTool {
         readOnly: turn.readOnlyDirs,
       ),
     );
+    return result.timedOut && !offer.oneShot && offer.background
+        ? _pointedAtTheBackground(result)
+        : result;
   }
+
+  /// A timed-out [result], told where a run that long goes. Claude Code
+  /// moves such a command to the background and carries on; here it was
+  /// killed, since the chat's shell is one process every later command
+  /// waits behind, so the model is told how to run it again.
+  static ShellResult _pointedAtTheBackground(ShellResult result) => ShellResult(
+    returnCode: result.returnCode,
+    output: result.output,
+    cwd: result.cwd,
+    timedOut: true,
+    exceptionInfo:
+        "${result.exceptionInfo ?? "The command timed out."} To run "
+        "something that takes this long, start it again with "
+        "`background: true`: you are told when it ends.",
+  );
 
   /// Start [command] as a background job and answer with where it went. A
   /// one-shot run, so its own shell is all it holds, under the sandbox the

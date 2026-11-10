@@ -131,9 +131,18 @@ class ChatRoom {
   /// nobody looking. So the end starts a turn of its own, said as the app's
   /// notification. A job that was stopped wakes nobody: whoever stopped it
   /// knows. One end is one wake, so a watcher that keeps dying cannot loop.
+  ///
+  /// An end that lands while a turn runs is held: that turn may make no
+  /// call after it — its last reply already being written — and then
+  /// nothing would ever have said it. [_wakeForUnheard] asks once the turn
+  /// is over.
   Future<void> _wake(JobEnd end, String command) async {
     final code = end.exitCode;
-    if (code == null || state.isRunning) return;
+    if (code == null) return;
+    if (state.isRunning) {
+      _endsDuringTurns.add((end: end, command: command));
+      return;
+    }
     _jobs.told(end.jobId);
     await _prompt(
       jobEndedNotification(
@@ -143,6 +152,20 @@ class ChatRoom {
         tail: end.tail,
       ),
     );
+  }
+
+  /// Job ends that landed while a turn ran, to be asked about when it is
+  /// over: see [_wake].
+  final _endsDuringTurns = <({JobEnd end, String command})>[];
+
+  /// The first held end the agent has not heard — no later call of the turn
+  /// carried its note — wakes it, now the room is quiet. The rest wait for
+  /// the end of that turn, which asks again; any its calls read are dropped.
+  void _wakeForUnheard() {
+    _endsDuringTurns.removeWhere((held) => _jobs.heard(held.end.jobId));
+    if (_endsDuringTurns.isEmpty || state.isRunning || _disposed) return;
+    final held = _endsDuringTurns.removeAt(0);
+    unawaited(_wake(held.end, held.command));
   }
 
   bool _loaded = false;
@@ -1329,6 +1352,9 @@ class ChatRoom {
     // say it just dispatched reads as a running room.
     if (reason == TurnEnd.done) _host.settledDone();
     await _settle(turn, reason);
+    // After the settle, whose handoffs are the room's own next turns: a
+    // wake waits behind them rather than talking over them.
+    _wakeForUnheard();
   }
 
   /// A turn has ended: the room may hand off. Under the wave orderings the

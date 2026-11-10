@@ -773,6 +773,7 @@ class _Session {
         returnCode: rc,
         output: output,
         cwd: cwd,
+        timedOut: run.interrupted && run.byTimeout,
         exceptionInfo: run.interrupted
             ? run.byTimeout
                   ? "The command timed out after ${_word(run.timeout)} and was "
@@ -805,6 +806,7 @@ class _Session {
         ShellResult(
           returnCode: -1,
           output: run.output,
+          timedOut: run.interrupted && run.byTimeout,
           exceptionInfo: run.interrupted
               ? run.byTimeout
                     ? "The command timed out after ${_word(run.timeout)} and was "
@@ -1118,6 +1120,7 @@ class _OneShotRun extends ShellRun {
       return ShellResult(
         returnCode: -1,
         output: text,
+        timedOut: !_killed,
         exceptionInfo: _killed
             ? "The command was interrupted and killed."
             : "The command timed out after ${_word(timeout)} and was killed. "

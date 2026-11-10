@@ -132,6 +132,9 @@ class ChatJobs implements ChatShellJobs {
   void told(int id) => _notes.remove(id);
 
   @override
+  bool heard(int id) => !_notes.containsKey(id);
+
+  @override
   Future<void> stop(int id) async => _runs[id]?.kill();
 
   static const _tailBytes = 32 * 1024;

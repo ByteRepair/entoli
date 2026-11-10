@@ -558,6 +558,9 @@ sealed class MessagePart with _$MessagePart {
     String? exceptionInfo,
     String? cwd,
     @Default([]) List<String> violations,
+
+    /// Where the whole of [output] was saved, as [ToolResult.outputFile] is.
+    String? outputFile,
   }) = ShellRunPart;
   const factory MessagePart.file({
     required String resource,
@@ -692,6 +695,14 @@ abstract class ToolResult with _$ToolResult {
     /// of [output], which is the model's to read.
     int? jobId,
     @Default([]) List<String> violations,
+
+    /// Where the whole of [output] was saved because it was too large to
+    /// word in full, as the path the model was given: the projection words
+    /// the result as a preview of [output] and this path, while [output]
+    /// stays the whole of it for the chat to show. Null where it was worded
+    /// in full, or where the save failed. See "Tools" in
+    /// `lib/data/builtin/AGENTS.md`.
+    String? outputFile,
 
     /// What happened since the last call that the model should hear — a
     /// background job ending — beside the result rather than inside

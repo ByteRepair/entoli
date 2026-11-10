@@ -36,12 +36,14 @@ class ShellResult {
     this.exceptionInfo,
     this.cwd,
     this.jobId,
+    this.timedOut = false,
   });
 
   const ShellResult.failed(this.exceptionInfo, {this.output = ""})
     : returnCode = -1,
       cwd = null,
-      jobId = null;
+      jobId = null,
+      timedOut = false;
 
   final int returnCode;
   final String output;
@@ -56,6 +58,11 @@ class ShellResult {
 
   /// The background job the command started, where it started one.
   final int? jobId;
+
+  /// Whether the command was stopped because it ran past its timeout, as
+  /// opposed to finishing, failing or being stopped by someone: what `bash`
+  /// reads to point a run that long at the background.
+  final bool timedOut;
 }
 
 /// What this build ships beside the machine's own commands: the environment a

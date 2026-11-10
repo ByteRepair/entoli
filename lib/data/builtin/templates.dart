@@ -302,11 +302,61 @@ String? cwdChangedNote(String? before, String? after) =>
     ? null
     : "Note: your current working directory is now $after.";
 
-const _fullOutputLimit = 10000;
+/// Above how many characters a tool's result is saved to a file and worded
+/// as a preview of it, and the preview's length: Claude Code's own numbers,
+/// measured rather than recalled — `bash` at 30,000 and every other tool at
+/// 50,000, a preview of the first 2,000. See "Tools" in `AGENTS.md`.
+const bashInlineLimit = 30000;
+const defaultInlineLimit = 50000;
+const previewChars = 2000;
+
+/// The start of [output] a saved result is previewed by: the first
+/// [previewChars] characters, cut back to the last line break where that
+/// keeps more than half of them, so the preview ends on a whole line.
+String outputPreview(String output) {
+  if (output.length <= previewChars) return output;
+  final cut = output.substring(0, previewChars).lastIndexOf("\n");
+  var end = cut > previewChars ~/ 2 ? cut : previewChars;
+  // Never half a surrogate pair.
+  final last = output.codeUnitAt(end - 1);
+  if (last >= 0xD800 && last <= 0xDBFF) end--;
+  return output.substring(0, end);
+}
+
+/// A length the way Claude Code's notice says one: kibibytes to one decimal,
+/// a trailing `.0` dropped.
+String _sizeOf(int chars) {
+  String one(double v) =>
+      v.toStringAsFixed(1).replaceFirst(RegExp(r"\.0$"), "");
+  final kb = chars / 1024;
+  if (kb < 1) return "$chars bytes";
+  if (kb < 1024) return "${one(kb)}KB";
+  final mb = kb / 1024;
+  return mb < 1024 ? "${one(mb)}MB" : "${one(mb / 1024)}GB";
+}
+
+/// What a saved result is worded as in place of its output: Claude Code's
+/// `<persisted-output>` notice, word for word, naming [path] — the file the
+/// whole of [output] is in, as the model's tools reach it.
+String persistedOutput(String output, String path) {
+  final preview = outputPreview(output);
+  return "<persisted-output>\n"
+      "Output too large (${_sizeOf(output.length)}). Full output saved to: "
+      "$path\n\n"
+      "Preview (first ${_sizeOf(previewChars)}):\n"
+      "$preview"
+      "${preview.length < output.length ? "\n...\n" : "\n"}"
+      "</persisted-output>";
+}
+
+/// Past this, a result that was not saved — a log from before results were,
+/// or a save that failed — is cut to its ends rather than worded whole.
+const _fullOutputLimit = defaultInlineLimit;
 const _elidedHalf = 5000;
 
-/// How a command's result is shown to the model: JSON, and elided in the
-/// middle once it is long enough to crowd out the conversation. Both ends are
+/// How a command's result is shown to the model: JSON. A result saved to
+/// [outputFile] is worded as [persistedOutput] — a preview and the path —
+/// and one too long that was not saved is elided in the middle, both ends
 /// kept because a build prints what it is doing first and why it failed last.
 /// [violations] is what a sandbox denied while the command ran, worded after
 /// the output it belongs to so the model reads the refusal beside what it
@@ -316,15 +366,17 @@ String observation({
   required String output,
   String? exceptionInfo,
   List<String> violations = const [],
+  String? outputFile,
 }) {
-  final elide = output.length > _fullOutputLimit;
+  final elide = outputFile == null && output.length > _fullOutputLimit;
   return _pretty.convert({
     "returncode": returnCode,
-    if (!elide) "output": output,
+    if (outputFile != null) "output": persistedOutput(output, outputFile),
+    if (outputFile == null && !elide) "output": output,
     if (elide) ...{
       "output_head": output.substring(0, _elidedHalf),
       "output_tail": output.substring(output.length - _elidedHalf),
-      "elided_chars": output.length - _fullOutputLimit,
+      "elided_chars": output.length - 2 * _elidedHalf,
       "warning": "Output too long.",
     },
     if (exceptionInfo != null && exceptionInfo.isNotEmpty)
@@ -351,10 +403,11 @@ String shellRunTranscript({
   required String output,
   String? exceptionInfo,
   List<String> violations = const [],
+  String? outputFile,
 }) =>
     "The user ran this command in the chat themselves, rather than asking me "
     "to:\n\n$command\n\n"
-    "${observation(returnCode: returnCode, output: output, exceptionInfo: exceptionInfo, violations: violations)}";
+    "${observation(returnCode: returnCode, output: output, exceptionInfo: exceptionInfo, violations: violations, outputFile: outputFile)}";
 
 /// Appended to a `bash` result that read or wrote a file, now and then — see
 /// [fileToolReminderEvery]. The read tool is what brings in the AGENTS.md

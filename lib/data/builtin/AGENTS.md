@@ -5,8 +5,9 @@ task prompts, ask the model, run the tool calls it made, show it the results,
 repeat. What is still upstream's, and it is worth knowing which parts are: that
 skeleton (`DefaultAgent.run`/`step`/`query`/`execute_actions`), the one `bash`
 tool and its schema, the observation JSON `observation()` writes — key for key,
-including the 10,000-character threshold and the 5,000-character head and tail —
-and the shell contract `LocalShell` keeps, which is `local.py`'s; see "Running
+the 5,000-character head and tail included, though that elision is now only the
+fallback for a long result nothing saved, past 50,000 characters rather than
+upstream's 10,000 (see "Tools") — and the shell contract `LocalShell` keeps, which is `local.py`'s; see "Running
 the commands". Prompt furniture too: the `cd` prefix rule, the
 `<system_information>` block, the `cat <<'EOF'` and `sed -i` examples.
 
@@ -174,6 +175,67 @@ fenced ```` ```echo foo``` ```` will imitate the fence and write the line as
 prose, which does nothing). Finishing is native — the model just replies with
 text and no tool call — so no marker instruction is needed.
 
+**A result too large to word in full is saved to a file, and the model reads
+its start and the path.** Claude Code's own mechanism, copied from what was
+measured of it (Claude Code 2.1.321, probed from its own `Bash` and `Read` and
+confirmed in its bundled source) rather than from memory of it: a result
+longer than its tool's limit is written whole to a file, and in its place the
+model reads
+
+```
+<persisted-output>
+Output too large (49.8KB). Full output saved to: <path>
+
+Preview (first 2KB):
+<the first 2,000 characters, cut back to the last line break past 1,000>
+...
+</persisted-output>
+```
+
+word for word (`persistedOutput` in `templates.dart`), sizes in kibibytes to
+one decimal. The limits are Claude Code's: `bash` at 30,000 characters
+(`bashInlineLimit`), every other tool at 50,000, and none for `read`, which
+bounds itself, and `ask_user`, whose result is the user's own words — a
+tool's `inlineLimit`. It is one place for every tool, as Claude Code persists
+in its tool-result layer rather than in each tool: `BuiltinAgent._savingLarge`
+wraps each call's events, batched ones included, the way `_withJobNotes` does.
+The file is `.entoli-output/<call id>.txt` in the chat's workspace
+(`saveOutput`), beside the jobs' logs, so `read` and `tail` reach it from every
+shell, a guest's included — the path the model is given is the guest's where
+the commands run in one — and it goes when the chat's workspace does. Not
+`.entoli-tmp`, the model's own scratch it is told to fill and may clear: a path
+the conversation still names must keep naming something. Never over another
+call's file: a provider with no ids of its own numbers them per response, so
+`call_0` comes round again and the next save is `call_0-2.txt`.
+
+The path rides the result as a fact, `ToolResult.outputFile`, and the output
+stays whole on the log — the chat shows all of it, and a mirror, which reads
+the log and never runs the turn (see "Driving a turn from the other end" in
+`lib/data/sync/AGENTS.md`), shows all of it too, the path naming a file on the
+home device only the home device's turns are ever given. The projection words
+the notice from the fact, so a reload words what the live turn did. A result
+with no file — a log from before this, or a save that failed — is worded whole
+up to 50,000 characters and cut to its ends past that, upstream's elision kept
+as the fallback. The user's `!` command saves on `bash`'s terms, onto
+`ShellRunPart.outputFile`.
+
+What this replaced was the elision alone, at 10,000: a build log's middle was
+gone with no way back but running it again, and every result up to the
+threshold rode the context whole. The chat that prompted it spent 1.2M
+characters on command output and 2.66M on reads.
+
+**`read` pages, on Claude Code's terms.** With no `limit` it returns 2,000
+lines from `offset` (`readLineLimit`), and says where the rest starts when the
+file goes on — Claude Code leaves that to its description, and a silent cut
+read as the whole file. A read is held to 25,000 tokens (`readTokenCap`),
+counted the way the app estimates tokens everywhere else, four characters
+each. Over it, a read of the whole file — no offset past the first line, no
+limit — is the whole lines that fit, closed by Claude Code's `[Truncated:
+PARTIAL view — …]` naming the next `offset` and `limit`; one line longer than
+the cap is cut by characters. A read that named a range is refused with
+Claude Code's own "File content (N tokens) exceeds maximum allowed tokens
+(25000)…", the range being the model's to narrow. `readPage` is all of it.
+
 Every tool call gets an answer, including the ones never run — after an abort,
 for a tool that does not exist. A provider that sees a
 `tool_use` with no matching result rejects the *next* turn, so padding them with
@@ -306,6 +368,29 @@ the grace where the command never answered at all. The
 group is the reason the shell is spawned under `setsid` where that exists —
 learned by trying it, not by probing first.
 
+**How long a command may run is Claude Code's two minutes and ten.**
+`BuiltinOptions.commandTimeout` is what a call naming no `timeout` gets, two
+minutes, and `maxCommandTimeout` is the most one may name, ten — Claude Code's
+120,000 and 600,000 milliseconds, measured. It was three minutes for both, and
+the chat that prompted the change had 25 commands hit it, mostly builds and CI
+waits. The user's `!` gets the ten: they typed it and are there to stop it.
+
+A command killed at its timeout keeps what it printed — the session shell's
+interrupt and the one-shot kill both hand back the output so far — and
+`ShellResult.timedOut` says that is why it stopped. Here Claude Code and this
+part ways on purpose: Claude Code moves a timed-out command to the background
+and lets it run, reporting `Command did not complete within its 120s timeout
+and was moved to the background (ID: …)`. Every Claude Code command is a
+process of its own, so stopping waiting is free; here a chat's commands run in
+one shell, and a command left running in it is one every later command waits
+behind. So it is killed, as before, and `bash` adds to a timed-out result,
+where background jobs are offered, that something that long goes in again with
+`background: true`. The descriptions say it ahead: `command`'s that the whole
+output comes back and is saved past the limit, so `| tail` buys nothing and a
+pipeline killed at the timeout loses all `tail` was holding — 14 of that chat's
+21 empty timeouts were pipes into `tail` or `head` — and `timeout`'s and
+`background`'s that anything that may outlast the timeout is a job.
+
 A command that moved the shell records the directory it left it in, on the
 result as a fact, and the projection words the change into a note the model
 reads — the note is derived at wording time from the fact the part carries,
@@ -402,7 +487,15 @@ starts a turn whose prompt is a `<system-notification>` naming the job, its
 exit code and its log's tail (`jobEndedNotification`), and tells the jobs the
 agent knows (`ChatShellJobs.told`), so the next tool result does not say it
 twice. A job that was stopped wakes nobody — whoever stopped it knows — and
-one end is one wake, so a watcher that keeps dying cannot loop. The chat
+one end is one wake, so a watcher that keeps dying cannot loop.
+
+An end that lands while a turn runs is held rather than dropped: the turn
+reads it on its next tool result if there is one, but the end often comes
+while the last reply is being written, and then no call follows. When the
+turn is over and the room quiet, an end the agent has not heard
+(`ChatShellJobs.heard`: its note is still waiting) wakes it the same way;
+one whose note a later call carried is dropped. A turn that was stopped or
+failed wakes nothing: the note waits for the next call. The chat
 draws that prompt as the app's note, not the user's; see "When a turn is
 over" in `lib/domain/room/AGENTS.md`.
 

@@ -22,12 +22,19 @@ void main() {
 
   final finish = saidOnly("done");
 
-  BuiltinAgent agentOver(FakeLlmClient client, {bool background = true}) {
+  BuiltinAgent agentOver(
+    FakeLlmClient client, {
+    bool background = true,
+    ShellResult Function(String command)? respond,
+  }) {
     final tempDir = Directory.systemTemp.createTempSync("background-jobs-test");
     addTearDown(() => tempDir.deleteSync(recursive: true));
     workspace = p.join(tempDir.path, "project", "chats", "chat-1");
     Directory(workspace).createSync(recursive: true);
-    shell = FakeShell((_) => ok("output"), canRunInBackground: background);
+    shell = FakeShell(
+      respond ?? (_) => ok("output"),
+      canRunInBackground: background,
+    );
     jobs = BackgroundJobs();
     return BuiltinAgent(
       session: BuiltinSession(),
@@ -131,6 +138,35 @@ void main() {
     expect(second.output, "output");
     expect(third.notes, isEmpty);
     expect(jobs.forChat("chat-1").jobs.value, isEmpty);
+  });
+
+  test("a command killed at its timeout keeps what it printed, and is "
+      "pointed at the background", () async {
+    final client = FakeLlmClient([
+      [bashCall("flutter build apk")],
+      [finish],
+    ]);
+    final events = await agentOver(
+      client,
+      respond: (_) => const ShellResult(
+        returnCode: 130,
+        output: "Running Gradle task 'assembleRelease'...\n",
+        timedOut: true,
+        exceptionInfo:
+            "The command timed out after 120s and was interrupted. "
+            "Anything it printed before that is above.",
+      ),
+    ).run(userMessage("build")).toList();
+
+    final result = results(events).single;
+    expect(result.output, "Running Gradle task 'assembleRelease'...\n");
+    expect(
+      result.exceptionInfo,
+      "The command timed out after 120s and was interrupted. Anything it "
+      "printed before that is above. To run something that takes this "
+      "long, start it again with `background: true`: you are told when it "
+      "ends.",
+    );
   });
 
   test("a job's id is not reused after it ends", () async {

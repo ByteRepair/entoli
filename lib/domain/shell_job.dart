@@ -87,6 +87,12 @@ abstract class ChatShellJobs {
   /// The agent has been told how job [id] ended some other way — the turn
   /// its end woke — so the note its next tool result would carry goes.
   void told(int id) {}
+
+  /// Whether the agent has heard how job [id] ended: on a tool result, or
+  /// by a wake. What decides whether a job that ended while a turn ran,
+  /// and was never read on a later call of that turn, wakes the agent once
+  /// the turn is over.
+  bool heard(int id) => true;
 }
 
 /// A job as it ended: the call that started it, what it ran, and how it went.

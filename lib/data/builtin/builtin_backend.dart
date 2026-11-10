@@ -48,6 +48,8 @@ import "llm/llm_registry.dart";
 import "llm/rate_limit_gate.dart";
 import "goal_reviewer.dart";
 import "permission_classifier.dart";
+import "saved_output.dart";
+import "templates.dart" show bashInlineLimit;
 import "projection.dart";
 import "sub_agent.dart";
 import "tools/agent_tool.dart" show AgentCapabilities;
@@ -791,15 +793,18 @@ class BuiltinBackend implements AgentBackend {
     final command = shellBypassCommand(prompt.plainText)!;
     await config.ensureChatDirs(chatId, project: project);
     final workspace = config.workspaceDir(chatId, project: project);
+    final home = _projectWorkspaceFor(
+      workspace: workspace,
+      project: project,
+      sharedWorkspace: sharedWorkspace,
+    );
     final run = shell.start(
       command,
       cwd: workspace,
-      home: _projectWorkspaceFor(
-        workspace: workspace,
-        project: project,
-        sharedWorkspace: sharedWorkspace,
-      ),
-      timeout: options.commandTimeout,
+      home: home,
+      // The longest a command may be given: the user typed it, is watching
+      // it, and stops it when they have seen enough.
+      timeout: options.maxCommandTimeout,
       environment: environment,
       project: project,
       // The agent's commands and this share the chat's shell, which
@@ -823,12 +828,22 @@ class BuiltinBackend implements AgentBackend {
     if (controller.isClosed) return;
     // The directory the shell was left in rides on the part as a fact; the
     // projection words the change, the way it does for the model's commands.
+    // So does where a long output was saved, on `bash`'s terms.
     final part = ShellRunPart(
       command: command,
       returnCode: result.returnCode,
       output: result.output,
       exceptionInfo: result.exceptionInfo,
       cwd: result.cwd,
+      outputFile: result.output.length > bashInlineLimit
+          ? await saveOutput(
+              result.output,
+              callId: prompt.id,
+              workspace: workspace,
+              projectWorkspace: home,
+              guestRoot: shell.guestRoot,
+            )
+          : null,
     );
     controller.add(ShellRunEvent(part));
     if (!_stopping.contains(controller)) controller.add(const DoneEvent());
