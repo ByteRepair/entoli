@@ -212,6 +212,16 @@ PlanTask? planNext(String? text) => planTasksFrom(
   text,
 ).where((t) => t.status == PlanTaskStatus.pending).firstOrNull;
 
+/// The task in progress, or null: the work the plan has taken.
+PlanTask? planInProgress(String? text) => planTasksFrom(
+  text,
+).where((t) => t.status == PlanTaskStatus.inProgress).firstOrNull;
+
+/// Whether a tool named [toolName] can change the plan: the plan tools, and
+/// the file tools the model edits it with. A `bash` that rewrites it is not
+/// among them, as [planRevision] says.
+bool writesPlan(String toolName) => _planWriters.contains(toolName);
+
 /// Whether a plan is under way: a task in progress, which is a plan approved
 /// and its work taken. The one state where a reply with no tool call is a
 /// stop in the middle, and where taking another task would be one too many.

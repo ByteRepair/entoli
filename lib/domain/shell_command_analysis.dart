@@ -1,10 +1,11 @@
 /// What a shell command parses to, decided before anything asks a model about
 /// it. The approval regime reads command text, and a command's text can lie —
 /// an `eval` built out of pieces, a redirect buried in a substitution — so the
-/// deterministic layer answers for the commands it can model and refuses the
-/// rest. The safe side is the deterministic side: a command whose write
-/// behaviour this cannot answer for is not run, and the reason is worded so
-/// the model can rewrite around it.
+/// deterministic layer answers for the commands it can model and names what
+/// it cannot. What it cannot answer for is not run on the parse's word: it is
+/// judged whole — at the banner, or by auto mode's classifier told the
+/// findings — and refused where nothing judges it, the reason worded so the
+/// model can rewrite around it.
 library;
 
 import "../core/log.dart" show logFailure;
@@ -81,12 +82,25 @@ class ShellCommandAnalysis {
   /// What the parse found that an automatic decision cannot stand on.
   final List<String> escalationReasons;
 
-  /// The sentence the model reads when this was escalated, or null where
-  /// nothing needs saying. Not a bare refusal: the reasons are named, the
-  /// command's segments are offered where the parse saw them, and the way out
-  /// — split the command, or write the script to the workspace — is spelled
-  /// out, so the model rewrites instead of retrying the same shape.
-  String? get escalationNote {
+  /// The sentence the model reads when this was refused unjudged, or null
+  /// where nothing needs saying. A command with findings is judged whole —
+  /// by the user at the banner, or by auto mode's classifier told what the
+  /// parse found — and this is what reaches the model where neither did:
+  /// never mode, or an allow rule in it, with nobody to judge. Not a bare
+  /// refusal: the reasons are named, the command's segments are offered
+  /// where the parse saw them, and the way out — split the command, or
+  /// write the script to the workspace — is spelled out, so the model
+  /// rewrites instead of retrying the same shape.
+  String? get escalationNote => escalationNoteBecause(
+    "Run as one piece, a command like this needs judging whole — by the "
+    "user, or by auto mode's classifier — and nothing was there to judge "
+    "it.",
+  );
+
+  /// [escalationNote] with [why] in place of its account of why the whole
+  /// command was not judged: a classifier that judged and refused it, or a
+  /// deny rule that kept it from being judged at all.
+  String? escalationNoteBecause(String why) {
     final all = [...unmodelableReasons, ...escalationReasons];
     if (all.isEmpty) return null;
     final segments = modelableSegments;
@@ -96,10 +110,9 @@ class ShellCommandAnalysis {
               "call instead:\n${[for (final s in segments) "- $s"].join("\n")}";
     return "Not run: this command cannot be checked as one piece. The parse "
         "found:\n${[for (final r in all) "- $r"].join("\n")}\n"
-        "A compound command is judged segment by segment, and one the parse "
-        "cannot model is judged for nothing — no rule and no classifier can "
-        "allow it. Rewrite it so what it does is plain, or split it into "
-        "separate bash calls, one per step."
+        "A compound command is checked segment by segment. $why Rewrite it "
+        "so what it does is plain, or split it into separate bash calls, one "
+        "per step."
         "$segmentAdvice"
         "\nA script too long to inline may be written to the workspace with "
         "the write tool and run by its path.";
@@ -238,7 +251,15 @@ List<String> _segmentsOf(String command, List<_Tok> tokens) {
 /// left out of the words. Null where any of it is not plain text — an
 /// expansion, a substitution, a group — or the segment does not tokenize,
 /// the same answer the whole-command parse gives.
-({List<String> words, List<String?> writes})? plainCommand(String segment) {
+///
+/// [expandedTargets] lets a redirect target through that names its file by
+/// a variable (`> $B/out`), its write then null: the words are what a rule
+/// reads, and a variable in where they write hides no command from it. A
+/// substitution in a target is still null, being a command of its own.
+({List<String> words, List<String?> writes})? plainCommand(
+  String segment, {
+  bool expandedTargets = false,
+}) {
   final reasons = <String>[];
   final tokens = _tokenize(segment, reasons);
   if (reasons.isNotEmpty ||
@@ -257,7 +278,14 @@ List<String> _segmentsOf(String command, List<_Tok> tokens) {
   final writes = <String?>[];
   for (final redirect in parsed.redirects) {
     final target = redirect.target == null ? null : _plain(redirect.target!);
-    if (redirect.target != null && target == null) return null;
+    if (redirect.target != null &&
+        target == null &&
+        !(expandedTargets &&
+            redirect.target!.every(
+              (piece) => piece is String || piece is _Expansion,
+            ))) {
+      return null;
+    }
     if (!redirect.fromInput && !redirect.fdOnly) writes.add(target);
   }
   return (words: words, writes: writes);

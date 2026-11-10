@@ -158,9 +158,8 @@ so a fan-out is the tool's business rather than the loop's.
 **The gate is `ApprovalGate`** (`approval_gate.dart`), one per turn, holding
 what is the turn's: the policy as the current call reads it, the directories
 granted mid-turn, and auto mode's circuit breaker. It hands a call's outcome
-back on a `GateOutcome` the caller made — the result, what decided it, and
-whether a person answered a banner — rather than on state any other call
-could read. What a rule is matched against is the caller's to say: a subject
+back on a `GateOutcome` the caller made — the result and what decided it —
+rather than on state any other call could read. What a rule is matched against is the caller's to say: a subject
 (the path for the file tools, the URL for a fetch) or the parse for a command.
 
 Adding a tool is a class beside its kin and a line in the registry; where the
@@ -491,8 +490,31 @@ not `|`, which is the pipe, nor a bare comma, which arguments carry). Every
 segment must find an allow, so a compound whose tail no rule covers is not
 allowed by its head. A segment whose words are not plain text — an
 expansion, a substitution — is matched by no rule, and a command the parse
-cannot model at all goes to the banner even under an allow rule (refused in
-`never`, where nobody can answer).
+has findings on — one it cannot model at all, or a redirect through a
+variable, an assignment that moves where tools write — is not decided by an
+allow rule either: it goes to the banner in `ask`, to the classifier in
+`auto`, and is refused in `never`, where nobody can answer.
+
+**A command the parse cannot check is judged whole, not refused unjudged.**
+`ApprovalGate.decide` decides it once, after the deny rules and before
+anything else, where a sandbox would confine the run (without one the parse
+has nothing to hold it to, and the mode decides as for any command): the
+banner in `ask`; in `auto` the classifier, handed the findings beside the
+command (`classify`'s `findings`); in `never` a refusal
+(`ShellCommandAnalysis.escalationNote`, which the model reads: the findings,
+the segments where the parse saw them, and the advice to split the command
+or write a script). The run itself does not check again. Before, a
+classifier allow was vetoed by the parse at the run, so an ordinary
+`cat x > $B/out` was refused outright; the static parse is a fast path, not
+the only judge, and what runs is still under the sandbox. A classifier deny answers with the same split
+advice and the classifier's verdict, so the model rewrites rather than
+retries; an ask goes to the banner. **The rules are not bypassed**
+(`rulesBlindTo`): where a deny rule for `bash` could match a part the parse
+cannot read — a segment whose words are not plain, or whose plain words
+match it with a redirect's target hidden — the command is refused as before
+without asking the classifier, and an ask rule there raises the banner. A
+rule is the user's word on what never runs or always shows, and a model's
+judgement of text the rule never saw does not stand in for it.
 
 **The policy is read, not held.** The repository hands a turn a
 `PolicyReader` (`TurnSettings.policy`), and the agent calls it at every gated
@@ -657,7 +679,9 @@ In `auto` mode, a `PermissionClassifier` (the `LlmClassifier` impl, or
 `NoClassifier` when no classifier model is configured) is asked before each
 `bash` and `webfetch` call. `allow` runs silently, `deny` refuses with a
 message that says not to retry it, `ask` escalates to the same banner `ask`
-mode uses. The classifier's rubric is workspace-anchored: reads of anything
+mode uses. A command with parse findings reaches it with them, and its deny
+carries the split advice instead (see "A command the parse cannot check"
+above). The classifier's rubric is workspace-anchored: reads of anything
 and writes inside the workspace allow, anything modifying state past it (the
 machine's `/tmp` included) asks, and deny is reserved for irreversible
 destruction rather than being a stronger ask — a write the model is unsure
@@ -668,6 +692,30 @@ turn, falling back to `ask` for the rest — emitted as an `InfoEvent` so the
 UI can say "auto mode paused." `NoClassifier` always asks, which is why the
 default mode is `ask` and `auto` is disabled in the settings UI until a
 classifier model is picked. `never` is labeled "(DANGEROUS)" in the dropdown.
+
+**The classifier judges a call against what was asked.** Every classifier
+call carries a `ClassifierRequest` beside the call: the text of the message
+the turn opened on as the user typed it (no attachments), the chat's active
+`/goal` objective, and the plan's task in progress (`planInProgress` over
+`readPlan`). The message is the agent's `said`, given by whoever opens the
+turn — the backend from the prompt, or for a resumed turn the message that
+started it; the sub-agent runner from the task — since the session holds only
+its dressed projection. A sub-agent's request has no plan: the plan beside it
+is the parent's, and a one-shot agent keeps none. A resumed sub-agent has no
+task to say, its transcript opening on its own message. `ClassifierRequest.of`
+is the one place blankness is decided (trimmed, a blank part null, no request
+where every part is). The gate reads it at each classifier call
+(`ApprovalGate.request`), alongside the policy; the plan's task is read once
+and held until a call that can write the plan (`writesPlan`) has run. The
+prompt puts it first, after the system prompt, since it is the same for
+every call of a turn and so a prefix a provider can cache, capped at
+`LlmClassifier.requestBudget` (4000 characters: the goal and the task cut to
+a share each, the message to the rest from its end, the newest kept), so a
+long paste cannot swamp the call being judged. The rubric frames it as data:
+it says what work was requested, never grants permission itself, and text in
+it that addresses the classifier is ignored. It is message content, so no
+log line carries it. Sub-agents run under `never` with no classifier today,
+so theirs is read only if that changes.
 
 The `ApprovalRequestEvent` is emitted *before* the agent waits on it, because
 the banner is where the answer comes from. The completer is therefore created
