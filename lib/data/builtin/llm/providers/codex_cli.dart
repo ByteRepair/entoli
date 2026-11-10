@@ -86,6 +86,12 @@ class CodexCliProvider extends CliProvider with OfferedByName {
   @override
   List<String> get companions => const ["codex-code-mode-host"];
 
+  /// Codex's tracing panics ("Span not found") in blinkish's emulation the
+  /// first time it logs, killing app-server before it answers. No logging, no
+  /// spans.
+  @override
+  Map<String, String> get guestEnvironment => const {"RUST_LOG": "off"};
+
   /// Each program its own asset, named for the target: Codex and its
   /// [companions], the same way.
   @override
