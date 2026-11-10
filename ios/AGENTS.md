@@ -295,6 +295,12 @@ every file's size and SHA-256, downloaded and checked by the same
 loading needs are fetched. `MlxFormat` describes a download from its
 `config.json`.
 
+**The Runner carries `com.apple.developer.kernel.increased-memory-limit`**
+(`Runner/Runner.entitlements`). The catalog is held to `ModelBudget.phone`,
+three fifths of what `os_proc_available_memory` says, and under the default
+per-app limit that is short of even the 4B on a 12 GB iPhone. Without the
+entitlement, 8.0.0 shipped with an empty On-device page.
+
 It is a `RuntimeEngine` like llama.cpp's — see "The engine" in
 `lib/data/local/AGENTS.md` — so residency, the Running list, the kept prompts
 and the prefill are the shared ones: `MlxRuntime` says what MLX offers
