@@ -645,8 +645,18 @@ abstract class CliProcessSession extends CliSession {
   }) async {
     final process = await provider.run(arguments, environment: environment);
     _process = process;
-    process.lines.listen(_read, onError: (Object e) => fail("$e"));
-    process.errors.listen(_stderr.add);
+    logFailure("cli", "$name process started");
+    process.lines.listen((l) {
+      logDetail(
+        "cli",
+        () => "$name stdout: ${l.length > 200 ? l.substring(0, 200) : l}",
+      );
+      _read(l);
+    }, onError: (Object e) => fail("$e"));
+    process.errors.listen((c) {
+      logFailure("cli", "$name stderr: $c");
+      _stderr.add(c);
+    });
     unawaited(process.exitCode.then(_exited));
   }
 

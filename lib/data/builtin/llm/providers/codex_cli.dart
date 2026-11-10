@@ -592,6 +592,7 @@ class CodexCliSession extends CliProcessSession {
     final id = ++_nextId;
     final done = Completer<Object?>();
     _waiting[id] = done;
+    logFailure("codex", "request $method id=$id");
     write({"id": id, "method": method, "params": params});
     return done.future;
   }
