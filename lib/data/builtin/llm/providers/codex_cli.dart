@@ -86,11 +86,14 @@ class CodexCliProvider extends CliProvider with OfferedByName {
   @override
   List<String> get companions => const ["codex-code-mode-host"];
 
-  /// Codex's tracing panics ("Span not found") in blinkish's emulation the
-  /// first time it logs, killing app-server before it answers. No logging, no
-  /// spans.
+  /// Experiment: app-server panics ("Span not found") in blinkish before it
+  /// answers. One tokio worker rules out a cross-thread emulation fault; the
+  /// backtrace shows where it fails.
   @override
-  Map<String, String> get guestEnvironment => const {"RUST_LOG": "off"};
+  Map<String, String> get guestEnvironment => const {
+    "TOKIO_WORKER_THREADS": "1",
+    "RUST_BACKTRACE": "full",
+  };
 
   /// Each program its own asset, named for the target: Codex and its
   /// [companions], the same way.
