@@ -120,8 +120,7 @@ class ApprovalGate {
     );
   }
 
-  String _tilde(String path) =>
-      path == "~" || path.startsWith("~/") ? resolvePath(path) : path;
+  String _tilde(String path) => isTildePath(path) ? resolvePath(path) : path;
 
   /// Grants [dirs] for the rest of this turn.
   void grant(Iterable<String> dirs) {
@@ -142,12 +141,17 @@ class ApprovalGate {
     environment: Platform.environment,
   );
 
+  /// Whether a command runs confined under [permissions]: the switch on and
+  /// a helper to enforce it. What the turn's context reads before it names
+  /// the folders the sandbox grants, so it never names any it does not.
+  bool confines(StandingPermissions permissions) =>
+      permissions.sandboxed && helper != null;
+
   /// The sandbox a command runs in under [permissions]: the chat's workspace,
   /// its tmp, the project's workspace beside it — where work another
   /// conversation should find goes — and the granted directories.
   CommandSandbox? _sandboxFor(StandingPermissions permissions) {
-    if (!permissions.sandboxed) return null;
-    if (helper == null) return null;
+    if (!confines(permissions)) return null;
     final granted = [
       workspace,
       if (projectWorkspace != workspace) projectWorkspace,

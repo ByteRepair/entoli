@@ -1298,7 +1298,7 @@ void main() {
       await tester.tap(find.text("Add folder"));
       await settleIo(tester, least: 10);
       expect(saved(), isEmpty);
-      expect(find.text(WorkFolderRefusal.appData.message), findsOneWidget);
+      expect(find.text(FolderRefusal.appData.message), findsOneWidget);
     });
 
     testWidgets("a folder gone from this device says so in its row", (

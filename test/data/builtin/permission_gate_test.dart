@@ -34,6 +34,16 @@ void main() {
 
   final finish = saidOnly("done");
 
+  /// A real folder outside the workspaces, gone at the end of the test: a
+  /// persisted grant reaches the turn only while it is a folder on disk.
+  String folder(String name) {
+    final dir = Directory.systemTemp.createTempSync(name);
+    addTearDown(() {
+      if (dir.existsSync()) dir.deleteSync(recursive: true);
+    });
+    return dir.path;
+  }
+
   /// The [which]'th tool result a turn reported, zero-based — the record the
   /// outcome rides on.
   ToolResult results(List<AgentEvent> events, {int which = 0}) =>
@@ -478,8 +488,9 @@ void main() {
     test(
       "the classifier is told the project workspace and the grants",
       () async {
+        final repo = folder("repo");
         final client = FakeLlmClient([
-          [bashCall("make -C /home/u/repo")],
+          [bashCall("make -C $repo")],
           [finish],
         ]);
         final classifier = FakeClassifier();
@@ -487,12 +498,12 @@ void main() {
           client,
           approveMode: ApproveMode.auto,
           classifier: classifier,
-          writableDirs: ["/home/u/repo"],
+          writableDirs: [repo],
         ).run(userMessage("go")).toList();
 
         expect(classifier.alsoWritable.single, [
           p.dirname(p.dirname(workspaceDir)),
-          "/home/u/repo",
+          repo,
         ]);
       },
     );
@@ -1088,7 +1099,11 @@ void main() {
       expect(offers(const ToolOffer(sandboxed: true, oneShot: true)), isFalse);
     });
 
-    test("the turn's writableDirs reach the sandbox, files included", () async {
+    test("the turn's writableDirs reach the sandbox while they are folders "
+        "on disk", () async {
+      final repo = folder("repo");
+      final logs = folder("logs");
+      final gone = p.join(logs, "gone");
       final client = FakeLlmClient([
         [bashCall("python3 build.py")],
         [finish],
@@ -1096,15 +1111,16 @@ void main() {
       await agentOver(
         client,
         approveMode: ApproveMode.never,
-        writableDirs: ["/etc/hosts", "/var/log/entoli"],
+        writableDirs: [repo, gone, p.join(repo, "missing.txt"), logs],
       ).run(userMessage("go")).toList();
-      // The project's workspace, then the persisted tier's grant —
-      // directories and files alike — is what the command's confinement
-      // carries, ahead of the toolchain caches this machine happens to have.
+      // The project's workspace, then the persisted tier's grant — a folder
+      // gone from the machine, or never one, granting nothing — is what the
+      // command's confinement carries, ahead of the toolchain caches this
+      // machine happens to have.
       expect(shell.sandboxes.single!.extraWrites.take(3), [
         p.dirname(p.dirname(workspaceDir)),
-        "/etc/hosts",
-        "/var/log/entoli",
+        repo,
+        logs,
       ]);
     });
   });
@@ -1119,12 +1135,13 @@ void main() {
       final client = FakeLlmClient([
         [finish],
       ]);
+      final repo = folder("repo");
       await agentOver(
         client,
-        writableDirs: ["/home/u/repo"],
+        writableDirs: [repo],
       ).run(userMessage("go")).toList();
       expect(told(client), contains("## Work folders"));
-      expect(told(client), contains("- /home/u/repo"));
+      expect(told(client), contains("- $repo"));
     });
 
     test("a turn with the sandbox off names none, there being nothing to "

@@ -1,13 +1,13 @@
-import "dart:io";
-
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/project.dart" show ProjectRef;
+import "../../domain/shell.dart" show isTildePath;
 import "../../domain/work_folders.dart";
 import "../../providers.dart";
 import "../widgets/add_button_row.dart";
 import "../widgets/dialogs.dart" show say;
+import "../widgets/editable_row.dart";
 import "../widgets/section_header.dart";
 
 /// A project's work folders: the directories outside the workspaces that
@@ -23,15 +23,24 @@ class WorkFoldersSection extends ConsumerWidget {
 
   final ProjectRef at;
 
+  /// Why [dir] grants nothing to this project's turns, or null where it
+  /// grants. The chat workspaces are inside the project's, so that one
+  /// stands for them all.
+  FolderRefusal? _refusal(WidgetRef ref, String dir) => refuseFolder(
+    dir,
+    dataDir: ref.read(appConfigProvider).dataDir,
+    home: ref.read(shellProvider).machineHome,
+    workspaces: [
+      ref.read(appConfigProvider).projectWorkspaceDir(project: at.project),
+    ],
+  );
+
   Future<void> _add(BuildContext context, WidgetRef ref) async {
     final picked = await ref
         .read(folderPickerProvider)
         .pick(confirmLabel: "Add");
     if (picked == null || !context.mounted) return;
-    final refusal = refuseWorkFolder(
-      picked,
-      dataDir: ref.read(appConfigProvider).dataDir,
-    );
+    final refusal = _refusal(ref, picked);
     if (refusal != null) {
       say(context, refusal.message);
       return;
@@ -53,7 +62,6 @@ class WorkFoldersSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final dirs = ref.watch(projectSettingsOf(at).select((s) => s.writableDirs));
-    final dataDir = ref.watch(appConfigProvider).dataDir;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -64,24 +72,14 @@ class WorkFoldersSection extends ConsumerWidget {
               "may write to, with nothing to approve.",
         ),
         for (final dir in dirs)
-          ListTile(
-            dense: true,
-            leading: const Icon(Icons.folder_outlined),
-            title: Text(dir),
-            // One the turn is not granted — gone from this device, or over
-            // the app's data — is said rather than left looking live.
-            subtitle: grantsNow(dir, dataDir: dataDir)
-                ? null
-                : Text(
-                    FileSystemEntity.isDirectorySync(dir)
-                        ? "Holds the app's own data, so it grants nothing"
-                        : "Missing on this device",
-                  ),
-            trailing: IconButton(
-              icon: const Icon(Icons.close),
-              tooltip: "Remove $dir",
-              onPressed: () => _remove(ref, dir),
-            ),
+          EditableRow(
+            title: dir,
+            // One the turn is not granted — gone from this device, or a
+            // folder no grant may name — is said rather than left looking
+            // live. A `~` path is the turn's to resolve, and stands.
+            subtitle: isTildePath(dir) ? null : _refusal(ref, dir)?.row,
+            removeLabel: "Remove $dir",
+            onRemove: () => _remove(ref, dir),
           ),
         AddButtonRow(
           child: OutlinedButton.icon(

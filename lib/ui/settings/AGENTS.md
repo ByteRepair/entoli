@@ -296,13 +296,17 @@ backup or sync names a folder that is not there, which grants nothing (below).
 
 A folder comes from the platform's picker (`FolderPicker`, `file_selector`'s
 `getDirectoryPath` under it) and is never typed. It is refused, with a snack
-bar, for the two reasons `add_directory` refuses one: it is the app's own data
-tree (the data directory, anything under it, or anything holding it), or it is
-not a directory. `refuseWorkFolder` in `lib/domain/work_folders.dart` is the
-one test. A row whose folder is gone from this device, or that names the app's
-data however it got there, says so under its path. The same `grantsNow` that
-draws that line drops the folder from the turn's policy, so a folder that has
-disappeared grants nothing, and a command cannot recreate it under the grant.
+bar, by `refuseFolder` in `lib/domain/work_folders.dart`, the one test any
+grant takes, `add_directory`'s banner included. It refuses a path that is not
+a directory, the root, the home or anything holding it, the app's own data
+tree (the data directory, anything under it, or anything holding it), and
+anything holding the project's workspace. A row whose folder that test now
+refuses says why under its path (`FolderRefusal.row`). The commonest case is
+"Missing on this device", a folder that has disappeared or arrived by sync
+from another machine. The turn drops such a folder from its policy as well, so
+it grants nothing and a command cannot recreate it under the grant. Rows are
+the shared `EditableRow`, with no tap, since a folder is only added and
+removed.
 
 It is drawn only where the paths are this device's and the sandbox is what
 they open. It is not drawn for a paired device's project, whose folders a
