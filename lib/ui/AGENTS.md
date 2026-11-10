@@ -375,13 +375,22 @@ constructor default there, and Swift's starting value before Dart has said
 anything is a `static let initial` beside its view, since Pigeon gives a
 Swift struct none. A field may not be called `description`, which is Swift's.
 
-**A publisher reads what it sends in its own build.** Each concern is
-published by a widget of its own, so what it watches rebuilds it and nothing
-else; and a provider watched from a builder beneath one, rather than the
-widget's own build, can be missed — the sidebar went out empty on some
-launches because the chat list landed a frame after a first snapshot read it
-from a `ValueListenableBuilder`. The running chats are a listenable, so the
-publishers watch `busyChatIdsProvider`, its set as a value.
+**What no surface owns is a provider; what a surface owns, its widget.**
+The window's, the sidebar's and the palette's snapshots are providers —
+`windowSnapshotProvider`, `sidebarSnapshotProvider`,
+`paletteSnapshotProvider`, each in its concern's own file beside the runner
+for its intents — and `ShellPublisher`, which `ShellBridge` holds, sends each
+from a listener on the container. Not from a build: a build waits for a
+frame, and an iPhone shows its sidebar exactly when the Flutter view is out
+of the window and the engine paused, so a rename, a pin or a delete made from
+the list never reached it until the user left it. A widget's own
+subscription would not do either, being paused under a page that covers the
+conversation. The surfaces' snapshots — the bars, the composer, the turn,
+the new-chat screen, voice mode — stay with the widget on top of their
+`ShellSlot`, are on screen only while the Flutter view is, and read what they
+send in their own build, since a provider watched from a builder beneath one
+can be missed. The running chats are a listenable, so the snapshots watch
+`busyChatIdsProvider`, its set as a value.
 
 **An intent goes to whoever is on screen.** The window's, the sidebar's and
 the palette's go to `ShellBridge`'s own runners. The composer's, the turn
@@ -498,10 +507,15 @@ menu, so the native field takes its own editing keys — cut, copy, paste,
 select all, undo, and Return's send and queue — in `performKeyEquivalent`,
 which the window offers a view before the menu bar; an Edit menu would have
 sent the same keys to Flutter's own text fields too. On an iPhone the split
-view is a stack: opening a chat or a new one asks for the detail column,
-nothing selected being the new-chat screen rather than the list, and the
-app's pages are a menu on the list's bar, there being no menu bar to hold
-them. The hosting is each Runner's own story — see "The native shell" in
+view is a stack, and it opens on the detail column — nothing selected is the
+new-chat screen, as it is in the Flutter app, not the list. The chat's bar
+leads with a sidebar button in place of the split view's chevron, the Flutter
+app's menu button drawn the system's way, and picking a chat, a new one, a
+page or a project from the list goes back to the detail as the Flutter drawer
+closes on each; `ShellModel.compactColumn` is the one state for all of it.
+Only the behaviour follows Flutter's: the layout stays the native split
+view. The app's pages are a menu on the list's bar, there being no menu bar
+to hold them. The hosting is each Runner's own story — see "The native shell" in
 `macos/AGENTS.md` and `ios/AGENTS.md`.
 
 What is tested is the Dart half, `test/ui/shell/`: every snapshot as the

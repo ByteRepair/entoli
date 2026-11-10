@@ -1,11 +1,13 @@
 import "dart:async";
 
 import "package:entoli_glass/entoli_glass.dart";
+import "package:flutter/widgets.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/shell/shell_palette.dart";
+import "package:agent_chat/ui/shell/shell_publisher.dart";
 
 import "../../harness.dart";
 import "fake_native_shell.dart";
@@ -25,6 +27,8 @@ void main() {
   tearDown(() => app.dispose());
 
   Future<void> pump(WidgetTester tester) async {
+    final publisher = ShellPublisher(app.container);
+    addTearDown(publisher.close);
     await app.pump(
       tester,
       ProviderScope(
@@ -32,7 +36,7 @@ void main() {
           builder: (context, ref, _) {
             widgetRef = ref;
             palette = PaletteRunner(context, ref);
-            return const PalettePublisher();
+            return const SizedBox.shrink();
           },
         ),
       ),

@@ -1,10 +1,12 @@
 import "dart:async";
 
 import "package:entoli_glass/entoli_glass.dart";
+import "package:flutter/widgets.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/ui/selection.dart";
+import "package:agent_chat/ui/shell/shell_publisher.dart";
 import "package:agent_chat/ui/shell/shell_sidebar.dart";
 
 import "../../harness.dart";
@@ -22,13 +24,15 @@ void main() {
   tearDown(() => app.dispose());
 
   Future<void> pump(WidgetTester tester) async {
+    final publisher = ShellPublisher(app.container);
+    addTearDown(publisher.close);
     await app.pump(
       tester,
       ProviderScope(
         child: Consumer(
           builder: (context, ref, _) {
             sidebar = SidebarRunner(context, ref);
-            return const SidebarPublisher();
+            return const SizedBox.shrink();
           },
         ),
       ),
@@ -121,6 +125,32 @@ void main() {
 
     await run(tester, (s) => s.delete(id));
     await settleUntil(tester, () => titles().isEmpty, what: "the row gone");
+  });
+
+  testWidgets("a change reaches the sidebar with no frame drawn", (
+    tester,
+  ) async {
+    await io(tester, () => app.seedChat(title: "first"));
+    await pump(tester);
+    // An iPhone showing the list has the Flutter view out of the window and
+    // the engine paused: nothing is drawn until the user leaves the list.
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    addTearDown(
+      () => tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.resumed,
+      ),
+    );
+
+    final query = await tester.runAsync(() {
+      final arrived = shell.next<SidebarSnapshot>(
+        "sidebar",
+        (s) => s.query == "fir",
+      );
+      sidebar.search("fir");
+      // Only so the old failure says what it is rather than hanging.
+      return arrived.timeout(const Duration(seconds: 10));
+    });
+    expect(query!.query, "fir");
   });
 
   testWidgets("a name no project can have is refused with a reason", (

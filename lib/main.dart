@@ -61,6 +61,7 @@ import "ui/triggers/incoming_open.dart";
 import "ui/selection.dart";
 import "ui/theme.dart";
 import "ui/shell/shell_bridge.dart";
+import "ui/shell/shell_window.dart";
 import "ui/app_routes.dart";
 import "ui/widgets/liquid_glass.dart";
 

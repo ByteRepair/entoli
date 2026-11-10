@@ -1,3 +1,5 @@
+import "dart:async";
+
 import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter_test/flutter_test.dart";
 
@@ -11,7 +13,10 @@ class FakeNativeShell implements TestNativeShell {
   static FakeNativeShell install() {
     final shell = FakeNativeShell._();
     TestNativeShell.setUp(shell);
-    addTearDown(() => TestNativeShell.setUp(null));
+    addTearDown(() {
+      TestNativeShell.setUp(null);
+      return shell._arrivals.close();
+    });
     return shell;
   }
 
@@ -32,7 +37,20 @@ class FakeNativeShell implements TestNativeShell {
   PaletteSnapshot? get lastPalette => _last("palette");
   List<double> get levels => [...?sent["voiceLevel"]?.cast<double>()];
 
-  void _add(String concern, Object value) => (sent[concern] ??= []).add(value);
+  final _arrivals = StreamController<(String, Object)>.broadcast(sync: true);
+
+  /// The next [concern] snapshot that [matches], however it arrives: with no
+  /// frame pumped, which is how a snapshot sent off a listener lands.
+  Future<T> next<T>(String concern, bool Function(T) matches) => _arrivals
+      .stream
+      .where((e) => e.$1 == concern && matches(e.$2 as T))
+      .map((e) => e.$2 as T)
+      .first;
+
+  void _add(String concern, Object value) {
+    (sent[concern] ??= []).add(value);
+    _arrivals.add((concern, value));
+  }
 
   @override
   void start() {}
