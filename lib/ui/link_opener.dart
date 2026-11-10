@@ -74,6 +74,23 @@ class PlatformLinkOpener implements LinkOpener {
     await launchUrl(url, mode: LaunchMode.externalApplication);
   }
 
+  /// The system's own in-app browser on the phones — SFSafariViewController,
+  /// a Custom Tab — rather than the app's webview, which sign-in pages
+  /// refuse, or the external browser, which leaves the app in the background.
+  @override
+  Future<void> openSignIn(BuildContext context, Uri url) async {
+    if (url.scheme != "https") {
+      logFailure("link", "refused a sign-in page with scheme ${url.scheme}");
+      return;
+    }
+    await launchUrl(
+      url,
+      mode: isPhone
+          ? LaunchMode.inAppBrowserView
+          : LaunchMode.externalApplication,
+    );
+  }
+
   @override
   Future<void> openArtifact(
     BuildContext context,

@@ -201,9 +201,11 @@ void main() {
       ..complain("Open https://auth.openai.com/oauth/auth")
       ..complain("orize?client_id=x\nWaiting…");
     await frames(tester);
+    // Opened as a sign-in, which keeps the app in front on a phone so the
+    // callback reaches the program.
     await tester.tap(find.text("Open the sign-in page"));
     await tester.pump();
-    expect(app.linkOpener.opened, [
+    expect(app.linkOpener.signIns, [
       Uri.parse("https://auth.openai.com/oauth/authorize?client_id=x"),
     ]);
     expect(settings().llmProviders, isEmpty);

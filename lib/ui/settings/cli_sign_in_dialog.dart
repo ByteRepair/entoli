@@ -175,7 +175,8 @@ class _CliSignInDialogState extends ConsumerState<CliSignInDialog> {
             plan: _cli.planName,
             page: page,
             code: _code,
-            onOpen: () => ref.read(linkOpenerProvider).open(context, page),
+            onOpen: () =>
+                ref.read(linkOpenerProvider).openSignIn(context, page),
             onCode: () => signIn.answer(_code.text),
           ),
           _Failed(:final reason) => Text(

@@ -85,6 +85,13 @@ class FakeLinkOpener implements LinkOpener {
   @override
   Future<void> open(BuildContext context, Uri url) async => opened.add(url);
 
+  /// Every sign-in page opened, apart from [opened].
+  final List<Uri> signIns = [];
+
+  @override
+  Future<void> openSignIn(BuildContext context, Uri url) async =>
+      signIns.add(url);
+
   @override
   Future<void> openArtifact(
     BuildContext context,

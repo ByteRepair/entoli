@@ -7,6 +7,13 @@ import "package:flutter/widgets.dart";
 abstract interface class LinkOpener {
   Future<void> open(BuildContext context, Uri url);
 
+  /// A sign-in page whose result comes back to a program this app runs, by
+  /// a callback to its own `localhost` listener: a CLI's sign-in. Opened
+  /// without sending the app away where being away stops it — inside the
+  /// app on the phones, since iOS suspends an app in the background and the
+  /// callback would reach nobody — and in the external browser on desktop.
+  Future<void> openSignIn(BuildContext context, Uri url);
+
   /// Open the artifact [artifactId] saved under [chatId]. [entryFile] is the
   /// filename in the artifact dir the viewer should open. The title is for the
   /// app bar of the in-app viewer, where there is one.
