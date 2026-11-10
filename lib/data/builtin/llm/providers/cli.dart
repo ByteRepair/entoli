@@ -656,6 +656,11 @@ abstract class CliProcessSession extends CliSession {
     try {
       message = jsonDecode(text);
     } on FormatException {
+      logFailure(
+        "codex",
+        "dropped a non-JSON line (${text.length} bytes): "
+            "${text.substring(0, text.length < 120 ? text.length : 120)}",
+      );
       return;
     }
     if (message is Map<String, dynamic>) line(message);
