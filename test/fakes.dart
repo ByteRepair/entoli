@@ -2022,7 +2022,22 @@ class FakeHostGuest extends HostCliGuest {
   const FakeHostGuest({super.launch});
 
   @override
-  List<String>? onTerminal(List<String> argv) => argv;
+  bool get hasTerminal => true;
+
+  @override
+  Future<CliProcess> spawn(
+    List<String> argv, {
+    required String cwd,
+    required Map<String, String> environment,
+    required List<String> shared,
+    required bool terminal,
+  }) => super.spawn(
+    argv,
+    cwd: cwd,
+    environment: environment,
+    shared: shared,
+    terminal: false,
+  );
 }
 
 /// A CLI's process as a test drives it: [say] prints a line, [complain]

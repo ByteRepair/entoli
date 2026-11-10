@@ -41,6 +41,8 @@
 #include "kernel/signal.h"
 #include "fs/path.h"
 #include "fs/real.h"
+#include "fs/tty.h"
+#include "fs/devices.h"
 
 // ---- internal state ----
 
@@ -478,6 +480,131 @@ void ish_session_destroy(ish_session *session) {
 
 // ---- pipe sessions (a guest program run directly) ----
 
+// A program's terminal: one of iSH's own pseudo-terminals, made the way its
+// app makes a Terminal's (pty_open_fake), whose screen is a host pipe — the
+// session's stdout — and whose keyboard is the session's stdin pipe, typed
+// into it by a thread of its own, the way tty-real.c's thread types the real
+// terminal's. Everything between — line discipline, echo, termios, the
+// window size, the controlling terminal, ^C — is iSH's tty layer, as for
+// any other terminal in the guest. The caller's thread only ever writes a
+// host pipe, so nothing it does waits on the guest.
+//
+// What the driver holds is the screen's fd (tty->data), closed when the
+// last reference goes, so a write can never land on a closed or reused fd.
+static int pipe_tty_write(struct tty *tty, const void *buf, size_t len, bool UNUSED(blocking)) {
+    int screen = (int) (intptr_t) tty->data;
+    size_t done = 0;
+    while (done < len) {
+        ssize_t n = write(screen, (const char *) buf + done, len - done);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            return _EIO;
+        }
+        done += (size_t) n;
+    }
+    return (int) len;
+}
+
+static void pipe_tty_cleanup(struct tty *tty) {
+    close((int) (intptr_t) tty->data);
+}
+
+static const struct tty_driver_ops pipe_tty_ops = {
+    .write = pipe_tty_write,
+    .cleanup = pipe_tty_cleanup,
+};
+// pty_open_fake fills in the rest: the ttys are the pty slaves', so the
+// terminal is /dev/pts/N to the guest like any other.
+static struct tty_driver pipe_tty_driver = {.ops = &pipe_tty_ops};
+
+static void pipe_tty_retain(struct tty *tty) {
+    lock(&tty->lock);
+    tty->refcount++;
+    unlock(&tty->lock);
+}
+
+static void pipe_tty_put(struct tty *tty) {
+    lock(&ttys_lock);
+    tty_release(tty);
+    unlock(&ttys_lock);
+}
+
+struct pipe_tty_keyboard {
+    struct tty *tty;
+    int keys;
+};
+
+// Types what arrives on the stdin pipe into the terminal, waiting while its
+// buffer is full (tty_input blocking, which needs no guest task), and on the
+// pipe's end — the caller closing the input, or the session going — types
+// the end-of-file key once, as a person at it would.
+static void *pipe_tty_keyboard_thread(void *arg) {
+    struct pipe_tty_keyboard *keyboard = arg;
+    struct tty *tty = keyboard->tty;
+    char buf[1024];
+    for (;;) {
+        ssize_t n = read(keyboard->keys, buf, sizeof(buf));
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) break;
+        for (ssize_t done = 0; done < n;) {
+            ssize_t typed = tty_input(tty, buf + done, (size_t) (n - done), true);
+            if (typed <= 0) break;
+            done += typed;
+        }
+    }
+    lock(&tty->lock);
+    char eof = (char) tty->termios.cc[VEOF_];
+    unlock(&tty->lock);
+    tty_input(tty, &eof, 1, false);
+    close(keyboard->keys);
+    pipe_tty_put(tty);
+    free(keyboard);
+    return NULL;
+}
+
+// The terminal [cols] by [rows], as the current task's stdio and controlling
+// terminal (an init child is a session leader), its screen [screen] and its
+// keyboard [keys], both taken over. Null where it could not be made.
+static struct tty *pipe_tty_open(int screen, int keys, int cols, int rows) {
+    struct tty *tty = pty_open_fake(&pipe_tty_driver);
+    if (IS_ERR(tty)) {
+        close(screen);
+        close(keys);
+        return NULL;
+    }
+    tty->data = (void *) (intptr_t) screen;
+    lock(&tty->lock);
+    tty_set_winsize(tty, (struct winsize_) {.col = (word_t) cols, .row = (word_t) rows});
+    unlock(&tty->lock);
+
+    struct pipe_tty_keyboard *keyboard = malloc(sizeof(*keyboard));
+    pthread_t thread;
+    if (keyboard == NULL) goto fail;
+    keyboard->tty = tty;
+    keyboard->keys = keys;
+    pipe_tty_retain(tty);
+    if (pthread_create(&thread, NULL, pipe_tty_keyboard_thread, keyboard) != 0) {
+        pipe_tty_put(tty);
+        free(keyboard);
+        goto fail;
+    }
+    pthread_detach(thread);
+    keys = -1;
+
+    char path[32];
+    snprintf(path, sizeof(path), "/dev/pts/%d", tty->num);
+    if (create_stdio(path, TTY_PSEUDO_SLAVE_MAJOR, tty->num) < 0) {
+        pipe_tty_put(tty);
+        return NULL;
+    }
+    return tty;
+
+fail:
+    if (keys >= 0) close(keys);
+    pipe_tty_put(tty);
+    return NULL;
+}
+
 // The registry of live pipe sessions the exit hook walks, one node per session.
 // Guarded by pids_lock: the hook runs under it (do_exit holds it), and
 // init/destroy take it around their own list edits.
@@ -526,6 +653,8 @@ ish_pipe_session *ish_pipe_init(
     int32_t env_count,
     const char **read_only,
     int32_t read_only_count,
+    int32_t terminal_cols,
+    int32_t terminal_rows,
     const char **error)
 {
     if (!ish_booted) {
@@ -542,6 +671,7 @@ ish_pipe_session *ish_pipe_init(
     if (home[0] != '\0' && cwd[0] != '\0') {
         bind_workspace(home);
     }
+    bool terminal = terminal_cols > 0 && terminal_rows > 0;
 
     ish_pipe_session *s = calloc(1, sizeof(*s));
     if (!s) {
@@ -581,13 +711,27 @@ ish_pipe_session *ish_pipe_init(
     }
     struct task *task = current;
 
-    // fds 0, 1 and 2, each to its own host pipe end.
-    fd_t in = guest_fd_from_host(stdin_pipe[0]);
-    fd_t out = guest_fd_from_host(stdout_pipe[1]);
-    fd_t errfd = guest_fd_from_host(stderr_pipe[1]);
-    if (in != 0 || out != 1 || errfd != 2) {
-        *error = "failed to wire the guest stdio";
-        goto fail;
+    if (terminal) {
+        // fds 0, 1 and 2 the terminal, which takes over the stdin pipe's read
+        // end and stdout's write end; stderr's is closed unwritten, so the
+        // reader finds it at its end.
+        s->tty = pipe_tty_open(stdout_pipe[1], stdin_pipe[0], terminal_cols, terminal_rows);
+        stdout_pipe[1] = stdin_pipe[0] = -1;
+        close(stderr_pipe[1]);
+        stderr_pipe[1] = -1;
+        if (s->tty == NULL) {
+            *error = "failed to give the program a terminal";
+            goto fail;
+        }
+    } else {
+        // fds 0, 1 and 2, each to its own host pipe end.
+        fd_t in = guest_fd_from_host(stdin_pipe[0]);
+        fd_t out = guest_fd_from_host(stdout_pipe[1]);
+        fd_t errfd = guest_fd_from_host(stderr_pipe[1]);
+        if (in != 0 || out != 1 || errfd != 2) {
+            *error = "failed to wire the guest stdio";
+            goto fail;
+        }
     }
 
     struct fd *pwd = generic_open(cwd, O_RDONLY_, 0);
@@ -662,6 +806,7 @@ fail:
         if (stderr_pipe[i] >= 0) close(stderr_pipe[i]);
         if (wake_pipe[i] >= 0) close(wake_pipe[i]);
     }
+    if (s->tty != NULL) pipe_tty_put(s->tty);
     free(s);
     return NULL;
 }
@@ -759,6 +904,16 @@ void ish_pipe_destroy(ish_pipe_session *session) {
     if (session->stderr_read >= 0) close(session->stderr_read);
     if (session->wake_read >= 0) close(session->wake_read);
     if (session->wake_write >= 0) close(session->wake_write);
+    if (session->tty != NULL) {
+        // A keyboard still waiting for room in a buffer nobody will read now
+        // is let go: the buffer emptied, the wait it is in ends, and the
+        // closed stdin pipe ends it.
+        lock(&session->tty->lock);
+        session->tty->bufsize = 0;
+        notify(&session->tty->consumed);
+        unlock(&session->tty->lock);
+        pipe_tty_put(session->tty);
+    }
     // Unlink from the registry.
     lock(&pids_lock);
     ish_pipe_session **link = &pipe_sessions;

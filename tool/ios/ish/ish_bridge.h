@@ -138,7 +138,9 @@ void ish_session_destroy(ish_session *session);
 
 // A pipe session runs one guest program directly — not the persistent shell
 // under the dispatcher — with its own stderr pipe beside stdout and stdin fed
-// raw from the host. This is the transport a CLI provider (claude, codex)
+// raw from the host, or on a terminal of its own: one of iSH's pseudo-
+// terminals whose screen is the stdout pipe, the way iSH's app gives its
+// Terminal one. This is the transport a CLI provider (claude, codex)
 // needs: JSON lines written to stdin, JSON lines read from stdout, diagnostics
 // on a separate stderr, and a real exit code when the process ends. See "The
 // CLI providers inside the guest" in lib/data/builtin/llm/AGENTS.md.
@@ -154,6 +156,9 @@ typedef struct ish_pipe_session {
     // O_NONBLOCK, as the dispatcher session's is.
     int wake_read;
     int wake_write;
+    // The program's terminal, or null where it runs over pipes. The session
+    // holds a reference, which [ish_pipe_destroy] releases.
+    struct tty *tty;
     // Set by the kernel's exit hook when the process exits, read by the worker
     // after the wake byte. The hook runs on the guest's own thread, so these
     // are atomics rather than plain ints.
@@ -166,8 +171,10 @@ typedef struct ish_pipe_session {
 
 // Spawn [argv] (argv[0] the program, an absolute guest path) as a guest
 // process, with [env] its environment. [home]/[cwd]/[read_only] are bound
-// exactly as for the dispatcher session. Returns null and sets *error where the
-// rootfs is not present or the program failed to exec.
+// exactly as for the dispatcher session. [terminal_cols] and [terminal_rows]
+// above zero run it on a terminal that size — its stdio all the terminal, its
+// output read as stdout, stderr empty — and zero over pipes. Returns null and
+// sets *error where the rootfs is not present or the program failed to exec.
 ish_pipe_session *ish_pipe_init(
     const char *rootfs_dir,
     const char *data_dir,
@@ -179,13 +186,16 @@ ish_pipe_session *ish_pipe_init(
     int32_t env_count,
     const char **read_only,
     int32_t read_only_count,
+    int32_t terminal_cols,
+    int32_t terminal_rows,
     const char **error);
 
 // Write [len] raw bytes to the process's stdin (not base64, not newline
-// terminated — the caller owns the framing).
+// terminated — the caller owns the framing); on a terminal, typed into it.
 void ish_pipe_write(ish_pipe_session *session, const char *buf, int32_t len);
 
-// Close the process's stdin, which a program reading it takes as EOF.
+// Close the process's stdin, which a program reading it takes as EOF; on a
+// terminal, the terminal's end-of-file key.
 void ish_pipe_close_input(ish_pipe_session *session);
 
 // Block on the process's stdout, stderr and wake pipe; answer what woke it:

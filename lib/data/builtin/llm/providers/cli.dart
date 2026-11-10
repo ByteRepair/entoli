@@ -66,9 +66,9 @@ abstract class CliGuest {
   /// at its own host path, so a path the app hands the program is one answer
   /// inside and out. Throws an [LlmException] where it cannot run yet.
   ///
-  /// [terminal] runs it on a pseudo-terminal, for a program whose prompts
-  /// read keys only from one — Claude CLI's sign-in code — where the guest
-  /// has one to give ([onTerminal]); over pipes otherwise.
+  /// [terminal] runs it on a terminal, for a program whose prompts read keys
+  /// only from one — Claude CLI's sign-in code — where the guest has one to
+  /// give ([hasTerminal]); over pipes otherwise.
   Future<CliProcess> start(
     List<String> argv, {
     required String cwd,
@@ -76,32 +76,42 @@ abstract class CliGuest {
     required List<String> shared,
     bool terminal = false,
   }) async {
-    final onOne = terminal ? onTerminal(argv) : null;
-    if (onOne == null) {
-      return spawn(argv, cwd: cwd, environment: environment, shared: shared);
-    }
-    return TerminalCliProcess(
-      await spawn(onOne, cwd: cwd, environment: environment, shared: shared),
+    final onOne = terminal && hasTerminal;
+    final process = await spawn(
+      argv,
+      cwd: cwd,
+      environment: environment,
+      shared: shared,
+      terminal: onOne,
     );
+    return onOne ? TerminalCliProcess(process) : process;
   }
 
-  /// [argv] as a command that runs it on a pseudo-terminal here, or null
-  /// where there is none to run it on.
+  /// Whether a program here can be given a terminal.
   @protected
-  List<String>? onTerminal(List<String> argv);
+  bool get hasTerminal;
 
-  /// [argv] started as it is, over pipes: [start] less the terminal.
+  /// [argv] started as it is: on a terminal [terminalColumns] by
+  /// [terminalRows] where [terminal], over pipes otherwise. [start] less
+  /// reading it as a terminal.
   @protected
   Future<CliProcess> spawn(
     List<String> argv, {
     required String cwd,
     required Map<String, String> environment,
     required List<String> shared,
+    required bool terminal,
   });
 
   /// The size a terminal is given: wide, so a program does not wrap a long
   /// link across lines for a screen nobody looks at.
-  static const terminalSize = "stty cols 4096 rows 40 2>/dev/null";
+  static const terminalColumns = 4096;
+  static const terminalRows = 40;
+
+  /// [terminalColumns] by [terminalRows] set from inside, for a terminal
+  /// that `script` makes at its own size.
+  static const _terminalSize =
+      "stty cols $terminalColumns rows $terminalRows 2>/dev/null";
 
   /// util-linux's `script` running [argv] on a terminal: one command line,
   /// since its -c takes a string, with the output flushed as it comes and
@@ -110,7 +120,7 @@ abstract class CliGuest {
   static List<String> utilLinuxScript(List<String> argv) => [
     "script",
     "-qfec",
-    "$terminalSize; exec ${argv.map(shellQuoted).join(" ")}",
+    "$_terminalSize; exec ${argv.map(shellQuoted).join(" ")}",
     "/dev/null",
   ];
 }
@@ -151,24 +161,9 @@ class HostCliGuest extends CliGuest {
   /// words, and util-linux's on a Linux that has it. Windows has none, and
   /// a desktop's sign-in opens a browser rather than asking for a code.
   @override
-  List<String>? onTerminal(List<String> argv) {
-    if (Platform.isMacOS) {
-      return [
-        "/usr/bin/script",
-        "-q",
-        "/dev/null",
-        "/bin/sh",
-        "-c",
-        '${CliGuest.terminalSize}; exec "\$@"',
-        "sh",
-        ...argv,
-      ];
-    }
-    if (Platform.isLinux && File("/usr/bin/script").existsSync()) {
-      return CliGuest.utilLinuxScript(argv);
-    }
-    return null;
-  }
+  bool get hasTerminal =>
+      Platform.isMacOS ||
+      (Platform.isLinux && File("/usr/bin/script").existsSync());
 
   @override
   Future<CliProcess> spawn(
@@ -176,12 +171,29 @@ class HostCliGuest extends CliGuest {
     required String cwd,
     required Map<String, String> environment,
     required List<String> shared,
-  }) => launch(
-    argv.first,
-    argv.sublist(1),
-    workingDirectory: cwd,
-    environment: environment,
-  );
+    required bool terminal,
+  }) {
+    final command = !terminal
+        ? argv
+        : Platform.isMacOS
+        ? [
+            "/usr/bin/script",
+            "-q",
+            "/dev/null",
+            "/bin/sh",
+            "-c",
+            '${CliGuest._terminalSize}; exec "\$@"',
+            "sh",
+            ...argv,
+          ]
+        : CliGuest.utilLinuxScript(argv);
+    return launch(
+      command.first,
+      command.sublist(1),
+      workingDirectory: cwd,
+      environment: environment,
+    );
+  }
 }
 
 /// A Linux of the app's own, apart from the machine it is on: Android's
@@ -214,19 +226,36 @@ abstract class LinuxCliGuest extends CliGuest {
     ...packages,
   ];
 
-  /// util-linux's `script`, which Alpine keeps in util-linux-misc and its
-  /// busybox lacks: installed the first time a terminal is asked for, so a
-  /// Linux set up before this needs nothing done to it. Beside it, the
-  /// program's browser: a Linux of the app's own has none to open a page in,
-  /// so `BROWSER` names one ([_opener]) that hands the page to the app
-  /// instead, as a line on the terminal saying [cliOpenMarker] and its
-  /// address. The page a sign-in asks to open is the one whose callback
-  /// finishes it on its own.
   @override
-  List<String>? onTerminal(List<String> argv) => [
+  bool get hasTerminal => true;
+
+  /// [argv] with its browser: a Linux of the app's own has none to open a
+  /// page in, so `BROWSER` names one ([_opener]) that hands the page to the
+  /// app instead, as a line on the program's terminal saying [cliOpenMarker]
+  /// and its address. The page a sign-in asks to open is the one whose
+  /// callback finishes it on its own. Written into the guest the first time
+  /// it is asked for, so a Linux set up before this needs nothing done to
+  /// it.
+  @protected
+  static List<String> withBrowser(List<String> argv) => [
     "/bin/sh",
     "-c",
-    _onTerminal,
+    _withBrowser,
+    "sh",
+    ...argv,
+  ];
+
+  /// [argv] on a terminal by util-linux's `script`, which Alpine keeps in
+  /// util-linux-misc and its busybox lacks: installed the first time a
+  /// terminal is asked for, for a guest that has no terminal of its own to
+  /// give.
+  @protected
+  static List<String> underScript(List<String> argv) => [
+    "/bin/sh",
+    "-c",
+    "command -v script >/dev/null 2>&1 || "
+        "apk add --no-cache util-linux-misc >/dev/null 2>&1; "
+        'exec "\$@"',
     "sh",
     ...CliGuest.utilLinuxScript(argv),
   ];
@@ -234,13 +263,10 @@ abstract class LinuxCliGuest extends CliGuest {
   /// Where the browser that hands a page to the app is kept in the guest.
   static const _opener = "/usr/local/bin/entoli-open";
 
-  /// What [onTerminal] runs before the program: script installed, the
-  /// browser written where it is missing — a script that prints the marker
-  /// and its first argument to the terminal — then the program under
-  /// script with `BROWSER` naming it.
-  static const _onTerminal =
-      "command -v script >/dev/null 2>&1 || "
-      "apk add --no-cache util-linux-misc >/dev/null 2>&1; "
+  /// What [withBrowser] runs before the program: the browser written where
+  /// it is missing — a script that prints the marker and its first argument
+  /// to the terminal — then the program with `BROWSER` naming it.
+  static const _withBrowser =
       "[ -x $_opener ] || { mkdir -p /usr/local/bin && "
       "printf '#!/bin/sh\\nprintf \"$cliOpenMarker %%s\\\\n\" \"\$1\" > /dev/tty\\n' "
       "> $_opener && chmod +x $_opener; }; "
@@ -248,7 +274,7 @@ abstract class LinuxCliGuest extends CliGuest {
 }
 
 /// What a program's browser in a Linux of the app's own says before the
-/// address of a page it was asked to open; see [LinuxCliGuest.onTerminal].
+/// address of a page it was asked to open; see [LinuxCliGuest.withBrowser].
 const cliOpenMarker = "entoli-open";
 
 /// A program on a terminal, read and written as one over pipes: Enter is a

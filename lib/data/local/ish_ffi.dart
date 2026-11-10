@@ -92,6 +92,8 @@ typedef IshPipeInitC =
       Int32 envCount,
       Pointer<Pointer<Utf8>> readOnly,
       Int32 readOnlyCount,
+      Int32 terminalCols,
+      Int32 terminalRows,
       Pointer<Pointer<Utf8>> error,
     );
 typedef IshPipeInitDart =
@@ -106,6 +108,8 @@ typedef IshPipeInitDart =
       int envCount,
       Pointer<Pointer<Utf8>> readOnly,
       int readOnlyCount,
+      int terminalCols,
+      int terminalRows,
       Pointer<Pointer<Utf8>> error,
     );
 

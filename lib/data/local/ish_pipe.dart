@@ -7,7 +7,8 @@ import "dart:typed_data" show Uint8List;
 import "package:ffi/ffi.dart";
 
 import "../builtin/llm/llm_client.dart" show LlmException;
-import "../builtin/llm/providers/cli.dart" show CliProcess, LinuxCliGuest;
+import "../builtin/llm/providers/cli.dart"
+    show CliGuest, CliProcess, LinuxCliGuest;
 import "ish_ffi.dart";
 
 /// A [CliProcess] that runs a CLI program (`claude`, `codex`) inside the
@@ -34,6 +35,9 @@ class GuestCliProcess extends CliProcess {
   /// Spawns [argv] (argv[0] the program, resolved through the guest's PATH) in
   /// the guest, with [env] its environment. [rootfsDir]/[dataDir]/[home]/
   /// [cwd]/[readOnly] are the guest's, exactly as [IshWorker.init] takes them.
+  /// [terminal] runs it on a terminal of the bridge's — one of iSH's own
+  /// pseudo-terminals, [CliGuest.terminalColumns] by [CliGuest.terminalRows],
+  /// read as stdout and typed into by [write] — where pipes would be.
   static Future<GuestCliProcess> start({
     required List<String> argv,
     required Map<String, String> env,
@@ -42,6 +46,7 @@ class GuestCliProcess extends CliProcess {
     required String home,
     required String cwd,
     List<String> readOnly = const [],
+    bool terminal = false,
   }) async {
     final stdout = StreamController<List<int>>();
     final stderr = StreamController<List<int>>();
@@ -95,6 +100,7 @@ class GuestCliProcess extends CliProcess {
       argv,
       [for (final e in env.entries) "${e.key}=${e.value}"],
       readOnly,
+      terminal,
     ), onExit: exitPort.sendPort);
 
     final address = await handle.future;
@@ -196,6 +202,7 @@ class IshCliGuest extends LinuxCliGuest {
     required String cwd,
     required Map<String, String> environment,
     required List<String> shared,
+    required bool terminal,
   }) {
     final rootfs = rootfsDir();
     if (rootfs.isEmpty) {
@@ -205,12 +212,13 @@ class IshCliGuest extends LinuxCliGuest {
       );
     }
     return GuestCliProcess.start(
-      argv: argv,
+      argv: terminal ? LinuxCliGuest.withBrowser(argv) : argv,
       env: environment,
       rootfsDir: rootfs,
       dataDir: dataDir,
       home: "",
       cwd: cwd,
+      terminal: terminal,
     );
   }
 }
@@ -238,10 +246,12 @@ void _pipeEntry(
     List<String>,
     List<String>,
     List<String>,
+    bool,
   )
   arg,
 ) {
-  final (main, rootfsDir, dataDir, home, cwd, argv, env, readOnly) = arg;
+  final (main, rootfsDir, dataDir, home, cwd, argv, env, readOnly, terminal) =
+      arg;
   final receive = ReceivePort();
   main.send(receive.sendPort);
 
@@ -280,6 +290,8 @@ void _pipeEntry(
     env.length,
     readOnlyPtrs,
     readOnly.length,
+    terminal ? CliGuest.terminalColumns : 0,
+    terminal ? CliGuest.terminalRows : 0,
     errPtr,
   );
   final error = errPtr.value.address == 0

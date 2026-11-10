@@ -181,13 +181,16 @@ class ProotCliGuest extends LinuxCliGuest {
   @override
   Abi get abi => Abi.current();
 
-  /// Started as a process of this device, under proot.
+  /// Started as a process of this device, under proot; on a terminal, under
+  /// `script` ([LinuxCliGuest.underScript]), a real kernel's pseudo-terminal
+  /// being what proot has to give.
   @override
   Future<CliProcess> spawn(
     List<String> argv, {
     required String cwd,
     required Map<String, String> environment,
     required List<String> shared,
+    required bool terminal,
   }) {
     final rootfs = rootfsById(rootfsId());
     final dir = rootfs == null ? null : store.directoryOfSync(rootfs.id);
@@ -202,7 +205,9 @@ class ProotCliGuest extends LinuxCliGuest {
       rootfsDir: dir,
       shared: shared,
       cwd: cwd,
-      argv: argv,
+      argv: terminal
+          ? LinuxCliGuest.withBrowser(LinuxCliGuest.underScript(argv))
+          : argv,
     );
     return launchProcess(
       command.first,

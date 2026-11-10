@@ -375,10 +375,19 @@ provider given a guest of its own (`ClaudeCliProvider.over`) runs there
 instead, which is how a test runs one over a fake.
 
 **A program can be started on a terminal.** `start(…, terminal: true)` runs it
-on a pseudo-terminal where the guest has one (`onTerminal`): util-linux's
-`script` in the Linux guests, installed from Alpine's `util-linux-misc` the
-first time it is asked for, the system's own `script` on macOS and on a
-Linux that has it, and none on Windows, which keeps pipes. It is given a
+on one where the guest has one to give (`hasTerminal`), each guest its own
+way through `spawn(…, terminal:)`. iOS's is the bridge's: one of iSH's own
+pseudo-terminals, made the way iSH's app makes its Terminal's
+(`pty_open_fake`), as the program's stdio and controlling terminal, whose
+screen is the session's stdout pipe and whose keyboard is a thread of the
+bridge's typing the stdin pipe into it, the way `tty-real.c`'s thread types
+the real one. Line discipline, echo, termios and the window size are iSH's
+tty layer, nothing in the guest stands between, and the caller only ever
+writes a host pipe. Android's is util-linux's `script` under proot
+(`LinuxCliGuest.underScript`), installed from Alpine's `util-linux-misc` the
+first time it is asked for, a real kernel's pseudo-terminal being what proot
+has; the system's own `script` on macOS and on a Linux that has it; none on
+Windows, which keeps pipes. It is given a
 wide size, so a program does not wrap a long link across lines. The process
 comes back a `TerminalCliProcess`: what it prints arrives without the
 terminal's escapes or line-ending carriage returns, and a line written to it
@@ -387,7 +396,7 @@ sign-in runs this way, since Claude CLI reads a pasted code only as keys
 from a terminal and takes nothing written to a pipe.
 
 **A Linux of the app's own has no browser, so its programs are given the
-app's.** On a terminal there, `BROWSER` names `/usr/local/bin/entoli-open`,
+app's.** On a terminal there (`LinuxCliGuest.withBrowser`), `BROWSER` names `/usr/local/bin/entoli-open`,
 written in the guest where it is missing, which prints `entoli-open` and the
 address to the terminal. The sign-in takes a page named that way over the
 first link the program prints, in whichever order they come: Claude CLI

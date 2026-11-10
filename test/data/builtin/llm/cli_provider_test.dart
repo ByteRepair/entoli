@@ -1463,11 +1463,13 @@ void main() {
       expect(process, isA<TerminalCliProcess>());
       // proot -w <cwd>, then the words the guest was asked to run
       final words = launched.single.sublist(2);
-      expect(words.take(2), ["/bin/sh", "-c"]);
-      expect(words[2], contains("apk add --no-cache util-linux-misc"));
       // its browser is the app's, by way of the terminal
+      expect(words.take(2), ["/bin/sh", "-c"]);
       expect(words[2], contains("BROWSER=/usr/local/bin/entoli-open"));
-      expect(words.sublist(4), [
+      final script = words.sublist(4);
+      expect(script.take(2), ["/bin/sh", "-c"]);
+      expect(script[2], contains("apk add --no-cache util-linux-misc"));
+      expect(script.sublist(4), [
         "script",
         "-qfec",
         "stty cols 4096 rows 40 2>/dev/null; exec 'claude' 'it'\\''s'",
@@ -1625,12 +1627,27 @@ class _MarkedTerminal extends HostCliGuest {
   const _MarkedTerminal({super.launch});
 
   @override
-  List<String>? onTerminal(List<String> argv) => ["terminal", ...argv];
+  bool get hasTerminal => true;
+
+  @override
+  Future<CliProcess> spawn(
+    List<String> argv, {
+    required String cwd,
+    required Map<String, String> environment,
+    required List<String> shared,
+    required bool terminal,
+  }) => super.spawn(
+    terminal ? ["terminal", ...argv] : argv,
+    cwd: cwd,
+    environment: environment,
+    shared: shared,
+    terminal: false,
+  );
 }
 
 /// Android's Linux, faked: an arm64 musl guest whose programs [launch]
-/// starts as `proot -w <cwd>` and the program's own words, with what it
-/// shared kept in [shared].
+/// starts as `proot -w <cwd>` and the program's own words — on a terminal,
+/// as `ProotCliGuest` gives one — with what it shared kept in [shared].
 class _Guest extends LinuxCliGuest {
   _Guest(this.launch);
 
@@ -1646,11 +1663,18 @@ class _Guest extends LinuxCliGuest {
     required String cwd,
     required Map<String, String> environment,
     required List<String> shared,
+    required bool terminal,
   }) {
     this.shared.add(shared);
     return launch(
       "proot",
-      ["-w", cwd, ...argv],
+      [
+        "-w",
+        cwd,
+        ...terminal
+            ? LinuxCliGuest.withBrowser(LinuxCliGuest.underScript(argv))
+            : argv,
+      ],
       workingDirectory: cwd,
       environment: {...environment, "PROOT_TMP_DIR": "/guest/tmp"},
     );
