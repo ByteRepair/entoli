@@ -150,7 +150,10 @@ class _CliSignInDialogState extends ConsumerState<CliSignInDialog> {
 
   Future<void> _cancel() async {
     final stage = _stage;
-    if (stage is _SigningIn) await stage.signIn.cancel();
+    // Stopped behind the dialog rather than before it closes: a program that
+    // does not take its SIGTERM is given seconds more, and the user who
+    // cancelled is not kept waiting on it.
+    if (stage is _SigningIn) unawaited(stage.signIn.cancel());
     if (stage is _Installing) {
       ref.read(cliDownloadsProvider.notifier).cancel(_cli.workFolder);
     }
