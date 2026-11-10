@@ -1097,21 +1097,49 @@ void main() {
           ...event.result.notes,
       ];
 
-      test("after a sandboxed command fails in a folder outside", () async {
+      test("after the sandbox refuses a write in a folder outside", () async {
+        final denied = p.join(repo, "lib", "new.dart");
         final client = FakeLlmClient([
-          [bashCall("cd ${p.join(repo, "lib")} && git add .")],
+          [bashCall("touch $denied")],
           [finish],
         ]);
         final events = await agentOver(
           client,
-          respond: (_) => const ShellResult(
-            returnCode: 128,
-            output: "fatal: Unable to create index.lock",
+          respond: (_) => ShellResult(
+            returnCode: 1,
+            output: "touch: $denied: Operation not permitted",
           ),
         ).run(userMessage("go")).toList();
         expect(shell.sandboxes.single, isNotNull);
+        expect(results(events).violations, [
+          denied,
+        ], reason: "the model is told the failure was the sandbox's");
         final note = notesOf(events).single;
         expect(note, contains("`add_directory` with $repo once"));
+      });
+
+      test("not after a command that only failed there", () async {
+        final client = FakeLlmClient([
+          [bashCall("cd $repo && grep -r nothing-here lib")],
+          [bashCall("cd $repo && false")],
+          [bashCall("cd $repo && flutter test")],
+          [finish],
+        ]);
+        final outputs = ["", "", "Some tests failed."];
+        final events = await agentOver(
+          client,
+          respond: (_) =>
+              ShellResult(returnCode: 1, output: outputs.removeAt(0)),
+        ).run(userMessage("go")).toList();
+        expect(shell.sandboxes, everyElement(isNotNull));
+        expect(events.whereType<ToolResultEvent>(), hasLength(3));
+        expect(notesOf(events), isEmpty);
+        expect(
+          events.whereType<ToolResultEvent>().expand(
+            (e) => e.result.violations,
+          ),
+          isEmpty,
+        );
       });
 
       test("on the second unsandboxed request for one folder, not the "

@@ -9,6 +9,7 @@ import "../../../domain/shell_command_analysis.dart";
 import "../../../domain/shell_job.dart" show backgroundLog;
 import "../../../domain/tool_arg.dart";
 import "../approval_gate.dart";
+import "../sandbox_denials.dart";
 import "../background_jobs.dart";
 import "../llm/llm_client.dart";
 import "agent_tool.dart";
@@ -170,8 +171,7 @@ class BashTool extends AgentTool {
     // Leaving the sandbox is part of what is asked: where one would confine
     // the run and no no-sandbox rule covers it, the call goes to the mode.
     final leave = leavesSandbox && boolArg(call.argumentsJson, "unsandboxed");
-    final confined = await turn.gate.confinementOf(analysis) != null;
-    final escaping = leave && confined;
+    final escaping = leave && await turn.gate.confinementOf(analysis) != null;
     final standing = turn.shell.standingIn(turn.workspace) ?? turn.workspace;
     final outcome = GateOutcome();
     yield* turn.gate.decide(
@@ -190,36 +190,35 @@ class BashTool extends AgentTool {
       result,
       standing,
       unsandboxed: escaping,
-      confined: confined && !leave,
     );
     yield ToolResultEvent(
       note == null ? result : result.copyWith(notes: [...result.notes, note]),
     );
   }
 
-  /// The note steering [result]'s work toward `add_directory`, where the call
-  /// says that work is in a folder outside the writable set: it asked to
-  /// leave the sandbox ([unsandboxed]), again, for that folder, or it ran
-  /// sandboxed ([confined]) there and failed. The folder is where the
-  /// command's leading `cd` goes, where the shell left it, or where it stood
-  /// before ([standing]) — the call's own arguments and the shell's state,
-  /// never its output. Only where `add_directory` is this turn's to call;
-  /// see "Approvals" in AGENTS.md.
+  /// The note steering [result]'s work toward `add_directory`, where the
+  /// sandbox refused a write outside the writable set (the result's
+  /// `violations`), or the call asked to leave the sandbox ([unsandboxed])
+  /// again for one folder. A denial names its own folder; a request's is
+  /// where the command's leading `cd` goes, where the shell left it, or
+  /// where it stood before ([standing]). Only where `add_directory` is this
+  /// turn's to call; see "Approvals" in AGENTS.md.
   Future<String?> _grantNote(
     Turn turn,
     ShellCommandAnalysis analysis,
     ToolResult result,
     String standing, {
     required bool unsandboxed,
-    required bool confined,
   }) async {
     if (!leavesSandbox || !grantsDirectories(offer)) return null;
-    // A banner the user said no to is their answer about this command; a
-    // refusal or a kill before the run (-1) is no failure of its writes.
+    // A banner the user said no to is their answer about this command.
     if (result.decided == PermissionDecision.deny) return null;
-    if (!unsandboxed && !(confined && result.returnCode > 0)) return null;
+    final denied = result.violations;
+    if (!unsandboxed && denied.isEmpty) return null;
     final folder = grantFolder(
-      [?_cdTarget(analysis, standing, turn), ?result.cwd, standing],
+      unsandboxed
+          ? [?_cdTarget(analysis, standing, turn), ?result.cwd, standing]
+          : [for (final path in denied) existingDirectoryOf(path)],
       workspace: turn.workspace,
       projectWorkspace: turn.projectWorkspace,
       granted: (await turn.gate.permissions()).writableDirs,
@@ -296,7 +295,8 @@ class BashTool extends AgentTool {
     if (jobs != null && boolArg(call.argumentsJson, "background")) {
       return _startBackground(turn, jobs, call.id, command, sandbox);
     }
-    return turn.track(
+    final startIn = turn.shell.standingIn(turn.workspace) ?? turn.workspace;
+    final result = await turn.track(
       call,
       turn.shell.start(
         command,
@@ -311,6 +311,17 @@ class BashTool extends AgentTool {
         readOnly: turn.readOnlyDirs,
       ),
     );
+    if (sandbox == null) return result;
+    // What the sandbox refused, read off the kernel's own errors: the one
+    // thing that says a failure was the sandbox's. See "Approvals".
+    final denied = sandboxDenials(
+      result.output,
+      sandbox,
+      cwd: result.cwd ?? startIn,
+      home: turn.shell.machineHome,
+      readOnly: turn.readOnlyDirs,
+    );
+    return denied.isEmpty ? result : result.withViolations(denied);
   }
 
   /// Start [command] as a background job and answer with where it went. A

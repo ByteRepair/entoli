@@ -3,6 +3,7 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
+import "package:agent_chat/data/builtin/sandbox_denials.dart";
 import "package:agent_chat/data/local/seatbelt.dart";
 import "package:agent_chat/domain/shell.dart";
 
@@ -75,6 +76,29 @@ void main() {
     expect(File(p.join(extraDir, "d")).existsSync(), isTrue);
     expect(File(extraFile).readAsStringSync(), "f\n");
     expect(File(p.join(outside, "sibling")).existsSync(), isFalse);
+  }, skip: skip);
+
+  test("the kernel's refusal names the denied path, and a plain failure "
+      "names none", () async {
+    final sandbox = CommandSandbox(workspace: workspace);
+    final denied = await run(sandbox, 'touch "$outside/new"');
+    expect(
+      sandboxDenials(
+        "${denied.stdout}${denied.stderr}",
+        sandbox,
+        cwd: workspace,
+      ),
+      [p.join(outside, "new")],
+    );
+    final failed = await run(
+      sandbox,
+      'cd "$outside" && grep -r nothing-here .',
+    );
+    expect(failed.exitCode, isNot(0));
+    expect(
+      sandboxDenials("${failed.stdout}${failed.stderr}", sandbox, cwd: outside),
+      isEmpty,
+    );
   }, skip: skip);
 
   test("a missing binary fails closed", () async {

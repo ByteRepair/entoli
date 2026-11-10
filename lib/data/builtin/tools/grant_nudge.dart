@@ -3,11 +3,12 @@
 // otherwise leaving the sandbox command by command. See "Approvals" in
 // `lib/data/builtin/AGENTS.md`.
 //
-// The signals are the call's own: the directory its leading `cd` names, the
-// one the shell was standing in, the one it was left in, whether it asked to
-// leave the sandbox and whether a sandboxed run failed. Never the output's
-// wording — a sandbox denial and a failing test print alike, and the note is
-// worded to stand either way.
+// The signals are the sandbox's refusals, read off the kernel's own errors
+// (`sandbox_denials.dart`), and the call's own arguments: whether it asked to
+// leave the sandbox, the directory its leading `cd` names, the one the shell
+// was standing in and the one it was left in. A command that merely failed
+// in such a folder says nothing — a failing test or a `grep` with no match
+// is not a refused write.
 
 import "dart:io";
 
@@ -27,7 +28,7 @@ class GrantNudges {
   /// The note for a call whose work is in [folder], or null where there is
   /// nothing to say. [unsandboxed] is a call that asked to leave the sandbox,
   /// which says so the second time in one folder — once is the one-off the
-  /// argument is for; otherwise the call ran sandboxed and failed there.
+  /// argument is for; otherwise the sandbox refused the call's writes there.
   String? note(String folder, {required bool unsandboxed}) {
     if (unsandboxed) {
       final asked = _unsandboxed.update(
@@ -46,9 +47,9 @@ class GrantNudges {
         ? "Note: this is another command asking to leave the sandbox for work "
               "in $folder, which is outside the folders commands may write "
               "to. If what it writes is in that folder, $grant"
-        : "Note: this command ran sandboxed in $folder, which is outside the "
-              "folders commands may write to. If it failed writing there and "
-              "the work goes on in that folder, $grant";
+        : "Note: the sandbox refused this command's writes in $folder, which "
+              "is outside the folders commands may write to. If the work goes "
+              "on in that folder, $grant";
   }
 }
 
@@ -92,6 +93,16 @@ String? grantFolder(
     if (grantable(dir)) return dir;
   }
   return null;
+}
+
+/// [path] if it is a directory, else the nearest directory above it that
+/// exists: a refused write is often of a file that was never created.
+String existingDirectoryOf(String path) {
+  var at = p.normalize(path);
+  while (!FileSystemEntity.isDirectorySync(at) && p.dirname(at) != at) {
+    at = p.dirname(at);
+  }
+  return at;
 }
 
 /// The nearest directory from [dir] up holding a `.git`, file or directory,

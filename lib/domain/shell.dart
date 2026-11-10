@@ -36,12 +36,14 @@ class ShellResult {
     this.exceptionInfo,
     this.cwd,
     this.jobId,
+    this.violations = const [],
   });
 
   const ShellResult.failed(this.exceptionInfo, {this.output = ""})
     : returnCode = -1,
       cwd = null,
-      jobId = null;
+      jobId = null,
+      violations = const [];
 
   final int returnCode;
   final String output;
@@ -56,6 +58,20 @@ class ShellResult {
 
   /// The background job the command started, where it started one.
   final int? jobId;
+
+  /// The writes the sandbox refused while the command ran, by path: what
+  /// tells the model a failure was the sandbox's rather than the command's.
+  final List<String> violations;
+
+  /// This result naming [violations] as the sandbox's refusals.
+  ShellResult withViolations(List<String> violations) => ShellResult(
+    returnCode: returnCode,
+    output: output,
+    exceptionInfo: exceptionInfo,
+    cwd: cwd,
+    jobId: jobId,
+    violations: violations,
+  );
 }
 
 /// What this build ships beside the machine's own commands: the environment a
@@ -111,11 +127,12 @@ class CommandSandbox {
   /// Granted the full write set the workspace gets.
   final List<String> extraWrites;
 
-  /// The sentence a result from before the sandbox stopped naming its
-  /// denials carries — old logs still hold them.
+  /// What the model reads of the writes a sandbox refused, beside the output
+  /// they failed in.
   static String violationsNote(List<String> violations) =>
-      "\n\nDenied by the sandbox: ${violations.join("; ")}. The command "
-      "carried on; what it printed above is what it could reach.";
+      "\n\nDenied by the sandbox: ${violations.join("; ")}. These writes "
+      "are outside the folders commands may write to, so the failure there "
+      "is the sandbox's, not the command's own.";
 
   /// This one with [extraWrites] replacing its own — the rules' folders
   /// composed on the run's sandbox.
