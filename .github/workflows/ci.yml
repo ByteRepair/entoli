@@ -3,7 +3,10 @@ name: CI
 on:
   push:
     branches: [master]
+  # `closed` is here only to stop the PR's run: it joins the PR's group below,
+  # which cancels whatever is in progress there, and then runs nothing.
   pull_request:
+    types: [opened, synchronize, reopened, closed]
 
 permissions:
   contents: read
@@ -19,6 +22,7 @@ jobs:
   # master, and a filtered-out workflow never reports, where a skipped job
   # passes. Notes (AGENTS.md, README.md) reach no build; `assets/` always does.
   changes:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.diff.outputs.code }}

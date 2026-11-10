@@ -394,3 +394,13 @@ needed), so its key is the release's by construction. Without it every
 release built MLX from scratch, five minutes a slice, and a package that
 stopped building was found on the tag. It is not part of CI: a macOS runner
 on every PR is too much to pay for a framework most PRs never touch.
+
+## A closed PR's run
+
+**Closing or merging a PR cancels its CI run.** `ci.yml` takes the
+`closed` event too, for that alone: the run it starts lands in the PR's
+concurrency group (`github.ref`, `refs/pull/<n>/merge`, whether the PR was
+merged or not), which cancels the one in progress, and then its jobs skip.
+Listing `closed` means listing the three defaults beside it, since naming
+any type replaces them. A merge still gets its own run on master, a push
+in a group of its own.
