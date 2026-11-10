@@ -14,6 +14,7 @@ class ChatViewState {
     this.retry,
     this.status,
     this.unfinishedNotice,
+    this.compactFailure,
     this.shellOutput = const {},
     this.steering = const [],
     this.runningJobs = const {},
@@ -50,6 +51,13 @@ class ChatViewState {
   /// reached" for a step limit, null otherwise. Turn-scoped: not persisted, so
   /// a reload shows the default "Unfinished turn" text.
   final String? unfinishedNotice;
+
+  /// Why the last automatic compaction landed no marker, for the chat to say
+  /// in red where the divider would have been. An automatic one has no turn
+  /// to carry an error part, and one that fails without a word is the worst
+  /// way it can fail. Not persisted: the next settle tries again, and says
+  /// so again if it fails again; the next turn and a landed marker clear it.
+  final String? compactFailure;
 
   /// The tail of what a running command has printed, keyed by the reply it
   /// belongs to — a message landing after that reply must not take it over.
@@ -99,6 +107,8 @@ class ChatViewState {
     bool clearStatus = false,
     String? unfinishedNotice,
     bool clearUnfinishedNotice = false,
+    String? compactFailure,
+    bool clearCompactFailure = false,
     Map<String, String>? shellOutput,
     List<Message>? steering,
     Map<String, ShellJob>? runningJobs,
@@ -113,6 +123,9 @@ class ChatViewState {
     unfinishedNotice: clearUnfinishedNotice
         ? null
         : (unfinishedNotice ?? this.unfinishedNotice),
+    compactFailure: clearCompactFailure
+        ? null
+        : (compactFailure ?? this.compactFailure),
     shellOutput: shellOutput ?? this.shellOutput,
     steering: steering ?? this.steering,
     runningJobs: runningJobs ?? this.runningJobs,

@@ -783,10 +783,13 @@ class FakeBackend implements AgentBackend {
   /// last message.
   String? scriptedSummary;
 
+  /// Why a compaction with no [scriptedSummary] came back empty.
+  static const compactFailure = "The summarizer gave back an empty summary.";
+
   final List<({String? instructions, int historyLength})> compactionCalls = [];
 
   @override
-  Future<ConversationCompaction?> compact(
+  Future<CompactOutcome> compact(
     String chatId, {
     required List<Message> history,
     required List<ConversationCompaction> compactions,
@@ -797,10 +800,12 @@ class FakeBackend implements AgentBackend {
       instructions: instructions,
       historyLength: history.length,
     ));
-    if (scriptedSummary == null) return null;
-    return ConversationCompaction(
-      upToMessageId: history.lastOrNull?.id ?? "",
-      summary: scriptedSummary!,
+    if (scriptedSummary == null) return const NotCompacted(compactFailure);
+    return Compacted(
+      ConversationCompaction(
+        upToMessageId: history.lastOrNull?.id ?? "",
+        summary: scriptedSummary!,
+      ),
     );
   }
 

@@ -426,9 +426,8 @@ class ChatRepository {
   /// settings a turn in this chat would run. The boundary is the one the
   /// summarizer actually read to — the caller's last message, or newer after
   /// a ladder halve — and the answer is the pair a [CompactionRecord] is made
-  /// of. Null when nothing answered; the controller reads a log line, there
-  /// being no turn to fail.
-  Future<ConversationCompaction?> compact(
+  /// of, or why there is none.
+  Future<CompactOutcome> compact(
     String chatId, {
     required List<Message> history,
     required List<ConversationCompaction> compactions,

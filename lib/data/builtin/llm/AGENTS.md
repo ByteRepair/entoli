@@ -277,7 +277,7 @@ of models no catalog lists, and `CliProvider` falls back to `knownModels`
 there. The backend asks an endpoint it holds rather than `modelInfoOf`
 directly — `contextWindowOf`, which the context page and auto-compaction
 read, and `_resolveModel`'s image and PDF gate — so a chat on either program
-reports the window it has rather than the 128k guess. The pickers, which hold
+reports the window it has rather than the Total Context guess. The pickers, which hold
 a config and no endpoint, still ask `modelInfoOf`, which only costs them a
 display name.
 

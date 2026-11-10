@@ -1394,6 +1394,27 @@ oldest half of the span is dropped and the ask is made again, three attempts.
 The boundary handed back covers only what was read, so a conversation too big
 for its own summarizer still gets a marker for its newest half.
 
+**The half dropped is of what the ask reads**, the messages after the newest
+marker the span holds (`verbatimFrom`, the projection's own rule), not of the
+span whole. Everything behind that marker costs one summary however many
+messages it is, so halving them leaves the ask the size it was: a chat
+compacted once and grown past half its window again made three asks of the
+same size and gave up without calling the model. Once the old boundary is
+dropped the marker no longer applies, and the prior summary rides the prompt
+as `<prior-summary>` instead.
+
+**A compaction that lands nothing says why, on screen and in the log.**
+`compact` answers a `CompactOutcome`: `Compacted` with the marker, or
+`NotCompacted` with a sentence for the user — a turn running, no model,
+nothing to read, a ladder still over budget after its last halving (with the
+numbers), a summarizer that said nothing or failed. The manual turn ends as
+`error` with "The conversation could not be compacted." and the reason on its
+reply, the red an error part is drawn in, since a `done` with nothing after
+it is the compact that seemed never to run. An automatic one has no turn, so
+the reason is `ChatViewState.compactFailure`, which the chat draws as a
+divider with the reason in red where the marker would have been; see "A
+compact turn, and its divider" in `lib/ui/chat/AGENTS.md`.
+
 **Usage is parsed, not estimated, where the provider says anything.**
 `LlmUsage` rides `LlmCompletion` — Anthropic's `message_start` and
 `message_delta` usage objects, OpenAI's final-chunk `usage` (asked for with
@@ -1406,9 +1427,17 @@ business. The window is the chat's model's, not the last turn's:
 `contextWindowProvider` resolves the chat's choice from its meta the way a
 turn does (`chatModelOf`) and asks `contextWindowOf` for the catalog's number
 among the endpoints a turn would reach, so it is there before any turn after a
-restart and follows a model change. Where the catalog does not know the model,
-`AppSettings.totalContext` ("Total Context" under Settings > LLMs, 128k
-default) is the guess.
+restart and follows a model change.
+
+**Total Context is a ceiling, not only a guess.** `AppSettings.totalContext`
+("Total Context" under Settings > LLMs, 256k default) is the most any chat is
+let grow to: the window the threshold is a share of is the model's or it,
+whichever is smaller, and it where the catalog does not know the model. A
+share of a million-token window is a context no model reads well — 80% of
+1M is 838k, and a chat that long has gone wrong well before. The context page draws the same capped
+window, so its 80% mark is where compaction fires. The summarizer is not
+held to it: its budget is half the model's real window where that is known,
+since reading more in one ask is what the ladder wants.
 
 The marker lands through `ChatRepository.appendCompaction` —
 `_rethread` with a `CompactionRecord`, the same append/reload/rebuild walk a

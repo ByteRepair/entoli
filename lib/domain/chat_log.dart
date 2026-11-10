@@ -457,6 +457,26 @@ Chat chatFrom(ChatState state, List<ChatRecord> records) {
   );
 }
 
+/// Whether a turn [prompt] opened is one Continue could carry on — the half
+/// of [endsUnfinished] that asks about the prompt rather than the log, and
+/// the rule the live room reads when a turn ends, so a reload and the room
+/// offer the same turns. False for a `!` command and a wired callback that
+/// runs no model, neither of which has a reply to append to.
+bool carriesOn(Message prompt) {
+  if (shellBypassCommand(prompt.plainText) != null) return false;
+  // A wired-callback turn (`/compact`) appends nothing either — unless it
+  // handed the work to a model (`/goal <objective>`), whose reply is any
+  // reply. Matched by name alone rather than against the library: this runs
+  // on a reload, where what the skill's frontmatter says today is not what it
+  // said when the turn was sent, and a name in the enum is the closed set the
+  // dispatch reads. The one cost is a user's own template skill shadowing a
+  // wired name — its interrupted turn is then not offered, where it would
+  // have been resumable; a name in the enum is the app's own, and shadowing
+  // one is not a state worth a stamp on every message for.
+  return wiredSkillFromText(prompt.plainText) == null ||
+      wiredRunsModel(prompt.plainText);
+}
+
 /// Whether the log stops in the middle of a turn: the last message of the
 /// thread being read is a reply, and nothing closed it. See "Carrying on an
 /// interrupted turn" in AGENTS.md for why only the last one is asked about.
@@ -477,24 +497,7 @@ bool endsUnfinished(List<Message> messages, List<ChatRecord> records) {
   if (last == null || last.role != MessageRole.assistant) return false;
   // A sub-agent's transcript is the reply alone, so there is not always one.
   final prompt = messages.length < 2 ? null : messages[messages.length - 2];
-  if (prompt != null && shellBypassCommand(prompt.plainText) != null) {
-    return false;
-  }
-  // A wired-callback turn (`/compact`) appends nothing either — unless it
-  // handed the work to a model (`/goal <objective>`), whose reply is any
-  // reply. Matched by
-  // name alone rather than against the library: this runs on a reload, where
-  // what the skill's frontmatter says today is not what it said when the turn
-  // was sent, and a name in the enum is the closed set the dispatch reads.
-  // The one cost is a user's own template skill shadowing a wired name — its
-  // interrupted turn is then not offered, where it would have been resumable;
-  // a name in the enum is the app's own, and shadowing one is not a state
-  // worth a stamp on every message for.
-  if (prompt != null &&
-      wiredSkillFromText(prompt.plainText) != null &&
-      !wiredRunsModel(prompt.plainText)) {
-    return false;
-  }
+  if (prompt != null && !carriesOn(prompt)) return false;
   TurnEnd? ended;
   for (final record in records) {
     if (record is TurnEndRecord && record.messageId == last.id) {

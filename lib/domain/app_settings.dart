@@ -426,12 +426,13 @@ class AppSettings {
   /// number.
   int autoCompactPercent;
 
-  /// The model's total context, in tokens — what [autoCompactPercent] is a
-  /// share of, and what the summarizer's own ask must fit under. One number
-  /// for the app: every provider's window is guessed here, and a user who
-  /// knows the real one sets it. Nothing reads this before the settings page
-  /// has a row for it, but the constant ships the guess so the row's "(128k)"
-  /// and the check are one number.
+  /// The most context a chat is let grow to, in tokens: the window
+  /// [autoCompactPercent] is a share of is the model's own or this, whichever
+  /// is smaller, and this where the catalog does not know the model — so a
+  /// million-token model compacts at a share of this rather than at 800k, a
+  /// context no model reads well. The summarizer's own ask is held to the
+  /// model's real window where it is known, this only where it is not. The
+  /// constant is the row's "(256k)" and the check's number both.
   int totalContext;
 
   /// Whether every reply is held to [responseLength], over what models.dev
@@ -493,7 +494,7 @@ class AppSettings {
   /// The window the guess lands on: 128k sits under every hosted window
   /// today — underestimating costs an early compaction, overestimating costs
   /// a failed request, so the safe guess is the small one.
-  static const defaultTotalContext = 128000;
+  static const defaultTotalContext = 256000;
 
   /// The bounds Total Context is clamped to, at load and at the settings
   /// row's save — two sites that must agree, named once.
