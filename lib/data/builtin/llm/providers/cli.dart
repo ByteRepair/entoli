@@ -14,7 +14,7 @@ import "../../../../domain/download.dart";
 import "../../../../domain/llm_provider.dart";
 import "../../../../domain/model_capability.dart";
 import "../../../../domain/model_registry.dart";
-import "../../../../domain/shell.dart" show guestHome, guestPath;
+import "../../../../domain/shell.dart" show guestHome, guestPath, shellQuoted;
 import "../../../download.dart";
 import "../../../local/file_modes.dart";
 import "../hosted_models.dart";
@@ -65,12 +65,54 @@ abstract class CliGuest {
   /// [argv] started from [cwd] with [environment], each of [shared] reachable
   /// at its own host path, so a path the app hands the program is one answer
   /// inside and out. Throws an [LlmException] where it cannot run yet.
+  ///
+  /// [terminal] runs it on a pseudo-terminal, for a program whose prompts
+  /// read keys only from one — Claude CLI's sign-in code — where the guest
+  /// has one to give ([onTerminal]); over pipes otherwise.
   Future<CliProcess> start(
     List<String> argv, {
     required String cwd,
     required Map<String, String> environment,
     required List<String> shared,
+    bool terminal = false,
+  }) async {
+    final onOne = terminal ? onTerminal(argv) : null;
+    if (onOne == null) {
+      return spawn(argv, cwd: cwd, environment: environment, shared: shared);
+    }
+    return TerminalCliProcess(
+      await spawn(onOne, cwd: cwd, environment: environment, shared: shared),
+    );
+  }
+
+  /// [argv] as a command that runs it on a pseudo-terminal here, or null
+  /// where there is none to run it on.
+  @protected
+  List<String>? onTerminal(List<String> argv);
+
+  /// [argv] started as it is, over pipes: [start] less the terminal.
+  @protected
+  Future<CliProcess> spawn(
+    List<String> argv, {
+    required String cwd,
+    required Map<String, String> environment,
+    required List<String> shared,
   });
+
+  /// The size a terminal is given: wide, so a program does not wrap a long
+  /// link across lines for a screen nobody looks at.
+  static const terminalSize = "stty cols 4096 rows 40 2>/dev/null";
+
+  /// util-linux's `script` running [argv] on a terminal: one command line,
+  /// since its -c takes a string, with the output flushed as it comes and
+  /// the program's exit code its own.
+  @protected
+  static List<String> utilLinuxScript(List<String> argv) => [
+    "script",
+    "-qfec",
+    "$terminalSize; exec ${argv.map(shellQuoted).join(" ")}",
+    "/dev/null",
+  ];
 }
 
 /// This machine: a desktop's, whose programs are its own processes.
@@ -105,8 +147,31 @@ class HostCliGuest extends CliGuest {
   @override
   List<String>? install(List<String> packages) => null;
 
+  /// The system's own `script`: BSD's on macOS, which takes the program as
+  /// words, and util-linux's on a Linux that has it. Windows has none, and
+  /// a desktop's sign-in opens a browser rather than asking for a code.
   @override
-  Future<CliProcess> start(
+  List<String>? onTerminal(List<String> argv) {
+    if (Platform.isMacOS) {
+      return [
+        "/usr/bin/script",
+        "-q",
+        "/dev/null",
+        "/bin/sh",
+        "-c",
+        '${CliGuest.terminalSize}; exec "\$@"',
+        "sh",
+        ...argv,
+      ];
+    }
+    if (Platform.isLinux && File("/usr/bin/script").existsSync()) {
+      return CliGuest.utilLinuxScript(argv);
+    }
+    return null;
+  }
+
+  @override
+  Future<CliProcess> spawn(
     List<String> argv, {
     required String cwd,
     required Map<String, String> environment,
@@ -148,6 +213,60 @@ abstract class LinuxCliGuest extends CliGuest {
     "--no-cache",
     ...packages,
   ];
+
+  /// util-linux's `script`, which Alpine keeps in util-linux-misc and its
+  /// busybox lacks: installed the first time a terminal is asked for, so a
+  /// Linux set up before this needs nothing done to it.
+  @override
+  List<String>? onTerminal(List<String> argv) => [
+    "/bin/sh",
+    "-c",
+    "command -v script >/dev/null 2>&1 || "
+        "apk add --no-cache util-linux-misc >/dev/null 2>&1; "
+        'exec "\$@"',
+    "sh",
+    ...CliGuest.utilLinuxScript(argv),
+  ];
+}
+
+/// A program on a terminal, read and written as one over pipes: Enter is a
+/// carriage return, which a program reading keys takes as Enter where a
+/// line feed is not, and what it prints comes without the terminal's
+/// escapes — colours, cursor moves, a link's hyperlink wrapping — or the
+/// carriage return ending each line, so a link in it is found as it is.
+/// Its error output is the terminal's own, on its output.
+class TerminalCliProcess extends CliProcess {
+  TerminalCliProcess(this._process);
+
+  final CliProcess _process;
+
+  static final _escapes = RegExp(
+    // OSC (a hyperlink, a title) to BEL or ST; CSI; any other two-byte
+    // escape; a carriage return.
+    r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-?]*[ -/]*[@-~]|\x1b[@-Z\\-_]|\r",
+  );
+
+  @override
+  Stream<String> get lines =>
+      _process.lines.map((line) => line.replaceAll(_escapes, ""));
+
+  @override
+  Stream<String> get errors => _process.errors;
+
+  @override
+  void write(String text) => _process.write(text);
+
+  @override
+  void writeLine(String line) => write("$line\r");
+
+  @override
+  Future<void> closeInput() => _process.closeInput();
+
+  @override
+  Future<int> get exitCode => _process.exitCode;
+
+  @override
+  void kill({bool force = false}) => _process.kill(force: force);
 }
 
 abstract class CliProvider extends LlmProvider with KeyFree {
@@ -461,23 +580,28 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   Future<CliProcess> run(
     List<String> arguments, {
     Map<String, String> environment = const {},
+    bool terminal = false,
   }) async => _start(
     [executable(), ...arguments],
     cwd: await workDirectory(),
+    terminal: terminal,
     environment: {...environment, ...this.environment},
   );
 
   /// [argv] started from [cwd] with [environment] by its [guest], the
-  /// program's cache folder reachable at its own path there.
+  /// program's cache folder reachable at its own path there; on a terminal
+  /// where [terminal].
   Future<CliProcess> _start(
     List<String> argv, {
     required String cwd,
     required Map<String, String> environment,
+    bool terminal = false,
   }) => _runsIn.start(
     argv,
     cwd: cwd,
     environment: environment,
     shared: [workRoot.path],
+    terminal: terminal,
   );
 
   /// [inherited] less what [inherits] keeps out.
@@ -1059,7 +1183,11 @@ abstract class CliProcess {
   /// Its standard error, as it comes.
   Stream<String> get errors;
 
-  void writeLine(String line);
+  /// [text] to its standard input, as it is.
+  void write(String text);
+
+  /// [line] and the end of one.
+  void writeLine(String line) => write("$line\n");
 
   /// Closes its standard input, which a program reading it takes as the end.
   Future<void> closeInput();
@@ -1140,7 +1268,7 @@ Future<CliProcess> launchProcess(
   ),
 );
 
-class _IoCliProcess implements CliProcess {
+class _IoCliProcess extends CliProcess {
   _IoCliProcess(this._process);
 
   final Process _process;
@@ -1153,7 +1281,7 @@ class _IoCliProcess implements CliProcess {
   Stream<String> get errors => _process.stderr.transform(utf8.decoder);
 
   @override
-  void writeLine(String line) => _process.stdin.writeln(line);
+  void write(String text) => _process.stdin.write(text);
 
   @override
   Future<void> closeInput() => _process.stdin.close();

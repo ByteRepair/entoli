@@ -374,6 +374,18 @@ build with no proot, which is the one place `supported` is false. A
 provider given a guest of its own (`ClaudeCliProvider.over`) runs there
 instead, which is how a test runs one over a fake.
 
+**A program can be started on a terminal.** `start(…, terminal: true)` runs it
+on a pseudo-terminal where the guest has one (`onTerminal`): util-linux's
+`script` in the Linux guests, installed from Alpine's `util-linux-misc` the
+first time it is asked for, the system's own `script` on macOS and on a
+Linux that has it, and none on Windows, which keeps pipes. It is given a
+wide size, so a program does not wrap a long link across lines. The process
+comes back a `TerminalCliProcess`: what it prints arrives without the
+terminal's escapes or line-ending carriage returns, and a line written to it
+ends in a carriage return, which is Enter to a program reading keys. The
+sign-in runs this way, since Claude CLI reads a pasted code only as keys
+from a terminal and takes nothing written to a pipe.
+
 The two phones' guests are `LinuxCliGuest`s: Alpine's `PATH`, `HOME` and
 `LANG` and the subclass's `guestEnvironment` stand in for the app's
 environment, which is Android's or iOS's; their programs are the musl

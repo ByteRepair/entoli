@@ -34,9 +34,13 @@ class CliSignIn {
     });
   }
 
-  /// [provider]'s program, started on its [CliProvider.signInArguments].
-  static Future<CliSignIn> start(CliProvider provider) async =>
-      CliSignIn._(provider, await provider.run(provider.signInArguments));
+  /// [provider]'s program, started on its [CliProvider.signInArguments] on a
+  /// terminal: a program that asks for a code reads it as keys from one,
+  /// and takes nothing written to a pipe.
+  static Future<CliSignIn> start(CliProvider provider) async => CliSignIn._(
+    provider,
+    await provider.run(provider.signInArguments, terminal: true),
+  );
 
   final CliProvider _provider;
   final CliProcess _process;

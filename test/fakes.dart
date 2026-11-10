@@ -1888,7 +1888,7 @@ class FakeCli extends CliProvider {
     required this.isInstalled,
     required this.isSignedIn,
   }) : super(
-         guest: HostCliGuest(
+         guest: FakeHostGuest(
            launch:
                (
                  executable,
@@ -2008,6 +2008,16 @@ class FakeCli extends CliProvider {
   Future<CliSession> start(CliSessionSpec spec) => throw UnimplementedError();
 }
 
+/// This machine, with a terminal that leaves the command as it is: a test
+/// sees the program's own words whether or not it was asked for one, and
+/// what it reads and writes on one is a [TerminalCliProcess]'s.
+class FakeHostGuest extends HostCliGuest {
+  const FakeHostGuest({super.launch});
+
+  @override
+  List<String>? onTerminal(List<String> argv) => argv;
+}
+
 /// A CLI's process as a test drives it: [say] prints a line, [complain]
 /// writes to its error output, [exit] ends it, and what it was sent is
 /// [sent].
@@ -2032,6 +2042,9 @@ class FakeCliProcess implements CliProcess {
 
   @override
   Stream<String> get errors => _err.stream;
+
+  @override
+  void write(String text) => sent.add(text);
 
   @override
   void writeLine(String line) => sent.add(line);

@@ -154,6 +154,12 @@ class _FakeProcess implements CliProcess {
   @override
   Stream<String> get errors => stderr.stream;
 
+  /// What was written as it was, outside the JSON lines.
+  final written = <String>[];
+
+  @override
+  void write(String text) => written.add(text);
+
   @override
   void writeLine(String line) =>
       sent.add(jsonDecode(line) as Map<String, dynamic>);
@@ -1326,15 +1332,16 @@ void main() {
   });
 
   group("a sign-in", () {
-    /// [cli] launching [process] for its sign-in and [status] for its
-    /// status check, which exits [signedIn] 0 or 1.
+    /// [cli] launching [process] for its sign-in, on a terminal and only
+    /// there, and [status] for its status check, which exits [signedIn] 0
+    /// or 1.
     ({CliProvider cli, _FakeProcess login}) signingIn({
       required bool signedIn,
     }) {
       final login = _FakeProcess(const [], "", const {});
       final cli = CodexCliProvider.over(
         CodexCliProvider.preset.copyWith(command: Platform.resolvedExecutable),
-        guest: HostCliGuest(
+        guest: _MarkedTerminal(
           launch:
               (
                 executable,
@@ -1342,7 +1349,9 @@ void main() {
                 required workingDirectory,
                 required environment,
               }) async {
-                if (arguments.first == "login" && arguments.length == 1) {
+                if (executable == "terminal" &&
+                    arguments.length == 2 &&
+                    arguments.last == "login") {
                   return login;
                 }
                 return _FakeProcess(arguments, workingDirectory, environment)
@@ -1353,6 +1362,17 @@ void main() {
       return (cli: cli, login: login);
     }
 
+    // The program reads a code as keys from a terminal, where Enter is a
+    // carriage return.
+    test("a code is typed on the terminal and entered", () async {
+      final (:cli, :login) = signingIn(signedIn: true);
+      final signIn = await CliSignIn.start(cli);
+      signIn.answer(" abc#def ");
+      expect(login.written, ["abc#def\r"]);
+      login.exit(0);
+      expect(await signIn.result, isTrue);
+    });
+
     test("finds the page in a line it prints, and ends signed in", () async {
       final (:cli, :login) = signingIn(signedIn: true);
       final signIn = await CliSignIn.start(cli);
@@ -1362,8 +1382,12 @@ void main() {
       login._stdout.add(
         "If your browser did not open, navigate to this URL to authenticate:",
       );
+      // On a terminal: coloured, wrapped as a hyperlink, ended by a
+      // carriage return.
       login._stdout.add(
-        "\x1b[94mhttps://auth.openai.com/oauth/authorize?x=1\x1b[0m",
+        "\x1b]8;;https://auth.openai.com/oauth/authorize?x=1\x07"
+        "\x1b[94mhttps://auth.openai.com/oauth/authorize?x=1\x1b[0m"
+        "\x1b]8;;\x07\r",
       );
       expect(
         await signIn.page,
@@ -1389,6 +1413,49 @@ void main() {
       CliProvider.cacheRoot = dir.path;
     });
     tearDown(() => CliProvider.cacheRoot = null);
+
+    // util-linux's script, installed if the Linux has none, runs the program
+    // wide, so a link is not wrapped, and with its own words quoted whole.
+    test("a program asked for a terminal runs under script", () async {
+      final launched = <List<String>>[];
+      final guest = _Guest((
+        executable,
+        arguments, {
+        required workingDirectory,
+        required environment,
+      }) async {
+        launched.add(arguments);
+        return _FakeProcess(arguments, workingDirectory, environment);
+      });
+      final process = await guest.start(
+        ["claude", "it's"],
+        cwd: "/w",
+        environment: const {},
+        shared: const [],
+        terminal: true,
+      );
+      expect(process, isA<TerminalCliProcess>());
+      // proot -w <cwd>, then the words the guest was asked to run
+      final words = launched.single.sublist(2);
+      expect(words.take(2), ["/bin/sh", "-c"]);
+      expect(words[2], contains("apk add --no-cache util-linux-misc"));
+      expect(words.sublist(4), [
+        "script",
+        "-qfec",
+        "stty cols 4096 rows 40 2>/dev/null; exec 'claude' 'it'\\''s'",
+        "/dev/null",
+      ]);
+
+      launched.clear();
+      final plain = await guest.start(
+        ["claude"],
+        cwd: "/w",
+        environment: const {},
+        shared: const [],
+      );
+      expect(plain, isNot(isA<TerminalCliProcess>()));
+      expect(launched.single.sublist(2), ["claude"]);
+    });
 
     test("Android's builds are the musl ones its Alpine runs", () {
       expect(
@@ -1524,6 +1591,15 @@ void main() {
   });
 }
 
+/// This machine, with a terminal a test can tell apart: the program's words
+/// after the word "terminal".
+class _MarkedTerminal extends HostCliGuest {
+  const _MarkedTerminal({super.launch});
+
+  @override
+  List<String>? onTerminal(List<String> argv) => ["terminal", ...argv];
+}
+
 /// Android's Linux, faked: an arm64 musl guest whose programs [launch]
 /// starts as `proot -w <cwd>` and the program's own words, with what it
 /// shared kept in [shared].
@@ -1537,7 +1613,7 @@ class _Guest extends LinuxCliGuest {
   Abi get abi => Abi.androidArm64;
 
   @override
-  Future<CliProcess> start(
+  Future<CliProcess> spawn(
     List<String> argv, {
     required String cwd,
     required Map<String, String> environment,

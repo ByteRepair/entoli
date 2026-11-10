@@ -183,7 +183,7 @@ class ProotCliGuest extends LinuxCliGuest {
 
   /// Started as a process of this device, under proot.
   @override
-  Future<CliProcess> start(
+  Future<CliProcess> spawn(
     List<String> argv, {
     required String cwd,
     required Map<String, String> environment,

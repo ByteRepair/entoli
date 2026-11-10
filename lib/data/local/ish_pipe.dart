@@ -19,10 +19,10 @@ import "ish_ffi.dart";
 /// The guest process lives on its own worker isolate, whose thread parks in the
 /// bridge's poll between output chunks — the same parking that keeps
 /// [IshWorker]'s command runs stoppable. Control that must land while that
-/// thread is parked — [writeLine], [closeInput], [kill] — goes straight to the
+/// thread is parked — [write], [closeInput], [kill] — goes straight to the
 /// bridge from the calling isolate, the way [IshWorker]'s interrupt and hangup
 /// do, rather than queueing behind the read loop.
-class GuestCliProcess implements CliProcess {
+class GuestCliProcess extends CliProcess {
   GuestCliProcess._({
     required this.handle,
     required this.worker,
@@ -134,11 +134,10 @@ class GuestCliProcess implements CliProcess {
   Stream<String> get errors => stderr.stream.transform(utf8.decoder);
 
   @override
-  void writeLine(String line) {
+  void write(String text) {
     if (_closed) return;
     final fn = _core.bridge?.pipeWrite;
     if (fn == null) return;
-    final text = "$line\n";
     final ptr = text.toNativeUtf8();
     // The byte length, not the character count: a non-ASCII line has more
     // bytes than code units, and a character count truncates the write.
@@ -192,7 +191,7 @@ class IshCliGuest extends LinuxCliGuest {
   Abi get abi => Abi.linuxX64;
 
   @override
-  Future<CliProcess> start(
+  Future<CliProcess> spawn(
     List<String> argv, {
     required String cwd,
     required Map<String, String> environment,
