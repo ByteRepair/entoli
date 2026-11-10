@@ -27,7 +27,6 @@ import "ish_ffi.dart";
 class GuestCliProcess implements CliProcess {
   GuestCliProcess._({
     required this.handle,
-    required this.blinkish,
     required this.worker,
     required this.stdout,
     required this.stderr,
@@ -37,7 +36,6 @@ class GuestCliProcess implements CliProcess {
   /// Spawns [argv] (argv[0] the program, resolved through the guest's PATH) in
   /// the guest, with [env] its environment. [rootfsDir]/[dataDir]/[home]/
   /// [cwd]/[readOnly] are the guest's, exactly as [IshWorker.init] takes them.
-  /// [blinkish] picks the x86-64 core (true) or the i386 one (false).
   static Future<GuestCliProcess> start({
     required List<String> argv,
     required Map<String, String> env,
@@ -46,7 +44,6 @@ class GuestCliProcess implements CliProcess {
     required String home,
     required String cwd,
     List<String> readOnly = const [],
-    bool blinkish = true,
   }) async {
     final stdout = StreamController<List<int>>();
     final stderr = StreamController<List<int>>();
@@ -93,7 +90,6 @@ class GuestCliProcess implements CliProcess {
 
     await Isolate.spawn(_pipeEntry, (
       replies.sendPort,
-      blinkish,
       rootfsDir,
       dataDir,
       home,
@@ -107,7 +103,6 @@ class GuestCliProcess implements CliProcess {
 
     final process = GuestCliProcess._(
       handle: address,
-      blinkish: blinkish,
       worker: sendPort!,
       stdout: stdout,
       stderr: stderr,
@@ -122,9 +117,6 @@ class GuestCliProcess implements CliProcess {
 
   /// The pipe session's C handle address, for the pokes that bypass the worker.
   final int handle;
-
-  /// Whether this drives the blinkish (x86-64) bridge or the i386 one.
-  final bool blinkish;
 
   /// The worker isolate's port. [destroy] is the one message that still needs
   /// it; the pokes below reach the bridge directly.
@@ -146,7 +138,7 @@ class GuestCliProcess implements CliProcess {
   @override
   void writeLine(String line) {
     if (_closed) return;
-    final fn = blinkish ? blinkishPipeWriteFn : ishPipeWriteFn;
+    final fn = _core.bridge?.pipeWrite;
     if (fn == null) return;
     final text = "$line\n";
     final ptr = text.toNativeUtf8();
@@ -159,8 +151,7 @@ class GuestCliProcess implements CliProcess {
   @override
   Future<void> closeInput() async {
     if (_closed) return;
-    final fn = blinkish ? blinkishPipeCloseInputFn : ishPipeCloseInputFn;
-    fn?.call(Pointer.fromAddress(handle));
+    _core.bridge?.pipeCloseInput(Pointer.fromAddress(handle));
   }
 
   @override
@@ -168,10 +159,11 @@ class GuestCliProcess implements CliProcess {
 
   @override
   void kill({bool force = false}) {
-    final fn = force
-        ? (blinkish ? blinkishPipeHangupFn : ishPipeHangupFn)
-        : (blinkish ? blinkishPipeTerminateFn : ishPipeTerminateFn);
-    fn?.call(Pointer.fromAddress(handle));
+    final bridge = _core.bridge;
+    if (bridge == null) return;
+    (force ? bridge.pipeHangup : bridge.pipeTerminate)(
+      Pointer.fromAddress(handle),
+    );
   }
 
   /// Ends the worker isolate and frees the guest process, once the process is
@@ -179,8 +171,7 @@ class GuestCliProcess implements CliProcess {
   void destroy() {
     if (_closed) return;
     _closed = true;
-    final fn = blinkish ? blinkishPipeDestroyFn : ishPipeDestroyFn;
-    fn?.call(Pointer.fromAddress(handle));
+    _core.bridge?.pipeDestroy(Pointer.fromAddress(handle));
     worker.send(const [_kStop]);
   }
 }
@@ -232,10 +223,13 @@ class IshCliGuest implements CliGuest, CliProcessLauncher {
           home: "",
           cwd: workingDirectory,
           readOnly: const [],
-          blinkish: true,
         );
       };
 }
+
+/// The core a CLI program runs on: the x86-64 one, since the programs' builds
+/// are x86-64 Linux ones and the i386 core cannot run them.
+const _core = IshCore.x86_64;
 
 // Message tags between the main isolate and the pipe worker.
 const _kReply = 0;
@@ -249,7 +243,6 @@ const _kStop = 3;
 void _pipeEntry(
   (
     SendPort,
-    bool,
     String,
     String,
     String,
@@ -260,20 +253,12 @@ void _pipeEntry(
   )
   arg,
 ) {
-  final (main, blinkish, rootfsDir, dataDir, home, cwd, argv, env, readOnly) =
-      arg;
+  final (main, rootfsDir, dataDir, home, cwd, argv, env, readOnly) = arg;
   final receive = ReceivePort();
   main.send(receive.sendPort);
 
-  final initFn = blinkish ? blinkishPipeInitFn : ishPipeInitFn;
-  final pollFn = blinkish ? blinkishPipePollFn : ishPipePollFn;
-  final readFn = blinkish ? blinkishPipeReadFn : ishPipeReadFn;
-  final exitCodeFn = blinkish ? blinkishPipeExitCodeFn : ishPipeExitCodeFn;
-
-  if (initFn == null ||
-      pollFn == null ||
-      readFn == null ||
-      exitCodeFn == null) {
+  final bridge = _core.bridge;
+  if (bridge == null) {
     main.send(const [_kReply, "iSH is not linked", null]);
     return;
   }
@@ -296,7 +281,7 @@ void _pipeEntry(
   final cwdPtr = cwd.toNativeUtf8();
   final errPtr = calloc<Pointer<Utf8>>();
 
-  final handle = initFn(
+  final handle = bridge.pipeInit(
     rootfsPtr,
     dataPtr,
     homePtr,
@@ -346,7 +331,7 @@ void _pipeEntry(
   // One read of a stream, sent on if it held anything. The bridge's ends are
   // non-blocking, so an empty stream answers at once rather than parking.
   bool forward(int stream) {
-    final n = readFn(handle, stream, buf, 65536);
+    final n = bridge.pipeRead(handle, stream, buf, 65536);
     if (n <= 0) return false;
     main.send([_kOutput, stream, Uint8List.fromList(buf.asTypedList(n))]);
     return true;
@@ -354,7 +339,7 @@ void _pipeEntry(
 
   try {
     while (true) {
-      final flags = pollFn(handle);
+      final flags = bridge.pipePoll(handle);
       if (flags < 0) break;
       if (flags & 4 != 0) {
         // The wake byte: exit, or a hangup. The program's last words may
@@ -369,7 +354,7 @@ void _pipeEntry(
   } finally {
     calloc.free(buf);
   }
-  main.send([_kExit, exitCodeFn(handle)]);
+  main.send([_kExit, bridge.pipeExitCode(handle)]);
 
   // The process is gone; the isolate has nothing left but a stop or destroy.
   receive.listen((msg) {

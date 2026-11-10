@@ -101,8 +101,8 @@ is told on every other platform.
 The app launches and runs on an iOS simulator, with the emulator linked: the
 startup chain (data directory, secrets, the bundled skills' self-heal) runs
 end to end, the UI renders, and the FFI entry points resolve at runtime —
-`ishLinked` true, `ishInitFn`/`ishRunFn`/`ishFakefsifyFn` non-null, evaluated
-in the running app over the VM service.
+`ishLinked` true, each `IshCore`'s bridge and `ishFakefsifyFn` non-null,
+evaluated in the running app over the VM service.
 
 1. **Install a rootfs and run a command — done, on the simulator.** The
    rootfs half ran end to end (fetch, SHA-256 check, in-process unpack,

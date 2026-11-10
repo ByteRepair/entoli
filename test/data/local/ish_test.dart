@@ -67,9 +67,24 @@ void main() {
 }
 
 /// The names ish_ffi.dart hands to `lookupFunction` — the lookups themselves,
-/// not every quoted `ish_` string the file may come to hold.
-Set<String> _lookedUp() =>
-    RegExp(r'lookupFunction<[^>]*>\(\s*"((?:ish|blinkish)_[a-z_]+)"')
-        .allMatches(File("lib/data/local/ish_ffi.dart").readAsStringSync())
-        .map((m) => m[1]!)
-        .toSet();
+/// not every quoted `ish_` string the file may come to hold. A bridge's are
+/// written once over its core's prefix, so they are every core's prefix
+/// with every one of those, beside the lookups named outright.
+Set<String> _lookedUp() {
+  final source = File("lib/data/local/ish_ffi.dart").readAsStringSync();
+  final prefixes = RegExp(
+    r'^\s*\w+\("((?:ish|blinkish))"\)[,;]$',
+    multiLine: true,
+  ).allMatches(source).map((m) => m[1]!);
+  final perCore = RegExp(
+    r'lookupFunction<[^>]*>\(\s*"\$\{prefix\}_([a-z_]+)"',
+  ).allMatches(source).map((m) => m[1]!);
+  final outright = RegExp(
+    r'lookupFunction<[^>]*>\(\s*"((?:ish|blinkish)_[a-z_]+)"',
+  ).allMatches(source).map((m) => m[1]!);
+  return {
+    for (final prefix in prefixes)
+      for (final name in perCore) "${prefix}_$name",
+    ...outright,
+  };
+}

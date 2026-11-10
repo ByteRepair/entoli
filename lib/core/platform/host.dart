@@ -103,13 +103,14 @@ Shell platformShell({
     // The x86-64 guest (alpine64) runs on the blinkish core; the i386 one on
     // iSH's asbestos. Asked per session, since the setting is picked after
     // startup.
-    bool blinkish() => rootfsId?.call() == alpine64.id;
+    IshCore core() =>
+        rootfsId?.call() == alpine64.id ? IshCore.x86_64 : IshCore.i386;
 
     return IshShell(
       rootfsDir: () => rootfsDir() ?? "",
       dataDir: dataDir ?? "",
       environment: environment,
-      blinkish: blinkish,
+      core: core,
       platformDescription: () => rootfsDir() != null
           ? rootfsById(rootfsId?.call())!.describe(iosAbi)
           : "iOS, with no Linux installed. Install one from the Terminal "

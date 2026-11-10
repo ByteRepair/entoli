@@ -147,358 +147,130 @@ typedef IshPipeDestroyDart = void Function(IshPipeSessionPtr session);
 typedef IshPipeExitCodeC = Int32 Function(IshPipeSessionPtr session);
 typedef IshPipeExitCodeDart = int Function(IshPipeSessionPtr session);
 
-// The lazy lookups. Null until first use, and only ever resolved on iOS.
-IshInitDart? _initFn;
-IshDrainWakeDart? _drainWakeFn;
-IshWriteStdinDart? _writeStdinFn;
-IshPollDart? _pollFn;
-IshReadDart? _readFn;
-IshInterruptDart? _interruptFn;
-IshHangupDart? _hangupFn;
-IshDestroyDart? _destroyFn;
-IshFakefsifyDart? _fakefsifyFn;
-
-IshPipeInitDart? _pipeInitFn;
-IshPipeWriteDart? _pipeWriteFn;
-IshPipeCloseInputDart? _pipeCloseInputFn;
-IshPipePollDart? _pipePollFn;
-IshPipeReadDart? _pipeReadFn;
-IshPipeTerminateDart? _pipeTerminateFn;
-IshPipeHangupDart? _pipeHangupFn;
-IshPipeDestroyDart? _pipeDestroyFn;
-IshPipeExitCodeDart? _pipeExitCodeFn;
-
-// The blinkish (x86-64) core's twin entry points. Same signatures, looked up
-// by the blinkish_* names the bridge's second core exports.
-IshInitDart? _blinkishInitFn;
-IshDrainWakeDart? _blinkishDrainWakeFn;
-IshWriteStdinDart? _blinkishWriteStdinFn;
-IshPollDart? _blinkishPollFn;
-IshReadDart? _blinkishReadFn;
-IshInterruptDart? _blinkishInterruptFn;
-IshHangupDart? _blinkishHangupFn;
-IshDestroyDart? _blinkishDestroyFn;
-
-IshPipeInitDart? _blinkishPipeInitFn;
-IshPipeWriteDart? _blinkishPipeWriteFn;
-IshPipeCloseInputDart? _blinkishPipeCloseInputFn;
-IshPipePollDart? _blinkishPipePollFn;
-IshPipeReadDart? _blinkishPipeReadFn;
-IshPipeTerminateDart? _blinkishPipeTerminateFn;
-IshPipeHangupDart? _blinkishPipeHangupFn;
-IshPipeDestroyDart? _blinkishPipeDestroyFn;
-IshPipeExitCodeDart? _blinkishPipeExitCodeFn;
-
-bool _resolved = false;
-
-void _resolve() {
-  if (_resolved) return;
-  _resolved = true;
-  if (!ishLinked) return;
-  final lib = DynamicLibrary.process();
-  _initFn = lib.lookupFunction<IshInitC, IshInitDart>("ish_session_init");
-  _drainWakeFn = lib.lookupFunction<IshDrainWakeC, IshDrainWakeDart>(
-    "ish_session_drain_wake",
-  );
-  _writeStdinFn = lib.lookupFunction<IshWriteStdinC, IshWriteStdinDart>(
-    "ish_session_write_stdin",
-  );
-  _pollFn = lib.lookupFunction<IshPollC, IshPollDart>("ish_session_poll");
-  _readFn = lib.lookupFunction<IshReadC, IshReadDart>("ish_session_read");
-  _interruptFn = lib.lookupFunction<IshInterruptC, IshInterruptDart>(
-    "ish_session_interrupt",
-  );
-  _hangupFn = lib.lookupFunction<IshHangupC, IshHangupDart>(
-    "ish_session_hangup",
-  );
-  _destroyFn = lib.lookupFunction<IshDestroyC, IshDestroyDart>(
-    "ish_session_destroy",
-  );
-  _fakefsifyFn = lib.lookupFunction<IshFakefsifyC, IshFakefsifyDart>(
-    "ish_fakefsify",
-  );
-  _pipeInitFn = lib.lookupFunction<IshPipeInitC, IshPipeInitDart>(
-    "ish_pipe_init",
-  );
-  _pipeWriteFn = lib.lookupFunction<IshPipeWriteC, IshPipeWriteDart>(
-    "ish_pipe_write",
-  );
-  _pipeCloseInputFn = lib
-      .lookupFunction<IshPipeCloseInputC, IshPipeCloseInputDart>(
-        "ish_pipe_close_input",
-      );
-  _pipePollFn = lib.lookupFunction<IshPipePollC, IshPipePollDart>(
-    "ish_pipe_poll",
-  );
-  _pipeReadFn = lib.lookupFunction<IshPipeReadC, IshPipeReadDart>(
-    "ish_pipe_read",
-  );
-  _pipeTerminateFn = lib
-      .lookupFunction<IshPipeTerminateC, IshPipeTerminateDart>(
-        "ish_pipe_terminate",
-      );
-  _pipeHangupFn = lib.lookupFunction<IshPipeHangupC, IshPipeHangupDart>(
-    "ish_pipe_hangup",
-  );
-  _pipeDestroyFn = lib.lookupFunction<IshPipeDestroyC, IshPipeDestroyDart>(
-    "ish_pipe_destroy",
-  );
-  _pipeExitCodeFn = lib.lookupFunction<IshPipeExitCodeC, IshPipeExitCodeDart>(
-    "ish_pipe_exit_code",
-  );
-  _blinkishInitFn = lib.lookupFunction<IshInitC, IshInitDart>(
-    "blinkish_session_init",
-  );
-  _blinkishDrainWakeFn = lib.lookupFunction<IshDrainWakeC, IshDrainWakeDart>(
-    "blinkish_session_drain_wake",
-  );
-  _blinkishWriteStdinFn = lib.lookupFunction<IshWriteStdinC, IshWriteStdinDart>(
-    "blinkish_session_write_stdin",
-  );
-  _blinkishPollFn = lib.lookupFunction<IshPollC, IshPollDart>(
-    "blinkish_session_poll",
-  );
-  _blinkishReadFn = lib.lookupFunction<IshReadC, IshReadDart>(
-    "blinkish_session_read",
-  );
-  _blinkishInterruptFn = lib.lookupFunction<IshInterruptC, IshInterruptDart>(
-    "blinkish_session_interrupt",
-  );
-  _blinkishHangupFn = lib.lookupFunction<IshHangupC, IshHangupDart>(
-    "blinkish_session_hangup",
-  );
-  _blinkishDestroyFn = lib.lookupFunction<IshDestroyC, IshDestroyDart>(
-    "blinkish_session_destroy",
-  );
-  _blinkishPipeInitFn = lib.lookupFunction<IshPipeInitC, IshPipeInitDart>(
-    "blinkish_pipe_init",
-  );
-  _blinkishPipeWriteFn = lib.lookupFunction<IshPipeWriteC, IshPipeWriteDart>(
-    "blinkish_pipe_write",
-  );
-  _blinkishPipeCloseInputFn = lib
-      .lookupFunction<IshPipeCloseInputC, IshPipeCloseInputDart>(
-        "blinkish_pipe_close_input",
-      );
-  _blinkishPipePollFn = lib.lookupFunction<IshPipePollC, IshPipePollDart>(
-    "blinkish_pipe_poll",
-  );
-  _blinkishPipeReadFn = lib.lookupFunction<IshPipeReadC, IshPipeReadDart>(
-    "blinkish_pipe_read",
-  );
-  _blinkishPipeTerminateFn = lib
-      .lookupFunction<IshPipeTerminateC, IshPipeTerminateDart>(
-        "blinkish_pipe_terminate",
-      );
-  _blinkishPipeHangupFn = lib.lookupFunction<IshPipeHangupC, IshPipeHangupDart>(
-    "blinkish_pipe_hangup",
-  );
-  _blinkishPipeDestroyFn = lib
-      .lookupFunction<IshPipeDestroyC, IshPipeDestroyDart>(
-        "blinkish_pipe_destroy",
-      );
-  _blinkishPipeExitCodeFn = lib
-      .lookupFunction<IshPipeExitCodeC, IshPipeExitCodeDart>(
-        "blinkish_pipe_exit_code",
-      );
-}
-
 /// Whether the iSH bridge is linked into this build. Only iOS, where the
 /// XCFramework from tool/ios/ish/build.sh is linked; false everywhere else,
 /// so the FFI lookups are never made and the symbol is never touched.
 bool get ishLinked => Platform.isIOS;
 
-/// The resolved init function, or null where iSH is not linked. Called from the
-/// background isolate.
-IshInitDart? get ishInitFn {
-  _resolve();
-  return _initFn;
+/// The two emulator cores the bridge links. Each exports the same entry
+/// points under its own prefix — `ish_session_init`, `blinkish_session_init`
+/// — and a session or a guest program is driven through one of them for its
+/// whole life.
+enum IshCore {
+  /// The i386 guest, on iSH's own asbestos.
+  i386("ish"),
+
+  /// The x86-64 guest, on blink's interpreter: blinkish.
+  x86_64("blinkish");
+
+  const IshCore(this.prefix);
+
+  /// What the core's entry points are named with.
+  final String prefix;
+
+  /// The core's entry points, or null where the bridge is not linked. Looked
+  /// up on first use in each isolate, since a function looked up on one is
+  /// not valid on another.
+  IshBridge? get bridge =>
+      ishLinked ? _bridges[this] ??= IshBridge._(this) : null;
 }
 
-/// The resolved run-side functions, or null. Each is one step the worker's
-/// own loop takes — drain, write the command, poll between chunks, read —
-/// where the bridge's `ish_session_run` was one parked call for the whole
-/// command; splitting it is what lets the command's output reach the run's
-/// watch while it runs. Called from the background isolate.
-IshDrainWakeDart? get ishDrainWakeFn {
-  _resolve();
-  return _drainWakeFn;
+final _bridges = <IshCore, IshBridge>{};
+
+/// One core's entry points. The session ones run the shell's commands, a
+/// step at a time — drain, write the command, poll between chunks, read —
+/// so a command's output reaches the run's watch while it runs; the pipe
+/// ones run a guest program directly, for the CLI providers. Interrupt,
+/// hangup and the pipe's write, close, terminate and hangup are delivered
+/// from whatever isolate is stopping or feeding a run, so they do not queue
+/// behind the run they act on.
+class IshBridge {
+  IshBridge._(IshCore core)
+    : this._lookup(DynamicLibrary.process(), core.prefix);
+
+  IshBridge._lookup(DynamicLibrary lib, String prefix)
+    : init = lib.lookupFunction<IshInitC, IshInitDart>(
+        "${prefix}_session_init",
+      ),
+      drainWake = lib.lookupFunction<IshDrainWakeC, IshDrainWakeDart>(
+        "${prefix}_session_drain_wake",
+      ),
+      writeStdin = lib.lookupFunction<IshWriteStdinC, IshWriteStdinDart>(
+        "${prefix}_session_write_stdin",
+      ),
+      poll = lib.lookupFunction<IshPollC, IshPollDart>(
+        "${prefix}_session_poll",
+      ),
+      read = lib.lookupFunction<IshReadC, IshReadDart>(
+        "${prefix}_session_read",
+      ),
+      interrupt = lib.lookupFunction<IshInterruptC, IshInterruptDart>(
+        "${prefix}_session_interrupt",
+      ),
+      hangup = lib.lookupFunction<IshHangupC, IshHangupDart>(
+        "${prefix}_session_hangup",
+      ),
+      destroy = lib.lookupFunction<IshDestroyC, IshDestroyDart>(
+        "${prefix}_session_destroy",
+      ),
+      pipeInit = lib.lookupFunction<IshPipeInitC, IshPipeInitDart>(
+        "${prefix}_pipe_init",
+      ),
+      pipeWrite = lib.lookupFunction<IshPipeWriteC, IshPipeWriteDart>(
+        "${prefix}_pipe_write",
+      ),
+      pipeCloseInput = lib
+          .lookupFunction<IshPipeCloseInputC, IshPipeCloseInputDart>(
+            "${prefix}_pipe_close_input",
+          ),
+      pipePoll = lib.lookupFunction<IshPipePollC, IshPipePollDart>(
+        "${prefix}_pipe_poll",
+      ),
+      pipeRead = lib.lookupFunction<IshPipeReadC, IshPipeReadDart>(
+        "${prefix}_pipe_read",
+      ),
+      pipeTerminate = lib
+          .lookupFunction<IshPipeTerminateC, IshPipeTerminateDart>(
+            "${prefix}_pipe_terminate",
+          ),
+      pipeHangup = lib.lookupFunction<IshPipeHangupC, IshPipeHangupDart>(
+        "${prefix}_pipe_hangup",
+      ),
+      pipeDestroy = lib.lookupFunction<IshPipeDestroyC, IshPipeDestroyDart>(
+        "${prefix}_pipe_destroy",
+      ),
+      pipeExitCode = lib.lookupFunction<IshPipeExitCodeC, IshPipeExitCodeDart>(
+        "${prefix}_pipe_exit_code",
+      );
+
+  final IshInitDart init;
+  final IshDrainWakeDart drainWake;
+  final IshWriteStdinDart writeStdin;
+  final IshPollDart poll;
+  final IshReadDart read;
+  final IshInterruptDart interrupt;
+  final IshHangupDart hangup;
+  final IshDestroyDart destroy;
+
+  final IshPipeInitDart pipeInit;
+  final IshPipeWriteDart pipeWrite;
+  final IshPipeCloseInputDart pipeCloseInput;
+  final IshPipePollDart pipePoll;
+  final IshPipeReadDart pipeRead;
+  final IshPipeTerminateDart pipeTerminate;
+  final IshPipeHangupDart pipeHangup;
+  final IshPipeDestroyDart pipeDestroy;
+  final IshPipeExitCodeDart pipeExitCode;
 }
 
-IshWriteStdinDart? get ishWriteStdinFn {
-  _resolve();
-  return _writeStdinFn;
-}
+IshFakefsifyDart? _fakefsifyFn;
 
-IshPollDart? get ishPollFn {
-  _resolve();
-  return _pollFn;
-}
-
-IshReadDart? get ishReadFn {
-  _resolve();
-  return _readFn;
-}
-
-/// The resolved interrupt function, or null.
-IshInterruptDart? get ishInterruptFn {
-  _resolve();
-  return _interruptFn;
-}
-
-/// The resolved hangup function, or null. Delivered from whatever isolate is
-/// stopping a run — see [IshShell]'s interrupt path, which bypasses the
-/// worker isolate so a stop does not queue behind the run it ends.
-IshHangupDart? get ishHangupFn {
-  _resolve();
-  return _hangupFn;
-}
-
-/// The resolved destroy function, or null.
-IshDestroyDart? get ishDestroyFn {
-  _resolve();
-  return _destroyFn;
-}
-
-/// The resolved fakefsify function, or null. Called to unpack a rootfs tarball
-/// into iSH's fakefs layout in-process — the iOS analog of `tar -xzf`.
+/// The bridge's fakefsify, or null where it is not linked: a rootfs tarball
+/// unpacked into iSH's fakefs layout in-process, the iOS analog of
+/// `tar -xzf`. One for both cores, since the unpack is the same whichever
+/// guest runs the rootfs.
 IshFakefsifyDart? get ishFakefsifyFn {
-  _resolve();
-  return _fakefsifyFn;
-}
-
-/// The blinkish (x86-64) core's twin entry points, or null. The same shape as
-/// the iSH ones above, looked up by the `blinkish_*` names; both cores share
-/// one fakefsify (the unpack is the same, whichever guest runs the rootfs), so
-/// there is no blinkish fakefsify twin.
-IshInitDart? get blinkishInitFn {
-  _resolve();
-  return _blinkishInitFn;
-}
-
-IshDrainWakeDart? get blinkishDrainWakeFn {
-  _resolve();
-  return _blinkishDrainWakeFn;
-}
-
-IshWriteStdinDart? get blinkishWriteStdinFn {
-  _resolve();
-  return _blinkishWriteStdinFn;
-}
-
-IshPollDart? get blinkishPollFn {
-  _resolve();
-  return _blinkishPollFn;
-}
-
-IshReadDart? get blinkishReadFn {
-  _resolve();
-  return _blinkishReadFn;
-}
-
-IshInterruptDart? get blinkishInterruptFn {
-  _resolve();
-  return _blinkishInterruptFn;
-}
-
-IshHangupDart? get blinkishHangupFn {
-  _resolve();
-  return _blinkishHangupFn;
-}
-
-IshDestroyDart? get blinkishDestroyFn {
-  _resolve();
-  return _blinkishDestroyFn;
-}
-
-/// The pipe-session entry points, or null where iSH is not linked. Same shape
-/// as the session ones; called from the background isolate.
-IshPipeInitDart? get ishPipeInitFn {
-  _resolve();
-  return _pipeInitFn;
-}
-
-IshPipeWriteDart? get ishPipeWriteFn {
-  _resolve();
-  return _pipeWriteFn;
-}
-
-IshPipeCloseInputDart? get ishPipeCloseInputFn {
-  _resolve();
-  return _pipeCloseInputFn;
-}
-
-IshPipePollDart? get ishPipePollFn {
-  _resolve();
-  return _pipePollFn;
-}
-
-IshPipeReadDart? get ishPipeReadFn {
-  _resolve();
-  return _pipeReadFn;
-}
-
-IshPipeTerminateDart? get ishPipeTerminateFn {
-  _resolve();
-  return _pipeTerminateFn;
-}
-
-IshPipeHangupDart? get ishPipeHangupFn {
-  _resolve();
-  return _pipeHangupFn;
-}
-
-IshPipeDestroyDart? get ishPipeDestroyFn {
-  _resolve();
-  return _pipeDestroyFn;
-}
-
-IshPipeExitCodeDart? get ishPipeExitCodeFn {
-  _resolve();
-  return _pipeExitCodeFn;
-}
-
-IshPipeInitDart? get blinkishPipeInitFn {
-  _resolve();
-  return _blinkishPipeInitFn;
-}
-
-IshPipeWriteDart? get blinkishPipeWriteFn {
-  _resolve();
-  return _blinkishPipeWriteFn;
-}
-
-IshPipeCloseInputDart? get blinkishPipeCloseInputFn {
-  _resolve();
-  return _blinkishPipeCloseInputFn;
-}
-
-IshPipePollDart? get blinkishPipePollFn {
-  _resolve();
-  return _blinkishPipePollFn;
-}
-
-IshPipeReadDart? get blinkishPipeReadFn {
-  _resolve();
-  return _blinkishPipeReadFn;
-}
-
-IshPipeTerminateDart? get blinkishPipeTerminateFn {
-  _resolve();
-  return _blinkishPipeTerminateFn;
-}
-
-IshPipeHangupDart? get blinkishPipeHangupFn {
-  _resolve();
-  return _blinkishPipeHangupFn;
-}
-
-IshPipeDestroyDart? get blinkishPipeDestroyFn {
-  _resolve();
-  return _blinkishPipeDestroyFn;
-}
-
-IshPipeExitCodeDart? get blinkishPipeExitCodeFn {
-  _resolve();
-  return _blinkishPipeExitCodeFn;
+  if (!ishLinked) return null;
+  return _fakefsifyFn ??= DynamicLibrary.process()
+      .lookupFunction<IshFakefsifyC, IshFakefsifyDart>("ish_fakefsify");
 }

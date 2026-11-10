@@ -43,12 +43,13 @@ class IshShell extends Shell {
     required this.dataDir,
     required this.environment,
     required String Function() platformDescription,
-    bool Function()? blinkish,
+    IshCore Function()? core,
     IshTransport? transport,
-  }) : _describe = platformDescription,
+  }) : assert(core != null || transport != null),
+       _describe = platformDescription,
        _transportFor = transport != null
            ? (() => transport)
-           : (() => IshWorker(blinkish: (blinkish ?? (() => false))()));
+           : (() => IshWorker(core: core!()));
 
   /// Where the guest's rootfs is mounted from, asked per command: a Linux
   /// installed where none was reaches the next command, and one deleted stops
@@ -87,9 +88,9 @@ class IshShell extends Shell {
   /// or a test's fake for every owner. The suite runs where `ishLinked` is
   /// false, so without it the session logic would be reachable only from a
   /// device. One owner one isolate is what lets two chats' commands run at
-  /// once — a run parks the worker thread that drives it. [blinkish] is asked
-  /// when a worker is made (per session), so the core picked after startup —
-  /// the Terminal setting, which names the x86-64 guest — is the one driven.
+  /// once — a run parks the worker thread that drives it. The core is asked
+  /// for when a worker is made (per session), so the one the Linux picked
+  /// after startup runs on is the one driven.
   final IshTransport Function() _transportFor;
 
   final Map<String, _IshSession> _sessions = {};
@@ -968,10 +969,10 @@ class IshRunBuffer {
 /// The protocol is Lists over a SendPort: `[tag, replyId, ...args]` for a
 /// request, `[replyId, result]` for a reply.
 class IshWorker implements IshTransport {
-  IshWorker({this.blinkish = false});
+  IshWorker({required this.core});
 
-  /// Whether this worker drives the x86-64 (blinkish) bridge or the i386 one.
-  final bool blinkish;
+  /// The emulator core this worker's sessions run on.
+  final IshCore core;
 
   SendPort? _sendPort;
   Future<void>? _starting;
@@ -1037,7 +1038,7 @@ class IshWorker implements IshTransport {
     final exitPort = ReceivePort();
     await Isolate.spawn(_entry, (
       replies.sendPort,
-      blinkish,
+      core,
     ), onExit: exitPort.sendPort);
     spawnCount++;
     // One listener for the port's whole life: a ReceivePort is a
@@ -1146,12 +1147,10 @@ class IshWorker implements IshTransport {
   }
 
   @override
-  void interrupt(int handle) =>
-      _poke(blinkish ? blinkishInterruptFn : ishInterruptFn, handle);
+  void interrupt(int handle) => _poke(core.bridge?.interrupt, handle);
 
   @override
-  void hangup(int handle) =>
-      _poke(blinkish ? blinkishHangupFn : ishHangupFn, handle);
+  void hangup(int handle) => _poke(core.bridge?.hangup, handle);
 
   /// One of the two never-blocking bridging calls, made here rather than
   /// posted: the worker is unavailable while a run it owns is pending, and
@@ -1211,8 +1210,8 @@ class IshWorker implements IshTransport {
     }
   }
 
-  static void _entry((SendPort, bool) arg) {
-    final (main, blinkish) = arg;
+  static void _entry((SendPort, IshCore) arg) {
+    final (main, core) = arg;
     final receive = ReceivePort();
     main.send(receive.sendPort);
     // The worker's own session table: the handle every FFI step goes through
@@ -1220,15 +1219,8 @@ class IshWorker implements IshTransport {
     // matches the command's end by.
     final sessions = <int, ({IshSessionPtr handle, String token})>{};
 
-    // The bridge this worker drives: the blinkish twin or the i386 original.
-    // Resolved once here, on the isolate that will use them, since an FFI
-    // pointer is only valid on the isolate that created it.
-    final initFn = blinkish ? blinkishInitFn : ishInitFn;
-    final drainFn = blinkish ? blinkishDrainWakeFn : ishDrainWakeFn;
-    final writeFn = blinkish ? blinkishWriteStdinFn : ishWriteStdinFn;
-    final pollFn = blinkish ? blinkishPollFn : ishPollFn;
-    final readFn = blinkish ? blinkishReadFn : ishReadFn;
-    final destroyFn = blinkish ? blinkishDestroyFn : ishDestroyFn;
+    // Looked up here, on the isolate that will call it.
+    final bridge = core.bridge;
 
     receive.listen((msg) {
       if (msg is! List) return;
@@ -1245,7 +1237,7 @@ class IshWorker implements IshTransport {
           final token = msg[8] as String;
           final env = msg[9] as List;
           final readOnly = msg[10] as List;
-          if (initFn == null) {
+          if (bridge == null) {
             main.send([_kReply, replyId, "iSH is not linked", null]);
             return;
           }
@@ -1268,7 +1260,7 @@ class IshWorker implements IshTransport {
             readOnlyPtrs[i] = (readOnly[i] as String).toNativeUtf8();
           }
           final errPtr = calloc<Pointer<Utf8>>();
-          final handle = initFn(
+          final handle = bridge.init(
             argPtrs[0],
             argPtrs[1],
             argPtrs[2],
@@ -1306,11 +1298,7 @@ class IshWorker implements IshTransport {
           final sessionId = msg[2] as int;
           final scriptB64 = msg[3] as String;
           final sess = sessions[sessionId];
-          if (sess == null ||
-              drainFn == null ||
-              pollFn == null ||
-              readFn == null ||
-              writeFn == null) {
+          if (sess == null || bridge == null) {
             main.send([_kReply, replyId, "session not found", null]);
             return;
           }
@@ -1327,16 +1315,16 @@ class IshWorker implements IshTransport {
             onDelta: (delta) => main.send([_kOutput, replyId, delta]),
           );
           try {
-            drainFn(sess.handle);
+            bridge.drainWake(sess.handle);
             final scriptPtr = scriptB64.toNativeUtf8();
-            writeFn(sess.handle, scriptPtr);
+            bridge.writeStdin(sess.handle, scriptPtr);
             calloc.free(scriptPtr);
             while (!feed.done) {
-              final flags = pollFn(sess.handle);
+              final flags = bridge.poll(sess.handle);
               if (flags < 0) break; // a poll we cannot trust
               if (flags & 2 != 0) break; // the hangup's byte
               if (flags & 1 == 0) continue; // nothing yet (cannot stand)
-              final n = readFn(sess.handle, buf, 65536);
+              final n = bridge.read(sess.handle, buf, 65536);
               if (n < 0) {
                 if (n == -2) continue; // transient
                 break;
@@ -1352,8 +1340,8 @@ class IshWorker implements IshTransport {
         case _kDestroy:
           final sessionId = msg[2] as int;
           final sess = sessions.remove(sessionId);
-          if (destroyFn != null && sess != null) {
-            destroyFn(sess.handle);
+          if (bridge != null && sess != null) {
+            bridge.destroy(sess.handle);
           }
 
         case _kStop:
