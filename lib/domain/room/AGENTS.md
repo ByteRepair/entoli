@@ -97,7 +97,7 @@ dispatch-time sync, **`_syncSession`** (see "The agent loop":
 whole thread, and a participant's session words what it has never heard,
 confirmed against the log before a word is appended.
 
-**Logs from before Athena had a name** were brought forward by the 7.5.0
+**Logs from before Athena had a name** were brought forward by the 8.0.0
 migration (`lib/core/migrations.dart`): every reply with no author became
 hers, every say with no addressees was addressed to her. The sync protocol
 moved to 6 in the same release, so no older build's records reach a newer

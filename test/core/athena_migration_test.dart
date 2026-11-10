@@ -10,7 +10,7 @@ import "package:agent_chat/domain/models.dart";
 
 import "../harness.dart";
 
-/// 7.5.0, the entry that made the main agent Athena: a log written before it
+/// 8.0.0, the entry that made the main agent Athena: a log written before it
 /// reads as though she had always been named.
 void main() {
   final at = DateTime.utc(2026, 1, 1);
@@ -85,7 +85,7 @@ void main() {
       "{ the line a kill landed in",
     ]);
     expect(decoy.readAsStringSync(), decoyBefore);
-    expect(File(migrationStamp(config.dataDir)).readAsStringSync(), "7.5.0");
+    expect(File(migrationStamp(config.dataDir)).readAsStringSync(), "8.0.0");
   });
 
   test("a message's documents become the references they were keyed by, "

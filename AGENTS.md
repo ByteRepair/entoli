@@ -298,7 +298,7 @@ the user deleted whatever it was looking for. Two things have changed the layout
 since 1.0.0 without an entry: the user's `commands/` became `skills/` — a
 private app with no released directory to carry forward, so a `commands/` left
 on disk is not read rather than migrated — and `memory/`, a directory created
-on first use rather than moved. The first entry is 7.5.0's, which names the
+on first use rather than moved. The first entry is 8.0.0's, which names the
 main agent: every `conv.jsonl` reply with no author became `@athena`'s and
 every say addressed to nobody was addressed to her (see "The room and its
 participants" in `lib/domain/room/AGENTS.md`), and every message's

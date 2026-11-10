@@ -27,9 +27,9 @@ String migrationStamp(String dataDir) => p.join(dataDir, "version");
 
 /// The chain, oldest first: each entry moves what the one above it left, and
 /// nothing older.
-const List<Migration> migrations = [Migration("7.5.0", _athena)];
+const List<Migration> migrations = [Migration("8.0.0", _athena)];
 
-/// 7.5.0: the main agent is Athena, a participant like any other. Every
+/// 8.0.0: the main agent is Athena, a participant like any other. Every
 /// reply names its author and every say whom it was for, so a reply with no
 /// author is hers and a say addressed to nobody was said to her. And a
 /// message records the `/skill` and `@agent` it named rather than what they
