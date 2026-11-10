@@ -18,8 +18,8 @@ import "../../domain/shell.dart";
 /// The ruleset here is the allowlist shape: read everywhere, write only the
 /// workspace, tmp and the system's temp folders. `$HOME`'s profile files —
 /// `.bashrc`, `.gitconfig`, `.ssh`, the whole deny-write set — fall outside
-/// the granted write set without being named, which is the point of granting by subtree rather
-/// than by file.
+/// the granted write set without being named, which is the point of
+/// granting by subtree rather than by file.
 ///
 /// The ruleset is applied by a small C helper compiled once into the app's
 /// cache directory. The ruleset attaches to the process that creates it and
