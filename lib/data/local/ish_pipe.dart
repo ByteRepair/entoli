@@ -343,23 +343,28 @@ void _pipeEntry(
   // reaches EOF is dropped by the poll, never treated as the end of the process:
   // do_exit closes the fds before the hook runs, so EOF precedes the exit code.
   final buf = calloc<Uint8>(65536);
+  // One read of a stream, sent on if it held anything. The bridge's ends are
+  // non-blocking, so an empty stream answers at once rather than parking.
+  bool forward(int stream) {
+    final n = readFn(handle, stream, buf, 65536);
+    if (n <= 0) return false;
+    main.send([_kOutput, stream, Uint8List.fromList(buf.asTypedList(n))]);
+    return true;
+  }
+
   try {
     while (true) {
       final flags = pollFn(handle);
       if (flags < 0) break;
-      if (flags & 4 != 0) break; // the wake byte: exit, or a hangup
-      if (flags & 1 != 0) {
-        final n = readFn(handle, 0, buf, 65536);
-        if (n > 0) {
-          main.send([_kOutput, 0, Uint8List.fromList(buf.asTypedList(n))]);
-        }
+      if (flags & 4 != 0) {
+        // The wake byte: exit, or a hangup. The program's last words may
+        // still be in the pipes, so take them before the exit code.
+        while (forward(0)) {}
+        while (forward(1)) {}
+        break;
       }
-      if (flags & 2 != 0) {
-        final n = readFn(handle, 1, buf, 65536);
-        if (n > 0) {
-          main.send([_kOutput, 1, Uint8List.fromList(buf.asTypedList(n))]);
-        }
-      }
+      if (flags & 1 != 0) forward(0);
+      if (flags & 2 != 0) forward(1);
     }
   } finally {
     calloc.free(buf);

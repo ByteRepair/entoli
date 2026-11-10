@@ -61,6 +61,13 @@ static fd_t guest_fd_from_host(int real_fd) {
     return f_install(fd, 0);
 }
 
+// The host end of a pipe the bridge reads, so a read with nothing there says
+// so (-2 from the read calls) rather than parking.
+static void set_nonblocking(int fd) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags >= 0) fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
+
 // ---- lifecycle ----
 
 // Write the guest's /etc/resolv.conf from the host's resolvers, the same
@@ -282,10 +289,7 @@ ish_session *ish_session_init(
         *error = "failed to create the session pipes";
         goto fail;
     }
-    int wake_flags = fcntl(wake_pipe[0], F_GETFL, 0);
-    if (wake_flags >= 0) {
-        fcntl(wake_pipe[0], F_SETFL, wake_flags | O_NONBLOCK);
-    }
+    set_nonblocking(wake_pipe[0]);
 
     // A child of the kernel's init task: its own mm, fds, and signal state,
     // with `current` switched to it for the calls below. This is
@@ -564,10 +568,12 @@ ish_pipe_session *ish_pipe_init(
         *error = "failed to create the session pipes";
         goto fail;
     }
-    int wake_flags = fcntl(wake_pipe[0], F_GETFL, 0);
-    if (wake_flags >= 0) {
-        fcntl(wake_pipe[0], F_SETFL, wake_flags | O_NONBLOCK);
-    }
+    // Non-blocking, all three: the reader drains stdout and stderr once the
+    // wake byte says the program is gone, and must not park on a stream a
+    // child it left behind still holds open.
+    set_nonblocking(stdout_pipe[0]);
+    set_nonblocking(stderr_pipe[0]);
+    set_nonblocking(wake_pipe[0]);
 
     if (become_new_init_child() < 0) {
         *error = "failed to create the guest task";
@@ -692,7 +698,8 @@ int32_t ish_pipe_poll(ish_pipe_session *session) {
         // always visible before the exit code the hook stores. Reading that EOF
         // as the end races ahead of the code and reports -1. So a stream at EOF
         // is dropped from the poll (fd set to -1, which poll ignores) and the
-        // wait goes on for the wake pipe alone.
+        // wait goes on for the wake pipe alone. What the streams still hold
+        // when the byte lands is the reader's to drain.
         if ((fds[2].revents & (POLLIN | POLLHUP | POLLERR)) != 0) return 4;
         int32_t flags = 0;
         if (fds[0].fd >= 0) {
