@@ -1215,9 +1215,15 @@ class BuiltinBackend implements AgentBackend {
     required TurnSettings settings,
     required String? instructions,
   }) async {
-    if (_running.any(chatId)) return null;
+    if (_running.any(chatId)) {
+      logFailure("compact", "a turn is running in $chatId");
+      return null;
+    }
     final target = _resolveModel(settings.model, settings.provider);
-    if (target == null) return null;
+    if (target == null) {
+      logFailure("compact", "no model to summarize $chatId with");
+      return null;
+    }
     if (history.isEmpty) return null;
     // The ask has to fit the window with room for the summary it produces; a
     // budget that would fill the whole window is how the last attempt got
@@ -1241,9 +1247,20 @@ class BuiltinBackend implements AgentBackend {
     Future<Uint8List?> loader(String resource) =>
         read.putIfAbsent(resource, () => _resourcesOf(chatId)(resource));
     List<Message> span = history;
-    List<Message> halve() => span.sublist((span.length / 2).ceil());
+    // The oldest half of what the ask reads — the span after the newest
+    // marker it holds — not of the span whole: everything up to that marker's
+    // boundary costs one summary however much of it there is, so dropping it
+    // leaves the ask the size it was. Once the boundary is gone the marker no
+    // longer applies, and [priorSummary] is what carries it.
+    List<Message> halve() {
+      final verbatim = span.sublist(verbatimFrom(span, compactions).from);
+      return verbatim.sublist((verbatim.length / 2).ceil());
+    }
+
     // Loop-invariant: the markers do not change across the ladder.
     final priorSummary = compactions.lastOrNull?.summary;
+    // The last attempt's estimate, for the line a ladder that never fit says.
+    int? asked;
     for (var attempt = 0; attempt < 3; attempt++) {
       // Summarized as Athena reads the room: the default route's view, in
       // which the room's says to nobody else are her own.
@@ -1254,7 +1271,10 @@ class BuiltinBackend implements AgentBackend {
         load: loader,
         compactions: compactions,
       );
-      if (projected.isEmpty) return null;
+      if (projected.isEmpty) {
+        logFailure("compact", "nothing left to summarize for $chatId");
+        return null;
+      }
       final cut = CompactPrompt.build(
         conversation: projected,
         instructions: instructions,
@@ -1262,7 +1282,8 @@ class BuiltinBackend implements AgentBackend {
       );
       // Where the ask itself would not fit, dropping the oldest half is the
       // only answer; where it would, the span stands.
-      if (estimateTokens(cut) > budget) {
+      asked = estimateTokens(cut);
+      if (asked > budget) {
         span = halve();
         continue;
       }
@@ -1294,6 +1315,13 @@ class BuiltinBackend implements AgentBackend {
       // A reply that said nothing, or an error: halve and try once more, the
       // same ladder the too-big ask takes.
       span = halve();
+    }
+    if (asked != null && asked > budget) {
+      logFailure(
+        "compact",
+        "$chatId is still ~$asked tokens after halving, over a budget of "
+            "$budget",
+      );
     }
     return null;
   }

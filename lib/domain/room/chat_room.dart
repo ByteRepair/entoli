@@ -708,11 +708,21 @@ class ChatRoom {
     // the row that says nothing.
     _view = state.copyWith(status: "Compacting the conversation");
     try {
-      await compact(
+      final landed = await compact(
         instructions: arguments.trim().isEmpty ? null : arguments.trim(),
       );
-    } catch (e) {
+      // A turn the user asked for ends as one that failed, where it wrote no
+      // marker: a `done` with nothing after it is the compact that seemed
+      // never to run. Why is the backend's log line, the reasons being its.
+      if (!landed && !_disposed) {
+        const message = "The conversation could not be compacted";
+        turn.errorLine = message;
+        turn.recorder.handle(const ErrorEvent(message));
+      }
+    } catch (e, trace) {
       logFailure("compact", "compact turn failed", e);
+      turn.errorLine = "$e".split("\n").first;
+      turn.recorder.handle(ErrorEvent("$e", trace: trace.toString()));
     } finally {
       // Unconditional, like the stream path's onDone: the finish is
       // idempotent and `_endTurn` guards its own state, and a turn disposed
@@ -734,7 +744,10 @@ class ChatRoom {
   /// it is true, the landing is skipped whole — no marker, so the next settle
   /// may retry. The manual compact turn is its own running turn and lands
   /// unconditionally.
-  Future<void> compact({
+  ///
+  /// Whether a marker landed: false is a summarizer that came back with
+  /// nothing, or a landing [recheck] skipped.
+  Future<bool> compact({
     required String? instructions,
     bool recheck = false,
   }) async {
@@ -747,10 +760,13 @@ class ChatRoom {
             compactions: chat.compactions,
             instructions: instructions,
           );
-    if (_disposed || result == null || (recheck && state.isRunning)) return;
+    if (_disposed || result == null || (recheck && state.isRunning)) {
+      return false;
+    }
     // The wrapper's own guard is the reentrancy flag, and it sets the chat on
     // the way through — so nothing to hand back here.
     await _rethread((repo) => repo.appendCompaction(chatId, result));
+    return true;
   }
 
   /// Open a turn: put the prompt, where it is not on the log yet, and the
@@ -1288,10 +1304,19 @@ class ChatRoom {
     // answered its own outstanding questions with nothing, so a banner or a
     // panel still on screen would send its reply into the void. Only this
     // turn's — a sibling still running keeps its own.
+    // What a reload would now make of the log, so a turn that gave up is
+    // offered straight away rather than only once the chat is opened again —
+    // and only one a reload would offer: a callback that failed has nothing
+    // to carry on.
+    final messages = state.chat?.messages ?? const <Message>[];
+    final at = messages.indexWhere((m) => m.id == turn.replyId);
+    final prompt = at < 1 ? null : messages[at - 1];
     _view = state.copyWith(
-      // What a reload would now make of the log, so a turn that gave up is
-      // offered straight away rather than only once the chat is opened again.
-      chat: state.chat?.copyWith(unfinished: reason?.resumable ?? true),
+      chat: state.chat?.copyWith(
+        unfinished:
+            (reason?.resumable ?? true) &&
+            (prompt == null || carriesOn(prompt)),
+      ),
       isRunning: _turns.isNotEmpty,
       approvals: _withoutTurn(state.approvals, turn.replyId),
       questions: _withoutTurn(state.questions, turn.replyId),

@@ -1394,6 +1394,21 @@ oldest half of the span is dropped and the ask is made again, three attempts.
 The boundary handed back covers only what was read, so a conversation too big
 for its own summarizer still gets a marker for its newest half.
 
+**The half dropped is of what the ask reads**, the messages after the newest
+marker the span holds (`verbatimFrom`, the projection's own rule), not of the
+span whole. Everything behind that marker costs one summary however many
+messages it is, so halving them leaves the ask the size it was: a chat
+compacted once and grown past half its window again made three asks of the
+same size and gave up without calling the model. Once the old boundary is
+dropped the marker no longer applies, and the prior summary rides the prompt
+as `<prior-summary>` instead.
+
+**A compaction that lands nothing says why, in the log**: a turn running, no
+model, nothing left to read, a ladder still over budget after its last
+halving, a summarizer that said nothing or threw. The manual turn also ends
+as `error` with "The conversation could not be compacted" on its reply, since
+a `done` with nothing after it is the compact that seemed never to run.
+
 **Usage is parsed, not estimated, where the provider says anything.**
 `LlmUsage` rides `LlmCompletion` — Anthropic's `message_start` and
 `message_delta` usage objects, OpenAI's final-chunk `usage` (asked for with

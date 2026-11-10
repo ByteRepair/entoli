@@ -2903,14 +2903,23 @@ void main() {
       );
     });
 
-    test("a failed summarizer leaves the conversation untouched", () async {
+    test("a failed summarizer leaves the conversation untouched, and the "
+        "turn says it failed", () async {
       final (id, controller) = await chatWithCompactSkill();
       // scriptedSummary null: nothing answered.
       await controller.send("/compact");
       await waitIdle(id);
 
       expect(app.backend.compactionCalls, hasLength(1));
-      expect(await app.repo.openChat(id), chatOf(id));
+      final chat = await app.repo.openChat(id);
+      expect(chat, chatOf(id));
+      expect(chat.compactions, isEmpty);
+      // Not a `done` with nothing after it, which is a compact that reads as
+      // never having run: the reply carries the failure, on disk as well.
+      expect(
+        chat.messages.last.parts.whereType<ErrorPart>().single.message,
+        "The conversation could not be compacted",
+      );
     });
 
     test("is refused while a turn runs, and never queued", () async {

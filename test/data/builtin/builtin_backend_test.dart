@@ -21,6 +21,7 @@ import "package:agent_chat/data/builtin/tools/participants_tool.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/local/file_sub_agent_log.dart";
 import "package:agent_chat/domain/agent_backend.dart";
+import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/llm_provider.dart";
@@ -2754,6 +2755,57 @@ void main() {
       await backend.shutdown();
 
       expect(client.closed, isTrue);
+    });
+  });
+
+  group("compacting the conversation", () {
+    Message said(int n, String text) => Message(
+      id: "m$n",
+      role: n.isEven ? MessageRole.user : MessageRole.assistant,
+      createdAt: sentAt,
+      parts: [MessagePart.text(text: text)],
+    );
+
+    test("a live tail too big to summarize whole is halved, however much "
+        "the last marker already covers", () async {
+      // The shape a long chat compacted once has: most messages behind the
+      // marker, two too big to read after it, a newest pair that fits. A
+      // window the model's catalog does not know is the settings' guess, so
+      // this one is small enough to make the big pair too big.
+      await (AppSettings.load(config)..totalContext = 8192).save(config);
+      final backend = backendOver([
+        [saidOnly("<summary>the newer half</summary>")],
+      ]);
+      final history = [
+        for (var n = 0; n < 10; n++) said(n, "early $n"),
+        said(10, "a" * 20000),
+        said(11, "b" * 20000),
+        said(12, "keep this"),
+        said(13, "kept"),
+      ];
+
+      final marker = await backend.compact(
+        chatId,
+        history: history,
+        compactions: const [
+          ConversationCompaction(upToMessageId: "m9", summary: "earlier work"),
+        ],
+        settings: const TurnSettings(
+          model: "fake-model",
+          provider: "fake",
+          approveMode: ApproveMode.never,
+        ),
+        instructions: null,
+      );
+
+      expect(marker?.summary, "the newer half");
+      expect(marker?.upToMessageId, "m13");
+      // One ask, of the newest half of what followed the marker, with the
+      // marker's summary carried as the prior one.
+      final asked = client.sent.single.map((m) => m.text).join("\n");
+      expect(asked, contains("keep this"));
+      expect(asked, isNot(contains("b" * 100)));
+      expect(asked, contains("earlier work"));
     });
   });
 

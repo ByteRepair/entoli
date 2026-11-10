@@ -597,7 +597,9 @@ model is asked), the send dispatches it before the room's guards, and while a tu
 rewriting underneath it. The turn itself goes through the room's machinery:
 prompt logged as said, empty reply, the status row saying "Compacting the
 conversation" where a model's spinner would be, `turnEnd done`. Its product is
-the marker, not a reply.
+the marker, not a reply — and where no marker lands, the turn ends `error`
+with "The conversation could not be compacted" on the reply, the reason in
+the log.
 
 **The marker is a `ConversationSeparator`** — the same full-width divider the
 Omada mode flips are, generalized to take a caption and furniture beneath the
