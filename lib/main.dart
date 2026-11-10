@@ -60,6 +60,7 @@ import "ui/triggers/incoming_open.dart";
 import "ui/selection.dart";
 import "ui/theme.dart";
 import "ui/shell/shell_bridge.dart";
+import "ui/shell/shell_window.dart";
 import "ui/app_routes.dart";
 import "ui/widgets/liquid_glass.dart";
 
@@ -323,6 +324,9 @@ class AppSession {
         appConfigProvider.overrideWithValue(config),
         appSecretsProvider.overrideWithValue(secrets),
         attachmentPickerProvider.overrideWithValue(const FileSelectorPicker()),
+        folderPickerProvider.overrideWithValue(
+          const FileSelectorFolderPicker(),
+        ),
         clipboardFilesProvider.overrideWithValue(createClipboardFiles()),
         // Seed every project's library at startup: each family member gets its
         // own seeded library, so nothing downstream waits on disk.

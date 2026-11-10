@@ -131,6 +131,11 @@ class ChatRoom {
   /// nobody looking. So the end starts a turn of its own, said as the app's
   /// notification. A job that was stopped wakes nobody: whoever stopped it
   /// knows. One end is one wake, so a watcher that keeps dying cannot loop.
+  ///
+  /// An end that lands while a turn runs is left to the jobs, which hold it
+  /// as unheard: that turn may make no call after it — its last reply
+  /// already being written — and then nothing would ever have said it.
+  /// [_wakeForUnheard] asks once the turn is over.
   Future<void> _wake(JobEnd end, String command) async {
     final code = end.exitCode;
     if (code == null || state.isRunning) return;
@@ -143,6 +148,18 @@ class ChatRoom {
         tail: end.tail,
       ),
     );
+  }
+
+  /// The first end the agent has not heard — no call carried its note —
+  /// wakes it, now the room is quiet. The rest wait for the end of that
+  /// turn, which asks again; any its calls read are heard by then. A job
+  /// that was stopped wakes nobody, here as between turns.
+  void _wakeForUnheard() {
+    if (state.isRunning || _disposed) return;
+    final first = _jobs.unheard.firstWhereOrNull(
+      (ended) => ended.end.exitCode != null,
+    );
+    if (first != null) unawaited(_wake(first.end, first.command));
   }
 
   bool _loaded = false;
@@ -600,18 +617,23 @@ class ChatRoom {
   /// kickoff, and [_openTurn] writes the goal record after it — so both wait
   /// for a running turn to finish, as `/compact` does. Pausing and clearing
   /// are a goal record alone, after the last message, and land mid-turn too:
-  /// the running turn reads the goal at its next stop. `/goal` alone writes
-  /// nothing. See "Goals" in `lib/domain/AGENTS.md`.
+  /// the running turn reads the goal at its next stop. A command that changes
+  /// nothing — `/goal` alone, a clear with nothing to clear, a pause of one
+  /// already paused, a resume of nothing — writes a [GoalChange.answered] row
+  /// instead, so the answer reads where every other change is read. A set or
+  /// resume refused because a turn is running is not one of those: it is not
+  /// answerable yet, only too early, and it still writes `status`. See "Goals"
+  /// in `lib/domain/AGENTS.md`.
   Future<void> _goalCommand(GoalCommand command) async {
     final chat = state.chat;
     if (chat == null) return;
     final goal = chat.goal;
     switch (command) {
       case GoalShow():
-        _view = state.copyWith(status: goalSummary(goal));
+        await _answerGoal(command, goal);
       case GoalPause():
         if (goal == null || !goal.isActive) {
-          _view = state.copyWith(status: goalSummary(goal));
+          await _answerGoal(command, goal);
           return;
         }
         await _markGoal(
@@ -621,16 +643,18 @@ class ChatRoom {
         );
       case GoalClear():
         if (goal == null) {
-          _view = state.copyWith(status: "No goal was set");
+          await _answerGoal(command, goal);
           return;
         }
         await _markGoal(GoalChange.cleared, goal.objective);
       case GoalResume():
         if (goal == null) {
-          _view = state.copyWith(status: goalSummary(goal));
+          await _answerGoal(command, goal);
           return;
         }
         if (state.isRunning) {
+          // Said on the running turn's next step, which is the only place it
+          // can be read: a resume is a turn, and one turn per participant.
           _view = state.copyWith(
             status: "Wait for the turn to finish before resuming the goal",
           );
@@ -646,6 +670,21 @@ class ChatRoom {
         }
         await _prompt(command.text);
     }
+  }
+
+  /// Say what a command that changed nothing found, as the row every change
+  /// leaves: `Goal answered: …`, after the message it was said at.
+  ///
+  /// A record names the message it stands after, and a chat with nothing said
+  /// in it has none — so the answer lands as a message of its own first, as
+  /// `!` and `/compact` do. Without it a clear on a fresh chat would be the one
+  /// command with nothing to show, which is the case that started this. That
+  /// message is the answer's own; nothing addresses a model with it.
+  Future<void> _answerGoal(GoalCommand command, ChatGoal? goal) async {
+    if (state.chat?.messages.isEmpty ?? false) {
+      await _land([_composeSay(command.text, const [])]);
+    }
+    await _markGoal(GoalChange.answered, goalAnswer(goal));
   }
 
   /// A goal record after [after] — the last message on the thread where the
@@ -686,11 +725,21 @@ class ChatRoom {
     // the row that says nothing.
     _view = state.copyWith(status: "Compacting the conversation");
     try {
-      await compact(
+      final failure = await compact(
         instructions: arguments.trim().isEmpty ? null : arguments.trim(),
       );
-    } catch (e) {
+      // A turn the user asked for ends as one that failed, where it wrote no
+      // marker, and says why on its reply: a `done` with nothing after it is
+      // the compact that seemed never to run.
+      if (failure != null && !_disposed) {
+        final message = "The conversation could not be compacted. $failure";
+        turn.errorLine = message;
+        turn.recorder.handle(ErrorEvent(message));
+      }
+    } catch (e, trace) {
       logFailure("compact", "compact turn failed", e);
+      turn.errorLine = "$e".split("\n").first;
+      turn.recorder.handle(ErrorEvent("$e", trace: trace.toString()));
     } finally {
       // Unconditional, like the stream path's onDone: the finish is
       // idempotent and `_endTurn` guards its own state, and a turn disposed
@@ -712,23 +761,46 @@ class ChatRoom {
   /// it is true, the landing is skipped whole — no marker, so the next settle
   /// may retry. The manual compact turn is its own running turn and lands
   /// unconditionally.
-  Future<void> compact({
+  ///
+  /// Answers why no marker landed, or null where one did — or where
+  /// [recheck] stood the landing down for a turn that started meanwhile,
+  /// which the next settle retries and is no failure. An automatic one's
+  /// reason is [ChatViewState.compactFailure], there being no turn to put it
+  /// on; the manual turn puts its own on its reply.
+  Future<String?> compact({
     required String? instructions,
     bool recheck = false,
   }) async {
     final chat = state.chat;
-    final result = chat == null
-        ? null
-        : await _repo.compact(
-            chatId,
-            history: chat.messages,
-            compactions: chat.compactions,
-            instructions: instructions,
-          );
-    if (_disposed || result == null || (recheck && state.isRunning)) return;
-    // The wrapper's own guard is the reentrancy flag, and it sets the chat on
-    // the way through — so nothing to hand back here.
-    await _rethread((repo) => repo.appendCompaction(chatId, result));
+    CompactOutcome? result;
+    try {
+      result = chat == null
+          ? null
+          : await _repo.compact(
+              chatId,
+              history: chat.messages,
+              compactions: chat.compactions,
+              instructions: instructions,
+            );
+    } catch (e) {
+      logFailure("compact", "compact failed for $chatId", e);
+      result = NotCompacted("Compacting failed: ${"$e".split("\n").first}");
+    }
+    if (_disposed || (recheck && state.isRunning)) return null;
+    switch (result) {
+      case null:
+        // No chat to compact: nothing to say, and nobody asked.
+        return null;
+      case NotCompacted(:final reason):
+        if (recheck) _view = state.copyWith(compactFailure: reason);
+        return reason;
+      case Compacted(:final marker):
+        // The wrapper's own guard is the reentrancy flag, and it sets the chat
+        // on the way through — so nothing to hand back here.
+        await _rethread((repo) => repo.appendCompaction(chatId, marker));
+        _view = state.copyWith(clearCompactFailure: true);
+        return null;
+    }
   }
 
   /// Open a turn: put the prompt, where it is not on the log yet, and the
@@ -795,6 +867,9 @@ class ChatRoom {
       isRunning: true,
       clearRetry: true,
       clearStatus: true,
+      // An automatic compaction's failure is about the conversation as it
+      // stood; the next turn's settle is the next try.
+      clearCompactFailure: true,
     );
     // The prompt and the empty reply go down before the turn starts, so a chat
     // killed before the model says anything still shows what was asked. What
@@ -1266,10 +1341,19 @@ class ChatRoom {
     // answered its own outstanding questions with nothing, so a banner or a
     // panel still on screen would send its reply into the void. Only this
     // turn's — a sibling still running keeps its own.
+    // What a reload would now make of the log, so a turn that gave up is
+    // offered straight away rather than only once the chat is opened again —
+    // and only one a reload would offer: a callback that failed has nothing
+    // to carry on.
+    final messages = state.chat?.messages ?? const <Message>[];
+    final at = messages.indexWhere((m) => m.id == turn.replyId);
+    final prompt = at < 1 ? null : messages[at - 1];
     _view = state.copyWith(
-      // What a reload would now make of the log, so a turn that gave up is
-      // offered straight away rather than only once the chat is opened again.
-      chat: state.chat?.copyWith(unfinished: reason?.resumable ?? true),
+      chat: state.chat?.copyWith(
+        unfinished:
+            (reason?.resumable ?? true) &&
+            (prompt == null || carriesOn(prompt)),
+      ),
       isRunning: _turns.isNotEmpty,
       approvals: _withoutTurn(state.approvals, turn.replyId),
       questions: _withoutTurn(state.questions, turn.replyId),
@@ -1307,6 +1391,9 @@ class ChatRoom {
     // say it just dispatched reads as a running room.
     if (reason == TurnEnd.done) _host.settledDone();
     await _settle(turn, reason);
+    // After the settle, whose handoffs are the room's own next turns: a
+    // wake waits behind them rather than talking over them.
+    _wakeForUnheard();
   }
 
   /// A turn has ended: the room may hand off. Under the wave orderings the

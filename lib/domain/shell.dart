@@ -7,6 +7,7 @@ library;
 import "dart:io";
 
 import "package:flutter/foundation.dart" show ValueListenable;
+import "package:path/path.dart" as p;
 
 /// The command tool's name: the log records it, the chat draws it, and the
 /// permission rules are typed by it.
@@ -36,12 +37,16 @@ class ShellResult {
     this.exceptionInfo,
     this.cwd,
     this.jobId,
+    this.violations = const [],
+    this.timedOut = false,
   });
 
   const ShellResult.failed(this.exceptionInfo, {this.output = ""})
     : returnCode = -1,
       cwd = null,
-      jobId = null;
+      jobId = null,
+      violations = const [],
+      timedOut = false;
 
   final int returnCode;
   final String output;
@@ -56,6 +61,35 @@ class ShellResult {
 
   /// The background job the command started, where it started one.
   final int? jobId;
+
+  /// Whether the command was stopped because it ran past its timeout, as
+  /// opposed to finishing, failing or being stopped by someone: what `bash`
+  /// reads to point a run that long at the background.
+  final bool timedOut;
+
+  /// The writes the sandbox refused while the command ran, by path: what
+  /// tells the model a failure was the sandbox's rather than the command's.
+  final List<String> violations;
+
+  /// This result with the fields given replaced. A null keeps the field as
+  /// it is, so a field is not cleared through this.
+  ShellResult copyWith({
+    int? returnCode,
+    String? output,
+    String? exceptionInfo,
+    String? cwd,
+    int? jobId,
+    List<String>? violations,
+    bool? timedOut,
+  }) => ShellResult(
+    returnCode: returnCode ?? this.returnCode,
+    output: output ?? this.output,
+    exceptionInfo: exceptionInfo ?? this.exceptionInfo,
+    cwd: cwd ?? this.cwd,
+    jobId: jobId ?? this.jobId,
+    violations: violations ?? this.violations,
+    timedOut: timedOut ?? this.timedOut,
+  );
 }
 
 /// What this build ships beside the machine's own commands: the environment a
@@ -111,11 +145,18 @@ class CommandSandbox {
   /// Granted the full write set the workspace gets.
   final List<String> extraWrites;
 
-  /// The sentence a result from before the sandbox stopped naming its
-  /// denials carries — old logs still hold them.
+  /// Every directory (or file) the command may write to: [workspace], [tmp]
+  /// and [extraWrites]. What each helper grants and what a refusal is
+  /// checked against. The devices the helpers also open (`/dev/null` and
+  /// their kin) are each helper's own and not here.
+  List<String> get writes => [workspace, ?tmp, ...extraWrites];
+
+  /// What the model reads of the writes a sandbox refused, beside the output
+  /// they failed in.
   static String violationsNote(List<String> violations) =>
-      "\n\nDenied by the sandbox: ${violations.join("; ")}. The command "
-      "carried on; what it printed above is what it could reach.";
+      "\n\nDenied by the sandbox: ${violations.join("; ")}. These writes "
+      "are outside the folders commands may write to, so the failure there "
+      "is the sandbox's, not the command's own.";
 
   /// This one with [extraWrites] replacing its own — the rules' folders
   /// composed on the run's sandbox.
@@ -126,6 +167,10 @@ class CommandSandbox {
     extraWrites: extraWrites ?? this.extraWrites,
   );
 }
+
+/// Whether [path] is spelled from the home, `~` or `~/…`: a path the reader
+/// resolves in its own terms — a guest's home or the machine's.
+bool isTildePath(String path) => path == "~" || path.startsWith("~/");
 
 /// Whether [path] is [root] or under it, compared by components so `/w/x`
 /// does not match `/wextra`.
@@ -150,6 +195,42 @@ bool pathsOverlap(String a, String b) {
   } on FileSystemException {
     return false;
   }
+}
+
+/// [path] with its symlinks resolved, since Seatbelt matches the path the
+/// kernel resolved: a grant of `/tmp/x` matches nothing, every write there
+/// landing at `/private/tmp/x`. A path not there yet resolves its nearest
+/// existing ancestor and keeps the rest as written.
+String realPath(String path) {
+  var head = p.normalize(p.absolute(path));
+  final tail = <String>[];
+  while (true) {
+    try {
+      return p.joinAll([Directory(head).resolveSymbolicLinksSync(), ...tail]);
+    } on FileSystemException {
+      final parent = p.dirname(head);
+      if (parent == head) return p.normalize(p.absolute(path));
+      tail.insert(0, p.basename(head));
+      head = parent;
+    }
+  }
+}
+
+/// The repository [dir] is in: the nearest directory from [dir] up holding a
+/// `.git` — a directory for a checkout, a file for a worktree — or null
+/// where there is none below [stopAt] (exclusive) or the root.
+String? repositoryRootOf(String dir, {String? stopAt}) {
+  var at = p.normalize(dir);
+  while (at != stopAt) {
+    if (FileSystemEntity.typeSync(p.join(at, ".git"), followLinks: false) !=
+        FileSystemEntityType.notFound) {
+      return at;
+    }
+    final parent = p.dirname(at);
+    if (parent == at) return null;
+    at = parent;
+  }
+  return null;
 }
 
 String _trimSlash(String path) => path.length > 1 && path.endsWith("/")

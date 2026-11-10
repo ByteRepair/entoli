@@ -276,9 +276,13 @@ code and its log's tail, said by the app. The end carries the command
 through `_prompt` like anything said, so it is on the log as a user message
 and a reload words it the same; the bubble draws a user message that is a
 system notification as "System" rather than "You", and a steer that is one —
-the plan's tasks-left note — as "System, while it worked". A stopped job and
-a job ending while a turn runs start nothing: the running turn reads it on
-its next tool result.
+the plan's tasks-left note — as "System, while it worked". A stopped job
+starts nothing. A job ending while a turn runs is left with the jobs, which
+hold it as unheard: the running turn reads it on its next tool result if it
+makes one, and when the turn is over and settled, `_wakeForUnheard` asks the
+jobs (`ChatShellJobs.unheard`) and wakes the agent for the first end no call
+carried — the last reply's own end was the one that went unsaid. A stopped or
+failed turn wakes nothing.
 
 ## Automatic retry rounds
 

@@ -597,7 +597,9 @@ model is asked), the send dispatches it before the room's guards, and while a tu
 rewriting underneath it. The turn itself goes through the room's machinery:
 prompt logged as said, empty reply, the status row saying "Compacting the
 conversation" where a model's spinner would be, `turnEnd done`. Its product is
-the marker, not a reply.
+the marker, not a reply — and where no marker lands, the turn ends `error`
+with "The conversation could not be compacted." and the backend's reason on
+the reply, in an error part's red.
 
 **The marker is a `ConversationSeparator`** — the same full-width divider the
 Omada mode flips are, generalized to take a caption and furniture beneath the
@@ -610,6 +612,14 @@ container of its own is the per-row container the bubble's single region
 replaced. Auto-compact
 leaves the same trace with no turn around it: unawaited after a settled turn,
 the divider its only evidence, the way the memory extraction's note is.
+
+**An automatic compaction that fails is drawn too**, because failing without
+a word is the worst way it can fail: `ChatViewState.compactFailure` holds the
+reason, and the page appends a `CompactionFailedEntry` after the last
+message — a divider captioned "Could not compact the conversation" with the
+reason beneath it in `MessageText`'s error red. It is view state, not a log
+record: the next settle tries again and says so again if it fails, a turn
+opening clears it, and so does a marker landing.
 
 ## Activities, on screen
 
@@ -681,10 +691,11 @@ The goal shows twice. **Where it stands now** is the row above the composer —
 resume and its clear, each sent as the `/goal` command it is. **Where it
 moved** is a `GoalMarkRow` in the conversation for each `goal` record, after
 the message it names: an activity label in the reply's gutter, "Goal set: …",
-"Goal paused: …", "Goal met: …", opening the same kind of drawer every
-activity has (a sheet, a page under the native shell). The drawer says the
-state the goal was left in, why — the user's pause, the reviewer's verdict —
-and the goal prompt as the model was given it. Off the log, so a restart
+"Goal paused: …", "Goal met: …", and "Goal answered: …" for a command that
+changed nothing, opening the same kind of drawer every activity has (a sheet,
+a page under the native shell). The drawer says the state the goal was left
+in, why — the user's pause, the reviewer's verdict — and the goal prompt as
+the model was given it. Off the log, so a restart
 draws the same rows and a rewind takes them away with their message.
 
 ## The plan, on screen

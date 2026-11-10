@@ -271,7 +271,24 @@ abstract class Chat with _$Chat {
 }
 
 /// What happened to a chat's goal, as a [GoalMark] records it.
-enum GoalChange { set, resumed, paused, cleared, met, blocked }
+///
+/// [answered] is the one that changes nothing: a `/goal` that had no goal to
+/// clear, or a goal to pause, and said so. It is kept so that "nothing
+/// changed" is still a row the user can read, where every other change is.
+enum GoalChange {
+  set,
+  resumed,
+  paused,
+  cleared,
+  met,
+  blocked,
+  answered;
+
+  /// Whether this moved the goal. [answered] only says what it found, so the
+  /// fold skips it and the drawer says "No change" rather than naming a state
+  /// it never left the goal in. The one place that fact is written.
+  bool get changesGoal => this != GoalChange.answered;
+}
 
 /// One change to the chat's goal, said after the message [afterMessageId] —
 /// the `/goal` that set it, the reply whose review found it met, the last
@@ -541,6 +558,9 @@ sealed class MessagePart with _$MessagePart {
     String? exceptionInfo,
     String? cwd,
     @Default([]) List<String> violations,
+
+    /// Where the whole of [output] was saved, as [ToolResult.outputFile] is.
+    String? outputFile,
   }) = ShellRunPart;
   const factory MessagePart.file({
     required String resource,
@@ -675,6 +695,14 @@ abstract class ToolResult with _$ToolResult {
     /// of [output], which is the model's to read.
     int? jobId,
     @Default([]) List<String> violations,
+
+    /// Where the whole of [output] was saved because it was too large to
+    /// word in full, as the path the model was given: the projection words
+    /// the result as a preview of [output] and this path, while [output]
+    /// stays the whole of it for the chat to show. Null where it was worded
+    /// in full, or where the save failed. See "Tools" in
+    /// `lib/data/builtin/AGENTS.md`.
+    String? outputFile,
 
     /// What happened since the last call that the model should hear — a
     /// background job ending — beside the result rather than inside

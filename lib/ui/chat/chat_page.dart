@@ -372,7 +372,8 @@ class _NewChatState extends ConsumerState<_NewChat> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const _CommandHint(),
+        // The native shell's new-chat screen says it itself.
+        if (!ref.watch(liquidGlassProvider).on) const _CommandHint(),
         if (at.device != null)
           // A paired device's project: its setup and its voice are that
           // device's.
@@ -853,6 +854,14 @@ class CompactionEntry extends ConversationEntry {
 
   /// What the model reads in place of the messages above this line.
   final String summary;
+}
+
+/// The divider an automatic compaction would have left, saying in red why
+/// it did not — [ChatViewState.compactFailure], at the end of the thread.
+class CompactionFailedEntry extends ConversationEntry {
+  const CompactionFailedEntry(this.reason);
+
+  final String reason;
 }
 
 /// A change to the chat's goal, after the message its record names.
@@ -1442,7 +1451,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   }) {
     final lines = [..._details(chat.state), ...details];
     final barHeight = _barHeight(context, lines.length);
-    final entries = entriesOf(chat);
+    final failure = view.compactFailure;
+    final entries = [
+      ...entriesOf(chat),
+      if (failure != null) CompactionFailedEntry(failure),
+    ];
     final title = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -1663,6 +1676,16 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                   body: MessageText(
                     text: summary,
                     isError: false,
+                    isWaiting: false,
+                    caret: false,
+                    onTapLink: (href) => _openLink(context, href),
+                  ),
+                ),
+                CompactionFailedEntry(:final reason) => ConversationSeparator(
+                  text: "Could not compact the conversation",
+                  body: MessageText(
+                    text: reason,
+                    isError: true,
                     isWaiting: false,
                     caret: false,
                     onTapLink: (href) => _openLink(context, href),

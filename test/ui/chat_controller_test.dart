@@ -2670,8 +2670,9 @@ void main() {
     /// The goal as the room holds it, and as a restart would read it back.
     ChatGoal? goalOn(String id) =>
         app.container.read(chatControllerProvider(id)).chat?.goal;
+    Future<Chat> restartedChat(String id) => app.repo.openChat(id);
     Future<ChatGoal?> goalAfterRestart(String id) async =>
-        (await app.repo.openChat(id)).goal;
+        (await restartedChat(id)).goal;
 
     test("setting one logs it after the /goal, then hands the work to a "
         "model", () async {
@@ -2783,17 +2784,69 @@ void main() {
       );
     });
 
-    test("alone, it says what the goal is", () async {
+    test("alone, it says where the goal stands, as a row", () async {
       final (id, controller) = await openChat();
       await controller.send("/goal ship it");
       await waitIdle(id);
       await controller.send("/goal");
 
-      expect(
-        app.container.read(chatControllerProvider(id)).status,
-        "Goal active: ship it",
-      );
+      final answered = (await restartedChat(id)).goals.last;
+      expect(answered.change, GoalChange.answered);
+      expect(answered.objective, "Goal active: ship it");
+      // A row, not a change: the goal stands as it did.
+      expect(await goalAfterRestart(id), const ChatGoal(objective: "ship it"));
       expect(app.backend.prompts, hasLength(1));
+    });
+
+    test("a command with nothing to change leaves a row saying so, where a "
+        "status line was drawn only beside a running turn's spinner", () async {
+      final (id, controller) = await openChat();
+
+      await controller.send("/goal clear");
+
+      final chat = await restartedChat(id);
+      expect(chat.goals.single.change, GoalChange.answered);
+      expect(chat.goals.single.objective, "No goal was set");
+      expect(chat.goal, isNull);
+      // A chat with nothing said in it has no message for a record to stand
+      // after, so the answer is said as one — and is a row on screen for it.
+      expect(chat.messages.single.plainText, "/goal clear");
+    });
+
+    test("pausing one already paused answers, and leaves it paused", () async {
+      final (id, controller) = await openChat();
+      await controller.send("/goal ship it");
+      await waitIdle(id);
+      await controller.send("/goal pause");
+      await controller.send("/goal pause");
+
+      final chat = await restartedChat(id);
+      expect(chat.goals.map((g) => g.change), [
+        GoalChange.set,
+        GoalChange.paused,
+        GoalChange.answered,
+      ]);
+      expect(
+        chat.goal,
+        const ChatGoal(
+          objective: "ship it",
+          status: GoalStatus.paused,
+          reason: "Paused by you.",
+        ),
+      );
+    });
+
+    test("an answer survives a restart, and still moves no goal", () async {
+      final (id, controller) = await openChat();
+      await controller.send("/goal ship it");
+      await waitIdle(id);
+      await controller.send("/goal");
+
+      expect((await restartedChat(id)).goals.map((g) => g.change), [
+        GoalChange.set,
+        GoalChange.answered,
+      ]);
+      expect(await goalAfterRestart(id), const ChatGoal(objective: "ship it"));
     });
   });
 
@@ -2850,14 +2903,24 @@ void main() {
       );
     });
 
-    test("a failed summarizer leaves the conversation untouched", () async {
+    test("a failed summarizer leaves the conversation untouched, and the "
+        "turn says it failed", () async {
       final (id, controller) = await chatWithCompactSkill();
       // scriptedSummary null: nothing answered.
       await controller.send("/compact");
       await waitIdle(id);
 
       expect(app.backend.compactionCalls, hasLength(1));
-      expect(await app.repo.openChat(id), chatOf(id));
+      final chat = await app.repo.openChat(id);
+      expect(chat, chatOf(id));
+      expect(chat.compactions, isEmpty);
+      // Not a `done` with nothing after it, which is a compact that reads as
+      // never having run: the reply carries the failure, on disk as well.
+      expect(
+        chat.messages.last.parts.whereType<ErrorPart>().single.message,
+        "The conversation could not be compacted. "
+        "${FakeBackend.compactFailure}",
+      );
     });
 
     test("is refused while a turn runs, and never queued", () async {
@@ -2896,7 +2959,8 @@ void main() {
       "a turn that pushed the context past the share compacts on its own",
       () async {
         final (id, controller) = await chatWithCompactSkill();
-        // Well under any share of the 128k window the fake reports.
+        // Well under any share of Total Context, the window a model the
+        // catalog does not know runs in.
         app.backend.usageHolder[id] = 60000;
         await controller.send("grow a little");
         await waitIdle(id);
@@ -2906,7 +2970,7 @@ void main() {
         await app.container
             .read(appSettingsProvider.notifier)
             .setAutoCompactPercent(60);
-        app.backend.usageHolder[id] = 120000;
+        app.backend.usageHolder[id] = 160000;
         app.backend.scriptedSummary = "Everything so far.";
         await controller.send("grow a lot");
         await waitIdle(id);
@@ -2950,18 +3014,65 @@ void main() {
       expect(app.backend.compactionCalls, hasLength(1));
     });
 
+    test("the share is of the chat's model's window where it is the "
+        "smaller", () async {
+      final (id, controller) = await chatWithCompactSkill();
+      await app.repo.saveMeta(id, ChatMeta(model: "small", provider: "fake"));
+      app.backend.windowHolder["small"] = 100000;
+      // Past 80% of the model's own window, a third of Total Context.
+      app.backend.usageHolder[id] = 85000;
+      app.backend.scriptedSummary = "Everything so far.";
+      await controller.send("grow");
+      await waitFor(
+        () async => (await app.repo.openChat(id)).compactions.isNotEmpty,
+        what: "the compaction",
+      );
+      expect(app.backend.compactionCalls, hasLength(1));
+    });
+
+    test("a window bigger than Total Context is held to it", () async {
+      final (id, controller) = await chatWithCompactSkill();
+      await app.repo.saveMeta(id, ChatMeta(model: "big", provider: "fake"));
+      app.backend.windowHolder["big"] = 1000000;
+      // Past 80% of the 256k ceiling, a fifth of the model's own: a share of
+      // a million is a context no model reads well.
+      app.backend.usageHolder[id] = 210000;
+      app.backend.scriptedSummary = "Everything so far.";
+      await controller.send("grow");
+      await waitFor(
+        () async => (await app.repo.openChat(id)).compactions.isNotEmpty,
+        what: "the compaction",
+      );
+      expect(app.backend.compactionCalls, hasLength(1));
+    });
+
     test(
-      "the share is of the chat's model's window, not the global guess",
+      "an automatic compaction that lands nothing says why, in the chat",
       () async {
         final (id, controller) = await chatWithCompactSkill();
-        await app.repo.saveMeta(id, ChatMeta(model: "big", provider: "fake"));
-        app.backend.windowHolder["big"] = 1000000;
-        // Past 80% of the 128k guess, a ninth of the model's own.
-        app.backend.usageHolder[id] = 120000;
-        app.backend.scriptedSummary = "Everything so far.";
+        app.backend.usageHolder[id] = 210000;
+        // scriptedSummary null: the summarizer said nothing.
         await controller.send("grow");
+        await waitFor(
+          () =>
+              app.container.read(chatControllerProvider(id)).compactFailure !=
+              null,
+          what: "the failure",
+        );
+        expect(
+          app.container.read(chatControllerProvider(id)).compactFailure,
+          FakeBackend.compactFailure,
+        );
+        expect((await app.repo.openChat(id)).compactions, isEmpty);
+
+        // The next turn is the next try; it clears the old one as it opens.
+        app.backend.usageHolder[id] = 1000;
+        await controller.send("go on");
         await waitIdle(id);
-        expect(app.backend.compactionCalls, isEmpty);
+        expect(
+          app.container.read(chatControllerProvider(id)).compactFailure,
+          isNull,
+        );
       },
     );
   });

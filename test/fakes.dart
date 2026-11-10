@@ -33,6 +33,7 @@ import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/app_restart.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/attachment_picker.dart";
+import "package:agent_chat/domain/folder_picker.dart";
 import "package:agent_chat/domain/clipboard_files.dart";
 import "package:agent_chat/domain/backup_handoff.dart";
 import "package:agent_chat/domain/shell_job.dart";
@@ -296,6 +297,15 @@ class FakeAttachmentPicker implements AttachmentPicker {
     picks.add(kind);
     return scripted;
   }
+}
+
+/// Stands in for the platform's folder chooser.
+class FakeFolderPicker implements FolderPicker {
+  /// What the next pick returns. Null is a cancelled dialog.
+  String? scripted;
+
+  @override
+  Future<String?> pick({required String confirmLabel}) async => scripted;
 }
 
 /// Stands in for the runner's clipboard channel.
@@ -610,6 +620,16 @@ class FakeShellJobs implements ChatShellJobs {
 
   @override
   void told(int id) => toldOf.add(id);
+
+  /// The ends the agent has not heard, as a test sets them; a wake's
+  /// [told] takes one out.
+  final List<EndedJob> unheardEnds = [];
+
+  @override
+  List<EndedJob> get unheard => [
+    for (final ended in unheardEnds)
+      if (!toldOf.contains(ended.end.jobId)) ended,
+  ];
 }
 
 class FakeBackend implements AgentBackend {
@@ -784,10 +804,13 @@ class FakeBackend implements AgentBackend {
   /// last message.
   String? scriptedSummary;
 
+  /// Why a compaction with no [scriptedSummary] came back empty.
+  static const compactFailure = "The summarizer gave back an empty summary.";
+
   final List<({String? instructions, int historyLength})> compactionCalls = [];
 
   @override
-  Future<ConversationCompaction?> compact(
+  Future<CompactOutcome> compact(
     String chatId, {
     required List<Message> history,
     required List<ConversationCompaction> compactions,
@@ -798,10 +821,12 @@ class FakeBackend implements AgentBackend {
       instructions: instructions,
       historyLength: history.length,
     ));
-    if (scriptedSummary == null) return null;
-    return ConversationCompaction(
-      upToMessageId: history.lastOrNull?.id ?? "",
-      summary: scriptedSummary!,
+    if (scriptedSummary == null) return const NotCompacted(compactFailure);
+    return Compacted(
+      ConversationCompaction(
+        upToMessageId: history.lastOrNull?.id ?? "",
+        summary: scriptedSummary!,
+      ),
     );
   }
 

@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:math" show min;
 
 import "package:app_links/app_links.dart";
 import "package:clock/clock.dart";
@@ -41,6 +42,7 @@ import "domain/app_theme.dart";
 import "domain/assistant_launch.dart";
 import "domain/assistant_view.dart";
 import "domain/attachment_picker.dart";
+import "domain/folder_picker.dart";
 import "domain/clipboard_files.dart";
 import "domain/backup_handoff.dart";
 import "domain/background_work.dart";
@@ -127,6 +129,9 @@ final marketplaceClientProvider = Provider<http.Client>(
   (ref) => throw UnimplementedError(),
 );
 final attachmentPickerProvider = Provider<AttachmentPicker>(
+  (ref) => throw UnimplementedError(),
+);
+final folderPickerProvider = Provider<FolderPicker>(
   (ref) => throw UnimplementedError(),
 );
 final clipboardFilesProvider = Provider<ClipboardFiles>(
@@ -1682,7 +1687,12 @@ final availableModelsProvider = FutureProvider<List<ModelOption>>((ref) {
 });
 
 /// The window [chatId]'s model runs in: the chat's own choice, else the app
-/// default, as the catalog knows it, else the settings' global guess. Read
+/// default, as the catalog knows it — held to the settings' Total Context,
+/// which is the most any chat is let grow to and also the guess where the
+/// catalog does not know the model. A ceiling rather than only a fallback
+/// because a share of a million-token window is a context no model reads
+/// well; the auto-compact threshold and the context page read this, while
+/// the summarizer keeps the model's own window for how much it can read. Read
 /// from the chat's meta, so it is there before any turn, and computed again
 /// when the meta, the settings or the catalog change.
 final contextWindowProvider = FutureProvider.autoDispose.family<int, String>((
@@ -1702,8 +1712,10 @@ final contextWindowProvider = FutureProvider.autoDispose.family<int, String>((
     ModelCatalog.notifier.removeListener(catalogChanged);
   });
   final meta = await repo.loadMeta(chatId);
-  return backend.contextWindowOf(chatModelOf(meta, settings)) ??
-      settings.totalContext;
+  final window = backend.contextWindowOf(chatModelOf(meta, settings));
+  return window == null
+      ? settings.totalContext
+      : min(window, settings.totalContext);
 });
 
 /// The same models in the one order every picker lists them in. Sorted here

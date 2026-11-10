@@ -239,6 +239,9 @@ private struct ProjectHeader: View {
         get: { current },
         set: { _ in
           model.say.sidebar.selectProject(device: choice.device, project: choice.project) { _ in }
+          // The Flutter sidebar closes on a project picked, leaving its
+          // new-chat screen in front.
+          model.showDetail()
         })
     ) {
       Label {

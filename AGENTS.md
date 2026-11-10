@@ -78,8 +78,8 @@ named in a cross-reference is findable from this list.
   change about it, The keyboard and the caret, The app's commands, The menu
   bar, Liquid Glass (the native shell on iOS and macOS: the bridge, the
   layout, voice mode and the glow, where the platforms differ)
-- `lib/ui/settings/AGENTS.md` — Setting overrides, What the app is, Backing it
-  all up
+- `lib/ui/settings/AGENTS.md` — Setting overrides, Work folders, What the app
+  is, Backing it all up
 - `lib/ui/widgets/AGENTS.md` — Shared UI, A catalog of things to download, The
   model catalog
 - `.github/workflows/AGENTS.md` — Releasing
@@ -135,7 +135,10 @@ builders, and each place it could happen is held apart the same few ways:
 `<dataDir>/projects/<project>/` holds `chats/`, `workspace/` and `memory/`,
 the project's memories beside what its chats share, and `project.json` — the
 project's own overrides: the temporary-chat TTL, the command environment its
-chats run under, and whether it keeps an auto-memory store of its own. A chat is
+chats run under, whether it keeps an auto-memory store of its own, and its
+work folders (`writableDirs`), the machine paths every turn in it may write
+to — kept here although they are this machine's, a path from elsewhere
+granting nothing (see "Work folders" in `lib/ui/settings/AGENTS.md`). A chat is
 `chats/<chat-id>/` with `state.json`, `conv.jsonl`, `meta.json`, `resources/`
 and `subagents/` in it; where its commands run is `workspace/chats/<chat-id>/`,
 inside the workspace the project shares rather than beside the conversation.

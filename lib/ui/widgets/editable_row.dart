@@ -7,17 +7,21 @@ class EditableRow extends StatelessWidget {
   const EditableRow({
     super.key,
     required this.title,
-    required this.subtitle,
+    this.subtitle,
     required this.removeLabel,
-    required this.onTap,
+    this.onTap,
     required this.onRemove,
     this.detail,
   });
 
   final String title;
-  final String subtitle;
+
+  /// Null draws none.
+  final String? subtitle;
   final String removeLabel;
-  final VoidCallback onTap;
+
+  /// Null where an entry is only added and removed, never changed.
+  final VoidCallback? onTap;
   final VoidCallback onRemove;
 
   /// Drawn under the subtitle, for what one kind of entry has to say beyond
@@ -29,10 +33,10 @@ class EditableRow extends StatelessWidget {
     dense: true,
     title: Text(title),
     subtitle: detail == null
-        ? Text(subtitle)
+        ? (subtitle == null ? null : Text(subtitle!))
         : Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [Text(subtitle), detail!],
+            children: [if (subtitle != null) Text(subtitle!), detail!],
           ),
     onTap: onTap,
     trailing: IconButton(

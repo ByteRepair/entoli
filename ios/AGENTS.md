@@ -616,9 +616,13 @@ version": Flutter writes its generated plugin package's platform from the
 targets', and the recommended one resolved to 15, which an iOS 17 package
 refuses.
 
-An iPhone is the split view collapsed to a stack, so opening a chat or a new
-one asks for the detail column (`detailAsked`), the new-chat screen being
-nothing selected rather than the list; the app's pages — Settings, Profile,
+An iPhone is the split view collapsed to a stack, which starts on the detail
+column (`compactColumn`), the new-chat screen being nothing selected rather
+than the list; the chat's bar leads with the shell's own sidebar button
+rather than the split view's chevron, and a pick from the list goes back to
+the detail. The list being up is the Flutter view out of the window and the
+engine paused, which is why the sidebar's snapshot is sent from a provider's
+listener rather than a build (see "The bridge" in `lib/ui/AGENTS.md`). The app's pages — Settings, Profile,
 Marketplace — are a menu on the list's bar, the menu bar being iPadOS's and
 not there without a pointer. A Flutter page over the chat hides the native
 navigation bar, the page having its own. The keyboard reaches the native

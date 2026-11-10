@@ -17,16 +17,19 @@ void main() {
     reason: "Paused by you.",
   );
 
+  /// [mark]'s row, in the narrowest host that draws one.
+  Future<void> pumpRow(WidgetTester tester, GoalMark mark) => tester.pumpWidget(
+    ProviderScope(
+      child: MaterialApp(
+        home: Scaffold(body: GoalMarkRow(mark: mark)),
+      ),
+    ),
+  );
+
   testWidgets("a goal's row opens a drawer with its prompt and new state", (
     tester,
   ) async {
-    await tester.pumpWidget(
-      const ProviderScope(
-        child: MaterialApp(
-          home: Scaffold(body: GoalMarkRow(mark: paused)),
-        ),
-      ),
-    );
+    await pumpRow(tester, paused);
     expect(find.text("Goal paused: the tests pass"), findsOneWidget);
 
     await tester.tap(find.text("Goal paused: the tests pass"));
@@ -35,6 +38,25 @@ void main() {
     expect(find.text("Now: paused"), findsOneWidget);
     expect(find.text("Paused by you."), findsOneWidget);
     expect(find.text(goalKickoff("the tests pass")), findsOneWidget);
+  });
+
+  testWidgets("an answer says no change rather than naming a state it has not "
+      "left the goal in", (tester) async {
+    const answered = GoalMark(
+      afterMessageId: "ask",
+      change: GoalChange.answered,
+      objective: "No goal was set",
+    );
+    await pumpRow(tester, answered);
+    expect(find.text("Goal answered: No goal was set"), findsOneWidget);
+
+    await tester.tap(find.text("Goal answered: No goal was set"));
+    await tester.pumpAndSettle();
+
+    // Not "Now: no goal": the row moved nothing, and a goal may still stand.
+    expect(find.text("No change"), findsOneWidget);
+    // No kickoff was ever sent for this one, so there is no prompt to show.
+    expect(find.textContaining("Goal prompt"), findsNothing);
   });
 
   test("the row goes after the message its record names", () {

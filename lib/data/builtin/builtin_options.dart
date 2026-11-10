@@ -3,7 +3,8 @@
 class BuiltinOptions {
   const BuiltinOptions({
     this.stepLimit = 40,
-    this.commandTimeout = const Duration(minutes: 3),
+    this.commandTimeout = BuiltinOptions.defaultCommandTimeout,
+    this.maxCommandTimeout = BuiltinOptions.defaultMaxCommandTimeout,
     this.maxAttempts = 4,
     this.retryBackoff = const Duration(seconds: 1),
     this.maxConcurrentSubAgents = 8,
@@ -15,7 +16,17 @@ class BuiltinOptions {
   /// leans on a cost limit instead; a chat has someone waiting, so it counts
   /// steps.
   final int stepLimit;
+
+  /// How long a command may run in the foreground: [commandTimeout] where
+  /// the call names no `timeout`, and never longer than [maxCommandTimeout]
+  /// whatever it names. Claude Code's own two minutes and ten, measured; a
+  /// longer run is a background job's. See "Running the commands".
   final Duration commandTimeout;
+  final Duration maxCommandTimeout;
+
+  /// The defaults, named for the `bash` schema, which says them.
+  static const defaultCommandTimeout = Duration(minutes: 2);
+  static const defaultMaxCommandTimeout = Duration(minutes: 10);
 
   /// How many times a failed request is tried again before the turn gives up,
   /// and the first wait between two — it doubles after that, so the defaults
@@ -50,6 +61,7 @@ class BuiltinOptions {
   BuiltinOptions copyWith({int? stepLimit, int? maxAttempts}) => BuiltinOptions(
     stepLimit: stepLimit ?? this.stepLimit,
     commandTimeout: commandTimeout,
+    maxCommandTimeout: maxCommandTimeout,
     maxAttempts: maxAttempts ?? this.maxAttempts,
     retryBackoff: retryBackoff,
     maxConcurrentSubAgents: maxConcurrentSubAgents,

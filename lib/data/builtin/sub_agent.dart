@@ -128,6 +128,7 @@ class SubAgentRunner implements SubAgents {
       session,
       _definitionOf(agentName),
       callId,
+      task: prompt,
       // The task is dressed: a fresh session's first own mail, what the
       // instance template frames it as.
       (agent) => agent.run(said, mayDress: true),
@@ -142,6 +143,7 @@ class SubAgentRunner implements SubAgents {
       ..replaceWith(
         await projectionOf(await log.read(callId), load: noResources),
       );
+    // No task to say: the transcript opens on the sub-agent's own message.
     return _drive(
       session,
       _definitionOf(agentName),
@@ -161,8 +163,9 @@ class SubAgentRunner implements SubAgents {
     BuiltinSession session,
     AgentDefinition definition,
     String? callId,
-    Stream<AgentEvent> Function(BuiltinAgent) start,
-  ) async {
+    Stream<AgentEvent> Function(BuiltinAgent) start, {
+    String? task,
+  }) async {
     String? error;
 
     final agent = BuiltinAgent(
@@ -196,6 +199,7 @@ class SubAgentRunner implements SubAgents {
       readOnlyDirs: readOnlyDirs,
       webSearch: webSearch,
       rateLimitGate: rateLimitGate,
+      said: task,
     );
     final recorder = callId == null ? null : await _recorderFor(callId);
 

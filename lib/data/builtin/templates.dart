@@ -1,5 +1,6 @@
 import "dart:convert";
 
+import "../../core/formatting.dart" show safeCut;
 import "../../domain/agent_backend.dart" show taskToolName;
 import "../../domain/bundled_prompt_file.dart";
 import "../../domain/bundled_project_prompts.dart" show bundledSystemPrompts;
@@ -58,6 +59,7 @@ String turnPrompt({
   required bool projectHome,
   String? guestRoot,
   String? homePath,
+  List<String> workFolders = const [],
 }) {
   // Where the model is told its workspace is: `~` inside a guest, the real
   // path on the machine. The chat workspace is `~/chats/<id>` inside a guest.
@@ -116,6 +118,7 @@ String turnPrompt({
 Your shell starts in this conversation's own workspace: $workspaceDisplay
 It is yours; the files in it survive between turns, and nothing else writes
 there. $scope$tmp$shared${home()}""",
+    if (canRunCommands && workFolders.isNotEmpty) _workFolders(workFolders),
     if (instructions != null && instructions.isNotEmpty)
       "## Workspace instructions\n\n$instructions",
     if (pinned != null && pinned.isNotEmpty)
@@ -141,6 +144,17 @@ $recall""",
   ];
   return parts.join("\n\n");
 }
+
+/// The folders outside the workspaces the user granted up front, as the
+/// sandbox carries them: writing in one is not leaving the sandbox, so
+/// neither `unsandboxed` nor a request for access is needed there.
+String _workFolders(List<String> folders) => """
+## Work folders
+
+The user granted write access to these folders, beside the workspaces. Commands and file edits in them run inside the sandbox with
+nothing to ask for: do not run them unsandboxed or request access to them.
+
+${folders.map((f) => "- $f").join("\n")}""";
 
 /// What an `@agent` not in the room asks for: that agent doing the work, as a
 /// sub-agent, rather than the participant answering wearing its prompt.
@@ -302,11 +316,62 @@ String? cwdChangedNote(String? before, String? after) =>
     ? null
     : "Note: your current working directory is now $after.";
 
-const _fullOutputLimit = 10000;
+/// Above how many characters a tool's result is saved to a file and worded
+/// as a preview of it, and the preview's length: Claude Code's own numbers,
+/// measured rather than recalled — every tool at 50,000 unless it says
+/// otherwise (`bash` says 30,000: `BashTool.outputLimit`), a preview of the
+/// first 2,000. See "Tools" in `AGENTS.md`.
+const defaultInlineLimit = 50000;
+const previewChars = 2000;
+
+/// The start of [output] a saved result is previewed by: the first
+/// [previewChars] characters, cut back to the last line break where that
+/// keeps more than half of them, so the preview ends on a whole line.
+String outputPreview(String output) {
+  if (output.length <= previewChars) return output;
+  final cut = output.substring(0, previewChars).lastIndexOf("\n");
+  return safeCut(output, cut > previewChars ~/ 2 ? cut : previewChars);
+}
+
+/// A result's length in characters, the way Claude Code's notice says it:
+/// "KB" for each 1,024, to one decimal, a trailing `.0` dropped — Claude Code
+/// counts characters and words them as a size. Kept apart from the app's own
+/// `formatSize` (`core/formatting.dart`), which words bytes, so the notice
+/// stays Claude Code's to the letter.
+String _charSize(int chars) {
+  String one(double v) =>
+      v.toStringAsFixed(1).replaceFirst(RegExp(r"\.0$"), "");
+  final kb = chars / 1024;
+  // Claude Code's word below a kilobyte, kept although it counts characters;
+  // no limit here is that small.
+  if (kb < 1) return "$chars bytes";
+  if (kb < 1024) return "${one(kb)}KB";
+  final mb = kb / 1024;
+  return mb < 1024 ? "${one(mb)}MB" : "${one(mb / 1024)}GB";
+}
+
+/// What a saved result is worded as in place of its output: Claude Code's
+/// `<persisted-output>` notice, word for word, naming [path] — the file the
+/// whole of [output] is in, as the model's tools reach it.
+String persistedOutput(String output, String path) {
+  final preview = outputPreview(output);
+  return "<persisted-output>\n"
+      "Output too large (${_charSize(output.length)}). Full output saved to: "
+      "$path\n\n"
+      "Preview (first ${_charSize(previewChars)}):\n"
+      "$preview"
+      "${preview.length < output.length ? "\n...\n" : "\n"}"
+      "</persisted-output>";
+}
+
+/// Past this, a result that was not saved — a log from before results were,
+/// or a save that failed — is cut to its ends rather than worded whole.
+const _fullOutputLimit = defaultInlineLimit;
 const _elidedHalf = 5000;
 
-/// How a command's result is shown to the model: JSON, and elided in the
-/// middle once it is long enough to crowd out the conversation. Both ends are
+/// How a command's result is shown to the model: JSON. A result saved to
+/// [outputFile] is worded as [persistedOutput] — a preview and the path —
+/// and one too long that was not saved is elided in the middle, both ends
 /// kept because a build prints what it is doing first and why it failed last.
 /// [violations] is what a sandbox denied while the command ran, worded after
 /// the output it belongs to so the model reads the refusal beside what it
@@ -316,16 +381,19 @@ String observation({
   required String output,
   String? exceptionInfo,
   List<String> violations = const [],
+  String? outputFile,
 }) {
-  final elide = output.length > _fullOutputLimit;
   return _pretty.convert({
     "returncode": returnCode,
-    if (!elide) "output": output,
-    if (elide) ...{
-      "output_head": output.substring(0, _elidedHalf),
-      "output_tail": output.substring(output.length - _elidedHalf),
-      "elided_chars": output.length - _fullOutputLimit,
-      "warning": "Output too long.",
+    ...switch (outputFile) {
+      final saved? => {"output": persistedOutput(output, saved)},
+      null when output.length > _fullOutputLimit => {
+        "output_head": output.substring(0, _elidedHalf),
+        "output_tail": output.substring(output.length - _elidedHalf),
+        "elided_chars": output.length - 2 * _elidedHalf,
+        "warning": "Output too long.",
+      },
+      null => {"output": output},
     },
     if (exceptionInfo != null && exceptionInfo.isNotEmpty)
       "exception_info": exceptionInfo,
@@ -351,10 +419,11 @@ String shellRunTranscript({
   required String output,
   String? exceptionInfo,
   List<String> violations = const [],
+  String? outputFile,
 }) =>
     "The user ran this command in the chat themselves, rather than asking me "
     "to:\n\n$command\n\n"
-    "${observation(returnCode: returnCode, output: output, exceptionInfo: exceptionInfo, violations: violations)}";
+    "${observation(returnCode: returnCode, output: output, exceptionInfo: exceptionInfo, violations: violations, outputFile: outputFile)}";
 
 /// Appended to a `bash` result that read or wrote a file, now and then — see
 /// [fileToolReminderEvery]. The read tool is what brings in the AGENTS.md

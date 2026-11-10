@@ -16,6 +16,30 @@ import "../../domain/shell.dart" show bashToolName;
 import "llm/llm_client.dart";
 import "templates.dart";
 
+/// Where [messages] stop being summarized: the newest of [compactions] whose
+/// boundary they hold, and the index of the first message after it — 0, with
+/// no marker, where they hold none. Everything from [from] on is what a model
+/// reads verbatim, so it is also what a read of [messages] costs.
+///
+/// Reversed firstWhere: an earlier marker is a shadow the newest one replaced,
+/// and the log can hold any number of those. The ids are one set up front, so
+/// the scan is one pass over ids plus one per marker, not a pass per marker.
+/// Ids are unique on a thread, so the newest marker's boundary is where its
+/// message sits.
+({ConversationCompaction? marker, int from}) verbatimFrom(
+  List<Message> messages,
+  List<ConversationCompaction> compactions,
+) {
+  final ids = {for (final m in messages) m.id};
+  final marker = compactions.lastWhereOrNull(
+    (c) => ids.contains(c.upToMessageId),
+  );
+  final from = marker == null
+      ? 0
+      : messages.lastIndexWhere((m) => m.id == marker.upToMessageId) + 1;
+  return (marker: marker, from: from);
+}
+
 /// The conversation as a provider has to see it, built out of what `conv.jsonl`
 /// kept. This is what makes a session that missed the conversation — rewound,
 /// or belonging to a chat opened after a restart — answer as though it had been
@@ -86,23 +110,10 @@ Future<List<LlmMessage>> projectionOf(
   String? viewer,
   List<ConversationCompaction> compactions = const [],
 }) async {
-  // The newest marker whose boundary the projection was handed. Anything
-  // before its boundary is summarized; anything after it is verbatim.
-  // Reversed firstWhere: an earlier marker is a shadow the newest one
-  // replaced, and the log can hold any number of those. Decided before the
-  // bytes are read, which is the point: the attachments of the summarized
-  // span are the expensive half of what the summary replaces, and the
-  // compacted tail is loaded whole. The ids are one set up front, so the scan
-  // is one pass over ids plus one per marker, not a pass per marker. Ids are
-  // unique on a thread, so the newest marker's boundary is where its message
-  // sits.
-  final ids = {for (final m in messages) m.id};
-  final marker = compactions.lastWhereOrNull(
-    (c) => ids.contains(c.upToMessageId),
-  );
-  final from = marker == null
-      ? 0
-      : messages.lastIndexWhere((m) => m.id == marker.upToMessageId) + 1;
+  // Decided before the bytes are read, which is the point: the attachments of
+  // the summarized span are the expensive half of what the summary replaces,
+  // and the compacted tail is loaded whole.
+  final (:marker, :from) = verbatimFrom(messages, compactions);
   // Every resource at once rather than a message at a time, so a long
   // conversation's reads overlap rather than queue. Only the verbatim half's bytes
   // are read — the summarized span's are what the summary replaced.
@@ -415,6 +426,7 @@ Iterable<LlmMessage> _assistant(
                 output: part.output,
                 exceptionInfo: part.exceptionInfo,
                 violations: part.violations,
+                outputFile: part.outputFile,
               ),
               part.cwd,
             ),
@@ -565,6 +577,7 @@ String _observed(ToolResult result) => _observations[result] ??= observation(
   output: result.output,
   exceptionInfo: result.exceptionInfo,
   violations: result.violations,
+  outputFile: result.outputFile,
 );
 
 final _observations = Expando<String>("observation");

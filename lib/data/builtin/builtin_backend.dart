@@ -48,10 +48,11 @@ import "llm/llm_registry.dart";
 import "llm/rate_limit_gate.dart";
 import "goal_reviewer.dart";
 import "permission_classifier.dart";
+import "saved_output.dart";
 import "projection.dart";
 import "sub_agent.dart";
 import "tools/agent_tool.dart" show AgentCapabilities;
-import "tools/bash_tool.dart" show runningCommand;
+import "tools/bash_tool.dart" show BashTool, runningCommand;
 import "builtin_options.dart";
 
 /// The built-in agent, running in this process. The loop is [BuiltinAgent];
@@ -537,7 +538,13 @@ class BuiltinBackend implements AgentBackend {
         viewer: participant,
         compactions: compactions,
       );
+      // A resumed turn has no prompt of its own to read `@agent` mentions out
+      // of, or to tell the classifier what was asked, so both come off the
+      // message that started it.
+      final said =
+          prompt ?? history.lastWhereOrNull((m) => m.role == MessageRole.user);
       final agent = BuiltinAgent(
+        said: said?.plainText,
         session: session,
         viewer: participant,
         agent: AgentDefinition.of(file),
@@ -675,10 +682,6 @@ class BuiltinBackend implements AgentBackend {
       // The real kill replaces the placeholder.
       _running.replace(stopKey, agent.cancel);
 
-      // A resumed turn has no prompt of its own to read `@agent` mentions out
-      // of, so they come off the message that started it.
-      final said =
-          prompt ?? history.lastWhereOrNull((m) => m.role == MessageRole.user);
       final mentions = mentionedAgents(said?.references ?? const []);
       final events = prompt == null
           ? agent.resume(mentions: mentions)
@@ -791,15 +794,18 @@ class BuiltinBackend implements AgentBackend {
     final command = shellBypassCommand(prompt.plainText)!;
     await config.ensureChatDirs(chatId, project: project);
     final workspace = config.workspaceDir(chatId, project: project);
+    final home = _projectWorkspaceFor(
+      workspace: workspace,
+      project: project,
+      sharedWorkspace: sharedWorkspace,
+    );
     final run = shell.start(
       command,
       cwd: workspace,
-      home: _projectWorkspaceFor(
-        workspace: workspace,
-        project: project,
-        sharedWorkspace: sharedWorkspace,
-      ),
-      timeout: options.commandTimeout,
+      home: home,
+      // The longest a command may be given: the user typed it, is watching
+      // it, and stops it when they have seen enough.
+      timeout: options.maxCommandTimeout,
       environment: environment,
       project: project,
       // The agent's commands and this share the chat's shell, which
@@ -823,12 +829,21 @@ class BuiltinBackend implements AgentBackend {
     if (controller.isClosed) return;
     // The directory the shell was left in rides on the part as a fact; the
     // projection words the change, the way it does for the model's commands.
+    // So does where a long output was saved, on `bash`'s terms.
     final part = ShellRunPart(
       command: command,
       returnCode: result.returnCode,
       output: result.output,
       exceptionInfo: result.exceptionInfo,
       cwd: result.cwd,
+      outputFile: await saveIfLarge(
+        result.output,
+        BashTool.outputLimit,
+        callId: prompt.id,
+        workspace: workspace,
+        projectWorkspace: home,
+        guestRoot: shell.guestRoot,
+      ),
     );
     controller.add(ShellRunEvent(part));
     if (!_stopping.contains(controller)) controller.add(const DoneEvent());
@@ -1205,20 +1220,29 @@ class BuiltinBackend implements AgentBackend {
   /// seconds: a long conversation is a long read.
   ///
   /// [summaryFrom] cuts the tags, so what this hands back is the text the
-  /// marker carries. Null with a log line, like every background failure —
-  /// there is no turn to report it on.
+  /// marker carries. A failure is [NotCompacted] with the reason, said in the
+  /// log too, since the chat draws it and a log is what gets sent.
   @override
-  Future<ConversationCompaction?> compact(
+  Future<CompactOutcome> compact(
     String chatId, {
     required List<Message> history,
     required List<ConversationCompaction> compactions,
     required TurnSettings settings,
     required String? instructions,
   }) async {
-    if (_running.any(chatId)) return null;
+    NotCompacted fail(String reason) {
+      logFailure("compact", "$chatId: $reason");
+      return NotCompacted(reason);
+    }
+
+    if (_running.any(chatId)) {
+      return fail("A turn is running in this chat, so it was not compacted.");
+    }
     final target = _resolveModel(settings.model, settings.provider);
-    if (target == null) return null;
-    if (history.isEmpty) return null;
+    if (target == null) {
+      return fail("No model is set up to summarize this chat with.");
+    }
+    if (history.isEmpty) return fail("There is nothing to summarize yet.");
     // The ask has to fit the window with room for the summary it produces; a
     // budget that would fill the whole window is how the last attempt got
     // here in the first place. The window is the model's own where the
@@ -1241,9 +1265,21 @@ class BuiltinBackend implements AgentBackend {
     Future<Uint8List?> loader(String resource) =>
         read.putIfAbsent(resource, () => _resourcesOf(chatId)(resource));
     List<Message> span = history;
-    List<Message> halve() => span.sublist((span.length / 2).ceil());
+    // The oldest half of what the ask reads — the span after the newest
+    // marker it holds — not of the span whole: everything up to that marker's
+    // boundary costs one summary however much of it there is, so dropping it
+    // leaves the ask the size it was. Once the boundary is gone the marker no
+    // longer applies, and [priorSummary] is what carries it.
+    List<Message> halve() {
+      final verbatim = span.sublist(verbatimFrom(span, compactions).from);
+      return verbatim.sublist((verbatim.length / 2).ceil());
+    }
+
     // Loop-invariant: the markers do not change across the ladder.
     final priorSummary = compactions.lastOrNull?.summary;
+    // Why the last attempt did not land, which is what the user is told
+    // where the ladder runs out.
+    var failure = "";
     for (var attempt = 0; attempt < 3; attempt++) {
       // Summarized as Athena reads the room: the default route's view, in
       // which the room's says to nobody else are her own.
@@ -1254,7 +1290,13 @@ class BuiltinBackend implements AgentBackend {
         load: loader,
         compactions: compactions,
       );
-      if (projected.isEmpty) return null;
+      if (projected.isEmpty) {
+        return fail(
+          failure.isEmpty
+              ? "There is nothing to summarize yet."
+              : "$failure Nothing was left to summarize after halving.",
+        );
+      }
       final cut = CompactPrompt.build(
         conversation: projected,
         instructions: instructions,
@@ -1262,7 +1304,11 @@ class BuiltinBackend implements AgentBackend {
       );
       // Where the ask itself would not fit, dropping the oldest half is the
       // only answer; where it would, the span stands.
-      if (estimateTokens(cut) > budget) {
+      final asked = estimateTokens(cut);
+      if (asked > budget) {
+        failure =
+            "What is left to summarize is about ${_tokens(asked)} tokens, "
+            "more than the ${_tokens(budget)} the summarizer can read at once.";
         span = halve();
         continue;
       }
@@ -1285,18 +1331,22 @@ class BuiltinBackend implements AgentBackend {
             load: loader,
             compactions: [...compactions, marker],
           );
-          return marker.copyWith(chatTokens: estimateTokens(after));
+          return Compacted(marker.copyWith(chatTokens: estimateTokens(after)));
         }
-        logFailure("compact", "empty summary for $chatId");
+        failure = "The summarizer gave back an empty summary.";
       } catch (e) {
         logFailure("compact", "summarizer failed for $chatId", e);
+        failure = "The summarizer failed: ${"$e".split("\n").first}";
       }
       // A reply that said nothing, or an error: halve and try once more, the
       // same ladder the too-big ask takes.
       span = halve();
     }
-    return null;
+    return fail(failure);
   }
+
+  /// A token count as the failure says it: "750k", not "749148".
+  static String _tokens(int n) => n >= 1000 ? "${(n / 1000).round()}k" : "$n";
 
   /// What a turn that ended cleanly leaves behind: a background model reads
   /// the exchange and keeps the facts that outlive it. Runs unwatched, so it

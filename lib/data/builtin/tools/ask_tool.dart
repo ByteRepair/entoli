@@ -23,6 +23,10 @@ class AskTool extends AgentTool {
   @override
   bool get offered => offer.caps.ask;
 
+  /// The user's own answers, which are short and are the result.
+  @override
+  int? get inlineLimit => null;
+
   @override
   String get fragment => "`$askToolName` to put a question to the user";
 

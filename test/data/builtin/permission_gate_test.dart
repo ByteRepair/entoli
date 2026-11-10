@@ -4,7 +4,9 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
-import "package:agent_chat/data/builtin/tools/agent_tool.dart" show ToolOffer;
+import "package:agent_chat/data/builtin/sandbox_grants.dart" show systemTemps;
+import "package:agent_chat/data/builtin/tools/agent_tool.dart"
+    show AgentCapabilities, ToolOffer;
 import "package:agent_chat/data/builtin/tools/bash_tool.dart" show BashTool;
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/domain/agent_backend.dart";
@@ -34,6 +36,16 @@ void main() {
 
   final finish = saidOnly("done");
 
+  /// A real folder outside the workspaces, gone at the end of the test: a
+  /// persisted grant reaches the turn only while it is a folder on disk.
+  String folder(String name) {
+    final dir = Directory.systemTemp.createTempSync(name);
+    addTearDown(() {
+      if (dir.existsSync()) dir.deleteSync(recursive: true);
+    });
+    return dir.path;
+  }
+
   /// The [which]'th tool result a turn reported, zero-based — the record the
   /// outcome rides on.
   ToolResult results(List<AgentEvent> events, {int which = 0}) =>
@@ -52,6 +64,7 @@ void main() {
     ShellResult Function(String)? respond,
     PermissionClassifier? classifier,
     FakeWebSearch? webSearch,
+    AgentCapabilities caps = AgentCapabilities.full,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-gate-test");
     final project = p.join(tempDir.path, "project-ws");
@@ -97,6 +110,7 @@ void main() {
       ),
       classifier: classifier,
       webSearch: webSearch,
+      caps: caps,
     );
   }
 
@@ -478,8 +492,9 @@ void main() {
     test(
       "the classifier is told the project workspace and the grants",
       () async {
+        final repo = folder("repo");
         final client = FakeLlmClient([
-          [bashCall("make -C /home/u/repo")],
+          [bashCall("make -C $repo")],
           [finish],
         ]);
         final classifier = FakeClassifier();
@@ -487,12 +502,12 @@ void main() {
           client,
           approveMode: ApproveMode.auto,
           classifier: classifier,
-          writableDirs: ["/home/u/repo"],
+          writableDirs: [repo],
         ).run(userMessage("go")).toList();
 
         expect(classifier.alsoWritable.single, [
           p.dirname(p.dirname(workspaceDir)),
-          "/home/u/repo",
+          repo,
         ]);
       },
     );
@@ -1077,6 +1092,127 @@ void main() {
       expect(shell.sandboxes, [isNull, isNull]);
     });
 
+    group("steers toward add_directory", () {
+      /// A repository outside the workspaces, with a directory inside it the
+      /// commands `cd` to: the grant is asked for the repository's root.
+      late String repo;
+      setUp(() {
+        final dir = Directory.systemTemp.createTempSync("grant-nudge-test");
+        addTearDown(() => dir.deleteSync(recursive: true));
+        repo = dir.path;
+        Directory(p.join(repo, ".git")).createSync();
+        Directory(p.join(repo, "lib")).createSync();
+      });
+
+      List<String> notesOf(List<AgentEvent> events) => [
+        for (final event in events.whereType<ToolResultEvent>())
+          ...event.result.notes,
+      ];
+
+      test("after the sandbox refuses a write in a folder outside", () async {
+        final denied = p.join(repo, "lib", "new.dart");
+        final client = FakeLlmClient([
+          [bashCall("touch $denied")],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          // What the shell reports of a run the sandbox refused a write.
+          respond: (_) => ShellResult(
+            returnCode: 1,
+            output: "touch: $denied: Operation not permitted",
+            violations: [denied],
+          ),
+        ).run(userMessage("go")).toList();
+        expect(shell.sandboxes.single, isNotNull);
+        expect(results(events).violations, [
+          denied,
+        ], reason: "the model is told the failure was the sandbox's");
+        final note = notesOf(events).single;
+        expect(note, contains("`add_directory` with $repo once"));
+      });
+
+      test("not after a command that only failed there", () async {
+        final client = FakeLlmClient([
+          [bashCall("cd $repo && grep -r nothing-here lib")],
+          [bashCall("cd $repo && false")],
+          [bashCall("cd $repo && flutter test")],
+          [finish],
+        ]);
+        final outputs = ["", "", "Some tests failed."];
+        final events = await agentOver(
+          client,
+          respond: (_) =>
+              ShellResult(returnCode: 1, output: outputs.removeAt(0)),
+        ).run(userMessage("go")).toList();
+        expect(shell.sandboxes, everyElement(isNotNull));
+        expect(events.whereType<ToolResultEvent>(), hasLength(3));
+        expect(notesOf(events), isEmpty);
+        expect(
+          events.whereType<ToolResultEvent>().expand(
+            (e) => e.result.violations,
+          ),
+          isEmpty,
+        );
+      });
+
+      test("on the second unsandboxed request for one folder, not the "
+          "first", () async {
+        final client = FakeLlmClient([
+          [unsandboxed("cd $repo && git add .")],
+          [unsandboxed("cd $repo && git commit -m wip")],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          approveMode: ApproveMode.never,
+        ).run(userMessage("go")).toList();
+        final results = events.whereType<ToolResultEvent>().toList();
+        expect(results.first.result.notes, isEmpty);
+        expect(
+          results.last.result.notes.single,
+          contains("`add_directory` with $repo once"),
+        );
+      });
+
+      test("not after the user said no to the banner", () async {
+        final client = FakeLlmClient([
+          [unsandboxed("cd $repo && git add .")],
+          [unsandboxed("cd $repo && git commit -m wip")],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          approveMode: ApproveMode.ask,
+          approvals: [ApprovalResponse.deny, ApprovalResponse.deny],
+        ).run(userMessage("go")).toList();
+        expect(events.whereType<ApprovalRequestEvent>(), hasLength(2));
+        expect(notesOf(events), isEmpty);
+      });
+
+      test("not where add_directory is not offered", () async {
+        final client = FakeLlmClient([
+          [unsandboxed("cd $repo && git add .")],
+          [unsandboxed("cd $repo && git commit -m wip")],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          approveMode: ApproveMode.never,
+          caps: const AgentCapabilities(
+            commands: true,
+            webSearch: false,
+            ask: false,
+            task: false,
+            artifact: false,
+            createSkill: false,
+          ),
+        ).run(userMessage("go")).toList();
+        expect(events.whereType<ToolResultEvent>(), hasLength(2));
+        expect(notesOf(events), isEmpty);
+      });
+    });
+
     test("is offered only where a sandbox is enforced, and never to a "
         "sub-agent", () {
       bool offers(ToolOffer offer) =>
@@ -1088,7 +1224,7 @@ void main() {
       expect(offers(const ToolOffer(sandboxed: true, oneShot: true)), isFalse);
     });
 
-    test("the turn's writableDirs reach the sandbox, files included", () async {
+    test("the machine's temp folders reach the sandbox", () async {
       final client = FakeLlmClient([
         [bashCall("python3 build.py")],
         [finish],
@@ -1096,16 +1232,181 @@ void main() {
       await agentOver(
         client,
         approveMode: ApproveMode.never,
-        writableDirs: ["/etc/hosts", "/var/log/entoli"],
       ).run(userMessage("go")).toList();
-      // The project's workspace, then the persisted tier's grant —
-      // directories and files alike — is what the command's confinement
-      // carries, ahead of the toolchain caches this machine happens to have.
+      // Granted by the gate, into the sandbox's own write set, so whatever
+      // reads a `CommandSandbox` sees every folder the command could write.
+      expect(
+        shell.sandboxes.single!.extraWrites,
+        containsAll(await systemTemps()),
+      );
+    });
+
+    test("the turn's writableDirs reach the sandbox while they are folders "
+        "on disk", () async {
+      final repo = folder("repo");
+      final logs = folder("logs");
+      final gone = p.join(logs, "gone");
+      final client = FakeLlmClient([
+        [bashCall("python3 build.py")],
+        [finish],
+      ]);
+      await agentOver(
+        client,
+        approveMode: ApproveMode.never,
+        writableDirs: [repo, gone, p.join(repo, "missing.txt"), logs],
+      ).run(userMessage("go")).toList();
+      // The project's workspace, then the persisted tier's grant — a folder
+      // gone from the machine, or never one, granting nothing — is what the
+      // command's confinement carries, ahead of the toolchain caches this
+      // machine happens to have.
       expect(shell.sandboxes.single!.extraWrites.take(3), [
         p.dirname(p.dirname(workspaceDir)),
-        "/etc/hosts",
-        "/var/log/entoli",
+        repo,
+        logs,
       ]);
+    });
+  });
+
+  group("a command the parse cannot check, in auto mode", () {
+    /// Every tool result's text, joined: the refusal rides on either half.
+    String resultText(List<AgentEvent> events) => events
+        .whereType<ToolResultEvent>()
+        .map((r) => [r.result.output, r.result.exceptionInfo ?? ""].join(" "))
+        .join();
+
+    test("is judged whole by the classifier, and runs on its allow", () async {
+      final command = r"cat notes.txt > $B/out.txt";
+      final classifier = FakeClassifier(decision: PermissionDecision.allow);
+      final client = FakeLlmClient([
+        [bashCall(command)],
+        [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.auto,
+        classifier: classifier,
+        permissions: [
+          // A deny rule the command's words are plain to: nothing hides
+          // from it, so it does not hold the command back.
+          const PermissionRule(
+            tool: "bash",
+            pattern: "git push *",
+            decision: PermissionDecision.deny,
+          ),
+        ],
+      ).run(userMessage("go")).toList();
+      expect(shell.ran, [command]);
+      expect(shell.sandboxes.single, isNotNull, reason: "still confined");
+      expect(classifier.findings.single, [
+        contains(r"redirects through $B"),
+      ], reason: "the classifier is told what the parse found");
+      expect(results(events).decidedBy, PermissionSource.classifier);
+      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
+    });
+
+    test("a classifier deny answers with the split advice", () async {
+      final client = FakeLlmClient([
+        [bashCall(r"mkdir -p out && cat notes.txt > $B/out.txt")],
+        [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.auto,
+        classifier: FakeClassifier(decision: PermissionDecision.deny),
+      ).run(userMessage("go")).toList();
+      final text = resultText(events);
+      expect(shell.ran, isEmpty);
+      expect(text, contains("cannot be checked as one piece"));
+      expect(text, contains("classifier read the whole command"));
+      expect(text, contains("- mkdir -p out"), reason: "the segments named");
+    });
+
+    test("a deny rule the parse hides the command from keeps it refused, "
+        "unasked", () async {
+      final classifier = FakeClassifier(decision: PermissionDecision.allow);
+      for (final command in [
+        // The words are plain, the redirect is not: the rule matches them.
+        r"rm -rf build > $B/log",
+        // Nothing the rule could read at all.
+        r'rm -rf "build',
+      ]) {
+        final client = FakeLlmClient([
+          [bashCall(command)],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          approveMode: ApproveMode.auto,
+          classifier: classifier,
+          permissions: [
+            const PermissionRule(
+              tool: "bash",
+              pattern: "rm *",
+              decision: PermissionDecision.deny,
+            ),
+          ],
+        ).run(userMessage("go")).toList();
+        expect(shell.ran, isEmpty, reason: command);
+        expect(resultText(events), contains("deny rule"), reason: command);
+      }
+      expect(classifier.classified, isEmpty);
+    });
+
+    test("an ask rule the parse hides the command from still asks", () async {
+      final classifier = FakeClassifier(decision: PermissionDecision.allow);
+      final client = FakeLlmClient([
+        [bashCall(r"git commit -m wip > $B/log")],
+        [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.auto,
+        classifier: classifier,
+        approvals: [ApprovalResponse.deny],
+        permissions: [
+          const PermissionRule(
+            tool: "bash",
+            pattern: "git commit *",
+            decision: PermissionDecision.ask,
+          ),
+        ],
+      ).run(userMessage("go")).toList();
+      expect(events.whereType<ApprovalRequestEvent>(), hasLength(1));
+      expect(classifier.classified, isEmpty);
+      expect(shell.ran, isEmpty);
+    });
+  });
+
+  group("the work folders, as the model is told them", () {
+    String told(FakeLlmClient client) => client.sent.first
+        .where((m) => m.role == LlmRole.system)
+        .map((m) => m.text)
+        .join("\n");
+
+    test("a turn under the sandbox names its writable folders", () async {
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      final repo = folder("repo");
+      await agentOver(
+        client,
+        writableDirs: [repo],
+      ).run(userMessage("go")).toList();
+      expect(told(client), contains("## Work folders"));
+      expect(told(client), contains("- $repo"));
+    });
+
+    test("a turn with the sandbox off names none, there being nothing to "
+        "stay inside", () async {
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      await agentOver(
+        client,
+        writableDirs: ["/home/u/repo"],
+        sandboxed: false,
+      ).run(userMessage("go")).toList();
+      expect(told(client), isNot(contains("## Work folders")));
     });
   });
 
@@ -1160,6 +1461,8 @@ class _StubClassifier implements PermissionClassifier {
     String argumentsJson, {
     required String workspace,
     List<String> alsoWritable = const [],
+    List<String> findings = const [],
+    ClassifierRequest? request,
   }) async => decision;
 }
 
@@ -1175,6 +1478,8 @@ class _SpyClassifier implements PermissionClassifier {
     String argumentsJson, {
     required String workspace,
     List<String> alsoWritable = const [],
+    List<String> findings = const [],
+    ClassifierRequest? request,
   }) async {
     ask();
     return PermissionDecision.allow;

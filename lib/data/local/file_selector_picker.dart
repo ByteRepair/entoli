@@ -1,6 +1,7 @@
 import "package:file_selector/file_selector.dart";
 
 import "../../domain/attachment_picker.dart";
+import "../../domain/folder_picker.dart";
 import "../../domain/models.dart";
 import "../mime.dart";
 
@@ -41,4 +42,13 @@ class FileSelectorPicker implements AttachmentPicker {
       bytes: bytes,
     );
   }
+}
+
+/// The platform's own folder chooser, through the same plugin.
+class FileSelectorFolderPicker implements FolderPicker {
+  const FileSelectorFolderPicker();
+
+  @override
+  Future<String?> pick({required String confirmLabel}) =>
+      getDirectoryPath(confirmButtonText: confirmLabel);
 }

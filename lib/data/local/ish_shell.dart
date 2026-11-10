@@ -391,6 +391,7 @@ class _IshSession {
                 returnCode: result.returnCode,
                 output: result.output,
                 cwd: result.cwd,
+                timedOut: run.state.byTimeout,
                 exceptionInfo: run.state.byTimeout
                     ? "The command timed out after ${timeout.inSeconds}s and "
                           "was interrupted. Anything it printed before that is "
@@ -659,6 +660,7 @@ class _IshOneShotRun extends ShellRun {
         return ShellResult(
           returnCode: -1,
           output: res.output,
+          timedOut: true,
           exceptionInfo:
               "The command timed out after ${timeout.inSeconds}s. "
               "Anything it printed before that is above.",

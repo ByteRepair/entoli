@@ -5,6 +5,7 @@ import "package:path/path.dart" as p;
 import "../../../core/config.dart"
     show instructionBlockHeader, instructionFileName;
 import "../../../core/log.dart";
+import "../../../domain/shell.dart" show repositoryRootOf;
 import "../../../domain/models.dart"
     show InstructionKind, InstructionRef, instructionKindPhrase;
 
@@ -110,6 +111,7 @@ Future<List<InstructionFile>> findNestedInstructions(
   List<String> excludes = const [],
 }) async {
   var dir = _norm(p.dirname(filePath));
+  final repository = repositoryRootOf(dir);
   final found = <InstructionFile>[];
   while (true) {
     await _readInto(
@@ -120,12 +122,7 @@ Future<List<InstructionFile>> findNestedInstructions(
       alreadyLoaded,
       excludes,
     );
-    // A worktree's `.git` is a file, a checkout's a directory: either is
-    // where the repository starts.
-    if (FileSystemEntity.typeSync(p.join(dir, ".git")) !=
-        FileSystemEntityType.notFound) {
-      break;
-    }
+    if (dir == repository) break;
     final parent = _norm(p.dirname(dir));
     if (parent == dir) break;
     dir = parent;

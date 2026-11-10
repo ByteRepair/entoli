@@ -29,6 +29,8 @@ import "../../fakes.dart";
 import "../../harness.dart" show waitFor;
 import "builtin_fakes.dart";
 import "package:agent_chat/data/builtin/builtin_options.dart";
+import "package:agent_chat/data/builtin/templates.dart" show previewChars;
+import "package:agent_chat/data/builtin/tools/bash_tool.dart" show BashTool;
 
 void main() {
   late BuiltinSession session;
@@ -70,6 +72,8 @@ void main() {
     String? provider,
     GoalReader? goal,
     GoalReviewer? goalReviewer,
+    bool oneShot = false,
+    String? said,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-test");
     // Beside the workspaces, the way the layout keeps `chats/<id>/resources`.
@@ -115,6 +119,8 @@ void main() {
       subAgents: subAgents,
       goal: goal,
       goalReviewer: goalReviewer,
+      oneShot: oneShot,
+      said: said,
     );
   }
 
@@ -152,6 +158,70 @@ void main() {
       expect(observation.toolCallId, "call-1");
       expect(observation.text, contains("\"returncode\": 2"));
       expect(observation.text, contains("no such file"));
+    });
+
+    group("a result too large to word in full", () {
+      // 51 characters a line, so the preview's 2,000 end inside line 39 and
+      // cut back to the end of line 38.
+      final log = [
+        for (var i = 0; i < 1000; i++)
+          "line ${i.toString().padLeft(4, "0")} ${"x" * 40}\n",
+      ].join();
+
+      test("is saved whole, and the model reads its start and the path, "
+          "in Claude Code's words", () async {
+        final client = FakeLlmClient([
+          [bashCall("make")],
+          [finish],
+        ]);
+        final agent = agentOver(client, respond: (_) => ok(log));
+        final events = await agent.run(userMessage("build it")).toList();
+
+        final result = events.whereType<ToolResultEvent>().single.result;
+        final saved = p.join(agent.workspace, ".entoli-output", "call-1.txt");
+        expect(result.outputFile, saved);
+        expect(File(saved).readAsStringSync(), log);
+        // The log keeps the whole of it, for the chat to show.
+        expect(result.output, log);
+
+        final worded = jsonDecode(client.sent[1].last.text) as Map;
+        expect(worded["returncode"], 0);
+        final preview = log.substring(0, 38 * 51 + 50);
+        expect(
+          worded["output"],
+          "<persisted-output>\n"
+          "Output too large (49.8KB). Full output saved to: $saved\n\n"
+          "Preview (first 2KB):\n"
+          "$preview\n...\n"
+          "</persisted-output>",
+        );
+      });
+
+      test("is worded whole at the limit, and saved past it", () async {
+        final atLimit = "y" * BashTool.outputLimit;
+        final client = FakeLlmClient([
+          [bashCall("one", id: "c1")],
+          [bashCall("two", id: "c2")],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          respond: (c) => ok(c == "one" ? atLimit : "$atLimit!"),
+        ).run(userMessage("go")).toList();
+
+        final [first, second] = [
+          for (final e in events.whereType<ToolResultEvent>()) e.result,
+        ];
+        expect(first.outputFile, isNull);
+        expect(jsonDecode(client.sent[1].last.text)["output"], atLimit);
+        expect(second.outputFile, isNotNull);
+        // No line break to stop at: the preview is the first 2,000 as they
+        // are.
+        expect(
+          jsonDecode(client.sent[2].last.text)["output"],
+          contains("Preview (first 2KB):\n${"y" * previewChars}\n...\n"),
+        );
+      });
     });
 
     test("the first turn is the task under two system messages", () async {
@@ -1022,28 +1092,32 @@ void main() {
       }
     });
 
-    test("a goal paused while the reviewer reads is not sent back", () async {
-      final client = FakeLlmClient([
-        [saidOnly("Done.")],
-      ]);
-      final goal = FakeGoal(const ChatGoal(objective: "ship"));
-      final reviewer = FakeGoalReviewer(
-        [const GoalVerdict(GoalVerdictKind.carryOn, "Not yet.")],
-        whileReading: () => goal.goal = const ChatGoal(
-          objective: "ship",
-          status: GoalStatus.paused,
-        ),
-      );
+    test(
+      "a goal cleared or paused while the reviewer reads is not sent back",
+      () async {
+        for (final left in [
+          null,
+          const ChatGoal(objective: "ship", status: GoalStatus.paused),
+        ]) {
+          final client = FakeLlmClient([
+            [saidOnly("Done.")],
+          ]);
+          final goal = FakeGoal(const ChatGoal(objective: "ship"));
+          final reviewer = FakeGoalReviewer([
+            const GoalVerdict(GoalVerdictKind.carryOn, "Not yet."),
+          ], whileReading: () => goal.goal = left);
 
-      final events = await agentOver(
-        client,
-        goal: goal.read,
-        goalReviewer: reviewer,
-      ).run(userMessage("go")).toList();
+          final events = await agentOver(
+            client,
+            goal: goal.read,
+            goalReviewer: reviewer,
+          ).run(userMessage("go")).toList();
 
-      expect(events.whereType<SteerEvent>(), isEmpty);
-      expect(moved(events), isEmpty);
-    });
+          expect(events.whereType<SteerEvent>(), isEmpty);
+          expect(moved(events), isEmpty);
+        }
+      },
+    );
   });
 
   group("with no shell to run anything", () {
@@ -2036,7 +2110,8 @@ void main() {
     });
 
     test(
-      "the model's timeout reaches the shell, capped by the chat's",
+      "the model's timeout reaches the shell, capped by the chat's most, and "
+      "a call naming none gets the chat's default",
       () async {
         final client = FakeLlmClient([
           [
@@ -2045,19 +2120,24 @@ void main() {
           [
             bashCall("again", extra: {"timeout": 999999999, "restart": true}),
           ],
+          [bashCall("unbounded")],
           [finish],
         ]);
         await agentOver(
           client,
-          options: const BuiltinOptions(commandTimeout: Duration(seconds: 60)),
+          options: const BuiltinOptions(
+            commandTimeout: Duration(seconds: 60),
+            maxCommandTimeout: Duration(seconds: 90),
+          ),
         ).run(userMessage("build")).toList();
 
         expect(shell.timeouts, [
           const Duration(seconds: 5),
+          const Duration(seconds: 90),
           const Duration(seconds: 60),
         ]);
-        expect(shell.restarts, [false, true]);
-        expect(shell.oneShots, [false, false]);
+        expect(shell.restarts, [false, true, false]);
+        expect(shell.oneShots, [false, false, false]);
       },
     );
   });
@@ -2346,44 +2426,95 @@ void main() {
       expect(shell.ran, hasLength(1));
     });
 
-    test("in auto mode the parse holds only where nobody decided", () async {
-      // The classifier asks: the banner is the decision, as in ask mode.
-      final client = FakeLlmClient([
-        [bashCall(r'echo "unclosed')],
-        [finish],
-      ]);
+    test(
+      "in auto mode the banner judges what the classifier asks about",
+      () async {
+        // The classifier asks: the banner is the decision, as in ask mode.
+        final client = FakeLlmClient([
+          [bashCall(r'echo "unclosed')],
+          [finish],
+        ]);
+        await agentOver(
+          client,
+          sandboxHelper: _StubSandboxHelper(),
+          approveMode: ApproveMode.auto,
+          classifier: FakeClassifier(decision: PermissionDecision.ask),
+          approvals: [ApprovalResponse.allow, ApprovalResponse.allow],
+        ).run(userMessage("go")).toList();
+
+        expect(
+          shell.ran,
+          hasLength(1),
+          reason: "the banner is the decision, in auto mode as in ask",
+        );
+      },
+    );
+  });
+
+  group("what the classifier is told the user asked for", () {
+    /// A plan whose second task is under way, in [agent]'s workspace.
+    void planUnderWay(BuiltinAgent agent) => File(
+      p.join(agent.workspace, "PLAN.md"),
+    ).writeAsStringSync("# Plan\n- [x] read the code\n- [~] run the tests\n");
+
+    test(
+      "the message the turn opened on, the goal and the plan's task",
+      () async {
+        final classifier = FakeClassifier();
+        final agent = agentOver(
+          FakeLlmClient([
+            [bashCall("npm test")],
+            [finish],
+          ]),
+          approveMode: ApproveMode.auto,
+          classifier: classifier,
+          goal: FakeGoal(const ChatGoal(objective: "ship the release")).read,
+          said: "run the test suite",
+        );
+        planUnderWay(agent);
+        await agent.run(userMessage("run the test suite")).toList();
+        final request = classifier.requests.single!;
+        expect(request.said, "run the test suite");
+        expect(request.goal, "ship the release");
+        expect(request.task, "run the tests");
+      },
+    );
+
+    test("a goal that is not active is not part of it", () async {
+      final classifier = FakeClassifier();
       await agentOver(
-        client,
-        sandboxHelper: _StubSandboxHelper(),
+        FakeLlmClient([
+          [bashCall("npm test")],
+          [finish],
+        ]),
         approveMode: ApproveMode.auto,
-        classifier: FakeClassifier(decision: PermissionDecision.ask),
-        approvals: [ApprovalResponse.allow, ApprovalResponse.allow],
+        classifier: classifier,
+        goal: FakeGoal(
+          const ChatGoal(objective: "ship", status: GoalStatus.paused),
+        ).read,
       ).run(userMessage("go")).toList();
+      expect(classifier.requests.single?.goal, isNull);
+    });
 
-      expect(
-        shell.ran,
-        hasLength(1),
-        reason: "the banner is the decision, in auto mode as in ask",
+    test("a sub-agent's is its task, not the chat's plan", () async {
+      // A sub-agent is a one-shot agent over the chat's own workspace, run
+      // on its task; the plan beside it is the parent's.
+      final classifier = FakeClassifier();
+      final agent = agentOver(
+        FakeLlmClient([
+          [bashCall("npm test")],
+          [finish],
+        ]),
+        approveMode: ApproveMode.auto,
+        classifier: classifier,
+        oneShot: true,
+        said: "find why the build fails",
       );
-
-      // The classifier allows: no human read the text, so the gate's refusal
-      // is what says why.
-      final allowed = FakeLlmClient([
-        [bashCall(r'echo "unclosed')],
-        [finish],
-      ]);
-      final events = await agentOver(
-        allowed,
-        sandboxHelper: helper,
-        approveMode: ApproveMode.auto,
-        classifier: FakeClassifier(decision: PermissionDecision.allow),
-      ).run(userMessage("go")).toList();
-      final text = events
-          .whereType<ToolResultEvent>()
-          .map((r) => [r.result.output, r.result.exceptionInfo ?? ""].join(" "))
-          .join();
-      expect(text.toLowerCase(), contains("cannot be checked as one piece"));
-      expect(shell.ran, isEmpty);
+      planUnderWay(agent);
+      await agent.run(userMessage("find why the build fails")).toList();
+      final request = classifier.requests.single!;
+      expect(request.said, "find why the build fails");
+      expect(request.task, isNull);
     });
   });
 

@@ -234,7 +234,7 @@ class _TotalContextField extends ConsumerWidget {
       label: "Total Context",
       child: _TokenCountTile(
         title: "Total Context",
-        hint: "The model's context window, in tokens",
+        hint: "The most context a chat grows to before it compacts, in tokens",
         value: total,
         defaultValue: AppSettings.defaultTotalContext,
         min: AppSettings.minTotalContext,

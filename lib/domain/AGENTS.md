@@ -471,7 +471,8 @@ summary describes the work rather than the summarizing — and there is no
 `<analysis>` step, the analysis being stripped before anything is stored and
 costing output tokens on the context that is already over budget.
 
-**The retry ladder**, not a failure: a span too big to summarize is halved and
+**The retry ladder**, not a failure: a span too big to summarize is halved —
+the part after the last marker, which is what the ask reads — and
 re-asked, three attempts, each attempt's marker covering only what it read.
 `upToMessageId` is the honest boundary of what was actually summarized, which
 is why the field is on the record rather than implied.
@@ -516,7 +517,15 @@ answers met, carry on, or blocked; the agent's claim is not evidence. See
 
 **The goal is the log's.** Every change to it is a `goal` record —
 `set`, `resumed`, `paused`, `cleared`, `met`, `blocked` — naming the message
-it comes after, as a `compaction` names its boundary. Replay keeps the ones
+it comes after, as a `compaction` names its boundary. `answered` is the one
+that changes nothing: a command with nothing to clear or pause and no goal to
+resume, and `/goal` alone, still say what they found, as a row reading
+`Goal answered: …`. `GoalChange.changesGoal` is the one place that fact is
+written — `goalOf` skips them, the drawer says "No change" rather than naming
+a state the row never left the goal in, and no kickoff is shown for one, since
+none was sent. A chat with nothing said in it yet has no message for a record
+to stand after, so the answer is said as its own message first, which is what
+gives a `/goal clear` on a fresh chat somewhere to land. Replay keeps the ones
 whose message is live, in thread order, as `Chat.goals` (`GoalMark`s), and
 the goal as it stands is their fold (`goalOf`, read as `chat.goal`): a set
 starts one, a clear ends it, the rest move the one there is, and a mark about
@@ -550,8 +559,9 @@ projection words them — `goalKickoff`, `goalResumedText` — so the model is
 told the goal, that a reviewer will check the evidence, and to stop and say so
 when blocked. The records are never projected. `/goal` alone (and Claude
 Code's `stop`, `off`, `reset`, `none`, `cancel` for clear) says where the goal
-stands on the status row. A one-word verb is the verb; anything longer is an
-objective.
+stands, as an `answered` row — never as `status`, which is drawn only beside a
+running turn's spinner and so is read by nobody at rest. A one-word verb is the
+verb; anything longer is an objective.
 
 `GoalStatus` is active, paused, met or blocked; only active is reviewed, the
 rest are kept for the goal row above the composer to show until cleared —

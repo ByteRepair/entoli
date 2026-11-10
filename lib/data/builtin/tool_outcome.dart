@@ -24,6 +24,7 @@ ToolResult toolRan(
   exceptionInfo: result.exceptionInfo,
   cwd: result.cwd,
   jobId: result.jobId,
+  violations: result.violations,
   decidedBy: decision?.source,
   decidedTier: decision?.tiers ?? const [],
   decided: decision?.decided,

@@ -1,7 +1,5 @@
 import "dart:io";
 
-import "package:path/path.dart" as p;
-
 import "../../domain/shell.dart";
 
 /// Seatbelt confinement for one command, on a Mac.
@@ -33,11 +31,7 @@ class SeatbeltSandboxHelper implements SandboxHelper {
   @override
   Future<List<String>?> prefixFor(CommandSandbox sandbox) async {
     if (!await _probe()) return null;
-    final writes = [
-      sandbox.workspace,
-      if (sandbox.tmp != null) sandbox.tmp!,
-      ...sandbox.extraWrites,
-    ];
+    final writes = sandbox.writes;
     return [
       binary,
       "-p",
@@ -89,23 +83,4 @@ String seatbeltProfile(int writes) {
       "(allow default)\n"
       "(deny file-write*)\n"
       "(allow file-write*\n  ${grants.join("\n  ")})\n";
-}
-
-/// [path] with its symlinks resolved, since Seatbelt matches the path the
-/// kernel resolved: a grant of `/tmp/x` matches nothing, every write there
-/// landing at `/private/tmp/x`. A path not there yet resolves its nearest
-/// existing ancestor and keeps the rest as written.
-String realPath(String path) {
-  var head = p.normalize(p.absolute(path));
-  final tail = <String>[];
-  while (true) {
-    try {
-      return p.joinAll([Directory(head).resolveSymbolicLinksSync(), ...tail]);
-    } on FileSystemException {
-      final parent = p.dirname(head);
-      if (parent == head) return p.normalize(p.absolute(path));
-      tail.insert(0, p.basename(head));
-      head = parent;
-    }
-  }
 }

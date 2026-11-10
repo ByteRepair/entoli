@@ -22,7 +22,8 @@ import "../profile/profile_page.dart";
 import "../settings/agents_settings.dart";
 import "../settings/permissions_section.dart";
 import "../settings/skills_settings.dart";
-import "../settings/writable_dirs_section.dart";
+import "../settings/terminal_settings.dart" show pickedConfinement;
+import "../settings/work_folders_section.dart";
 import "../widgets/destructive_button.dart";
 import "../widgets/dialogs.dart" show confirm, promptForText;
 import "../widgets/environment_section.dart";
@@ -220,6 +221,16 @@ class ProjectSettingsPage extends ConsumerWidget {
                     ],
                   ),
                   const Divider(),
+                  // Folders on this machine, granted to the host's sandbox:
+                  // not a paired device's, whose paths a picker here cannot
+                  // name, not a guest's, which cannot see them, and not where
+                  // nothing is confined, where the list would change nothing.
+                  if (!remote &&
+                      builtIn?.rootfsIsolation != true &&
+                      pickedConfinement(ref).enforcesSandbox) ...[
+                    WorkFoldersSection(at: at),
+                    const Divider(),
+                  ],
                   if (builtIn == null) ...[
                     _ProjectMemoryRow(at: at),
                     MemoryTile(project: at, title: "Project memories"),
@@ -708,15 +719,6 @@ class _ProjectPermissionsPage extends ConsumerWidget {
             onSaved: (rules) => ref
                 .read(projectSettingsOf(at).notifier)
                 .setProjectPermissions(rules),
-          ),
-          const Divider(),
-          WritableDirsSection(
-            dirs: settings.writableDirs,
-            description:
-                "Directories the project's sandboxed commands may "
-                "write to, beside the workspace.",
-            onSaved: (dirs) =>
-                ref.read(projectSettingsOf(at).notifier).setWritableDirs(dirs),
           ),
           const Divider(),
           // Each overrides the app's answer for this project's chats.

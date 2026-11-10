@@ -61,15 +61,20 @@ GoalStatus? goalStatusAfter(GoalChange change) => switch (change) {
   GoalChange.met => GoalStatus.met,
   GoalChange.blocked => GoalStatus.blocked,
   GoalChange.cleared => null,
+  // Nothing moved, so there is no status to leave it in; [goalOf] reads this
+  // as "no change", which is the whole of what an answer is.
+  GoalChange.answered => null,
 };
 
-/// The goal [marks] leave, in order: a set starts one, a clear ends it, and
-/// everything else moves the one there is. A mark about a goal that is not
-/// the one standing — a stale verdict landing after a new `/goal` — moves
-/// nothing.
+/// The goal [marks] leave, in order: a set starts one, a clear ends it,
+/// everything else moves the one there is, and an answer moves nothing at all
+/// — it is a row the user reads, not a change to what stands. A mark about a
+/// goal that is not the one standing — a stale verdict landing after a new
+/// `/goal` — moves nothing either.
 ChatGoal? goalOf(Iterable<GoalMark> marks) {
   ChatGoal? goal;
   for (final mark in marks) {
+    if (!mark.change.changesGoal) continue;
     final starts = mark.change == GoalChange.set;
     if (!starts && goal?.objective != mark.objective) continue;
     goal = switch (goalStatusAfter(mark.change)) {
@@ -212,14 +217,24 @@ String goalNudge(String objective, String reason, String? next) =>
           "evidence. If you are blocked, say so plainly and stop.",
     ]);
 
-/// The status line for `/goal` alone, and the goal row's tooltip.
-String goalSummary(ChatGoal? goal) {
-  if (goal == null) return "No goal is set. Set one with /goal <objective>";
-  return [
-    "${goalStatusLabel(goal.status)}: ${goal.objective}",
-    ?goal.reason,
-  ].join(" · ");
-}
+/// Where a goal stands, in one line: "Goal active: ship it". The one wording
+/// for it, so the strip's tooltip and a row that reports one cannot drift.
+String goalHeadline(ChatGoal goal) =>
+    "${goalStatusLabel(goal.status)}: ${goal.objective}";
+
+/// The status line for the goal row's tooltip.
+String goalSummary(ChatGoal? goal) => goal == null
+    ? "No goal is set. Set one with /goal <objective>"
+    : [goalHeadline(goal), ?goal.reason].join(" · ");
+
+/// What a `/goal` that changed nothing found, as the row it leaves.
+///
+/// A command that changes no goal — a clear with nothing to clear, a pause of
+/// a goal already paused, `/goal` alone — reports rather than changes, so its
+/// row is worded as the answer it is: the state it found, or that there was
+/// none. See [GoalChange.answered].
+String goalAnswer(ChatGoal? goal) =>
+    goal == null ? "No goal was set" : goalHeadline(goal);
 
 /// What a goal standing at [status] is called on screen.
 String goalStatusLabel(GoalStatus status) => switch (status) {
@@ -237,4 +252,5 @@ String goalChangeLabel(GoalChange change) => switch (change) {
   GoalChange.cleared => "Goal cleared",
   GoalChange.met => "Goal met",
   GoalChange.blocked => "Goal blocked",
+  GoalChange.answered => "Goal answered",
 };

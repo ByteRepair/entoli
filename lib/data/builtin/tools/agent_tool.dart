@@ -5,6 +5,7 @@ import "../../../domain/builtin_project.dart";
 import "../../../domain/models.dart";
 import "../../../domain/prompt_library.dart";
 import "../llm/llm_client.dart";
+import "../templates.dart" show defaultInlineLimit;
 import "turn.dart";
 
 /// What a turn may be offered: the platform's facts minus what the turn is
@@ -215,6 +216,13 @@ abstract class AgentTool {
   /// offered is answered as an unknown tool.
   bool get offered => true;
 
+  /// Whether this turn is handed it: [offered], and among the agent's tools
+  /// where it is one an agent's list grants. What the tool list is built
+  /// from, and what a tool naming another to the model checks first.
+  bool get handed =>
+      offered &&
+      (group == null || offer.agent.offers(id, byDefault: onByDefault));
+
   /// What the spinner says while it runs, or null for the ones that finish
   /// too fast to be worth naming: a label that flashes is worse than none.
   String? get runningLabel => null;
@@ -240,6 +248,12 @@ abstract class AgentTool {
   /// happens between — a provider that sees a call with no result rejects
   /// the next turn.
   Stream<AgentEvent> run(LlmToolCall call, Turn turn);
+
+  /// Above how many characters a result of this tool is saved to a file in
+  /// the chat's workspace and worded for the model as a preview and the
+  /// path, the whole of it staying on the log for the chat to show. Null for
+  /// a tool that bounds its own result. See "Tools" in `AGENTS.md`.
+  int? get inlineLimit => defaultInlineLimit;
 
   /// Whether a message's calls to this tool run as one batch, after its other
   /// calls, rather than in order among them: a fan-out that runs them at once.

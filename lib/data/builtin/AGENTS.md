@@ -5,8 +5,9 @@ task prompts, ask the model, run the tool calls it made, show it the results,
 repeat. What is still upstream's, and it is worth knowing which parts are: that
 skeleton (`DefaultAgent.run`/`step`/`query`/`execute_actions`), the one `bash`
 tool and its schema, the observation JSON `observation()` writes — key for key,
-including the 10,000-character threshold and the 5,000-character head and tail —
-and the shell contract `LocalShell` keeps, which is `local.py`'s; see "Running
+the 5,000-character head and tail included, though that elision is now only the
+fallback for a long result nothing saved, past 50,000 characters rather than
+upstream's 10,000 (see "Tools") — and the shell contract `LocalShell` keeps, which is `local.py`'s; see "Running
 the commands". Prompt furniture too: the `cd` prefix rule, the
 `<system_information>` block, the `cat <<'EOF'` and `sed -i` examples.
 
@@ -158,9 +159,8 @@ so a fan-out is the tool's business rather than the loop's.
 **The gate is `ApprovalGate`** (`approval_gate.dart`), one per turn, holding
 what is the turn's: the policy as the current call reads it, the directories
 granted mid-turn, and auto mode's circuit breaker. It hands a call's outcome
-back on a `GateOutcome` the caller made — the result, what decided it, and
-whether a person answered a banner — rather than on state any other call
-could read. What a rule is matched against is the caller's to say: a subject
+back on a `GateOutcome` the caller made — the result and what decided it —
+rather than on state any other call could read. What a rule is matched against is the caller's to say: a subject
 (the path for the file tools, the URL for a fetch) or the parse for a command.
 
 Adding a tool is a class beside its kin and a line in the registry; where the
@@ -173,6 +173,71 @@ fail: that a command only runs when the `bash` tool is called (a model shown a
 fenced ```` ```echo foo``` ```` will imitate the fence and write the line as
 prose, which does nothing). Finishing is native — the model just replies with
 text and no tool call — so no marker instruction is needed.
+
+**A result too large to word in full is saved to a file, and the model reads
+its start and the path.** Claude Code's own mechanism, copied from what was
+measured of it (Claude Code 2.1.321, probed from its own `Bash` and `Read` and
+confirmed in its bundled source) rather than from memory of it: a result
+longer than its tool's limit is written whole to a file, and in its place the
+model reads
+
+```
+<persisted-output>
+Output too large (49.8KB). Full output saved to: <path>
+
+Preview (first 2KB):
+<the first 2,000 characters, cut back to the last line break past 1,000>
+...
+</persisted-output>
+```
+
+word for word (`persistedOutput` in `templates.dart`), sizes in kibibytes to
+one decimal. The limits are Claude Code's: `bash` at 30,000 characters
+(`BashTool.outputLimit`), every other tool at 50,000, and none for `read`,
+which bounds itself, and `ask_user`, whose result is the user's own words — a
+tool's `inlineLimit`. It is one place for every tool, as Claude Code persists
+in its tool-result layer rather than in each tool: `BuiltinAgent._savingLarge`
+wraps each call's events, batched ones included, the way `_withJobNotes` does,
+and `saveIfLarge` is the one test of "too large", which the user's `!` command
+asks too, with `bash`'s limit. The file is `.entoli-output/<call id>.txt` in
+the chat's workspace (`saveOutput`; the id made a file name by `fileStemOf`, as
+a job's log is), beside the jobs' logs, so `read` and `tail` reach it from
+every shell, a guest's included. The model is given it as an absolute path
+(`shellPath`) — the guest's where the commands run in one, which `read` maps
+back — so a `tail` after a `cd` still finds it; a job's log is named the same
+way. It goes when the chat's workspace does. Not
+`.entoli-tmp`, the model's own scratch it is told to fill and may clear: a path
+the conversation still names must keep naming something. Never over another
+call's file: a provider with no ids of its own numbers them per response, so
+`call_0` comes round again and the next save is `call_0-2.txt`.
+
+The path rides the result as a fact, `ToolResult.outputFile`, and the output
+stays whole on the log — the chat shows all of it, and a mirror, which reads
+the log and never runs the turn (see "Driving a turn from the other end" in
+`lib/data/sync/AGENTS.md`), shows all of it too, the path naming a file on the
+home device only the home device's turns are ever given. The projection words
+the notice from the fact, so a reload words what the live turn did. A result
+with no file — a log from before this, or a save that failed — is worded whole
+up to 50,000 characters and cut to its ends past that, upstream's elision kept
+as the fallback. The user's `!` command saves on `bash`'s terms, onto
+`ShellRunPart.outputFile`.
+
+What this replaced was the elision alone, at 10,000: a build log's middle was
+gone with no way back but running it again, and every result up to the
+threshold rode the context whole. The chat that prompted it spent 1.2M
+characters on command output and 2.66M on reads.
+
+**`read` pages, on Claude Code's terms.** With no `limit` it returns 2,000
+lines from `offset` (`readLineLimit`), and says where the rest starts when the
+file goes on — Claude Code leaves that to its description, and a silent cut
+read as the whole file. A read is held to 25,000 tokens (`readTokenCap`),
+counted the way the app estimates tokens everywhere else, four characters
+each. Over it, a read of the whole file — no offset past the first line, no
+limit — is the whole lines that fit, closed by Claude Code's `[Truncated:
+PARTIAL view — …]` naming the next `offset` and `limit`; one line longer than
+the cap is cut by characters. A read that named a range is refused with
+Claude Code's own "File content (N tokens) exceeds maximum allowed tokens
+(25000)…", the range being the model's to narrow. `readPage` is all of it.
 
 Every tool call gets an answer, including the ones never run — after an abort,
 for a tool that does not exist. A provider that sees a
@@ -306,6 +371,29 @@ the grace where the command never answered at all. The
 group is the reason the shell is spawned under `setsid` where that exists —
 learned by trying it, not by probing first.
 
+**How long a command may run is Claude Code's two minutes and ten.**
+`BuiltinOptions.commandTimeout` is what a call naming no `timeout` gets, two
+minutes, and `maxCommandTimeout` is the most one may name, ten — Claude Code's
+120,000 and 600,000 milliseconds, measured. It was three minutes for both, and
+the chat that prompted the change had 25 commands hit it, mostly builds and CI
+waits. The user's `!` gets the ten: they typed it and are there to stop it.
+
+A command killed at its timeout keeps what it printed — the session shell's
+interrupt and the one-shot kill both hand back the output so far — and
+`ShellResult.timedOut` says that is why it stopped. Here Claude Code and this
+part ways on purpose: Claude Code moves a timed-out command to the background
+and lets it run, reporting `Command did not complete within its 120s timeout
+and was moved to the background (ID: …)`. Every Claude Code command is a
+process of its own, so stopping waiting is free; here a chat's commands run in
+one shell, and a command left running in it is one every later command waits
+behind. So it is killed, as before, and `bash` adds to a timed-out result,
+where background jobs are offered, that something that long goes in again with
+`background: true`. The descriptions say it ahead: `command`'s that the whole
+output comes back and is saved past the limit, so `| tail` buys nothing and a
+pipeline killed at the timeout loses all `tail` was holding — 14 of that chat's
+21 empty timeouts were pipes into `tail` or `head` — and `timeout`'s and
+`background`'s that anything that may outlast the timeout is a job.
+
 A command that moved the shell records the directory it left it in, on the
 result as a fact, and the projection words the change into a note the model
 reads — the note is derived at wording time from the fact the part carries,
@@ -370,8 +458,9 @@ The log is named by the call that started the job (`backgroundLog`), not by
 the job's number: the number starts again with the app, and a reused one
 would write over a log the chat still points at.
 The answer gives the job's number, its pid (the group leader, so
-`kill -- -<pid>` takes everything it started) and the log, which the model
-reads with `tail` or `read`; the number also rides the result as
+`kill -- -<pid>` takes everything it started) and the log, by the absolute
+path the shell sees (`shellPath`, as a saved result's), which the model reads
+with `tail` or `read`; the number also rides the result as
 `ToolResult.jobId`, which is how the chat tells a job's call from a call.
 
 A job starts in the directory the chat's commands stand in
@@ -402,7 +491,17 @@ starts a turn whose prompt is a `<system-notification>` naming the job, its
 exit code and its log's tail (`jobEndedNotification`), and tells the jobs the
 agent knows (`ChatShellJobs.told`), so the next tool result does not say it
 twice. A job that was stopped wakes nobody — whoever stopped it knows — and
-one end is one wake, so a watcher that keeps dying cannot loop. The chat
+one end is one wake, so a watcher that keeps dying cannot loop.
+
+An end that lands while a turn runs is held rather than dropped: the turn
+reads it on its next tool result if there is one, but the end often comes
+while the last reply is being written, and then no call follows. When the
+turn is over and the room quiet, the first end the agent has not heard wakes
+it the same way. The jobs are the one record of that: `ChatJobs` keeps each
+end until a tool result carries its note or a wake tells it
+(`ChatShellJobs.unheard`), and the room keeps no list of its own. A turn
+that was stopped or failed wakes nothing then: the end waits for the next
+call, or for the next turn that ends settled. The chat
 draws that prompt as the app's note, not the user's; see "When a turn is
 over" in `lib/domain/room/AGENTS.md`.
 
@@ -491,8 +590,31 @@ not `|`, which is the pipe, nor a bare comma, which arguments carry). Every
 segment must find an allow, so a compound whose tail no rule covers is not
 allowed by its head. A segment whose words are not plain text — an
 expansion, a substitution — is matched by no rule, and a command the parse
-cannot model at all goes to the banner even under an allow rule (refused in
-`never`, where nobody can answer).
+has findings on — one it cannot model at all, or a redirect through a
+variable, an assignment that moves where tools write — is not decided by an
+allow rule either: it goes to the banner in `ask`, to the classifier in
+`auto`, and is refused in `never`, where nobody can answer.
+
+**A command the parse cannot check is judged whole, not refused unjudged.**
+`ApprovalGate.decide` decides it once, after the deny rules and before
+anything else, where a sandbox would confine the run (without one the parse
+has nothing to hold it to, and the mode decides as for any command): the
+banner in `ask`; in `auto` the classifier, handed the findings beside the
+command (`classify`'s `findings`); in `never` a refusal
+(`ShellCommandAnalysis.escalationNote`, which the model reads: the findings,
+the segments where the parse saw them, and the advice to split the command
+or write a script). The run itself does not check again. Before, a
+classifier allow was vetoed by the parse at the run, so an ordinary
+`cat x > $B/out` was refused outright; the static parse is a fast path, not
+the only judge, and what runs is still under the sandbox. A classifier deny answers with the same split
+advice and the classifier's verdict, so the model rewrites rather than
+retries; an ask goes to the banner. **The rules are not bypassed**
+(`rulesBlindTo`): where a deny rule for `bash` could match a part the parse
+cannot read — a segment whose words are not plain, or whose plain words
+match it with a redirect's target hidden — the command is refused as before
+without asking the classifier, and an ask rule there raises the banner. A
+rule is the user's word on what never runs or always shows, and a model's
+judgement of text the rule never saw does not stand in for it.
 
 **The policy is read, not held.** The repository hands a turn a
 `PolicyReader` (`TurnSettings.policy`), and the agent calls it at every gated
@@ -517,8 +639,36 @@ back, and at least one segment must match — and `writes` are the union of
 the matched rules'. The turn's grant is the chat's workspace, its tmp, the
 project's workspace beside it, and the tiers' `writableDirs`.
 
-Beside those, two grants a build needs and a user should never have had to
-make (`sandbox_grants.dart`). **The toolchain caches** under the machine
+Beside those, three grants a build needs and a user should never have had
+to make (`sandbox_grants.dart`), each into the sandbox's `extraWrites` from
+`_sandboxFor`, so a `CommandSandbox` is always the whole write set and a
+helper renders it and adds nothing of its own. **The system's temp
+folders** (`systemTemps`): on macOS `/private/tmp` and the per-user folder
+`getconf DARWIN_USER_TEMP_DIR` names (Seatbelt's helper resolves it to the
+real path, like every grant), on Linux `/tmp` and `/var/tmp` where they
+exist, and nothing elsewhere. Found once per process as a future the gate
+starts before its policy read, so parallel sub-agents' first commands share
+one `getconf`. `TMPDIR` still names the chat's `.entoli-tmp`, and a program
+that honours it writes there; the grant is for the ones that do not.
+macOS's `mktemp` asks `_CS_DARWIN_USER_TEMP_DIR` before `TMPDIR` (its manual
+says so), so it failed whatever `TMPDIR` said, meson's compiler check with
+it; the system's bash 3.2 never reads `TMPDIR` for a here document — it
+tries `/var/tmp`, `/tmp`, then the working directory — so `python3 - <<'EOF'`
+worked in the workspace and failed after a `cd` out of it. `TMPDIR` reached
+every one of those commands; they did not ask it. **The cost is accepted,
+and it is this**: those folders are shared with every program the user
+runs, so a confined command can overwrite or delete another app's temp
+files there. The alternative was a stream of failures in ordinary tools,
+each one sending the model out of the sandbox altogether, which grants far
+more. The phones, the guests and Windows change nothing: a phone's host
+shell is inside the app's own OS sandbox, a guest Linux (proot, iSH) has
+its own `/tmp` inside the rootfs, and Windows has no sandbox to grant it
+in. With them writable, the parse no longer counts a `TMPDIR` assignment as
+an escalation: it picks no program and no configuration, only where scratch
+lands, and the parse gate stands only where the sandbox already bounds
+that.
+
+**The toolchain caches** under the machine
 user's home that exist, looked up once per turn — `~/.cache`, `~/Library/Caches`, Xcode's
 DerivedData, `~/.pub-cache`, `~/.npm`, `~/.gradle`, Cargo's registry, Go's
 module cache and their kin, the variables that move them, and the `bin/cache`
@@ -564,9 +714,13 @@ also stands down the parse gate.
 environment enforces one, `bash` carries an `unsandboxed` argument
 (`ToolOffer.sandboxed`; never a sub-agent's, which has nobody to approve it),
 and its description says what a sandboxed write outside the grant looks like
-when it fails. Nothing scans the output: a confined command that cannot
-write fails like any command, and the model reads the error and calls again
-with `unsandboxed: true`. The gate treats that as part of the call — an
+when it fails, and what each way out is for: work that keeps writing in one
+folder — a repository, a worktree, a build directory — is `add_directory` on
+it once, and `unsandboxed` is the one-off (installers, container tools,
+setuid programs). A chat working in a repository outside the workspace that
+read only the second answered 72 banners and called `add_directory` never,
+the description being all it had. The gate treats an `unsandboxed` call as
+part of the call — an
 allow rule and the read-only check do not cover it, a no-sandbox rule for
 every segment does, and the rest goes to the mode: the classifier in auto
 mode (its rubric judges an unsandboxed call as writing past the workspace),
@@ -574,11 +728,54 @@ the banner in ask mode ("Run without the sandbox?", `ToolApproval.unsandboxed`),
 and a refusal in never mode, where the sandbox is the one guard an unwatched
 turn has. Its "always" writes a no-sandbox rule for the command's leading
 words with no decision of its own, so the asking stays with whatever already
-decides it. Nothing guesses from the output after the fact: rootless podman
-cannot run under Landlock at all (joining its pause process means opening
-another process's namespace, which Landlock refuses), so no folder grant
-could have been the answer. Old results carry `violations` and a `rerun`
-decision, still worded so their logs read.
+decides it. Rootless podman cannot run under Landlock at all (joining its
+pause process means opening another process's namespace, which Landlock
+refuses), so no folder grant could have been the answer there. Old results
+carry a `rerun` decision, still worded so their logs read.
+
+**What the sandbox refused is read off the kernel's own error**
+(`lib/domain/sandbox_denials.dart`), since neither enforcer reports a denial
+to anyone.
+Seatbelt logs none for a `sandbox-exec` profile nested under another sandbox
+(checked: neither `(debug deny)` nor `log show --info --debug` shows one, and
+`(with report)` is refused on a deny), and a `log show` over the run's window
+costs a second or two on every failing command. Landlock logs nothing, and
+its helper has exec'd the command before the write happens, so it has nothing
+to report either. What both leave is the errno, printed by whatever made the
+call: Seatbelt's EPERM ("Operation not permitted") and Landlock's EACCES
+("Permission denied"). The output is read for those lines where the
+confined run ends, in `LocalShell`'s one-shot run, so every run under a
+sandbox reports them on its `ShellResult` — the model's command and a
+background job alike — and output with neither errno is answered before
+anything is resolved. The path is the quoted string on the line, or the
+field just before the error, must hold a slash (a bare name is a program, as
+in `execvp() of 'ps'`), and counts only if it is outside
+`CommandSandbox.writes` — the one list the helpers grant from — resolved
+through symlinks as Seatbelt resolves them, outside the read-only
+directories, whose EACCES is the app's file modes, and outside `/dev`, a
+device being no folder to grant. That is the OS's error,
+not the model's words. What it finds is the result's `violations`, at most
+five, which the observation words as "Denied by the sandbox" beside the
+output and the activity draws under "Sandbox": the model is told the failure
+was the sandbox's, which it cannot tell from the error alone. A command that
+merely failed — a test, a `grep` with no match — has none.
+
+**A `bash` result steers toward the grant** (`tools/grant_nudge.dart`) on
+two signals. One is a sandbox refusal: the note names the denied path's
+folder, the nearest directory of it that exists. The other is a second
+`unsandboxed` request for one folder in a turn (the first is the one-off the
+argument is for), whose folder is where the command's leading `cd` goes,
+where the shell was left, or where it stood before. Either is widened to the
+nearest directory above it with a `.git` short of the home
+(`repositoryRootOf`, the walk the instruction files and a worktree's git
+directory share), since a build writes across the tree. It rides `ToolResult.notes`, names each folder once a
+turn, and is left off where `add_directory` is not the turn's to call
+(`grantsDirectories`: `AgentTool.handed`, the predicate the tool list is
+built from), or would be
+refused by the tool itself: `refuseFolder` (`lib/domain/work_folders.dart`)
+answers for both, so the note never names a folder `add_directory` turns
+away. A banner the user denied gets none, being their answer; a
+classifier's or a rule's refusal is not theirs, and still gets one.
 
 The two "always" banner answers on an ordinary banner write the derived rule:
 `ruleFromApproval` reads the command's leading words, the file's directory or
@@ -588,7 +785,8 @@ named before the answer reaches the turn.
 The directory grant is `add_directory` (`lib/data/builtin/tools/directory_tools.dart`):
 the model's ask for write access to a directory outside the workspaces, and
 its banner — the ordinary one less its plain Allow — is the whole grant. The
-model asks because the work there recurs; a mirrored chat, which has no
+model asks because the work there recurs, whether the user named the folder
+or the task led there; a mirrored chat, which has no
 always answers, keeps a this-turn grant. An always answer reaches the
 repository with the directory in `deniedDirs`, so it lands in the named
 tier's `writableDirs` and no rule is written. `writable_directories` lists the
@@ -596,17 +794,42 @@ workspaces and what was granted beside them. The file tools read the same
 list — `outsideWorkspaces` carries the turn's writable set — so a granted
 directory behaves the same by command or by file tool; and auto mode's
 classifier is handed it as `alsoWritable`, beside the project workspace.
-The app's data directory refuses in both directions — anything beneath it, or
-anything containing it, would make the app's own settings, secrets and chats
-writable from inside its own permit. The tool's door refuses before any
-banner, and the repository drops the same paths. The tool rides `ask` and
+What may be granted at all is one test, `refuseFolder` in
+`lib/domain/work_folders.dart`, which the settings page's work folders take
+too. A grant must be a directory that is not the root, not the home or a
+folder holding it, and not a folder holding the workspaces. The app's data
+directory refuses in both directions: anything beneath it, or anything
+containing it, would make the app's own settings, secrets and chats writable
+from inside its own permit. The tool's door refuses before any banner, and
+the repository drops data-tree paths from an "always" answer. The tool rides `ask` and
 runs top-level only, having nobody to answer the banner otherwise.
+
+**A project's work folders are the same list, granted up front.** The
+project tier's `writableDirs` is what its settings page shows as "Work
+folders" (see "Work folders" in `lib/ui/settings/AGENTS.md`), so a folder put
+there before any turn is in the sandbox's grant, Seatbelt's and Landlock's
+alike. It also counts as inside the sandbox for the gate's question of whether
+a call leaves it, and for the classifier's `alsoWritable`, from the first
+call. No banner is needed, so nothing is refused for want of someone to answer
+it. The repository merges the tiers' lists once, without duplicates. The agent
+then hands its gate the policy less what grants nothing here (`grantsNow`:
+`refuseFolder` refuses it, so a folder gone from this machine grants nothing,
+whatever tier wrote it). Each path is checked once per turn rather than per
+call, and a `~` path stands for the gate to resolve. The turn's second system
+message names what is left under "## Work folders" (`turnPrompt`'s
+`workFolders`), so the model writes there without `unsandboxed` or an
+`add_directory` ask. That is read once per turn, and only where the gate
+`confines` the turn's commands (the same condition its sandbox is built
+under). With the switch off or no helper there is nothing to stay inside, and
+the section is absent.
 
 In `auto` mode, a `PermissionClassifier` (the `LlmClassifier` impl, or
 `NoClassifier` when no classifier model is configured) is asked before each
 `bash` and `webfetch` call. `allow` runs silently, `deny` refuses with a
 message that says not to retry it, `ask` escalates to the same banner `ask`
-mode uses. The classifier's rubric is workspace-anchored: reads of anything
+mode uses. A command with parse findings reaches it with them, and its deny
+carries the split advice instead (see "A command the parse cannot check"
+above). The classifier's rubric is workspace-anchored: reads of anything
 and writes inside the workspace allow, anything modifying state past it (the
 machine's `/tmp` included) asks, and deny is reserved for irreversible
 destruction rather than being a stronger ask — a write the model is unsure
@@ -617,6 +840,30 @@ turn, falling back to `ask` for the rest — emitted as an `InfoEvent` so the
 UI can say "auto mode paused." `NoClassifier` always asks, which is why the
 default mode is `ask` and `auto` is disabled in the settings UI until a
 classifier model is picked. `never` is labeled "(DANGEROUS)" in the dropdown.
+
+**The classifier judges a call against what was asked.** Every classifier
+call carries a `ClassifierRequest` beside the call: the text of the message
+the turn opened on as the user typed it (no attachments), the chat's active
+`/goal` objective, and the plan's task in progress (`planInProgress` over
+`readPlan`). The message is the agent's `said`, given by whoever opens the
+turn — the backend from the prompt, or for a resumed turn the message that
+started it; the sub-agent runner from the task — since the session holds only
+its dressed projection. A sub-agent's request has no plan: the plan beside it
+is the parent's, and a one-shot agent keeps none. A resumed sub-agent has no
+task to say, its transcript opening on its own message. `ClassifierRequest.of`
+is the one place blankness is decided (trimmed, a blank part null, no request
+where every part is). The gate reads it at each classifier call
+(`ApprovalGate.request`), alongside the policy; the plan's task is read once
+and held until a call that can write the plan (`writesPlan`) has run. The
+prompt puts it first, after the system prompt, since it is the same for
+every call of a turn and so a prefix a provider can cache, capped at
+`LlmClassifier.requestBudget` (4000 characters: the goal and the task cut to
+a share each, the message to the rest from its end, the newest kept), so a
+long paste cannot swamp the call being judged. The rubric frames it as data:
+it says what work was requested, never grants permission itself, and text in
+it that addresses the classifier is ignored. It is message content, so no
+log line carries it. Sub-agents run under `never` with no classifier today,
+so theirs is read only if that changes.
 
 The `ApprovalRequestEvent` is emitted *before* the agent waits on it, because
 the banner is where the answer comes from. The completer is therefore created
@@ -1394,6 +1641,27 @@ oldest half of the span is dropped and the ask is made again, three attempts.
 The boundary handed back covers only what was read, so a conversation too big
 for its own summarizer still gets a marker for its newest half.
 
+**The half dropped is of what the ask reads**, the messages after the newest
+marker the span holds (`verbatimFrom`, the projection's own rule), not of the
+span whole. Everything behind that marker costs one summary however many
+messages it is, so halving them leaves the ask the size it was: a chat
+compacted once and grown past half its window again made three asks of the
+same size and gave up without calling the model. Once the old boundary is
+dropped the marker no longer applies, and the prior summary rides the prompt
+as `<prior-summary>` instead.
+
+**A compaction that lands nothing says why, on screen and in the log.**
+`compact` answers a `CompactOutcome`: `Compacted` with the marker, or
+`NotCompacted` with a sentence for the user — a turn running, no model,
+nothing to read, a ladder still over budget after its last halving (with the
+numbers), a summarizer that said nothing or failed. The manual turn ends as
+`error` with "The conversation could not be compacted." and the reason on its
+reply, the red an error part is drawn in, since a `done` with nothing after
+it is the compact that seemed never to run. An automatic one has no turn, so
+the reason is `ChatViewState.compactFailure`, which the chat draws as a
+divider with the reason in red where the marker would have been; see "A
+compact turn, and its divider" in `lib/ui/chat/AGENTS.md`.
+
 **Usage is parsed, not estimated, where the provider says anything.**
 `LlmUsage` rides `LlmCompletion` — Anthropic's `message_start` and
 `message_delta` usage objects, OpenAI's final-chunk `usage` (asked for with
@@ -1406,9 +1674,17 @@ business. The window is the chat's model's, not the last turn's:
 `contextWindowProvider` resolves the chat's choice from its meta the way a
 turn does (`chatModelOf`) and asks `contextWindowOf` for the catalog's number
 among the endpoints a turn would reach, so it is there before any turn after a
-restart and follows a model change. Where the catalog does not know the model,
-`AppSettings.totalContext` ("Total Context" under Settings > LLMs, 128k
-default) is the guess.
+restart and follows a model change.
+
+**Total Context is a ceiling, not only a guess.** `AppSettings.totalContext`
+("Total Context" under Settings > LLMs, 256k default) is the most any chat is
+let grow to: the window the threshold is a share of is the model's or it,
+whichever is smaller, and it where the catalog does not know the model. A
+share of a million-token window is a context no model reads well — 80% of
+1M is 838k, and a chat that long has gone wrong well before. The context page draws the same capped
+window, so its 80% mark is where compaction fires. The summarizer is not
+held to it: its budget is half the model's real window where that is known,
+since reading more in one ask is what the ladder wants.
 
 The marker lands through `ChatRepository.appendCompaction` —
 `_rethread` with a `CompactionRecord`, the same append/reload/rebuild walk a

@@ -5,9 +5,19 @@ import SwiftUI
 /// draws through this one view — the chat's bar and every Flutter page's —
 /// so they are the system's bar alike, and a press goes to whichever bar's
 /// [intents] it was drawn with. See `TitleBarSnapshot`.
+///
+/// A bar Dart gives no leading control of its own leads with [sidebar] where
+/// one is given — the Flutter app's menu button on a phone, drawn the
+/// system's way — in place of the split view's chevron, which the Flutter app
+/// has nothing like and which made the new-chat screen look like a page
+/// pushed over the list.
 struct TitleBar: ViewModifier {
   let bar: TitleBarSnapshot
   let intents: TitleBarIntents
+  let sidebar: (() -> Void)?
+
+  /// What leads the bar where Dart says nothing does.
+  private var leadingSidebar: (() -> Void)? { bar.leading == nil ? sidebar : nil }
 
   func body(content: Content) -> some View {
     content
@@ -19,15 +29,17 @@ struct TitleBar: ViewModifier {
         .navigationBarTitleDisplayMode(.inline)
         // A page's way back is Dart's, which asks before it goes; the
         // split view's own would leave the page standing.
-        .navigationBarBackButtonHidden(bar.leading != nil)
+        .navigationBarBackButtonHidden(bar.leading != nil || leadingSidebar != nil)
       #endif
-      .toolbar { TitleBarContent(bar: bar, intents: intents) }
+      .toolbar { TitleBarContent(bar: bar, intents: intents, sidebar: leadingSidebar) }
   }
 }
 
 extension View {
-  func titleBar(_ bar: TitleBarSnapshot, intents: TitleBarIntents) -> some View {
-    modifier(TitleBar(bar: bar, intents: intents))
+  func titleBar(
+    _ bar: TitleBarSnapshot, intents: TitleBarIntents, sidebar: (() -> Void)?
+  ) -> some View {
+    modifier(TitleBar(bar: bar, intents: intents, sidebar: sidebar))
   }
 }
 
@@ -55,6 +67,7 @@ extension TitleBarMenuItem: Identifiable {}
 private struct TitleBarContent: ToolbarContent {
   let bar: TitleBarSnapshot
   let intents: TitleBarIntents
+  let sidebar: (() -> Void)?
 
   private var buttons: [TitleBarItem] {
     bar.items.filter { !$0.spinner && $0.style != .confirm }
@@ -72,6 +85,13 @@ private struct TitleBarContent: ToolbarContent {
           }
         }
         .help(leading == .back ? "Back" : "Discard")
+      }
+    } else if let sidebar {
+      ToolbarItem(placement: .navigation) {
+        Button(action: sidebar) {
+          Label("Chats", systemImage: "sidebar.leading")
+        }
+        .help("Show chats")
       }
     }
     // The spinner on its own, with no glass behind it: in the buttons'
