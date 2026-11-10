@@ -614,9 +614,13 @@ also stands down the parse gate.
 environment enforces one, `bash` carries an `unsandboxed` argument
 (`ToolOffer.sandboxed`; never a sub-agent's, which has nobody to approve it),
 and its description says what a sandboxed write outside the grant looks like
-when it fails. Nothing scans the output: a confined command that cannot
-write fails like any command, and the model reads the error and calls again
-with `unsandboxed: true`. The gate treats that as part of the call — an
+when it fails, and what each way out is for: work that keeps writing in one
+folder — a repository, a worktree, a build directory — is `add_directory` on
+it once, and `unsandboxed` is the one-off (installers, container tools,
+setuid programs). A chat working in a repository outside the workspace that
+read only the second answered 72 banners and called `add_directory` never,
+the description being all it had. The gate treats an `unsandboxed` call as
+part of the call — an
 allow rule and the read-only check do not cover it, a no-sandbox rule for
 every segment does, and the rest goes to the mode: the classifier in auto
 mode (its rubric judges an unsandboxed call as writing past the workspace),
@@ -624,11 +628,54 @@ the banner in ask mode ("Run without the sandbox?", `ToolApproval.unsandboxed`),
 and a refusal in never mode, where the sandbox is the one guard an unwatched
 turn has. Its "always" writes a no-sandbox rule for the command's leading
 words with no decision of its own, so the asking stays with whatever already
-decides it. Nothing guesses from the output after the fact: rootless podman
-cannot run under Landlock at all (joining its pause process means opening
-another process's namespace, which Landlock refuses), so no folder grant
-could have been the answer. Old results carry `violations` and a `rerun`
-decision, still worded so their logs read.
+decides it. Rootless podman cannot run under Landlock at all (joining its
+pause process means opening another process's namespace, which Landlock
+refuses), so no folder grant could have been the answer there. Old results
+carry a `rerun` decision, still worded so their logs read.
+
+**What the sandbox refused is read off the kernel's own error**
+(`lib/domain/sandbox_denials.dart`), since neither enforcer reports a denial
+to anyone.
+Seatbelt logs none for a `sandbox-exec` profile nested under another sandbox
+(checked: neither `(debug deny)` nor `log show --info --debug` shows one, and
+`(with report)` is refused on a deny), and a `log show` over the run's window
+costs a second or two on every failing command. Landlock logs nothing, and
+its helper has exec'd the command before the write happens, so it has nothing
+to report either. What both leave is the errno, printed by whatever made the
+call: Seatbelt's EPERM ("Operation not permitted") and Landlock's EACCES
+("Permission denied"). The output is read for those lines where the
+confined run ends, in `LocalShell`'s one-shot run, so every run under a
+sandbox reports them on its `ShellResult` — the model's command and a
+background job alike — and output with neither errno is answered before
+anything is resolved. The path is the quoted string on the line, or the
+field just before the error, must hold a slash (a bare name is a program, as
+in `execvp() of 'ps'`), and counts only if it is outside
+`CommandSandbox.writes` — the one list the helpers grant from — resolved
+through symlinks as Seatbelt resolves them, outside the read-only
+directories, whose EACCES is the app's file modes, and outside `/dev`, a
+device being no folder to grant. That is the OS's error,
+not the model's words. What it finds is the result's `violations`, at most
+five, which the observation words as "Denied by the sandbox" beside the
+output and the activity draws under "Sandbox": the model is told the failure
+was the sandbox's, which it cannot tell from the error alone. A command that
+merely failed — a test, a `grep` with no match — has none.
+
+**A `bash` result steers toward the grant** (`tools/grant_nudge.dart`) on
+two signals. One is a sandbox refusal: the note names the denied path's
+folder, the nearest directory of it that exists. The other is a second
+`unsandboxed` request for one folder in a turn (the first is the one-off the
+argument is for), whose folder is where the command's leading `cd` goes,
+where the shell was left, or where it stood before. Either is widened to the
+nearest directory above it with a `.git` short of the home
+(`repositoryRootOf`, the walk the instruction files and a worktree's git
+directory share), since a build writes across the tree. It rides `ToolResult.notes`, names each folder once a
+turn, and is left off where `add_directory` is not the turn's to call
+(`grantsDirectories`: `AgentTool.handed`, the predicate the tool list is
+built from), or would be
+refused by the tool itself: `refuseFolder` (`lib/domain/work_folders.dart`)
+answers for both, so the note never names a folder `add_directory` turns
+away. A banner the user denied gets none, being their answer; a
+classifier's or a rule's refusal is not theirs, and still gets one.
 
 The two "always" banner answers on an ordinary banner write the derived rule:
 `ruleFromApproval` reads the command's leading words, the file's directory or
@@ -638,7 +685,8 @@ named before the answer reaches the turn.
 The directory grant is `add_directory` (`lib/data/builtin/tools/directory_tools.dart`):
 the model's ask for write access to a directory outside the workspaces, and
 its banner — the ordinary one less its plain Allow — is the whole grant. The
-model asks because the work there recurs; a mirrored chat, which has no
+model asks because the work there recurs, whether the user named the folder
+or the task led there; a mirrored chat, which has no
 always answers, keeps a this-turn grant. An always answer reaches the
 repository with the directory in `deniedDirs`, so it lands in the named
 tier's `writableDirs` and no rule is written. `writable_directories` lists the

@@ -157,8 +157,9 @@ class ApprovalGate {
   /// machine's [systemTemps].
   CommandSandbox? _sandboxFor(
     StandingPermissions permissions,
-    List<String> systemTemps,
-  ) {
+    List<String> systemTemps, {
+    String? standing,
+  }) {
     if (!confines(permissions)) return null;
     final granted = [
       workspace,
@@ -166,7 +167,7 @@ class ApprovalGate {
       ...permissions.writableDirs,
     ];
     final gitDir = worktreeGitDir(
-      shell.standingIn(workspace) ?? workspace,
+      standing ?? shell.standingIn(workspace) ?? workspace,
       granted,
     );
     return CommandSandbox(
@@ -191,23 +192,32 @@ class ApprovalGate {
   /// could write, the rules' own folders added where they match. One answer
   /// for the gate asking whether leaving it is being asked for, and the run.
   /// Worked out once per call: the gate and the run ask about the same
-  /// analysis.
-  Future<CommandSandbox?> confinementOf(ShellCommandAnalysis analysis) {
+  /// analysis, from the same place.
+  ///
+  /// [standing] is where the command starts, where the caller has worked it
+  /// out already; the shell is asked otherwise.
+  Future<CommandSandbox?> confinementOf(
+    ShellCommandAnalysis analysis, {
+    String? standing,
+  }) {
     final held = _confinement;
     if (held != null && identical(held.$1, analysis)) return held.$2;
-    final confined = _confine(analysis);
+    final confined = _confine(analysis, standing);
     _confinement = (analysis, confined);
     return confined;
   }
 
   (ShellCommandAnalysis, Future<CommandSandbox?>)? _confinement;
 
-  Future<CommandSandbox?> _confine(ShellCommandAnalysis analysis) async {
+  Future<CommandSandbox?> _confine(
+    ShellCommandAnalysis analysis,
+    String? standing,
+  ) async {
     // Started before the policy read rather than after it: the first
     // command of a process pays one `getconf`, and it overlaps the read.
     final temps = systemTemps();
     final permissions = await this.permissions();
-    final sandbox = _sandboxFor(permissions, await temps);
+    final sandbox = _sandboxFor(permissions, await temps, standing: standing);
     if (sandbox == null) return null;
     final ruled = rulesSandbox(
       permissions.permissions,

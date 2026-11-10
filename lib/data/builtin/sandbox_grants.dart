@@ -3,7 +3,7 @@ import "dart:io";
 import "package:path/path.dart" as p;
 
 import "../../core/log.dart";
-
+import "../../domain/shell.dart" show repositoryRootOf;
 import "local_shell.dart" show LocalShell;
 
 /// The caches developer tools write to as a matter of course, under the
@@ -94,32 +94,29 @@ String? _flutterCache(String path) {
 String? worktreeGitDir(String dir, List<String> granted) {
   bool inGrant(String path) =>
       granted.any((g) => p.equals(g, path) || p.isWithin(g, path));
-  var at = p.normalize(dir);
-  while (true) {
-    final dotGit = p.join(at, ".git");
-    final type = FileSystemEntity.typeSync(dotGit, followLinks: false);
-    if (type == FileSystemEntityType.directory) return null;
-    if (type == FileSystemEntityType.file) {
-      if (!inGrant(at)) return null;
-      try {
-        final line = File(
-          dotGit,
-        ).readAsLinesSync().firstWhere((l) => l.startsWith("gitdir:"));
-        final gitdir = p.normalize(
-          p.join(at, line.substring("gitdir:".length).trim()),
-        );
-        final common = File(p.join(gitdir, "commondir"));
-        final root = common.existsSync()
-            ? p.normalize(p.join(gitdir, common.readAsStringSync().trim()))
-            : gitdir;
-        return inGrant(root) ? null : root;
-      } on Object {
-        return null;
-      }
-    }
-    final parent = p.dirname(at);
-    if (parent == at) return null;
-    at = parent;
+  final at = repositoryRootOf(dir);
+  if (at == null) return null;
+  final dotGit = p.join(at, ".git");
+  // A checkout's `.git` is a directory, and its metadata is its own.
+  if (FileSystemEntity.typeSync(dotGit, followLinks: false) !=
+          FileSystemEntityType.file ||
+      !inGrant(at)) {
+    return null;
+  }
+  try {
+    final line = File(
+      dotGit,
+    ).readAsLinesSync().firstWhere((l) => l.startsWith("gitdir:"));
+    final gitdir = p.normalize(
+      p.join(at, line.substring("gitdir:".length).trim()),
+    );
+    final common = File(p.join(gitdir, "commondir"));
+    final root = common.existsSync()
+        ? p.normalize(p.join(gitdir, common.readAsStringSync().trim()))
+        : gitdir;
+    return inGrant(root) ? null : root;
+  } on Object {
+    return null;
   }
 }
 

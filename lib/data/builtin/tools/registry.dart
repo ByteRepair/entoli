@@ -73,10 +73,6 @@ List<AgentTool> offeredTools(ToolOffer offer) {
   final names = <String>{};
   return [
     for (final tool in agentTools(offer))
-      if (tool.offered &&
-          (tool.group == null ||
-              offer.agent.offers(tool.id, byDefault: tool.onByDefault)) &&
-          names.add(tool.name))
-        tool,
+      if (tool.handed && names.add(tool.name)) tool,
   ];
 }

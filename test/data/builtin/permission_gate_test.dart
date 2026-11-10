@@ -5,7 +5,8 @@ import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/sandbox_grants.dart" show systemTemps;
-import "package:agent_chat/data/builtin/tools/agent_tool.dart" show ToolOffer;
+import "package:agent_chat/data/builtin/tools/agent_tool.dart"
+    show AgentCapabilities, ToolOffer;
 import "package:agent_chat/data/builtin/tools/bash_tool.dart" show BashTool;
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/domain/agent_backend.dart";
@@ -63,6 +64,7 @@ void main() {
     ShellResult Function(String)? respond,
     PermissionClassifier? classifier,
     FakeWebSearch? webSearch,
+    AgentCapabilities caps = AgentCapabilities.full,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-gate-test");
     final project = p.join(tempDir.path, "project-ws");
@@ -108,6 +110,7 @@ void main() {
       ),
       classifier: classifier,
       webSearch: webSearch,
+      caps: caps,
     );
   }
 
@@ -1087,6 +1090,127 @@ void main() {
       expect(approvals, hasLength(2));
       expect(approvals.last.approval.unsandboxed, isFalse);
       expect(shell.sandboxes, [isNull, isNull]);
+    });
+
+    group("steers toward add_directory", () {
+      /// A repository outside the workspaces, with a directory inside it the
+      /// commands `cd` to: the grant is asked for the repository's root.
+      late String repo;
+      setUp(() {
+        final dir = Directory.systemTemp.createTempSync("grant-nudge-test");
+        addTearDown(() => dir.deleteSync(recursive: true));
+        repo = dir.path;
+        Directory(p.join(repo, ".git")).createSync();
+        Directory(p.join(repo, "lib")).createSync();
+      });
+
+      List<String> notesOf(List<AgentEvent> events) => [
+        for (final event in events.whereType<ToolResultEvent>())
+          ...event.result.notes,
+      ];
+
+      test("after the sandbox refuses a write in a folder outside", () async {
+        final denied = p.join(repo, "lib", "new.dart");
+        final client = FakeLlmClient([
+          [bashCall("touch $denied")],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          // What the shell reports of a run the sandbox refused a write.
+          respond: (_) => ShellResult(
+            returnCode: 1,
+            output: "touch: $denied: Operation not permitted",
+            violations: [denied],
+          ),
+        ).run(userMessage("go")).toList();
+        expect(shell.sandboxes.single, isNotNull);
+        expect(results(events).violations, [
+          denied,
+        ], reason: "the model is told the failure was the sandbox's");
+        final note = notesOf(events).single;
+        expect(note, contains("`add_directory` with $repo once"));
+      });
+
+      test("not after a command that only failed there", () async {
+        final client = FakeLlmClient([
+          [bashCall("cd $repo && grep -r nothing-here lib")],
+          [bashCall("cd $repo && false")],
+          [bashCall("cd $repo && flutter test")],
+          [finish],
+        ]);
+        final outputs = ["", "", "Some tests failed."];
+        final events = await agentOver(
+          client,
+          respond: (_) =>
+              ShellResult(returnCode: 1, output: outputs.removeAt(0)),
+        ).run(userMessage("go")).toList();
+        expect(shell.sandboxes, everyElement(isNotNull));
+        expect(events.whereType<ToolResultEvent>(), hasLength(3));
+        expect(notesOf(events), isEmpty);
+        expect(
+          events.whereType<ToolResultEvent>().expand(
+            (e) => e.result.violations,
+          ),
+          isEmpty,
+        );
+      });
+
+      test("on the second unsandboxed request for one folder, not the "
+          "first", () async {
+        final client = FakeLlmClient([
+          [unsandboxed("cd $repo && git add .")],
+          [unsandboxed("cd $repo && git commit -m wip")],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          approveMode: ApproveMode.never,
+        ).run(userMessage("go")).toList();
+        final results = events.whereType<ToolResultEvent>().toList();
+        expect(results.first.result.notes, isEmpty);
+        expect(
+          results.last.result.notes.single,
+          contains("`add_directory` with $repo once"),
+        );
+      });
+
+      test("not after the user said no to the banner", () async {
+        final client = FakeLlmClient([
+          [unsandboxed("cd $repo && git add .")],
+          [unsandboxed("cd $repo && git commit -m wip")],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          approveMode: ApproveMode.ask,
+          approvals: [ApprovalResponse.deny, ApprovalResponse.deny],
+        ).run(userMessage("go")).toList();
+        expect(events.whereType<ApprovalRequestEvent>(), hasLength(2));
+        expect(notesOf(events), isEmpty);
+      });
+
+      test("not where add_directory is not offered", () async {
+        final client = FakeLlmClient([
+          [unsandboxed("cd $repo && git add .")],
+          [unsandboxed("cd $repo && git commit -m wip")],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          approveMode: ApproveMode.never,
+          caps: const AgentCapabilities(
+            commands: true,
+            webSearch: false,
+            ask: false,
+            task: false,
+            artifact: false,
+            createSkill: false,
+          ),
+        ).run(userMessage("go")).toList();
+        expect(events.whereType<ToolResultEvent>(), hasLength(2));
+        expect(notesOf(events), isEmpty);
+      });
     });
 
     test("is offered only where a sandbox is enforced, and never to a "

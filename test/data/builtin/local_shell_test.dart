@@ -772,6 +772,52 @@ void main() {
     );
   });
 
+  group("the sandbox's refusals", () {
+    // The platform's real helper, since what is refused is the kernel's to
+    // say and what it prints is what the shell reads: Seatbelt on a Mac,
+    // Landlock on Linux, and nothing to check anywhere else.
+    late SandboxHelper helper;
+    late CommandSandbox sandbox;
+    late LocalShell shell;
+    late String outside;
+    setUp(() {
+      helper = Platform.isMacOS
+          ? SeatbeltSandboxHelper()
+          : LandlockSandboxHelper(
+              cacheDir: Directory.systemTemp
+                  .createTempSync("agent_chat_ll_")
+                  .path,
+            );
+      sandbox = CommandSandbox(workspace: workspace.path);
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      shell = LocalShell(driver: ({String? project}) => driver);
+      outside = (Directory(p.join(home.path, "repo"))..createSync()).path;
+    });
+
+    Future<ShellResult> run(String command) => shell
+        .start(
+          command,
+          cwd: workspace.path,
+          home: home.path,
+          timeout: const Duration(seconds: 10),
+          sandbox: sandbox,
+        )
+        .result;
+
+    test("a refused write is named on the result; a plain failure names "
+        "none", () async {
+      if (await helper.prefixFor(sandbox) == null) return;
+      final denied = p.join(outside, "new");
+      final refused = await run("touch $denied");
+      expect(refused.returnCode, isNot(0));
+      expect(refused.violations, [denied]);
+
+      final failed = await run("cd $outside && grep -r nothing-here .");
+      expect(failed.returnCode, isNot(0));
+      expect(failed.violations, isEmpty);
+    }, skip: Platform.isMacOS || Platform.isLinux ? null : "no sandbox here");
+  });
+
   group("a sandboxed command", () {
     // Landlock is where the deny is decided, so these run the real helper;
     // a machine without it skips the confined assertions and keeps the

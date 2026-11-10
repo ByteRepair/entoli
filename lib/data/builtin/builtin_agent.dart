@@ -37,6 +37,7 @@ import "projection.dart";
 import "templates.dart";
 import "tools/agent_tool.dart";
 import "tools/customization_tools.dart";
+import "tools/grant_nudge.dart";
 import "tools/plan_tools.dart" show readPlan;
 import "tools/registry.dart";
 import "tools/skill_tool.dart" show skillToolName;
@@ -691,6 +692,9 @@ class BuiltinAgent implements Turn {
       approveMode: read.approveMode,
     );
   }
+
+  @override
+  final GrantNudges grantNudges = GrantNudges();
 
   @override
   late final ApprovalGate gate = ApprovalGate(

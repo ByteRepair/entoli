@@ -47,9 +47,12 @@ class AddDirectoryTool extends AgentTool {
       "Request persistent write access to a directory "
       "outside the workspace, when the task needs write access there "
       "repeatedly. One approval covers the directory, so writes in it "
-      "afterwards run without asking. Call this when the user has indicated "
-      "that the work should be done in a specific folder outside of the chat "
-      "or project workspaces. On a denial, carry on with the task; writes in "
+      "afterwards run sandboxed without asking. Call this when the work is in "
+      "a folder outside the chat and project workspaces — a repository, a "
+      "worktree, a build directory — whether the user named it or the task "
+      "led there, rather than running command after command in it "
+      "unsandboxed. Grant the folder the work is in, such as the "
+      "repository's root, not a single file's directory. On a denial, carry on with the task; writes in "
       "that folder keep raising the ordinary per-write approval the user "
       "answers one at a time, and do not call this again this turn.";
 
@@ -188,6 +191,11 @@ class AddDirectoryTool extends AgentTool {
     );
   }
 }
+
+/// Whether [offer]'s turn is handed `add_directory`: offered, and in the
+/// agent's tools. What a `bash` result's steering toward it reads, so it
+/// names no tool the model cannot call.
+bool grantsDirectories(ToolOffer offer) => AddDirectoryTool(offer).handed;
 
 /// The turn's writable set, named. The workspaces stand first, every write
 /// in them being free; what `add_directory` granted, standing or mid-turn,

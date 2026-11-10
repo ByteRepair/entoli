@@ -3,6 +3,7 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
+import "package:agent_chat/domain/sandbox_denials.dart";
 import "package:agent_chat/data/local/landlock.dart";
 import "package:agent_chat/domain/shell.dart";
 
@@ -105,6 +106,26 @@ void main() {
       File(outside).readAsStringSync(),
       "keep\n",
       reason: "the denial took nothing away that was already there",
+    );
+  });
+
+  test("the kernel's refusal names the denied path, and a plain failure "
+      "names none", () async {
+    if (!landlockUsable) return;
+    final sandbox = CommandSandbox(
+      workspace: p.join(cache.path, "ws"),
+      tmp: tmp.path,
+    );
+    final outside = p.join(cache.path, "outside-denied.txt");
+    final denied = await run0("touch $outside");
+    expect(sandboxDenials(denied.err, sandbox, cwd: sandbox.workspace), [
+      outside,
+    ]);
+    final failed = await run0("false; grep -r nothing-here . ");
+    expect(failed.code, isNot(0));
+    expect(
+      sandboxDenials(failed.out + failed.err, sandbox, cwd: sandbox.workspace),
+      isEmpty,
     );
   });
 
