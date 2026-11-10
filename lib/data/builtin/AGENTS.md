@@ -564,9 +564,14 @@ also stands down the parse gate.
 environment enforces one, `bash` carries an `unsandboxed` argument
 (`ToolOffer.sandboxed`; never a sub-agent's, which has nobody to approve it),
 and its description says what a sandboxed write outside the grant looks like
-when it fails. Nothing scans the output: a confined command that cannot
-write fails like any command, and the model reads the error and calls again
-with `unsandboxed: true`. The gate treats that as part of the call — an
+when it fails, and what each way out is for: work that keeps writing in one
+folder — a repository, a worktree, a build directory — is `add_directory` on
+it once, and `unsandboxed` is the one-off (installers, container tools,
+setuid programs). Nothing scans the output: a confined command that cannot
+write fails like any command, and the model reads the error and either asks
+for the folder or calls again with `unsandboxed: true`. A chat working in a
+repository outside the workspace that read only the second answered 72
+banners and called `add_directory` never, the description being all it had. The gate treats that as part of the call — an
 allow rule and the read-only check do not cover it, a no-sandbox rule for
 every segment does, and the rest goes to the mode: the classifier in auto
 mode (its rubric judges an unsandboxed call as writing past the workspace),
@@ -580,6 +585,21 @@ another process's namespace, which Landlock refuses), so no folder grant
 could have been the answer. Old results carry `violations` and a `rerun`
 decision, still worded so their logs read.
 
+**A `bash` result steers toward the grant** where the call says its work is
+in a folder outside the writable set (`tools/grant_nudge.dart`): a second
+`unsandboxed` request for one folder in a turn — the first is the one-off the
+argument is for — or a sandboxed run there that exited non-zero. The folder is
+where the command's leading `cd` goes, where the shell was left, or where it
+stood before, widened to the nearest directory above it with a `.git` short of
+the home, since a build writes across the tree; and it is the call's arguments
+and the shell's state that say so, never the output, a sandbox denial and a
+failing test printing alike — which is why the note is worded to stand either
+way. It rides `ToolResult.notes`, names each folder once a turn, and is left
+off where `add_directory` is not the turn's to call (`grantsDirectories`:
+offered and in the agent's tools), or would be refused: the root, the home or
+anything holding it, the app's data, anything holding the workspaces. A
+banner the user denied gets none, being their answer.
+
 The two "always" banner answers on an ordinary banner write the derived rule:
 `ruleFromApproval` reads the command's leading words, the file's directory or
 the fetch's host, and the repository persists it to the tier the answer
@@ -588,7 +608,8 @@ named before the answer reaches the turn.
 The directory grant is `add_directory` (`lib/data/builtin/tools/directory_tools.dart`):
 the model's ask for write access to a directory outside the workspaces, and
 its banner — the ordinary one less its plain Allow — is the whole grant. The
-model asks because the work there recurs; a mirrored chat, which has no
+model asks because the work there recurs, whether the user named the folder
+or the task led there; a mirrored chat, which has no
 always answers, keeps a this-turn grant. An always answer reaches the
 repository with the directory in `deniedDirs`, so it lands in the named
 tier's `writableDirs` and no rule is written. `writable_directories` lists the

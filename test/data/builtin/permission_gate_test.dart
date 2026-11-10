@@ -4,7 +4,8 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
-import "package:agent_chat/data/builtin/tools/agent_tool.dart" show ToolOffer;
+import "package:agent_chat/data/builtin/tools/agent_tool.dart"
+    show AgentCapabilities, ToolOffer;
 import "package:agent_chat/data/builtin/tools/bash_tool.dart" show BashTool;
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/domain/agent_backend.dart";
@@ -52,6 +53,7 @@ void main() {
     ShellResult Function(String)? respond,
     PermissionClassifier? classifier,
     FakeWebSearch? webSearch,
+    AgentCapabilities caps = AgentCapabilities.full,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-gate-test");
     final project = p.join(tempDir.path, "project-ws");
@@ -97,6 +99,7 @@ void main() {
       ),
       classifier: classifier,
       webSearch: webSearch,
+      caps: caps,
     );
   }
 
@@ -1075,6 +1078,82 @@ void main() {
       expect(approvals, hasLength(2));
       expect(approvals.last.approval.unsandboxed, isFalse);
       expect(shell.sandboxes, [isNull, isNull]);
+    });
+
+    group("steers toward add_directory", () {
+      /// A repository outside the workspaces, with a directory inside it the
+      /// commands `cd` to: the grant is asked for the repository's root.
+      late String repo;
+      setUp(() {
+        final dir = Directory.systemTemp.createTempSync("grant-nudge-test");
+        addTearDown(() => dir.deleteSync(recursive: true));
+        repo = dir.path;
+        Directory(p.join(repo, ".git")).createSync();
+        Directory(p.join(repo, "lib")).createSync();
+      });
+
+      List<String> notesOf(List<AgentEvent> events) => [
+        for (final event in events.whereType<ToolResultEvent>())
+          ...event.result.notes,
+      ];
+
+      test("after a sandboxed command fails in a folder outside", () async {
+        final client = FakeLlmClient([
+          [bashCall("cd ${p.join(repo, "lib")} && git add .")],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          respond: (_) => const ShellResult(
+            returnCode: 128,
+            output: "fatal: Unable to create index.lock",
+          ),
+        ).run(userMessage("go")).toList();
+        expect(shell.sandboxes.single, isNotNull);
+        final note = notesOf(events).single;
+        expect(note, contains("`add_directory` with $repo once"));
+      });
+
+      test("on the second unsandboxed request for one folder, not the "
+          "first", () async {
+        final client = FakeLlmClient([
+          [unsandboxed("cd $repo && git add .")],
+          [unsandboxed("cd $repo && git commit -m wip")],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          approveMode: ApproveMode.never,
+        ).run(userMessage("go")).toList();
+        final results = events.whereType<ToolResultEvent>().toList();
+        expect(results.first.result.notes, isEmpty);
+        expect(
+          results.last.result.notes.single,
+          contains("`add_directory` with $repo once"),
+        );
+      });
+
+      test("not where add_directory is not offered", () async {
+        final client = FakeLlmClient([
+          [unsandboxed("cd $repo && git add .")],
+          [unsandboxed("cd $repo && git commit -m wip")],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          approveMode: ApproveMode.never,
+          caps: const AgentCapabilities(
+            commands: true,
+            webSearch: false,
+            ask: false,
+            task: false,
+            artifact: false,
+            createSkill: false,
+          ),
+        ).run(userMessage("go")).toList();
+        expect(events.whereType<ToolResultEvent>(), hasLength(2));
+        expect(notesOf(events), isEmpty);
+      });
     });
 
     test("is offered only where a sandbox is enforced, and never to a "

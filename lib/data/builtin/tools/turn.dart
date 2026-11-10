@@ -11,6 +11,7 @@ import "../background_jobs.dart";
 import "../builtin_options.dart";
 import "../llm/llm_client.dart";
 import "../memory/store.dart";
+import "grant_nudge.dart";
 import "../../../domain/app_settings.dart" show SettingsEditor;
 
 /// What a running tool may reach of the turn it runs in: the workspaces, the
@@ -55,6 +56,11 @@ abstract interface class Turn {
 
   /// The rules and the approval mode, between a call and its run.
   ApprovalGate get gate;
+
+  /// Which folders this turn's `bash` results have suggested
+  /// `add_directory` for, and how often it asked to leave the sandbox in
+  /// each.
+  GrantNudges get grantNudges;
 
   /// Puts questions to the user; one answer per question, null where they
   /// answered nothing.

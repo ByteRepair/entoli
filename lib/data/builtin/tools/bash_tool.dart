@@ -1,4 +1,8 @@
+import "package:path/path.dart" as p;
+
 import "../../../domain/agent_backend.dart";
+import "../../../domain/models.dart" show ToolResult;
+import "../../../domain/permission.dart" show PermissionDecision;
 import "../../../domain/safe_command.dart" show readsOnly;
 import "../../../domain/shell.dart";
 import "../../../domain/shell_command_analysis.dart";
@@ -8,6 +12,8 @@ import "../approval_gate.dart";
 import "../background_jobs.dart";
 import "../llm/llm_client.dart";
 import "agent_tool.dart";
+import "directory_tools.dart" show grantsDirectories;
+import "grant_nudge.dart";
 import "turn.dart";
 
 /// What the spinner says while a command runs, the user's `!` one included.
@@ -106,10 +112,14 @@ class BashTool extends AgentTool {
           "Run this command outside the sandbox. Commands normally run "
           "sandboxed: they can write only to the workspaces and the folders "
           "the user granted, and a write anywhere else fails with "
-          "\"Permission denied\" or \"Operation not permitted\". When a "
-          "command needs to write elsewhere (container tools like podman or "
-          "toolbox, installers, caches under ~), call it again with this "
-          "set. Package and build caches (~/.cache, ~/.pub-cache, ~/.npm, "
+          "\"Permission denied\" or \"Operation not permitted\". Work that "
+          "keeps writing in one folder outside the workspaces — a repository, "
+          "a worktree, a build directory — calls for `add_directory` on that "
+          "folder once, where it is offered: after one approval every "
+          "command there runs sandboxed without asking. Set this for a "
+          "one-off need to write elsewhere: container tools like podman or "
+          "toolbox, installers, caches under ~. Package and build caches "
+          "(~/.cache, ~/.pub-cache, ~/.npm, "
           "the Flutter SDK's cache and the like) are already writable. A "
           "setuid program such as `ps` cannot start sandboxed at all: use "
           "`pgrep`, or set this. The user is asked to approve it unless a "
@@ -160,7 +170,9 @@ class BashTool extends AgentTool {
     // Leaving the sandbox is part of what is asked: where one would confine
     // the run and no no-sandbox rule covers it, the call goes to the mode.
     final leave = leavesSandbox && boolArg(call.argumentsJson, "unsandboxed");
-    final escaping = leave && await turn.gate.confinementOf(analysis) != null;
+    final confined = await turn.gate.confinementOf(analysis) != null;
+    final escaping = leave && confined;
+    final standing = turn.shell.standingIn(turn.workspace) ?? turn.workspace;
     final outcome = GateOutcome();
     yield* turn.gate.decide(
       call,
@@ -171,7 +183,69 @@ class BashTool extends AgentTool {
       analysis: analysis,
       unsandboxed: escaping,
     );
-    yield ToolResultEvent(outcome.resultOf(call));
+    final result = outcome.resultOf(call);
+    final note = await _grantNote(
+      turn,
+      analysis,
+      result,
+      standing,
+      unsandboxed: escaping,
+      confined: confined && !leave,
+    );
+    yield ToolResultEvent(
+      note == null ? result : result.copyWith(notes: [...result.notes, note]),
+    );
+  }
+
+  /// The note steering [result]'s work toward `add_directory`, where the call
+  /// says that work is in a folder outside the writable set: it asked to
+  /// leave the sandbox ([unsandboxed]), again, for that folder, or it ran
+  /// sandboxed ([confined]) there and failed. The folder is where the
+  /// command's leading `cd` goes, where the shell left it, or where it stood
+  /// before ([standing]) — the call's own arguments and the shell's state,
+  /// never its output. Only where `add_directory` is this turn's to call;
+  /// see "Approvals" in AGENTS.md.
+  Future<String?> _grantNote(
+    Turn turn,
+    ShellCommandAnalysis analysis,
+    ToolResult result,
+    String standing, {
+    required bool unsandboxed,
+    required bool confined,
+  }) async {
+    if (!leavesSandbox || !grantsDirectories(offer)) return null;
+    // A banner the user said no to is their answer about this command; a
+    // refusal or a kill before the run (-1) is no failure of its writes.
+    if (result.decided == PermissionDecision.deny) return null;
+    if (!unsandboxed && !(confined && result.returnCode > 0)) return null;
+    final folder = grantFolder(
+      [?_cdTarget(analysis, standing, turn), ?result.cwd, standing],
+      workspace: turn.workspace,
+      projectWorkspace: turn.projectWorkspace,
+      granted: (await turn.gate.permissions()).writableDirs,
+      home: turn.shell.machineHome,
+      dataDir: turn.dataDir,
+    );
+    if (folder == null) return null;
+    return turn.grantNudges.note(folder, unsandboxed: unsandboxed);
+  }
+
+  /// Where the command's first segment `cd`s to, resolved against [standing]
+  /// and `~`, or null where it starts with anything else or the target is
+  /// not plain text.
+  static String? _cdTarget(
+    ShellCommandAnalysis analysis,
+    String standing,
+    Turn turn,
+  ) {
+    final first = analysis.modelableSegments?.firstOrNull;
+    final words = first == null ? null : plainCommand(first)?.words;
+    if (words == null || words.length != 2 || words[0] != "cd") return null;
+    final target = words[1];
+    if (target == "~" || target.startsWith("~/")) {
+      return turn.resolvePath(target);
+    }
+    return p.isAbsolute(target) ? target : p.join(standing, target);
   }
 
   Future<ShellResult> _execute(

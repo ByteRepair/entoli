@@ -34,6 +34,7 @@ import "projection.dart";
 import "templates.dart";
 import "tools/agent_tool.dart";
 import "tools/customization_tools.dart";
+import "tools/grant_nudge.dart";
 import "tools/registry.dart";
 import "tools/skill_tool.dart" show skillToolName;
 import "tools/turn.dart";
@@ -647,6 +648,9 @@ class BuiltinAgent implements Turn {
   /// What the model may call this step: worked out once at its head and read
   /// by the request, the context count and the dispatch alike.
   List<AgentTool> _tools = const [];
+
+  @override
+  final GrantNudges grantNudges = GrantNudges();
 
   @override
   late final ApprovalGate gate = ApprovalGate(
