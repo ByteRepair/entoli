@@ -5,14 +5,17 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
+import "package:path/path.dart" as p;
 
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_meta.dart";
+import "package:agent_chat/domain/confinement.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/domain/project_settings.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
+import "package:agent_chat/domain/work_folders.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/sidebar/chat_groups.dart";
@@ -1239,6 +1242,89 @@ void main() {
       },
     );
   });
+  group("a project's work folders", () {
+    late Directory outside;
+
+    setUp(() {
+      outside = Directory.systemTemp.createTempSync("work_folder_");
+      app = TestApp.create(hostConfinement: Confinement.seatbelt);
+    });
+    tearDown(() {
+      if (outside.existsSync()) outside.deleteSync(recursive: true);
+    });
+
+    Future<void> open(WidgetTester tester, {List<String>? folders}) async {
+      await io(tester, () async {
+        await app.repo.createProject("research");
+        if (folders != null) {
+          await app.container
+              .read(projectSettingsProvider("research").notifier)
+              .setWritableDirs(folders);
+        }
+      });
+      await app.pump(tester, const ProjectSettingsPage(project: "research"));
+      await tester.scrollUntilVisible(
+        find.text("Add folder"),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await settleIo(tester);
+    }
+
+    List<String> saved() =>
+        ProjectSettings.load(app.config, project: "research").writableDirs;
+
+    testWidgets("a picked folder is added as a row, and its cross removes "
+        "it", (tester) async {
+      await open(tester);
+
+      app.folders.scripted = outside.path;
+      await tester.tap(find.text("Add folder"));
+      await settleIo(tester, least: 10);
+      expect(saved(), [outside.path]);
+      expect(find.text(outside.path), findsOneWidget);
+      expect(find.text("Missing on this device"), findsNothing);
+
+      await tester.tap(find.byTooltip("Remove ${outside.path}"));
+      await settleIo(tester, least: 10);
+      expect(saved(), isEmpty);
+      expect(find.text(outside.path), findsNothing);
+    });
+
+    testWidgets("the app's own data directory is refused", (tester) async {
+      await open(tester);
+
+      app.folders.scripted = app.config.dataDir;
+      await tester.tap(find.text("Add folder"));
+      await settleIo(tester, least: 10);
+      expect(saved(), isEmpty);
+      expect(find.text(FolderRefusal.appData.message), findsOneWidget);
+    });
+
+    testWidgets("a folder gone from this device says so in its row", (
+      tester,
+    ) async {
+      final gone = p.join(outside.path, "gone");
+      await open(tester, folders: [gone]);
+
+      expect(find.text(gone), findsOneWidget);
+      expect(find.text("Missing on this device"), findsOneWidget);
+    });
+
+    for (final confinement in [Confinement.none, Confinement.appSandbox]) {
+      testWidgets("${confinement.name} confines nothing the list could open, "
+          "so there is no list", (tester) async {
+        app = TestApp.create(hostConfinement: confinement);
+        await io(tester, () => app.repo.createProject("research"));
+        await app.pump(tester, const ProjectSettingsPage(project: "research"));
+        await settleIo(tester);
+
+        expect(find.text("Work folders"), findsNothing);
+        expect(find.text("Add folder"), findsNothing);
+      });
+    }
+  });
+
   group("a project's permission pages", () {
     Future<void> open(WidgetTester tester, String project) async {
       await app.pump(tester, ProjectSettingsPage(project: project));
@@ -1251,23 +1337,6 @@ void main() {
       await tester.tap(find.text("Permissions"));
       await settleIo(tester);
     }
-
-    testWidgets("the writable directories section saves what is added", (
-      tester,
-    ) async {
-      await io(tester, () => app.repo.createProject("research"));
-      await open(tester, "research");
-
-      expect(find.text("Writable directories"), findsOneWidget);
-      await tester.tap(find.text("Add directory"));
-      await settleIo(tester);
-      await tester.enterText(find.byType(TextField).last, "/mnt/data");
-      await tester.tap(find.text("Save"));
-      await settleIo(tester, least: 10);
-
-      final settings = ProjectSettings.load(app.config, project: "research");
-      expect(settings.writableDirs, ["/mnt/data"]);
-    });
 
     testWidgets("a built-in project has them too", (tester) async {
       await open(tester, "byte-repair");

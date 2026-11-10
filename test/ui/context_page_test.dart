@@ -133,8 +133,10 @@ void main() {
     await app.pump(tester, ContextPage(chatId: id));
     await settleUntil(
       tester,
-      () => find.text("20k / 1000k").evaluate().isNotEmpty,
-      what: "the model's window",
+      // Held to Total Context: the page's window is the one compaction
+      // fires against, not the million the model could take.
+      () => find.text("20k / 256k").evaluate().isNotEmpty,
+      what: "the model's window, held to the ceiling",
     );
 
     await io(

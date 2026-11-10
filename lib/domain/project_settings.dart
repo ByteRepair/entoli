@@ -133,7 +133,8 @@ class ProjectSettings {
 
   /// Directories this project's commands may additionally write to, beside
   /// the workspace the sandbox grants — the machine paths a turn works in
-  /// that are not the workspaces.
+  /// that are not the workspaces. The settings page calls them work folders;
+  /// one not on this machine grants nothing (`grantsNow`).
   List<String> writableDirs;
 
   /// Whether commands on the machine run under Landlock at all. Null inherits

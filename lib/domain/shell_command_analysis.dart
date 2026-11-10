@@ -403,6 +403,13 @@ bool isFileToolWork(String command) {
 /// Assigning one in a command is an escalation, because the parse answers for
 /// what the command does under the environment it was handed and one of these
 /// rewrites that environment under the parse.
+///
+/// `TMPDIR` is not one. It picks no program, no configuration and no profile
+/// — only where a program puts its scratch — and the parse never answered
+/// for that: a tool's own temp files are the sandbox's to bound, which it
+/// does whatever `TMPDIR` names, and this gate stands only where there is a
+/// sandbox. Refusing it turned away the commands that set it to get past a
+/// denied temp folder, and changed nothing they could write.
 const writeTargetVars = {
   "HOME",
   "CDPATH",
@@ -419,7 +426,6 @@ const writeTargetVars = {
   "BASH_ENV",
   "ENV",
   "ZDOTDIR",
-  "TMPDIR",
 };
 
 // ---------------------------------------------------------------------------

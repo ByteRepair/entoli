@@ -21,6 +21,7 @@ import "../../domain/shell.dart";
 import "../../domain/system_notification.dart";
 import "../../domain/tone.dart";
 import "../../domain/tool_arg.dart";
+import "../../domain/work_folders.dart" show grantsNow;
 import "../../domain/trigger_manager.dart" show TriggerRegistry;
 import "../../domain/turn_recorder.dart";
 import "../../domain/web_search.dart";
@@ -659,9 +660,41 @@ class BuiltinAgent implements Turn {
   /// by the request, the context count and the dispatch alike.
   List<AgentTool> _tools = const [];
 
+  /// Which persisted writable directories grant anything this turn, each
+  /// looked up once: the policy is read at every call, and a folder does not
+  /// come and go under one turn often enough to stat it per call.
+  final Map<String, bool> _grantable = {};
+
+  /// [policy] less the persisted writable directories that grant nothing
+  /// here (`grantsNow`): gone from this machine, or a folder no grant may
+  /// name. What the gate and the turn's context both read, so the folders
+  /// the model is told are the ones the sandbox carries.
+  Future<StandingPermissions> _grantedPolicy() async {
+    final read = await policy();
+    final home = shell.machineHome;
+    return StandingPermissions(
+      permissions: read.permissions,
+      writableDirs: [
+        for (final dir in read.writableDirs)
+          if (_grantable.putIfAbsent(
+            dir,
+            () => grantsNow(
+              dir,
+              dataDir: dataDir,
+              home: home,
+              workspaces: [workspace, projectWorkspace],
+            ),
+          ))
+            dir,
+      ],
+      sandboxed: read.sandboxed,
+      approveMode: read.approveMode,
+    );
+  }
+
   @override
   late final ApprovalGate gate = ApprovalGate(
-    policy: policy,
+    policy: _grantedPolicy,
     approveMode: approveMode,
     classifier: classifier,
     approve: approve,
@@ -793,7 +826,7 @@ class BuiltinAgent implements Turn {
   /// hold a message no reload could rebuild; see "The projection" in
   /// `lib/domain/AGENTS.md` for what that cost.
   Stream<AgentEvent> resume({List<String> mentions = const []}) async* {
-    _setSystemPrompt(mentions);
+    await _setSystemPrompt(mentions);
     final turn = _recorded(_loop);
     // Wrapped either way: the branch decides whether the reason goes in, not
     // whether the turn is recorded.
@@ -1093,7 +1126,7 @@ class BuiltinAgent implements Turn {
     bool mayDress,
     List<String> mentions,
   ) async {
-    _setSystemPrompt(mentions);
+    await _setSystemPrompt(mentions);
     // The wording the live turn sends is the wording a reload rebuilds: both
     // call the projection, and the dress decision — may this message dress —
     // is the caller's, computed against the history it holds: the viewer's
@@ -1122,7 +1155,16 @@ class BuiltinAgent implements Turn {
   /// what a restore can find. See [turnPrompt]. Two only as far as the KV keys:
   /// a chat template renders one system block, so `mergeLeadingSystem` joins
   /// them on the way out.
-  void _setSystemPrompt(List<String> mentions) {
+  ///
+  /// The folders the policy grants are read here, once per turn: a work
+  /// folder added between turns is named in the next, and none is named
+  /// where the gate confines nothing — no sandbox here, or the switch off —
+  /// since there is nothing for the model to stay inside.
+  Future<void> _setSystemPrompt(List<String> mentions) async {
+    final policy = await _grantedPolicy();
+    final workFolders = gate.confines(policy)
+        ? policy.writableDirs
+        : const <String>[];
     final offer = this.offer;
     // A participant is told its handle whatever its file says. A mention of
     // an agent not in the room is one to delegate to, so only where there is
@@ -1150,6 +1192,7 @@ class BuiltinAgent implements Turn {
       projectHome: shell.projectHome,
       guestRoot: shell.guestRoot,
       homePath: shell.homeFor(projectWorkspace),
+      workFolders: workFolders,
     );
     final head = [
       agentSystemMessage(

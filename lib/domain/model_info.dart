@@ -12,6 +12,7 @@ class ModelInfo {
     this.output,
     this.reasoning = false,
     this.toolCall = false,
+    this.interleavedField,
     this.talks = true,
     this.transcribes = false,
     this.speaks = false,
@@ -33,6 +34,7 @@ class ModelInfo {
     // model), which is no answer rather than a window of nothing.
     int? positive(Object? n) => n is num && n > 0 ? n.toInt() : null;
     double? price(Object? n) => n is num ? n.toDouble() : null;
+    final interleaved = json["interleaved"];
     return ModelInfo(
       id: id,
       name: json["name"] is String ? json["name"] as String : null,
@@ -54,6 +56,9 @@ class ModelInfo {
       output: positive(limit["output"]),
       reasoning: json["reasoning"] == true,
       toolCall: json["tool_call"] == true,
+      interleavedField: interleaved is Map && interleaved["field"] is String
+          ? interleaved["field"] as String
+          : null,
       inputCost: price(cost["input"]),
       outputCost: price(cost["output"]),
     );
@@ -77,6 +82,11 @@ class ModelInfo {
   final int? output;
   final bool reasoning;
   final bool toolCall;
+
+  /// The assistant-message field this model's reasoning goes back to it in,
+  /// where it reads its earlier reasoning between tool calls: models.dev's
+  /// `interleaved.field`. Null where models.dev does not name one.
+  final String? interleavedField;
 
   /// Takes text in and gives text out: a chat model, rather than a speech,
   /// transcription or image-only one.
@@ -103,6 +113,7 @@ class ModelInfo {
     if (name != null) "name": name,
     "reasoning": reasoning,
     "tool_call": toolCall,
+    if (interleavedField != null) "interleaved": {"field": interleavedField},
     "modalities": {
       "input": [
         if (talks || speaks) "text",

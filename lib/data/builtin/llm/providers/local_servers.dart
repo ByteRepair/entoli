@@ -13,7 +13,7 @@ abstract class LocalServerProvider extends OpenAiCompatibleProvider
   Uri? get modelsUrl => super.modelsUrl ?? under(baseUrl, "models");
 }
 
-class OllamaProvider extends LocalServerProvider {
+class OllamaProvider extends LocalServerProvider with OllamaCompat {
   const OllamaProvider([LlmProviderConfig config = preset])
     : super(config, _terms);
 

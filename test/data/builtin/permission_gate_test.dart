@@ -4,6 +4,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
+import "package:agent_chat/data/builtin/sandbox_grants.dart" show systemTemps;
 import "package:agent_chat/data/builtin/tools/agent_tool.dart" show ToolOffer;
 import "package:agent_chat/data/builtin/tools/bash_tool.dart" show BashTool;
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
@@ -33,6 +34,16 @@ void main() {
   setUp(() => session = BuiltinSession());
 
   final finish = saidOnly("done");
+
+  /// A real folder outside the workspaces, gone at the end of the test: a
+  /// persisted grant reaches the turn only while it is a folder on disk.
+  String folder(String name) {
+    final dir = Directory.systemTemp.createTempSync(name);
+    addTearDown(() {
+      if (dir.existsSync()) dir.deleteSync(recursive: true);
+    });
+    return dir.path;
+  }
 
   /// The [which]'th tool result a turn reported, zero-based — the record the
   /// outcome rides on.
@@ -478,8 +489,9 @@ void main() {
     test(
       "the classifier is told the project workspace and the grants",
       () async {
+        final repo = folder("repo");
         final client = FakeLlmClient([
-          [bashCall("make -C /home/u/repo")],
+          [bashCall("make -C $repo")],
           [finish],
         ]);
         final classifier = FakeClassifier();
@@ -487,12 +499,12 @@ void main() {
           client,
           approveMode: ApproveMode.auto,
           classifier: classifier,
-          writableDirs: ["/home/u/repo"],
+          writableDirs: [repo],
         ).run(userMessage("go")).toList();
 
         expect(classifier.alsoWritable.single, [
           p.dirname(p.dirname(workspaceDir)),
-          "/home/u/repo",
+          repo,
         ]);
       },
     );
@@ -1088,7 +1100,7 @@ void main() {
       expect(offers(const ToolOffer(sandboxed: true, oneShot: true)), isFalse);
     });
 
-    test("the turn's writableDirs reach the sandbox, files included", () async {
+    test("the machine's temp folders reach the sandbox", () async {
       final client = FakeLlmClient([
         [bashCall("python3 build.py")],
         [finish],
@@ -1096,15 +1108,37 @@ void main() {
       await agentOver(
         client,
         approveMode: ApproveMode.never,
-        writableDirs: ["/etc/hosts", "/var/log/entoli"],
       ).run(userMessage("go")).toList();
-      // The project's workspace, then the persisted tier's grant —
-      // directories and files alike — is what the command's confinement
-      // carries, ahead of the toolchain caches this machine happens to have.
+      // Granted by the gate, into the sandbox's own write set, so whatever
+      // reads a `CommandSandbox` sees every folder the command could write.
+      expect(
+        shell.sandboxes.single!.extraWrites,
+        containsAll(await systemTemps()),
+      );
+    });
+
+    test("the turn's writableDirs reach the sandbox while they are folders "
+        "on disk", () async {
+      final repo = folder("repo");
+      final logs = folder("logs");
+      final gone = p.join(logs, "gone");
+      final client = FakeLlmClient([
+        [bashCall("python3 build.py")],
+        [finish],
+      ]);
+      await agentOver(
+        client,
+        approveMode: ApproveMode.never,
+        writableDirs: [repo, gone, p.join(repo, "missing.txt"), logs],
+      ).run(userMessage("go")).toList();
+      // The project's workspace, then the persisted tier's grant — a folder
+      // gone from the machine, or never one, granting nothing — is what the
+      // command's confinement carries, ahead of the toolchain caches this
+      // machine happens to have.
       expect(shell.sandboxes.single!.extraWrites.take(3), [
         p.dirname(p.dirname(workspaceDir)),
-        "/etc/hosts",
-        "/var/log/entoli",
+        repo,
+        logs,
       ]);
     });
   });
@@ -1216,6 +1250,39 @@ void main() {
       expect(events.whereType<ApprovalRequestEvent>(), hasLength(1));
       expect(classifier.classified, isEmpty);
       expect(shell.ran, isEmpty);
+    });
+  });
+
+  group("the work folders, as the model is told them", () {
+    String told(FakeLlmClient client) => client.sent.first
+        .where((m) => m.role == LlmRole.system)
+        .map((m) => m.text)
+        .join("\n");
+
+    test("a turn under the sandbox names its writable folders", () async {
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      final repo = folder("repo");
+      await agentOver(
+        client,
+        writableDirs: [repo],
+      ).run(userMessage("go")).toList();
+      expect(told(client), contains("## Work folders"));
+      expect(told(client), contains("- $repo"));
+    });
+
+    test("a turn with the sandbox off names none, there being nothing to "
+        "stay inside", () async {
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      await agentOver(
+        client,
+        writableDirs: ["/home/u/repo"],
+        sandboxed: false,
+      ).run(userMessage("go")).toList();
+      expect(told(client), isNot(contains("## Work folders")));
     });
   });
 
