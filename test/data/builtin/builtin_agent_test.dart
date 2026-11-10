@@ -29,8 +29,8 @@ import "../../fakes.dart";
 import "../../harness.dart" show waitFor;
 import "builtin_fakes.dart";
 import "package:agent_chat/data/builtin/builtin_options.dart";
-import "package:agent_chat/data/builtin/templates.dart"
-    show bashInlineLimit, previewChars;
+import "package:agent_chat/data/builtin/templates.dart" show previewChars;
+import "package:agent_chat/data/builtin/tools/bash_tool.dart" show BashTool;
 
 void main() {
   late BuiltinSession session;
@@ -194,7 +194,7 @@ void main() {
       });
 
       test("is worded whole at the limit, and saved past it", () async {
-        final atLimit = "y" * bashInlineLimit;
+        final atLimit = "y" * BashTool.outputLimit;
         final client = FakeLlmClient([
           [bashCall("one", id: "c1")],
           [bashCall("two", id: "c2")],

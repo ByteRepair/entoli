@@ -88,11 +88,11 @@ abstract class ChatShellJobs {
   /// its end woke — so the note its next tool result would carry goes.
   void told(int id) {}
 
-  /// Whether the agent has heard how job [id] ended: on a tool result, or
-  /// by a wake. What decides whether a job that ended while a turn ran,
-  /// and was never read on a later call of that turn, wakes the agent once
-  /// the turn is over.
-  bool heard(int id) => true;
+  /// The ends the agent has not heard yet — no tool result carried their
+  /// note and no wake told it — oldest first. What the room asks after once
+  /// a turn is over: an end that landed while the turn ran and that no later
+  /// call of it read wakes the agent then.
+  List<EndedJob> get unheard;
 }
 
 /// A job as it ended: the call that started it, what it ran, and how it went.
@@ -117,8 +117,13 @@ String jobEndedNotification({
 /// The log of the job [callId] started, relative to the chat workspace. Named
 /// by the call rather than the job's number, which starts again with the app,
 /// so a chat's label never opens another job's log.
-String backgroundLog(String callId) =>
-    ".entoli-jobs/${callId.replaceAll(RegExp(r"[^A-Za-z0-9_-]"), "_")}.log";
+String backgroundLog(String callId) => ".entoli-jobs/${fileStemOf(callId)}.log";
+
+/// [callId] as a file name: what a provider puts in an id is not ours to
+/// trust as a path, so anything past letters, digits, `_` and `-` is `_`.
+/// What the job logs and the saved results are both named by.
+String fileStemOf(String callId) =>
+    callId.replaceAll(RegExp(r"[^A-Za-z0-9_-]"), "_");
 
 /// What the chat keeps of a job's log: its last [lines] lines, cut from the
 /// top to the last [maxBytes] where those are longer, behind "…".

@@ -336,14 +336,16 @@ void main() {
       final jobs = app.backend.jobsOf(room.chatId);
       // Job 2's end rode a later call of the turn; job 3's came after its
       // last call, while its reply was being written.
-      jobs.heardOf.add(2);
-      for (final id in [2, 3]) {
-        jobs.endings.add((
-          callId: "c$id",
-          command: job.command,
-          end: JobEnd(jobId: id, exitCode: 1, tail: "Error $id"),
-        ));
-      }
+      final ends = [
+        for (final id in [2, 3])
+          (
+            callId: "c$id",
+            command: job.command,
+            end: JobEnd(jobId: id, exitCode: 1, tail: "Error $id"),
+          ),
+      ];
+      jobs.unheardEnds.add(ends.last);
+      ends.forEach(jobs.endings.add);
       await waitFor(
         () => room.state.chat?.jobEndOf("c3") != null,
         what: "the ends on the chat",

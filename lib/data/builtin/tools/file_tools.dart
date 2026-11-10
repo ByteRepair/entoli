@@ -14,6 +14,7 @@ import "../../../domain/tool_arg.dart";
 import "../../../domain/workspace.dart" show isUnder;
 import "../../mime.dart";
 import "../approval_gate.dart";
+import "../compact_prompt.dart" show charsPerToken;
 import "../llm/llm_client.dart";
 import "../llm/readable_client.dart" show pdfBudgetBytes;
 import "../memory/instructions.dart";
@@ -321,10 +322,10 @@ class ReadTool extends AgentTool {
 /// How many lines a `read` with no `limit` returns, and the most a read may
 /// come to: Claude Code's own 2,000 lines and 25,000 tokens, the tokens
 /// counted the way the rest of the app estimates them, four characters each
-/// (see `estimateTokens`). See "Tools" in `lib/data/builtin/AGENTS.md`.
+/// ([charsPerToken], beside `estimateTokens`). See "Tools" in
+/// `lib/data/builtin/AGENTS.md`.
 const readLineLimit = 2000;
 const readTokenCap = 25000;
-const _charsPerToken = 4;
 
 /// [content] as `read` answers with it: lines [offset] on, [limit] of them
 /// or [readLineLimit], each numbered. Over [readTokenCap] a read of the
@@ -345,16 +346,27 @@ const _charsPerToken = 4;
   final total = content.endsWith("\n") ? lines.length - 1 : lines.length;
   final from = (offset ?? 1).clamp(1, lines.length + 1);
   final end = (from + (limit ?? readLineLimit) - 1).clamp(1, lines.length);
-  final numbered = [for (var i = from; i <= end; i++) "$i: ${lines[i - 1]}\n"];
-  final chars = numbered.fold(0, (n, line) => n + line.length);
-  final tokens = (chars / _charsPerToken).ceil();
-  const capChars = readTokenCap * _charsPerToken;
+  const capChars = readTokenCap * charsPerToken;
+  // Lines are numbered onto the page only while they fit under the cap;
+  // past it they are only counted, for the token count the notice gives.
+  final page = StringBuffer();
+  var fit = 0;
+  var chars = 0;
+  for (var i = from; i <= end; i++) {
+    final length = "$i".length + 2 + lines[i - 1].length + 1;
+    if (fit == i - from && chars + length <= capChars) {
+      page.write("$i: ${lines[i - 1]}\n");
+      fit++;
+    }
+    chars += length;
+  }
+  final tokens = (chars / charsPerToken).ceil();
   if (tokens <= readTokenCap) {
     final shown = end < total && limit == null
         ? "\n[Showing lines $from-$end of $total. Call $readToolName with "
               "offset=${end + 1} for the rest.]\n"
         : "";
-    return (text: numbered.join() + shown, refused: null);
+    return (text: "$page$shown", refused: null);
   }
   if (from > 1 || limit != null) {
     return (
@@ -366,32 +378,25 @@ const _charsPerToken = 4;
           "reading the whole file.",
     );
   }
-  var fit = 0;
-  var used = 0;
-  while (fit < numbered.length && used + numbered[fit].length <= capChars) {
-    used += numbered[fit++].length;
-  }
   const answer =
       " Do NOT answer from this page alone if the answer may be further in "
       "the file.]";
   if (fit == 0) {
     // One line past the cap on its own: there is no line to stop after.
-    var cut = capChars;
-    final last = numbered.first.codeUnitAt(cut - 1);
-    if (last >= 0xD800 && last <= 0xDBFF) cut--;
+    final cut = safeCut("1: ${lines.first}", capChars);
     return (
       text:
-          "${numbered.first.substring(0, cut)}\n"
-          "[Truncated: PARTIAL view — $path: showing the first $cut of "
-          "${content.length} characters ($tokens tokens, cap $readTokenCap); "
-          "this file has very long lines and cannot be paginated by line. "
-          "Search it for the section you need.$answer",
+          "$cut\n"
+          "[Truncated: PARTIAL view — $path: showing the first ${cut.length} "
+          "of ${content.length} characters ($tokens tokens, cap "
+          "$readTokenCap); this file has very long lines and cannot be "
+          "paginated by line. Search it for the section you need.$answer",
       refused: null,
     );
   }
   return (
     text:
-        "${numbered.take(fit).join()}"
+        "$page"
         "[Truncated: PARTIAL view — $path: showing lines 1-$fit of $total "
         "total ($tokens tokens, cap $readTokenCap). Call $readToolName with "
         "offset=${fit + 1} limit=$fit for the next page, or search the file "

@@ -49,11 +49,10 @@ import "llm/rate_limit_gate.dart";
 import "goal_reviewer.dart";
 import "permission_classifier.dart";
 import "saved_output.dart";
-import "templates.dart" show bashInlineLimit;
 import "projection.dart";
 import "sub_agent.dart";
 import "tools/agent_tool.dart" show AgentCapabilities;
-import "tools/bash_tool.dart" show runningCommand;
+import "tools/bash_tool.dart" show BashTool, runningCommand;
 import "builtin_options.dart";
 
 /// The built-in agent, running in this process. The loop is [BuiltinAgent];
@@ -835,15 +834,14 @@ class BuiltinBackend implements AgentBackend {
       output: result.output,
       exceptionInfo: result.exceptionInfo,
       cwd: result.cwd,
-      outputFile: result.output.length > bashInlineLimit
-          ? await saveOutput(
-              result.output,
-              callId: prompt.id,
-              workspace: workspace,
-              projectWorkspace: home,
-              guestRoot: shell.guestRoot,
-            )
-          : null,
+      outputFile: await saveIfLarge(
+        result.output,
+        BashTool.outputLimit,
+        callId: prompt.id,
+        workspace: workspace,
+        projectWorkspace: home,
+        guestRoot: shell.guestRoot,
+      ),
     );
     controller.add(ShellRunEvent(part));
     if (!_stopping.contains(controller)) controller.add(const DoneEvent());

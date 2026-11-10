@@ -56,7 +56,10 @@ class ChatJobs implements ChatShellJobs {
   @override
   final ValueNotifier<List<ShellJob>> jobs = ValueNotifier(const []);
   final _runs = <int, ShellRun>{};
-  final _notes = <int, String>{};
+
+  /// The ends the agent has not heard yet, by job: what the next tool result
+  /// words as its notes, and what the room asks after when a turn is over.
+  final _unheard = <int, EndedJob>{};
   // Synchronous, so a listener has the end before the list drops the job: the
   // chat never reads a job as neither running nor ended.
   final _ended = StreamController<EndedJob>.broadcast(sync: true);
@@ -94,9 +97,6 @@ class ChatJobs implements ChatShellJobs {
 
   Future<void> _end(ShellJob job, int code) async {
     if (_runs.remove(job.id) == null) return;
-    final how = code == -1 ? "was stopped" : "exited with code $code";
-    _notes[job.id] =
-        "Background job ${job.id} (`${firstLine(job.command)}`) $how.";
     var log = "";
     try {
       final file = File(job.logPath);
@@ -104,17 +104,17 @@ class ChatJobs implements ChatShellJobs {
     } catch (e) {
       logFailure("jobs", "could not read the log of job ${job.id}", e);
     }
-    if (!_ended.isClosed) {
-      _ended.add((
-        callId: job.callId,
-        command: job.command,
-        end: JobEnd(
-          jobId: job.id,
-          exitCode: code == -1 ? null : code,
-          tail: jobTail(log),
-        ),
-      ));
-    }
+    final ended = (
+      callId: job.callId,
+      command: job.command,
+      end: JobEnd(
+        jobId: job.id,
+        exitCode: code == -1 ? null : code,
+        tail: jobTail(log),
+      ),
+    );
+    _unheard[job.id] = ended;
+    if (!_ended.isClosed) _ended.add(ended);
     jobs.value = [
       for (final j in jobs.value)
         if (j.id != job.id) j,
@@ -123,16 +123,20 @@ class ChatJobs implements ChatShellJobs {
 
   /// How the jobs that ended since the last call ended, once each.
   List<String> takeNotes() {
-    final notes = [..._notes.values];
-    _notes.clear();
+    final notes = [
+      for (final (:command, :end, callId: _) in _unheard.values)
+        "Background job ${end.jobId} (`${firstLine(command)}`) "
+            "${end.exitCode == null ? "was stopped" : "exited with code ${end.exitCode}"}.",
+    ];
+    _unheard.clear();
     return notes;
   }
 
   @override
-  void told(int id) => _notes.remove(id);
+  void told(int id) => _unheard.remove(id);
 
   @override
-  bool heard(int id) => !_notes.containsKey(id);
+  List<EndedJob> get unheard => [..._unheard.values];
 
   @override
   Future<void> stop(int id) async => _runs[id]?.kill();

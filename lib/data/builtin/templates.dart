@@ -1,5 +1,6 @@
 import "dart:convert";
 
+import "../../core/formatting.dart" show safeCut;
 import "../../domain/agent_backend.dart" show taskToolName;
 import "../../domain/bundled_prompt_file.dart";
 import "../../domain/bundled_project_prompts.dart" show bundledSystemPrompts;
@@ -304,9 +305,9 @@ String? cwdChangedNote(String? before, String? after) =>
 
 /// Above how many characters a tool's result is saved to a file and worded
 /// as a preview of it, and the preview's length: Claude Code's own numbers,
-/// measured rather than recalled — `bash` at 30,000 and every other tool at
-/// 50,000, a preview of the first 2,000. See "Tools" in `AGENTS.md`.
-const bashInlineLimit = 30000;
+/// measured rather than recalled — every tool at 50,000 unless it says
+/// otherwise (`bash` says 30,000: `BashTool.outputLimit`), a preview of the
+/// first 2,000. See "Tools" in `AGENTS.md`.
 const defaultInlineLimit = 50000;
 const previewChars = 2000;
 
@@ -316,19 +317,20 @@ const previewChars = 2000;
 String outputPreview(String output) {
   if (output.length <= previewChars) return output;
   final cut = output.substring(0, previewChars).lastIndexOf("\n");
-  var end = cut > previewChars ~/ 2 ? cut : previewChars;
-  // Never half a surrogate pair.
-  final last = output.codeUnitAt(end - 1);
-  if (last >= 0xD800 && last <= 0xDBFF) end--;
-  return output.substring(0, end);
+  return safeCut(output, cut > previewChars ~/ 2 ? cut : previewChars);
 }
 
-/// A length the way Claude Code's notice says one: kibibytes to one decimal,
-/// a trailing `.0` dropped.
-String _sizeOf(int chars) {
+/// A result's length in characters, the way Claude Code's notice says it:
+/// "KB" for each 1,024, to one decimal, a trailing `.0` dropped — Claude Code
+/// counts characters and words them as a size. Kept apart from the app's own
+/// `formatSize` (`core/formatting.dart`), which words bytes, so the notice
+/// stays Claude Code's to the letter.
+String _charSize(int chars) {
   String one(double v) =>
       v.toStringAsFixed(1).replaceFirst(RegExp(r"\.0$"), "");
   final kb = chars / 1024;
+  // Claude Code's word below a kilobyte, kept although it counts characters;
+  // no limit here is that small.
   if (kb < 1) return "$chars bytes";
   if (kb < 1024) return "${one(kb)}KB";
   final mb = kb / 1024;
@@ -341,9 +343,9 @@ String _sizeOf(int chars) {
 String persistedOutput(String output, String path) {
   final preview = outputPreview(output);
   return "<persisted-output>\n"
-      "Output too large (${_sizeOf(output.length)}). Full output saved to: "
+      "Output too large (${_charSize(output.length)}). Full output saved to: "
       "$path\n\n"
-      "Preview (first ${_sizeOf(previewChars)}):\n"
+      "Preview (first ${_charSize(previewChars)}):\n"
       "$preview"
       "${preview.length < output.length ? "\n...\n" : "\n"}"
       "</persisted-output>";
@@ -368,16 +370,17 @@ String observation({
   List<String> violations = const [],
   String? outputFile,
 }) {
-  final elide = outputFile == null && output.length > _fullOutputLimit;
   return _pretty.convert({
     "returncode": returnCode,
-    if (outputFile != null) "output": persistedOutput(output, outputFile),
-    if (outputFile == null && !elide) "output": output,
-    if (elide) ...{
-      "output_head": output.substring(0, _elidedHalf),
-      "output_tail": output.substring(output.length - _elidedHalf),
-      "elided_chars": output.length - 2 * _elidedHalf,
-      "warning": "Output too long.",
+    ...switch (outputFile) {
+      final saved? => {"output": persistedOutput(output, saved)},
+      null when output.length > _fullOutputLimit => {
+        "output_head": output.substring(0, _elidedHalf),
+        "output_tail": output.substring(output.length - _elidedHalf),
+        "elided_chars": output.length - 2 * _elidedHalf,
+        "warning": "Output too long.",
+      },
+      null => {"output": output},
     },
     if (exceptionInfo != null && exceptionInfo.isNotEmpty)
       "exception_info": exceptionInfo,

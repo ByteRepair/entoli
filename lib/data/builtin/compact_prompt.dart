@@ -104,6 +104,10 @@ $priorSummary
   }
 }
 
+/// How many characters the app counts as a token wherever it has no count
+/// of its own: [estimateTokens], and what `read` holds a page to.
+const charsPerToken = 4;
+
 /// A rough count, by length: four characters to the token is the estimate
 /// every system without a reported count falls back on, and it over-asks —
 /// which for a compaction means compacting a little early rather than
@@ -132,5 +136,5 @@ int estimateTokens(List<LlmMessage> messages) {
       chars += call.argumentsJson.length;
     }
   }
-  return chars ~/ 4;
+  return chars ~/ charsPerToken;
 }

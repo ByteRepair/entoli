@@ -132,17 +132,13 @@ class ChatRoom {
   /// notification. A job that was stopped wakes nobody: whoever stopped it
   /// knows. One end is one wake, so a watcher that keeps dying cannot loop.
   ///
-  /// An end that lands while a turn runs is held: that turn may make no
-  /// call after it — its last reply already being written — and then
-  /// nothing would ever have said it. [_wakeForUnheard] asks once the turn
-  /// is over.
+  /// An end that lands while a turn runs is left to the jobs, which hold it
+  /// as unheard: that turn may make no call after it — its last reply
+  /// already being written — and then nothing would ever have said it.
+  /// [_wakeForUnheard] asks once the turn is over.
   Future<void> _wake(JobEnd end, String command) async {
     final code = end.exitCode;
-    if (code == null) return;
-    if (state.isRunning) {
-      _endsDuringTurns.add((end: end, command: command));
-      return;
-    }
+    if (code == null || state.isRunning) return;
     _jobs.told(end.jobId);
     await _prompt(
       jobEndedNotification(
@@ -154,18 +150,16 @@ class ChatRoom {
     );
   }
 
-  /// Job ends that landed while a turn ran, to be asked about when it is
-  /// over: see [_wake].
-  final _endsDuringTurns = <({JobEnd end, String command})>[];
-
-  /// The first held end the agent has not heard — no later call of the turn
-  /// carried its note — wakes it, now the room is quiet. The rest wait for
-  /// the end of that turn, which asks again; any its calls read are dropped.
+  /// The first end the agent has not heard — no call carried its note —
+  /// wakes it, now the room is quiet. The rest wait for the end of that
+  /// turn, which asks again; any its calls read are heard by then. A job
+  /// that was stopped wakes nobody, here as between turns.
   void _wakeForUnheard() {
-    _endsDuringTurns.removeWhere((held) => _jobs.heard(held.end.jobId));
-    if (_endsDuringTurns.isEmpty || state.isRunning || _disposed) return;
-    final held = _endsDuringTurns.removeAt(0);
-    unawaited(_wake(held.end, held.command));
+    if (state.isRunning || _disposed) return;
+    final first = _jobs.unheard.firstWhereOrNull(
+      (ended) => ended.end.exitCode != null,
+    );
+    if (first != null) unawaited(_wake(first.end, first.command));
   }
 
   bool _loaded = false;

@@ -1176,13 +1176,12 @@ class BuiltinAgent implements Turn {
     Stream<AgentEvent> events,
   ) async* {
     await for (final event in events) {
-      if (limit != null &&
-          event is ToolResultEvent &&
+      if (event is ToolResultEvent &&
           calls.contains(event.result.callId) &&
-          event.result.outputFile == null &&
-          event.result.output.length > limit) {
-        final path = await saveOutput(
+          event.result.outputFile == null) {
+        final path = await saveIfLarge(
           event.result.output,
+          limit,
           callId: event.result.callId,
           workspace: workspace,
           projectWorkspace: projectWorkspace,

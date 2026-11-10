@@ -8,7 +8,8 @@ import "../approval_gate.dart";
 import "../background_jobs.dart";
 import "../builtin_options.dart";
 import "../llm/llm_client.dart";
-import "../templates.dart" show bashInlineLimit, previewChars;
+import "../saved_output.dart" show shellPath;
+import "../templates.dart" show previewChars;
 import "agent_tool.dart";
 import "turn.dart";
 
@@ -42,8 +43,11 @@ class BashTool extends AgentTool {
 
   /// Claude Code's `bash` limit, below every other tool's: a command's output
   /// is most often a log, whose start and path say what to look for in it.
+  /// Static, since the user's `!` command saves on the same terms.
+  static const outputLimit = 30000;
+
   @override
-  int? get inlineLimit => bashInlineLimit;
+  int? get inlineLimit => outputLimit;
 
   @override
   String get fragment => "`bash` to run a command";
@@ -95,7 +99,7 @@ class BashTool extends AgentTool {
     "type": "string",
     "description":
         "The bash command to execute. Its whole output, stdout and stderr "
-        "together, comes back to you; one longer than $bashInlineLimit "
+        "together, comes back to you; one longer than $outputLimit "
         "characters is saved to a file instead, and you get its first "
         "$previewChars characters and the file's path, to read or search "
         "for the rest. So run a command as it is rather than trimming its "
@@ -318,8 +322,14 @@ class BashTool extends AgentTool {
         readOnly: turn.readOnlyDirs,
       ),
     );
-    final log = backgroundLog(callId);
-    final where = turn.shell.guestRoot == null ? " (${job.logPath})" : "";
+    // The path the shell sees, as a saved result's is: absolute, so a `tail`
+    // after a `cd` still finds it, and the guest's inside one.
+    final log = shellPath(
+      backgroundLog(callId),
+      workspace: turn.workspace,
+      projectWorkspace: turn.projectWorkspace,
+      guestRoot: turn.shell.guestRoot,
+    );
     final pid = job.pid;
     final stop = pid == null
         ? ""
@@ -330,9 +340,8 @@ class BashTool extends AgentTool {
       jobId: job.id,
       output:
           "Started in the background as job ${job.id}.$stop Its output "
-          "goes to $log in the chat workspace$where: read it with `tail` or "
-          "the read tool at chat:$log. You are told how it ended when it "
-          "exits, even after this turn is over.",
+          "goes to $log: read it with `tail` or the read tool. You are told "
+          "how it ended when it exits, even after this turn is over.",
     );
   }
 }

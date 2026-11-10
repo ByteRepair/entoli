@@ -194,15 +194,19 @@ Preview (first 2KB):
 
 word for word (`persistedOutput` in `templates.dart`), sizes in kibibytes to
 one decimal. The limits are Claude Code's: `bash` at 30,000 characters
-(`bashInlineLimit`), every other tool at 50,000, and none for `read`, which
-bounds itself, and `ask_user`, whose result is the user's own words — a
+(`BashTool.outputLimit`), every other tool at 50,000, and none for `read`,
+which bounds itself, and `ask_user`, whose result is the user's own words — a
 tool's `inlineLimit`. It is one place for every tool, as Claude Code persists
 in its tool-result layer rather than in each tool: `BuiltinAgent._savingLarge`
-wraps each call's events, batched ones included, the way `_withJobNotes` does.
-The file is `.entoli-output/<call id>.txt` in the chat's workspace
-(`saveOutput`), beside the jobs' logs, so `read` and `tail` reach it from every
-shell, a guest's included — the path the model is given is the guest's where
-the commands run in one — and it goes when the chat's workspace does. Not
+wraps each call's events, batched ones included, the way `_withJobNotes` does,
+and `saveIfLarge` is the one test of "too large", which the user's `!` command
+asks too, with `bash`'s limit. The file is `.entoli-output/<call id>.txt` in
+the chat's workspace (`saveOutput`; the id made a file name by `fileStemOf`, as
+a job's log is), beside the jobs' logs, so `read` and `tail` reach it from
+every shell, a guest's included. The model is given it as an absolute path
+(`shellPath`) — the guest's where the commands run in one, which `read` maps
+back — so a `tail` after a `cd` still finds it; a job's log is named the same
+way. It goes when the chat's workspace does. Not
 `.entoli-tmp`, the model's own scratch it is told to fill and may clear: a path
 the conversation still names must keep naming something. Never over another
 call's file: a provider with no ids of its own numbers them per response, so
@@ -455,8 +459,9 @@ The log is named by the call that started the job (`backgroundLog`), not by
 the job's number: the number starts again with the app, and a reused one
 would write over a log the chat still points at.
 The answer gives the job's number, its pid (the group leader, so
-`kill -- -<pid>` takes everything it started) and the log, which the model
-reads with `tail` or `read`; the number also rides the result as
+`kill -- -<pid>` takes everything it started) and the log, by the absolute
+path the shell sees (`shellPath`, as a saved result's), which the model reads
+with `tail` or `read`; the number also rides the result as
 `ToolResult.jobId`, which is how the chat tells a job's call from a call.
 
 A job starts in the directory the chat's commands stand in
@@ -492,10 +497,12 @@ one end is one wake, so a watcher that keeps dying cannot loop.
 An end that lands while a turn runs is held rather than dropped: the turn
 reads it on its next tool result if there is one, but the end often comes
 while the last reply is being written, and then no call follows. When the
-turn is over and the room quiet, an end the agent has not heard
-(`ChatShellJobs.heard`: its note is still waiting) wakes it the same way;
-one whose note a later call carried is dropped. A turn that was stopped or
-failed wakes nothing: the note waits for the next call. The chat
+turn is over and the room quiet, the first end the agent has not heard wakes
+it the same way. The jobs are the one record of that: `ChatJobs` keeps each
+end until a tool result carries its note or a wake tells it
+(`ChatShellJobs.unheard`), and the room keeps no list of its own. A turn
+that was stopped or failed wakes nothing then: the end waits for the next
+call, or for the next turn that ends settled. The chat
 draws that prompt as the app's note, not the user's; see "When a turn is
 over" in `lib/domain/room/AGENTS.md`.
 
