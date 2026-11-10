@@ -12,4 +12,19 @@ void main() {
     expect(prompt, contains("/w/chats/c/.entoli-tmp"));
     expect(prompt, contains("never in `/tmp`"));
   });
+
+  test("the work folders are named as writable, and only where there are "
+      "any", () {
+    String prompt(List<String> folders) => turnPrompt(
+      workspace: "/w/chats/c",
+      projectWorkspace: "/w",
+      canRunCommands: true,
+      projectHome: false,
+      workFolders: folders,
+    );
+    final named = prompt(["/home/u/repo", "/srv/data"]);
+    expect(named, contains("## Work folders"));
+    expect(named, contains("- /home/u/repo\n- /srv/data"));
+    expect(prompt(const []), isNot(contains("## Work folders")));
+  });
 }

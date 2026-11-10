@@ -784,6 +784,34 @@ void main() {
     );
   });
 
+  test("a project's work folder is granted only while it is a folder on this "
+      "machine, and never over the app's own data", () async {
+    final outside = Directory.systemTemp.createTempSync("work_folder_");
+    addTearDown(() {
+      if (outside.existsSync()) outside.deleteSync(recursive: true);
+    });
+    final repo = repoWith(AppSettings());
+    final chat = await repo.createChat(project: "work");
+    await writeChatVia(repo, chat);
+    await repo
+        .sendPrompt(participant: "athena", chat.state.id, userMessage("go"))
+        .toList();
+    final policy = backend.prompts.last.settings.policy;
+    final gone = p.join(outside.path, "gone");
+    final appData = p.join(config.dataDir, "projects");
+    await (ProjectSettings.load(config, project: "work")
+          ..writableDirs = [outside.path, gone, appData, "~/.local/share"])
+        .save(config, project: "work");
+
+    expect((await policy()).writableDirs, [
+      outside.path,
+      "~/.local/share",
+    ], reason: "a `~` path is the gate's to resolve, and stands");
+
+    outside.deleteSync(recursive: true);
+    expect((await policy()).writableDirs, ["~/.local/share"]);
+  });
+
   group("a rule written from a banner answer", () {
     test(
       "\"Allow in Chat\" writes the derived rule on the chat's meta.json",

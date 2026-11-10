@@ -602,6 +602,22 @@ writable from inside its own permit. The tool's door refuses before any
 banner, and the repository drops the same paths. The tool rides `ask` and
 runs top-level only, having nobody to answer the banner otherwise.
 
+**A project's work folders are the same list, granted up front.** The
+project tier's `writableDirs` is what its settings page shows as "Work
+folders" (see "Work folders" in `lib/ui/settings/AGENTS.md`), so a folder put
+there before any turn is in the sandbox's grant, Seatbelt's and Landlock's
+alike. It also counts as inside the sandbox for the gate's question of whether
+a call leaves it, and for the classifier's `alsoWritable`, from the first
+call. No banner is needed, so nothing is refused for want of someone to answer
+it. `ChatRepository._policyOf` keeps only the persisted grants that hold now
+(`grantsNow`): a folder no longer on this machine grants nothing, nor does one
+over the app's data, whatever tier wrote it. A `~` path stands, for the gate to
+resolve. The turn's second system message names what is left under
+"## Work folders" (`turnPrompt`'s `workFolders`), so the model writes there
+without `unsandboxed` or an `add_directory` ask. It is read once per turn,
+and only where the sandbox carries the folders: with the switch off or no
+helper, there is nothing to stay inside, and the section is absent.
+
 In `auto` mode, a `PermissionClassifier` (the `LlmClassifier` impl, or
 `NoClassifier` when no classifier model is configured) is asked before each
 `bash` and `webfetch` call. `allow` runs silently, `deny` refuses with a

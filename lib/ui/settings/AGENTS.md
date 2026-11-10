@@ -274,6 +274,44 @@ one file and back — see "Backing it all up". **About** is the
 app rather than anything it does, which is why it is last — see "What the app
 is".
 
+## Work folders
+
+A project's settings page has a **Work folders** section: the folders outside
+the workspaces that every turn in the project may write to, granted before
+any turn so nobody has to be there to answer for them. It is what Claude
+Code gets from being opened in a folder. A chat working in a repository
+elsewhere on the machine otherwise left the sandbox once a command and
+waited on a banner each time, and a turn left running while the user was away
+was refused outright.
+
+It is no new store. The rows are the project's `writableDirs` in
+`project.json`, the list an `add_directory` "always for this project"
+answer already extends. So a folder granted on a banner shows here, one removed
+here is gone from the next call (the policy is read per call), and the
+sandbox, the approval gate and the file tools all read it through the policy
+as they always have. The list stays in `project.json` although it holds this
+machine's paths, unlike `instruction_files.json`. The field was already there,
+moving it would cost a migration, and a path that reaches another machine by
+backup or sync names a folder that is not there, which grants nothing (below).
+
+A folder comes from the platform's picker (`FolderPicker`, `file_selector`'s
+`getDirectoryPath` under it) and is never typed. It is refused, with a snack
+bar, for the two reasons `add_directory` refuses one: it is the app's own data
+tree (the data directory, anything under it, or anything holding it), or it is
+not a directory. `refuseWorkFolder` in `lib/domain/work_folders.dart` is the
+one test. A row whose folder is gone from this device, or that names the app's
+data however it got there, says so under its path. The same `grantsNow` that
+draws that line drops the folder from the turn's policy, so a folder that has
+disappeared grants nothing, and a command cannot recreate it under the grant.
+
+It is drawn only where the paths are this device's and the sandbox is what
+they open. It is not drawn for a paired device's project, whose folders a
+picker here cannot name, or for a built-in with rootfs isolation, whose
+commands run in a guest that cannot see them. Nor is it drawn where the picked
+driver's `Confinement` does not enforce the sandbox: Windows, which confines
+nothing, so the list would change nothing (see "What is absent, and honestly
+so" in `windows/AGENTS.md`); phones; and a Linux guest.
+
 ## The trigger editor
 
 The name, the prompt, and one row of "When" — a `SegmentedButton` over the

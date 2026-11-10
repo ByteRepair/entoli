@@ -1109,6 +1109,38 @@ void main() {
     });
   });
 
+  group("the work folders, as the model is told them", () {
+    String told(FakeLlmClient client) => client.sent.first
+        .where((m) => m.role == LlmRole.system)
+        .map((m) => m.text)
+        .join("\n");
+
+    test("a turn under the sandbox names its writable folders", () async {
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      await agentOver(
+        client,
+        writableDirs: ["/home/u/repo"],
+      ).run(userMessage("go")).toList();
+      expect(told(client), contains("## Work folders"));
+      expect(told(client), contains("- /home/u/repo"));
+    });
+
+    test("a turn with the sandbox off names none, there being nothing to "
+        "stay inside", () async {
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      await agentOver(
+        client,
+        writableDirs: ["/home/u/repo"],
+        sandboxed: false,
+      ).run(userMessage("go")).toList();
+      expect(told(client), isNot(contains("## Work folders")));
+    });
+  });
+
   group("the verbose veto note", () {
     test(
       "a command with a backtick substitution is refused verbosely",

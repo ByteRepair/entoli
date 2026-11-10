@@ -17,6 +17,7 @@ import "../domain/models.dart";
 import "../domain/permission.dart";
 import "../domain/project.dart";
 import "../domain/wired_skill.dart";
+import "../domain/work_folders.dart";
 import "../domain/project_settings.dart";
 import "../domain/prompt_library.dart";
 import "../domain/shell.dart";
@@ -566,12 +567,17 @@ class ChatRepository {
         ),
       ],
       // The project's writable roots and the chat's own grants, where an
-      // `add_directory` always answer lands. A rule's writes are the agent's to
-      // apply, to the commands that rule matches.
+      // `add_directory` always answer lands — the project's are its work
+      // folders, granted up front. One no longer on this machine grants
+      // nothing. A rule's writes are the agent's to apply, to the commands
+      // that rule matches.
       writableDirs: [
-        ...meta.writableDirs,
-        ...projectSettings.writableDirs,
-        ...defaultProjectSettings.writableDirs,
+        for (final dir in [
+          ...meta.writableDirs,
+          ...projectSettings.writableDirs,
+          ...defaultProjectSettings.writableDirs,
+        ])
+          if (grantsNow(dir, dataDir: _config.dataDir)) dir,
       ],
       sandboxed:
           meta.sandbox ??

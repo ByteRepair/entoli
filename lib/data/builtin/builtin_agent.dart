@@ -754,7 +754,7 @@ class BuiltinAgent implements Turn {
   /// hold a message no reload could rebuild; see "The projection" in
   /// `lib/domain/AGENTS.md` for what that cost.
   Stream<AgentEvent> resume({List<String> mentions = const []}) async* {
-    _setSystemPrompt(mentions);
+    await _setSystemPrompt(mentions);
     final turn = _recorded(_loop);
     // Wrapped either way: the branch decides whether the reason goes in, not
     // whether the turn is recorded.
@@ -1048,7 +1048,7 @@ class BuiltinAgent implements Turn {
     bool mayDress,
     List<String> mentions,
   ) async {
-    _setSystemPrompt(mentions);
+    await _setSystemPrompt(mentions);
     // The wording the live turn sends is the wording a reload rebuilds: both
     // call the projection, and the dress decision — may this message dress —
     // is the caller's, computed against the history it holds: the viewer's
@@ -1077,7 +1077,16 @@ class BuiltinAgent implements Turn {
   /// what a restore can find. See [turnPrompt]. Two only as far as the KV keys:
   /// a chat template renders one system block, so `mergeLeadingSystem` joins
   /// them on the way out.
-  void _setSystemPrompt(List<String> mentions) {
+  ///
+  /// The folders the policy grants are read here, once per turn: a work
+  /// folder added between turns is named in the next, and one the sandbox
+  /// does not carry — no sandbox here, or the switch off — is not named at
+  /// all, since there is nothing for the model to stay inside.
+  Future<void> _setSystemPrompt(List<String> mentions) async {
+    final policy = await this.policy();
+    final workFolders = policy.sandboxed && gate.helper != null
+        ? policy.writableDirs.toSet().toList()
+        : const <String>[];
     final offer = this.offer;
     // A participant is told its handle whatever its file says. A mention of
     // an agent not in the room is one to delegate to, so only where there is
@@ -1105,6 +1114,7 @@ class BuiltinAgent implements Turn {
       projectHome: shell.projectHome,
       guestRoot: shell.guestRoot,
       homePath: shell.homeFor(projectWorkspace),
+      workFolders: workFolders,
     );
     final head = [
       agentSystemMessage(
