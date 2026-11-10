@@ -26,12 +26,14 @@ class LlmClassifier implements PermissionClassifier {
     String argumentsJson, {
     required String workspace,
     List<String> alsoWritable = const [],
+    List<String> findings = const [],
   }) async {
     final prompt = _classifierPrompt(
       toolName,
       argumentsJson,
       workspace: workspace,
       alsoWritable: alsoWritable,
+      findings: findings,
     );
     try {
       final answer = await client.complete(
@@ -102,6 +104,13 @@ them. ask: anything else, and anything outside the workspace. deny: keys,
 credentials, password stores, browser profiles, shell history, or whole home
 or system directories.
 
+A bash call may come with "Parse findings": what the static checker could
+not model in it — a redirect through a variable, an unterminated quote, a
+variable that moves where tools write. The checker could not answer for the
+command, so you judge it whole: read what the command does, findings
+included, and answer as for any other call. A finding is not itself a reason
+to ask; a command whose effect you cannot tell from its text is.
+
 deny: the call is irreversible or system-wide destruction, and must never run.
 rm -rf on a system path, dd, mkfs, shred, fork bombs, chmod -R 777 on system
 paths, git push --force. Deny is not a stronger ask: it is only for commands
@@ -113,10 +122,12 @@ that must never run. A write you are merely unsure about is ask.
     String argumentsJson, {
     required String workspace,
     List<String> alsoWritable = const [],
+    List<String> findings = const [],
   }) {
     final args = _pretty(argumentsJson, toolName);
     return "Tool: $toolName\nArguments: $args\nWorkspace: $workspace"
-        "${alsoWritable.isEmpty ? "" : "\nAlso writable: ${alsoWritable.join(", ")}"}";
+        "${alsoWritable.isEmpty ? "" : "\nAlso writable: ${alsoWritable.join(", ")}"}"
+        "${findings.isEmpty ? "" : "\nParse findings:\n${[for (final f in findings) "- $f"].join("\n")}"}";
   }
 
   /// Render the arguments as something the model can read. A bash command is

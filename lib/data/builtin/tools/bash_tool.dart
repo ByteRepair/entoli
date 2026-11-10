@@ -212,9 +212,11 @@ class BashTool extends AgentTool {
     // what the human approved is the machine overriding its keeper. The
     // banner, not the mode, is what carries that — auto mode reaches the
     // banner through the classifier's ask — so the gate reads what the
-    // outcome says of the run.
+    // outcome says of the run. The same holds for auto mode's classifier
+    // where it allowed the command told the parse's findings: it judged the
+    // command whole, which is what the parse could not do.
     final sandbox = unconfined ? null : await turn.gate.confinementOf(analysis);
-    if (sandbox != null && !outcome.byPerson) {
+    if (sandbox != null && !outcome.byPerson && !outcome.judgedWhole) {
       final note = analysis.escalationNote;
       if (note != null) return ShellResult.failed(note);
     }

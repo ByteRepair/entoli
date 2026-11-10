@@ -55,12 +55,17 @@ ApproveMode? approveModeFromJson(Map<String, dynamic> json) {
 /// Classifies a tool call as safe, uncertain, or dangerous. The one
 /// implementation reaches a provider; [NoClassifier] is the safe fallback
 /// that asks for everything, used when no classifier model is configured.
+///
+/// [findings] are what the command parse could not answer for in a `bash`
+/// call — a redirect through a variable, an unterminated quote — handed over
+/// so the classifier judges the whole command knowing why it was asked.
 abstract class PermissionClassifier {
   Future<PermissionDecision> classify(
     String toolName,
     String argumentsJson, {
     required String workspace,
     List<String> alsoWritable,
+    List<String> findings,
   });
 }
 
@@ -76,6 +81,7 @@ class NoClassifier implements PermissionClassifier {
     String argumentsJson, {
     required String workspace,
     List<String> alsoWritable = const [],
+    List<String> findings = const [],
   }) async => PermissionDecision.ask;
 }
 
@@ -356,6 +362,42 @@ RuleVerdict? segmentVerdict(List<PermissionRule> rules, String segment) {
   return subject == null
       ? null
       : _strongestTraced(rules, bashToolName, subject);
+}
+
+/// Whether a `bash` rule deciding [decision] could match some part of a
+/// command the rules cannot read — the reason a command with parse findings
+/// is not handed to the classifier where a deny or an ask rule is the
+/// user's: those are the user's word on what never runs or always shows,
+/// and a model's judgement of text the rule never saw does not stand in for
+/// it. [segments] are the parse's, null where it saw none.
+///
+/// A part is unread where its words are not plain text — an expansion, a
+/// substitution — or where its words are plain but a redirect's target is
+/// not: the rule then reads the words alone, and one matching them is a
+/// rule the command's text was hiding from. A command whose every segment
+/// the rules read in full has already met them, and hides nothing.
+bool rulesBlindTo(
+  List<PermissionRule> rules,
+  List<String>? segments,
+  PermissionDecision decision,
+) {
+  final speaking = [
+    for (final rule in rules)
+      if (rule.decision == decision &&
+          (rule.tool == "*" || rule.tool == bashToolName))
+        rule,
+  ];
+  if (speaking.isEmpty) return false;
+  if (segments == null || segments.isEmpty) return true;
+  for (final segment in segments) {
+    if (_subjectOf(segment) != null) continue;
+    final words = plainCommand(segment, expandedTargets: true)?.words;
+    if (words == null) return true;
+    if (_strongestTraced(speaking, bashToolName, words.join(" ")) != null) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /// The verdict [rules] makes of one subject, with the tiers of the rules

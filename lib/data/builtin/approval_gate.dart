@@ -28,6 +28,12 @@ class GateOutcome {
   /// the machine overriding its keeper.
   bool byPerson = false;
 
+  /// The classifier allowed the run having read the whole command beside
+  /// the parse's findings on it. The parse stands down for this too: its
+  /// findings are what the classifier was asked to judge, so refusing on
+  /// them again would be asking a question and ignoring the answer.
+  bool judgedWhole = false;
+
   /// The outcome as [call]'s result.
   ToolResult resultOf(LlmToolCall call) =>
       toolRan(call, result!, decision: decision);
@@ -251,6 +257,18 @@ class ApprovalGate {
             outcome.result = ShellResult.failed(note);
             return;
           }
+          if (turnMode == ApproveMode.auto) {
+            yield* _judgeWhole(
+              call,
+              toolName,
+              run,
+              outcome,
+              argumentsText,
+              analysis!,
+              rules,
+            );
+            return;
+          }
           yield* _ask(call, toolName, run, outcome, argumentsText);
           return;
         }
@@ -280,6 +298,26 @@ class ApprovalGate {
             : const ShellResult.failed(_deniedByRule);
         return;
       }
+    }
+    // A command the parse has findings on, where a sandbox would hold the
+    // parse to them: in auto mode the classifier judges it whole rather than
+    // the run refusing it unjudged. Ask mode's banner already does, and never
+    // mode has nobody to judge it — the run refuses it there.
+    if (analysis != null &&
+        !unsandboxed &&
+        (mode ?? turnMode) == ApproveMode.auto &&
+        analysis.escalationNote != null &&
+        await confinementOf(analysis) != null) {
+      yield* _judgeWhole(
+        call,
+        toolName,
+        run,
+        outcome,
+        argumentsText,
+        analysis,
+        rules,
+      );
+      return;
     }
     switch (mode ?? turnMode) {
       case ApproveMode.ask:
@@ -400,8 +438,50 @@ class ApprovalGate {
         : const ShellResult.failed(_deniedByUser);
   }
 
+  /// A command [analysis] has findings on, in auto mode: judged whole by the
+  /// classifier, told what the parse found, where the rules allow that. A
+  /// deny rule that could match a part the parse cannot read keeps the
+  /// refusal, and an ask rule there keeps the banner — the rules are the
+  /// user's, and a model's reading of text they never saw does not stand in
+  /// for them. A classifier deny answers with the parse's split advice and
+  /// what the classifier said, so the model can rewrite rather than retry.
+  Stream<AgentEvent> _judgeWhole(
+    LlmToolCall call,
+    String toolName,
+    Future<ShellResult> Function() run,
+    GateOutcome outcome,
+    String? argumentsText,
+    ShellCommandAnalysis analysis,
+    List<PermissionRule> rules,
+  ) async* {
+    final segments = analysis.modelableSegments;
+    if (rulesBlindTo(rules, segments, PermissionDecision.deny)) {
+      outcome.result = ShellResult.failed(
+        analysis.escalationNoteBecause(_blindDenyRule)!,
+      );
+      return;
+    }
+    if (rulesBlindTo(rules, segments, PermissionDecision.ask)) {
+      yield* _ask(call, toolName, run, outcome, argumentsText);
+      return;
+    }
+    yield* _classify(
+      call,
+      toolName,
+      run,
+      outcome,
+      argumentsText,
+      findings: [...analysis.unmodelableReasons, ...analysis.escalationReasons],
+      refusal: analysis.escalationNoteBecause(_classifierDenied),
+    );
+  }
+
   /// Classify the call, then allow (run), deny (refuse), or ask (escalate to
-  /// the banner).
+  /// the banner). [findings] are what the command parse could not answer for,
+  /// handed to the classifier beside the call; an allow given with them in
+  /// hand marks the run [GateOutcome.judgedWhole]. [refusal] is what a deny
+  /// answers with, where the caller has something better to say than that
+  /// the call was dangerous.
   Stream<AgentEvent> _classify(
     LlmToolCall call,
     String toolName,
@@ -409,6 +489,8 @@ class ApprovalGate {
     GateOutcome outcome,
     String? argumentsText, {
     bool unsandboxed = false,
+    List<String> findings = const [],
+    String? refusal,
   }) async* {
     if (_autoPaused) {
       yield* _ask(
@@ -433,6 +515,7 @@ class ApprovalGate {
           if (projectWorkspace != workspace) projectWorkspace,
           ...(await permissions()).writableDirs,
         ],
+        findings: findings,
       ),
       stopped.then((_) => PermissionDecision.ask),
     ]);
@@ -451,11 +534,14 @@ class ApprovalGate {
     }
     switch (decision) {
       case PermissionDecision.allow:
+        outcome.judgedWhole = findings.isNotEmpty;
         outcome.result = await run();
       case PermissionDecision.deny:
-        outcome.result = const ShellResult.failed(
-          "Denied by auto mode as dangerous. Do not retry this command; "
-          "tell the user what you were trying to do and let them decide.",
+        outcome.result = ShellResult.failed(
+          refusal ??
+              "Denied by auto mode as dangerous. Do not retry this command; "
+                  "tell the user what you were trying to do and let them "
+                  "decide.",
         );
       case PermissionDecision.ask:
         _consecutiveAsks++;
@@ -486,6 +572,17 @@ class ApprovalGate {
       "Running this outside the sandbox needs "
       "the user's approval, and nobody is here to give it. Do it inside the "
       "workspaces, or tell the user what needs to run unsandboxed.";
+
+  static const _blindDenyRule =
+      "A deny rule the user set could match a part of it the parse cannot "
+      "read, so it was not judged whole: the rules are the user's, and only a "
+      "command whose every segment they can read is decided past them.";
+
+  static const _classifierDenied =
+      "Auto mode's classifier read the whole command and judged it "
+      "dangerous. If what it does is ordinary, rewritten as below each step "
+      "is judged on its own; if it is what the classifier feared, do not "
+      "retry it — tell the user what you were trying to do.";
 
   static const _deniedByRule =
       "Denied by a permission rule you set. Do not "

@@ -491,8 +491,30 @@ not `|`, which is the pipe, nor a bare comma, which arguments carry). Every
 segment must find an allow, so a compound whose tail no rule covers is not
 allowed by its head. A segment whose words are not plain text — an
 expansion, a substitution — is matched by no rule, and a command the parse
-cannot model at all goes to the banner even under an allow rule (refused in
-`never`, where nobody can answer).
+has findings on — one it cannot model at all, or a redirect through a
+variable, an assignment that moves where tools write — is not decided by an
+allow rule either: it goes to the banner in `ask`, to the classifier in
+`auto`, and is refused in `never`, where nobody can answer.
+
+**A command the parse cannot check is judged whole, not refused unjudged.**
+Where a sandbox would confine it, the run holds the parse to its findings
+(`ShellCommandAnalysis.escalationNote`, the refusal the model reads: the
+findings, the segments where the parse saw them, and the advice to split
+the command or write a script) unless something read the whole command —
+a person at the banner (`GateOutcome.byPerson`), or in `auto` the
+classifier, handed the findings beside the command (`classify`'s
+`findings`) and allowing it (`GateOutcome.judgedWhole`). Before, a classifier
+allow was vetoed by the parse, so an ordinary `cat x > $B/out` was refused
+outright; the static parse is a fast path, not the only judge, and what runs
+is still under the sandbox. A classifier deny answers with the same split
+advice and the classifier's verdict, so the model rewrites rather than
+retries; an ask goes to the banner. **The rules are not bypassed**
+(`rulesBlindTo`): where a deny rule for `bash` could match a part the parse
+cannot read — a segment whose words are not plain, or whose plain words
+match it with a redirect's target hidden — the command is refused as before
+without asking the classifier, and an ask rule there raises the banner. A
+rule is the user's word on what never runs or always shows, and a model's
+judgement of text the rule never saw does not stand in for it.
 
 **The policy is read, not held.** The repository hands a turn a
 `PolicyReader` (`TurnSettings.policy`), and the agent calls it at every gated
@@ -606,7 +628,9 @@ In `auto` mode, a `PermissionClassifier` (the `LlmClassifier` impl, or
 `NoClassifier` when no classifier model is configured) is asked before each
 `bash` and `webfetch` call. `allow` runs silently, `deny` refuses with a
 message that says not to retry it, `ask` escalates to the same banner `ask`
-mode uses. The classifier's rubric is workspace-anchored: reads of anything
+mode uses. A command with parse findings reaches it with them, and its deny
+carries the split advice instead (see "A command the parse cannot check"
+above). The classifier's rubric is workspace-anchored: reads of anything
 and writes inside the workspace allow, anything modifying state past it (the
 machine's `/tmp` included) asks, and deny is reserved for irreversible
 destruction rather than being a stronger ask — a write the model is unsure

@@ -2350,7 +2350,7 @@ void main() {
       expect(shell.ran, hasLength(1));
     });
 
-    test("in auto mode the parse holds only where nobody decided", () async {
+    test("in auto mode the parse stands down for a judged command", () async {
       // The classifier asks: the banner is the decision, as in ask mode.
       final client = FakeLlmClient([
         [bashCall(r'echo "unclosed')],
@@ -2370,24 +2370,19 @@ void main() {
         reason: "the banner is the decision, in auto mode as in ask",
       );
 
-      // The classifier allows: no human read the text, so the gate's refusal
-      // is what says why.
+      // The classifier allows, told what the parse found: it judged the
+      // command whole, and the run does not refuse it again.
       final allowed = FakeLlmClient([
         [bashCall(r'echo "unclosed')],
         [finish],
       ]);
-      final events = await agentOver(
+      await agentOver(
         allowed,
         sandboxHelper: helper,
         approveMode: ApproveMode.auto,
         classifier: FakeClassifier(decision: PermissionDecision.allow),
       ).run(userMessage("go")).toList();
-      final text = events
-          .whereType<ToolResultEvent>()
-          .map((r) => [r.result.output, r.result.exceptionInfo ?? ""].join(" "))
-          .join();
-      expect(text.toLowerCase(), contains("cannot be checked as one piece"));
-      expect(shell.ran, isEmpty);
+      expect(shell.ran, [r'echo "unclosed']);
     });
   });
 
