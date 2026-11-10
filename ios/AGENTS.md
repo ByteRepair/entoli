@@ -598,6 +598,21 @@ embedded in it as a child. The Runner is untouched: the implicit engine, its
 registrations and `SceneDelegate` are as they were, and the plugin finds the
 window as the one whose root is Flutter's.
 
+**The container takes the Flutter controller once it has appeared**
+(`FlutterContainer.viewDidAppear`), not as it loads or is about to. Swapping
+the window's root sends the old root — Flutter's controller — its
+`viewDidDisappear` only as the new root appears, which is after the
+`viewWillAppear` it had as the container's child. Flutter sets its surface up
+on an appearance and tears it down on a disappearance, so in that order the
+Flutter view drew no frame again from the shell's start: the lifecycle stayed
+resumed and Dart built, laid out and painted every frame, and the screen kept
+the last one from before the swap. The native chrome hid it — the new-chat
+screen draws over a Flutter view with nothing on it — until a Flutter page was
+pushed and showed its header, the shell's, over a blank body. Opening the
+sidebar and closing it mended it, the view leaving the window and coming back.
+Taken in `viewDidAppear`, the controller's own disappearance has ended and it
+appears afresh inside a container already in the window.
+
 The plugin's package is iOS 17 and macOS 14, the floor the app already has for
 MLX, and the Runner's targets say 17.0 outright rather than "the recommended
 version": Flutter writes its generated plugin package's platform from the

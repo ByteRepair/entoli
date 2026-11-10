@@ -75,13 +75,17 @@ import SwiftUI
 
     required init?(coder: NSCoder) { fatalError("not from a nib") }
 
-    override func viewDidLoad() {
-      super.viewDidLoad()
-      adopt()
-    }
-
-    override func viewWillAppear(_ animated: Bool) {
-      super.viewWillAppear(animated)
+    /// Taken once this container has appeared, not as it loads or is about
+    /// to: the controller may still be finishing a disappearance of its own.
+    /// The shell's start swaps it out as the window's root, and UIKit sends
+    /// that root its `viewDidDisappear` only as the new root appears — after
+    /// the `viewWillAppear` it would have had here as a child. Flutter tears
+    /// its surface down on a disappearance and sets it up on an appearance,
+    /// so in that order it drew no frame again, and nothing said so: the
+    /// lifecycle stayed resumed. Moved into a container already in the
+    /// window, it gets an appearance of its own after the disappearance.
+    override func viewDidAppear(_ animated: Bool) {
+      super.viewDidAppear(animated)
       adopt()
     }
 
