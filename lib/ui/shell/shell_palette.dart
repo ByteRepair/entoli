@@ -8,7 +8,6 @@ import "../../providers.dart";
 import "../selection.dart";
 import "../sidebar/project_palette.dart" show paletteListing;
 import "../sidebar/remote_projects.dart";
-import "shell_outbox.dart";
 import "../app_routes.dart";
 import "shell_sidebar.dart" show projectSymbol, remoteSymbol;
 
@@ -33,116 +32,105 @@ final shellPaletteProvider = NotifierProvider<ShellPalette, PaletteState>(
   ShellPalette.new,
 );
 
-/// Sends the [PaletteSnapshot] while the palette is open: `ProjectPalette`'s
+/// The [PaletteSnapshot]: while the palette is open, `ProjectPalette`'s
 /// list, [paletteListing] — the default project and the built-ins, the
 /// user's projects, other devices', then every chat, running ones first — or,
-/// with something typed, the projects and chats it matches. Everything is
-/// read in [build], the publisher's own, as `SidebarPublisher` reads it and
-/// for the same reason.
-class PalettePublisher extends ConsumerWidget {
-  const PalettePublisher({super.key});
+/// with something typed, the projects and chats it matches. `ShellPublisher`
+/// sends it.
+final paletteSnapshotProvider = Provider<PaletteSnapshot>((ref) {
+  final palette = ref.watch(shellPaletteProvider);
+  return palette.open
+      ? _paletteSnapshot(ref, palette)
+      : PaletteSnapshot(open: false, serial: palette.serial);
+});
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final palette = ref.watch(shellPaletteProvider);
-    ref
-        .read(shellOutboxProvider)
-        .palette(
-          palette.open
-              ? _snapshot(ref, palette)
-              : PaletteSnapshot(open: false, serial: palette.serial),
-        );
-    return const SizedBox.shrink();
-  }
+PaletteSnapshot _paletteSnapshot(Ref ref, PaletteState palette) {
+  final running = ref.watch(busyChatIdsProvider);
+  final selected = ref.watch(selectedProjectProvider);
+  final selectedChat = ref.watch(selectedChatIdProvider);
+  final chats = (ref.watch(chatListProvider).value ?? const <ChatState>[])
+      .where((c) => !c.isExpired())
+      .toList();
+  final (:counts, :busy) = projectCounts(chats, running);
 
-  PaletteSnapshot _snapshot(WidgetRef ref, PaletteState palette) {
-    final running = ref.watch(busyChatIdsProvider);
-    final selected = ref.watch(selectedProjectProvider);
-    final selectedChat = ref.watch(selectedChatIdProvider);
-    final chats = (ref.watch(chatListProvider).value ?? const <ChatState>[])
-        .where((c) => !c.isExpired())
-        .toList();
-    final (:counts, :busy) = projectCounts(chats, running);
+  PaletteItem local(String? p) => PaletteItem(
+    id: "p::${p ?? ""}",
+    label: projectLabel(p),
+    project: p,
+    symbol: projectSymbol(p),
+    omada: ref.watch(omadaOnProvider(p)),
+    trailing: "${counts[p] ?? 0}",
+    busy: busy.contains(p),
+    current: selected == localProject(p),
+  );
+  PaletteItem mirrored(RemoteEntry e) => PaletteItem(
+    id: "p:${e.scope.device}:${e.scope.project ?? ""}",
+    label: e.label,
+    device: e.scope.device,
+    project: e.scope.project,
+    symbol: remoteSymbol,
+    omada: e.omada,
+    trailing: "${e.count}",
+    current: e.scope == selected,
+  );
 
-    PaletteItem local(String? p) => PaletteItem(
-      id: "p::${p ?? ""}",
-      label: projectLabel(p),
-      project: p,
-      symbol: projectSymbol(p),
-      omada: ref.watch(omadaOnProvider(p)),
-      trailing: "${counts[p] ?? 0}",
-      busy: busy.contains(p),
-      current: selected == localProject(p),
-    );
-    PaletteItem mirrored(RemoteEntry e) => PaletteItem(
-      id: "p:${e.scope.device}:${e.scope.project ?? ""}",
-      label: e.label,
-      device: e.scope.device,
-      project: e.scope.project,
-      symbol: remoteSymbol,
-      omada: e.omada,
-      trailing: "${e.count}",
-      current: e.scope == selected,
-    );
-
-    final listing = paletteListing(
-      named: ref.watch(projectListProvider).value ?? const <String>[],
-      chats: chats,
-      remotes: remoteEntries(
-        ref.watch(remoteChatsProvider),
-        ref.watch(deviceProjectsProvider),
-        ref.watch(syncPeersProvider),
-      ),
-      query: palette.query,
-      running: running,
-    );
-    final sections = [
-      if (!listing.searching) ...[
-        PaletteSection(
-          heading: "",
-          items: [for (final p in listing.projects) local(p)],
-        ),
-        PaletteSection(
-          heading: "",
-          items: [for (final p in listing.mine) local(p)],
-        ),
-        PaletteSection(
-          heading: "Other Devices",
-          items: [for (final e in listing.devices) mirrored(e)],
-        ),
-      ] else
-        PaletteSection(
-          heading: "Projects",
-          items: [
-            for (final p in listing.projects) local(p),
-            for (final e in listing.devices) mirrored(e),
-          ],
-        ),
+  final listing = paletteListing(
+    named: ref.watch(projectListProvider).value ?? const <String>[],
+    chats: chats,
+    remotes: remoteEntries(
+      ref.watch(remoteChatsProvider),
+      ref.watch(deviceProjectsProvider),
+      ref.watch(syncPeersProvider),
+    ),
+    query: palette.query,
+    running: running,
+  );
+  final sections = [
+    if (!listing.searching) ...[
       PaletteSection(
-        heading: "Chats",
+        heading: "",
+        items: [for (final p in listing.projects) local(p)],
+      ),
+      PaletteSection(
+        heading: "",
+        items: [for (final p in listing.mine) local(p)],
+      ),
+      PaletteSection(
+        heading: "Other Devices",
+        items: [for (final e in listing.devices) mirrored(e)],
+      ),
+    ] else
+      PaletteSection(
+        heading: "Projects",
         items: [
-          for (final chat in listing.chats)
-            PaletteItem(
-              id: "c:${chat.id}",
-              label: chat.title.orUntitled,
-              chat: chat.id,
-              trailing: projectLabel(chat.project),
-              busy: running.contains(chat.id),
-              current: chat.id == selectedChat,
-            ),
+          for (final p in listing.projects) local(p),
+          for (final e in listing.devices) mirrored(e),
         ],
       ),
-    ];
-    return PaletteSnapshot(
-      open: true,
-      query: palette.query,
-      sections: [
-        for (final s in sections)
-          if (s.items.isNotEmpty) s,
+    PaletteSection(
+      heading: "Chats",
+      items: [
+        for (final chat in listing.chats)
+          PaletteItem(
+            id: "c:${chat.id}",
+            label: chat.title.orUntitled,
+            chat: chat.id,
+            trailing: projectLabel(chat.project),
+            busy: running.contains(chat.id),
+            current: chat.id == selectedChat,
+          ),
       ],
-      serial: palette.serial,
-    );
-  }
+    ),
+  ];
+  return PaletteSnapshot(
+    open: true,
+    query: palette.query,
+    sections: [
+      for (final s in sections)
+        if (s.items.isNotEmpty) s,
+    ],
+    serial: palette.serial,
+  );
 }
 
 /// The app's own, under a name [PaletteRunner]'s methods do not hide.

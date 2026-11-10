@@ -12,8 +12,8 @@ extension PaletteItem: Identifiable {}
 /// The project palette, Cmd+K's, as a panel over the window in the system's
 /// glass: a search field over the projects and every chat, the arrow keys
 /// moving through them, Return taking one and Escape leaving. Dart's
-/// `PalettePublisher` lists and narrows the rows by `ProjectPalette`'s rules;
-/// a pick is an intent.
+/// `paletteSnapshotProvider` lists and narrows the rows by `ProjectPalette`'s
+/// rules; a pick is an intent.
 struct PaletteView: View {
   @ObservedObject var model: ShellModel
 

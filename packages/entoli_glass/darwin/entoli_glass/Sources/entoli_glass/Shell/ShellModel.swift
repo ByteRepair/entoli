@@ -31,11 +31,18 @@ final class ShellModel: ObservableObject {
   @Published var strip: StripRequest?
   var stripReply: ((Int64?) -> Void)?
 
-  /// Asked of the split view where it is one column — an iPhone — so a chat
-  /// opened or a new one started is shown rather than left behind the list.
-  @Published private(set) var detailAsked = 0
+  /// Which column the split view shows where it is one column — an iPhone.
+  /// The detail to begin with, nothing selected being the new-chat screen
+  /// as it is in the Flutter app; the list when its button or the system's
+  /// back gesture asks for it; the detail again once a chat, a new one, a
+  /// page or a project is picked from it, as the Flutter drawer closes on
+  /// each. The split view writes it back as the user moves between the two.
+  @Published var compactColumn = NavigationSplitViewColumn.detail
 
-  func showDetail() { detailAsked += 1 }
+  /// Set only where it changes: the model is every view's, and a write it
+  /// publishes redraws them all.
+  func showDetail() { if compactColumn != .detail { compactColumn = .detail } }
+  func showSidebar() { if compactColumn != .sidebar { compactColumn = .sidebar } }
 
   /// The microphone's level: not published, being many times a second and
   /// read by the glow on each of its frames.

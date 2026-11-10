@@ -372,7 +372,8 @@ class _NewChatState extends ConsumerState<_NewChat> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const _CommandHint(),
+        // The native shell's new-chat screen says it itself.
+        if (!ref.watch(liquidGlassProvider).on) const _CommandHint(),
         if (at.device != null)
           // A paired device's project: its setup and its voice are that
           // device's.
