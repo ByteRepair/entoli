@@ -1271,6 +1271,7 @@ class _StubClassifier implements PermissionClassifier {
     required String workspace,
     List<String> alsoWritable = const [],
     List<String> findings = const [],
+    ClassifierRequest? request,
   }) async => decision;
 }
 
@@ -1287,6 +1288,7 @@ class _SpyClassifier implements PermissionClassifier {
     required String workspace,
     List<String> alsoWritable = const [],
     List<String> findings = const [],
+    ClassifierRequest? request,
   }) async {
     ask();
     return PermissionDecision.allow;

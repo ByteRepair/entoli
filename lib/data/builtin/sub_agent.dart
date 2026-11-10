@@ -138,15 +138,19 @@ class SubAgentRunner implements SubAgents {
   /// its own transcript. The same thing the user's Continue does one level up,
   /// and the same three steps: project the log back, nudge, run the loop.
   Future<ShellResult> resume(String agentName, String callId) async {
+    final transcript = await log.read(callId);
     final session = BuiltinSession()
-      ..replaceWith(
-        await projectionOf(await log.read(callId), load: noResources),
-      );
+      ..replaceWith(await projectionOf(transcript, load: noResources));
+    // The task it was set, which is what it is carrying on.
+    final task = transcript
+        .where((m) => m.role == MessageRole.user)
+        .firstOrNull
+        ?.plainText;
     return _drive(
       session,
       _definitionOf(agentName),
       callId,
-      (agent) => agent.resume(),
+      (agent) => agent.resume(said: task),
     );
   }
 

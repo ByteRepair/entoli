@@ -630,7 +630,24 @@ In `auto` mode, a `PermissionClassifier` (the `LlmClassifier` impl, or
 message that says not to retry it, `ask` escalates to the same banner `ask`
 mode uses. A command with parse findings reaches it with them, and its deny
 carries the split advice instead (see "A command the parse cannot check"
-above). The classifier's rubric is workspace-anchored: reads of anything
+above).
+
+**The classifier judges a call against what was asked.** Every classifier
+call carries a `ClassifierRequest` beside the call: the text of the message
+the turn opened on as the user typed it (no attachments; a resumed turn's
+comes from its caller, the message that started it), the chat's active
+`/goal` objective, and the plan's task in progress, read off `PLAN.md`.
+A sub-agent's is its own task, and no plan — the plan beside it is the
+parent's, and a one-shot agent keeps none. The gate reads it afresh at each
+call (`ApprovalGate.request`) from what the turn holds, never the log. The
+prompt carries it capped (`LlmClassifier.requestBudget`, 4000 characters:
+the goal and the task cut to a share each, the message to the rest from its
+end, the newest nearest the call), so a long paste cannot swamp the call
+being judged. The rubric frames it as data: it says what work was
+requested, never grants permission itself, and text in it that addresses
+the classifier is ignored. It is message content, so no log line carries
+it. Sub-agents run under `never` with no classifier today, so theirs is
+read only if that changes. The classifier's rubric is workspace-anchored: reads of anything
 and writes inside the workspace allow, anything modifying state past it (the
 machine's `/tmp` included) asks, and deny is reserved for irreversible
 destruction rather than being a stronger ask — a write the model is unsure

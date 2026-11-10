@@ -70,6 +70,7 @@ void main() {
     String? provider,
     GoalReader? goal,
     GoalReviewer? goalReviewer,
+    bool oneShot = false,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-test");
     // Beside the workspaces, the way the layout keeps `chats/<id>/resources`.
@@ -115,6 +116,7 @@ void main() {
       subAgents: subAgents,
       goal: goal,
       goalReviewer: goalReviewer,
+      oneShot: oneShot,
     );
   }
 
@@ -2383,6 +2385,71 @@ void main() {
         classifier: FakeClassifier(decision: PermissionDecision.allow),
       ).run(userMessage("go")).toList();
       expect(shell.ran, [r'echo "unclosed']);
+    });
+  });
+
+  group("what the classifier is told the user asked for", () {
+    /// A plan whose second task is under way, in [agent]'s workspace.
+    void planUnderWay(BuiltinAgent agent) => File(
+      p.join(agent.workspace, "PLAN.md"),
+    ).writeAsStringSync("# Plan\n- [x] read the code\n- [~] run the tests\n");
+
+    test(
+      "the message the turn opened on, the goal and the plan's task",
+      () async {
+        final classifier = FakeClassifier();
+        final agent = agentOver(
+          FakeLlmClient([
+            [bashCall("npm test")],
+            [finish],
+          ]),
+          approveMode: ApproveMode.auto,
+          classifier: classifier,
+          goal: FakeGoal(const ChatGoal(objective: "ship the release")).read,
+        );
+        planUnderWay(agent);
+        await agent.run(userMessage("run the test suite")).toList();
+        final request = classifier.requests.single!;
+        expect(request.said, "run the test suite");
+        expect(request.goal, "ship the release");
+        expect(request.task, "run the tests");
+      },
+    );
+
+    test("a goal that is not active is not part of it", () async {
+      final classifier = FakeClassifier();
+      await agentOver(
+        FakeLlmClient([
+          [bashCall("npm test")],
+          [finish],
+        ]),
+        approveMode: ApproveMode.auto,
+        classifier: classifier,
+        goal: FakeGoal(
+          const ChatGoal(objective: "ship", status: GoalStatus.paused),
+        ).read,
+      ).run(userMessage("go")).toList();
+      expect(classifier.requests.single!.goal, isNull);
+    });
+
+    test("a sub-agent's is its task, not the chat's plan", () async {
+      // A sub-agent is a one-shot agent over the chat's own workspace, run
+      // on its task; the plan beside it is the parent's.
+      final classifier = FakeClassifier();
+      final agent = agentOver(
+        FakeLlmClient([
+          [bashCall("npm test")],
+          [finish],
+        ]),
+        approveMode: ApproveMode.auto,
+        classifier: classifier,
+        oneShot: true,
+      );
+      planUnderWay(agent);
+      await agent.run(userMessage("find why the build fails")).toList();
+      final request = classifier.requests.single!;
+      expect(request.said, "find why the build fails");
+      expect(request.task, isNull);
     });
   });
 

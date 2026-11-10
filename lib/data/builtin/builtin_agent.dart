@@ -1,10 +1,13 @@
 import "dart:async";
 import "dart:convert";
+import "dart:io";
 import "dart:typed_data";
 
 import "package:flutter/foundation.dart" show visibleForTesting;
+import "package:path/path.dart" as p;
 import "package:uuid/uuid.dart";
 
+import "../../core/log.dart" show logFailure;
 import "../../domain/agent_backend.dart";
 import "../../domain/agent_definition.dart";
 import "../../domain/agent_browser.dart";
@@ -13,6 +16,8 @@ import "../../domain/file_tools.dart";
 import "../../domain/goal.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
+import "../../domain/plan.dart"
+    show PlanTaskStatus, planFileName, planTasksFrom;
 import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
@@ -661,7 +666,42 @@ class BuiltinAgent implements Turn {
     cancelled: () => _cancelled,
     stopped: _stopped.future,
     sandboxHelper: sandboxHelper,
+    request: _classifierRequest,
   );
+
+  /// The text of the message this turn opened on, as the user typed it: set
+  /// by [run] from its prompt, by [resume] from what its caller says started
+  /// the turn. For a sub-agent, its task.
+  String? _said;
+
+  /// What the classifier is told the user asked for: [_said], the chat's
+  /// active goal, and the plan's task under way. The plan is the chat's own
+  /// and a one-shot agent does not keep it (the plan tools are not offered
+  /// there), so a sub-agent's request is its task alone.
+  Future<ClassifierRequest?> _classifierRequest() async {
+    final objective = switch (goal?.call()) {
+      final asked? when asked.isActive => asked.objective,
+      _ => null,
+    };
+    final task = oneShot ? null : await _planTaskUnderWay();
+    final request = ClassifierRequest(said: _said, goal: objective, task: task);
+    return request.isEmpty ? null : request;
+  }
+
+  /// The plan's task in progress, read off the chat's `PLAN.md`; null where
+  /// there is none, or the file is not there to read.
+  Future<String?> _planTaskUnderWay() async {
+    final file = File(p.join(workspace, planFileName));
+    if (!file.existsSync()) return null;
+    try {
+      return planTasksFrom(
+        await file.readAsString(),
+      ).where((t) => t.status == PlanTaskStatus.inProgress).firstOrNull?.text;
+    } on FileSystemException catch (e) {
+      logFailure("agent", "plan unreadable for the classifier", e.message);
+      return null;
+    }
+  }
 
   /// Resolve a file-tool path through the workspaces, the guest root and the
   /// shell's home, so every call site carries the translation without
@@ -735,6 +775,7 @@ class BuiltinAgent implements Turn {
     List<String> mentions = const [],
     bool mayDress = false,
   }) async* {
+    _said = prompt.plainText;
     await _openTurn(prompt, mayDress, mentions);
     yield* _recorded(_loop)();
   }
@@ -753,7 +794,14 @@ class BuiltinAgent implements Turn {
   /// rather than added to. Nothing logs it, so a session that kept it would
   /// hold a message no reload could rebuild; see "The projection" in
   /// `lib/domain/AGENTS.md` for what that cost.
-  Stream<AgentEvent> resume({List<String> mentions = const []}) async* {
+  ///
+  /// [said] is the message that started the turn being carried on, for the
+  /// classifier's account of what was asked.
+  Stream<AgentEvent> resume({
+    List<String> mentions = const [],
+    String? said,
+  }) async* {
+    _said = said;
     _setSystemPrompt(mentions);
     final turn = _recorded(_loop);
     // Wrapped either way: the branch decides whether the reason goes in, not

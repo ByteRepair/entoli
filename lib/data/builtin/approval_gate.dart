@@ -57,6 +57,7 @@ class ApprovalGate {
     required this.cancelled,
     required this.stopped,
     this.sandboxHelper,
+    this.request,
   });
 
   /// What the permission pages set, read afresh at every gated call: a rule
@@ -88,6 +89,11 @@ class ApprovalGate {
   /// The sandbox helper a test hands in, where the shell is a fake with no
   /// driver behind it; the shell's own wins where both exist.
   final SandboxHelper? sandboxHelper;
+
+  /// What the user asked the turn for, read at each classifier call — every
+  /// one, so the judge has one set of inputs whatever brought the call to
+  /// it. Null where the turn keeps nothing to say.
+  final Future<ClassifierRequest?> Function()? request;
 
   Future<StandingPermissions>? _callPolicy;
 
@@ -516,6 +522,7 @@ class ApprovalGate {
           ...(await permissions()).writableDirs,
         ],
         findings: findings,
+        request: await request?.call(),
       ),
       stopped.then((_) => PermissionDecision.ask),
     ]);

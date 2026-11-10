@@ -681,7 +681,7 @@ class BuiltinBackend implements AgentBackend {
           prompt ?? history.lastWhereOrNull((m) => m.role == MessageRole.user);
       final mentions = mentionedAgents(said?.references ?? const []);
       final events = prompt == null
-          ? agent.resume(mentions: mentions)
+          ? agent.resume(mentions: mentions, said: said?.plainText)
           : agent.run(
               prompt,
               mentions: mentions,

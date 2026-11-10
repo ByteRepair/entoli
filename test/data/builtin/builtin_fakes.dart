@@ -542,6 +542,9 @@ class FakeClassifier implements PermissionClassifier {
   /// The parse's findings each call was told.
   final List<List<String>> findings = [];
 
+  /// What the user asked for, as each call was told it.
+  final List<ClassifierRequest?> requests = [];
+
   @override
   Future<PermissionDecision> classify(
     String toolName,
@@ -549,10 +552,12 @@ class FakeClassifier implements PermissionClassifier {
     required String workspace,
     List<String> alsoWritable = const [],
     List<String> findings = const [],
+    ClassifierRequest? request,
   }) async {
     classified.add((tool: toolName, args: argumentsJson));
     this.alsoWritable.add(alsoWritable);
     this.findings.add(findings);
+    requests.add(request);
     return decide?.call(toolName, argumentsJson) ?? decision;
   }
 }

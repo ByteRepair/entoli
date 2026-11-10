@@ -59,6 +59,8 @@ ApproveMode? approveModeFromJson(Map<String, dynamic> json) {
 /// [findings] are what the command parse could not answer for in a `bash`
 /// call — a redirect through a variable, an unterminated quote — handed over
 /// so the classifier judges the whole command knowing why it was asked.
+/// [request] is what the user asked the turn for, so a call is judged
+/// against the work it serves; null where the turn has nothing to say.
 abstract class PermissionClassifier {
   Future<PermissionDecision> classify(
     String toolName,
@@ -66,7 +68,24 @@ abstract class PermissionClassifier {
     required String workspace,
     List<String> alsoWritable,
     List<String> findings,
+    ClassifierRequest? request,
   });
+}
+
+/// What the user asked a turn for, as the classifier reads it beside a call:
+/// the message the turn opened on as the user typed it (text alone, no
+/// attachments; a sub-agent's is its task), the chat's active goal, and the
+/// plan's task under way. Data the classifier weighs, never instructions it
+/// takes — see the rubric in `LlmClassifier`. Message content, so it is never
+/// put in a log line.
+class ClassifierRequest {
+  const ClassifierRequest({this.said, this.goal, this.task});
+
+  final String? said;
+  final String? goal;
+  final String? task;
+
+  bool get isEmpty => [said, goal, task].every((t) => t == null || t.isEmpty);
 }
 
 /// Always asks. What auto mode falls back to when no classifier model is
@@ -82,6 +101,7 @@ class NoClassifier implements PermissionClassifier {
     required String workspace,
     List<String> alsoWritable = const [],
     List<String> findings = const [],
+    ClassifierRequest? request,
   }) async => PermissionDecision.ask;
 }
 
