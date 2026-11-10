@@ -128,7 +128,7 @@ const alpine64 = Rootfs(
   version: "3.24.1",
   packageManager: "apk",
   images: {
-    "ios": RootfsImage(
+    iosAbi: RootfsImage(
       arch: "x86_64",
       url:
           "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/"
@@ -140,7 +140,18 @@ const alpine64 = Rootfs(
   },
 );
 
+/// Every distribution Entoli knows, which is what an id saved in the settings
+/// is looked up in.
 const rootfsCatalog = [alpine, alpine64];
+
+/// The ABI every iOS device answers with, the key of [alpine64]'s one image.
+const iosAbi = "ios";
+
+/// What a device with [abi] is offered: iOS its x86-64 guest alone, and
+/// every other device the one Alpine, whose row says so where it has no build
+/// for the device.
+List<Rootfs> rootfsCatalogFor(String? abi) =>
+    abi == iosAbi ? const [alpine64] : const [alpine];
 
 /// The wire name the guest drivers and the install environment name the
 /// distribution's installer by — what `byte-repair-setup.sh` reads. One

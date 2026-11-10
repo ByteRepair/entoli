@@ -60,12 +60,12 @@ void main() {
     expect(find.text("tour"), findsOneWidget);
   });
 
-  testWidgets("iOS gets it too", (tester) async {
+  testWidgets("iOS gets its x86-64 Linux", (tester) async {
     app = TestApp.create(abi: "ios");
     await app.pump(tester, gate);
     await settleIo(tester, least: 3);
 
-    expect(rootfs(), "alpine");
+    expect(rootfs(), "alpine64");
     expect(find.text("tour"), findsOneWidget);
   });
 
@@ -174,7 +174,7 @@ void main() {
     CliProvider.guest = null;
     app = TestApp.create(abi: "ios");
     expect(app.container.read(setupPlanProvider).steps.map((s) => s.name), [
-      "Alpine Linux",
+      "Alpine Linux (x86-64)",
     ]);
   });
 

@@ -1,5 +1,3 @@
-import "dart:io" show Platform;
-
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
@@ -37,11 +35,11 @@ final setupPlanProvider = Provider<SetupPlan>((ref) {
     for (final cli in ref.watch(cliProgramsProvider))
       if (cli.supported) CliSetup(cli),
   ];
-  // Android's CLIs run in the Alpine installed first; iOS's emulated one
-  // runs neither, so it gets Alpine alone.
-  if (ref.watch(prootAvailableProvider) ||
-      ref.watch(deviceAbiProvider) == "ios") {
-    return SetupPlan([const AlpineSetup(), ...clis]);
+  // A phone's CLIs run in the Linux installed first: proot's on Android, the
+  // emulated x86-64 one on iOS.
+  final abi = ref.watch(deviceAbiProvider);
+  if (ref.watch(prootAvailableProvider) || abi == iosAbi) {
+    return SetupPlan([AlpineSetup(rootfsCatalogFor(abi).first), ...clis]);
   }
   final browser = ref.watch(agentBrowserProvider);
   return SetupPlan([
@@ -144,11 +142,10 @@ class PlanProgress extends SetupProgress {
 }
 
 class AlpineSetup extends SetupStep {
-  const AlpineSetup();
+  const AlpineSetup(this._default);
 
-  /// The rootfs first startup installs. iOS defaults to the x86-64 (blinkish)
-  /// guest; Android keeps the i386 Alpine, since alpine64 has no Android image.
-  Rootfs get _default => Platform.isIOS ? alpine64 : alpine;
+  /// The rootfs first startup installs: the one this device is offered.
+  final Rootfs _default;
 
   @override
   String get name => _default.name;

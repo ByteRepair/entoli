@@ -30,7 +30,7 @@ class TerminalSection extends ConsumerWidget {
     // is keyed on). iOS with no Linux installed reads as "nothing to run" in
     // [canRunCommands], but the catalog below is the way one gets installed,
     // so the section stays for it.
-    final canHostALinux = available || abi == "ios";
+    final canHostALinux = available || abi == iosAbi;
     if (!canRun && !canHostALinux) {
       return SectionHeader(
         "Driver",
@@ -45,7 +45,9 @@ class TerminalSection extends ConsumerWidget {
     // device's build shipping without it — a fault of the APK. iOS carries no
     // proot by design; its shell is the in-process emulator, and its catalog
     // rides on the "ios" ABI the device answers with.
-    final unpackagedAbi = available || abi == null || abi == "ios" ? null : abi;
+    final unpackagedAbi = available || abi == null || abi == iosAbi
+        ? null
+        : abi;
     final description =
         "What driver to use when running commands. Determines "
         "the environment commands will run in."
@@ -81,8 +83,8 @@ class TerminalSection extends ConsumerWidget {
           // sandbox is the status card's.
           none: abi != null ? null : "Host",
           options: {
-            for (final rootfs in rootfsCatalog)
-              if ((available || abi == "ios") && installed.contains(rootfs.id))
+            for (final rootfs in rootfsCatalogFor(abi))
+              if ((available || abi == iosAbi) && installed.contains(rootfs.id))
                 rootfs.id: rootfs.name,
           },
           value: selected,
@@ -189,9 +191,8 @@ class RootfsCatalogSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final canHostALinux =
-        ref.watch(prootAvailableProvider) ||
-        ref.watch(deviceAbiProvider) == "ios";
+    final abi = ref.watch(deviceAbiProvider);
+    final canHostALinux = ref.watch(prootAvailableProvider) || abi == iosAbi;
     if (!canHostALinux) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -203,7 +204,7 @@ class RootfsCatalogSection extends ConsumerWidget {
               "Downloaded once and kept outside the app's data, so a "
               "backup does not carry it and a restore does not delete it.",
         ),
-        for (final rootfs in rootfsCatalog) RootfsTile(rootfs: rootfs),
+        for (final rootfs in rootfsCatalogFor(abi)) RootfsTile(rootfs: rootfs),
       ],
     );
   }

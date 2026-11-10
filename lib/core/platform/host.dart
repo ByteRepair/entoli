@@ -111,7 +111,7 @@ Shell platformShell({
       environment: environment,
       blinkish: blinkish,
       platformDescription: () => rootfsDir() != null
-          ? rootfsById(rootfsId?.call())!.describe("ios")
+          ? rootfsById(rootfsId?.call())!.describe(iosAbi)
           : "iOS, with no Linux installed. Install one from the Terminal "
                 "settings to run commands.",
     );
@@ -208,7 +208,7 @@ String landlockCacheDir(AppConfig config) => p.join(config.dataDir, "landlock");
 /// Which rootfs a download fetches: Android's ABI, "ios" on iOS (iSH emulates
 /// x86, not the device's arm64), null on the desktops, which have no catalog.
 Future<String?> deviceAbi() =>
-    Platform.isIOS ? Future.value("ios") : BundledTools.abi();
+    Platform.isIOS ? Future.value(iosAbi) : BundledTools.abi();
 
 /// What keeps the host shell's commands in. Linux's is the Landlock helper
 /// [hostDriver] is built with, macOS's the Seatbelt one; a phone's is the
