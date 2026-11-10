@@ -103,40 +103,32 @@ const alpine = Rootfs(
       sha256:
           "50942d567e6ee422c16cb46d5c282ed9d8adc9007c2a483faf4148a18c64ce32",
     ),
-    "x86_64": RootfsImage(
-      arch: "x86_64",
-      url:
-          "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/"
-          "alpine-minirootfs-3.24.1-x86_64.tar.gz",
-      bytes: 3698422,
-      sha256:
-          "41f73e3cf5fa919b8aa5ca6b30dc48f0da2720776d7423e2a7748211456fe081",
-    ),
+    "x86_64": _alpineX86_64,
   },
 );
 
+/// Alpine's x86_64 tarball, which Android's x86_64 devices and iOS's emulator
+/// both run.
+const _alpineX86_64 = RootfsImage(
+  arch: "x86_64",
+  url:
+      "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/"
+      "alpine-minirootfs-3.24.1-x86_64.tar.gz",
+  bytes: 3698422,
+  sha256: "41f73e3cf5fa919b8aa5ca6b30dc48f0da2720776d7423e2a7748211456fe081",
+);
+
 /// iOS's x86-64 guest, blinkish: a second catalog entry beside [alpine]. The
-/// same Alpine the i386 one ships, but the x86_64 tarball run under blink's
-/// interpreter rather than asbestos. Its `images` holds only
-/// [EmulatedLinux]'s key, so it cannot collide with [alpine]'s Android x86_64
-/// image. `rootfsById("alpine64")` is how the Terminal setting and the setup
+/// same Alpine x86_64 tarball Android's x86_64 devices run, under blink's
+/// interpreter. Its `images` holds only [EmulatedLinux]'s key, so it cannot
+/// collide with [alpine]'s Android x86_64 image. `rootfsById("alpine64")` is how the Terminal setting and the setup
 /// step name it.
 const alpine64 = Rootfs(
   id: "alpine64",
   name: "Alpine Linux (x86-64)",
   version: "3.24.1",
   packageManager: "apk",
-  images: {
-    EmulatedLinux.key: RootfsImage(
-      arch: "x86_64",
-      url:
-          "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/"
-          "alpine-minirootfs-3.24.1-x86_64.tar.gz",
-      bytes: 3698422,
-      sha256:
-          "41f73e3cf5fa919b8aa5ca6b30dc48f0da2720776d7423e2a7748211456fe081",
-    ),
-  },
+  images: {EmulatedLinux.key: _alpineX86_64},
 );
 
 /// Every distribution Entoli knows, which is what an id saved in the settings

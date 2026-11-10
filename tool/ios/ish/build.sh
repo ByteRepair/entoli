@@ -125,32 +125,23 @@ blink_cflags=(
   -I"$src/emu/blink/config" -I"$src/deps/blink"
 )
 
-# The bridge's public entry points, renamed to their blinkish twins when the
-# x86-64 core is built. Compiling the same source twice with a -D rename is
-# what gives the second core its bridge without forking the file. fakefsify is
-# not renamed: the rootfs unpack is guest-independent (one fakefs format), so
-# Dart always unpacks through the i386 core's ish_fakefsify, and the blinkish
-# core's copy stays local (not exported) and unused.
-blinkish_bridge_renames=(
-  -Dish_boot=blinkish_boot
-  -Dish_session_init=blinkish_session_init
-  -Dish_session_drain_wake=blinkish_session_drain_wake
-  -Dish_session_write_stdin=blinkish_session_write_stdin
-  -Dish_session_poll=blinkish_session_poll
-  -Dish_session_read=blinkish_session_read
-  -Dish_session_interrupt=blinkish_session_interrupt
-  -Dish_session_hangup=blinkish_session_hangup
-  -Dish_session_destroy=blinkish_session_destroy
-  -Dish_pipe_init=blinkish_pipe_init
-  -Dish_pipe_write=blinkish_pipe_write
-  -Dish_pipe_close_input=blinkish_pipe_close_input
-  -Dish_pipe_poll=blinkish_pipe_poll
-  -Dish_pipe_read=blinkish_pipe_read
-  -Dish_pipe_terminate=blinkish_pipe_terminate
-  -Dish_pipe_hangup=blinkish_pipe_hangup
-  -Dish_pipe_destroy=blinkish_pipe_destroy
-  -Dish_pipe_exit_code=blinkish_pipe_exit_code
+# The bridge's public entry points, without their prefix: ish_* in the i386
+# core, renamed to blinkish_* when the x86-64 core is built. Compiling the same
+# source twice with a -D rename is what gives the second core its bridge
+# without forking the file. The renames and the x86-64 core's export list are
+# both made from this one list. fakefsify is not among them: the rootfs unpack
+# is guest-independent (one fakefs format), so only the i386 core has it.
+bridge_entry_points=(
+  boot
+  session_init session_drain_wake session_write_stdin session_poll
+  session_read session_interrupt session_hangup session_destroy
+  pipe_init pipe_write pipe_close_input pipe_poll pipe_read pipe_terminate
+  pipe_hangup pipe_destroy pipe_exit_code
 )
+blinkish_bridge_renames=()
+for e in "${bridge_entry_points[@]}"; do
+  blinkish_bridge_renames+=("-Dish_$e=blinkish_$e")
+done
 
 # cpu-offsets.h is generated, not checked in: meson builds it from
 # asbestos/offsets.c via tools/staticdefine.sh before anything that includes
@@ -239,8 +230,7 @@ build_i386_lib() {
   libtool -static -o "$out/libishcore_$outname.a" "${objs[@]}"
 }
 
-# The x86-64 core: the same kernel, fakefs, libarchive and fakefsify sources,
-# plus blink's interpreter and the engine glue, compiled with the x86-64 guest
+# The x86-64 core: the same kernel and fakefs sources, plus blink's interpreter and the engine glue, compiled with the x86-64 guest
 # and blink engine, then partially linked with only the blinkish_* bridge
 # symbols exported so its internals stay local. One static lib per slice.
 build_blinkish_lib() {
@@ -251,8 +241,8 @@ build_blinkish_lib() {
   local -a cflags; cflags=($(slice_cflags "$sdk" "$target" "$outname"))
   cflags+=(-DENGINE_BLINK=1 -DGUEST_X86_64=1)
   local objs=()
-  local srcs=("${kernel_src[@]}" "${fakefs_src[@]}" "${libarchive_src[@]}"
-    "${fakefsify_src[@]}" "emu/tlb.c" "emu/blink/engine.c")
+  local srcs=("${kernel_src[@]}" "${fakefs_src[@]}" "emu/tlb.c"
+    "emu/blink/engine.c")
   for f in "${srcs[@]}"; do
     objs+=("$(compile_one "$destdir" "$f" "${cflags[@]}")")
   done
@@ -274,26 +264,7 @@ build_blinkish_lib() {
   # so it cannot collide with the i386 core's same-named symbols at the final
   # link. The exported list uses the C underscore macOS mangles symbols with.
   local exportlist="$work/blinkish-exports-$outname.txt"
-  {
-    printf '_blinkish_boot\n'
-    printf '_blinkish_session_init\n'
-    printf '_blinkish_session_drain_wake\n'
-    printf '_blinkish_session_write_stdin\n'
-    printf '_blinkish_session_poll\n'
-    printf '_blinkish_session_read\n'
-    printf '_blinkish_session_interrupt\n'
-    printf '_blinkish_session_hangup\n'
-    printf '_blinkish_session_destroy\n'
-    printf '_blinkish_pipe_init\n'
-    printf '_blinkish_pipe_write\n'
-    printf '_blinkish_pipe_close_input\n'
-    printf '_blinkish_pipe_poll\n'
-    printf '_blinkish_pipe_read\n'
-    printf '_blinkish_pipe_terminate\n'
-    printf '_blinkish_pipe_hangup\n'
-    printf '_blinkish_pipe_destroy\n'
-    printf '_blinkish_pipe_exit_code\n'
-  } > "$exportlist"
+  printf '_blinkish_%s\n' "${bridge_entry_points[@]}" > "$exportlist"
   local partial="$destdir/blinkish.o"
   ld -r "${objs[@]}" -exported_symbols_list "$exportlist" -o "$partial"
   # The partial object is a static lib on its own, but it sits beside the

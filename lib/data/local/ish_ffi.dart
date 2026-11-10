@@ -4,6 +4,8 @@ import "dart:io" show Platform;
 // Utf8 moved out of dart:ffi; package:ffi's is the one Dart 3.13 keeps.
 import "package:ffi/ffi.dart";
 
+import "../../domain/rootfs.dart" show EmulatedLinux, Rootfs;
+
 // The dart:ffi bindings to the iSH bridge (tool/ios/ish/ish_bridge.c). The
 // bridge runs the iSH emulator core in-process — see ios/AGENTS.md for why a
 // child-process shell cannot work on iOS.
@@ -84,14 +86,11 @@ typedef IshPipeInitC =
     Pointer<Void> Function(
       Pointer<Utf8> rootfsDir,
       Pointer<Utf8> dataDir,
-      Pointer<Utf8> home,
       Pointer<Utf8> cwd,
       Pointer<Pointer<Utf8>> argv,
       Int32 argc,
       Pointer<Pointer<Utf8>> env,
       Int32 envCount,
-      Pointer<Pointer<Utf8>> readOnly,
-      Int32 readOnlyCount,
       Int32 terminalCols,
       Int32 terminalRows,
       Pointer<Pointer<Utf8>> error,
@@ -100,14 +99,11 @@ typedef IshPipeInitDart =
     IshPipeSessionPtr Function(
       Pointer<Utf8> rootfsDir,
       Pointer<Utf8> dataDir,
-      Pointer<Utf8> home,
       Pointer<Utf8> cwd,
       Pointer<Pointer<Utf8>> argv,
       int argc,
       Pointer<Pointer<Utf8>> env,
       int envCount,
-      Pointer<Pointer<Utf8>> readOnly,
-      int readOnlyCount,
       int terminalCols,
       int terminalRows,
       Pointer<Pointer<Utf8>> error,
@@ -180,6 +176,14 @@ enum IshCore {
 }
 
 final _bridges = <IshCore, IshBridge>{};
+
+/// The core that runs [rootfs]: the one its iOS image is built for, the x86-64
+/// one for an x86_64 image and iSH's own asbestos for anything else — an i386
+/// Alpine kept from before the catalog went x86-64.
+IshCore ishCoreOf(Rootfs? rootfs) =>
+    rootfs?.images[EmulatedLinux.key]?.arch == "x86_64"
+    ? IshCore.x86_64
+    : IshCore.i386;
 
 /// One core's entry points. The session ones run the shell's commands, a
 /// step at a time — drain, write the command, poll between chunks, read —
@@ -265,6 +269,17 @@ class IshBridge {
   final IshPipeHangupDart pipeHangup;
   final IshPipeDestroyDart pipeDestroy;
   final IshPipeExitCodeDart pipeExitCode;
+}
+
+/// [strings] as a C array of C strings, both allocated in [arena], which
+/// frees them when the call they were made for is over. The bridge copies
+/// whatever it keeps.
+Pointer<Pointer<Utf8>> cStrings(List<String> strings, Arena arena) {
+  final array = arena<Pointer<Utf8>>(strings.length);
+  for (var i = 0; i < strings.length; i++) {
+    array[i] = strings[i].toNativeUtf8(allocator: arena);
+  }
+  return array;
 }
 
 IshFakefsifyDart? _fakefsifyFn;

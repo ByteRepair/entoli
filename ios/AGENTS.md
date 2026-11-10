@@ -76,7 +76,7 @@ userspace **in-process**: no child process, and no writable-executable memory
 either, which is the other iOS ban. iSH's threaded-code interpreter is a table
 of function pointers with tail-calls rather than a JIT that emits machine code,
 which is exactly what lets it run on a stock, non-jailbroken device. The guest
-is an i386 Alpine — see "The rootfs" — and not the arm64 one Android uses,
+is an x86-64 Alpine — see "The rootfs" — and not the arm64 one Android uses,
 because iSH emulates x86 and not the device's own architecture.
 
 ## The iSH driver

@@ -307,8 +307,7 @@ removed.
 
 It is drawn only where the paths are this device's and the sandbox is what
 they open. It is not drawn for a paired device's project, whose folders a
-picker here cannot name, or for a built-in with rootfs isolation, whose
-commands run in a guest that cannot see them. Nor is it drawn where the picked
+picker here cannot name. Nor is it drawn where the picked
 driver's `Confinement` does not enforce the sandbox: Windows, which confines
 nothing, so the list would change nothing (see "What is absent, and honestly
 so" in `windows/AGENTS.md`); phones; and a Linux guest.
@@ -441,10 +440,11 @@ costs the user is stated plainly — restoring onto another device does not
 bring the keys, and they are typed again where the store is local to it (the
 keyring is a machine's own).
 
-A per-project `rootfs/` is the one re-fetchable tree that *does* live under the
-data directory, because a built-in with rootfs isolation keeps its living
-filesystem there beside the chats. `writeBackup`'s `skipDir` leaves it out for
-the same reason the voice models are outside it, and for a second one: proot's
+A per-project `rootfs/` is the one re-fetchable tree that may still live under
+the data directory, left by a build whose built-ins kept their own living
+filesystem there beside the chats; nothing writes one now. `writeBackup`'s
+`skipDir` leaves it out for the same reason the voice models are outside it,
+and for a second one: proot's
 mode-0000 bind stubs (see `tree_ops.dart`) sit inside it, and `dart:io` cannot
 list a mode-0000 directory, so a walker that reached one would throw. The
 directory a restore replaces goes through `removeTree` rather than a plain

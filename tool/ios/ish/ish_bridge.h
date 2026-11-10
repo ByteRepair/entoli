@@ -170,22 +170,19 @@ typedef struct ish_pipe_session {
 } ish_pipe_session;
 
 // Spawn [argv] (argv[0] the program, an absolute guest path) as a guest
-// process, with [env] its environment. [home]/[cwd]/[read_only] are bound
-// exactly as for the dispatcher session. [terminal_cols] and [terminal_rows]
+// process, with [env] its environment, started in [cwd] with [data_dir]
+// bound as for the dispatcher session. [terminal_cols] and [terminal_rows]
 // above zero run it on a terminal that size — its stdio all the terminal, its
 // output read as stdout, stderr empty — and zero over pipes. Returns null and
 // sets *error where the rootfs is not present or the program failed to exec.
 ish_pipe_session *ish_pipe_init(
     const char *rootfs_dir,
     const char *data_dir,
-    const char *home,
     const char *cwd,
     const char **argv,
     int32_t argc,
     const char **env,
     int32_t env_count,
-    const char **read_only,
-    int32_t read_only_count,
     int32_t terminal_cols,
     int32_t terminal_rows,
     const char **error);

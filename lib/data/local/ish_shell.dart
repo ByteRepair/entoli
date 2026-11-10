@@ -43,13 +43,9 @@ class IshShell extends Shell {
     required this.dataDir,
     required this.environment,
     required String Function() platformDescription,
-    IshCore Function()? core,
-    IshTransport? transport,
-  }) : assert(core != null || transport != null),
-       _describe = platformDescription,
-       _transportFor = transport != null
-           ? (() => transport)
-           : (() => IshWorker(core: core!()));
+    required IshTransport Function() transport,
+  }) : _describe = platformDescription,
+       _transportFor = transport;
 
   /// Where the guest's rootfs is mounted from, asked per command: a Linux
   /// installed where none was reaches the next command, and one deleted stops
@@ -1076,8 +1072,8 @@ class IshWorker implements IshTransport {
     required Map<String, String> env,
     List<String> readOnly = const [],
   }) {
-    final task = _ops.then(
-      (_) => _init(
+    return serialised(
+      () => _init(
         rootfsDir: rootfsDir,
         dataDir: dataDir,
         home: home,
@@ -1086,6 +1082,12 @@ class IshWorker implements IshTransport {
         readOnly: readOnly,
       ),
     );
+  }
+
+  /// [op] run in its turn on [_ops]: for anything that boots or binds the
+  /// guest, a pipe session's init as much as a shell session's.
+  static Future<T> serialised<T>(Future<T> Function() op) {
+    final task = _ops.then((_) => op());
     _ops = task.then((_) {}, onError: (_) {});
     return task;
   }
@@ -1243,53 +1245,28 @@ class IshWorker implements IshTransport {
             main.send([_kReply, replyId, "iSH is not linked", null]);
             return;
           }
-          // The env array as C strings. Every string handed to the bridge is
-          // ours to free after the call — the bridge copies what it keeps.
-          final envPtrs = calloc<Pointer<Utf8>>(env.length);
-          final argPtrs = [
-            rootfsDir.toNativeUtf8(),
-            dataDir.toNativeUtf8(),
-            home.toNativeUtf8(),
-            cwd.toNativeUtf8(),
-            dispatcher.toNativeUtf8(),
-            token.toNativeUtf8(),
-          ];
-          for (var i = 0; i < env.length; i++) {
-            envPtrs[i] = (env[i] as String).toNativeUtf8();
-          }
-          final readOnlyPtrs = calloc<Pointer<Utf8>>(readOnly.length);
-          for (var i = 0; i < readOnly.length; i++) {
-            readOnlyPtrs[i] = (readOnly[i] as String).toNativeUtf8();
-          }
-          final errPtr = calloc<Pointer<Utf8>>();
-          final handle = bridge.init(
-            argPtrs[0],
-            argPtrs[1],
-            argPtrs[2],
-            argPtrs[3],
-            argPtrs[4],
-            argPtrs[5],
-            envPtrs,
-            env.length,
-            readOnlyPtrs,
-            readOnly.length,
-            errPtr,
-          );
-          final error = errPtr.value.address == 0
-              ? null
-              : errPtr.value.cast<Utf8>().toDartString();
-          for (var i = 0; i < env.length; i++) {
-            calloc.free(envPtrs[i]);
-          }
-          calloc.free(envPtrs);
-          for (var i = 0; i < readOnly.length; i++) {
-            calloc.free(readOnlyPtrs[i]);
-          }
-          calloc.free(readOnlyPtrs);
-          calloc.free(errPtr);
-          for (final p in argPtrs) {
-            calloc.free(p);
-          }
+          // Every string handed to the bridge is ours to free after the
+          // call — the bridge copies what it keeps.
+          final (handle, error) = using((arena) {
+            final errPtr = arena<Pointer<Utf8>>();
+            final handle = bridge.init(
+              rootfsDir.toNativeUtf8(allocator: arena),
+              dataDir.toNativeUtf8(allocator: arena),
+              home.toNativeUtf8(allocator: arena),
+              cwd.toNativeUtf8(allocator: arena),
+              dispatcher.toNativeUtf8(allocator: arena),
+              token.toNativeUtf8(allocator: arena),
+              cStrings(env.cast<String>(), arena),
+              env.length,
+              cStrings(readOnly.cast<String>(), arena),
+              readOnly.length,
+              errPtr,
+            );
+            final error = errPtr.value.address == 0
+                ? null
+                : errPtr.value.cast<Utf8>().toDartString();
+            return (handle, error);
+          });
           if (error == null && handle.address != 0) {
             sessions[sessionId] = (handle: handle, token: token);
           }

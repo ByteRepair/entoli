@@ -239,6 +239,69 @@ static void bind_workspace(const char *workspace) {
     }
 }
 
+// Boot the guest from [rootfs_dir] where it has not been, then bind what a
+// session needs: [data_dir] at its host path with [read_only] beside it, and
+// [home] at /root. An empty string is a bind not wanted. False, with *error
+// set, where the rootfs could not be mounted.
+static bool guest_prepare(
+    const char *rootfs_dir,
+    const char *data_dir,
+    const char *home,
+    const char **read_only,
+    int32_t read_only_count,
+    const char **error)
+{
+    if (!ish_booted) {
+        ish_boot(rootfs_dir);
+        if (!ish_booted) {
+            *error = "the rootfs could not be mounted; is it installed?";
+            return false;
+        }
+    }
+    if (data_dir[0] != '\0') {
+        bind_data_dir(data_dir);
+        bind_read_only(read_only, read_only_count);
+    }
+    if (home[0] != '\0') {
+        bind_workspace(home);
+    }
+    return true;
+}
+
+// Append [parts] to the NUL-joined strings in [buf] from [*pos] — do_execve's
+// shape (kernel/exec.c) — as many as fit with room left for the closing NUL,
+// which is written after them. How many were appended.
+static size_t flatten(
+    char *buf, size_t cap, size_t *pos, const char *const *parts, size_t n) {
+    size_t done = 0;
+    for (; done < n; done++) {
+        size_t len = strlen(parts[done]) + 1;
+        if (*pos + len > cap - 1) break;
+        memcpy(&buf[*pos], parts[done], len);
+        *pos += len;
+    }
+    buf[*pos] = '\0';
+    return done;
+}
+
+// Drop the byte a run's or a program's poll answers as its end.
+static void wake(int fd) {
+    if (fd < 0) return;
+    char byte = 0;
+    ssize_t unused = write(fd, &byte, 1);
+    (void) unused;
+}
+
+// One read of a host pipe end: the byte count, 0 at its end, -2 where there
+// is nothing yet, -1 on an error.
+static int32_t read_host(int fd, char *buf, int32_t cap) {
+    if (fd < 0 || cap < 0) return -1;
+    ssize_t n = read(fd, buf, (size_t) cap);
+    if (n >= 0) return (int32_t) n;
+    if (errno == EINTR || errno == EAGAIN) return -2;
+    return -1;
+}
+
 ish_session *ish_session_init(
     const char *rootfs_dir,
     const char *data_dir,
@@ -256,19 +319,9 @@ ish_session *ish_session_init(
     // the shell starts in the guest's own words. The data-dir bind stays as
     // the fallback spelling. See "The workspace inside the guest" in
     // ios/AGENTS.md.
-    if (!ish_booted) {
-        ish_boot(rootfs_dir);
-        if (!ish_booted) {
-            *error = "the rootfs could not be mounted; is it installed?";
-            return NULL;
-        }
-    }
-    if (data_dir[0] != '\0') {
-        bind_data_dir(data_dir);
-        bind_read_only(read_only, read_only_count);
-    }
-    if (home[0] != '\0' && cwd[0] != '\0') {
-        bind_workspace(home);
+    if (!guest_prepare(rootfs_dir, data_dir, cwd[0] != '\0' ? home : "",
+                       read_only, read_only_count, error)) {
+        return NULL;
     }
 
     ish_session *s = calloc(1, sizeof(*s));
@@ -325,30 +378,17 @@ ish_session *ish_session_init(
     fs_chdir(task->fs, pwd);
 
     // Start the persistent guest /bin/sh under the dispatcher. argv and envp
-    // are flat NUL-joined strings — do_execve's shape (kernel/exec.c), the
-    // same one xX_main_Xx builds. argv[0] is the program name itself:
-    // /bin/sh is busybox, which picks its applet off argv[0], and an argv
-    // that starts at "-c" reads as an applet named "-c" ("c: applet not
-    // found").
+    // are flat NUL-joined strings, the same shape xX_main_Xx builds. argv[0]
+    // is the program name itself: /bin/sh is busybox, which picks its applet
+    // off argv[0], and an argv that starts at "-c" reads as an applet named
+    // "-c" ("c: applet not found").
     char argv[4096];
     size_t pos = 0;
     const char *parts[] = {"/bin/sh", "-c", dispatcher};
-    for (size_t i = 0; i < 3 && pos < sizeof(argv) - 1; i++) {
-        size_t len = strlen(parts[i]) + 1;
-        if (pos + len > sizeof(argv)) break;
-        memcpy(&argv[pos], parts[i], len);
-        pos += len;
-    }
-    argv[pos] = '\0';
+    flatten(argv, sizeof(argv), &pos, parts, 3);
     char envp[8192];
     pos = 0;
-    for (int32_t i = 0; i < env_count; i++) {
-        size_t len = strlen(env[i]) + 1;
-        if (pos + len > sizeof(envp) - 1) break;
-        memcpy(&envp[pos], env[i], len);
-        pos += len;
-    }
-    envp[pos] = '\0';
+    flatten(envp, sizeof(envp), &pos, env, (size_t) env_count);
     if (do_execve("/bin/sh", 3, argv, envp) < 0) {
         *error = "failed to exec /bin/sh in the guest; the rootfs has none";
         goto fail;
@@ -426,12 +466,8 @@ int32_t ish_session_poll(ish_session *session) {
 }
 
 int32_t ish_session_read(ish_session *session, char *buf, int32_t cap) {
-    if (!session || cap < 0) return -1;
-    ssize_t n = read(session->stdout_read, buf, (size_t) cap);
-    if (n > 0) return (int32_t) n;
-    if (n == 0) return 0;
-    if (errno == EINTR || errno == EAGAIN) return -2;
-    return -1;
+    if (!session) return -1;
+    return read_host(session->stdout_read, buf, cap);
 }
 
 void ish_session_interrupt(ish_session *session) {
@@ -451,11 +487,7 @@ void ish_session_hangup(ish_session *session) {
     // The byte is what the run's poll answers. stdout is not closed here:
     // the worker may be reading it, and a close from this thread could hand
     // its number to another open before that read lands.
-    if (session->wake_write >= 0) {
-        char wake = 0;
-        ssize_t unused = write(session->wake_write, &wake, 1);
-        (void) unused;
-    }
+    wake(session->wake_write);
 }
 
 void ish_session_destroy(ish_session *session) {
@@ -633,11 +665,7 @@ static void pipe_exit_hook(struct task *task, int code) {
         // 0-255, or 128+signal.
         int code8 = (code & 0xff) != 0 ? 128 + (code & 0xff) : (code >> 8);
         atomic_store(&s->exit_code, code8);
-        if (s->wake_write >= 0) {
-            char wake = 0;
-            ssize_t unused = write(s->wake_write, &wake, 1);
-            (void) unused;
-        }
+        wake(s->wake_write);
         return;
     }
 }
@@ -645,32 +673,16 @@ static void pipe_exit_hook(struct task *task, int code) {
 ish_pipe_session *ish_pipe_init(
     const char *rootfs_dir,
     const char *data_dir,
-    const char *home,
     const char *cwd,
     const char **argv,
     int32_t argc,
     const char **env,
     int32_t env_count,
-    const char **read_only,
-    int32_t read_only_count,
     int32_t terminal_cols,
     int32_t terminal_rows,
     const char **error)
 {
-    if (!ish_booted) {
-        ish_boot(rootfs_dir);
-        if (!ish_booted) {
-            *error = "the rootfs could not be mounted; is it installed?";
-            return NULL;
-        }
-    }
-    if (data_dir[0] != '\0') {
-        bind_data_dir(data_dir);
-        bind_read_only(read_only, read_only_count);
-    }
-    if (home[0] != '\0' && cwd[0] != '\0') {
-        bind_workspace(home);
-    }
+    if (!guest_prepare(rootfs_dir, data_dir, "", NULL, 0, error)) return NULL;
     bool terminal = terminal_cols > 0 && terminal_rows > 0;
 
     ish_pipe_session *s = calloc(1, sizeof(*s));
@@ -744,35 +756,15 @@ ish_pipe_session *ish_pipe_init(
     // The program runs under `exec "$@"`, so a bare name resolves through the
     // guest's PATH and the arguments reach it unsplit; the exec replaces the
     // shell, so the pid the signals go through is the program's own.
-    const char *parts[] = {"/bin/sh", "-c", "exec \"$@\"", "sh", NULL};
+    const char *parts[] = {"/bin/sh", "-c", "exec \"$@\"", "sh"};
     char argv_flat[4096];
     size_t pos = 0;
-    size_t nparts = 0;
-    for (size_t i = 0; parts[i] != NULL; i++) {
-        size_t len = strlen(parts[i]) + 1;
-        if (pos + len > sizeof(argv_flat)) break;
-        memcpy(&argv_flat[pos], parts[i], len);
-        pos += len;
-        nparts++;
-    }
-    for (int32_t i = 0; i < argc; i++) {
-        size_t len = strlen(argv[i]) + 1;
-        if (pos + len > sizeof(argv_flat)) break;
-        memcpy(&argv_flat[pos], argv[i], len);
-        pos += len;
-        nparts++;
-    }
-    argv_flat[pos] = '\0';
+    size_t nparts = flatten(argv_flat, sizeof(argv_flat), &pos, parts, 4);
+    nparts += flatten(argv_flat, sizeof(argv_flat), &pos, argv, (size_t) argc);
 
     char envp[8192];
     pos = 0;
-    for (int32_t i = 0; i < env_count; i++) {
-        size_t len = strlen(env[i]) + 1;
-        if (pos + len > sizeof(envp) - 1) break;
-        memcpy(&envp[pos], env[i], len);
-        pos += len;
-    }
-    envp[pos] = '\0';
+    flatten(envp, sizeof(envp), &pos, env, (size_t) env_count);
 
     if (do_execve("/bin/sh", nparts, argv_flat, envp) < 0) {
         *error = "failed to exec the program in the guest";
@@ -867,14 +859,9 @@ int32_t ish_pipe_poll(ish_pipe_session *session) {
 
 int32_t ish_pipe_read(
     ish_pipe_session *session, int32_t stream, char *buf, int32_t cap) {
-    if (!session || cap < 0) return -1;
-    int fd = stream == 0 ? session->stdout_read : session->stderr_read;
-    if (fd < 0) return -1;
-    ssize_t n = read(fd, buf, (size_t) cap);
-    if (n > 0) return (int32_t) n;
-    if (n == 0) return 0;
-    if (errno == EINTR || errno == EAGAIN) return -2;
-    return -1;
+    if (!session) return -1;
+    return read_host(
+        stream == 0 ? session->stdout_read : session->stderr_read, buf, cap);
 }
 
 void ish_pipe_terminate(ish_pipe_session *session) {
@@ -887,11 +874,7 @@ void ish_pipe_hangup(ish_pipe_session *session) {
     if (session->pid > 0) {
         send_group_signal(session->pid, SIGKILL_, SIGINFO_NIL);
     }
-    if (session->wake_write >= 0) {
-        char wake = 0;
-        ssize_t unused = write(session->wake_write, &wake, 1);
-        (void) unused;
-    }
+    wake(session->wake_write);
 }
 
 void ish_pipe_destroy(ish_pipe_session *session) {
@@ -929,6 +912,11 @@ int32_t ish_pipe_exit_code(ish_pipe_session *session) {
 }
 
 
+#if !GUEST_X86_64
+// The i386 core's alone: the unpack is the same whichever guest runs the
+// rootfs (one fakefs format), so the x86-64 core carries neither this nor the
+// libarchive it is built on.
+//
 // Convert a tarball into iSH's fakefs layout, in-process. iSH's own
 // tools/fakefsify does this against libarchive; this wraps the same
 // fakefs_import it calls, so the iOS rootfs unpack does not need a child
@@ -978,3 +966,4 @@ int32_t ish_fakefsify(const char *archive, const char *into) {
          : err.type == ERR_POSIX  ? -(err.code > 0 ? err.code : EIO)
                                   : -EIO;
 }
+#endif

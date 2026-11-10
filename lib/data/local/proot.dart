@@ -193,16 +193,11 @@ class ProotCliGuest extends LinuxCliGuest {
     required bool terminal,
   }) {
     final rootfs = rootfsById(rootfsId());
-    final dir = rootfs == null ? null : store.directoryOfSync(rootfs.id);
-    if (dir == null) {
-      throw LlmException(
-        "No Linux is installed to run it in. Install one from the Terminal "
-        "settings.",
-      );
-    }
     final (:command, environment: own) = prootProgram(
       proot: proot,
-      rootfsDir: dir,
+      rootfsDir: LinuxCliGuest.installed(
+        rootfs == null ? null : store.directoryOfSync(rootfs.id),
+      ),
       shared: shared,
       cwd: cwd,
       argv: terminal

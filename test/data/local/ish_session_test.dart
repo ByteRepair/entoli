@@ -36,7 +36,7 @@ void main() {
     dataDir: "/data",
     environment: () => {},
     platformDescription: () => "iSH",
-    transport: transport,
+    transport: () => transport,
   );
 
   group("a session command", () {
@@ -460,7 +460,7 @@ void main() {
       dataDir: "/data",
       environment: () => {},
       platformDescription: () => "iSH",
-      transport: fake,
+      transport: () => fake,
     );
     shell.start(
       "true",

@@ -102,17 +102,12 @@ Shell platformShell({
       return rootfs != null ? rootfsStore?.directoryOfSync(rootfs.id) : null;
     }
 
-    // The x86-64 guest (alpine64) runs on the blinkish core; the i386 one on
-    // iSH's asbestos. Asked per session, since the setting is picked after
-    // startup.
-    IshCore core() =>
-        rootfsId?.call() == alpine64.id ? IshCore.x86_64 : IshCore.i386;
-
     return IshShell(
       rootfsDir: () => rootfsDir() ?? "",
       dataDir: dataDir ?? "",
       environment: environment,
-      core: core,
+      // Asked per session, since the setting is picked after startup.
+      transport: () => IshWorker(core: ishCoreOf(rootfsById(rootfsId?.call()))),
       platformDescription: () => rootfsDir() != null
           ? rootfsById(rootfsId?.call())!.describe(EmulatedLinux.key)
           : "iOS, with no Linux installed. Install one from the Terminal "
@@ -248,8 +243,8 @@ CliGuest? cliGuestOf(
     rootfsDir: () {
       final rootfs = rootfsById(rootfsId());
       return rootfs != null && linux.catalog.contains(rootfs)
-          ? store.directoryOfSync(rootfs.id) ?? ""
-          : "";
+          ? store.directoryOfSync(rootfs.id)
+          : null;
     },
     dataDir: dataDir,
   ),

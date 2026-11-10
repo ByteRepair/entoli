@@ -1,15 +1,15 @@
 import "dart:async";
 import "dart:convert" show LineSplitter, utf8;
 import "dart:ffi";
-import "dart:isolate" show Isolate, ReceivePort, SendPort;
-import "dart:typed_data" show Uint8List;
+import "dart:isolate"
+    show Isolate, ReceivePort, SendPort, TransferableTypedData;
 
 import "package:ffi/ffi.dart";
 
-import "../builtin/llm/llm_client.dart" show LlmException;
 import "../builtin/llm/providers/cli.dart"
     show CliGuest, CliProcess, LinuxCliGuest;
 import "ish_ffi.dart";
+import "ish_shell.dart" show IshWorker;
 
 /// A [CliProcess] that runs a CLI program (`claude`, `codex`) inside the
 /// iSH/blinkish guest as a long-lived interactive process, where iOS cannot
@@ -33,8 +33,8 @@ class GuestCliProcess extends CliProcess {
   }) : _exitCode = exitCode; // ignore: prefer_initializing_formals
 
   /// Spawns [argv] (argv[0] the program, resolved through the guest's PATH) in
-  /// the guest, with [env] its environment. [rootfsDir]/[dataDir]/[home]/
-  /// [cwd]/[readOnly] are the guest's, exactly as [IshWorker.init] takes them.
+  /// the guest, with [env] its environment. [rootfsDir]/[dataDir]/[cwd] are
+  /// the guest's, exactly as [IshWorker.init] takes them.
   /// [terminal] runs it on a terminal of the bridge's — one of iSH's own
   /// pseudo-terminals, [CliGuest.terminalColumns] by [CliGuest.terminalRows],
   /// read as stdout and typed into by [write] — where pipes would be.
@@ -43,9 +43,7 @@ class GuestCliProcess extends CliProcess {
     required Map<String, String> env,
     required String rootfsDir,
     required String dataDir,
-    required String home,
     required String cwd,
-    List<String> readOnly = const [],
     bool terminal = false,
   }) async {
     final stdout = StreamController<List<int>>();
@@ -74,7 +72,9 @@ class GuestCliProcess extends CliProcess {
           }
         case _kOutput:
           final stream = msg[1] as int;
-          (stream == 0 ? stdout : stderr).add(msg[2] as Uint8List);
+          (stream == 0 ? stdout : stderr).add(
+            (msg[2] as TransferableTypedData).materialize().asUint8List(),
+          );
         case _kExit:
           if (!exitCode.isCompleted) exitCode.complete(msg[1] as int);
           unawaited(sub.cancel());
@@ -91,19 +91,20 @@ class GuestCliProcess extends CliProcess {
       replies.close();
     });
 
-    await Isolate.spawn(_pipeEntry, (
-      replies.sendPort,
-      rootfsDir,
-      dataDir,
-      home,
-      cwd,
-      argv,
-      [for (final e in env.entries) "${e.key}=${e.value}"],
-      readOnly,
-      terminal,
-    ), onExit: exitPort.sendPort);
-
-    final address = await handle.future;
+    // The pipe's init boots and binds the guest as a shell session's does,
+    // so it takes its turn in the same order.
+    final address = await IshWorker.serialised(() async {
+      await Isolate.spawn(_pipeEntry, (
+        replies.sendPort,
+        rootfsDir,
+        dataDir,
+        cwd,
+        argv,
+        [for (final e in env.entries) "${e.key}=${e.value}"],
+        terminal,
+      ), onExit: exitPort.sendPort);
+      return handle.future;
+    });
 
     final process = GuestCliProcess._(
       handle: address,
@@ -144,10 +145,12 @@ class GuestCliProcess extends CliProcess {
     if (_closed) return;
     final fn = _core.bridge?.pipeWrite;
     if (fn == null) return;
-    final ptr = text.toNativeUtf8();
     // The byte length, not the character count: a non-ASCII line has more
     // bytes than code units, and a character count truncates the write.
-    fn(Pointer.fromAddress(handle), ptr, utf8.encode(text).length);
+    final bytes = utf8.encode(text);
+    final ptr = calloc<Uint8>(bytes.length);
+    ptr.asTypedList(bytes.length).setAll(0, bytes);
+    fn(Pointer.fromAddress(handle), ptr.cast(), bytes.length);
     calloc.free(ptr);
   }
 
@@ -187,8 +190,8 @@ class GuestCliProcess extends CliProcess {
 class IshCliGuest extends LinuxCliGuest {
   IshCliGuest({required this.rootfsDir, required this.dataDir});
 
-  /// The picked Linux's directory, or empty where none is installed.
-  final String Function() rootfsDir;
+  /// The picked Linux's directory, or null where none is installed.
+  final String? Function() rootfsDir;
   final String dataDir;
 
   /// The emulator's, not the device's: the programs are x86-64 Linux
@@ -204,19 +207,11 @@ class IshCliGuest extends LinuxCliGuest {
     required List<String> shared,
     required bool terminal,
   }) {
-    final rootfs = rootfsDir();
-    if (rootfs.isEmpty) {
-      throw LlmException(
-        "No Linux is installed to run it in. Install one from the Terminal "
-        "settings.",
-      );
-    }
     return GuestCliProcess.start(
       argv: terminal ? LinuxCliGuest.withBrowser(argv) : argv,
       env: environment,
-      rootfsDir: rootfs,
+      rootfsDir: LinuxCliGuest.installed(rootfsDir()),
       dataDir: dataDir,
-      home: "",
       cwd: cwd,
       terminal: terminal,
     );
@@ -237,21 +232,9 @@ const _kStop = 3;
 /// guest process, stream its output, and report its exit code. Writes and
 /// signals reach the process from the calling isolate (the pokes), not here.
 void _pipeEntry(
-  (
-    SendPort,
-    String,
-    String,
-    String,
-    String,
-    List<String>,
-    List<String>,
-    List<String>,
-    bool,
-  )
-  arg,
+  (SendPort, String, String, String, List<String>, List<String>, bool) arg,
 ) {
-  final (main, rootfsDir, dataDir, home, cwd, argv, env, readOnly, terminal) =
-      arg;
+  final (main, rootfsDir, dataDir, cwd, argv, env, terminal) = arg;
   final receive = ReceivePort();
   main.send(receive.sendPort);
 
@@ -261,60 +244,25 @@ void _pipeEntry(
     return;
   }
 
-  final argvPtrs = calloc<Pointer<Utf8>>(argv.length);
-  for (var i = 0; i < argv.length; i++) {
-    argvPtrs[i] = argv[i].toNativeUtf8();
-  }
-  final envPtrs = calloc<Pointer<Utf8>>(env.length);
-  for (var i = 0; i < env.length; i++) {
-    envPtrs[i] = env[i].toNativeUtf8();
-  }
-  final readOnlyPtrs = calloc<Pointer<Utf8>>(readOnly.length);
-  for (var i = 0; i < readOnly.length; i++) {
-    readOnlyPtrs[i] = readOnly[i].toNativeUtf8();
-  }
-  final rootfsPtr = rootfsDir.toNativeUtf8();
-  final dataPtr = dataDir.toNativeUtf8();
-  final homePtr = home.toNativeUtf8();
-  final cwdPtr = cwd.toNativeUtf8();
-  final errPtr = calloc<Pointer<Utf8>>();
-
-  final handle = bridge.pipeInit(
-    rootfsPtr,
-    dataPtr,
-    homePtr,
-    cwdPtr,
-    argvPtrs,
-    argv.length,
-    envPtrs,
-    env.length,
-    readOnlyPtrs,
-    readOnly.length,
-    terminal ? CliGuest.terminalColumns : 0,
-    terminal ? CliGuest.terminalRows : 0,
-    errPtr,
-  );
-  final error = errPtr.value.address == 0
-      ? null
-      : errPtr.value.cast<Utf8>().toDartString();
-
-  calloc.free(rootfsPtr);
-  calloc.free(dataPtr);
-  calloc.free(homePtr);
-  calloc.free(cwdPtr);
-  for (var i = 0; i < argv.length; i++) {
-    calloc.free(argvPtrs[i]);
-  }
-  calloc.free(argvPtrs);
-  for (var i = 0; i < env.length; i++) {
-    calloc.free(envPtrs[i]);
-  }
-  calloc.free(envPtrs);
-  for (var i = 0; i < readOnly.length; i++) {
-    calloc.free(readOnlyPtrs[i]);
-  }
-  calloc.free(readOnlyPtrs);
-  calloc.free(errPtr);
+  final (handle, error) = using((arena) {
+    final errPtr = arena<Pointer<Utf8>>();
+    final handle = bridge.pipeInit(
+      rootfsDir.toNativeUtf8(allocator: arena),
+      dataDir.toNativeUtf8(allocator: arena),
+      cwd.toNativeUtf8(allocator: arena),
+      cStrings(argv, arena),
+      argv.length,
+      cStrings(env, arena),
+      env.length,
+      terminal ? CliGuest.terminalColumns : 0,
+      terminal ? CliGuest.terminalRows : 0,
+      errPtr,
+    );
+    final error = errPtr.value.address == 0
+        ? null
+        : errPtr.value.cast<Utf8>().toDartString();
+    return (handle, error);
+  });
 
   if (error != null || handle.address == 0) {
     main.send([_kReply, error ?? "the program failed to start", null]);
@@ -333,7 +281,11 @@ void _pipeEntry(
   bool forward(int stream) {
     final n = bridge.pipeRead(handle, stream, buf, 65536);
     if (n <= 0) return false;
-    main.send([_kOutput, stream, Uint8List.fromList(buf.asTypedList(n))]);
+    main.send([
+      _kOutput,
+      stream,
+      TransferableTypedData.fromList([buf.asTypedList(n)]),
+    ]);
     return true;
   }
 

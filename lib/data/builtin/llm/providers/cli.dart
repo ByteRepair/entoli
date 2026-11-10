@@ -229,6 +229,16 @@ abstract class LinuxCliGuest extends CliGuest {
   @override
   bool get hasTerminal => true;
 
+  /// [rootfsDir], the picked Linux's directory, where one is installed; a
+  /// start with none is said rather than tried.
+  @protected
+  static String installed(String? rootfsDir) =>
+      rootfsDir ??
+      (throw LlmException(
+        "No Linux is installed to run it in. Install one from the Terminal "
+        "settings.",
+      ));
+
   /// [argv] with its browser: a Linux of the app's own has none to open a
   /// page in, so `BROWSER` names one ([_opener]) that hands the page to the
   /// app instead, as a line on the program's terminal saying [cliOpenMarker]
@@ -456,15 +466,16 @@ abstract class CliProvider extends LlmProvider with KeyFree {
 
   String get _bin => p.join(workRoot.path, "bin");
 
-  /// [name] as a program's file on [on]. One rule for where a release is
-  /// put and where it is looked for.
-  static String programFile(String name, Abi on) =>
-      const {Abi.windowsArm64, Abi.windowsIA32, Abi.windowsX64}.contains(on)
+  /// [name] as a program's file where this provider's program runs. One rule
+  /// for where a release is put and where it is looked for.
+  String fileOf(String name) =>
+      const {
+        Abi.windowsArm64,
+        Abi.windowsIA32,
+        Abi.windowsX64,
+      }.contains(_runsIn.abi)
       ? "$name.exe"
       : name;
-
-  /// [name] as a program's file where this provider's program runs.
-  String fileOf(String name) => programFile(name, _runsIn.abi);
 
   /// Programs the CLI runs from beside itself, which a copy is not whole
   /// without. None unless a subclass knows of one.
