@@ -141,43 +141,30 @@ void main() {
     expect(find.text("tour"), findsOneWidget);
   });
 
-  // Each program the tour signs a plan in with is Entoli's own copy,
-  // installed one after the other on the same screen before the tour.
-  testWidgets("a desktop installs its own copy of each CLI before the tour", (
-    tester,
-  ) async {
-    final claude = FakeCli.claude(installed: false)..installing = Completer();
+  // A CLI program is installed when its provider is connected, by the
+  // sign-in that starts, so none holds up the tour.
+  testWidgets("a desktop installs no CLI before the tour", (tester) async {
+    final claude = FakeCli.claude(installed: false);
     final codex = FakeCli.codex(installed: false);
     app = desktop(FakeHelium()..installedVersion = "1", clis: [claude, codex]);
     await app.pump(tester, gate);
     await settleIo(tester, least: 3);
 
-    expect(find.textContaining("Installing Claude CLI"), findsOneWidget);
-    expect(find.text("tour"), findsNothing);
-
-    claude.installing!.complete();
-    await settleIo(tester, least: 3);
-    expect([claude.installs, codex.installs], [1, 1]);
     expect(find.text("tour"), findsOneWidget);
+    expect([claude.installs, codex.installs], [0, 0]);
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
-  // A phone runs the CLIs in its Alpine, so its own copy of each is
-  // installed after the Alpine is: proot's on Android, the emulator's x86-64
-  // one on iOS.
-  test("a phone's plan installs each CLI after its Alpine", () {
+  // A phone's plan is the Linux its commands run in, and nothing after it.
+  test("a phone's plan is its Alpine alone", () {
     app = TestApp.create(linuxHost: const ProotLinux("arm64-v8a"));
     expect(app.container.read(setupPlanProvider).steps.map((s) => s.name), [
       "Alpine Linux",
-      "Claude CLI",
-      "Codex CLI",
     ]);
     app.dispose();
 
     app = TestApp.create(linuxHost: const EmulatedLinux());
     expect(app.container.read(setupPlanProvider).steps.map((s) => s.name), [
       "Alpine Linux (x86-64)",
-      "Claude CLI",
-      "Codex CLI",
     ]);
   });
 

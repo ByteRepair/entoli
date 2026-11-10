@@ -107,8 +107,8 @@ class _CliSignInDialogState extends ConsumerState<CliSignInDialog> {
     }
   }
 
-  /// Through the shared downloads, so first-run setup and this one never
-  /// fetch the program twice, and done once it is on disk.
+  /// Through the shared downloads, so two sign-ins never fetch the program
+  /// twice, and done once it is on disk.
   Future<void> _install() async {
     final id = _cli.workFolder;
     final done = Completer<void>();

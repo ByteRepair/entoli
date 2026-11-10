@@ -1,7 +1,6 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../data/builtin/llm/providers/presets.dart" show CliProvider;
-import "../../providers.dart";
 import "downloads.dart";
 
 /// The CLI programs' half of [Downloads]: each one fetched into Entoli's own
@@ -21,9 +20,10 @@ class CliDownloads extends Downloads<CliProvider> {
   @override
   String get plural => "programs";
 
+  /// Nothing to read again: whether a copy is there is [CliProvider.installed],
+  /// asked of the disk each time.
   @override
-  Future<void> rescan() async =>
-      ref.read(installedClisProvider.notifier).refresh();
+  Future<void> rescan() async {}
 
   /// Nothing to let go of: a provider on the program finds whatever other
   /// copy there is, and says so where there is none.
@@ -36,31 +36,4 @@ class CliDownloads extends Downloads<CliProvider> {
 
 final cliDownloadsProvider = NotifierProvider<CliDownloads, DownloadState>(
   CliDownloads.new,
-);
-
-/// Which of [cliProgramsProvider] Entoli has its own copy of, by
-/// [CliProvider.workFolder]: read off the disk, and again whenever a
-/// download lands or a copy is deleted. Read at once rather than seeded
-/// empty, since the first-run setup decides on its first frame whether there
-/// is anything left to install.
-class InstalledClis extends InstalledIds {
-  InstalledClis() : super(const {});
-
-  @override
-  Set<String> build() {
-    ref.watch(cliProgramsProvider);
-    return _scan();
-  }
-
-  @override
-  Future<Set<String>> scan() async => _scan();
-
-  Set<String> _scan() => {
-    for (final cli in ref.read(cliProgramsProvider))
-      if (cli.installed) cli.workFolder,
-  };
-}
-
-final installedClisProvider = NotifierProvider<InstalledClis, Set<String>>(
-  InstalledClis.new,
 );

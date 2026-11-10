@@ -63,9 +63,7 @@ Linux can run (proot on Android, the emulator on iOS) Alpine as the terminal,
 so a phone user never has to find the Terminal page, its bar the download
 alone (`StepProgress`); where the agent's browser is one the app launches —
 the desktops — Helium as that browser, which makes the embedded browser the
-desktops' default where it used to be off, then on every desktop Entoli's own
-copy of each CLI program (`CliSetup`, one per `cliProgramsProvider` entry,
-done when the copy is on disk), its bar the whole plan
+desktops' default where it used to be off, its bar the whole plan
 (`PlanProgress`, each step an equal share and unpacking its `unpackShare` of
 that, so it only moves forward). The page runs the steps one after another,
 each started when the one before is done or skipped; a step is done when its
@@ -81,7 +79,8 @@ plan someone pays for answers through (`welcomeProviders`), then Local Model
 and Advanced. A service is connected by `connectService`
 (`connect_provider.dart`, beside `editProvider`, the Providers page's way in)
 as its kind is — a CLI installed if Entoli has no
-copy of it and signed in if it is not (`CliSignInDialog` in `cli_sign_in_dialog.dart`: the program's own
+copy of it, which is the one place a program is installed (no first-run step
+does it ahead of time), and signed in if it is not (`CliSignInDialog` in `cli_sign_in_dialog.dart`: the program's own
 sign-in run, the page it prints opened from the dialog, a code the page shows
 pasted back), an API in its preset's dialog — and adopted, answering new
 chats, titles and the classifier at its own defaults; connecting one already
