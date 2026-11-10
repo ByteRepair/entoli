@@ -16,9 +16,9 @@ import "../../domain/shell.dart";
 /// OS may refuse to grant.
 ///
 /// The ruleset here is the allowlist shape: read everywhere, write only the
-/// workspace and tmp. `$HOME`'s profile files — `.bashrc`, `.gitconfig`,
-/// `.ssh`, the whole deny-write set — fall outside the granted write set
-/// without being named, which is the point of granting by subtree rather
+/// workspace, tmp and the system's temp folders. `$HOME`'s profile files —
+/// `.bashrc`, `.gitconfig`, `.ssh`, the whole deny-write set — fall outside
+/// the granted write set without being named, which is the point of granting by subtree rather
 /// than by file.
 ///
 /// The ruleset is applied by a small C helper compiled once into the app's
@@ -34,10 +34,21 @@ import "../../domain/shell.dart";
 /// compiler — [prefixFor] answers null and the caller fails the command
 /// closed. A confinement-requiring command is never run unrestricted.
 class LandlockSandboxHelper implements SandboxHelper {
-  LandlockSandboxHelper({required this.cacheDir});
+  LandlockSandboxHelper({
+    required this.cacheDir,
+    this.systemTemps = const ["/tmp", "/var/tmp"],
+  });
 
   /// Where the compiled helper lives, beside the app's other laid-out tools.
   final String cacheDir;
+
+  /// The machine's own temp folders, granted to every confined command
+  /// beside the chat's tmp. `TMPDIR` names the chat's, but a program that
+  /// hard-codes `/tmp` or was handed a clean environment does not ask it,
+  /// and a denied temp folder fails it in the middle of a build. One that is
+  /// not there is left out, since the helper refuses a rule on a missing
+  /// path. A test that needs an outside under the temp root passes none.
+  final List<String> systemTemps;
 
   static const _binaryName = "entoli-landlock";
 
@@ -59,6 +70,8 @@ class LandlockSandboxHelper implements SandboxHelper {
       sandbox.workspace,
       if (sandbox.tmp != null) ...["--tmp", sandbox.tmp!],
       if (sandbox.home != null) ...["--home", sandbox.home!],
+      for (final dir in systemTemps)
+        if (Directory(dir).existsSync()) ...["--write", dir],
       for (final dir in sandbox.extraWrites) ...["--write", dir],
       "--",
     ];

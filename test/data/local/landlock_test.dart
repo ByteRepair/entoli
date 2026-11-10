@@ -24,7 +24,13 @@ void main() {
   setUpAll(() async {
     cache = Directory.systemTemp.createTempSync("agent_chat_landlock_");
     tmp = Directory(p.join(cache.path, "tmp"))..createSync();
-    final helper0 = LandlockSandboxHelper(cacheDir: cache.path);
+    // The cache is under the machine's temp root, and so is every "outside"
+    // below: the system temp folders a real helper grants would grant them
+    // too, so this one grants none. The grant itself is its own test.
+    final helper0 = LandlockSandboxHelper(
+      cacheDir: cache.path,
+      systemTemps: const [],
+    );
     final sandbox = CommandSandbox(
       workspace: p.join(cache.path, "ws"),
       tmp: tmp.path,
@@ -136,6 +142,43 @@ void main() {
     if (!landlockUsable) return;
     final r = await run0("echo scratch > ${tmp.path}/x.txt");
     expect(r.code, 0);
+  });
+
+  test("the system's temp folders are granted to a command that was never "
+      "told where its tmp is", () async {
+    if (!landlockUsable) return;
+    // The real helper's grant, over an environment with no TMPDIR in it —
+    // what a build step that scrubs its environment hands its tools — so
+    // `mktemp` makes its file in /tmp. The here document is run from outside
+    // the workspace for the shells that write one to a file.
+    final real = LandlockSandboxHelper(cacheDir: cache.path);
+    final s = CommandSandbox(workspace: p.join(cache.path, "ws"));
+    final prefix = (await real.prefixFor(s))!;
+    final process = await Process.start(
+      prefix.first,
+      [
+        ...prefix.skip(1),
+        "/bin/sh",
+        "-c",
+        "cd / && cat <<EOF && rm \"\$(mktemp)\"\nhere ok\nEOF\n",
+      ],
+      environment: {"PATH": "/usr/bin:/bin"},
+      includeParentEnvironment: false,
+    );
+    final out = StringBuffer();
+    final err = StringBuffer();
+    final drained = Future.wait([
+      process.stdout
+          .transform(const SystemEncoding().decoder)
+          .forEach(out.write),
+      process.stderr
+          .transform(const SystemEncoding().decoder)
+          .forEach(err.write),
+    ]);
+    final code = await process.exitCode;
+    await drained;
+    expect(code, 0, reason: "out=$out err=$err");
+    expect("$out", contains("here ok"));
   });
 
   test("git works inside the workspace", () async {

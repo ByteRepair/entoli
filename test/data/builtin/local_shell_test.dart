@@ -7,6 +7,7 @@ import "package:agent_chat/data/builtin/background_jobs.dart"
     show backgroundScript;
 import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/data/local/landlock.dart";
+import "package:agent_chat/data/local/seatbelt.dart";
 import "package:agent_chat/domain/shell.dart";
 
 List<String> _hostCommand(
@@ -776,8 +777,11 @@ void main() {
     // fail-closed one, which is the contract everywhere.
     late LandlockSandboxHelper helper;
     setUp(() {
+      // The outside these write to is under the machine's temp root, which
+      // the real helper grants; the grant is the test below's.
       helper = LandlockSandboxHelper(
         cacheDir: Directory.systemTemp.createTempSync("agent_chat_ll_").path,
+        systemTemps: const [],
       );
     });
 
@@ -847,6 +851,49 @@ void main() {
         isTrue,
         reason: "the tmp is made for the confined run",
       );
+    });
+  });
+
+  group("a sandboxed command and the system's temp folders", () {
+    // The helper this machine's sandbox is, with its real grant: the tools
+    // that failed did not ask TMPDIR — macOS's mktemp prefers the per-user
+    // folder, the system's bash 3.2 puts a here document in /tmp or else the
+    // working directory — so standing outside the workspace both failed.
+    final SandboxHelper? helper = Platform.isMacOS
+        ? SeatbeltSandboxHelper()
+        : Platform.isLinux
+        ? LandlockSandboxHelper(
+            cacheDir: Directory.systemTemp
+                .createTempSync("agent_chat_ll_tmp_")
+                .path,
+          )
+        : null;
+
+    test("a here document and mktemp work away from the workspace", () async {
+      final sandbox = CommandSandbox(
+        workspace: workspace.path,
+        tmp: p.join(workspace.path, ".entoli-tmp"),
+      );
+      if (helper == null || await helper.prefixFor(sandbox) == null) return;
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      final shell = LocalShell(driver: ({String? project}) => driver);
+      final result = await shell
+          .start(
+            'cd / && rm "\$(mktemp)" && cat <<\'EOF\'\n'
+            'here ok\n'
+            'EOF\n',
+            cwd: workspace.path,
+            home: home.path,
+            timeout: const Duration(seconds: 10),
+            sandbox: sandbox,
+          )
+          .result;
+      expect(
+        result.returnCode,
+        0,
+        reason: "out=${result.output} info=${result.exceptionInfo}",
+      );
+      expect(result.output, contains("here ok"));
     });
   });
 

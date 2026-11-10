@@ -517,8 +517,32 @@ back, and at least one segment must match — and `writes` are the union of
 the matched rules'. The turn's grant is the chat's workspace, its tmp, the
 project's workspace beside it, and the tiers' `writableDirs`.
 
-Beside those, two grants a build needs and a user should never have had to
-make (`sandbox_grants.dart`). **The toolchain caches** under the machine
+Beside those, grants a build needs and a user should never have had to
+make. **The system's temp folders**, which the helper adds itself, being the
+platform's knowledge: on macOS `/private/tmp` and the per-user folder
+`getconf DARWIN_USER_TEMP_DIR` names (asked once, granted as real paths, since
+Seatbelt matches what the kernel resolved), on Linux `/tmp` and `/var/tmp`
+where they exist. `TMPDIR` still names the chat's `.entoli-tmp`, and a
+program that honours it writes there; the grant is for the ones that do not.
+A long DeepSeek chat found them mid-build: macOS's `mktemp` asks
+`_CS_DARWIN_USER_TEMP_DIR` before `TMPDIR` (its manual says so), so it failed
+whatever `TMPDIR` said, meson's compiler check with it; the system's bash 3.2
+never reads `TMPDIR` for a here document — it tries `/var/tmp`, `/tmp`, then
+the working directory — so `python3 - <<'EOF'` worked in the workspace and
+failed after a `cd` out of it. `TMPDIR` reached every one of those commands;
+they did not ask it. **The cost is accepted, and it is this**: those folders
+are shared with every program the user runs, so a confined command can
+overwrite or delete another app's temp files there. The alternative was a
+stream of failures in ordinary tools, each one sending the model out of the
+sandbox altogether, which grants far more. The phones, the guests and Windows
+change nothing: a phone's host shell is inside the app's own OS sandbox, a
+guest Linux (proot, iSH) has its own `/tmp` inside the rootfs, and Windows
+has no sandbox to grant it in. With them writable, the parse no longer
+counts a `TMPDIR` assignment as an escalation: it picks no program and no
+configuration, only where scratch lands, and the parse gate stands only
+where the sandbox already bounds that.
+
+Then two more (`sandbox_grants.dart`). **The toolchain caches** under the machine
 user's home that exist, looked up once per turn — `~/.cache`, `~/Library/Caches`, Xcode's
 DerivedData, `~/.pub-cache`, `~/.npm`, `~/.gradle`, Cargo's registry, Go's
 module cache and their kin, the variables that move them, and the `bin/cache`
@@ -544,7 +568,7 @@ enforce, and two host drivers can (their `sandboxHelper`): Linux's under
 Landlock (`lib/data/local/landlock.dart`) and macOS's under Seatbelt's
 `sandbox-exec` (`lib/data/local/seatbelt.dart`) — a phone needs none, its app
 sandbox being the OS's. Both are the same ruleset, read everywhere and write
-only the grant, and neither changes a live one: every confined command is its
+only the grant and the system's temp folders, and neither changes a live one: every confined command is its
 own subshell with a profile built from that command's `CommandSandbox`, which
 is how a grant made mid-chat reaches the next command. Seatbelt matches the
 path the kernel resolved, so its helper resolves symlinks (`/tmp`, `/var`)
