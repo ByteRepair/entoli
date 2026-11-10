@@ -90,16 +90,22 @@ class _CliSignInDialogState extends ConsumerState<CliSignInDialog> {
       if (await _cli.signedIn()) return _finish(true);
       final signIn = await CliSignIn.start(_cli);
       if (!mounted) return unawaited(signIn.cancel());
-      _show(_SigningIn(signIn, null));
-      unawaited(
-        signIn.page.then((page) {
-          final stage = _stage;
-          if (page != null && stage is _SigningIn && stage.signIn == signIn) {
-            _show(_SigningIn(signIn, page));
-          }
-        }),
-      );
-      if (await signIn.result) return _finish(true);
+      _show(_SigningIn(signIn, signIn.page.value));
+      // The page may be named again, a better one: the one the program asked
+      // to open, which signs in with no code to paste.
+      void named() {
+        final stage = _stage;
+        if (stage is _SigningIn && stage.signIn == signIn) {
+          _show(_SigningIn(signIn, signIn.page.value));
+        }
+      }
+
+      signIn.page.addListener(named);
+      try {
+        if (await signIn.result) return _finish(true);
+      } finally {
+        signIn.page.removeListener(named);
+      }
       _show(_Failed(signIn.failure ?? "The sign-in did not finish."));
     } catch (e) {
       logFailure("cli", "connecting ${_cli.config.displayName} failed", e);

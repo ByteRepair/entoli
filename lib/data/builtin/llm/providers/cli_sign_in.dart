@@ -1,5 +1,7 @@
 import "dart:async";
 
+import "package:flutter/foundation.dart" show ValueListenable, ValueNotifier;
+
 import "../../../../core/log.dart";
 import "cli.dart";
 
@@ -21,7 +23,6 @@ class CliSignIn {
     result = _process.exitCode.then((code) async {
       final said = _errors.rest.trim();
       _scan(said);
-      if (!_page.isCompleted) _page.complete(null);
       for (final sub in _subs) {
         unawaited(sub.cancel());
       }
@@ -46,7 +47,11 @@ class CliSignIn {
   final CliProcess _process;
   late final List<StreamSubscription<String>> _subs;
   final _errors = _Lines();
-  final _page = Completer<Uri?>();
+  final _page = ValueNotifier<Uri?>(null);
+
+  /// Whether the program asked for a page to be opened, whose address is
+  /// then the page whatever links it prints.
+  var _opened = false;
   var _cancelled = false;
 
   /// What the program said on its error output as it ended, for a failed
@@ -57,9 +62,12 @@ class CliSignIn {
   /// program's own last words on its error output.
   String? get failure => _failure;
 
-  /// The first link the program prints, which is the page to sign in on;
-  /// null where it exits having printed none.
-  Future<Uri?> get page => _page.future;
+  /// The page to sign in on, null until the program names one: the page it
+  /// asked to open, where its browser is the app's ([cliOpenMarker]), since
+  /// that page's callback finishes the sign-in with no code to paste; else
+  /// the first link it prints. Either may come first, so a page it asked to
+  /// open replaces a link it printed.
+  ValueListenable<Uri?> get page => _page;
 
   /// Whether it ended signed in: the program exited 0, and its own status
   /// says so.
@@ -75,10 +83,19 @@ class CliSignIn {
   }
 
   void _scan(String text) {
-    if (_page.isCompleted) return;
+    final asked = _asked.firstMatch(text)?[1];
+    if (asked != null) {
+      _opened = true;
+      _page.value = Uri.parse(asked);
+      return;
+    }
+    if (_opened || _page.value != null) return;
     final link = _link.firstMatch(text)?[0];
-    if (link != null) _page.complete(Uri.parse(link));
+    if (link != null) _page.value = Uri.parse(link);
   }
+
+  /// A page the program's browser was asked to open.
+  static final _asked = RegExp("$cliOpenMarker (${_link.pattern})");
 
   /// A link up to whatever cannot be in one: space, a quote, an angle
   /// bracket, or the escape that starts a terminal colour.

@@ -216,18 +216,40 @@ abstract class LinuxCliGuest extends CliGuest {
 
   /// util-linux's `script`, which Alpine keeps in util-linux-misc and its
   /// busybox lacks: installed the first time a terminal is asked for, so a
-  /// Linux set up before this needs nothing done to it.
+  /// Linux set up before this needs nothing done to it. Beside it, the
+  /// program's browser: a Linux of the app's own has none to open a page in,
+  /// so `BROWSER` names one ([_opener]) that hands the page to the app
+  /// instead, as a line on the terminal saying [cliOpenMarker] and its
+  /// address. The page a sign-in asks to open is the one whose callback
+  /// finishes it on its own.
   @override
   List<String>? onTerminal(List<String> argv) => [
     "/bin/sh",
     "-c",
-    "command -v script >/dev/null 2>&1 || "
-        "apk add --no-cache util-linux-misc >/dev/null 2>&1; "
-        'exec "\$@"',
+    _onTerminal,
     "sh",
     ...CliGuest.utilLinuxScript(argv),
   ];
+
+  /// Where the browser that hands a page to the app is kept in the guest.
+  static const _opener = "/usr/local/bin/entoli-open";
+
+  /// What [onTerminal] runs before the program: script installed, the
+  /// browser written where it is missing — a script that prints the marker
+  /// and its first argument to the terminal — then the program under
+  /// script with `BROWSER` naming it.
+  static const _onTerminal =
+      "command -v script >/dev/null 2>&1 || "
+      "apk add --no-cache util-linux-misc >/dev/null 2>&1; "
+      "[ -x $_opener ] || { mkdir -p /usr/local/bin && "
+      "printf '#!/bin/sh\\nprintf \"$cliOpenMarker %%s\\\\n\" \"\$1\" > /dev/tty\\n' "
+      "> $_opener && chmod +x $_opener; }; "
+      'exec env BROWSER=$_opener "\$@"';
 }
+
+/// What a program's browser in a Linux of the app's own says before the
+/// address of a page it was asked to open; see [LinuxCliGuest.onTerminal].
+const cliOpenMarker = "entoli-open";
 
 /// A program on a terminal, read and written as one over pipes: Enter is a
 /// carriage return, which a program reading keys takes as Enter where a

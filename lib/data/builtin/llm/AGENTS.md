@@ -386,6 +386,15 @@ ends in a carriage return, which is Enter to a program reading keys. The
 sign-in runs this way, since Claude CLI reads a pasted code only as keys
 from a terminal and takes nothing written to a pipe.
 
+**A Linux of the app's own has no browser, so its programs are given the
+app's.** On a terminal there, `BROWSER` names `/usr/local/bin/entoli-open`,
+written in the guest where it is missing, which prints `entoli-open` and the
+address to the terminal. The sign-in takes a page named that way over the
+first link the program prints, in whichever order they come: Claude CLI
+asks its browser for the page whose callback reaches its own `localhost`
+listener, which finishes the sign-in with no code, and prints the page that
+shows a code only as a fallback.
+
 The two phones' guests are `LinuxCliGuest`s: Alpine's `PATH`, `HOME` and
 `LANG` and the subclass's `guestEnvironment` stand in for the app's
 environment, which is Android's or iOS's; their programs are the musl

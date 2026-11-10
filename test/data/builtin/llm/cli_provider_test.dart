@@ -1389,20 +1389,46 @@ void main() {
         "\x1b[94mhttps://auth.openai.com/oauth/authorize?x=1\x1b[0m"
         "\x1b]8;;\x07\r",
       );
+      await pumpEventQueue();
       expect(
-        await signIn.page,
+        signIn.page.value,
         Uri.parse("https://auth.openai.com/oauth/authorize?x=1"),
       );
       login.exit(0);
       expect(await signIn.result, isTrue);
     });
 
+    // The program's browser in a Linux of the app's own hands the page it
+    // was asked to open to the app; that page's callback signs in with no
+    // code, so it is the page whether it comes before the fallback link the
+    // program prints or after.
+    for (final openedFirst in [true, false]) {
+      test("the page the program asked to open wins "
+          "(${openedFirst ? "before" : "after"} the link it prints)", () async {
+        final (:cli, :login) = signingIn(signedIn: true);
+        final signIn = await CliSignIn.start(cli);
+        const opened = "https://claude.com/cai/oauth/authorize?redirect_uri=x";
+        const printed = "https://claude.com/cai/oauth/authorize?code=true";
+        final lines = [
+          "$cliOpenMarker $opened",
+          "If the browser didn't open, visit: $printed",
+        ];
+        for (final line in openedFirst ? lines : lines.reversed) {
+          login._stdout.add(line);
+        }
+        await pumpEventQueue();
+        expect(signIn.page.value, Uri.parse(opened));
+        login.exit(0);
+        expect(await signIn.result, isTrue);
+      });
+    }
+
     test("exited 0 is not signed in until the program says so", () async {
       final (:cli, :login) = signingIn(signedIn: false);
       final signIn = await CliSignIn.start(cli);
       login.exit(0);
-      expect(await signIn.page, isNull);
       expect(await signIn.result, isFalse);
+      expect(signIn.page.value, isNull);
     });
   });
 
@@ -1439,6 +1465,8 @@ void main() {
       final words = launched.single.sublist(2);
       expect(words.take(2), ["/bin/sh", "-c"]);
       expect(words[2], contains("apk add --no-cache util-linux-misc"));
+      // its browser is the app's, by way of the terminal
+      expect(words[2], contains("BROWSER=/usr/local/bin/entoli-open"));
       expect(words.sublist(4), [
         "script",
         "-qfec",
