@@ -7,6 +7,7 @@ import "package:http/testing.dart";
 import "package:agent_chat/data/builtin/llm/gemini_client.dart";
 import "package:agent_chat/data/builtin/llm/hosted_models.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:agent_chat/data/builtin/llm/openai_client.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/model_capability.dart";
@@ -50,6 +51,93 @@ void main() {
           reason: preset.id,
         );
       }
+    });
+  });
+
+  group("replayed reasoning", () {
+    const deepseek = LlmProviderConfig(
+      id: "deepseek",
+      catalogId: "deepseek",
+      api: LlmApi.openai,
+      baseUrl: "https://api.deepseek.com",
+    );
+
+    setUp(() {
+      ModelCatalog.notifier.value = ModelCatalog.parse(
+        jsonEncode({
+          "deepseek": {
+            "models": {
+              "deepseek-v4-pro": {
+                "reasoning": true,
+                "interleaved": {"field": "reasoning_content"},
+              },
+              "deepseek-chat": {"reasoning": false},
+            },
+          },
+          "openrouter": {
+            "models": {
+              "some/thinker": {
+                "interleaved": {"field": "reasoning_details"},
+              },
+            },
+          },
+          "openai": {
+            "models": {
+              "gpt-a": {"reasoning": true},
+            },
+          },
+        }),
+      );
+    });
+    tearDown(() => ModelCatalog.notifier.value = ModelCatalog.empty);
+
+    String? fieldOf(LlmProvider provider, String model, {bool tools = true}) =>
+        (provider.client(null) as OpenAiClient).reasoningFieldOf?.call(
+          model,
+          tools: tools,
+        );
+
+    test("goes in the field models.dev names for the model", () {
+      final provider = providerOf(deepseek);
+      expect(fieldOf(provider, "deepseek-v4-pro"), "reasoning_content");
+      expect(fieldOf(provider, "deepseek-chat"), isNull);
+      expect(fieldOf(provider, "unlisted"), isNull);
+      // DeepSeek ignores it on a request without tools.
+      expect(fieldOf(provider, "deepseek-v4-pro", tools: false), isNull);
+    });
+
+    test("survives the catalog's cache, which is written through toJson", () {
+      final cached = ModelCatalog.parse(ModelCatalog.current.toJsonText());
+      expect(
+        cached.lookup(deepseek, "deepseek-v4-pro")?.interleavedField,
+        "reasoning_content",
+      );
+    });
+
+    test("is never OpenRouter's structured reasoning_details", () {
+      expect(
+        fieldOf(providerOf(OpenRouterProvider.preset), "some/thinker"),
+        isNull,
+      );
+    });
+
+    test("ollama, local and hosted, reads it as its own reasoning", () {
+      expect(fieldOf(const OllamaProvider(), "deepseek-v4-pro"), "reasoning");
+      expect(
+        fieldOf(const OllamaCloudProvider(), "deepseek-v4-pro"),
+        "reasoning",
+      );
+      expect(
+        fieldOf(const OllamaProvider(), "deepseek-v4-pro", tools: false),
+        isNull,
+      );
+    });
+
+    test("OpenAI is sent none", () {
+      expect(
+        (const OpenAiProvider().client(null) as OpenAiClient).reasoningFieldOf,
+        isNull,
+      );
     });
   });
 
