@@ -2,6 +2,7 @@ import "dart:io";
 
 import "package:path/path.dart" as p;
 
+import "../../core/log.dart";
 import "../../domain/shell.dart" show repositoryRootOf;
 import "local_shell.dart" show LocalShell;
 
@@ -117,4 +118,50 @@ String? worktreeGitDir(String dir, List<String> granted) {
   } on Object {
     return null;
   }
+}
+
+/// The machine's own temp folders, which every confined command may write:
+/// `/private/tmp` and the per-user folder `getconf DARWIN_USER_TEMP_DIR`
+/// names on macOS, `/tmp` and `/var/tmp` where they exist on Linux, and
+/// nothing on a platform whose sandbox Entoli does not enforce. `TMPDIR`
+/// still names the chat's own tmp, but the tools a build reaches for most do
+/// not ask it: macOS's `mktemp` prefers the per-user folder to `TMPDIR`, as
+/// its manual says, and the system's bash 3.2 writes a here document to
+/// `/var/tmp` or `/tmp` and else the working directory, never to `TMPDIR`.
+/// Denied, each failed wherever a command stood outside the workspace.
+///
+/// Found once per process — the folders are the user's and do not move —
+/// and held as a future, so the first commands of parallel sub-agents share
+/// one `getconf` rather than racing to spawn their own.
+Future<List<String>> systemTemps() => _systemTemps ??= _findSystemTemps();
+
+Future<List<String>>? _systemTemps;
+
+Future<List<String>> _findSystemTemps() async {
+  if (Platform.isMacOS) return ["/private/tmp", ?await _darwinUserTemp()];
+  if (Platform.isLinux) {
+    return [
+      for (final dir in const ["/tmp", "/var/tmp"])
+        if (Directory(dir).existsSync()) dir,
+    ];
+  }
+  return const [];
+}
+
+/// The per-user temp folder, or null where `getconf` will not say — then
+/// `/private/tmp` is granted alone.
+Future<String?> _darwinUserTemp() async {
+  Object reason;
+  try {
+    final result = await Process.run("/usr/bin/getconf", [
+      "DARWIN_USER_TEMP_DIR",
+    ]);
+    final out = "${result.stdout}".trim();
+    if (result.exitCode == 0 && out.isNotEmpty) return out;
+    reason = "getconf exited ${result.exitCode}";
+  } on Exception catch (e) {
+    reason = e;
+  }
+  logFailure("sandbox", "the per-user temp folder is not known", reason);
+  return null;
 }

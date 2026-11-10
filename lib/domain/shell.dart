@@ -159,6 +159,10 @@ class CommandSandbox {
   );
 }
 
+/// Whether [path] is spelled from the home, `~` or `~/…`: a path the reader
+/// resolves in its own terms — a guest's home or the machine's.
+bool isTildePath(String path) => path == "~" || path.startsWith("~/");
+
 /// Whether [path] is [root] or under it, compared by components so `/w/x`
 /// does not match `/wextra`.
 bool pathInside(String path, String root) {

@@ -55,6 +55,17 @@ void main() {
     },
   );
 
+  test("TMPDIR is a scratch directory, not a write target", () {
+    // It picks no program and no configuration, and the sandbox bounds the
+    // scratch wherever it names; refusing it only turned away the builds
+    // that set it.
+    expect(
+      parse(r"export TMPDIR=$PWD/tmp && meson setup build").escalationReasons,
+      isEmpty,
+    );
+    expect(parse("TMPDIR=/x/tmp mktemp").escalationReasons, isEmpty);
+  });
+
   test("assignments that are not sensitive do not escalate", () {
     // `-c` is a word, not an assignment; the include is an escalation only
     // when set as an env var, which the sensitive test above covers.

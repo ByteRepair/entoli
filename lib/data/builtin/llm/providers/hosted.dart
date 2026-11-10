@@ -67,7 +67,7 @@ class ZaiProvider extends OpenAiCompatibleProvider with ChecksKeyByCompletion {
 
 // shortcut: not known to keep a model list behind the key.
 class OllamaCloudProvider extends OpenAiCompatibleProvider
-    with ChecksKeyByCompletion, OfferedByName {
+    with ChecksKeyByCompletion, OfferedByName, OllamaCompat {
   const OllamaCloudProvider([LlmProviderConfig config = preset])
     : super(config, _terms);
 

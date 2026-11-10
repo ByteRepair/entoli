@@ -16,8 +16,8 @@ import "package:path/path.dart" as p;
 
 import "../../../domain/permission.dart" show addDirectoryName;
 import "../../../domain/file_tools.dart" show outsideWorkspaces;
-import "../../../domain/shell.dart"
-    show pathInside, pathsOverlap, repositoryRootOf;
+import "../../../domain/shell.dart" show repositoryRootOf;
+import "../../../domain/work_folders.dart" show refuseFolder;
 
 /// One turn's account of which folders it has suggested a grant for, and how
 /// often it asked to leave the sandbox in each. A folder is named once a
@@ -52,9 +52,9 @@ class GrantNudges {
 /// and [granted], widened to the repository it sits in — the nearest
 /// directory above it holding a `.git`, short of [home] — since a build's
 /// writes land across the whole tree. Null where none is, or where the
-/// folder would be one no grant should be: the root, [home] or anything
-/// holding it, the app's own data ([dataDir]), or anything holding the
-/// workspaces.
+/// folder is one `add_directory` refuses (`refuseFolder`): not a directory,
+/// the root, [home] or anything holding it, the app's own data ([dataDir]),
+/// or anything holding the workspaces.
 String? grantFolder(
   Iterable<String> candidates, {
   required String workspace,
@@ -63,17 +63,19 @@ String? grantFolder(
   String? home,
   String? dataDir,
 }) {
+  // The refusals `add_directory` answers with, so the note never names a
+  // folder the tool would then refuse.
   bool grantable(String dir) =>
-      p.dirname(dir) != dir &&
-      (home == null || !pathInside(home, dir)) &&
-      (dataDir == null || !pathsOverlap(dir, dataDir)) &&
-      !pathInside(workspace, dir) &&
-      !pathInside(projectWorkspace, dir);
+      refuseFolder(
+        dir,
+        dataDir: dataDir,
+        home: home,
+        workspaces: [workspace, projectWorkspace],
+      ) ==
+      null;
   for (final candidate in candidates) {
     final dir = p.normalize(candidate);
-    if (!p.isAbsolute(dir) || !FileSystemEntity.isDirectorySync(dir)) {
-      continue;
-    }
+    if (!p.isAbsolute(dir)) continue;
     if (!outsideWorkspaces(
       dir,
       workspace,

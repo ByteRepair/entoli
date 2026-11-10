@@ -58,6 +58,7 @@ String turnPrompt({
   required bool projectHome,
   String? guestRoot,
   String? homePath,
+  List<String> workFolders = const [],
 }) {
   // Where the model is told its workspace is: `~` inside a guest, the real
   // path on the machine. The chat workspace is `~/chats/<id>` inside a guest.
@@ -116,6 +117,7 @@ String turnPrompt({
 Your shell starts in this conversation's own workspace: $workspaceDisplay
 It is yours; the files in it survive between turns, and nothing else writes
 there. $scope$tmp$shared${home()}""",
+    if (canRunCommands && workFolders.isNotEmpty) _workFolders(workFolders),
     if (instructions != null && instructions.isNotEmpty)
       "## Workspace instructions\n\n$instructions",
     if (pinned != null && pinned.isNotEmpty)
@@ -141,6 +143,17 @@ $recall""",
   ];
   return parts.join("\n\n");
 }
+
+/// The folders outside the workspaces the user granted up front, as the
+/// sandbox carries them: writing in one is not leaving the sandbox, so
+/// neither `unsandboxed` nor a request for access is needed there.
+String _workFolders(List<String> folders) => """
+## Work folders
+
+The user granted write access to these folders, beside the workspaces. Commands and file edits in them run inside the sandbox with
+nothing to ask for: do not run them unsandboxed or request access to them.
+
+${folders.map((f) => "- $f").join("\n")}""";
 
 /// What an `@agent` not in the room asks for: that agent doing the work, as a
 /// sub-agent, rather than the participant answering wearing its prompt.

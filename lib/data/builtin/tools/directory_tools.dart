@@ -7,14 +7,13 @@
 // field. Nothing persists or is granted without the banner: the description
 // is the only thing that tells the model the tool exists.
 
-import "dart:io";
-
 import "../../../domain/agent_backend.dart";
 import "../../../domain/models.dart";
 import "../../../domain/permission.dart";
 import "../../../domain/shell.dart";
 import "../../../domain/file_tools.dart" show outsideWorkspaces;
 import "../../../domain/tool_arg.dart";
+import "../../../domain/work_folders.dart";
 import "../llm/llm_client.dart";
 import "agent_tool.dart";
 import "turn.dart";
@@ -85,22 +84,26 @@ class AddDirectoryTool extends AgentTool {
     }
     yield toolCalled(call, path);
     final resolved = turn.resolvePath(path);
-    final type = FileSystemEntity.typeSync(resolved);
-    if (type == FileSystemEntityType.notFound) {
-      yield toolFailed(
-        call,
-        "Directory not found: $resolved. "
-        "Create it first, then ask again.",
-      );
-      return;
-    }
-    if (type != FileSystemEntityType.directory) {
-      yield toolFailed(
-        call,
+    // The one test a grant takes, the settings page's work folders included.
+    // The workspaces' own directories are answered before its refusals,
+    // since they live beneath trees it refuses and need no grant.
+    final refusal = refuseFolder(
+      resolved,
+      dataDir: turn.dataDir,
+      home: turn.shell.machineHome,
+      workspaces: [turn.workspace, turn.projectWorkspace],
+    );
+    final unfound = switch (refusal) {
+      FolderRefusal.missing =>
+        "Directory not found: $resolved. Create it first, then ask again.",
+      FolderRefusal.notADirectory =>
         "$resolved is not a directory. The grant covers a "
-        "directory and everything under it; ask again with the directory "
-        "the work belongs in.",
-      );
+            "directory and everything under it; ask again with the directory "
+            "the work belongs in.",
+      _ => null,
+    };
+    if (unfound != null) {
+      yield toolFailed(call, unfound);
       return;
     }
     if (!outsideWorkspaces(resolved, turn.workspace, turn.projectWorkspace)) {
@@ -111,17 +114,18 @@ class AddDirectoryTool extends AgentTool {
       );
       return;
     }
-    // The tree either way — beneath it is the app's own data, containing it
-    // hands those writes to the sandbox — answered after the workspaces,
-    // whose directories live beneath this tree and need no grant. A symlink
-    // is chased to where it points, so one aliasing the data dir is the data
-    // dir.
-    final dataDir = turn.dataDir;
-    if (dataDir != null && pathsOverlap(resolved, dataDir)) {
+    if (refusal != null) {
+      final what = switch (refusal) {
+        FolderRefusal.root => "is the filesystem's root",
+        FolderRefusal.home => "is the home directory or holds it",
+        FolderRefusal.appData => "holds this app's own data, or lies inside it",
+        FolderRefusal.workspaces => "holds the workspaces",
+        FolderRefusal.missing || FolderRefusal.notADirectory => "",
+      };
       yield toolFailed(
         call,
-        "$resolved holds this app's own data, or lies "
-        "inside it, which is not grantable. Choose a directory outside it.",
+        "$resolved $what, which is not grantable. Choose the directory the "
+        "work is in.",
       );
       return;
     }

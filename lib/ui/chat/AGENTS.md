@@ -597,7 +597,9 @@ model is asked), the send dispatches it before the room's guards, and while a tu
 rewriting underneath it. The turn itself goes through the room's machinery:
 prompt logged as said, empty reply, the status row saying "Compacting the
 conversation" where a model's spinner would be, `turnEnd done`. Its product is
-the marker, not a reply.
+the marker, not a reply — and where no marker lands, the turn ends `error`
+with "The conversation could not be compacted." and the backend's reason on
+the reply, in an error part's red.
 
 **The marker is a `ConversationSeparator`** — the same full-width divider the
 Omada mode flips are, generalized to take a caption and furniture beneath the
@@ -610,6 +612,14 @@ container of its own is the per-row container the bubble's single region
 replaced. Auto-compact
 leaves the same trace with no turn around it: unawaited after a settled turn,
 the divider its only evidence, the way the memory extraction's note is.
+
+**An automatic compaction that fails is drawn too**, because failing without
+a word is the worst way it can fail: `ChatViewState.compactFailure` holds the
+reason, and the page appends a `CompactionFailedEntry` after the last
+message — a divider captioned "Could not compact the conversation" with the
+reason beneath it in `MessageText`'s error red. It is view state, not a log
+record: the next settle tries again and says so again if it fails, a turn
+opening clears it, and so does a marker landing.
 
 ## Activities, on screen
 
