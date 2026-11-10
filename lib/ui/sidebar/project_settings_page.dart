@@ -223,11 +223,11 @@ class ProjectSettingsPage extends ConsumerWidget {
                   const Divider(),
                   // Folders on this machine, granted to the host's sandbox:
                   // not a paired device's, whose paths a picker here cannot
-                  // name, not a guest's, which cannot see them, and not where
-                  // nothing is confined, where the list would change nothing.
-                  if (!remote &&
-                      builtIn?.rootfsIsolation != true &&
-                      pickedConfinement(ref).enforcesSandbox) ...[
+                  // name, and not where commands run in a guest, which cannot
+                  // see them, or where nothing is confined, where the list
+                  // would change nothing — both of which the picked
+                  // confinement answers.
+                  if (!remote && pickedConfinement(ref).enforcesSandbox) ...[
                     WorkFoldersSection(at: at),
                     const Divider(),
                   ],
