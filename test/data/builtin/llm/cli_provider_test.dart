@@ -10,7 +10,6 @@ import "package:agent_chat/data/builtin/llm/providers/presets.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/shell.dart" show guestHome, guestPath;
 import "package:agent_chat/domain/model_registry.dart";
-import "package:flutter/foundation.dart";
 import "package:archive/archive.dart";
 import "package:crypto/crypto.dart";
 import "package:http/http.dart" as http;
@@ -154,6 +153,12 @@ class _FakeProcess implements CliProcess {
 
   @override
   Stream<String> get errors => stderr.stream;
+
+  /// What was written as it was, outside the JSON lines.
+  final written = <String>[];
+
+  @override
+  void write(String text) => written.add(text);
 
   @override
   void writeLine(String line) =>
@@ -438,7 +443,7 @@ void main() {
           command: exe.path,
           env: const {"FROM_CONFIG": "1"},
         ),
-        launch: launch.call,
+        guest: HostCliGuest(launch: launch.call),
         bindBridge: bridge.bind,
       );
     });
@@ -660,7 +665,7 @@ void main() {
           command: exe.path,
           env: {"CODEX_HOME": home.path},
         ),
-        launch: launch.call,
+        guest: HostCliGuest(launch: launch.call),
       );
     });
     tearDown(() {
@@ -985,10 +990,8 @@ void main() {
       expect((codex as CliProvider).command, "codex");
     });
 
-    test("offers the CLI's model aliases beside the user's own, on a desktop "
-        "alone", () {
-      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
-      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    test("offers the CLI's model aliases beside the user's own, and none "
+        "where it has nowhere to run", () {
       final provider = ClaudeCliProvider(
         const LlmProviderConfig(
           id: "c",
@@ -1001,8 +1004,11 @@ void main() {
       expect(ids.first, "claude-opus-5");
       expect(ids, containsAll(["opus", "sonnet", "haiku"]));
 
-      // A CLI entry synced onto a phone has no program to run there.
-      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      // A CLI entry synced onto an Android build with no proot has no
+      // program to run there.
+      CliProvider.platformGuest = null;
+      addTearDown(() => CliProvider.platformGuest = const HostCliGuest());
+      expect(provider.supported, isFalse);
       expect(provider.models(ModelCatalog.current), isEmpty);
     });
 
@@ -1073,10 +1079,18 @@ void main() {
       dir = tempDir("cli-own-");
       CliProvider.cacheRoot = dir.path;
     });
-    tearDown(() {
-      CliProvider.cacheRoot = null;
-      CliProvider.abi = Abi.current();
-    });
+    tearDown(() => CliProvider.cacheRoot = null);
+
+    /// Each program as it is chosen for [abi]'s machine.
+    ClaudeCliProvider claudeOn(Abi abi) => ClaudeCliProvider.over(
+      ClaudeCliProvider.preset,
+      guest: HostCliGuest(abi: abi),
+    );
+    CodexCliProvider codexOn(Abi abi, {Map<String, String> env = const {}}) =>
+        CodexCliProvider.over(
+          CodexCliProvider.preset.copyWith(env: env),
+          guest: HostCliGuest(abi: abi),
+        );
 
     /// Anthropic's two files, for version [version] with [checksum] stated
     /// for darwin-arm64 and win32-x64.
@@ -1126,10 +1140,9 @@ void main() {
     test(
       "Claude CLI's release is its manifest's entry for this machine",
       () async {
-        CliProvider.abi = Abi.macosArm64;
-        final release = await const ClaudeCliProvider().latestRelease(
-          claudeReleases("2.1.320", "ab"),
-        );
+        final release = await claudeOn(
+          Abi.macosArm64,
+        ).latestRelease(claudeReleases("2.1.320", "ab"));
         final claude = release!.files.single;
         expect(
           "${claude.url}",
@@ -1138,18 +1151,16 @@ void main() {
         expect(claude.sha256, "ab");
         expect(claude.packing, isA<BareProgram>());
 
-        CliProvider.abi = Abi.windowsX64;
-        final windows = await const ClaudeCliProvider().latestRelease(
-          claudeReleases("2.1.320", "ab"),
-        );
+        final windows = await claudeOn(
+          Abi.windowsX64,
+        ).latestRelease(claudeReleases("2.1.320", "ab"));
         expect(windows!.files.single.name, "claude.exe");
 
         // A machine the manifest has no build for has no release.
-        CliProvider.abi = Abi.linuxArm64;
         expect(
-          await const ClaudeCliProvider().latestRelease(
-            claudeReleases("2.1.320", "ab"),
-          ),
+          await claudeOn(
+            Abi.linuxArm64,
+          ).latestRelease(claudeReleases("2.1.320", "ab")),
           isNull,
         );
       },
@@ -1183,10 +1194,9 @@ void main() {
         asset("codex-code-mode-host-aarch64-apple-darwin.tar.gz"),
         asset("codex-x86_64-apple-darwin.tar.gz"),
       ];
-      CliProvider.abi = Abi.linuxX64;
-      final linux = await const CodexCliProvider().latestRelease(
-        codexReleases(assets),
-      );
+      final linux = await codexOn(
+        Abi.linuxX64,
+      ).latestRelease(codexReleases(assets));
       // The host first, Codex last: its arrival is what says installed.
       expect(linux!.files.map((f) => f.name), [
         "codex-code-mode-host",
@@ -1199,10 +1209,9 @@ void main() {
       expect(linux.files.last.sha256, "cd");
       expect(linux.files.last.packing, isA<TarGzProgram>());
 
-      CliProvider.abi = Abi.windowsX64;
-      final windows = await const CodexCliProvider().latestRelease(
-        codexReleases(assets),
-      );
+      final windows = await codexOn(
+        Abi.windowsX64,
+      ).latestRelease(codexReleases(assets));
       expect(windows!.files.map((f) => f.name), [
         "codex-code-mode-host.exe",
         "codex.exe",
@@ -1210,15 +1219,13 @@ void main() {
       expect(windows.files.last.packing, isA<ZipProgram>());
 
       // No hash stated is nothing to check the download against.
-      CliProvider.abi = Abi.macosArm64;
       await expectLater(
-        const CodexCliProvider().latestRelease(codexReleases(assets)),
+        codexOn(Abi.macosArm64).latestRelease(codexReleases(assets)),
         throwsFormatException,
       );
       // A Codex without its host is not a release worth installing.
-      CliProvider.abi = Abi.macosX64;
       expect(
-        await const CodexCliProvider().latestRelease(codexReleases(assets)),
+        await codexOn(Abi.macosX64).latestRelease(codexReleases(assets)),
         isNull,
       );
     });
@@ -1279,9 +1286,8 @@ void main() {
 
     test("an install unpacks each program it checked, runnable, and is "
         "found first", () async {
-      CliProvider.abi = Abi.linuxX64;
       final (:archives, :digests) = codexOf("#!/bin/sh");
-      const codex = CodexCliProvider();
+      final codex = codexOn(Abi.linuxX64);
       await codex
           .install(client: codexServing(archives, digests))
           .drain<void>();
@@ -1298,9 +1304,7 @@ void main() {
       // Ahead of one on PATH: the copy the tour signed in.
       final path = Directory(p.join(dir.path, "path"))..createSync();
       File(p.join(path.path, "codex")).writeAsStringSync("");
-      final withPath = CodexCliProvider(
-        CodexCliProvider.preset.copyWith(env: {"PATH": path.path}),
-      );
+      final withPath = codexOn(Abi.linuxX64, env: {"PATH": path.path});
       expect(withPath.locate(), codex.ownCopy);
 
       // Without its host the copy is not whole, and is fetched again.
@@ -1311,9 +1315,8 @@ void main() {
     test(
       "a download that does not match its checksum installs nothing",
       () async {
-        CliProvider.abi = Abi.linuxX64;
         final (:archives, :digests) = codexOf("#!/bin/sh");
-        const codex = CodexCliProvider();
+        final codex = codexOn(Abi.linuxX64);
         await expectLater(
           codex
               .install(
@@ -1329,30 +1332,46 @@ void main() {
   });
 
   group("a sign-in", () {
-    /// [cli] launching [process] for its sign-in and [status] for its
-    /// status check, which exits [signedIn] 0 or 1.
+    /// [cli] launching [process] for its sign-in, on a terminal and only
+    /// there, and [status] for its status check, which exits [signedIn] 0
+    /// or 1.
     ({CliProvider cli, _FakeProcess login}) signingIn({
       required bool signedIn,
     }) {
       final login = _FakeProcess(const [], "", const {});
       final cli = CodexCliProvider.over(
         CodexCliProvider.preset.copyWith(command: Platform.resolvedExecutable),
-        launch:
-            (
-              executable,
-              arguments, {
-              required workingDirectory,
-              required environment,
-            }) async {
-              if (arguments.first == "login" && arguments.length == 1) {
-                return login;
-              }
-              return _FakeProcess(arguments, workingDirectory, environment)
-                ..exit(signedIn ? 0 : 1);
-            },
+        guest: _MarkedTerminal(
+          launch:
+              (
+                executable,
+                arguments, {
+                required workingDirectory,
+                required environment,
+              }) async {
+                if (executable == "terminal" &&
+                    arguments.length == 2 &&
+                    arguments.last == "login") {
+                  return login;
+                }
+                return _FakeProcess(arguments, workingDirectory, environment)
+                  ..exit(signedIn ? 0 : 1);
+              },
+        ),
       );
       return (cli: cli, login: login);
     }
+
+    // The program reads a code as keys from a terminal, where Enter is a
+    // carriage return.
+    test("a code is typed on the terminal and entered", () async {
+      final (:cli, :login) = signingIn(signedIn: true);
+      final signIn = await CliSignIn.start(cli);
+      signIn.answer(" abc#def ");
+      expect(login.written, ["abc#def\r"]);
+      login.exit(0);
+      expect(await signIn.result, isTrue);
+    });
 
     test("finds the page in a line it prints, and ends signed in", () async {
       final (:cli, :login) = signingIn(signedIn: true);
@@ -1363,39 +1382,109 @@ void main() {
       login._stdout.add(
         "If your browser did not open, navigate to this URL to authenticate:",
       );
+      // On a terminal: coloured, wrapped as a hyperlink, ended by a
+      // carriage return.
       login._stdout.add(
-        "\x1b[94mhttps://auth.openai.com/oauth/authorize?x=1\x1b[0m",
+        "\x1b]8;;https://auth.openai.com/oauth/authorize?x=1\x07"
+        "\x1b[94mhttps://auth.openai.com/oauth/authorize?x=1\x1b[0m"
+        "\x1b]8;;\x07\r",
       );
+      await pumpEventQueue();
       expect(
-        await signIn.page,
+        signIn.page.value,
         Uri.parse("https://auth.openai.com/oauth/authorize?x=1"),
       );
       login.exit(0);
       expect(await signIn.result, isTrue);
     });
 
+    // The program's browser in a Linux of the app's own hands the page it
+    // was asked to open to the app; that page's callback signs in with no
+    // code, so it is the page whether it comes before the fallback link the
+    // program prints or after.
+    for (final openedFirst in [true, false]) {
+      test("the page the program asked to open wins "
+          "(${openedFirst ? "before" : "after"} the link it prints)", () async {
+        final (:cli, :login) = signingIn(signedIn: true);
+        final signIn = await CliSignIn.start(cli);
+        const opened = "https://claude.com/cai/oauth/authorize?redirect_uri=x";
+        const printed = "https://claude.com/cai/oauth/authorize?code=true";
+        final lines = [
+          "$cliOpenMarker $opened",
+          "If the browser didn't open, visit: $printed",
+        ];
+        for (final line in openedFirst ? lines : lines.reversed) {
+          login._stdout.add(line);
+        }
+        await pumpEventQueue();
+        expect(signIn.page.value, Uri.parse(opened));
+        login.exit(0);
+        expect(await signIn.result, isTrue);
+      });
+    }
+
     test("exited 0 is not signed in until the program says so", () async {
       final (:cli, :login) = signingIn(signedIn: false);
       final signIn = await CliSignIn.start(cli);
       login.exit(0);
-      expect(await signIn.page, isNull);
       expect(await signIn.result, isFalse);
+      expect(signIn.page.value, isNull);
     });
   });
 
   group("in Android's Linux", () {
     late Directory dir;
-    late _Guest guest;
     setUp(() {
       dir = tempDir("cli-guest-");
       CliProvider.cacheRoot = dir.path;
-      guest = _Guest();
-      CliProvider.guest = guest;
     });
-    tearDown(() {
-      CliProvider.guest = null;
-      CliProvider.cacheRoot = null;
-      CliProvider.abi = Abi.current();
+    tearDown(() => CliProvider.cacheRoot = null);
+
+    // util-linux's script, installed if the Linux has none, runs the program
+    // wide, so a link is not wrapped, and with its own words quoted whole.
+    test("a program asked for a terminal runs under script", () async {
+      final launched = <List<String>>[];
+      final guest = _Guest((
+        executable,
+        arguments, {
+        required workingDirectory,
+        required environment,
+      }) async {
+        launched.add(arguments);
+        return _FakeProcess(arguments, workingDirectory, environment);
+      });
+      final process = await guest.start(
+        ["claude", "it's"],
+        cwd: "/w",
+        environment: const {},
+        shared: const [],
+        terminal: true,
+      );
+      expect(process, isA<TerminalCliProcess>());
+      // proot -w <cwd>, then the words the guest was asked to run
+      final words = launched.single.sublist(2);
+      // its browser is the app's, by way of the terminal
+      expect(words.take(2), ["/bin/sh", "-c"]);
+      expect(words[2], contains("BROWSER=/usr/local/bin/entoli-open"));
+      final script = words.sublist(4);
+      expect(script.take(2), ["/bin/sh", "-c"]);
+      expect(script[2], contains("apk add --no-cache util-linux-misc"));
+      expect(script.sublist(4), [
+        "script",
+        "-qfec",
+        "stty cols 4096 rows 40 2>/dev/null; exec 'claude' 'it'\\''s'",
+        "/dev/null",
+      ]);
+
+      launched.clear();
+      final plain = await guest.start(
+        ["claude"],
+        cwd: "/w",
+        environment: const {},
+        shared: const [],
+      );
+      expect(plain, isNot(isA<TerminalCliProcess>()));
+      expect(launched.single.sublist(2), ["claude"]);
     });
 
     test("Android's builds are the musl ones its Alpine runs", () {
@@ -1416,23 +1505,23 @@ void main() {
       "a program is started in the guest, told the guest's basics",
       () async {
         final launched = <_FakeProcess>[];
+        final guest = _Guest((
+          executable,
+          arguments, {
+          required workingDirectory,
+          required environment,
+        }) async {
+          final process = _FakeProcess(
+            [executable, ...arguments],
+            workingDirectory,
+            environment,
+          )..exit(0);
+          launched.add(process);
+          return process;
+        });
         final claude = ClaudeCliProvider.over(
           ClaudeCliProvider.preset.copyWith(id: "g"),
-          launch:
-              (
-                executable,
-                arguments, {
-                required workingDirectory,
-                required environment,
-              }) async {
-                final process = _FakeProcess(
-                  [executable, ...arguments],
-                  workingDirectory,
-                  environment,
-                )..exit(0);
-                launched.add(process);
-                return process;
-              },
+          guest: guest,
         );
         File(claude.ownCopy).createSync(recursive: true);
 
@@ -1480,17 +1569,16 @@ void main() {
       final ran = <List<String>>[];
       final claude = ClaudeCliProvider.over(
         ClaudeCliProvider.preset,
-        launch:
-            (
-              executable,
-              arguments, {
-              required workingDirectory,
-              required environment,
-            }) async {
-              ran.add([executable, ...arguments]);
-              return _FakeProcess(arguments, workingDirectory, environment)
-                ..exit(code);
-            },
+        guest: _Guest((
+          executable,
+          arguments, {
+          required workingDirectory,
+          required environment,
+        }) async {
+          ran.add([executable, ...arguments]);
+          return _FakeProcess(arguments, workingDirectory, environment)
+            ..exit(code);
+        }),
       );
       return (claude: claude, ran: ran);
     }
@@ -1500,7 +1588,6 @@ void main() {
     test(
       "an install puts the program's libraries in the guest first",
       () async {
-        CliProvider.abi = Abi.androidArm64;
         final (:claude, :ran) = installing(0);
         await claude
             .install(client: claudeForAndroid(utf8.encode("#!/bin/sh")))
@@ -1522,7 +1609,6 @@ void main() {
     );
 
     test("an install whose libraries fail is not installed", () async {
-      CliProvider.abi = Abi.androidArm64;
       final (:claude, ran: _) = installing(1);
       await expectLater(
         claude
@@ -1535,29 +1621,62 @@ void main() {
   });
 }
 
-/// A guest that runs nothing: what it was asked to run is `proot -w <cwd>`
-/// and the program's own words, what it shared is in [shared].
-class _Guest implements CliGuest {
+/// This machine, with a terminal a test can tell apart: the program's words
+/// after the word "terminal".
+class _MarkedTerminal extends HostCliGuest {
+  const _MarkedTerminal({super.launch});
+
+  @override
+  bool get hasTerminal => true;
+
+  @override
+  Future<CliProcess> spawn(
+    List<String> argv, {
+    required String cwd,
+    required Map<String, String> environment,
+    required List<String> shared,
+    required bool terminal,
+  }) => super.spawn(
+    terminal ? ["terminal", ...argv] : argv,
+    cwd: cwd,
+    environment: environment,
+    shared: shared,
+    terminal: false,
+  );
+}
+
+/// Android's Linux, faked: an arm64 musl guest whose programs [launch]
+/// starts as `proot -w <cwd>` and the program's own words — on a terminal,
+/// as `ProotCliGuest` gives one — with what it shared kept in [shared].
+class _Guest extends LinuxCliGuest {
+  _Guest(this.launch);
+
+  final LaunchCli launch;
   final shared = <List<String>>[];
 
   @override
-  ({List<String> command, Map<String, String> environment}) wrap(
-    List<String> argv, {
-    required String cwd,
-    required List<String> shared,
-  }) {
-    this.shared.add(shared);
-    return (
-      command: ["proot", "-w", cwd, ...argv],
-      environment: const {"PROOT_TMP_DIR": "/guest/tmp"},
-    );
-  }
+  Abi get abi => Abi.androidArm64;
 
   @override
-  List<String> install(List<String> packages) => [
-    "apk",
-    "add",
-    "--no-cache",
-    ...packages,
-  ];
+  Future<CliProcess> spawn(
+    List<String> argv, {
+    required String cwd,
+    required Map<String, String> environment,
+    required List<String> shared,
+    required bool terminal,
+  }) {
+    this.shared.add(shared);
+    return launch(
+      "proot",
+      [
+        "-w",
+        cwd,
+        ...terminal
+            ? LinuxCliGuest.withBrowser(LinuxCliGuest.underScript(argv))
+            : argv,
+      ],
+      workingDirectory: cwd,
+      environment: {...environment, "PROOT_TMP_DIR": "/guest/tmp"},
+    );
+  }
 }

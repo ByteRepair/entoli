@@ -5,6 +5,7 @@ import "dart:typed_data" show Uint8List;
 import "package:fake_async/fake_async.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/data/local/ish_ffi.dart" show IshCore;
 import "package:agent_chat/data/local/ish_shell.dart";
 import "package:agent_chat/domain/shell.dart";
 
@@ -35,7 +36,7 @@ void main() {
     dataDir: "/data",
     environment: () => {},
     platformDescription: () => "iSH",
-    transport: transport,
+    transport: () => transport,
   );
 
   group("a session command", () {
@@ -459,7 +460,7 @@ void main() {
       dataDir: "/data",
       environment: () => {},
       platformDescription: () => "iSH",
-      transport: fake,
+      transport: () => fake,
     );
     shell.start(
       "true",
@@ -704,7 +705,7 @@ void main() {
 
   group("a worker isolate", () {
     test("one spawn answers two concurrent first users", () async {
-      final worker = IshWorker();
+      final worker = IshWorker(core: IshCore.x86_64);
       await Future.wait([worker.ensureStarted(), worker.ensureStarted()]);
       expect(worker.spawnCount, 1);
     });

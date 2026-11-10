@@ -73,16 +73,16 @@ import "package:agent_chat/ui/theme.dart";
 
 import "fakes.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
+import "package:agent_chat/domain/rootfs.dart";
 
 /// The shell a test gets by default: a real host shell where the test pretends
-/// to be Android — [proot] or [abi] set — and `UnavailableShell` otherwise.
-/// The terminal settings page gates on
-/// `canRunCommands`, so a test pretending to be Android has to answer true the
-/// way the real one would. A test pretending to be a native desktop that the
-/// two knobs cannot distinguish passes [shell] explicitly.
-Shell _defaultShell(bool proot, String? abi) => proot || abi != null
-    ? LocalShell(environment: () => const {})
-    : const UnavailableShell();
+/// to be a phone — any [LinuxHost] but a desktop's — and `UnavailableShell`
+/// otherwise. The terminal settings page gates on `canRunCommands`, so a test
+/// pretending to be a phone has to answer true the way the real one would. A
+/// test pretending to be a native desktop passes [shell] explicitly.
+Shell _defaultShell(LinuxHost linux) => linux.hasHostShell
+    ? const UnavailableShell()
+    : LocalShell(environment: () => const {});
 
 /// The fixed "now" every test runs under, so a reminder's fire time is judged
 /// against this rather than the wall clock. Picked before every reminder fire
@@ -146,10 +146,10 @@ class TestApp {
   /// turns on. The default has no engine, which is every platform but those
   /// that run models and so what most of the suite should be pretending to be;
   /// [localEngineMissing] is a build that should have carried one and did not.
-  /// [linuxes] is which distributions are installed, and [proot] whether this
-  /// build could run one at all — the two halves the Terminal page turns on.
-  /// The default is a build with no proot in it, which is every platform but
-  /// Android and so what most of the suite should be pretending to be.
+  /// [linuxes] is which distributions are installed, and [linuxHost] how this
+  /// device would run one — the two halves the Terminal page turns on. The
+  /// default is a desktop's, which runs none, and so what most of the suite
+  /// should be pretending to be.
   /// [byteRepairInstallDir] is the install destination the store is built
   /// with: the guest's `/usr/local/bin` by default, the Android and iOS
   /// answer, which is the one the gate excludes from every host read. A host
@@ -157,8 +157,6 @@ class TestApp {
   /// install destination. [byteRepairBrewPaths] is where the store looks for
   /// `brew` on a mac target: none by default, so no test reads the machine's
   /// own Homebrew.
-  /// [abi] is what the device answers with, and only Android answers at all —
-  /// so it is named by a test that is about one, and left alone by the rest.
   /// [systemAccent] is the colour the system is themed to, which is the other
   /// thing only an Android answers: null is every platform without one, and so
   /// a settings page with no Material 3 Expressive switch on it.
@@ -188,7 +186,7 @@ class TestApp {
     NativeVoiceEngines nativeVoice = NativeVoiceEngines.none,
     bool assistantGesture = true,
     Set<String> linuxes = const {},
-    bool proot = false,
+    LinuxHost linuxHost = const NoLinux(),
     Confinement hostConfinement = Confinement.none,
     String? byteRepairInstallDir = guestEsbmcInstallDir,
     List<String> byteRepairBrewPaths = const [],
@@ -197,7 +195,6 @@ class TestApp {
     ModelBudget localBudget = const ModelBudget.unknown(),
     bool localEngineMissing = false,
     bool prefill = false,
-    String? abi,
     int? systemAccent,
     List<RemoteChatEntry> remotes = const [],
     Map<String, ChatViewState> mirrors = const {},
@@ -274,7 +271,7 @@ class TestApp {
           chatStoreProvider.overrideWithValue(chats),
           agentBackendProvider.overrideWithValue(backend),
           activityCatalogProvider.overrideWithValue(const ChatActivities()),
-          shellProvider.overrideWithValue(shell ?? _defaultShell(proot, abi)),
+          shellProvider.overrideWithValue(shell ?? _defaultShell(linuxHost)),
           appConfigProvider.overrideWithValue(config),
           // Installed and signed in unless a test says otherwise, and running
           // nothing either way.
@@ -345,12 +342,7 @@ class TestApp {
           installedLocalModelsProvider.overrideWith(
             () => InstalledLocalModels(localModels),
           ),
-          // A build with proot staged into it is an Android one, so [proot]
-          // answers for the ABI where a test did not bother to.
-          deviceAbiProvider.overrideWithValue(
-            abi ?? (proot ? "arm64-v8a" : null),
-          ),
-          prootAvailableProvider.overrideWithValue(proot),
+          linuxHostProvider.overrideWithValue(linuxHost),
           hostConfinementProvider.overrideWithValue(hostConfinement),
           appVersionProvider.overrideWithValue(testAppVersion),
           backgroundWorkProvider.overrideWithValue(work),

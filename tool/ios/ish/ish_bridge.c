@@ -29,12 +29,20 @@
 #include <limits.h>
 #include <poll.h>
 #include <sys/stat.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <resolv.h>
 
 #include "tools/fakefs.h"
 #include "kernel/calls.h"
 #include "kernel/errno.h"
+#include "kernel/init.h"
+#include "kernel/task.h"
+#include "kernel/signal.h"
 #include "fs/path.h"
 #include "fs/real.h"
+#include "fs/tty.h"
+#include "fs/devices.h"
 
 // ---- internal state ----
 
@@ -55,7 +63,70 @@ static fd_t guest_fd_from_host(int real_fd) {
     return f_install(fd, 0);
 }
 
+// The host end of a pipe the bridge reads, so a read with nothing there says
+// so (-2 from the read calls) rather than parking.
+static void set_nonblocking(int fd) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags >= 0) fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
+
 // ---- lifecycle ----
+
+// Write the guest's /etc/resolv.conf from the host's resolvers, the same
+// configureDns iSH's own app runs (AppDelegate.m): a fresh Alpine ships no
+// resolver, so name lookups fail until one is written. The host answer changes
+// with the network the device is on, so it is rewritten here on every boot
+// rather than once at install. Unlike the app's, a failed probe is not fatal —
+// this runs inside the app as a library, so it reports and lets the guest boot
+// with whatever resolv.conf the rootfs already has.
+static void configure_dns(void) {
+    struct __res_state res;
+    if (res_ninit(&res) != EXIT_SUCCESS) {
+        printk("ish: res_ninit failed; /etc/resolv.conf left as shipped\n");
+        return;
+    }
+    char buf[4096];
+    size_t used = 0;
+    if (res.dnsrch[0] != NULL) {
+        int n = snprintf(buf + used, sizeof(buf) - used, "search");
+        if (n > 0) used += (size_t) n;
+        for (int i = 0; res.dnsrch[i] != NULL && used < sizeof(buf); i++) {
+            n = snprintf(buf + used, sizeof(buf) - used, " %s", res.dnsrch[i]);
+            if (n < 0) break;
+            used += (size_t) n;
+        }
+        if (used < sizeof(buf)) {
+            buf[used++] = '\n';
+            buf[used] = '\0';
+        }
+    }
+    union res_sockaddr_union servers[NI_MAXSERV];
+    int found = res_getservers(&res, servers, NI_MAXSERV);
+    for (int i = 0; i < found && used < sizeof(buf); i++) {
+        union res_sockaddr_union s = servers[i];
+        if (s.sin.sin_len == 0) continue;
+        char address[NI_MAXHOST];
+        if (getnameinfo(
+                (struct sockaddr *) &s.sin, s.sin.sin_len, address,
+                sizeof(address), NULL, 0, NI_NUMERICHOST) != 0) {
+            continue;
+        }
+        int n = snprintf(buf + used, sizeof(buf) - used, "nameserver %s\n",
+                address);
+        if (n < 0) break;
+        used += (size_t) n;
+    }
+    res_ndestroy(&res);
+
+    struct fd *fd =
+            generic_open("/etc/resolv.conf", O_WRONLY_ | O_CREAT_ | O_TRUNC_, 0666);
+    if (IS_ERR(fd)) {
+        printk("ish: could not open /etc/resolv.conf for writing\n");
+        return;
+    }
+    fd->ops->write(fd, buf, used);
+    fd_close(fd);
+}
 
 void ish_boot(const char *rootfs_dir) {
     if (ish_booted) return;
@@ -81,6 +152,7 @@ void ish_boot(const char *rootfs_dir) {
     create_some_device_nodes();
     do_mount(&procfs, "proc", "/proc", "", 0);
     do_mount(&devptsfs, "devpts", "/dev/pts", "", 0);
+    configure_dns();
     ish_booted = true;
 }
 
@@ -167,6 +239,69 @@ static void bind_workspace(const char *workspace) {
     }
 }
 
+// Boot the guest from [rootfs_dir] where it has not been, then bind what a
+// session needs: [data_dir] at its host path with [read_only] beside it, and
+// [home] at /root. An empty string is a bind not wanted. False, with *error
+// set, where the rootfs could not be mounted.
+static bool guest_prepare(
+    const char *rootfs_dir,
+    const char *data_dir,
+    const char *home,
+    const char **read_only,
+    int32_t read_only_count,
+    const char **error)
+{
+    if (!ish_booted) {
+        ish_boot(rootfs_dir);
+        if (!ish_booted) {
+            *error = "the rootfs could not be mounted; is it installed?";
+            return false;
+        }
+    }
+    if (data_dir[0] != '\0') {
+        bind_data_dir(data_dir);
+        bind_read_only(read_only, read_only_count);
+    }
+    if (home[0] != '\0') {
+        bind_workspace(home);
+    }
+    return true;
+}
+
+// Append [parts] to the NUL-joined strings in [buf] from [*pos] — do_execve's
+// shape (kernel/exec.c) — as many as fit with room left for the closing NUL,
+// which is written after them. How many were appended.
+static size_t flatten(
+    char *buf, size_t cap, size_t *pos, const char *const *parts, size_t n) {
+    size_t done = 0;
+    for (; done < n; done++) {
+        size_t len = strlen(parts[done]) + 1;
+        if (*pos + len > cap - 1) break;
+        memcpy(&buf[*pos], parts[done], len);
+        *pos += len;
+    }
+    buf[*pos] = '\0';
+    return done;
+}
+
+// Drop the byte a run's or a program's poll answers as its end.
+static void wake(int fd) {
+    if (fd < 0) return;
+    char byte = 0;
+    ssize_t unused = write(fd, &byte, 1);
+    (void) unused;
+}
+
+// One read of a host pipe end: the byte count, 0 at its end, -2 where there
+// is nothing yet, -1 on an error.
+static int32_t read_host(int fd, char *buf, int32_t cap) {
+    if (fd < 0 || cap < 0) return -1;
+    ssize_t n = read(fd, buf, (size_t) cap);
+    if (n >= 0) return (int32_t) n;
+    if (errno == EINTR || errno == EAGAIN) return -2;
+    return -1;
+}
+
 ish_session *ish_session_init(
     const char *rootfs_dir,
     const char *data_dir,
@@ -184,19 +319,9 @@ ish_session *ish_session_init(
     // the shell starts in the guest's own words. The data-dir bind stays as
     // the fallback spelling. See "The workspace inside the guest" in
     // ios/AGENTS.md.
-    if (!ish_booted) {
-        ish_boot(rootfs_dir);
-        if (!ish_booted) {
-            *error = "the rootfs could not be mounted; is it installed?";
-            return NULL;
-        }
-    }
-    if (data_dir[0] != '\0') {
-        bind_data_dir(data_dir);
-        bind_read_only(read_only, read_only_count);
-    }
-    if (home[0] != '\0' && cwd[0] != '\0') {
-        bind_workspace(home);
+    if (!guest_prepare(rootfs_dir, data_dir, cwd[0] != '\0' ? home : "",
+                       read_only, read_only_count, error)) {
+        return NULL;
     }
 
     ish_session *s = calloc(1, sizeof(*s));
@@ -219,10 +344,7 @@ ish_session *ish_session_init(
         *error = "failed to create the session pipes";
         goto fail;
     }
-    int wake_flags = fcntl(wake_pipe[0], F_GETFL, 0);
-    if (wake_flags >= 0) {
-        fcntl(wake_pipe[0], F_SETFL, wake_flags | O_NONBLOCK);
-    }
+    set_nonblocking(wake_pipe[0]);
 
     // A child of the kernel's init task: its own mm, fds, and signal state,
     // with `current` switched to it for the calls below. This is
@@ -256,30 +378,17 @@ ish_session *ish_session_init(
     fs_chdir(task->fs, pwd);
 
     // Start the persistent guest /bin/sh under the dispatcher. argv and envp
-    // are flat NUL-joined strings — do_execve's shape (kernel/exec.c), the
-    // same one xX_main_Xx builds. argv[0] is the program name itself:
-    // /bin/sh is busybox, which picks its applet off argv[0], and an argv
-    // that starts at "-c" reads as an applet named "-c" ("c: applet not
-    // found").
+    // are flat NUL-joined strings, the same shape xX_main_Xx builds. argv[0]
+    // is the program name itself: /bin/sh is busybox, which picks its applet
+    // off argv[0], and an argv that starts at "-c" reads as an applet named
+    // "-c" ("c: applet not found").
     char argv[4096];
     size_t pos = 0;
     const char *parts[] = {"/bin/sh", "-c", dispatcher};
-    for (size_t i = 0; i < 3 && pos < sizeof(argv) - 1; i++) {
-        size_t len = strlen(parts[i]) + 1;
-        if (pos + len > sizeof(argv)) break;
-        memcpy(&argv[pos], parts[i], len);
-        pos += len;
-    }
-    argv[pos] = '\0';
+    flatten(argv, sizeof(argv), &pos, parts, 3);
     char envp[8192];
     pos = 0;
-    for (int32_t i = 0; i < env_count; i++) {
-        size_t len = strlen(env[i]) + 1;
-        if (pos + len > sizeof(envp) - 1) break;
-        memcpy(&envp[pos], env[i], len);
-        pos += len;
-    }
-    envp[pos] = '\0';
+    flatten(envp, sizeof(envp), &pos, env, (size_t) env_count);
     if (do_execve("/bin/sh", 3, argv, envp) < 0) {
         *error = "failed to exec /bin/sh in the guest; the rootfs has none";
         goto fail;
@@ -357,12 +466,8 @@ int32_t ish_session_poll(ish_session *session) {
 }
 
 int32_t ish_session_read(ish_session *session, char *buf, int32_t cap) {
-    if (!session || cap < 0) return -1;
-    ssize_t n = read(session->stdout_read, buf, (size_t) cap);
-    if (n > 0) return (int32_t) n;
-    if (n == 0) return 0;
-    if (errno == EINTR || errno == EAGAIN) return -2;
-    return -1;
+    if (!session) return -1;
+    return read_host(session->stdout_read, buf, cap);
 }
 
 void ish_session_interrupt(ish_session *session) {
@@ -382,11 +487,7 @@ void ish_session_hangup(ish_session *session) {
     // The byte is what the run's poll answers. stdout is not closed here:
     // the worker may be reading it, and a close from this thread could hand
     // its number to another open before that read lands.
-    if (session->wake_write >= 0) {
-        char wake = 0;
-        ssize_t unused = write(session->wake_write, &wake, 1);
-        (void) unused;
-    }
+    wake(session->wake_write);
 }
 
 void ish_session_destroy(ish_session *session) {
@@ -409,6 +510,413 @@ void ish_session_destroy(ish_session *session) {
     free(session);
 }
 
+// ---- pipe sessions (a guest program run directly) ----
+
+// A program's terminal: one of iSH's own pseudo-terminals, made the way its
+// app makes a Terminal's (pty_open_fake), whose screen is a host pipe — the
+// session's stdout — and whose keyboard is the session's stdin pipe, typed
+// into it by a thread of its own, the way tty-real.c's thread types the real
+// terminal's. Everything between — line discipline, echo, termios, the
+// window size, the controlling terminal, ^C — is iSH's tty layer, as for
+// any other terminal in the guest. The caller's thread only ever writes a
+// host pipe, so nothing it does waits on the guest.
+//
+// What the driver holds is the screen's fd (tty->data), closed when the
+// last reference goes, so a write can never land on a closed or reused fd.
+static int pipe_tty_write(struct tty *tty, const void *buf, size_t len, bool UNUSED(blocking)) {
+    int screen = (int) (intptr_t) tty->data;
+    size_t done = 0;
+    while (done < len) {
+        ssize_t n = write(screen, (const char *) buf + done, len - done);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            return _EIO;
+        }
+        done += (size_t) n;
+    }
+    return (int) len;
+}
+
+static void pipe_tty_cleanup(struct tty *tty) {
+    close((int) (intptr_t) tty->data);
+}
+
+static const struct tty_driver_ops pipe_tty_ops = {
+    .write = pipe_tty_write,
+    .cleanup = pipe_tty_cleanup,
+};
+// pty_open_fake fills in the rest: the ttys are the pty slaves', so the
+// terminal is /dev/pts/N to the guest like any other.
+static struct tty_driver pipe_tty_driver = {.ops = &pipe_tty_ops};
+
+static void pipe_tty_retain(struct tty *tty) {
+    lock(&tty->lock);
+    tty->refcount++;
+    unlock(&tty->lock);
+}
+
+static void pipe_tty_put(struct tty *tty) {
+    lock(&ttys_lock);
+    tty_release(tty);
+    unlock(&ttys_lock);
+}
+
+struct pipe_tty_keyboard {
+    struct tty *tty;
+    int keys;
+};
+
+// Types what arrives on the stdin pipe into the terminal, waiting while its
+// buffer is full (tty_input blocking, which needs no guest task), and on the
+// pipe's end — the caller closing the input, or the session going — types
+// the end-of-file key once, as a person at it would.
+static void *pipe_tty_keyboard_thread(void *arg) {
+    struct pipe_tty_keyboard *keyboard = arg;
+    struct tty *tty = keyboard->tty;
+    char buf[1024];
+    for (;;) {
+        ssize_t n = read(keyboard->keys, buf, sizeof(buf));
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) break;
+        for (ssize_t done = 0; done < n;) {
+            ssize_t typed = tty_input(tty, buf + done, (size_t) (n - done), true);
+            if (typed <= 0) break;
+            done += typed;
+        }
+    }
+    lock(&tty->lock);
+    char eof = (char) tty->termios.cc[VEOF_];
+    unlock(&tty->lock);
+    tty_input(tty, &eof, 1, false);
+    close(keyboard->keys);
+    pipe_tty_put(tty);
+    free(keyboard);
+    return NULL;
+}
+
+// The terminal [cols] by [rows], as the current task's stdio and controlling
+// terminal (an init child is a session leader), its screen [screen] and its
+// keyboard [keys], both taken over. Null where it could not be made.
+static struct tty *pipe_tty_open(int screen, int keys, int cols, int rows) {
+    struct tty *tty = pty_open_fake(&pipe_tty_driver);
+    if (IS_ERR(tty)) {
+        close(screen);
+        close(keys);
+        return NULL;
+    }
+    tty->data = (void *) (intptr_t) screen;
+    lock(&tty->lock);
+    tty_set_winsize(tty, (struct winsize_) {.col = (word_t) cols, .row = (word_t) rows});
+    unlock(&tty->lock);
+
+    struct pipe_tty_keyboard *keyboard = malloc(sizeof(*keyboard));
+    pthread_t thread;
+    if (keyboard == NULL) goto fail;
+    keyboard->tty = tty;
+    keyboard->keys = keys;
+    pipe_tty_retain(tty);
+    if (pthread_create(&thread, NULL, pipe_tty_keyboard_thread, keyboard) != 0) {
+        pipe_tty_put(tty);
+        free(keyboard);
+        goto fail;
+    }
+    pthread_detach(thread);
+    keys = -1;
+
+    char path[32];
+    snprintf(path, sizeof(path), "/dev/pts/%d", tty->num);
+    if (create_stdio(path, TTY_PSEUDO_SLAVE_MAJOR, tty->num) < 0) {
+        pipe_tty_put(tty);
+        return NULL;
+    }
+    return tty;
+
+fail:
+    if (keys >= 0) close(keys);
+    pipe_tty_put(tty);
+    return NULL;
+}
+
+// The registry of live pipe sessions the exit hook walks, one node per session.
+// Guarded by pids_lock: the hook runs under it (do_exit holds it), and
+// init/destroy take it around their own list edits.
+static ish_pipe_session *pipe_sessions = NULL;
+
+// The kernel's exit hook for pipe sessions. do_exit calls it under pids_lock
+// when a task's whole thread group has exited, with the task and its raw status
+// (status << 8 for a normal exit, the bare signal number for a signal death —
+// the same encoding xX_main_Xx's exit_handler decodes). It finds the session
+// whose pid matches and announces the exit: the atomics for the worker to read,
+// then one byte in the wake pipe so a poll parked beside the program's stdio
+// returns. Nothing here may take pids_lock again, and the write is a single
+// byte into a pipe nothing else fills, so it cannot block a do_exit.
+//
+// The match is on tgid, not pid: the hook fires with `current` as the *last*
+// thread of the group to die, and its pid is its own thread id — only the
+// group leader's pid equals the tgid stored at init. A multi-threaded program
+// (codex, claude — tokio, jemalloc) always exits from a non-leader thread, so
+// a pid match would never fire and the exit code would read -1 forever.
+static void pipe_exit_hook(struct task *task, int code) {
+    for (ish_pipe_session *s = pipe_sessions; s != NULL; s = s->next) {
+        if (s->pid != task->tgid) continue;
+        atomic_store(&s->exited, true);
+        // code & 0xff != 0 is a signal death (the bare signal number); a
+        // normal exit has status in the high byte. Report the shell's shape:
+        // 0-255, or 128+signal.
+        int code8 = (code & 0xff) != 0 ? 128 + (code & 0xff) : (code >> 8);
+        atomic_store(&s->exit_code, code8);
+        wake(s->wake_write);
+        return;
+    }
+}
+
+ish_pipe_session *ish_pipe_init(
+    const char *rootfs_dir,
+    const char *data_dir,
+    const char *cwd,
+    const char **argv,
+    int32_t argc,
+    const char **env,
+    int32_t env_count,
+    int32_t terminal_cols,
+    int32_t terminal_rows,
+    const char **error)
+{
+    if (!guest_prepare(rootfs_dir, data_dir, "", NULL, 0, error)) return NULL;
+    bool terminal = terminal_cols > 0 && terminal_rows > 0;
+
+    ish_pipe_session *s = calloc(1, sizeof(*s));
+    if (!s) {
+        *error = "out of memory";
+        return NULL;
+    }
+    s->stdin_write = -1;
+    s->stdout_read = -1;
+    s->stderr_read = -1;
+    s->wake_read = -1;
+    s->wake_write = -1;
+    atomic_init(&s->exited, false);
+    atomic_init(&s->exit_code, -1);
+
+    // Three host pipes — stdin, stdout, and a separate stderr so the program's
+    // diagnostics do not mix into the JSON lines the caller parses — plus the
+    // wake pipe the exit's byte lands in.
+    int stdin_pipe[2] = {-1, -1};
+    int stdout_pipe[2] = {-1, -1};
+    int stderr_pipe[2] = {-1, -1};
+    int wake_pipe[2] = {-1, -1};
+    if (pipe(stdin_pipe) < 0 || pipe(stdout_pipe) < 0 ||
+        pipe(stderr_pipe) < 0 || pipe(wake_pipe) < 0) {
+        *error = "failed to create the session pipes";
+        goto fail;
+    }
+    // Non-blocking, all three: the reader drains stdout and stderr once the
+    // wake byte says the program is gone, and must not park on a stream a
+    // child it left behind still holds open.
+    set_nonblocking(stdout_pipe[0]);
+    set_nonblocking(stderr_pipe[0]);
+    set_nonblocking(wake_pipe[0]);
+
+    if (become_new_init_child() < 0) {
+        *error = "failed to create the guest task";
+        goto fail;
+    }
+    struct task *task = current;
+
+    if (terminal) {
+        // fds 0, 1 and 2 the terminal, which takes over the stdin pipe's read
+        // end and stdout's write end; stderr's is closed unwritten, so the
+        // reader finds it at its end.
+        s->tty = pipe_tty_open(stdout_pipe[1], stdin_pipe[0], terminal_cols, terminal_rows);
+        stdout_pipe[1] = stdin_pipe[0] = -1;
+        close(stderr_pipe[1]);
+        stderr_pipe[1] = -1;
+        if (s->tty == NULL) {
+            *error = "failed to give the program a terminal";
+            goto fail;
+        }
+    } else {
+        // fds 0, 1 and 2, each to its own host pipe end.
+        fd_t in = guest_fd_from_host(stdin_pipe[0]);
+        fd_t out = guest_fd_from_host(stdout_pipe[1]);
+        fd_t errfd = guest_fd_from_host(stderr_pipe[1]);
+        if (in != 0 || out != 1 || errfd != 2) {
+            *error = "failed to wire the guest stdio";
+            goto fail;
+        }
+    }
+
+    struct fd *pwd = generic_open(cwd, O_RDONLY_, 0);
+    if (IS_ERR(pwd)) {
+        *error = "the working directory could not be opened in the guest";
+        goto fail;
+    }
+    fs_chdir(task->fs, pwd);
+
+    // The program runs under `exec "$@"`, so a bare name resolves through the
+    // guest's PATH and the arguments reach it unsplit; the exec replaces the
+    // shell, so the pid the signals go through is the program's own.
+    const char *parts[] = {"/bin/sh", "-c", "exec \"$@\"", "sh"};
+    char argv_flat[4096];
+    size_t pos = 0;
+    size_t nparts = flatten(argv_flat, sizeof(argv_flat), &pos, parts, 4);
+    nparts += flatten(argv_flat, sizeof(argv_flat), &pos, argv, (size_t) argc);
+
+    char envp[8192];
+    pos = 0;
+    flatten(envp, sizeof(envp), &pos, env, (size_t) env_count);
+
+    if (do_execve("/bin/sh", nparts, argv_flat, envp) < 0) {
+        *error = "failed to exec the program in the guest";
+        goto fail;
+    }
+
+    s->pid = task->pid;
+    s->stdin_write = stdin_pipe[1];
+    s->stdout_read = stdout_pipe[0];
+    s->stderr_read = stderr_pipe[0];
+    s->wake_read = wake_pipe[0];
+    s->wake_write = wake_pipe[1];
+
+    // Register before the task starts, so an exit that races the first poll is
+    // still announced. The hook runs under pids_lock; take it here too.
+    lock(&pids_lock);
+    exit_hook = pipe_exit_hook;
+    s->next = pipe_sessions;
+    pipe_sessions = s;
+    unlock(&pids_lock);
+
+    task_start(task);
+
+    *error = NULL;
+    return s;
+
+fail:
+    for (int i = 0; i < 2; i++) {
+        if (stdin_pipe[i] >= 0) close(stdin_pipe[i]);
+        if (stdout_pipe[i] >= 0) close(stdout_pipe[i]);
+        if (stderr_pipe[i] >= 0) close(stderr_pipe[i]);
+        if (wake_pipe[i] >= 0) close(wake_pipe[i]);
+    }
+    if (s->tty != NULL) pipe_tty_put(s->tty);
+    free(s);
+    return NULL;
+}
+
+void ish_pipe_write(ish_pipe_session *session, const char *buf, int32_t len) {
+    if (!session || len <= 0 || session->stdin_write < 0) return;
+    ssize_t unused = write(session->stdin_write, buf, (size_t) len);
+    (void) unused;
+}
+
+void ish_pipe_close_input(ish_pipe_session *session) {
+    if (!session || session->stdin_write < 0) return;
+    close(session->stdin_write);
+    session->stdin_write = -1;
+}
+
+int32_t ish_pipe_poll(ish_pipe_session *session) {
+    if (!session) return -1;
+    struct pollfd fds[3];
+    fds[0].fd = session->stdout_read;
+    fds[0].events = POLLIN;
+    fds[1].fd = session->stderr_read;
+    fds[1].events = POLLIN;
+    fds[2].fd = session->wake_read;
+    fds[2].events = POLLIN;
+    for (;;) {
+        int nready = poll(fds, 3, -1);
+        if (nready < 0) {
+            if (errno == EINTR) continue;
+            return -1;
+        }
+        // The wake byte is the single authoritative end signal: do_exit closes
+        // the process's fds before it runs the exit hook, so a stream's EOF is
+        // always visible before the exit code the hook stores. Reading that EOF
+        // as the end races ahead of the code and reports -1. So a stream at EOF
+        // is dropped from the poll (fd set to -1, which poll ignores) and the
+        // wait goes on for the wake pipe alone. What the streams still hold
+        // when the byte lands is the reader's to drain.
+        if ((fds[2].revents & (POLLIN | POLLHUP | POLLERR)) != 0) return 4;
+        int32_t flags = 0;
+        if (fds[0].fd >= 0) {
+            if ((fds[0].revents & POLLIN) != 0) {
+                flags |= 1;
+            } else if ((fds[0].revents & (POLLHUP | POLLERR)) != 0) {
+                fds[0].fd = -1;
+            }
+        }
+        if (fds[1].fd >= 0) {
+            if ((fds[1].revents & POLLIN) != 0) {
+                flags |= 2;
+            } else if ((fds[1].revents & (POLLHUP | POLLERR)) != 0) {
+                fds[1].fd = -1;
+            }
+        }
+        if (flags != 0) return flags;
+    }
+}
+
+int32_t ish_pipe_read(
+    ish_pipe_session *session, int32_t stream, char *buf, int32_t cap) {
+    if (!session) return -1;
+    return read_host(
+        stream == 0 ? session->stdout_read : session->stderr_read, buf, cap);
+}
+
+void ish_pipe_terminate(ish_pipe_session *session) {
+    if (!session || session->pid <= 0) return;
+    send_group_signal(session->pid, SIGTERM_, SIGINFO_NIL);
+}
+
+void ish_pipe_hangup(ish_pipe_session *session) {
+    if (!session) return;
+    if (session->pid > 0) {
+        send_group_signal(session->pid, SIGKILL_, SIGINFO_NIL);
+    }
+    wake(session->wake_write);
+}
+
+void ish_pipe_destroy(ish_pipe_session *session) {
+    if (!session) return;
+    if (session->pid > 0) {
+        send_group_signal(session->pid, SIGKILL_, SIGINFO_NIL);
+    }
+    if (session->stdin_write >= 0) close(session->stdin_write);
+    if (session->stdout_read >= 0) close(session->stdout_read);
+    if (session->stderr_read >= 0) close(session->stderr_read);
+    if (session->wake_read >= 0) close(session->wake_read);
+    if (session->wake_write >= 0) close(session->wake_write);
+    if (session->tty != NULL) {
+        // A keyboard still waiting for room in a buffer nobody will read now
+        // is let go: the buffer emptied, the wait it is in ends, and the
+        // closed stdin pipe ends it.
+        lock(&session->tty->lock);
+        session->tty->bufsize = 0;
+        notify(&session->tty->consumed);
+        unlock(&session->tty->lock);
+        pipe_tty_put(session->tty);
+    }
+    // Unlink from the registry.
+    lock(&pids_lock);
+    ish_pipe_session **link = &pipe_sessions;
+    while (*link != NULL && *link != session) link = &(*link)->next;
+    if (*link == session) *link = session->next;
+    unlock(&pids_lock);
+    free(session);
+}
+
+int32_t ish_pipe_exit_code(ish_pipe_session *session) {
+    if (!session) return -1;
+    return atomic_load(&session->exited) ? atomic_load(&session->exit_code) : -1;
+}
+
+
+#if !GUEST_X86_64
+// The i386 core's alone: the unpack is the same whichever guest runs the
+// rootfs (one fakefs format), so the x86-64 core carries neither this nor the
+// libarchive it is built on.
+//
 // Convert a tarball into iSH's fakefs layout, in-process. iSH's own
 // tools/fakefsify does this against libarchive; this wraps the same
 // fakefs_import it calls, so the iOS rootfs unpack does not need a child
@@ -458,3 +966,4 @@ int32_t ish_fakefsify(const char *archive, const char *into) {
          : err.type == ERR_POSIX  ? -(err.code > 0 ? err.code : EIO)
                                   : -EIO;
 }
+#endif

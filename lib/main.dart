@@ -15,7 +15,6 @@ import "core/platform/system_palette.dart";
 import "core/tls.dart";
 import "data/backup.dart" show recoverRestore;
 import "data/builtin/llm/providers/cli.dart" show CliProvider;
-import "data/local/proot.dart" show ProotCliGuest;
 import "data/builtin/llm/providers/provider.dart" show LlmProvider;
 import "data/local/mlx_engine.dart" show mlxChannel;
 import "data/local/file_trigger_store.dart";
@@ -41,7 +40,7 @@ import "ui/bot_avatar/licence.dart";
 import "ui/chat/activity/activities.dart" show ChatActivities;
 import "ui/chat/activity/activity.dart" show activityCatalogProvider;
 import "ui/chat/remote_turns.dart";
-import "ui/app_licence.dart";
+import "ui/app_licence.dart" show registerAppLicence, registerBlinkLicence;
 import "ui/app_menu_bar.dart";
 import "ui/app_shell.dart";
 import "ui/chat_actions.dart" show chatEditsProvider;
@@ -84,6 +83,7 @@ void main() async {
   registerBotAvatarLicence();
   registerBundledSkillLicences();
   registerAppLicence();
+  registerBlinkLicence();
   platform.registerVoiceLicences();
   platform.registerRecorder();
   // Built here rather than by the root, so the platform's splash covers the
@@ -227,19 +227,22 @@ class AppSession {
     final voiceModels = platform.createVoiceModelStore(cache);
     final voice = platform.createVoice(voiceModels, cache);
     final apple = await appleFm;
-    // A CLI provider's program is found on the PATH the user's shell has,
-    // as a command is.
-    CliProvider.loginPath = await loginPath;
-    CliProvider.cacheRoot = cache;
-    // Android runs a CLI's program in its Linux, under the proot its
-    // terminal runs commands under; a build without proot runs none.
-    if (toolset?.proot case final proot?) {
-      CliProvider.guest = ProotCliGuest(
-        proot: proot,
-        store: rootfs,
-        rootfsId: () => AppSettings.load(config).rootfsId,
-      );
-    }
+    // Where a CLI provider's program runs: here on a desktop, found on the
+    // PATH the user's shell has as a command is, and in the device's Linux
+    // on a phone.
+    final linux = platform.linuxHostOf(abi: await abi, tools: toolset);
+    CliProvider.cacheRoot = platform.cliCacheRoot(
+      cache: cache,
+      dataDir: config.dataDir,
+    );
+    CliProvider.platformGuest = platform.cliGuestOf(
+      linux,
+      proot: toolset?.proot,
+      store: rootfs,
+      rootfsId: () => AppSettings.load(config).rootfsId,
+      dataDir: config.dataDir,
+      loginPath: await loginPath,
+    );
     final backend = platform.createBackend(
       config,
       libraries,
@@ -364,9 +367,8 @@ class AppSession {
         installedRootfsProvider.overrideWith(
           () => InstalledRootfs(scans.first),
         ),
-        deviceAbiProvider.overrideWithValue(await abi),
+        linuxHostProvider.overrideWithValue(linux),
         appVersionProvider.overrideWithValue(await version),
-        prootAvailableProvider.overrideWithValue(toolset?.proot != null),
         hostConfinementProvider.overrideWithValue(platform.hostConfinement()),
         appUpdateHostProvider.overrideWithValue(
           platform.createAppUpdateHost(cache),

@@ -58,6 +58,7 @@ class CliSignInDialog extends ConsumerStatefulWidget {
 class _CliSignInDialogState extends ConsumerState<CliSignInDialog> {
   _Stage _stage = const _Checking();
   final _code = TextEditingController();
+  var _finished = false;
 
   CliProvider get _cli => widget.cli;
 
@@ -89,25 +90,31 @@ class _CliSignInDialogState extends ConsumerState<CliSignInDialog> {
       if (await _cli.signedIn()) return _finish(true);
       final signIn = await CliSignIn.start(_cli);
       if (!mounted) return unawaited(signIn.cancel());
-      _show(_SigningIn(signIn, null));
-      unawaited(
-        signIn.page.then((page) {
-          final stage = _stage;
-          if (page != null && stage is _SigningIn && stage.signIn == signIn) {
-            _show(_SigningIn(signIn, page));
-          }
-        }),
-      );
-      if (await signIn.result) return _finish(true);
-      _show(const _Failed("The sign-in did not finish."));
+      _show(_SigningIn(signIn, signIn.page.value));
+      // The page may be named again, a better one: the one the program asked
+      // to open, which signs in with no code to paste.
+      void named() {
+        final stage = _stage;
+        if (stage is _SigningIn && stage.signIn == signIn) {
+          _show(_SigningIn(signIn, signIn.page.value));
+        }
+      }
+
+      signIn.page.addListener(named);
+      try {
+        if (await signIn.result) return _finish(true);
+      } finally {
+        signIn.page.removeListener(named);
+      }
+      _show(_Failed(signIn.failure ?? "The sign-in did not finish."));
     } catch (e) {
       logFailure("cli", "connecting ${_cli.config.displayName} failed", e);
       _show(_Failed("$e"));
     }
   }
 
-  /// Through the shared downloads, so first-run setup and this one never
-  /// fetch the program twice, and done once it is on disk.
+  /// Through the shared downloads, so two sign-ins never fetch the program
+  /// twice, and done once it is on disk.
   Future<void> _install() async {
     final id = _cli.workFolder;
     final done = Completer<void>();
@@ -133,13 +140,20 @@ class _CliSignInDialogState extends ConsumerState<CliSignInDialog> {
   /// Out of [_SigningIn] first, so closing does not stop a program that
   /// has already finished.
   void _finish(bool signedIn) {
+    // Once only: [_run] can pop on success while [_cancel] is still awaiting
+    // [CliSignIn.cancel], and its own pop after would find the navigator empty.
+    if (_finished) return;
+    _finished = true;
     _stage = const _Checking();
     if (mounted) Navigator.pop(context, signedIn);
   }
 
   Future<void> _cancel() async {
     final stage = _stage;
-    if (stage is _SigningIn) await stage.signIn.cancel();
+    // Stopped behind the dialog rather than before it closes: a program that
+    // does not take its SIGTERM is given seconds more, and the user who
+    // cancelled is not kept waiting on it.
+    if (stage is _SigningIn) unawaited(stage.signIn.cancel());
     if (stage is _Installing) {
       ref.read(cliDownloadsProvider.notifier).cancel(_cli.workFolder);
     }
@@ -164,7 +178,8 @@ class _CliSignInDialogState extends ConsumerState<CliSignInDialog> {
             plan: _cli.planName,
             page: page,
             code: _code,
-            onOpen: () => ref.read(linkOpenerProvider).open(context, page),
+            onOpen: () =>
+                ref.read(linkOpenerProvider).openSignIn(context, page),
             onCode: () => signIn.answer(_code.text),
           ),
           _Failed(:final reason) => Text(

@@ -3,13 +3,11 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
 import "../core/formatting.dart";
-import "../data/builtin/llm/providers/presets.dart" show CliProvider;
 import "../domain/agent_browser.dart" show embeddedBrowserId;
 import "../domain/download.dart";
 import "../domain/rootfs.dart";
 import "../providers.dart";
 import "settings/browser_settings.dart";
-import "settings/cli_downloads.dart";
 import "settings/downloads.dart" show DownloadState;
 import "settings/rootfs_downloads.dart";
 import "widgets/app_mark.dart";
@@ -24,27 +22,17 @@ class SetupPlan {
 }
 
 /// The plan this device runs. A phone gets Alpine as where commands run —
-/// proot on Android, the emulator on iOS — and Android, whose Alpine runs
-/// them, Entoli's own copy of each CLI program after it. A desktop gets
-/// Helium as the browser its agent drives, where the agent drives one the
-/// app launches rather than its own WebView, and its own copy of each CLI
-/// program. The CLIs are what the welcome tour signs a ChatGPT or Claude
-/// plan in with. Anywhere else nothing is set up.
+/// proot on Android, the emulator on iOS. A desktop gets Helium as the
+/// browser its agent drives, where the agent drives one the app launches
+/// rather than its own WebView. Anywhere else nothing is set up. A CLI
+/// program is none of it: it is installed when the provider that runs it is
+/// connected, by the sign-in that connecting starts.
 final setupPlanProvider = Provider<SetupPlan>((ref) {
-  final clis = [
-    for (final cli in ref.watch(cliProgramsProvider))
-      if (cli.supported) CliSetup(cli),
-  ];
-  // Android's CLIs run in the Alpine installed first; iOS's emulated one
-  // runs neither, so it gets Alpine alone.
-  if (ref.watch(prootAvailableProvider) ||
-      ref.watch(deviceAbiProvider) == "ios") {
-    return SetupPlan([const AlpineSetup(), ...clis]);
-  }
+  final linux = ref.watch(linuxHostProvider);
+  if (linux.runsLinux) return SetupPlan([AlpineSetup(linux.catalog.first)]);
   final browser = ref.watch(agentBrowserProvider);
   return SetupPlan([
     if (browser.available && !browser.inApp) const HeliumSetup(),
-    ...clis,
   ], progress: const PlanProgress());
 });
 
@@ -142,10 +130,13 @@ class PlanProgress extends SetupProgress {
 }
 
 class AlpineSetup extends SetupStep {
-  const AlpineSetup();
+  const AlpineSetup(this._default);
+
+  /// The rootfs first startup installs: the one this device is offered.
+  final Rootfs _default;
 
   @override
-  String get name => alpine.name;
+  String get name => _default.name;
 
   @override
   String get purpose => "the agent has a terminal to work in.";
@@ -157,7 +148,7 @@ class AlpineSetup extends SetupStep {
   ProviderListenable<DownloadState> get downloads => rootfsDownloadsProvider;
 
   @override
-  String get downloadId => alpine.id;
+  String get downloadId => _default.id;
 
   @override
   bool done(WidgetRef ref) =>
@@ -165,18 +156,18 @@ class AlpineSetup extends SetupStep {
 
   @override
   void start(WidgetRef ref) {
-    if (ref.read(installedRootfsProvider).contains(alpine.id)) {
-      ref.read(appSettingsProvider.notifier).setRootfs(alpine.id);
+    if (ref.read(installedRootfsProvider).contains(_default.id)) {
+      ref.read(appSettingsProvider.notifier).setRootfs(_default.id);
     } else {
-      ref.read(rootfsDownloadsProvider.notifier).install(alpine);
+      ref.read(rootfsDownloadsProvider.notifier).install(_default);
     }
   }
 
   @override
   void listen(WidgetRef ref) =>
       ref.listen(installedRootfsProvider, (_, installed) {
-        if (installed.contains(alpine.id)) {
-          ref.read(appSettingsProvider.notifier).setRootfs(alpine.id);
+        if (installed.contains(_default.id)) {
+          ref.read(appSettingsProvider.notifier).setRootfs(_default.id);
         }
       });
 }
@@ -216,52 +207,6 @@ class HeliumSetup extends SetupStep {
           .install(EmbeddedBrowserDownloads.id);
     }
   }
-}
-
-/// Entoli's own copy of a CLI program, which nothing picks: the program is
-/// found where it was put, and done is it being there.
-class CliSetup extends SetupStep {
-  const CliSetup(this.cli);
-
-  final CliProvider cli;
-
-  @override
-  String get name => cli.config.displayName;
-
-  @override
-  String get purpose => "your ${cli.planName} plan can answer here.";
-
-  /// Connecting the service on the tour installs it too.
-  @override
-  String get settingsPage => "Settings > Welcome";
-
-  @override
-  ProviderListenable<DownloadState> get downloads => cliDownloadsProvider;
-
-  @override
-  String get downloadId => cli.workFolder;
-
-  @override
-  bool done(WidgetRef ref) =>
-      ref.watch(installedClisProvider.select((s) => s.contains(downloadId)));
-
-  @override
-  void start(WidgetRef ref) {
-    if (cli.installed) {
-      ref.read(installedClisProvider.notifier).refresh();
-    } else {
-      ref.read(cliDownloadsProvider.notifier).install(cli);
-    }
-  }
-
-  /// One per program, whichever instance the plan was rebuilt with: a skip
-  /// is remembered by it.
-  @override
-  bool operator ==(Object other) =>
-      other is CliSetup && other.cli.workFolder == cli.workFolder;
-
-  @override
-  int get hashCode => cli.workFolder.hashCode;
 }
 
 /// Shows [SetupPage] over this device's [setupPlanProvider] while the welcome

@@ -42,26 +42,23 @@ void main() {
         byteRepairBinDir: bin,
       );
 
-  test(
-    "PATH injection happens iff the project is isolated and a bin exists",
-    () {
-      final path = driverOf(project: "byte-repair")!.environment["PATH"];
-      // Ahead of the machine's own directories, so a fetched tool shadows a
-      // system one rather than the other way round.
-      expect(path, startsWith("$binDir:"));
+  test("PATH injection happens for setup projects with a bin", () {
+    final path = driverOf(project: "byte-repair")!.environment["PATH"];
+    // Ahead of the machine's own directories, so a fetched tool shadows a
+    // system one rather than the other way round.
+    expect(path, startsWith("$binDir:"));
 
-      // No other project's turns see the bin directory.
-      expect(driverOf(project: null)?.environment["PATH"], isNull);
-      expect(driverOf(project: "some-project")?.environment["PATH"], isNull);
+    // No other project's turns see the bin directory.
+    expect(driverOf(project: null)?.environment["PATH"], isNull);
+    expect(driverOf(project: "some-project")?.environment["PATH"], isNull);
 
-      // And no bin directory, no injection.
-      expect(
-        driverOf(bin: null, project: "byte-repair")?.environment["PATH"],
-        isNull,
-      );
-      expect(driverOf(bin: null, project: null)?.environment["PATH"], isNull);
-    },
-  );
+    // And no bin directory, no injection.
+    expect(
+      driverOf(bin: null, project: "byte-repair")?.environment["PATH"],
+      isNull,
+    );
+    expect(driverOf(bin: null, project: null)?.environment["PATH"], isNull);
+  });
 
   test(
     "the bin directory goes ahead of the login PATH, not the inherited one",
@@ -80,6 +77,36 @@ void main() {
       );
     },
   );
+
+  test("all proot projects run the same selected rootfs", () {
+    const proot = Proot(
+      binary: "/data/app/pkg/lib/arm/libproot.so",
+      loader: "/data/app/pkg/lib/arm/libproot-loader.so",
+      tmpDir: "/cache/entoli/tools/tmp",
+      resolvConf: "/cache/entoli/tools/etc/resolv.conf",
+    );
+    final store = FakeRootfsStore(installed: {"alpine"});
+    ShellDriver? forProject(String project) => platformDriver(
+      defaultSkillsBundledDir: config.bundledSkillsDir(),
+      defaultUserSkillsDir: config.promptsDir(CompletionKind.skill),
+      proot: proot,
+      store: store,
+      rootfsId: "alpine",
+      abi: "x86_64",
+      project: project,
+      config: config,
+    );
+    List<String> command(String project) =>
+        forProject(project)!.commandFor("/workspace/chats/chat", "/workspace");
+
+    String rootfs(String project) {
+      final args = command(project);
+      return args[args.indexOf("-r") + 1];
+    }
+
+    expect(rootfs("byte-repair"), "/rootfs/alpine");
+    expect(rootfs("another-project"), "/rootfs/alpine");
+  });
 
   test("the guest binds a project's skill directories only where they exist "
       "on disk", () {

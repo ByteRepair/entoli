@@ -26,11 +26,11 @@ abstract class RootfsStore {
   /// one `stat` of a marker file. Null where this platform has no rootfs at all.
   String? directoryOfSync(String id);
 
-  /// Fetch [rootfs] for [abi] and unpack it, reporting as it goes. The stream
+  /// Fetch [rootfs]'s image under [imageKey] and unpack it, reporting as it goes. The stream
   /// closes when it is installed and errors if it cannot be; **cancelling the
   /// subscription cancels the download** and leaves nothing behind, which is
   /// what the Cancel button does.
-  Stream<DownloadProgress> install(Rootfs rootfs, {required String abi});
+  Stream<DownloadProgress> install(Rootfs rootfs, {required String imageKey});
 
   Future<void> delete(Rootfs rootfs);
 }

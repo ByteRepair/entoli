@@ -20,6 +20,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdatomic.h>
 
 // iSH's own headers, vendored under tool/ios/ish/src/.
 #include "kernel/calls.h"
@@ -134,6 +135,90 @@ void ish_session_hangup(ish_session *session);
 // Tear down: kill the guest and close every host pipe end the session still
 // holds. The session handle is invalid after this.
 void ish_session_destroy(ish_session *session);
+
+// A pipe session runs one guest program directly — not the persistent shell
+// under the dispatcher — with its own stderr pipe beside stdout and stdin fed
+// raw from the host, or on a terminal of its own: one of iSH's pseudo-
+// terminals whose screen is the stdout pipe, the way iSH's app gives its
+// Terminal one. This is the transport a CLI provider (claude, codex)
+// needs: JSON lines written to stdin, JSON lines read from stdout, diagnostics
+// on a separate stderr, and a real exit code when the process ends. See "The
+// CLI providers inside the guest" in lib/data/builtin/llm/AGENTS.md.
+typedef struct ish_pipe_session {
+    // The guest pid of the program, its process group (an init child is its
+    // own session leader), which signals go through.
+    pid_t_ pid;
+    // The host ends of the three pipes the process's stdio is plumbed through.
+    int stdin_write;
+    int stdout_read;
+    int stderr_read;
+    // The wake pipe the exit (or a hangup) is announced on; the read end is
+    // O_NONBLOCK, as the dispatcher session's is.
+    int wake_read;
+    int wake_write;
+    // The program's terminal, or null where it runs over pipes. The session
+    // holds a reference, which [ish_pipe_destroy] releases.
+    struct tty *tty;
+    // Set by the kernel's exit hook when the process exits, read by the worker
+    // after the wake byte. The hook runs on the guest's own thread, so these
+    // are atomics rather than plain ints.
+    _Atomic bool exited;
+    _Atomic int exit_code;
+    // The registry the exit hook walks, guarded by pids_lock (which do_exit
+    // holds when it calls the hook). Not read by Dart.
+    struct ish_pipe_session *next;
+} ish_pipe_session;
+
+// Spawn [argv] (argv[0] the program, an absolute guest path) as a guest
+// process, with [env] its environment, started in [cwd] with [data_dir]
+// bound as for the dispatcher session. [terminal_cols] and [terminal_rows]
+// above zero run it on a terminal that size — its stdio all the terminal, its
+// output read as stdout, stderr empty — and zero over pipes. Returns null and
+// sets *error where the rootfs is not present or the program failed to exec.
+ish_pipe_session *ish_pipe_init(
+    const char *rootfs_dir,
+    const char *data_dir,
+    const char *cwd,
+    const char **argv,
+    int32_t argc,
+    const char **env,
+    int32_t env_count,
+    int32_t terminal_cols,
+    int32_t terminal_rows,
+    const char **error);
+
+// Write [len] raw bytes to the process's stdin (not base64, not newline
+// terminated — the caller owns the framing); on a terminal, typed into it.
+void ish_pipe_write(ish_pipe_session *session, const char *buf, int32_t len);
+
+// Close the process's stdin, which a program reading it takes as EOF; on a
+// terminal, the terminal's end-of-file key.
+void ish_pipe_close_input(ish_pipe_session *session);
+
+// Block on the process's stdout, stderr and wake pipe; answer what woke it:
+// 1 stdout has bytes (or is gone), 2 stderr has bytes (or is gone), 4 the wake
+// byte. EINTR is waited out; a fatal poll error answers -1.
+int32_t ish_pipe_poll(ish_pipe_session *session);
+
+// Read from [stream] (0 stdout, 1 stderr) into [buf]: >0 bytes read, 0 the
+// process is gone, -2 worth retrying, -1 fatal.
+int32_t ish_pipe_read(
+    ish_pipe_session *session, int32_t stream, char *buf, int32_t cap);
+
+// Deliver SIGTERM to the process's group — the graceful stop, giving the
+// program a chance to clean up before the escalation below.
+void ish_pipe_terminate(ish_pipe_session *session);
+
+// The escalation: SIGKILL the group and drop the wake byte, so a run parked in
+// [ish_pipe_poll] returns at once.
+void ish_pipe_hangup(ish_pipe_session *session);
+
+// Tear down: kill the guest and close every host pipe end. Invalid after this.
+void ish_pipe_destroy(ish_pipe_session *session);
+
+// The process's exit code as a shell reports one (0-255, or 128+signal), valid
+// once the wake byte has announced the exit; -1 before then.
+int32_t ish_pipe_exit_code(ish_pipe_session *session);
 
 // Convert a tarball into iSH's fakefs layout, in-process. The iOS analog of
 // `tar -xzf` — iOS denies an app a child process, so the system `tar` cannot

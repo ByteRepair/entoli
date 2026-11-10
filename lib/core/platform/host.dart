@@ -25,6 +25,7 @@ import "../read_only_dirs.dart";
 import "../../data/local/file_local_model_store.dart";
 import "../../data/local/file_rootfs_store.dart";
 import "../../data/local/ish_ffi.dart";
+import "../../data/local/ish_pipe.dart" show IshCliGuest;
 import "../../data/local/ish_shell.dart";
 import "../../data/local/llama_engine.dart";
 import "../../data/local/llama_server.dart";
@@ -48,6 +49,7 @@ import "../../data/local/macos_reminder_alarms.dart";
 import "../../data/browser/cdp_browser.dart";
 import "../../data/browser/helium.dart";
 import "../tls.dart" show tlsClient;
+import "../../data/builtin/llm/providers/cli.dart" show CliGuest, HostCliGuest;
 import "../../data/builtin/local_shell.dart";
 import "../../data/voice/android_voice.dart";
 import "../../data/voice/file_voice_model_store.dart";
@@ -104,8 +106,10 @@ Shell platformShell({
       rootfsDir: () => rootfsDir() ?? "",
       dataDir: dataDir ?? "",
       environment: environment,
+      // Asked per session, since the setting is picked after startup.
+      transport: () => IshWorker(core: ishCoreOf(rootfsById(rootfsId?.call()))),
       platformDescription: () => rootfsDir() != null
-          ? rootfsById(rootfsId?.call())!.describe("ios")
+          ? rootfsById(rootfsId?.call())!.describe(EmulatedLinux.key)
           : "iOS, with no Linux installed. Install one from the Terminal "
                 "settings to run commands.",
     );
@@ -150,14 +154,7 @@ ShellDriver? platformDriver({
   final baseDir = rootfs != null && store != null
       ? store.directoryOfSync(rootfs.id)
       : null;
-  final isolated =
-      project != null && builtinProjectOf(project)?.rootfsIsolation == true;
   if (rootfs != null && proot != null && baseDir != null) {
-    // An isolated project runs its own rootfs copy so guest installs do not
-    // leak between projects; the cached download is only the template.
-    final dir = (isolated && config != null)
-        ? _projectRootfsDir(config, project, rootfs.id) ?? baseDir
-        : baseDir;
     // proot refuses a binding whose host path is missing ("can't sanitize
     // binding"), and a project's skill dirs exist only after a setup or a
     // first turn. The default project's two are always there.
@@ -166,7 +163,7 @@ ShellDriver? platformDriver({
     return prootDriver(
       proot: proot,
       rootfs: rootfs,
-      rootfsDir: dir,
+      rootfsDir: baseDir,
       defaultSkillsBundledDir: defaultSkillsBundledDir,
       defaultUserSkillsDir: defaultUserSkillsDir,
       projectSkillsBundledDir: bindIfThere(projectSkillsBundledDir),
@@ -181,7 +178,10 @@ ShellDriver? platformDriver({
   if (Platform.isAndroid) return null;
   return LocalShell.hostDriver(
     tools: tools,
-    environment: isolated && byteRepairBinDir != null
+    environment:
+        project != null &&
+            builtinProjectOf(project)?.requiresSetup == true &&
+            byteRepairBinDir != null
         ? {
             "PATH":
                 "$byteRepairBinDir${LocalShell.listSeparator()}"
@@ -203,16 +203,58 @@ ShellDriver? platformDriver({
 /// OS cache, so a cache clear does not cost the compile again.
 String landlockCacheDir(AppConfig config) => p.join(config.dataDir, "landlock");
 
-/// The per-project rootfs copy, or null where it has not been made yet.
-String? _projectRootfsDir(AppConfig config, String project, String rootfsId) {
-  final dir = config.projectRootfsDir(project: project, rootfsId: rootfsId);
-  return File(p.join(dir, ".complete")).existsSync() ? dir : null;
-}
-
-/// Which rootfs a download fetches: Android's ABI, "ios" on iOS (iSH emulates
-/// x86, not the device's arm64), null on the desktops, which have no catalog.
+/// The device's ABI, which only Android answers: what proot runs, and which
+/// image of a distribution it downloads.
 Future<String?> deviceAbi() =>
-    Platform.isIOS ? Future.value("ios") : BundledTools.abi();
+    Platform.isIOS ? Future.value(null) : BundledTools.abi();
+
+/// How this device runs a Linux: under the emulator on iOS, under proot on
+/// an Android whose build carries it for [abi], and in the machine's own
+/// shell on a desktop.
+LinuxHost linuxHostOf({String? abi, Toolset? tools}) => Platform.isIOS
+    ? const EmulatedLinux()
+    : abi == null
+    ? const NoLinux()
+    : tools?.proot != null
+    ? ProotLinux(abi)
+    : MissingProotLinux(abi);
+
+/// Where a CLI provider's program runs on a device with [linux]: this
+/// machine on a desktop, the picked Linux under proot on Android and in the
+/// emulator on iOS, and nowhere on an Android build with no proot in it.
+CliGuest? cliGuestOf(
+  LinuxHost linux, {
+  Proot? proot,
+  required RootfsStore store,
+  required String? Function() rootfsId,
+  required String dataDir,
+  String? loginPath,
+}) => switch (linux) {
+  NoLinux() => HostCliGuest(loginPath: loginPath),
+  ProotLinux() when proot != null => ProotCliGuest(
+    proot: proot,
+    store: store,
+    rootfsId: rootfsId,
+  ),
+  ProotLinux() || MissingProotLinux() => null,
+  // The x86-64 guest runs only a Linux built for it, so a picked one this
+  // device is not offered — an i386 Alpine kept from before — is none.
+  EmulatedLinux() => IshCliGuest(
+    rootfsDir: () {
+      final rootfs = rootfsById(rootfsId());
+      return rootfs != null && linux.catalog.contains(rootfs)
+          ? store.directoryOfSync(rootfs.id)
+          : null;
+    },
+    dataDir: dataDir,
+  ),
+};
+
+/// Where the CLI programs and their sessions' folders are kept: the cache,
+/// except on iOS, where the emulator sees the app's data directory at its
+/// own path and nothing else of the host.
+String cliCacheRoot({required String cache, required String dataDir}) =>
+    Platform.isIOS ? p.join(dataDir, "cli-cache") : cache;
 
 /// What keeps the host shell's commands in. Linux's is the Landlock helper
 /// [hostDriver] is built with, macOS's the Seatbelt one; a phone's is the

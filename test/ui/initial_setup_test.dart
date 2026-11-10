@@ -8,7 +8,7 @@ import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/browser/cdp_browser.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart"
-    show CliGuest, CliProvider;
+    show CliProvider;
 import "package:agent_chat/domain/agent_browser.dart";
 import "package:agent_chat/domain/download.dart";
 
@@ -16,6 +16,7 @@ import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/initial_setup_gate.dart";
 import "package:agent_chat/ui/settings/downloads.dart" show DownloadState;
+import "package:agent_chat/domain/rootfs.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
@@ -46,7 +47,7 @@ void main() {
   testWidgets("a phone installs Alpine and picks it before the tour", (
     tester,
   ) async {
-    app = TestApp.create(proot: true);
+    app = TestApp.create(linuxHost: const ProotLinux("arm64-v8a"));
     app.rootfs.installing = Completer();
     await app.pump(tester, gate);
     await tester.pump();
@@ -60,17 +61,20 @@ void main() {
     expect(find.text("tour"), findsOneWidget);
   });
 
-  testWidgets("iOS gets it too", (tester) async {
-    app = TestApp.create(abi: "ios");
+  testWidgets("iOS gets its x86-64 Linux", (tester) async {
+    app = TestApp.create(linuxHost: const EmulatedLinux());
     await app.pump(tester, gate);
     await settleIo(tester, least: 3);
 
-    expect(rootfs(), "alpine");
+    expect(rootfs(), "alpine64");
     expect(find.text("tour"), findsOneWidget);
   });
 
   testWidgets("one already installed is only picked", (tester) async {
-    app = TestApp.create(proot: true, linuxes: {"alpine"});
+    app = TestApp.create(
+      linuxHost: const ProotLinux("arm64-v8a"),
+      linuxes: {"alpine"},
+    );
     await app.pump(tester, gate);
     await settleIo(tester, least: 3);
 
@@ -79,7 +83,7 @@ void main() {
   });
 
   testWidgets("a failure offers Retry and Skip", (tester) async {
-    app = TestApp.create(proot: true);
+    app = TestApp.create(linuxHost: const ProotLinux("arm64-v8a"));
     app.rootfs.failNext = Exception("offline");
     await app.pump(tester, gate);
     await settleIo(tester);
@@ -91,7 +95,7 @@ void main() {
 
     // Skip leaves the terminal on the host.
     app.dispose();
-    app = TestApp.create(proot: true);
+    app = TestApp.create(linuxHost: const ProotLinux("arm64-v8a"));
     app.rootfs.failNext = Exception("offline");
     await app.pump(tester, gate);
     await settleIo(tester);
@@ -109,7 +113,7 @@ void main() {
     expect(find.text("tour"), findsOneWidget);
 
     app.dispose();
-    app = TestApp.create(proot: true);
+    app = TestApp.create(linuxHost: const ProotLinux("arm64-v8a"));
     await io(
       tester,
       () => app.seedSettings(AppSettings(licenceAccepted: true)),
@@ -137,44 +141,30 @@ void main() {
     expect(find.text("tour"), findsOneWidget);
   });
 
-  // Each program the tour signs a plan in with is Entoli's own copy,
-  // installed one after the other on the same screen before the tour.
-  testWidgets("a desktop installs its own copy of each CLI before the tour", (
-    tester,
-  ) async {
-    final claude = FakeCli.claude(installed: false)..installing = Completer();
+  // A CLI program is installed when its provider is connected, by the
+  // sign-in that starts, so none holds up the tour.
+  testWidgets("a desktop installs no CLI before the tour", (tester) async {
+    final claude = FakeCli.claude(installed: false);
     final codex = FakeCli.codex(installed: false);
     app = desktop(FakeHelium()..installedVersion = "1", clis: [claude, codex]);
     await app.pump(tester, gate);
     await settleIo(tester, least: 3);
 
-    expect(find.textContaining("Installing Claude CLI"), findsOneWidget);
-    expect(find.text("tour"), findsNothing);
-
-    claude.installing!.complete();
-    await settleIo(tester, least: 3);
-    expect([claude.installs, codex.installs], [1, 1]);
     expect(find.text("tour"), findsOneWidget);
+    expect([claude.installs, codex.installs], [0, 0]);
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
-  // Android runs the CLIs in its Alpine, so its own copy of each is
-  // installed after the Alpine is; iOS's emulated Alpine runs neither, so its
-  // plan is the Alpine alone.
-  test("Android's plan installs each CLI after Alpine, and iOS's does not", () {
-    CliProvider.guest = const _AnyGuest();
-    addTearDown(() => CliProvider.guest = null);
-    app = TestApp.create(proot: true);
+  // A phone's plan is the Linux its commands run in, and nothing after it.
+  test("a phone's plan is its Alpine alone", () {
+    app = TestApp.create(linuxHost: const ProotLinux("arm64-v8a"));
     expect(app.container.read(setupPlanProvider).steps.map((s) => s.name), [
       "Alpine Linux",
-      "Claude CLI",
-      "Codex CLI",
     ]);
     app.dispose();
 
-    CliProvider.guest = null;
-    app = TestApp.create(abi: "ios");
+    app = TestApp.create(linuxHost: const EmulatedLinux());
     expect(app.container.read(setupPlanProvider).steps.map((s) => s.name), [
-      "Alpine Linux",
+      "Alpine Linux (x86-64)",
     ]);
   });
 
@@ -317,19 +307,4 @@ class FakeHelium implements EmbeddedBrowser {
 
   @override
   Future<void> remove() async => installedVersion = null;
-}
-
-/// A guest no test runs anything in: what makes a CLI supported on Android.
-class _AnyGuest implements CliGuest {
-  const _AnyGuest();
-
-  @override
-  ({List<String> command, Map<String, String> environment}) wrap(
-    List<String> argv, {
-    required String cwd,
-    required List<String> shared,
-  }) => throw UnimplementedError();
-
-  @override
-  List<String> install(List<String> packages) => throw UnimplementedError();
 }

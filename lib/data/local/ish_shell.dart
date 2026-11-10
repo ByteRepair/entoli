@@ -43,9 +43,9 @@ class IshShell extends Shell {
     required this.dataDir,
     required this.environment,
     required String Function() platformDescription,
-    IshTransport? transport,
+    required IshTransport Function() transport,
   }) : _describe = platformDescription,
-       _transportFor = transport != null ? (() => transport) : IshWorker.new;
+       _transportFor = transport;
 
   /// Where the guest's rootfs is mounted from, asked per command: a Linux
   /// installed where none was reaches the next command, and one deleted stops
@@ -84,7 +84,9 @@ class IshShell extends Shell {
   /// or a test's fake for every owner. The suite runs where `ishLinked` is
   /// false, so without it the session logic would be reachable only from a
   /// device. One owner one isolate is what lets two chats' commands run at
-  /// once — a run parks the worker thread that drives it.
+  /// once — a run parks the worker thread that drives it. The core is asked
+  /// for when a worker is made (per session), so the one the Linux picked
+  /// after startup runs on is the one driven.
   final IshTransport Function() _transportFor;
 
   final Map<String, _IshSession> _sessions = {};
@@ -965,7 +967,10 @@ class IshRunBuffer {
 /// The protocol is Lists over a SendPort: `[tag, replyId, ...args]` for a
 /// request, `[replyId, result]` for a reply.
 class IshWorker implements IshTransport {
-  IshWorker();
+  IshWorker({required this.core});
+
+  /// The emulator core this worker's sessions run on.
+  final IshCore core;
 
   SendPort? _sendPort;
   Future<void>? _starting;
@@ -1029,7 +1034,10 @@ class IshWorker implements IshTransport {
   Future<void> _spawn() async {
     final replies = ReceivePort();
     final exitPort = ReceivePort();
-    await Isolate.spawn(_entry, replies.sendPort, onExit: exitPort.sendPort);
+    await Isolate.spawn(_entry, (
+      replies.sendPort,
+      core,
+    ), onExit: exitPort.sendPort);
     spawnCount++;
     // One listener for the port's whole life: a ReceivePort is a
     // single-subscription stream, so reading the entry's hello with `.first`
@@ -1064,8 +1072,8 @@ class IshWorker implements IshTransport {
     required Map<String, String> env,
     List<String> readOnly = const [],
   }) {
-    final task = _ops.then(
-      (_) => _init(
+    return serialised(
+      () => _init(
         rootfsDir: rootfsDir,
         dataDir: dataDir,
         home: home,
@@ -1074,6 +1082,12 @@ class IshWorker implements IshTransport {
         readOnly: readOnly,
       ),
     );
+  }
+
+  /// [op] run in its turn on [_ops]: for anything that boots or binds the
+  /// guest, a pipe session's init as much as a shell session's.
+  static Future<T> serialised<T>(Future<T> Function() op) {
+    final task = _ops.then((_) => op());
     _ops = task.then((_) {}, onError: (_) {});
     return task;
   }
@@ -1137,10 +1151,10 @@ class IshWorker implements IshTransport {
   }
 
   @override
-  void interrupt(int handle) => _poke(ishInterruptFn, handle);
+  void interrupt(int handle) => _poke(core.bridge?.interrupt, handle);
 
   @override
-  void hangup(int handle) => _poke(ishHangupFn, handle);
+  void hangup(int handle) => _poke(core.bridge?.hangup, handle);
 
   /// One of the two never-blocking bridging calls, made here rather than
   /// posted: the worker is unavailable while a run it owns is pending, and
@@ -1200,13 +1214,17 @@ class IshWorker implements IshTransport {
     }
   }
 
-  static void _entry(SendPort main) {
+  static void _entry((SendPort, IshCore) arg) {
+    final (main, core) = arg;
     final receive = ReceivePort();
     main.send(receive.sendPort);
     // The worker's own session table: the handle every FFI step goes through
     // and the session's dispatcher token, which is what its marker feed
     // matches the command's end by.
     final sessions = <int, ({IshSessionPtr handle, String token})>{};
+
+    // Looked up here, on the isolate that will call it.
+    final bridge = core.bridge;
 
     receive.listen((msg) {
       if (msg is! List) return;
@@ -1223,58 +1241,32 @@ class IshWorker implements IshTransport {
           final token = msg[8] as String;
           final env = msg[9] as List;
           final readOnly = msg[10] as List;
-          final initFn = ishInitFn;
-          if (initFn == null) {
+          if (bridge == null) {
             main.send([_kReply, replyId, "iSH is not linked", null]);
             return;
           }
-          // The env array as C strings. Every string handed to the bridge is
-          // ours to free after the call — the bridge copies what it keeps.
-          final envPtrs = calloc<Pointer<Utf8>>(env.length);
-          final argPtrs = [
-            rootfsDir.toNativeUtf8(),
-            dataDir.toNativeUtf8(),
-            home.toNativeUtf8(),
-            cwd.toNativeUtf8(),
-            dispatcher.toNativeUtf8(),
-            token.toNativeUtf8(),
-          ];
-          for (var i = 0; i < env.length; i++) {
-            envPtrs[i] = (env[i] as String).toNativeUtf8();
-          }
-          final readOnlyPtrs = calloc<Pointer<Utf8>>(readOnly.length);
-          for (var i = 0; i < readOnly.length; i++) {
-            readOnlyPtrs[i] = (readOnly[i] as String).toNativeUtf8();
-          }
-          final errPtr = calloc<Pointer<Utf8>>();
-          final handle = initFn(
-            argPtrs[0],
-            argPtrs[1],
-            argPtrs[2],
-            argPtrs[3],
-            argPtrs[4],
-            argPtrs[5],
-            envPtrs,
-            env.length,
-            readOnlyPtrs,
-            readOnly.length,
-            errPtr,
-          );
-          final error = errPtr.value.address == 0
-              ? null
-              : errPtr.value.cast<Utf8>().toDartString();
-          for (var i = 0; i < env.length; i++) {
-            calloc.free(envPtrs[i]);
-          }
-          calloc.free(envPtrs);
-          for (var i = 0; i < readOnly.length; i++) {
-            calloc.free(readOnlyPtrs[i]);
-          }
-          calloc.free(readOnlyPtrs);
-          calloc.free(errPtr);
-          for (final p in argPtrs) {
-            calloc.free(p);
-          }
+          // Every string handed to the bridge is ours to free after the
+          // call — the bridge copies what it keeps.
+          final (handle, error) = using((arena) {
+            final errPtr = arena<Pointer<Utf8>>();
+            final handle = bridge.init(
+              rootfsDir.toNativeUtf8(allocator: arena),
+              dataDir.toNativeUtf8(allocator: arena),
+              home.toNativeUtf8(allocator: arena),
+              cwd.toNativeUtf8(allocator: arena),
+              dispatcher.toNativeUtf8(allocator: arena),
+              token.toNativeUtf8(allocator: arena),
+              cStrings(env.cast<String>(), arena),
+              env.length,
+              cStrings(readOnly.cast<String>(), arena),
+              readOnly.length,
+              errPtr,
+            );
+            final error = errPtr.value.address == 0
+                ? null
+                : errPtr.value.cast<Utf8>().toDartString();
+            return (handle, error);
+          });
           if (error == null && handle.address != 0) {
             sessions[sessionId] = (handle: handle, token: token);
           }
@@ -1285,15 +1277,7 @@ class IshWorker implements IshTransport {
           final sessionId = msg[2] as int;
           final scriptB64 = msg[3] as String;
           final sess = sessions[sessionId];
-          final drainFn = ishDrainWakeFn;
-          final writeFn = ishWriteStdinFn;
-          final pollFn = ishPollFn;
-          final readFn = ishReadFn;
-          if (sess == null ||
-              drainFn == null ||
-              pollFn == null ||
-              readFn == null ||
-              writeFn == null) {
+          if (sess == null || bridge == null) {
             main.send([_kReply, replyId, "session not found", null]);
             return;
           }
@@ -1310,16 +1294,16 @@ class IshWorker implements IshTransport {
             onDelta: (delta) => main.send([_kOutput, replyId, delta]),
           );
           try {
-            drainFn(sess.handle);
+            bridge.drainWake(sess.handle);
             final scriptPtr = scriptB64.toNativeUtf8();
-            writeFn(sess.handle, scriptPtr);
+            bridge.writeStdin(sess.handle, scriptPtr);
             calloc.free(scriptPtr);
             while (!feed.done) {
-              final flags = pollFn(sess.handle);
+              final flags = bridge.poll(sess.handle);
               if (flags < 0) break; // a poll we cannot trust
               if (flags & 2 != 0) break; // the hangup's byte
               if (flags & 1 == 0) continue; // nothing yet (cannot stand)
-              final n = readFn(sess.handle, buf, 65536);
+              final n = bridge.read(sess.handle, buf, 65536);
               if (n < 0) {
                 if (n == -2) continue; // transient
                 break;
@@ -1334,10 +1318,9 @@ class IshWorker implements IshTransport {
 
         case _kDestroy:
           final sessionId = msg[2] as int;
-          final destroyFn = ishDestroyFn;
           final sess = sessions.remove(sessionId);
-          if (destroyFn != null && sess != null) {
-            destroyFn(sess.handle);
+          if (bridge != null && sess != null) {
+            bridge.destroy(sess.handle);
           }
 
         case _kStop:

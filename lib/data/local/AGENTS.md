@@ -196,9 +196,8 @@ the stale install.
 
 On every desktop the fetched tools reach their turns through the driver:
 `platformDriver`
-prefixes the bin directory onto `PATH` for rootfs-isolated projects alone, the
-way the project's rootfs copy is its own — separated by `:` except on Windows,
-whose is `;`. A user-set `PATH` in the command
+prefixes the bin directory onto `PATH` for projects that require setup,
+separated by `:` except on Windows, whose is `;`. A user-set `PATH` in the command
 environment still wins over it. The chat page's setup gate asks after the
 binary itself on the host, since `<cacheDir>` can be emptied between setups —
 the marker alone said a thing the cache may have since taken away. Inside a
@@ -207,13 +206,11 @@ rootfs is the gate itself, since neither phone has a shell without one. Two
 consequences worth knowing: the script's in-script fetches (`releases/latest`
 for gh and ESBMC) are the one deliberate exception to the checksum pinning
 everywhere else in this app, because "Run Setup" is a button the user pressed
-rather than a download the app decided on; and `ensureRootfs` is a no-op off
-Android, where there is no guest for a per-project rootfs copy to serve — iOS's
-iSH guest runs the base Alpine, so a setup's installs land in what every chat
-on the device shares — so a `rootfsId` left over from another device does not
-pay for a copy nothing reads. That iSH install is also no host tree of the
-store's: import and the environment delete go by `installDir` naming the
-guest const, never a host path to reach the fakefs with.
+rather than a download the app decided on; Android and iOS share the selected
+guest rootfs across projects, so setup installs packages once into that global
+tree. iSH's fakefs is also no host tree of the store's:
+imports cannot write into it, and environment deletion leaves its shared
+packages alone.
 
 ## A whole Linux under proot
 
@@ -300,13 +297,10 @@ app's binds produce, since the Alpine tarball has none of them — proot
 creates an inaccessible placeholder to mount over. In the guest the stub is
 invisible; on the host it is poison, because `dart:io` cannot list a mode-0000
 directory, so a recursive delete over a rootfs that hosted a session dies on
-one and a `cp` that has to read one does too — both were live on a device. So
-the per-project rootfs copy (`ByteRepairStore.ensureRootfs`) is a tar round
-trip through `copyTree`, which excludes the stub paths (nothing there is
-reachable in the guest anyway) and starts by clearing whatever an earlier
-attempt left; and every rootfs deletion — the project's environment, and the
-Terminal page's — goes through `removeTree`, which `chmod -R u+rwX`es first
-because a guest `chmod` is a real one on the host and may have closed
+one and a `cp` that has to read one does too — both were live on a device.
+The selected rootfs is shared across projects, so setup does not copy it.
+Terminal rootfs deletion still goes through `removeTree`, which `chmod -R u+rwX`es
+first because a guest `chmod` is a real one on the host and may have closed
 directories that have to be reopened to be deleted.
 
 **`HOME` inside the guest is the project's workspace, not `/root`.** The rootfs

@@ -5,6 +5,8 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/ui/settings/provider_picker.dart";
+import "package:agent_chat/data/builtin/llm/providers/presets.dart"
+    show CliProvider, HostCliGuest;
 
 void main() {
   testWidgets("fits a phone's width without overflowing", (tester) async {
@@ -60,8 +62,12 @@ void main() {
     expect(picked!.preset!.api, LlmApi.claudeCli);
   });
 
-  testWidgets("offers no Claude CLI on a phone", (tester) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+  // An Android build with no proot has nowhere to run the program.
+  testWidgets("offers no Claude CLI where it has nowhere to run", (
+    tester,
+  ) async {
+    CliProvider.platformGuest = null;
+    addTearDown(() => CliProvider.platformGuest = const HostCliGuest());
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
@@ -76,8 +82,6 @@ void main() {
     );
     await tester.tap(find.text("open"));
     await tester.pumpAndSettle();
-    final found = find.text("Claude CLI").evaluate().length;
-    debugDefaultTargetPlatformOverride = null;
-    expect(found, 0);
+    expect(find.text("Claude CLI"), findsNothing);
   });
 }

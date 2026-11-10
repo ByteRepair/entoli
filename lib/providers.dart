@@ -74,6 +74,7 @@ import "domain/trigger_kinds.dart";
 import "domain/trigger_runner.dart";
 import "domain/turn_sender.dart";
 import "domain/trigger_manager.dart";
+import "domain/rootfs.dart" show LinuxHost, NoLinux;
 import "domain/rootfs_store.dart";
 import "domain/shell.dart";
 import "data/builtin/memory/store.dart" show Memories, MemoryStore;
@@ -390,21 +391,14 @@ String? _prefillTarget(AppSettings settings, Set<String> installed) {
   return id;
 }
 
-/// Which architecture this install is for, and so which rootfs a download
-/// fetches. Read once at startup — it cannot change while the app runs. Android
-/// is the only thing that answers, so a null one is also how a page tells a
-/// phone from a desktop.
-final deviceAbiProvider = Provider<String?>((ref) => null);
+/// How this device runs a Linux, and so what the Terminal page offers and
+/// which image a download fetches. Read once at startup — it cannot change
+/// while the app runs. See [LinuxHost].
+final linuxHostProvider = Provider<LinuxHost>((ref) => const NoLinux());
 
 /// What About says this build is. Read once at startup beside the ABI, and null
 /// where the bundle would not answer — see `appVersion` in `core/platform/`.
 final appVersionProvider = Provider<String?>((ref) => null);
-
-/// Whether this build can run a command inside a Linux at all: proot has to
-/// have been packaged for the device's ABI. False everywhere but Android — and
-/// on an Android whose APK was built without it, which the Terminal page says
-/// rather than describing a device that cannot run one.
-final prootAvailableProvider = Provider<bool>((ref) => false);
 
 /// What keeps the host shell's commands in, from the platform. Overridden in
 /// `main` beside the rest of the platform ports.

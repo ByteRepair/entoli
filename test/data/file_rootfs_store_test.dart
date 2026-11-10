@@ -78,7 +78,7 @@ void main() {
       final store = storeIn();
       final rootfs = distro();
 
-      await store.install(rootfs, abi: "x86_64").drain<void>();
+      await store.install(rootfs, imageKey: "x86_64").drain<void>();
 
       expect(await store.installed(), {"testix"});
       final dir = (await store.directoryOf(rootfs))!;
@@ -93,7 +93,7 @@ void main() {
     () async {
       final store = storeIn();
 
-      await store.install(distro(), abi: "x86_64").drain<void>();
+      await store.install(distro(), imageKey: "x86_64").drain<void>();
 
       final dir = store.directoryOfSync("testix")!;
       final busybox = File(p.join(dir, "bin", "busybox"));
@@ -109,7 +109,9 @@ void main() {
   test(
     "it says how far along it is, and that unpacking is a phase of its own",
     () async {
-      final seen = await storeIn().install(distro(), abi: "x86_64").toList();
+      final seen = await storeIn()
+          .install(distro(), imageKey: "x86_64")
+          .toList();
 
       expect(seen.first.received, 0);
       expect(seen.last.unpacking, isTrue);
@@ -123,7 +125,9 @@ void main() {
       final store = storeIn();
 
       await expectLater(
-        store.install(distro(path: "/rubbish"), abi: "x86_64").drain<void>(),
+        store
+            .install(distro(path: "/rubbish"), imageKey: "x86_64")
+            .drain<void>(),
         throwsA(isA<StateError>()),
       );
 
@@ -139,7 +143,7 @@ void main() {
     final store = storeIn();
     net.hold = Completer<void>();
 
-    final sub = store.install(distro(), abi: "x86_64").listen(null);
+    final sub = store.install(distro(), imageKey: "x86_64").listen(null);
     // Under way mid-response: the tarball exists, which the progress stream
     // never says at this size (it reports per megabyte).
     await waitFor(
@@ -162,7 +166,7 @@ void main() {
   test("an architecture the distribution has no build for is refused rather "
       "than fetched", () async {
     await expectLater(
-      storeIn().install(distro(), abi: "armeabi-v7a").drain<void>(),
+      storeIn().install(distro(), imageKey: "armeabi-v7a").drain<void>(),
       throwsA(isA<UnsupportedError>()),
     );
   });
@@ -173,7 +177,7 @@ void main() {
     );
 
     await expectLater(
-      store.install(distro(), abi: "x86_64").drain<void>(),
+      store.install(distro(), imageKey: "x86_64").drain<void>(),
       throwsA(isA<ProcessException>()),
     );
 
@@ -197,7 +201,7 @@ void main() {
   test("deleting takes the whole of it", () async {
     final store = storeIn();
     final rootfs = distro();
-    await store.install(rootfs, abi: "x86_64").drain<void>();
+    await store.install(rootfs, imageKey: "x86_64").drain<void>();
 
     await store.delete(rootfs);
 

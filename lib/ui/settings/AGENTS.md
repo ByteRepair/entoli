@@ -63,9 +63,7 @@ Linux can run (proot on Android, the emulator on iOS) Alpine as the terminal,
 so a phone user never has to find the Terminal page, its bar the download
 alone (`StepProgress`); where the agent's browser is one the app launches —
 the desktops — Helium as that browser, which makes the embedded browser the
-desktops' default where it used to be off, then on every desktop Entoli's own
-copy of each CLI program (`CliSetup`, one per `cliProgramsProvider` entry,
-done when the copy is on disk), its bar the whole plan
+desktops' default where it used to be off, its bar the whole plan
 (`PlanProgress`, each step an equal share and unpacking its `unpackShare` of
 that, so it only moves forward). The page runs the steps one after another,
 each started when the one before is done or skipped; a step is done when its
@@ -81,7 +79,8 @@ plan someone pays for answers through (`welcomeProviders`), then Local Model
 and Advanced. A service is connected by `connectService`
 (`connect_provider.dart`, beside `editProvider`, the Providers page's way in)
 as its kind is — a CLI installed if Entoli has no
-copy of it and signed in if it is not (`CliSignInDialog` in `cli_sign_in_dialog.dart`: the program's own
+copy of it, which is the one place a program is installed (no first-run step
+does it ahead of time), and signed in if it is not (`CliSignInDialog` in `cli_sign_in_dialog.dart`: the program's own
 sign-in run, the page it prints opened from the dialog, a code the page shows
 pasted back), an API in its preset's dialog — and adopted, answering new
 chats, titles and the classifier at its own defaults; connecting one already
@@ -177,14 +176,12 @@ see "The trigger editor" below, and "Waking for a reminder" in
 **Agents** is the list of what a message can address by name — the bundled ones, which ship with the app and are read-only, and the user's own, written in-app and editable or removable. An agent is one flat `.md` file (a system prompt with `description` frontmatter), so it is written through an editor page rather than imported the way a skill's directory is; the name is the file name, and editing it on an existing agent renames the file — the new `.md` is written before the old one is taken away, a rename onto a name another agent holds is refused in the editor, and the only thing a rename loses is a new mention of the old name, since a mention already written into a conversation keeps the meaning it was recorded with. **Import agent** is the one way an outside `.md` comes in: it lands under its file's own name, with a replace-confirm where the name is taken and a refusal for an empty body, rather than through the editor — an editor pass before the write would be a second way to make the name and the file name diverge. Add and Import agent are the fixed footer, the two-button row the backup section draws. Export rides every row, the same `BackupHandoff` route the skills page takes, the `.md` itself the file — the picture is the device's own convenience and stays. Every row leads with the agent's face (`AgentPicture`) — a person mark until one is set, a still where it is a Bot Avatar, resolved over the library's tier walk by `agentPictureProvider` — which the editor takes as its picker face too: a tap opens a menu of Upload photo (PNG only, a non-PNG pick refused with a line saying so), Use Bot Avatar (the avatar editor; Edit where it wears one already) and Remove where there is something to remove. What is chosen lives in the editor until Save; a save touching nothing leaves what the agent already had. The face is `<name>.png` or `<name>.avatar.json` beside the `.md` — a save writing one takes the other away — written through `writeAgentFace` (`data/prompts/agent_pictures.dart`, beside the readers) in the same `ReadOnlyDir.write` block the `.md` rides: the editor hands back the face the agent now has, a rename takes the old name's away, an import or a replace leaves the new agent no face of the one it replaced, and a delete takes it with the agent. The rows re-read it because `agentPictureProvider` watches the library each write reloads. Add, edit, delete and import reload the library the moment they are done, the same one way a change to it lands without a restart — every project's where the page is the global one (the default directory is a rung of every project's tier walk, so an inherited agent and an inherited picture go stale everywhere if only `promptLibraryProvider(null)` is rebuilt; skills keep the same branch), the project's own where it is a project's page. See "Skills and agents" in `lib/domain/AGENTS.md`.
 **Byte Repair** is the tooling for the built-in project of the same name: a
 banner saying whether the configured terminal env can run it, a button that
-runs a bundled install script through that env to create the project's own
-rootfs instance and put `make`, `github-cli` and ESBMC into it, a button to
-import a local ESBMC binary into the rootfs, a button to delete the whole
-environment (rootfs, workspace, and all chats in the project), and the
-versions found afterwards. "Run Setup" owns the full lifecycle — it copies
-the base rootfs from cache, runs the install script, and writes a
-`.setup-complete` marker — so the turn path no longer creates the rootfs
-lazily. The chat page gates the composer on that marker, showing a "setup
+runs a bundled install script through that env to put `make`,
+`github-cli` and ESBMC into the selected shared rootfs, a button to import a
+local ESBMC binary into that rootfs, a button to delete the workspace and all
+chats in the project, and the versions found afterwards. "Run Setup" runs the
+install script and writes a `.setup-complete` marker — packages stay in the
+shared rootfs when project data is deleted. The chat page gates the composer on that marker, showing a "setup
 required" bar until it is there; on the host the marker is not enough either,
 since the fetched tools live in a cache directory that can be emptied between
 setups, so the binary is asked after too. Where the tools land follows the env:
@@ -310,8 +307,7 @@ removed.
 
 It is drawn only where the paths are this device's and the sandbox is what
 they open. It is not drawn for a paired device's project, whose folders a
-picker here cannot name, or for a built-in with rootfs isolation, whose
-commands run in a guest that cannot see them. Nor is it drawn where the picked
+picker here cannot name. Nor is it drawn where the picked
 driver's `Confinement` does not enforce the sandbox: Windows, which confines
 nothing, so the list would change nothing (see "What is absent, and honestly
 so" in `windows/AGENTS.md`); phones; and a Linux guest.
@@ -444,10 +440,11 @@ costs the user is stated plainly — restoring onto another device does not
 bring the keys, and they are typed again where the store is local to it (the
 keyring is a machine's own).
 
-A per-project `rootfs/` is the one re-fetchable tree that *does* live under the
-data directory, because a built-in with rootfs isolation keeps its living
-filesystem there beside the chats. `writeBackup`'s `skipDir` leaves it out for
-the same reason the voice models are outside it, and for a second one: proot's
+A per-project `rootfs/` is the one re-fetchable tree that may still live under
+the data directory, left by a build whose built-ins kept their own living
+filesystem there beside the chats; nothing writes one now. `writeBackup`'s
+`skipDir` leaves it out for the same reason the voice models are outside it,
+and for a second one: proot's
 mode-0000 bind stubs (see `tree_ops.dart`) sit inside it, and `dart:io` cannot
 list a mode-0000 directory, so a walker that reached one would throw. The
 directory a restore replaces goes through `removeTree` rather than a plain

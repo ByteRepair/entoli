@@ -29,7 +29,7 @@ void main() {
         "ios/Flutter/Ish.xcconfig",
       ).readAsLinesSync().singleWhere((l) => l.startsWith("ISH_KEEP_NAMES ="));
       final kept = RegExp(
-        r"-Wl,-u,_(ish_[a-z_]+)",
+        r"-Wl,-u,_((?:ish|blinkish)_[a-z_]+)",
       ).allMatches(keepLine).map((m) => m[1]!).toSet();
       final looked = _lookedUp();
       expect(looked, isNotEmpty);
@@ -42,8 +42,11 @@ void main() {
     test("every looked-up name is a function the bridge defines", () {
       final bridge = File("tool/ios/ish/ish_bridge.c").readAsStringSync();
       for (final name in _lookedUp()) {
+        final definedName = name.startsWith("blinkish_")
+            ? "ish_${name.substring("blinkish_".length)}"
+            : name;
         final head = RegExp(
-          "^[A-Za-z_][\\w \\t*]*\\b$name\\s*\\(",
+          "^[A-Za-z_][\\w \\t*]*\\b$definedName\\s*\\(",
           multiLine: true,
         ).allMatches(bridge);
         final defined = head.any((m) {
@@ -64,8 +67,24 @@ void main() {
 }
 
 /// The names ish_ffi.dart hands to `lookupFunction` — the lookups themselves,
-/// not every quoted `ish_` string the file may come to hold.
-Set<String> _lookedUp() => RegExp(r'lookupFunction<[^>]*>\(\s*"(ish_[a-z_]+)"')
-    .allMatches(File("lib/data/local/ish_ffi.dart").readAsStringSync())
-    .map((m) => m[1]!)
-    .toSet();
+/// not every quoted `ish_` string the file may come to hold. A bridge's are
+/// written once over its core's prefix, so they are every core's prefix
+/// with every one of those, beside the lookups named outright.
+Set<String> _lookedUp() {
+  final source = File("lib/data/local/ish_ffi.dart").readAsStringSync();
+  final prefixes = RegExp(
+    r'^\s*\w+\("((?:ish|blinkish))"\)[,;]$',
+    multiLine: true,
+  ).allMatches(source).map((m) => m[1]!);
+  final perCore = RegExp(
+    r'lookupFunction<[^>]*>\(\s*"\$\{prefix\}_([a-z_]+)"',
+  ).allMatches(source).map((m) => m[1]!);
+  final outright = RegExp(
+    r'lookupFunction<[^>]*>\(\s*"((?:ish|blinkish)_[a-z_]+)"',
+  ).allMatches(source).map((m) => m[1]!);
+  return {
+    for (final prefix in prefixes)
+      for (final name in perCore) "${prefix}_$name",
+    ...outright,
+  };
+}

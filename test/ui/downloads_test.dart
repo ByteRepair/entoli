@@ -57,7 +57,7 @@ void main() {
     testWidgets("says systems rather than models for the other catalog", (
       tester,
     ) async {
-      app = TestApp.create(proot: true);
+      app = TestApp.create(linuxHost: const ProotLinux("arm64-v8a"));
       app.rootfs.installing = Completer<void>();
       await app.pump(tester, const SizedBox());
 
@@ -121,7 +121,7 @@ void main() {
   testWidgets(
     "a download this device has nothing to fetch for starts nothing",
     (tester) async {
-      app = TestApp.create(proot: true, abi: "riscv64");
+      app = TestApp.create(linuxHost: const ProotLinux("riscv64"));
       await app.pump(tester, const SizedBox());
 
       app.container.read(rootfsDownloadsProvider.notifier).install(alpine);

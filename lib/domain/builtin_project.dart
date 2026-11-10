@@ -23,7 +23,6 @@ class BuiltinProject {
     this.memory = MemoryPolicy.app,
     this.sharedWorkspace = true,
     this.disabled = const {},
-    this.rootfsIsolation = false,
     this.requiresSetup = false,
     this.omada = false,
   });
@@ -55,14 +54,6 @@ class BuiltinProject {
   /// the platform's facts and a headless turn's restrictions apply on top,
   /// never under.
   final Set<AgentCapability> disabled;
-
-  /// Whether the project gets its own rootfs instance under its data directory,
-  /// so packages installed inside the guest do not appear in another project's
-  /// chats. The base download in cache is the template; the project's copy is
-  /// its living filesystem, backed up and surviving a cache clear. False on
-  /// user projects, which share the base rootfs in cache the way they always
-  /// have.
-  final bool rootfsIsolation;
 
   /// Whether the project needs a setup step before turns can be sent. The
   /// chat page hides the composer and shows a "setup required" bar until a
@@ -281,7 +272,6 @@ class ByteRepairProject extends BuiltinProject {
         dir: "byte-repair",
         label: byteRepairProjectLabel,
         icon: Icons.verified_user,
-        rootfsIsolation: true,
         requiresSetup: true,
       );
 

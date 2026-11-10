@@ -16,6 +16,8 @@ import "package:agent_chat/ui/welcome_gate.dart";
 import "../fakes.dart";
 import "../harness.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
+import "package:agent_chat/data/builtin/llm/providers/presets.dart"
+    show CliProvider, HostCliGuest;
 
 void main() {
   late TestApp app;
@@ -199,9 +201,11 @@ void main() {
       ..complain("Open https://auth.openai.com/oauth/auth")
       ..complain("orize?client_id=x\nWaiting…");
     await frames(tester);
+    // Opened as a sign-in, which keeps the app in front on a phone so the
+    // callback reaches the program.
     await tester.tap(find.text("Open the sign-in page"));
     await tester.pump();
-    expect(app.linkOpener.opened, [
+    expect(app.linkOpener.signIns, [
       Uri.parse("https://auth.openai.com/oauth/authorize?client_id=x"),
     ]);
     expect(settings().llmProviders, isEmpty);
@@ -230,17 +234,19 @@ void main() {
     await expectLater(claude.processes.single.exitCode, completes);
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
-  // A phone runs no programs, so the services that are one are not offered.
-  testWidgets("a phone is offered no service that runs a program", (
-    tester,
-  ) async {
+  // A build with nowhere to run a program — an Android one with no proot —
+  // is not offered the services that are one.
+  testWidgets("a build with nowhere to run a program is offered no service "
+      "that is one", (tester) async {
+    CliProvider.platformGuest = null;
+    addTearDown(() => CliProvider.platformGuest = const HostCliGuest());
     await app.pump(tester, const WelcomePage());
     await walkToProviders(tester);
 
     expect(find.text("Ollama Cloud"), findsOneWidget);
     expect(find.text("ChatGPT"), findsNothing);
     expect(find.text("Claude Pro"), findsNothing);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  });
 
   // The provider page holds the tour until some model is reachable: the
   // button is dead and the swipe cannot go around it.

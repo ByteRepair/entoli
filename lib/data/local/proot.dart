@@ -1,10 +1,12 @@
+import "dart:ffi" show Abi;
 import "dart:io" show Platform;
 
 import "../../domain/file_tools.dart";
 import "../../domain/rootfs.dart";
 import "../../domain/rootfs_store.dart";
 import "../builtin/llm/llm_client.dart" show LlmException;
-import "../builtin/llm/providers/cli.dart" show CliGuest;
+import "../builtin/llm/providers/cli.dart"
+    show CliProcess, LinuxCliGuest, launchProcess;
 import "../../domain/shell.dart";
 
 /// How a command is run inside a downloaded Linux: the proot invocation, the
@@ -164,7 +166,7 @@ Map<String, String> _loaderEnvironment(Proot proot) => {
 /// Android's Linux as where a CLI's program runs: [prootProgram] over the
 /// rootfs the Terminal settings picked, looked up at each start, so one
 /// installed after launch is used and one deleted is said rather than run.
-class ProotCliGuest implements CliGuest {
+class ProotCliGuest extends LinuxCliGuest {
   ProotCliGuest({
     required this.proot,
     required this.store,
@@ -175,26 +177,38 @@ class ProotCliGuest implements CliGuest {
   final RootfsStore store;
   final String? Function() rootfsId;
 
+  /// The device's own: proot runs the guest's programs natively.
   @override
-  ({List<String> command, Map<String, String> environment}) wrap(
+  Abi get abi => Abi.current();
+
+  /// Started as a process of this device, under proot; on a terminal, under
+  /// `script` ([LinuxCliGuest.underScript]), a real kernel's pseudo-terminal
+  /// being what proot has to give.
+  @override
+  Future<CliProcess> spawn(
     List<String> argv, {
     required String cwd,
+    required Map<String, String> environment,
     required List<String> shared,
+    required bool terminal,
   }) {
     final rootfs = rootfsById(rootfsId());
-    final dir = rootfs == null ? null : store.directoryOfSync(rootfs.id);
-    if (dir == null) {
-      throw LlmException(
-        "No Linux is installed to run it in. Install one from the Terminal "
-        "settings.",
-      );
-    }
-    return prootProgram(
+    final (:command, environment: own) = prootProgram(
       proot: proot,
-      rootfsDir: dir,
+      rootfsDir: LinuxCliGuest.installed(
+        rootfs == null ? null : store.directoryOfSync(rootfs.id),
+      ),
       shared: shared,
       cwd: cwd,
-      argv: argv,
+      argv: terminal
+          ? LinuxCliGuest.withBrowser(LinuxCliGuest.underScript(argv))
+          : argv,
+    );
+    return launchProcess(
+      command.first,
+      command.sublist(1),
+      workingDirectory: cwd,
+      environment: {...environment, ...own},
     );
   }
 

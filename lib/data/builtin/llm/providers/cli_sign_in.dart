@@ -1,5 +1,8 @@
 import "dart:async";
 
+import "package:flutter/foundation.dart" show ValueListenable, ValueNotifier;
+
+import "../../../../core/log.dart";
 import "cli.dart";
 
 /// One sign-in of a CLI's program, run the way the program runs its own: it
@@ -18,29 +21,53 @@ class CliSignIn {
       _process.errors.listen((chunk) => _scan(_errors.add(chunk))),
     ];
     result = _process.exitCode.then((code) async {
-      _scan(_errors.rest);
-      if (!_page.isCompleted) _page.complete(null);
+      final said = _errors.rest.trim();
+      _scan(said);
       for (final sub in _subs) {
         unawaited(sub.cancel());
       }
-      return code == 0 && !_cancelled && await _provider.signedIn();
+      final signedIn = code == 0 && !_cancelled && await _provider.signedIn();
+      if (!signedIn) {
+        _failure = "sign-in exited $code${said.isEmpty ? "" : ":\n$said"}";
+        logFailure("cli", _failure!);
+      }
+      return signedIn;
     });
   }
 
-  /// [provider]'s program, started on its [CliProvider.signInArguments].
-  static Future<CliSignIn> start(CliProvider provider) async =>
-      CliSignIn._(provider, await provider.run(provider.signInArguments));
+  /// [provider]'s program, started on its [CliProvider.signInArguments] on a
+  /// terminal: a program that asks for a code reads it as keys from one,
+  /// and takes nothing written to a pipe.
+  static Future<CliSignIn> start(CliProvider provider) async => CliSignIn._(
+    provider,
+    await provider.run(provider.signInArguments, terminal: true),
+  );
 
   final CliProvider _provider;
   final CliProcess _process;
   late final List<StreamSubscription<String>> _subs;
   final _errors = _Lines();
-  final _page = Completer<Uri?>();
+  final _page = ValueNotifier<Uri?>(null);
+
+  /// Whether the program asked for a page to be opened, whose address is
+  /// then the page whatever links it prints.
+  var _opened = false;
   var _cancelled = false;
 
-  /// The first link the program prints, which is the page to sign in on;
-  /// null where it exits having printed none.
-  Future<Uri?> get page => _page.future;
+  /// What the program said on its error output as it ended, for a failed
+  /// sign-in to explain itself; null once it succeeded.
+  String? _failure;
+
+  /// Why the sign-in failed, once [result] is false: the exit code and the
+  /// program's own last words on its error output.
+  String? get failure => _failure;
+
+  /// The page to sign in on, null until the program names one: the page it
+  /// asked to open, where its browser is the app's ([cliOpenMarker]), since
+  /// that page's callback finishes the sign-in with no code to paste; else
+  /// the first link it prints. Either may come first, so a page it asked to
+  /// open replaces a link it printed.
+  ValueListenable<Uri?> get page => _page;
 
   /// Whether it ended signed in: the program exited 0, and its own status
   /// says so.
@@ -56,10 +83,19 @@ class CliSignIn {
   }
 
   void _scan(String text) {
-    if (_page.isCompleted) return;
+    final asked = _asked.firstMatch(text)?[1];
+    if (asked != null) {
+      _opened = true;
+      _page.value = Uri.parse(asked);
+      return;
+    }
+    if (_opened || _page.value != null) return;
     final link = _link.firstMatch(text)?[0];
-    if (link != null) _page.complete(Uri.parse(link));
+    if (link != null) _page.value = Uri.parse(link);
   }
+
+  /// A page the program's browser was asked to open.
+  static final _asked = RegExp("$cliOpenMarker (${_link.pattern})");
 
   /// A link up to whatever cannot be in one: space, a quote, an angle
   /// bracket, or the escape that starts a terminal colour.

@@ -13,12 +13,12 @@ class RootfsDownloads extends Downloads<Rootfs> {
 
   @override
   Download? begin(Rootfs rootfs) {
-    final abi = ref.read(deviceAbiProvider);
-    final image = rootfs.imageFor(abi);
-    if (abi == null || image == null) return null;
+    final key = ref.read(linuxHostProvider).imageKey;
+    final image = rootfs.imageFor(key);
+    if (key == null || image == null) return null;
     return Download(
       bytes: image.bytes,
-      progress: ref.read(rootfsStoreProvider).install(rootfs, abi: abi),
+      progress: ref.read(rootfsStoreProvider).install(rootfs, imageKey: key),
     );
   }
 

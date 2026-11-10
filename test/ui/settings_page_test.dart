@@ -9,7 +9,6 @@ import "package:path/path.dart" as p;
 import "package:agent_chat/data/builtin/llm/providers/presets.dart"
     show CodexCliProvider;
 import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/provider_usage.dart";
 import "package:agent_chat/providers.dart";
@@ -20,6 +19,7 @@ import "package:agent_chat/ui/widgets/resettable_field.dart";
 import "../fakes.dart";
 import "../harness.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
+import "package:agent_chat/domain/rootfs.dart";
 
 void main() {
   late TestApp app;
@@ -699,8 +699,6 @@ void main() {
   });
 
   group("byte repair", () {
-    final project = ByteRepairProject().dir;
-
     /// The confirm dialog's message, which is the whole of what the store's
     /// [ByteRepairStore.deleteConfirmMessage] buys.
     String deleteMessage(WidgetTester tester) =>
@@ -861,16 +859,18 @@ void main() {
     );
 
     // The env check passes where a rootfs is picked, so the buttons come
-    // back and the message names the copy the setup made.
+    // back. The rootfs is the one every project shares, so a delete leaves it
+    // and the packages a setup put in it.
     targetTest(
-      "an Android rootfs env puts the buttons back, with the rootfs named",
+      "an Android rootfs env puts the buttons back, and the delete leaves the "
+      "shared rootfs",
       TargetPlatform.android,
       (tester) async {
         app.dispose();
-        app = TestApp.create(proot: true, linuxes: const {"alpine"});
-        Directory(
-          p.join(app.config.projectDir(project: project), "rootfs"),
-        ).createSync(recursive: true);
+        app = TestApp.create(
+          linuxHost: const ProotLinux("arm64-v8a"),
+          linuxes: const {"alpine"},
+        );
         await io(
           tester,
           () => app.container
@@ -881,10 +881,9 @@ void main() {
 
         expect(find.text("Run Setup"), findsOneWidget);
 
-        expect(
-          await deleteDialogMessage(tester),
-          contains("the Byte Repair rootfs"),
-        );
+        final message = await deleteDialogMessage(tester);
+        expect(message, contains("the Byte Repair workspace"));
+        expect(message, isNot(contains("rootfs")));
       },
     );
 

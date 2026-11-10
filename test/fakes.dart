@@ -12,6 +12,7 @@ import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart"
     show
         CliProvider,
+        HostCliGuest,
         CliProcess,
         CliRelease,
         CliSession,
@@ -83,6 +84,13 @@ class FakeLinkOpener implements LinkOpener {
 
   @override
   Future<void> open(BuildContext context, Uri url) async => opened.add(url);
+
+  /// Every sign-in page opened, apart from [opened].
+  final List<Uri> signIns = [];
+
+  @override
+  Future<void> openSignIn(BuildContext context, Uri url) async =>
+      signIns.add(url);
 
   @override
   Future<void> openArtifact(
@@ -1282,9 +1290,9 @@ class FakeRootfsStore extends RootfsStore {
   @override
   Stream<DownloadProgress> install(
     Rootfs rootfs, {
-    required String abi,
+    required String imageKey,
   }) async* {
-    final image = rootfs.imageFor(abi)!;
+    final image = rootfs.imageFor(imageKey)!;
     yield DownloadProgress(received: 0, total: image.bytes);
     if (failNext case final error?) {
       failNext = null;
@@ -1887,17 +1895,19 @@ class FakeCli extends CliProvider {
     required this.isInstalled,
     required this.isSignedIn,
   }) : super(
-         launch:
-             (
-               executable,
-               arguments, {
-               required workingDirectory,
-               required environment,
-             }) async {
-               final process = FakeCliProcess(arguments);
-               processes.add(process);
-               return process;
-             },
+         guest: FakeHostGuest(
+           launch:
+               (
+                 executable,
+                 arguments, {
+                 required workingDirectory,
+                 required environment,
+               }) async {
+                 final process = FakeCliProcess(arguments);
+                 processes.add(process);
+                 return process;
+               },
+         ),
        );
 
   factory FakeCli.claude({bool installed = true, bool signedIn = true}) =>
@@ -2005,6 +2015,31 @@ class FakeCli extends CliProvider {
   Future<CliSession> start(CliSessionSpec spec) => throw UnimplementedError();
 }
 
+/// This machine, with a terminal that leaves the command as it is: a test
+/// sees the program's own words whether or not it was asked for one, and
+/// what it reads and writes on one is a [TerminalCliProcess]'s.
+class FakeHostGuest extends HostCliGuest {
+  const FakeHostGuest({super.launch});
+
+  @override
+  bool get hasTerminal => true;
+
+  @override
+  Future<CliProcess> spawn(
+    List<String> argv, {
+    required String cwd,
+    required Map<String, String> environment,
+    required List<String> shared,
+    required bool terminal,
+  }) => super.spawn(
+    argv,
+    cwd: cwd,
+    environment: environment,
+    shared: shared,
+    terminal: false,
+  );
+}
+
 /// A CLI's process as a test drives it: [say] prints a line, [complain]
 /// writes to its error output, [exit] ends it, and what it was sent is
 /// [sent].
@@ -2029,6 +2064,9 @@ class FakeCliProcess implements CliProcess {
 
   @override
   Stream<String> get errors => _err.stream;
+
+  @override
+  void write(String text) => sent.add(text);
 
   @override
   void writeLine(String line) => sent.add(line);

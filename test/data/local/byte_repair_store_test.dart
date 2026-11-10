@@ -739,17 +739,6 @@ exit 0""");
       );
     });
 
-    test("the project's rootfs copy names the rootfs", () {
-      Directory(
-        p.join(config.projectDir(project: ByteRepairProject().dir), "rootfs"),
-      ).createSync(recursive: true);
-      expect(
-        storeAt(bin).environmentDeletion,
-        "the Byte Repair rootfs (the Linux copy and everything "
-        "installed into it)",
-      );
-    });
-
     test(
       "an unset install dir has nothing to name whatever is in the temp",
       () {
@@ -812,9 +801,8 @@ exit 0""");
         installDir: binDir,
       );
       Directory(
-        p.join(config.projectDir(project: project), "rootfs"),
+        config.projectWorkspaceDir(project: project),
       ).createSync(recursive: true);
-      Directory(config.projectWorkspaceDir(project: project)).createSync();
       File(
         p.join(config.projectWorkspaceDir(project: project), "cloned.txt"),
       ).writeAsStringSync("hello");
@@ -825,12 +813,6 @@ exit 0""");
 
       expect(await store.deleteEnvironment(), isNull);
 
-      expect(
-        Directory(
-          p.join(config.projectDir(project: project), "rootfs"),
-        ).existsSync(),
-        isFalse,
-      );
       expect(
         Directory(config.projectWorkspaceDir(project: project)).existsSync(),
         isFalse,

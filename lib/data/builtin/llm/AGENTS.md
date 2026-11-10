@@ -101,7 +101,8 @@ what they pay for and not what answers for it; no API key is asked for there,
 the APIs being Advanced's. A class offered there takes
 `OfferedByName`, whose `serviceName` and `connectHint` are its words on the
 tour, and `welcomeProviders` is which of them and in what order; one its
-`supported` says this platform cannot reach (a CLI on a phone) is not drawn.
+`supported` says this build cannot reach (a CLI where there is no guest) is
+not drawn.
 Connecting one is its preset in the ordinary provider dialog, adopted
 (`upsertProvider`'s `adopt`): it answers new chats, titles and the classifier
 at the preset's defaults, whatever was picked before, and nothing on the tour
@@ -276,16 +277,17 @@ looked up on `PATH`, null for the subclass's `defaultCommand`) and an `env`
 laid over the app's own environment; `baseUrl` is empty and no key is asked
 for (`KeyFree`). `providerOf` reads it by API before anything else, so a
 CLI entry is never mistaken for the endpoint its catalog id names. The
-program is found on the login shell's `PATH` (`CliProvider.loginPath`, set
-by `main` from the same capture the shell uses), since a desktop launch
+program is found on the login shell's `PATH` (the `HostCliGuest`'s
+`loginPath`, set by `main` from the same capture the shell uses), since a desktop launch
 inherits one that misses `~/.local/bin`. A default name found nowhere on
 it falls back to a copy another app ships (`bundledCopies`): on macOS,
 Claude Desktop keeps its own `claude` under
 `~/Library/Application Support/Claude/claude-code/<version>/<build>/`,
 replaced on each update, so the newest is looked up per session rather than
-stored — run outside a Desktop session it signs in as any `claude` does. Android runs the
-programs in its Linux (below); iOS runs none, so there a CLI entry offers no
-models and the dialog offers the API only where `supported` says it can run.
+stored — run outside a Desktop session it signs in as any `claude` does. A
+phone runs the programs in its Linux (below); only an Android build with no
+proot has nowhere to run one, and there a CLI entry offers no models and the
+dialog offers the API only where `supported` says it can run.
 What of the app's own environment reaches the program is the subclass's
 (`inherits`): an Entoli started from inside a Claude Code session — a
 Claude Code terminal, a Claude Desktop session — carries that session's
@@ -310,11 +312,11 @@ display name.
 **Entoli keeps its own copy of each program, and signs it in.** `ownCopy` is
 `<cache>/<workFolder>/bin/<command>`, the cache being where a copy that goes
 missing is fetched again rather than lost. `install` asks the subclass's
-`latestRelease` for this machine's build (`CliProvider.abi`, which a test
-names): Claude CLI's is the program itself from
+`latestRelease` for the build its guest runs (`CliGuest.abi`, a
+`HostCliGuest`'s own unless a test names one): Claude CLI's is the program itself from
 `downloads.claude.ai/claude-code-releases` — `latest` for the version, that
 version's `manifest.json` for each platform's SHA-256 and size, the musl
-build on a musl Linux — taken as it is rather than run as an installer, since
+build where the guest is musl (`CliGuest.musl`) — taken as it is rather than run as an installer, since
 `claude install` would only add a launcher on the user's `PATH`; Codex CLI's
 is two assets GitHub's releases API names for the target (musl on Linux, a
 zip on Windows, a tarball elsewhere) — `codex` and `codex-code-mode-host`,
@@ -359,28 +361,78 @@ sign-in, not a leaked token. `withConfig` reads one program for another entry
 with the same ports, which is how the UI gets an entry's program from
 `cliProgramsProvider`.
 
-**On Android the program runs in the Linux.** Android's own processes are
-not Linux's, so `main` sets `CliProvider.guest` to a `ProotCliGuest` where the
-build carries proot, and every start — a session, a status check, a sign-in
-— goes through `CliProvider.run`, which hands the program's own words to the
-guest. `prootProgram` (`data/local/proot.dart`) is the terminal driver's proot
+**Where a program runs is its `CliGuest`, and nothing else.** A guest
+says the ABI its programs are built for, whether they are musl, what they
+start with, how packages go in, and how a process is started; every start —
+a session, a status check, a sign-in, a package install — goes through
+`CliProvider.run` to it. `main` sets `CliProvider.platformGuest` once, from
+the device's `LinuxHost` (`cliGuestOf` in `core/platform/host.dart`): a
+`HostCliGuest` on a desktop, whose programs are this machine's processes
+with its environment as the subclass's `inherits` passes it on; a
+`ProotCliGuest` on Android; an `IshCliGuest` on iOS; none on an Android
+build with no proot, which is the one place `supported` is false. A
+provider given a guest of its own (`ClaudeCliProvider.over`) runs there
+instead, which is how a test runs one over a fake.
+
+**A program can be started on a terminal.** `start(…, terminal: true)` runs it
+on one where the guest has one to give (`hasTerminal`), each guest its own
+way through `spawn(…, terminal:)`. iOS's is the bridge's: one of iSH's own
+pseudo-terminals, made the way iSH's app makes its Terminal's
+(`pty_open_fake`), as the program's stdio and controlling terminal, whose
+screen is the session's stdout pipe and whose keyboard is a thread of the
+bridge's typing the stdin pipe into it, the way `tty-real.c`'s thread types
+the real one. Line discipline, echo, termios and the window size are iSH's
+tty layer, nothing in the guest stands between, and the caller only ever
+writes a host pipe. Android's is util-linux's `script` under proot
+(`LinuxCliGuest.underScript`), installed from Alpine's `util-linux-misc` the
+first time it is asked for, a real kernel's pseudo-terminal being what proot
+has; the system's own `script` on macOS and on a Linux that has it; none on
+Windows, which keeps pipes. It is given a
+wide size, so a program does not wrap a long link across lines. The process
+comes back a `TerminalCliProcess`: what it prints arrives without the
+terminal's escapes or line-ending carriage returns, and a line written to it
+ends in a carriage return, which is Enter to a program reading keys. The
+sign-in runs this way, since Claude CLI reads a pasted code only as keys
+from a terminal and takes nothing written to a pipe.
+
+**A Linux of the app's own has no browser, so its programs are given the
+app's.** On a terminal there (`LinuxCliGuest.withBrowser`), `BROWSER` names `/usr/local/bin/entoli-open`,
+written in the guest where it is missing, which prints `entoli-open` and the
+address to the terminal. The sign-in takes a page named that way over the
+first link the program prints, in whichever order they come: Claude CLI
+asks its browser for the page whose callback reaches its own `localhost`
+listener, which finishes the sign-in with no code, and prints the page that
+shows a code only as a fallback.
+
+The two phones' guests are `LinuxCliGuest`s: Alpine's `PATH`, `HOME` and
+`LANG` and the subclass's `guestEnvironment` stand in for the app's
+environment, which is Android's or iOS's; their programs are the musl
+builds; and packages go in with `apk`. The rootfs is the one the Terminal
+settings picked, looked up at each start, so the one the first-run setup
+installs is used without a restart, and with none the start says to
+install one.
+
+`ProotCliGuest` starts the program under proot as a process of the phone:
+`prootProgram` (`data/local/proot.dart`) is the terminal driver's proot
 running one program rather than a shell, with the program's cache folder
-bound at its own host path, so its file, its `data/<id>/`, its `work/<id>/` and
-a Claude session's files are one path inside the guest and out and nothing is
-translated; the guest's `PATH`, `HOME` and the subclass's `guestEnvironment`
-stand in for the app's environment, which is Android's. The rootfs is looked
-up at each start, so the one the first-run setup installs is used without a
-restart, and with none the start says to install one. The builds are the musl
-ones (`linux-arm64-musl`, `aarch64-unknown-linux-musl`), which is what Alpine
-runs; Claude CLI's docs ask for `libgcc`, `libstdc++` and the system's
-`ripgrep` on a musl Linux, so its `guestPackages` are `apk add`ed in the guest
-before the program is put in place, and a failure there is a failed install.
-The sign-in's callback is the program's own `localhost` server, which proot
-shares with the phone, so the phone's browser reaches it. iOS has no guest:
-its Alpine is iSH's, which emulates 32-bit x86 and loads no 64-bit program,
-and neither program is built for anything else. What is not known is how
-either behaves under proot on a real device — Codex's own exec sandbox above
-all; nothing here has run on one.
+bound at its own host path, so its file, its `data/<id>/`, its `work/<id>/`
+and a Claude session's files are one path inside the guest and out and
+nothing is translated. Its builds are the arm64 ones (`linux-arm64-musl`,
+`aarch64-unknown-linux-musl`). Claude CLI's docs ask for `libgcc`,
+`libstdc++` and the system's `ripgrep` on a musl Linux, so its
+`guestPackages` are `apk add`ed in the guest before the program is put in
+place, and a failure there is a failed install. The sign-in's callback is
+the program's own `localhost` server, which proot shares with the phone, so
+the phone's browser reaches it. What is not known is how either behaves
+under proot on a real device — Codex's own exec sandbox above all; nothing
+here has run on one.
+
+`IshCliGuest` starts it inside the emulator (`GuestCliProcess`, the iSH
+bridge's pipe session), on the x86-64 core: its builds are the x86-64 ones,
+whatever the iPhone is, and it runs only in a Linux built for that — the
+x86-64 Alpine. The emulator sees the app's data directory at its own path,
+which is why iOS keeps the programs' cache there (`cliCacheRoot`) rather
+than in the OS cache, and why nothing needs binding.
 
 **The split is interface against lifecycle.** `CliProvider` owns what every
 such program shares: finding it, its environment, and `CliClient` — the
@@ -434,16 +486,17 @@ is set to a day, a tool being able to wait on the user. Closing is stdin
 first, then SIGTERM, then SIGKILL, three seconds apart, with every held
 call failed so the CLI is not left waiting on it.
 
-The process and the bridge are ports a session is handed:
-`ClaudeCliProvider.over` takes a `LaunchCli` (the real one is
-`launchProcess`, a `CliProcess` over `dart:io`'s) and a `BindToolBridge`
+Where it runs and the bridge are ports a session is handed:
+`ClaudeCliProvider.over` takes a `CliGuest` (a test's is a `HostCliGuest`
+over a fake `LaunchCli`; the real one launches `launchProcess`, a
+`CliProcess` over `dart:io`'s) and a `BindToolBridge`
 (`McpToolBridge.bind`). What the bridge decides is `McpToolRoutes`, a
 JSON-RPC request in and its answer out, and `McpToolBridge` is that behind
 a socket — the token check and the HTTP translation, which no test covers,
 since no test binds a port. The session's tests run over a fake process
 and a bridge with no socket under it, playing the CLI by printing its
 stream events and calling the routes. `CodexCliProvider.over` takes the
-`LaunchCli` alone, and its tests play the app-server over the same fake
+guest alone, and its tests play the app-server over the same fake
 process, line by line.
 
 **Codex CLI is a server rather than a pipe of messages.**

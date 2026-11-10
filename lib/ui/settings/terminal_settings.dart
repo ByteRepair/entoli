@@ -23,15 +23,11 @@ class TerminalSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final canRun = ref.watch(shellProvider.select((s) => s.canRunCommands));
-    final abi = ref.watch(deviceAbiProvider);
-    final available = ref.watch(prootAvailableProvider);
-    // A Linux can run where this build carries proot (Android) or where the
-    // in-process emulator does (iOS, whose ABI is the "ios" key its catalog
-    // is keyed on). iOS with no Linux installed reads as "nothing to run" in
+    final linux = ref.watch(linuxHostProvider);
+    // A phone with no Linux installed reads as "nothing to run" in
     // [canRunCommands], but the catalog below is the way one gets installed,
     // so the section stays for it.
-    final canHostALinux = available || abi == "ios";
-    if (!canRun && !canHostALinux) {
+    if (!canRun && !linux.runsLinux) {
       return SectionHeader(
         "Driver",
         description:
@@ -41,15 +37,14 @@ class TerminalSection extends ConsumerWidget {
     }
     final installed = ref.watch(installedRootfsProvider);
     final selected = ref.watch(appSettingsProvider.select((s) => s.rootfsId));
-    // Android is the only platform whose ABI with no proot beside it is this
-    // device's build shipping without it — a fault of the APK. iOS carries no
-    // proot by design; its shell is the in-process emulator, and its catalog
-    // rides on the "ios" ABI the device answers with.
-    final unpackagedAbi = available || abi == null || abi == "ios" ? null : abi;
+    final unpackagedAbi = switch (linux) {
+      MissingProotLinux(:final abi) => abi,
+      _ => null,
+    };
     final description =
         "What driver to use when running commands. Determines "
         "the environment commands will run in."
-        "${canHostALinux ? " Commands run in a Linux installed below; with "
+        "${linux.runsLinux ? " Commands run in a Linux installed below; with "
                   "none, the agent has no terminal." : ""}";
 
     return Column(
@@ -73,16 +68,15 @@ class TerminalSection extends ConsumerWidget {
           ),
         InstalledPicker(
           label: "Commands run on",
-          // A phone — the one platform with an ABI to answer — offers no
-          // shell of its own: a Linux, proot on Android and the emulator on
-          // iOS, is the only place commands run, so nothing picked is no
-          // terminal rather than an entry. On a desktop null is the
-          // machine's own shell, an answer. Whether each enforces the
-          // sandbox is the status card's.
-          none: abi != null ? null : "Host",
+          // A phone offers no shell of its own: a Linux, proot on Android
+          // and the emulator on iOS, is the only place commands run, so
+          // nothing picked is no terminal rather than an entry. On a desktop
+          // null is the machine's own shell, an answer. Whether each
+          // enforces the sandbox is the status card's.
+          none: linux.hasHostShell ? "Host" : null,
           options: {
-            for (final rootfs in rootfsCatalog)
-              if ((available || abi == "ios") && installed.contains(rootfs.id))
+            for (final rootfs in linux.catalog)
+              if (linux.runsLinux && installed.contains(rootfs.id))
                 rootfs.id: rootfs.name,
           },
           value: selected,
@@ -189,10 +183,8 @@ class RootfsCatalogSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final canHostALinux =
-        ref.watch(prootAvailableProvider) ||
-        ref.watch(deviceAbiProvider) == "ios";
-    if (!canHostALinux) return const SizedBox.shrink();
+    final linux = ref.watch(linuxHostProvider);
+    if (!linux.runsLinux) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -203,7 +195,7 @@ class RootfsCatalogSection extends ConsumerWidget {
               "Downloaded once and kept outside the app's data, so a "
               "backup does not carry it and a restore does not delete it.",
         ),
-        for (final rootfs in rootfsCatalog) RootfsTile(rootfs: rootfs),
+        for (final rootfs in linux.catalog) RootfsTile(rootfs: rootfs),
       ],
     );
   }
@@ -226,7 +218,7 @@ class RootfsTile extends ConsumerWidget {
     final failure = ref.watch(
       rootfsDownloadsProvider.select((s) => s.failures[rootfs.id]),
     );
-    final image = rootfs.imageFor(ref.watch(deviceAbiProvider));
+    final image = rootfs.imageFor(ref.watch(linuxHostProvider).imageKey);
 
     return CatalogTile(
       title: Text("${rootfs.name} ${rootfs.version}"),
@@ -242,7 +234,7 @@ class RootfsTile extends ConsumerWidget {
 }
 
 /// Reads what it needs itself rather than being handed it: neither the
-/// installed set nor the device's ABI appears in the row above, and passing
+/// installed set nor the device's Linux host appears in the row above, and passing
 /// them down would rebuild the whole `ListTile` for a button.
 class _Action extends ConsumerWidget {
   const _Action({required this.rootfs, required this.downloading});
@@ -266,7 +258,7 @@ class _Action extends ConsumerWidget {
         : "Everything installed in it goes with it.",
     // An architecture with no image is a row drawn dead rather than left
     // out, so the reader can see the distribution exists.
-    onDownload: rootfs.imageFor(ref.watch(deviceAbiProvider)) == null
+    onDownload: rootfs.imageFor(ref.watch(linuxHostProvider).imageKey) == null
         ? null
         : () => ref.read(rootfsDownloadsProvider.notifier).install(rootfs),
   );
