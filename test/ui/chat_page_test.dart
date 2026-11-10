@@ -37,6 +37,7 @@ import "package:agent_chat/ui/chat/widgets/needs_setup_bar.dart";
 import "package:agent_chat/ui/chat/widgets/paired_project_badges.dart";
 import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/theme.dart";
+import "package:agent_chat/domain/rootfs.dart";
 
 import "../fakes.dart" show onePixelPng;
 import "../harness.dart";
@@ -356,7 +357,10 @@ void main() {
       "a rootfs env on Android lets the composer through with the marker",
       (tester) async {
         app.dispose();
-        app = TestApp.create(proot: true, linuxes: const {"alpine"});
+        app = TestApp.create(
+          linuxHost: const ProotLinux("arm64-v8a"),
+          linuxes: const {"alpine"},
+        );
         File(app.config.setupCompleteFile(project: ByteRepairProject().dir))
           ..createSync(recursive: true)
           ..writeAsStringSync("done");

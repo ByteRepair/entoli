@@ -460,9 +460,13 @@ Still owed: the licences MLX and swift-transformers ship, on the About page.
 
 ## The rootfs
 
-The Alpine a device downloads is an **i386** minirootfs, a separate entry in
-`Rootfs.images` under the `"ios"` ABI key — not the arm64 one Android fetches,
-because iSH emulates x86 and cannot run an arm64 binary. It is unpacked into
+The Alpine a device downloads is the **x86-64** minirootfs, `alpine64`, a
+catalog entry of its own whose one image is under `EmulatedLinux.key` — not
+the arm64 one Android fetches, because the emulator runs x86 and cannot run an
+arm64 binary. `EmulatedLinux` is the `LinuxHost` that says so: what iOS is
+offered and which image it fetches, where Android's is `ProotLinux` over its
+ABI. It runs on the blinkish core (`IshCore.x86_64`); a device that kept the
+i386 Alpine from before runs that on `IshCore.i386`. It is unpacked into
 iSH's fakefs, the SQLite-backed filesystem iSH models in-process, and the
 unpacking cannot use the system `tar` (the same exec ban): `FileRootfsStore`'s
 `tar` callback is iSH's own `fakefsify` tool, linked in, which converts a

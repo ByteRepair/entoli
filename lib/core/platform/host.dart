@@ -112,7 +112,7 @@ Shell platformShell({
       environment: environment,
       core: core,
       platformDescription: () => rootfsDir() != null
-          ? rootfsById(rootfsId?.call())!.describe(iosAbi)
+          ? rootfsById(rootfsId?.call())!.describe(EmulatedLinux.key)
           : "iOS, with no Linux installed. Install one from the Terminal "
                 "settings to run commands.",
     );
@@ -206,10 +206,21 @@ ShellDriver? platformDriver({
 /// OS cache, so a cache clear does not cost the compile again.
 String landlockCacheDir(AppConfig config) => p.join(config.dataDir, "landlock");
 
-/// Which rootfs a download fetches: Android's ABI, "ios" on iOS (iSH emulates
-/// x86, not the device's arm64), null on the desktops, which have no catalog.
+/// The device's ABI, which only Android answers: what proot runs, and which
+/// image of a distribution it downloads.
 Future<String?> deviceAbi() =>
-    Platform.isIOS ? Future.value(iosAbi) : BundledTools.abi();
+    Platform.isIOS ? Future.value(null) : BundledTools.abi();
+
+/// How this device runs a Linux: under the emulator on iOS, under proot on
+/// an Android whose build carries it for [abi], and in the machine's own
+/// shell on a desktop.
+LinuxHost linuxHostOf({String? abi, Toolset? tools}) => Platform.isIOS
+    ? const EmulatedLinux()
+    : abi == null
+    ? const NoLinux()
+    : tools?.proot != null
+    ? ProotLinux(abi)
+    : MissingProotLinux(abi);
 
 /// What keeps the host shell's commands in. Linux's is the Landlock helper
 /// [hostDriver] is built with, macOS's the Seatbelt one; a phone's is the

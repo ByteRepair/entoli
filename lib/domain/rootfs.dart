@@ -30,18 +30,18 @@ class Rootfs {
   /// distribution it will keep working around.
   final String packageManager;
 
-  /// By Android ABI. An ABI that is not a key is one this distribution has no
-  /// build for, which the settings page says rather than offering a download
-  /// that cannot work.
+  /// By [LinuxHost.imageKey]: an Android ABI, or iOS's emulator. A key that
+  /// is not here is a device this distribution has no build for, which the
+  /// settings page says rather than offering a download that cannot work.
   final Map<String, RootfsImage> images;
 
-  RootfsImage? imageFor(String? abi) => abi == null ? null : images[abi];
+  RootfsImage? imageFor(String? key) => key == null ? null : images[key];
 
   /// What the model is told it is on. The architecture is the guest's own name
   /// for it rather than Android's, since that is what `uname -m` in there will
   /// say.
-  String describe(String? abi) {
-    final arch = imageFor(abi)?.arch;
+  String describe(String? key) {
+    final arch = imageFor(key)?.arch;
     return arch == null ? "$name $version" : "$name $version ($arch)";
   }
 }
@@ -117,9 +117,8 @@ const alpine = Rootfs(
 
 /// iOS's x86-64 guest, blinkish: a second catalog entry beside [alpine]. The
 /// same Alpine the i386 one ships, but the x86_64 tarball run under blink's
-/// interpreter rather than asbestos. Its `images` holds only the iOS key — the
-/// "ios" ABI every iOS device answers with — so a non-iOS device sees no
-/// download for it, and it cannot collide with [alpine]'s Android x86_64
+/// interpreter rather than asbestos. Its `images` holds only
+/// [EmulatedLinux]'s key, so it cannot collide with [alpine]'s Android x86_64
 /// image. `rootfsById("alpine64")` is how the Terminal setting and the setup
 /// step name it.
 const alpine64 = Rootfs(
@@ -128,7 +127,7 @@ const alpine64 = Rootfs(
   version: "3.24.1",
   packageManager: "apk",
   images: {
-    iosAbi: RootfsImage(
+    EmulatedLinux.key: RootfsImage(
       arch: "x86_64",
       url:
           "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/"
@@ -144,14 +143,98 @@ const alpine64 = Rootfs(
 /// is looked up in.
 const rootfsCatalog = [alpine, alpine64];
 
-/// The ABI every iOS device answers with, the key of [alpine64]'s one image.
-const iosAbi = "ios";
+/// How this device runs a Linux, if it does: what decides the distributions
+/// it is offered, which image of each it downloads, and whether one
+/// installed can run anything. One answer per launch, from what the device
+/// is and what this build carries.
+sealed class LinuxHost {
+  const LinuxHost();
 
-/// What a device with [abi] is offered: iOS its x86-64 guest alone, and
-/// every other device the one Alpine, whose row says so where it has no build
-/// for the device.
-List<Rootfs> rootfsCatalogFor(String? abi) =>
-    abi == iosAbi ? const [alpine64] : const [alpine];
+  /// The distributions this device is offered, the first being the one a
+  /// first launch sets up. Empty where it has none.
+  List<Rootfs> get catalog;
+
+  /// Which of a distribution's [Rootfs.images] is this device's, or null
+  /// where it has none.
+  String? get imageKey;
+
+  /// Whether a Linux installed here runs commands.
+  bool get runsLinux;
+
+  /// Whether the machine's own shell is where commands run with no Linux
+  /// picked: a desktop's. A phone has none to offer, so nothing picked there
+  /// is no terminal.
+  bool get hasHostShell => false;
+}
+
+/// Android, whose Linux runs under the proot this build carries for [abi].
+final class ProotLinux extends LinuxHost {
+  const ProotLinux(this.abi);
+
+  final String abi;
+
+  @override
+  List<Rootfs> get catalog => const [alpine];
+
+  @override
+  String get imageKey => abi;
+
+  @override
+  bool get runsLinux => true;
+}
+
+/// Android, from a build with no proot in it for [abi]: a fault of the APK,
+/// which the Terminal page says rather than describing a device that cannot
+/// run one.
+final class MissingProotLinux extends LinuxHost {
+  const MissingProotLinux(this.abi);
+
+  final String abi;
+
+  @override
+  List<Rootfs> get catalog => const [alpine];
+
+  @override
+  String get imageKey => abi;
+
+  @override
+  bool get runsLinux => false;
+}
+
+/// iOS, whose Linux runs under the in-process emulator: an x86 guest whatever
+/// the device's own architecture, so its images are keyed apart from every
+/// Android ABI.
+final class EmulatedLinux extends LinuxHost {
+  const EmulatedLinux();
+
+  static const key = "ios";
+
+  @override
+  List<Rootfs> get catalog => const [alpine64];
+
+  @override
+  String get imageKey => key;
+
+  @override
+  bool get runsLinux => true;
+}
+
+/// A desktop, whose commands run in the machine's own shell.
+final class NoLinux extends LinuxHost {
+  const NoLinux();
+
+  @override
+  List<Rootfs> get catalog => const [];
+
+  @override
+  String? get imageKey => null;
+
+  @override
+  bool get runsLinux => false;
+
+  @override
+  bool get hasHostShell => true;
+}
 
 /// The wire name the guest drivers and the install environment name the
 /// distribution's installer by — what `byte-repair-setup.sh` reads. One

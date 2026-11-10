@@ -1257,9 +1257,9 @@ class FakeRootfsStore extends RootfsStore {
   @override
   Stream<DownloadProgress> install(
     Rootfs rootfs, {
-    required String abi,
+    required String imageKey,
   }) async* {
-    final image = rootfs.imageFor(abi)!;
+    final image = rootfs.imageFor(imageKey)!;
     yield DownloadProgress(received: 0, total: image.bytes);
     if (failNext case final error?) {
       failNext = null;

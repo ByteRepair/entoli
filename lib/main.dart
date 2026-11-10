@@ -375,9 +375,10 @@ class AppSession {
         installedRootfsProvider.overrideWith(
           () => InstalledRootfs(scans.first),
         ),
-        deviceAbiProvider.overrideWithValue(await abi),
+        linuxHostProvider.overrideWithValue(
+          platform.linuxHostOf(abi: await abi, tools: toolset),
+        ),
         appVersionProvider.overrideWithValue(await version),
-        prootAvailableProvider.overrideWithValue(toolset?.proot != null),
         hostConfinementProvider.overrideWithValue(platform.hostConfinement()),
         appUpdateHostProvider.overrideWithValue(
           platform.createAppUpdateHost(cache),

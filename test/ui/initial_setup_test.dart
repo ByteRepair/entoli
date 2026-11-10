@@ -16,6 +16,7 @@ import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/initial_setup_gate.dart";
 import "package:agent_chat/ui/settings/downloads.dart" show DownloadState;
+import "package:agent_chat/domain/rootfs.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
@@ -46,7 +47,7 @@ void main() {
   testWidgets("a phone installs Alpine and picks it before the tour", (
     tester,
   ) async {
-    app = TestApp.create(proot: true);
+    app = TestApp.create(linuxHost: const ProotLinux("arm64-v8a"));
     app.rootfs.installing = Completer();
     await app.pump(tester, gate);
     await tester.pump();
@@ -61,7 +62,7 @@ void main() {
   });
 
   testWidgets("iOS gets its x86-64 Linux", (tester) async {
-    app = TestApp.create(abi: "ios");
+    app = TestApp.create(linuxHost: const EmulatedLinux());
     await app.pump(tester, gate);
     await settleIo(tester, least: 3);
 
@@ -70,7 +71,10 @@ void main() {
   });
 
   testWidgets("one already installed is only picked", (tester) async {
-    app = TestApp.create(proot: true, linuxes: {"alpine"});
+    app = TestApp.create(
+      linuxHost: const ProotLinux("arm64-v8a"),
+      linuxes: {"alpine"},
+    );
     await app.pump(tester, gate);
     await settleIo(tester, least: 3);
 
@@ -79,7 +83,7 @@ void main() {
   });
 
   testWidgets("a failure offers Retry and Skip", (tester) async {
-    app = TestApp.create(proot: true);
+    app = TestApp.create(linuxHost: const ProotLinux("arm64-v8a"));
     app.rootfs.failNext = Exception("offline");
     await app.pump(tester, gate);
     await settleIo(tester);
@@ -91,7 +95,7 @@ void main() {
 
     // Skip leaves the terminal on the host.
     app.dispose();
-    app = TestApp.create(proot: true);
+    app = TestApp.create(linuxHost: const ProotLinux("arm64-v8a"));
     app.rootfs.failNext = Exception("offline");
     await app.pump(tester, gate);
     await settleIo(tester);
@@ -109,7 +113,7 @@ void main() {
     expect(find.text("tour"), findsOneWidget);
 
     app.dispose();
-    app = TestApp.create(proot: true);
+    app = TestApp.create(linuxHost: const ProotLinux("arm64-v8a"));
     await io(
       tester,
       () => app.seedSettings(AppSettings(licenceAccepted: true)),
@@ -163,7 +167,7 @@ void main() {
   test("Android's plan installs each CLI after Alpine, and iOS's does not", () {
     CliProvider.guest = const _AnyGuest();
     addTearDown(() => CliProvider.guest = null);
-    app = TestApp.create(proot: true);
+    app = TestApp.create(linuxHost: const ProotLinux("arm64-v8a"));
     expect(app.container.read(setupPlanProvider).steps.map((s) => s.name), [
       "Alpine Linux",
       "Claude CLI",
@@ -172,7 +176,7 @@ void main() {
     app.dispose();
 
     CliProvider.guest = null;
-    app = TestApp.create(abi: "ios");
+    app = TestApp.create(linuxHost: const EmulatedLinux());
     expect(app.container.read(setupPlanProvider).steps.map((s) => s.name), [
       "Alpine Linux (x86-64)",
     ]);

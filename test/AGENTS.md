@@ -82,8 +82,9 @@ real programs are asked — the release each publisher states, the checksum,
 the unpacking, the link found in what a sign-in prints — is
 `cli_provider_test.dart`'s, over `MockClient` and a fake process.
 
-`TestApp.create(proot: …, linuxes: …)` is the two halves the Terminal page turns
-on — whether this build could run a Linux at all, and which are installed — with
+`TestApp.create(linuxHost: …, linuxes: …)` is the two halves the Terminal page
+turns on — how this device would run a Linux (a `LinuxHost`), and which are
+installed — with
 `FakeRootfsStore` behind them. Its `installing` completer holds a download open
 so a test can see the row mid-flight. What a command actually runs under is not
 faked either: `local_shell_test.dart` builds a `ShellDriver` out of

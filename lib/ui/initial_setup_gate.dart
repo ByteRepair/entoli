@@ -37,9 +37,9 @@ final setupPlanProvider = Provider<SetupPlan>((ref) {
   ];
   // A phone's CLIs run in the Linux installed first: proot's on Android, the
   // emulated x86-64 one on iOS.
-  final abi = ref.watch(deviceAbiProvider);
-  if (ref.watch(prootAvailableProvider) || abi == iosAbi) {
-    return SetupPlan([AlpineSetup(rootfsCatalogFor(abi).first), ...clis]);
+  final linux = ref.watch(linuxHostProvider);
+  if (linux.runsLinux) {
+    return SetupPlan([AlpineSetup(linux.catalog.first), ...clis]);
   }
   final browser = ref.watch(agentBrowserProvider);
   return SetupPlan([

@@ -19,6 +19,7 @@ import "package:agent_chat/ui/widgets/resettable_field.dart";
 import "../fakes.dart";
 import "../harness.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
+import "package:agent_chat/domain/rootfs.dart";
 
 void main() {
   late TestApp app;
@@ -866,7 +867,10 @@ void main() {
       TargetPlatform.android,
       (tester) async {
         app.dispose();
-        app = TestApp.create(proot: true, linuxes: const {"alpine"});
+        app = TestApp.create(
+          linuxHost: const ProotLinux("arm64-v8a"),
+          linuxes: const {"alpine"},
+        );
         await io(
           tester,
           () => app.container

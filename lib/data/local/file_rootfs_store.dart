@@ -68,14 +68,14 @@ class FileRootfsStore extends RootfsStore {
   @override
   Stream<DownloadProgress> install(
     Rootfs rootfs, {
-    required String abi,
+    required String imageKey,
   }) => DownloadRun(
     client: client,
     discard: () => delete(rootfs),
     run: (run) async {
-      final image = rootfs.imageFor(abi);
+      final image = rootfs.imageFor(imageKey);
       if (image == null) {
-        throw UnsupportedError("${rootfs.name} has no build for $abi.");
+        throw UnsupportedError("${rootfs.name} has no build for $imageKey.");
       }
       // Whatever an earlier attempt left: files under a name we are about to
       // write, which is worse than starting again.

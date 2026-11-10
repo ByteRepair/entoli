@@ -9,6 +9,7 @@ import "package:agent_chat/providers.dart";
 
 import "../harness.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
+import "package:agent_chat/domain/rootfs.dart";
 
 void main() {
   late TestApp app;
@@ -41,7 +42,7 @@ void main() {
 
   testWidgets("a phone whose build has no proot in it blames the build, not "
       "the device", (tester) async {
-    app = TestApp.create(abi: "arm64-v8a");
+    app = TestApp.create(linuxHost: const MissingProotLinux("arm64-v8a"));
     await pumpTerminal(tester);
 
     expect(find.textContaining("no proot in it for arm64-v8a"), findsOneWidget);
@@ -58,7 +59,7 @@ void main() {
   testWidgets("where it can run one, the catalog is offered with its size", (
     tester,
   ) async {
-    app = TestApp.create(proot: true);
+    app = TestApp.create(linuxHost: const ProotLinux("arm64-v8a"));
     await pumpTerminal(tester);
 
     expect(find.text("Alpine Linux 3.24.1"), findsOneWidget);
@@ -77,7 +78,7 @@ void main() {
 
   testWidgets("an architecture this build has no image for is said rather than "
       "offered", (tester) async {
-    app = TestApp.create(proot: true, abi: "riscv64");
+    app = TestApp.create(linuxHost: const ProotLinux("riscv64"));
     await pumpTerminal(tester);
 
     expect(find.text("No build for this device"), findsOneWidget);
@@ -90,7 +91,7 @@ void main() {
   testWidgets("downloading one adds it to the picker and leaves it unpicked", (
     tester,
   ) async {
-    app = TestApp.create(proot: true);
+    app = TestApp.create(linuxHost: const ProotLinux("arm64-v8a"));
     await pumpTerminal(tester);
 
     await tester.tap(find.byTooltip("Download"));
@@ -113,7 +114,10 @@ void main() {
   testWidgets("picking one is what makes commands run inside it", (
     tester,
   ) async {
-    app = TestApp.create(proot: true, linuxes: const {"alpine"});
+    app = TestApp.create(
+      linuxHost: const ProotLinux("arm64-v8a"),
+      linuxes: const {"alpine"},
+    );
     await pumpTerminal(tester);
 
     await tester.tap(find.text(none));
@@ -131,7 +135,10 @@ void main() {
   testWidgets("deleting the one commands run in leaves none picked", (
     tester,
   ) async {
-    app = TestApp.create(proot: true, linuxes: const {"alpine"});
+    app = TestApp.create(
+      linuxHost: const ProotLinux("arm64-v8a"),
+      linuxes: const {"alpine"},
+    );
     await io(
       tester,
       () =>
@@ -159,7 +166,7 @@ void main() {
   testWidgets(
     "a download in flight shows what it is doing, and can be stopped",
     (tester) async {
-      app = TestApp.create(proot: true);
+      app = TestApp.create(linuxHost: const ProotLinux("arm64-v8a"));
       app.rootfs.installing = Completer<void>();
       await pumpTerminal(tester);
 
@@ -248,7 +255,7 @@ void main() {
       tester,
     ) async {
       app = TestApp.create(
-        proot: true,
+        linuxHost: const ProotLinux("arm64-v8a"),
         linuxes: const {"alpine"},
         hostConfinement: Confinement.landlock,
       );
