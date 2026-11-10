@@ -309,16 +309,8 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   }
 
   /// Whether the program is signed in, by its own [statusArguments].
-  Future<bool> signedIn() async {
-    final (code: code, said: said) = await _exitOf(await run(statusArguments));
-    if (code != 0 && said.toString().isNotEmpty) {
-      logFailure(
-        "cli",
-        "${config.displayName} sign-in status exited $code: $said",
-      );
-    }
-    return code == 0;
-  }
+  Future<bool> signedIn() async =>
+      (await _exitOf(await run(statusArguments))).code == 0;
 
   /// Signs the program out, by its own [signOutArguments]; whether it was
   /// signed in or not, it is not after.
@@ -645,18 +637,8 @@ abstract class CliProcessSession extends CliSession {
   }) async {
     final process = await provider.run(arguments, environment: environment);
     _process = process;
-    logFailure("cli", "$name process started");
-    process.lines.listen((l) {
-      logDetail(
-        "cli",
-        () => "$name stdout: ${l.length > 200 ? l.substring(0, 200) : l}",
-      );
-      _read(l);
-    }, onError: (Object e) => fail("$e"));
-    process.errors.listen((c) {
-      logFailure("cli", "$name stderr: $c");
-      _stderr.add(c);
-    });
+    process.lines.listen(_read, onError: (Object e) => fail("$e"));
+    process.errors.listen(_stderr.add);
     unawaited(process.exitCode.then(_exited));
   }
 
@@ -666,11 +648,6 @@ abstract class CliProcessSession extends CliSession {
     try {
       message = jsonDecode(text);
     } on FormatException {
-      logFailure(
-        "codex",
-        "dropped a non-JSON line (${text.length} bytes): "
-            "${text.substring(0, text.length < 120 ? text.length : 120)}",
-      );
       return;
     }
     if (message is Map<String, dynamic>) line(message);

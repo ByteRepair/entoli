@@ -86,15 +86,6 @@ class CodexCliProvider extends CliProvider with OfferedByName {
   @override
   List<String> get companions => const ["codex-code-mode-host"];
 
-  /// Experiment: app-server panics ("Span not found") in blinkish before it
-  /// answers. One tokio worker rules out a cross-thread emulation fault; the
-  /// backtrace shows where it fails.
-  @override
-  Map<String, String> get guestEnvironment => const {
-    "TOKIO_WORKER_THREADS": "1",
-    "RUST_BACKTRACE": "full",
-  };
-
   /// Each program its own asset, named for the target: Codex and its
   /// [companions], the same way.
   @override
@@ -371,7 +362,6 @@ class CodexCliSession extends CliProcessSession {
   @override
   void begin(List<LlmMessage> rest) {
     _turnOpen = true;
-    logFailure("codex", "turn/start sent");
     _request("turn/start", {
       "threadId": _thread,
       "input": _input(rest),
@@ -466,12 +456,6 @@ class CodexCliSession extends CliProcessSession {
   }
 
   void _notified(String method, Map<String, dynamic> params) {
-    // Per-token deltas are too noisy to log; log only the turn's lifecycle.
-    if (method == "turn/completed" ||
-        method == "item/completed" ||
-        method == "item/started") {
-      logFailure("codex", "notification $method");
-    }
     switch (method) {
       case "item/agentMessage/delta":
         _say(_text, "${params["delta"]}", LlmTextChunk.new);
@@ -514,7 +498,6 @@ class CodexCliSession extends CliProcessSession {
   }
 
   void _turnCompleted(Map<dynamic, dynamic> turn) {
-    logFailure("codex", "turn/completed status=${turn["status"]}");
     _turnOpen = false;
     // A turn that ended leaves nothing waiting on its calls.
     for (final request in [
@@ -601,7 +584,6 @@ class CodexCliSession extends CliProcessSession {
     final id = ++_nextId;
     final done = Completer<Object?>();
     _waiting[id] = done;
-    logFailure("codex", "request $method id=$id");
     write({"id": id, "method": method, "params": params});
     return done.future;
   }
