@@ -47,7 +47,7 @@ kernel_src=(
   kernel/vdso.c kernel/task.c kernel/group.c kernel/log.c kernel/fork.c
   kernel/exec.c kernel/exit.c kernel/time.c kernel/mmap.c kernel/uname.c
   kernel/tls.c kernel/futex.c kernel/getset.c kernel/signal.c
-  kernel/resource.c kernel/random.c kernel/misc.c kernel/eventfd.c
+  kernel/resource.c kernel/random.c kernel/misc.c kernel/eventfd.c kernel/signalfd.c
   kernel/ipc.c kernel/ptrace.c kernel/fs.c kernel/fs_info.c
   fs/mount.c fs/fd.c fs/inode.c fs/stat.c fs/dir.c fs/generic.c fs/path.c
   fs/real.c fs/fake.c fs/proc.c fs/proc/entry.c fs/proc/ish.c
