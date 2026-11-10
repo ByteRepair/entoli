@@ -48,8 +48,8 @@ class GuestCliProcess implements CliProcess {
     List<String> readOnly = const [],
     bool blinkish = true,
   }) async {
-    final stdout = StreamController<String>();
-    final stderr = StreamController<String>();
+    final stdout = StreamController<List<int>>();
+    final stderr = StreamController<List<int>>();
     final exitCode = Completer<int>();
 
     final replies = ReceivePort();
@@ -74,8 +74,7 @@ class GuestCliProcess implements CliProcess {
           }
         case _kOutput:
           final stream = msg[1] as int;
-          final delta = utf8.decode(msg[2] as Uint8List, allowMalformed: true);
-          (stream == 0 ? stdout : stderr).add(delta);
+          (stream == 0 ? stdout : stderr).add(msg[2] as Uint8List);
         case _kExit:
           if (!exitCode.isCompleted) exitCode.complete(msg[1] as int);
           unawaited(sub.cancel());
@@ -131,17 +130,18 @@ class GuestCliProcess implements CliProcess {
   /// it; the pokes below reach the bridge directly.
   final SendPort worker;
 
-  final StreamController<String> stdout;
-  final StreamController<String> stderr;
+  final StreamController<List<int>> stdout;
+  final StreamController<List<int>> stderr;
   final Completer<int> _exitCode;
 
   bool _closed = false;
 
   @override
-  Stream<String> get lines => stdout.stream.transform(const LineSplitter());
+  Stream<String> get lines =>
+      stdout.stream.transform(utf8.decoder).transform(const LineSplitter());
 
   @override
-  Stream<String> get errors => stderr.stream;
+  Stream<String> get errors => stderr.stream.transform(utf8.decoder);
 
   @override
   void writeLine(String line) {
@@ -150,7 +150,9 @@ class GuestCliProcess implements CliProcess {
     if (fn == null) return;
     final text = "$line\n";
     final ptr = text.toNativeUtf8();
-    fn(Pointer.fromAddress(handle), ptr, text.length);
+    // The byte length, not the character count: a non-ASCII line has more
+    // bytes than code units, and a character count truncates the write.
+    fn(Pointer.fromAddress(handle), ptr, utf8.encode(text).length);
     calloc.free(ptr);
   }
 
