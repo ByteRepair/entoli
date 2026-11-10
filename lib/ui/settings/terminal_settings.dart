@@ -95,7 +95,7 @@ class TerminalSection extends ConsumerWidget {
 
 /// What the picked driver does about the sandbox: the environment's own
 /// answer, with nothing installed falling back to the host's.
-Confinement _pickedConfinement(WidgetRef ref) {
+Confinement pickedConfinement(WidgetRef ref) {
   final selected = ref.watch(appSettingsProvider.select((s) => s.rootfsId));
   final installed = ref.watch(installedRootfsProvider);
   return selected == null || !installed.contains(selected)
@@ -113,7 +113,7 @@ class SandboxStatusCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    final supported = _pickedConfinement(ref).enforcesSandbox;
+    final supported = pickedConfinement(ref).enforcesSandbox;
     final enabled =
         ref.watch(projectSettingsProvider(null).select((s) => s.sandbox)) ??
         true;

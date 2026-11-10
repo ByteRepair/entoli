@@ -564,14 +564,16 @@ class ChatRepository {
           (r) => r.copyWith(origin: PermissionTier.defaultProject),
         ),
       ],
-      // The project's writable roots and the chat's own grants, where an
-      // `add_directory` always answer lands. A rule's writes are the agent's to
-      // apply, to the commands that rule matches.
-      writableDirs: [
+      // The project's writable roots — its work folders, granted up front —
+      // and the chat's own grants, where an `add_directory` always answer
+      // lands; once each, a folder granted at two tiers being one grant. The
+      // turn drops what grants nothing on this machine. A rule's writes are
+      // the agent's to apply, to the commands that rule matches.
+      writableDirs: {
         ...meta.writableDirs,
         ...projectSettings.writableDirs,
         ...defaultProjectSettings.writableDirs,
-      ],
+      }.toList(),
       sandboxed:
           meta.sandbox ??
           projectSettings.sandbox ??

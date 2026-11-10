@@ -129,6 +129,46 @@ void main() {
       },
     );
 
+    test("the home, the root and a folder holding the workspaces refuse, "
+        "before any banner", () async {
+      makeRooms();
+      final house = Directory.systemTemp.createTempSync("agent-dir-home");
+      addTearDown(() => house.deleteSync(recursive: true));
+      final home = p.join(house.path, "home");
+      makeDir(home);
+      shell = FakeShell((_) => ok(""), home: home);
+      final holding = p.dirname(projectWs);
+      final client = FakeLlmClient([
+        [
+          fileCall(addDirectoryName, {"path": "~"}),
+        ],
+        [
+          fileCall(addDirectoryName, {"path": house.path}),
+        ],
+        [
+          fileCall(addDirectoryName, {"path": "/"}),
+        ],
+        [
+          fileCall(addDirectoryName, {"path": holding}),
+        ],
+        [finish],
+      ]);
+      final events = await agentOver(client).run(userMessage("go")).toList();
+      expect(
+        events.whereType<ApprovalRequestEvent>(),
+        isEmpty,
+        reason: "nothing here is grantable, so no banner asks",
+      );
+      expect(textOf(results(events, which: 0)), contains("home directory"));
+      expect(
+        textOf(results(events, which: 1)),
+        contains("home directory"),
+        reason: "a folder holding the home holds every dotfile in it",
+      );
+      expect(textOf(results(events, which: 2)), contains("root"));
+      expect(textOf(results(events, which: 3)), contains("the workspaces"));
+    });
+
     test(
       "a link to the data directory refuses as the directory does",
       () async {
@@ -332,6 +372,7 @@ void main() {
     test("lists the workspaces and the granted directories", () async {
       makeRooms();
       final standing = p.join(outside, "standing");
+      makeDir(standing);
       makeDir(p.join(outside, "mid-turn"));
       final client = FakeLlmClient([
         [
@@ -407,6 +448,7 @@ void main() {
     test("a standing grant covers the write tool without a banner", () async {
       makeRooms();
       final file = p.join(outside, "standing", "made-by-write.txt");
+      makeDir(p.join(outside, "standing"));
       final client = FakeLlmClient([
         [
           fileCall(writeToolName, {"path": file, "content": "hi"}),

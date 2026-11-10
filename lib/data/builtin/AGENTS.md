@@ -624,11 +624,34 @@ workspaces and what was granted beside them. The file tools read the same
 list — `outsideWorkspaces` carries the turn's writable set — so a granted
 directory behaves the same by command or by file tool; and auto mode's
 classifier is handed it as `alsoWritable`, beside the project workspace.
-The app's data directory refuses in both directions — anything beneath it, or
-anything containing it, would make the app's own settings, secrets and chats
-writable from inside its own permit. The tool's door refuses before any
-banner, and the repository drops the same paths. The tool rides `ask` and
+What may be granted at all is one test, `refuseFolder` in
+`lib/domain/work_folders.dart`, which the settings page's work folders take
+too. A grant must be a directory that is not the root, not the home or a
+folder holding it, and not a folder holding the workspaces. The app's data
+directory refuses in both directions: anything beneath it, or anything
+containing it, would make the app's own settings, secrets and chats writable
+from inside its own permit. The tool's door refuses before any banner, and
+the repository drops data-tree paths from an "always" answer. The tool rides `ask` and
 runs top-level only, having nobody to answer the banner otherwise.
+
+**A project's work folders are the same list, granted up front.** The
+project tier's `writableDirs` is what its settings page shows as "Work
+folders" (see "Work folders" in `lib/ui/settings/AGENTS.md`), so a folder put
+there before any turn is in the sandbox's grant, Seatbelt's and Landlock's
+alike. It also counts as inside the sandbox for the gate's question of whether
+a call leaves it, and for the classifier's `alsoWritable`, from the first
+call. No banner is needed, so nothing is refused for want of someone to answer
+it. The repository merges the tiers' lists once, without duplicates. The agent
+then hands its gate the policy less what grants nothing here (`grantsNow`:
+`refuseFolder` refuses it, so a folder gone from this machine grants nothing,
+whatever tier wrote it). Each path is checked once per turn rather than per
+call, and a `~` path stands for the gate to resolve. The turn's second system
+message names what is left under "## Work folders" (`turnPrompt`'s
+`workFolders`), so the model writes there without `unsandboxed` or an
+`add_directory` ask. That is read once per turn, and only where the gate
+`confines` the turn's commands (the same condition its sandbox is built
+under). With the switch off or no helper there is nothing to stay inside, and
+the section is absent.
 
 In `auto` mode, a `PermissionClassifier` (the `LlmClassifier` impl, or
 `NoClassifier` when no classifier model is configured) is asked before each

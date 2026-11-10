@@ -32,6 +32,7 @@ import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/app_restart.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/attachment_picker.dart";
+import "package:agent_chat/domain/folder_picker.dart";
 import "package:agent_chat/domain/clipboard_files.dart";
 import "package:agent_chat/domain/backup_handoff.dart";
 import "package:agent_chat/domain/shell_job.dart";
@@ -295,6 +296,15 @@ class FakeAttachmentPicker implements AttachmentPicker {
     picks.add(kind);
     return scripted;
   }
+}
+
+/// Stands in for the platform's folder chooser.
+class FakeFolderPicker implements FolderPicker {
+  /// What the next pick returns. Null is a cancelled dialog.
+  String? scripted;
+
+  @override
+  Future<String?> pick({required String confirmLabel}) async => scripted;
 }
 
 /// Stands in for the runner's clipboard channel.
