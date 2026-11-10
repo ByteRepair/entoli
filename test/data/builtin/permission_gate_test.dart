@@ -1175,6 +1175,21 @@ void main() {
         );
       });
 
+      test("not after the user said no to the banner", () async {
+        final client = FakeLlmClient([
+          [unsandboxed("cd $repo && git add .")],
+          [unsandboxed("cd $repo && git commit -m wip")],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          approveMode: ApproveMode.ask,
+          approvals: [ApprovalResponse.deny, ApprovalResponse.deny],
+        ).run(userMessage("go")).toList();
+        expect(events.whereType<ApprovalRequestEvent>(), hasLength(2));
+        expect(notesOf(events), isEmpty);
+      });
+
       test("not where add_directory is not offered", () async {
         final client = FakeLlmClient([
           [unsandboxed("cd $repo && git add .")],
@@ -1249,6 +1264,116 @@ void main() {
         repo,
         logs,
       ]);
+    });
+  });
+
+  group("a command the parse cannot check, in auto mode", () {
+    /// Every tool result's text, joined: the refusal rides on either half.
+    String resultText(List<AgentEvent> events) => events
+        .whereType<ToolResultEvent>()
+        .map((r) => [r.result.output, r.result.exceptionInfo ?? ""].join(" "))
+        .join();
+
+    test("is judged whole by the classifier, and runs on its allow", () async {
+      final command = r"cat notes.txt > $B/out.txt";
+      final classifier = FakeClassifier(decision: PermissionDecision.allow);
+      final client = FakeLlmClient([
+        [bashCall(command)],
+        [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.auto,
+        classifier: classifier,
+        permissions: [
+          // A deny rule the command's words are plain to: nothing hides
+          // from it, so it does not hold the command back.
+          const PermissionRule(
+            tool: "bash",
+            pattern: "git push *",
+            decision: PermissionDecision.deny,
+          ),
+        ],
+      ).run(userMessage("go")).toList();
+      expect(shell.ran, [command]);
+      expect(shell.sandboxes.single, isNotNull, reason: "still confined");
+      expect(classifier.findings.single, [
+        contains(r"redirects through $B"),
+      ], reason: "the classifier is told what the parse found");
+      expect(results(events).decidedBy, PermissionSource.classifier);
+      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
+    });
+
+    test("a classifier deny answers with the split advice", () async {
+      final client = FakeLlmClient([
+        [bashCall(r"mkdir -p out && cat notes.txt > $B/out.txt")],
+        [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.auto,
+        classifier: FakeClassifier(decision: PermissionDecision.deny),
+      ).run(userMessage("go")).toList();
+      final text = resultText(events);
+      expect(shell.ran, isEmpty);
+      expect(text, contains("cannot be checked as one piece"));
+      expect(text, contains("classifier read the whole command"));
+      expect(text, contains("- mkdir -p out"), reason: "the segments named");
+    });
+
+    test("a deny rule the parse hides the command from keeps it refused, "
+        "unasked", () async {
+      final classifier = FakeClassifier(decision: PermissionDecision.allow);
+      for (final command in [
+        // The words are plain, the redirect is not: the rule matches them.
+        r"rm -rf build > $B/log",
+        // Nothing the rule could read at all.
+        r'rm -rf "build',
+      ]) {
+        final client = FakeLlmClient([
+          [bashCall(command)],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          approveMode: ApproveMode.auto,
+          classifier: classifier,
+          permissions: [
+            const PermissionRule(
+              tool: "bash",
+              pattern: "rm *",
+              decision: PermissionDecision.deny,
+            ),
+          ],
+        ).run(userMessage("go")).toList();
+        expect(shell.ran, isEmpty, reason: command);
+        expect(resultText(events), contains("deny rule"), reason: command);
+      }
+      expect(classifier.classified, isEmpty);
+    });
+
+    test("an ask rule the parse hides the command from still asks", () async {
+      final classifier = FakeClassifier(decision: PermissionDecision.allow);
+      final client = FakeLlmClient([
+        [bashCall(r"git commit -m wip > $B/log")],
+        [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.auto,
+        classifier: classifier,
+        approvals: [ApprovalResponse.deny],
+        permissions: [
+          const PermissionRule(
+            tool: "bash",
+            pattern: "git commit *",
+            decision: PermissionDecision.ask,
+          ),
+        ],
+      ).run(userMessage("go")).toList();
+      expect(events.whereType<ApprovalRequestEvent>(), hasLength(1));
+      expect(classifier.classified, isEmpty);
+      expect(shell.ran, isEmpty);
     });
   });
 
@@ -1336,6 +1461,8 @@ class _StubClassifier implements PermissionClassifier {
     String argumentsJson, {
     required String workspace,
     List<String> alsoWritable = const [],
+    List<String> findings = const [],
+    ClassifierRequest? request,
   }) async => decision;
 }
 
@@ -1351,6 +1478,8 @@ class _SpyClassifier implements PermissionClassifier {
     String argumentsJson, {
     required String workspace,
     List<String> alsoWritable = const [],
+    List<String> findings = const [],
+    ClassifierRequest? request,
   }) async {
     ask();
     return PermissionDecision.allow;
