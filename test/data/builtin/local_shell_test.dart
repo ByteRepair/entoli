@@ -121,10 +121,12 @@ void main() {
       timeout: const Duration(milliseconds: 300),
     );
 
-    // A timeout is a Ctrl-C to the group, and the command dies as 130.
+    // A timeout is a Ctrl-C to the group, and the command dies as 130,
+    // keeping what it printed before.
     expect(result.returnCode, 130);
     expect(result.output, "starting\n");
     expect(result.exceptionInfo, contains("timed out"));
+    expect(result.timedOut, isTrue);
   }, skip: _skipWithoutGroup);
 
   test("what the command spawned is killed with it", () async {
@@ -186,6 +188,8 @@ void main() {
       final result = await run.result;
       expect(result.returnCode, 130);
       expect(result.exceptionInfo, contains("interrupted"));
+      // Stopped by someone, which no background job would have helped.
+      expect(result.timedOut, isFalse);
     },
     skip: _skipWithoutGroup,
   );

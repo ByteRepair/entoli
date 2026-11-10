@@ -131,6 +131,11 @@ class ChatRoom {
   /// nobody looking. So the end starts a turn of its own, said as the app's
   /// notification. A job that was stopped wakes nobody: whoever stopped it
   /// knows. One end is one wake, so a watcher that keeps dying cannot loop.
+  ///
+  /// An end that lands while a turn runs is left to the jobs, which hold it
+  /// as unheard: that turn may make no call after it — its last reply
+  /// already being written — and then nothing would ever have said it.
+  /// [_wakeForUnheard] asks once the turn is over.
   Future<void> _wake(JobEnd end, String command) async {
     final code = end.exitCode;
     if (code == null || state.isRunning) return;
@@ -143,6 +148,18 @@ class ChatRoom {
         tail: end.tail,
       ),
     );
+  }
+
+  /// The first end the agent has not heard — no call carried its note —
+  /// wakes it, now the room is quiet. The rest wait for the end of that
+  /// turn, which asks again; any its calls read are heard by then. A job
+  /// that was stopped wakes nobody, here as between turns.
+  void _wakeForUnheard() {
+    if (state.isRunning || _disposed) return;
+    final first = _jobs.unheard.firstWhereOrNull(
+      (ended) => ended.end.exitCode != null,
+    );
+    if (first != null) unawaited(_wake(first.end, first.command));
   }
 
   bool _loaded = false;
@@ -1374,6 +1391,9 @@ class ChatRoom {
     // say it just dispatched reads as a running room.
     if (reason == TurnEnd.done) _host.settledDone();
     await _settle(turn, reason);
+    // After the settle, whose handoffs are the room's own next turns: a
+    // wake waits behind them rather than talking over them.
+    _wakeForUnheard();
   }
 
   /// A turn has ended: the room may hand off. Under the wave orderings the

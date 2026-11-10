@@ -775,11 +775,12 @@ class _Session {
         returnCode: rc,
         output: output,
         cwd: cwd,
-        exceptionInfo: run.interrupted
-            ? run.byTimeout
-                  ? "The command timed out after ${_word(run.timeout)} and was "
-                        "interrupted. Anything it printed before that is above."
-                  : "The command was interrupted."
+        timedOut: run.timedOut,
+        exceptionInfo: run.timedOut
+            ? "The command timed out after ${_word(run.timeout)} and was "
+                  "interrupted. Anything it printed before that is above."
+            : run.interrupted
+            ? "The command was interrupted."
             : null,
       ),
     );
@@ -807,11 +808,12 @@ class _Session {
         ShellResult(
           returnCode: -1,
           output: run.output,
-          exceptionInfo: run.interrupted
-              ? run.byTimeout
-                    ? "The command timed out after ${_word(run.timeout)} and was "
-                          "killed. Anything it printed before that is above."
-                    : "The command was interrupted and killed."
+          timedOut: run.timedOut,
+          exceptionInfo: run.timedOut
+              ? "The command timed out after ${_word(run.timeout)} and was "
+                    "killed. Anything it printed before that is above."
+              : run.interrupted
+              ? "The command was interrupted and killed."
               : "The shell was closed while the command was running. "
                     "It starts again, in its starting directory, on the next command.",
         ),
@@ -904,6 +906,10 @@ class _RunState {
   final Duration timeout;
   bool interrupted = false;
   bool byTimeout = false;
+
+  /// Whether the interrupt that ended it was the timeout's: the one test,
+  /// for the result's [ShellResult.timedOut] and its wording alike.
+  bool get timedOut => interrupted && byTimeout;
   final List<String> chunks = [];
   final Completer<ShellResult> done = Completer();
 
@@ -1141,6 +1147,7 @@ class _OneShotRun extends ShellRun {
       return ShellResult(
         returnCode: -1,
         output: text,
+        timedOut: !_killed,
         exceptionInfo: _killed
             ? "The command was interrupted and killed."
             : "The command timed out after ${_word(timeout)} and was killed. "

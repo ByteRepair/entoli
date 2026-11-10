@@ -29,6 +29,8 @@ import "../../fakes.dart";
 import "../../harness.dart" show waitFor;
 import "builtin_fakes.dart";
 import "package:agent_chat/data/builtin/builtin_options.dart";
+import "package:agent_chat/data/builtin/templates.dart" show previewChars;
+import "package:agent_chat/data/builtin/tools/bash_tool.dart" show BashTool;
 
 void main() {
   late BuiltinSession session;
@@ -156,6 +158,70 @@ void main() {
       expect(observation.toolCallId, "call-1");
       expect(observation.text, contains("\"returncode\": 2"));
       expect(observation.text, contains("no such file"));
+    });
+
+    group("a result too large to word in full", () {
+      // 51 characters a line, so the preview's 2,000 end inside line 39 and
+      // cut back to the end of line 38.
+      final log = [
+        for (var i = 0; i < 1000; i++)
+          "line ${i.toString().padLeft(4, "0")} ${"x" * 40}\n",
+      ].join();
+
+      test("is saved whole, and the model reads its start and the path, "
+          "in Claude Code's words", () async {
+        final client = FakeLlmClient([
+          [bashCall("make")],
+          [finish],
+        ]);
+        final agent = agentOver(client, respond: (_) => ok(log));
+        final events = await agent.run(userMessage("build it")).toList();
+
+        final result = events.whereType<ToolResultEvent>().single.result;
+        final saved = p.join(agent.workspace, ".entoli-output", "call-1.txt");
+        expect(result.outputFile, saved);
+        expect(File(saved).readAsStringSync(), log);
+        // The log keeps the whole of it, for the chat to show.
+        expect(result.output, log);
+
+        final worded = jsonDecode(client.sent[1].last.text) as Map;
+        expect(worded["returncode"], 0);
+        final preview = log.substring(0, 38 * 51 + 50);
+        expect(
+          worded["output"],
+          "<persisted-output>\n"
+          "Output too large (49.8KB). Full output saved to: $saved\n\n"
+          "Preview (first 2KB):\n"
+          "$preview\n...\n"
+          "</persisted-output>",
+        );
+      });
+
+      test("is worded whole at the limit, and saved past it", () async {
+        final atLimit = "y" * BashTool.outputLimit;
+        final client = FakeLlmClient([
+          [bashCall("one", id: "c1")],
+          [bashCall("two", id: "c2")],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          respond: (c) => ok(c == "one" ? atLimit : "$atLimit!"),
+        ).run(userMessage("go")).toList();
+
+        final [first, second] = [
+          for (final e in events.whereType<ToolResultEvent>()) e.result,
+        ];
+        expect(first.outputFile, isNull);
+        expect(jsonDecode(client.sent[1].last.text)["output"], atLimit);
+        expect(second.outputFile, isNotNull);
+        // No line break to stop at: the preview is the first 2,000 as they
+        // are.
+        expect(
+          jsonDecode(client.sent[2].last.text)["output"],
+          contains("Preview (first 2KB):\n${"y" * previewChars}\n...\n"),
+        );
+      });
     });
 
     test("the first turn is the task under two system messages", () async {
@@ -2044,7 +2110,8 @@ void main() {
     });
 
     test(
-      "the model's timeout reaches the shell, capped by the chat's",
+      "the model's timeout reaches the shell, capped by the chat's most, and "
+      "a call naming none gets the chat's default",
       () async {
         final client = FakeLlmClient([
           [
@@ -2053,19 +2120,24 @@ void main() {
           [
             bashCall("again", extra: {"timeout": 999999999, "restart": true}),
           ],
+          [bashCall("unbounded")],
           [finish],
         ]);
         await agentOver(
           client,
-          options: const BuiltinOptions(commandTimeout: Duration(seconds: 60)),
+          options: const BuiltinOptions(
+            commandTimeout: Duration(seconds: 60),
+            maxCommandTimeout: Duration(seconds: 90),
+          ),
         ).run(userMessage("build")).toList();
 
         expect(shell.timeouts, [
           const Duration(seconds: 5),
+          const Duration(seconds: 90),
           const Duration(seconds: 60),
         ]);
-        expect(shell.restarts, [false, true]);
-        expect(shell.oneShots, [false, false]);
+        expect(shell.restarts, [false, true, false]);
+        expect(shell.oneShots, [false, false, false]);
       },
     );
   });

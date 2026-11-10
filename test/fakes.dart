@@ -619,6 +619,16 @@ class FakeShellJobs implements ChatShellJobs {
 
   @override
   void told(int id) => toldOf.add(id);
+
+  /// The ends the agent has not heard, as a test sets them; a wake's
+  /// [told] takes one out.
+  final List<EndedJob> unheardEnds = [];
+
+  @override
+  List<EndedJob> get unheard => [
+    for (final ended in unheardEnds)
+      if (!toldOf.contains(ended.end.jobId)) ended,
+  ];
 }
 
 class FakeBackend implements AgentBackend {

@@ -28,6 +28,7 @@ import "../../domain/web_search.dart";
 import "approval_gate.dart";
 import "background_jobs.dart";
 import "compact_prompt.dart" show estimateTokens;
+import "saved_output.dart";
 import "goal_reviewer.dart";
 import "llm/llm_client.dart";
 import "llm/rate_limit_gate.dart";
@@ -1247,11 +1248,45 @@ class BuiltinAgent implements Turn {
           ? toolRejected(call, unknownTool(call.name, tools.keys))
           : tool.run(call, this);
       final jobs = backgroundJobs;
-      yield* jobs == null ? ran : _withJobNotes(jobs, call, ran);
+      final saved = _savingLarge(tool?.inlineLimit, {call.id}, ran);
+      yield* jobs == null ? saved : _withJobNotes(jobs, call, saved);
     }
     for (final MapEntry(key: tool, value: batch) in batches.entries) {
       if (tool.runningLabel case final label?) yield StatusEvent(label);
-      yield* tool.runAll(batch, this);
+      yield* _savingLarge(tool.inlineLimit, {
+        for (final call in batch) call.id,
+      }, tool.runAll(batch, this));
+    }
+  }
+
+  /// [events] with each result of [calls] longer than [limit] saved to a file
+  /// in the chat's workspace, its path on the result: a fact the projection
+  /// words as a preview and the path, so a reload words what the live turn
+  /// did. One place for every tool, the way Claude Code persists in its
+  /// tool-result layer rather than in each tool. See "Tools".
+  Stream<AgentEvent> _savingLarge(
+    int? limit,
+    Set<String> calls,
+    Stream<AgentEvent> events,
+  ) async* {
+    await for (final event in events) {
+      if (event is ToolResultEvent &&
+          calls.contains(event.result.callId) &&
+          event.result.outputFile == null) {
+        final path = await saveIfLarge(
+          event.result.output,
+          limit,
+          callId: event.result.callId,
+          workspace: workspace,
+          projectWorkspace: projectWorkspace,
+          guestRoot: shell.guestRoot,
+        );
+        if (path != null) {
+          yield ToolResultEvent(event.result.copyWith(outputFile: path));
+          continue;
+        }
+      }
+      yield event;
     }
   }
 

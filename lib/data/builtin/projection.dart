@@ -426,6 +426,7 @@ Iterable<LlmMessage> _assistant(
                 output: part.output,
                 exceptionInfo: part.exceptionInfo,
                 violations: part.violations,
+                outputFile: part.outputFile,
               ),
               part.cwd,
             ),
@@ -576,6 +577,7 @@ String _observed(ToolResult result) => _observations[result] ??= observation(
   output: result.output,
   exceptionInfo: result.exceptionInfo,
   violations: result.violations,
+  outputFile: result.outputFile,
 );
 
 final _observations = Expando<String>("observation");

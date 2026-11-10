@@ -22,12 +22,19 @@ void main() {
 
   final finish = saidOnly("done");
 
-  BuiltinAgent agentOver(FakeLlmClient client, {bool background = true}) {
+  BuiltinAgent agentOver(
+    FakeLlmClient client, {
+    bool background = true,
+    ShellResult Function(String command)? respond,
+  }) {
     final tempDir = Directory.systemTemp.createTempSync("background-jobs-test");
     addTearDown(() => tempDir.deleteSync(recursive: true));
     workspace = p.join(tempDir.path, "project", "chats", "chat-1");
     Directory(workspace).createSync(recursive: true);
-    shell = FakeShell((_) => ok("output"), canRunInBackground: background);
+    shell = FakeShell(
+      respond ?? (_) => ok("output"),
+      canRunInBackground: background,
+    );
     jobs = BackgroundJobs();
     return BuiltinAgent(
       session: BuiltinSession(),
@@ -89,7 +96,11 @@ void main() {
     final output = result.output;
     expect(output, contains("job 1"));
     expect(output, contains("kill -- -4000"));
-    expect(output, contains("chat:.entoli-jobs/call-1.log"));
+    // Named the way a saved result is: the absolute path the shell sees.
+    expect(
+      output,
+      contains("goes to ${p.join(workspace, ".entoli-jobs", "call-1.log")}:"),
+    );
 
     final job = jobs.forChat("chat-1").jobs.value.single;
     expect(job.pid, 4000);
@@ -131,6 +142,37 @@ void main() {
     expect(second.output, "output");
     expect(third.notes, isEmpty);
     expect(jobs.forChat("chat-1").jobs.value, isEmpty);
+    // Heard, so nothing is left for the room to wake the agent with.
+    expect(jobs.forChat("chat-1").unheard, isEmpty);
+  });
+
+  test("a command killed at its timeout keeps what it printed, and is "
+      "pointed at the background", () async {
+    final client = FakeLlmClient([
+      [bashCall("flutter build apk")],
+      [finish],
+    ]);
+    final events = await agentOver(
+      client,
+      respond: (_) => const ShellResult(
+        returnCode: 130,
+        output: "Running Gradle task 'assembleRelease'...\n",
+        timedOut: true,
+        exceptionInfo:
+            "The command timed out after 120s and was interrupted. "
+            "Anything it printed before that is above.",
+      ),
+    ).run(userMessage("build")).toList();
+
+    final result = results(events).single;
+    expect(result.output, "Running Gradle task 'assembleRelease'...\n");
+    expect(
+      result.exceptionInfo,
+      "The command timed out after 120s and was interrupted. Anything it "
+      "printed before that is above. To run something that takes this "
+      "long, start it again with `background: true`: you are told when it "
+      "ends.",
+    );
   });
 
   test("a job's id is not reused after it ends", () async {
@@ -153,6 +195,30 @@ void main() {
     );
     expect(second.id, 2);
   });
+
+  test(
+    "an end is unheard until a call carries it or a wake tells it",
+    () async {
+      jobs = BackgroundJobs();
+      shell = FakeShell((_) => ok(""), canRunInBackground: true);
+      final chat = jobs.forChat("chat-1");
+      ShellRun spawn(String script) =>
+          shell.start(script, cwd: "/w", home: "/w", timeout: Duration.zero);
+      for (final id in ["c1", "c2"]) {
+        final ended = chat.ended.first;
+        await chat.start("make $id", callId: id, workspace: "/w", spawn: spawn);
+        await ended;
+      }
+
+      expect([for (final e in chat.unheard) e.callId], ["c1", "c2"]);
+      chat.told(1);
+      expect([for (final e in chat.unheard) e.callId], ["c2"]);
+      expect(chat.takeNotes(), [
+        "Background job 2 (`make c2`) exited with code 0.",
+      ]);
+      expect(chat.unheard, isEmpty);
+    },
+  );
 
   test("closing a chat kills its jobs", () async {
     final client = FakeLlmClient([
