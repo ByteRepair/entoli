@@ -7,27 +7,17 @@ import SwiftUI
 /// [intents] it was drawn with. See `TitleBarSnapshot`.
 ///
 /// A bar Dart gives no leading control of its own leads with [sidebar] where
-/// the split view is one column — the Flutter app's menu button on a phone,
-/// drawn the system's way — in place of the split view's chevron, which the
-/// Flutter app has nothing like and which made the new-chat screen look like
-/// a page pushed over the list.
+/// one is given — the Flutter app's menu button on a phone, drawn the
+/// system's way — in place of the split view's chevron, which the Flutter app
+/// has nothing like and which made the new-chat screen look like a page
+/// pushed over the list.
 struct TitleBar: ViewModifier {
   let bar: TitleBarSnapshot
   let intents: TitleBarIntents
   let sidebar: (() -> Void)?
 
-  #if os(iOS)
-    @Environment(\.horizontalSizeClass) private var width
-  #endif
-
   /// What leads the bar where Dart says nothing does.
-  private var showSidebar: (() -> Void)? {
-    #if os(iOS)
-      bar.leading == nil && width == .compact ? sidebar : nil
-    #else
-      nil
-    #endif
-  }
+  private var leadingSidebar: (() -> Void)? { bar.leading == nil ? sidebar : nil }
 
   func body(content: Content) -> some View {
     content
@@ -39,15 +29,15 @@ struct TitleBar: ViewModifier {
         .navigationBarTitleDisplayMode(.inline)
         // A page's way back is Dart's, which asks before it goes; the
         // split view's own would leave the page standing.
-        .navigationBarBackButtonHidden(bar.leading != nil || showSidebar != nil)
+        .navigationBarBackButtonHidden(bar.leading != nil || leadingSidebar != nil)
       #endif
-      .toolbar { TitleBarContent(bar: bar, intents: intents, sidebar: showSidebar) }
+      .toolbar { TitleBarContent(bar: bar, intents: intents, sidebar: leadingSidebar) }
   }
 }
 
 extension View {
   func titleBar(
-    _ bar: TitleBarSnapshot, intents: TitleBarIntents, sidebar: (() -> Void)? = nil
+    _ bar: TitleBarSnapshot, intents: TitleBarIntents, sidebar: (() -> Void)?
   ) -> some View {
     modifier(TitleBar(bar: bar, intents: intents, sidebar: sidebar))
   }

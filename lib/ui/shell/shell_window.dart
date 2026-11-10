@@ -10,15 +10,9 @@ import "../selection.dart";
 
 /// Whether a Flutter page covers the conversation, as a provider: the
 /// routes say it as a listenable.
-class _Covered extends Notifier<bool> {
+class _Covered extends Notifier<bool> with ListenableValue<bool> {
   @override
-  bool build() {
-    final covered = ref.watch(appRoutesProvider).covered;
-    void changed() => state = covered.value;
-    covered.addListener(changed);
-    ref.onDispose(() => covered.removeListener(changed));
-    return covered.value;
-  }
+  bool build() => bridge(ref.watch(appRoutesProvider).covered);
 }
 
 final _coveredProvider = NotifierProvider<_Covered, bool>(_Covered.new);

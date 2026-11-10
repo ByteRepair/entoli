@@ -94,7 +94,5 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
   }
 
   @override
-  Widget build(BuildContext context) => const AppMenuBar(
-    child: Stack(children: [Positioned.fill(child: ChatPage())]),
-  );
+  Widget build(BuildContext context) => const AppMenuBar(child: ChatPage());
 }

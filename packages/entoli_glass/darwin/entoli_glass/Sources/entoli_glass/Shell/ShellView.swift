@@ -19,6 +19,15 @@ struct ShellView: View {
   /// first and is the source of the second.
   @State private var columns = NavigationSplitViewVisibility.all
 
+  #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var width
+    /// An iPhone's split view: one column at a time, the list a screen of
+    /// its own to get back to.
+    private var collapsed: Bool { width == .compact }
+  #else
+    private let collapsed = false
+  #endif
+
   private func visibility(_ shown: Bool) -> NavigationSplitViewVisibility {
     shown ? .all : .detailOnly
   }
@@ -64,7 +73,7 @@ struct ShellView: View {
         }
         .animation(ComposerView.motion, value: model.turn.isEmpty)
       }
-      .windowBar(model)
+      .windowBar(model, collapsed: collapsed)
     }
     // Voice mode over everything: the sidebar too, as the Flutter page was
     // pushed over the whole window.
@@ -148,16 +157,16 @@ extension View {
   /// The window's title bar: the chat's, or the Flutter page's over it — a
   /// way back and the page's own buttons in place of the chat's. A page with
   /// no bar of its own leaves the chat's title standing and nothing to press.
-  /// The chat's leads with the way to the list where the list is a column of
-  /// its own, an iPhone's.
-  fileprivate func windowBar(_ model: ShellModel) -> some View {
+  /// The chat's leads with the way to the list where the split view is
+  /// [collapsed].
+  fileprivate func windowBar(_ model: ShellModel, collapsed: Bool) -> some View {
     let page = model.window.covered
     let bar =
       !page ? model.chatBar : model.pageBar.present ? model.pageBar : model.chatBar.bare
     return self
       .titleBar(
         bar, intents: page ? model.say.pageBar : model.say.chatBar,
-        sidebar: page ? nil : model.showSidebar)
+        sidebar: page || !collapsed ? nil : model.showSidebar)
       #if os(iOS)
         // A page whose bar Flutter still draws has it alone: one on screen.
         .toolbar(page && !model.pageBar.present ? .hidden : .automatic, for: .navigationBar)

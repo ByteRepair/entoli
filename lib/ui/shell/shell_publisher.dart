@@ -18,36 +18,28 @@ import "shell_window.dart";
 /// do either: it is paused wherever a page covers the conversation,
 /// `TickerMode` being off there. A provider's listener is neither.
 class ShellPublisher {
-  ShellPublisher(ProviderContainer container)
-    : _sending = [
-        _send<WindowSnapshot>(
-          container,
-          windowSnapshotProvider,
-          (o, s) => o.window(s),
-        ),
-        _send<SidebarSnapshot>(
-          container,
-          sidebarSnapshotProvider,
-          (o, s) => o.sidebar(s),
-        ),
-        _send<PaletteSnapshot>(
-          container,
-          paletteSnapshotProvider,
-          (o, s) => o.palette(s),
-        ),
-      ];
+  ShellPublisher(ProviderContainer container) {
+    final outbox = container.read(shellOutboxProvider);
+    _sending = [
+      container.listen<WindowSnapshot>(
+        windowSnapshotProvider,
+        (_, s) => outbox.window(s),
+        fireImmediately: true,
+      ),
+      container.listen<SidebarSnapshot>(
+        sidebarSnapshotProvider,
+        (_, s) => outbox.sidebar(s),
+        fireImmediately: true,
+      ),
+      container.listen<PaletteSnapshot>(
+        paletteSnapshotProvider,
+        (_, s) => outbox.palette(s),
+        fireImmediately: true,
+      ),
+    ];
+  }
 
-  final List<ProviderSubscription<Object?>> _sending;
-
-  static ProviderSubscription<T> _send<T>(
-    ProviderContainer container,
-    Provider<T> snapshot,
-    void Function(ShellOutbox, T) post,
-  ) => container.listen(
-    snapshot,
-    (_, value) => post(container.read(shellOutboxProvider), value),
-    fireImmediately: true,
-  );
+  late final List<ProviderSubscription<Object?>> _sending;
 
   void close() {
     for (final sending in _sending) {

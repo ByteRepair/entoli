@@ -39,8 +39,10 @@ final class ShellModel: ObservableObject {
   /// each. The split view writes it back as the user moves between the two.
   @Published var compactColumn = NavigationSplitViewColumn.detail
 
-  func showDetail() { compactColumn = .detail }
-  func showSidebar() { compactColumn = .sidebar }
+  /// Set only where it changes: the model is every view's, and a write it
+  /// publishes redraws them all.
+  func showDetail() { if compactColumn != .detail { compactColumn = .detail } }
+  func showSidebar() { if compactColumn != .sidebar { compactColumn = .sidebar } }
 
   /// The microphone's level: not published, being many times a second and
   /// read by the glow on each of its frames.

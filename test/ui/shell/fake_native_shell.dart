@@ -41,11 +41,11 @@ class FakeNativeShell implements TestNativeShell {
 
   /// The next [concern] snapshot that [matches], however it arrives: with no
   /// frame pumped, which is how a snapshot sent off a listener lands.
-  Future<T> next<T>(String concern, bool Function(T) matches) => _arrivals
-      .stream
-      .where((e) => e.$1 == concern && matches(e.$2 as T))
-      .map((e) => e.$2 as T)
-      .first;
+  Future<T> next<T>(String concern, bool Function(T) matches) async =>
+      (await _arrivals.stream.firstWhere(
+            (e) => e.$1 == concern && matches(e.$2 as T),
+          )).$2
+          as T;
 
   void _add(String concern, Object value) {
     (sent[concern] ??= []).add(value);
