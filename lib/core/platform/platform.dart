@@ -39,6 +39,8 @@ export "host.dart"
         createAppUpdateHost,
         createBackupHandoff,
         createByteRepairStore,
+        cliCacheRoot,
+        cliGuestOf,
         createAssistantLaunch,
         createFileHandoff,
         createFileWatches,

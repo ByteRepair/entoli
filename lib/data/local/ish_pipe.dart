@@ -6,10 +6,8 @@ import "dart:typed_data" show Uint8List;
 
 import "package:ffi/ffi.dart";
 
-import "../../domain/shell.dart" show guestPath;
 import "../builtin/llm/llm_client.dart" show LlmException;
-import "../builtin/llm/providers/cli.dart"
-    show CliGuest, CliProcess, CliProcessLauncher, LaunchCli;
+import "../builtin/llm/providers/cli.dart" show CliProcess, LinuxCliGuest;
 import "ish_ffi.dart";
 
 /// A [CliProcess] that runs a CLI program (`claude`, `codex`) inside the
@@ -176,55 +174,46 @@ class GuestCliProcess implements CliProcess {
   }
 }
 
-/// iOS's in-process Linux for the CLI provider's common guest contract. The
-/// app data directory is mounted at its host path, so the provider's cache and
-/// working directory remain visible to both Dart and the guest.
-class IshCliGuest implements CliGuest, CliProcessLauncher {
+/// iOS's Linux as where a CLI's program runs: the x86-64 guest in the
+/// emulator, over the rootfs the Terminal settings picked, looked up at each
+/// start. The app data directory is mounted at its host path, so the
+/// program's cache and work folders are the same paths to Dart and to the
+/// guest, and the shared folders need no binding of their own.
+class IshCliGuest extends LinuxCliGuest {
   IshCliGuest({required this.rootfsDir, required this.dataDir});
 
+  /// The picked Linux's directory, or empty where none is installed.
   final String Function() rootfsDir;
   final String dataDir;
 
+  /// The emulator's, not the device's: the programs are x86-64 Linux
+  /// builds.
   @override
-  ({List<String> command, Map<String, String> environment}) wrap(
+  Abi get abi => Abi.linuxX64;
+
+  @override
+  Future<CliProcess> start(
     List<String> argv, {
     required String cwd,
+    required Map<String, String> environment,
     required List<String> shared,
-  }) => (command: argv, environment: const {});
-
-  @override
-  List<String> install(List<String> packages) => [
-    "apk",
-    "add",
-    "--no-cache",
-    ...packages,
-  ];
-
-  @override
-  LaunchCli get processLauncher =>
-      (
-        String executable,
-        List<String> arguments, {
-        required String workingDirectory,
-        required Map<String, String> environment,
-      }) {
-        final rootfs = rootfsDir();
-        if (rootfs.isEmpty) {
-          throw LlmException(
-            "No Linux is installed to run it in. Install one from the "
-            "Terminal settings.",
-          );
-        }
-        return GuestCliProcess.start(
-          argv: [executable, ...arguments],
-          env: {...environment, "PATH": guestPath},
-          rootfsDir: rootfs,
-          dataDir: dataDir,
-          home: "",
-          cwd: workingDirectory,
-          readOnly: const [],
-        );
-      };
+  }) {
+    final rootfs = rootfsDir();
+    if (rootfs.isEmpty) {
+      throw LlmException(
+        "No Linux is installed to run it in. Install one from the Terminal "
+        "settings.",
+      );
+    }
+    return GuestCliProcess.start(
+      argv: argv,
+      env: environment,
+      rootfsDir: rootfs,
+      dataDir: dataDir,
+      home: "",
+      cwd: cwd,
+    );
+  }
 }
 
 /// The core a CLI program runs on: the x86-64 one, since the programs' builds

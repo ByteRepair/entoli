@@ -12,6 +12,7 @@ import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart"
     show
         CliProvider,
+        HostCliGuest,
         CliProcess,
         CliRelease,
         CliSession,
@@ -1862,17 +1863,19 @@ class FakeCli extends CliProvider {
     required this.isInstalled,
     required this.isSignedIn,
   }) : super(
-         launch:
-             (
-               executable,
-               arguments, {
-               required workingDirectory,
-               required environment,
-             }) async {
-               final process = FakeCliProcess(arguments);
-               processes.add(process);
-               return process;
-             },
+         guest: HostCliGuest(
+           launch:
+               (
+                 executable,
+                 arguments, {
+                 required workingDirectory,
+                 required environment,
+               }) async {
+                 final process = FakeCliProcess(arguments);
+                 processes.add(process);
+                 return process;
+               },
+         ),
        );
 
   factory FakeCli.claude({bool installed = true, bool signedIn = true}) =>

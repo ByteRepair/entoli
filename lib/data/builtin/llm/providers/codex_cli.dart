@@ -29,7 +29,7 @@ class CodexCliProvider extends CliProvider with OfferedByName {
 
   /// With the process given rather than real: what a test runs a session
   /// over.
-  const CodexCliProvider.over(super.config, {super.launch});
+  const CodexCliProvider.over(super.config, {super.guest});
 
   static const preset = LlmProviderConfig(
     name: "Codex CLI",
@@ -71,7 +71,7 @@ class CodexCliProvider extends CliProvider with OfferedByName {
 
   @override
   CodexCliProvider withConfig(LlmProviderConfig config) =>
-      CodexCliProvider.over(config, launch: launch);
+      CodexCliProvider.over(config, guest: guest);
 
   /// OpenAI's newest release on GitHub. The API rather than the page's
   /// redirect: it is what states each asset's SHA-256.
@@ -90,7 +90,7 @@ class CodexCliProvider extends CliProvider with OfferedByName {
   /// [companions], the same way.
   @override
   Future<CliRelease?> latestRelease(http.Client client) async {
-    final triple = tripleOf(CliProvider.abi);
+    final triple = tripleOf(abi);
     if (triple == null) return null;
     final windows = triple.endsWith("windows-msvc");
     final release = await LlmProvider.getJson(
@@ -102,7 +102,7 @@ class CodexCliProvider extends CliProvider with OfferedByName {
       final List<dynamic> assets => assets.whereType<Map<String, dynamic>>(),
       _ => const <Map<String, dynamic>>[],
     };
-    CliFile? fileOf(String program) {
+    CliFile? assetOf(String program) {
       final name = windows
           ? "$program-$triple.exe.zip"
           : "$program-$triple.tar.gz";
@@ -113,7 +113,7 @@ class CodexCliProvider extends CliProvider with OfferedByName {
         throw FormatException("$name has no SHA-256 stated beside it");
       }
       return CliFile(
-        name: CliProvider.programFile(program),
+        name: fileOf(program),
         url: Uri.parse(asset["browser_download_url"] as String),
         sha256: digest.substring("sha256:".length),
         packing: windows ? const ZipProgram() : const TarGzProgram(),
@@ -122,7 +122,7 @@ class CodexCliProvider extends CliProvider with OfferedByName {
     }
 
     final files = [
-      for (final program in [...companions, defaultCommand]) fileOf(program),
+      for (final program in [...companions, defaultCommand]) assetOf(program),
     ];
     if (files.contains(null)) return null;
     return CliRelease(files: files.nonNulls.toList());

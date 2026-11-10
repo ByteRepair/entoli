@@ -30,11 +30,11 @@ class ClaudeCliProvider extends CliProvider with OfferedByName {
   const ClaudeCliProvider([LlmProviderConfig config = preset])
     : this.over(config);
 
-  /// With the process and the tool bridge given rather than real: what a
+  /// With where it runs and the tool bridge given rather than real: what a
   /// test runs a session over.
   const ClaudeCliProvider.over(
     super.config, {
-    super.launch,
+    super.guest,
     this.bindBridge = McpToolBridge.bind,
   });
 
@@ -86,7 +86,7 @@ class ClaudeCliProvider extends CliProvider with OfferedByName {
 
   @override
   ClaudeCliProvider withConfig(LlmProviderConfig config) =>
-      ClaudeCliProvider.over(config, launch: launch, bindBridge: bindBridge);
+      ClaudeCliProvider.over(config, guest: guest, bindBridge: bindBridge);
 
   /// Where Anthropic's own installer fetches from: the newest version in
   /// `latest`, and per version a manifest of each platform's SHA-256.
@@ -97,7 +97,7 @@ class ClaudeCliProvider extends CliProvider with OfferedByName {
   /// user's `PATH`.
   @override
   Future<CliRelease?> latestRelease(http.Client client) async {
-    final platform = platformOf(CliProvider.abi, musl: _musl);
+    final platform = platformOf(abi, musl: musl);
     if (platform == null) return null;
     final version = (await LlmProvider.getText(
       Uri.parse("$releases/latest"),
@@ -118,7 +118,7 @@ class ClaudeCliProvider extends CliProvider with OfferedByName {
     if (entry is! Map<String, dynamic>) return null;
     final checksum = entry["checksum"];
     if (checksum is! String) return null;
-    final program = CliProvider.programFile(defaultCommand);
+    final program = fileOf(defaultCommand);
     return CliRelease(
       files: [
         CliFile(
@@ -158,13 +158,6 @@ class ClaudeCliProvider extends CliProvider with OfferedByName {
     Abi.windowsArm64 => "win32-arm64",
     _ => null,
   };
-
-  /// What Anthropic's installer looks for to tell musl from glibc.
-  static bool get _musl =>
-      CliProvider.guest != null ||
-      (Platform.isLinux &&
-          (File("/lib/libc.musl-x86_64.so.1").existsSync() ||
-              File("/lib/libc.musl-aarch64.so.1").existsSync()));
 
   @override
   String get bundler => "Claude Desktop";

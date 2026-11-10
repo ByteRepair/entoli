@@ -9,7 +9,6 @@ import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
 import "../../../../core/log.dart";
-import "../../../../core/platform/form_factor.dart";
 import "../../../../core/tls.dart";
 import "../../../../domain/download.dart";
 import "../../../../domain/llm_provider.dart";
@@ -35,46 +34,143 @@ export "cli_release.dart";
 /// one harness process carries a conversation across the steps of a turn.
 /// What a session *is* — a process per call, a long-lived one fed over stdin,
 /// a server it talks to — is the subclass's, through [start].
-/// A Linux a CLI's program runs in, where the platform's own processes are
-/// not Linux's: Android, whose Alpine is arm64 musl under proot. iOS has none
-/// — its Alpine is emulated 32-bit x86, which neither program is built for.
+/// Where a CLI's program runs, and so everything about starting it that
+/// differs by platform: which build of it to fetch, what it starts with,
+/// how its packages go in, and how a process is made. This machine on a
+/// desktop ([HostCliGuest]), Android's Linux under proot, iOS's in the
+/// emulator ([LinuxCliGuest]). A [CliProvider] reaches its program through
+/// this and nothing else.
 abstract class CliGuest {
-  /// [argv] as it is started in the guest from [cwd], each of [shared] bound
-  /// at its own host path, so a path the app hands the program is one
-  /// answer inside the guest and out; and the environment the starting
-  /// process needs of its own. Throws an [LlmException] where there is no
-  /// Linux to run it in yet.
-  ({List<String> command, Map<String, String> environment}) wrap(
-    List<String> argv, {
-    required String cwd,
-    required List<String> shared,
+  const CliGuest();
+
+  /// The machine a release is chosen for.
+  Abi get abi;
+
+  /// Whether its programs link against musl, as Alpine's do: which build a
+  /// publisher that makes both is asked for.
+  bool get musl;
+
+  /// What a program starts with, below its provider's own variables. [host]
+  /// is the provider's take on this machine's environment, what a program
+  /// run here inherits; [linux] what it is told in a Linux of its own.
+  Map<String, String> environment({
+    required Map<String, String> host,
+    required Map<String, String> linux,
   });
 
-  /// The guest's own way of installing [packages].
-  List<String> install(List<String> packages);
+  /// The command that installs [packages] where the program runs, or null
+  /// where there is nothing to install them into.
+  List<String>? install(List<String> packages);
+
+  /// [argv] started from [cwd] with [environment], each of [shared] reachable
+  /// at its own host path, so a path the app hands the program is one answer
+  /// inside and out. Throws an [LlmException] where it cannot run yet.
+  Future<CliProcess> start(
+    List<String> argv, {
+    required String cwd,
+    required Map<String, String> environment,
+    required List<String> shared,
+  });
 }
 
-/// Optional transport for guests whose programs cannot be launched as host
-/// processes. Proot needs no separate transport; iSH launches in-process.
-abstract interface class CliProcessLauncher {
-  LaunchCli get processLauncher;
+/// This machine: a desktop's, whose programs are its own processes.
+class HostCliGuest extends CliGuest {
+  /// [loginPath] is the login shell's `PATH`, which a desktop launch's
+  /// inherited one misses what the user's profile adds to; null leaves the
+  /// inherited one. [abi] and [launch] are this machine's unless a test
+  /// names others.
+  const HostCliGuest({this.loginPath, Abi? abi, this.launch = launchProcess})
+    : _abi = abi; // ignore: prefer_initializing_formals
+
+  final String? loginPath;
+  final Abi? _abi;
+  final LaunchCli launch;
+
+  @override
+  Abi get abi => _abi ?? Abi.current();
+
+  /// What Anthropic's installer looks for to tell musl from glibc.
+  @override
+  bool get musl =>
+      Platform.isLinux &&
+      (File("/lib/libc.musl-x86_64.so.1").existsSync() ||
+          File("/lib/libc.musl-aarch64.so.1").existsSync());
+
+  @override
+  Map<String, String> environment({
+    required Map<String, String> host,
+    required Map<String, String> linux,
+  }) => {...host, "PATH": ?loginPath};
+
+  @override
+  List<String>? install(List<String> packages) => null;
+
+  @override
+  Future<CliProcess> start(
+    List<String> argv, {
+    required String cwd,
+    required Map<String, String> environment,
+    required List<String> shared,
+  }) => launch(
+    argv.first,
+    argv.sublist(1),
+    workingDirectory: cwd,
+    environment: environment,
+  );
+}
+
+/// A Linux of the app's own, apart from the machine it is on: Android's
+/// Alpine under proot and iOS's in the emulator. None of the app's own
+/// environment reaches it, being Android's or iOS's and meaning nothing to
+/// a Linux program; Alpine's basics stand in its place.
+abstract class LinuxCliGuest extends CliGuest {
+  const LinuxCliGuest();
+
+  static const basics = {
+    "HOME": guestHome,
+    "PATH": guestPath,
+    "LANG": "C.UTF-8",
+  };
+
+  @override
+  bool get musl => true;
+
+  @override
+  Map<String, String> environment({
+    required Map<String, String> host,
+    required Map<String, String> linux,
+  }) => {...basics, ...linux};
+
+  @override
+  List<String>? install(List<String> packages) => [
+    "apk",
+    "add",
+    "--no-cache",
+    ...packages,
+  ];
 }
 
 abstract class CliProvider extends LlmProvider with KeyFree {
-  const CliProvider(super.config, {this.launch = launchProcess});
+  /// [guest] is where its program runs, [platformGuest] unless a test names
+  /// one.
+  const CliProvider(super.config, {CliGuest? guest})
+    : _guest = guest; // ignore: prefer_initializing_formals
 
-  /// How a session starts the program: [launchProcess], or a test's fake.
-  final LaunchCli launch;
+  final CliGuest? _guest;
 
-  /// The login shell's `PATH`, set once by `main` when it has been captured:
-  /// a desktop launch inherits a `PATH` that misses what the user's profile
-  /// adds, which is where a program like `claude` is usually installed. Null
-  /// leaves the inherited one.
-  static String? loginPath;
+  /// Where this platform runs the programs, set once by `main`; this
+  /// machine until then. Null where the build has nowhere to run one: an
+  /// Android whose APK carries no proot.
+  static CliGuest? platformGuest = const HostCliGuest();
 
-  /// Where programs run where it is not this machine — Android's Linux —
-  /// set once by `main` where the build carries one; null runs them here.
-  static CliGuest? guest;
+  /// Where this provider's program runs.
+  CliGuest? get guest => _guest ?? platformGuest;
+
+  CliGuest get _runsIn =>
+      guest ??
+      (throw LlmException(
+        "This build has nowhere to run ${config.displayName}.",
+      ));
 
   /// Where the programs' sessions keep what they run with, set once by
   /// `main` to the app's cache. Null — a test, a build that never set it —
@@ -151,21 +247,25 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   /// The models the program takes by name, offered beside the user's own.
   List<ModelInfo> get knownModels;
 
-  /// Whether this platform can run a program at all: a desktop, or a phone
-  /// with a Linux to run it in (Android's proot, iOS's blinkish).
+  /// Whether there is anywhere to run the program: false only where the
+  /// build has no [guest] at all.
   @override
-  bool get supported => isDesktop || guest != null;
+  bool get supported => guest != null;
 
-  /// What the program needs installed in a [guest] beside it, by the
-  /// guest's package names: nothing, unless a subclass knows better.
+  /// What the program needs installed beside it where its [guest] installs
+  /// packages, by the guest's package names: nothing, unless a subclass
+  /// knows better.
   List<String> get guestPackages => const [];
 
-  /// What the program is told in a [guest] beyond the guest's own basics.
+  /// What the program is told in a Linux guest beyond the guest's basics.
   Map<String, String> get guestEnvironment => const {};
 
-  /// The machine a release is chosen for: this one, unless a test names
-  /// another.
-  static Abi abi = Abi.current();
+  /// The machine its program runs on, which a release is chosen for.
+  Abi get abi => _runsIn.abi;
+
+  /// Whether the program runs against musl, for a publisher that builds
+  /// for both.
+  bool get musl => _runsIn.musl;
 
   /// The newest release of the program for [abi], asked of its publisher
   /// over [client]. Null where it publishes none for that machine.
@@ -185,20 +285,19 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   /// Entoli's own copy of the program, kept in [workRoot] beside the folder
   /// its sessions run in, which is what the cache is for: deleted, it is
   /// downloaded again rather than lost.
-  String get ownCopy => p.join(_bin, programFile(defaultCommand));
+  String get ownCopy => p.join(_bin, fileOf(defaultCommand));
 
   String get _bin => p.join(workRoot.path, "bin");
 
-  /// [name] as [on] — [abi] unless named — names a program's file. One rule
-  /// for where a release is put and where it is looked for.
-  static String programFile(String name, [Abi? on]) =>
-      const {
-        Abi.windowsArm64,
-        Abi.windowsIA32,
-        Abi.windowsX64,
-      }.contains(on ?? abi)
+  /// [name] as a program's file on [on]. One rule for where a release is
+  /// put and where it is looked for.
+  static String programFile(String name, Abi on) =>
+      const {Abi.windowsArm64, Abi.windowsIA32, Abi.windowsX64}.contains(on)
       ? "$name.exe"
       : name;
+
+  /// [name] as a program's file where this provider's program runs.
+  String fileOf(String name) => programFile(name, _runsIn.abi);
 
   /// Programs the CLI runs from beside itself, which a copy is not whole
   /// without. None unless a subclass knows of one.
@@ -207,7 +306,7 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   /// [ownCopy] there, with every one of its [companions].
   bool get installed => [
     ownCopy,
-    for (final name in companions) p.join(_bin, programFile(name)),
+    for (final name in companions) p.join(_bin, fileOf(name)),
   ].every((path) => File(path).existsSync());
 
   /// [latestRelease] fetched, each of its files checked against the hash its
@@ -281,16 +380,17 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   }
 
   /// [guestPackages] into the [guest], before the program is in place, so a
-  /// copy that is [installed] has what it runs with. Nothing where there is
-  /// no guest or nothing to install.
+  /// copy that is [installed] has what it runs with. Nothing where the guest
+  /// installs nothing or there is nothing to install.
   Future<void> _installGuestPackages() async {
-    final guest = CliProvider.guest;
-    if (guest == null || guestPackages.isEmpty) return;
+    if (guestPackages.isEmpty) return;
+    final install = _runsIn.install(guestPackages);
+    if (install == null) return;
     final (:code, :said) = await _exitOf(
       await _start(
-        guest.install(guestPackages),
+        install,
         cwd: workRoot.path,
-        environment: _guestBasics,
+        environment: _runsIn.environment(host: const {}, linux: const {}),
       ),
     );
     if (code != 0) {
@@ -344,29 +444,16 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   /// unless a subclass knows of variables that belong to something else.
   bool inherits(String name, Map<String, String> inherited) => true;
 
-  /// The app's own environment less what [inherits] keeps out, the login
-  /// `PATH` over it, and the config's variables over both.
-  ///
-  /// In a [guest], none of the app's own: it is Android's, and means nothing
-  /// to a Linux program. The guest's basics stand in its place.
+  /// What its [guest] starts a program with — this machine's environment
+  /// less what [inherits] keeps out, or a Linux guest's basics and
+  /// [guestEnvironment] — and the config's variables over it.
   Map<String, String> get environment => {
-    if (guest == null) ...{
-      ...inheritedFrom(Platform.environment),
-      "PATH": ?loginPath,
-    } else ...{
-      ..._guestBasics,
-      ...guestEnvironment,
-    },
+    ..._runsIn.environment(
+      host: inheritedFrom(Platform.environment),
+      linux: guestEnvironment,
+    ),
     ...homeEnvironment(dataDirectory),
     ...config.env,
-  };
-
-  /// What every program in a [guest] starts with, in place of the app's own
-  /// environment, which is Android's.
-  static const _guestBasics = {
-    "HOME": guestHome,
-    "PATH": guestPath,
-    "LANG": "C.UTF-8",
   };
 
   /// The program, started on [arguments] in its work folder, with
@@ -380,27 +467,18 @@ abstract class CliProvider extends LlmProvider with KeyFree {
     environment: {...environment, ...this.environment},
   );
 
-  /// [argv] started from [cwd] with [environment]: as it is here, or in the
-  /// [guest] where there is one, the program's cache folder bound at its own
-  /// path there and the guest's own variables over [environment].
+  /// [argv] started from [cwd] with [environment] by its [guest], the
+  /// program's cache folder reachable at its own path there.
   Future<CliProcess> _start(
     List<String> argv, {
     required String cwd,
     required Map<String, String> environment,
-  }) {
-    final (:command, environment: own) =
-        guest?.wrap(argv, cwd: cwd, shared: [workRoot.path]) ??
-        (command: argv, environment: const <String, String>{});
-    final runner = guest is CliProcessLauncher
-        ? (guest as CliProcessLauncher).processLauncher
-        : launch;
-    return runner(
-      command.first,
-      command.sublist(1),
-      workingDirectory: cwd,
-      environment: {...environment, ...own},
-    );
-  }
+  }) => _runsIn.start(
+    argv,
+    cwd: cwd,
+    environment: environment,
+    shared: [workRoot.path],
+  );
 
   /// [inherited] less what [inherits] keeps out.
   Map<String, String> inheritedFrom(Map<String, String> inherited) => {

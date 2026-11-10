@@ -25,6 +25,7 @@ import "../read_only_dirs.dart";
 import "../../data/local/file_local_model_store.dart";
 import "../../data/local/file_rootfs_store.dart";
 import "../../data/local/ish_ffi.dart";
+import "../../data/local/ish_pipe.dart" show IshCliGuest;
 import "../../data/local/ish_shell.dart";
 import "../../data/local/llama_engine.dart";
 import "../../data/local/llama_server.dart";
@@ -48,6 +49,7 @@ import "../../data/local/macos_reminder_alarms.dart";
 import "../../data/browser/cdp_browser.dart";
 import "../../data/browser/helium.dart";
 import "../tls.dart" show tlsClient;
+import "../../data/builtin/llm/providers/cli.dart" show CliGuest, HostCliGuest;
 import "../../data/builtin/local_shell.dart";
 import "../../data/voice/android_voice.dart";
 import "../../data/voice/file_voice_model_store.dart";
@@ -221,6 +223,43 @@ LinuxHost linuxHostOf({String? abi, Toolset? tools}) => Platform.isIOS
     : tools?.proot != null
     ? ProotLinux(abi)
     : MissingProotLinux(abi);
+
+/// Where a CLI provider's program runs on a device with [linux]: this
+/// machine on a desktop, the picked Linux under proot on Android and in the
+/// emulator on iOS, and nowhere on an Android build with no proot in it.
+CliGuest? cliGuestOf(
+  LinuxHost linux, {
+  Proot? proot,
+  required RootfsStore store,
+  required String? Function() rootfsId,
+  required String dataDir,
+  String? loginPath,
+}) => switch (linux) {
+  NoLinux() => HostCliGuest(loginPath: loginPath),
+  ProotLinux() when proot != null => ProotCliGuest(
+    proot: proot,
+    store: store,
+    rootfsId: rootfsId,
+  ),
+  ProotLinux() || MissingProotLinux() => null,
+  // The x86-64 guest runs only a Linux built for it, so a picked one this
+  // device is not offered — an i386 Alpine kept from before — is none.
+  EmulatedLinux() => IshCliGuest(
+    rootfsDir: () {
+      final rootfs = rootfsById(rootfsId());
+      return rootfs != null && linux.catalog.contains(rootfs)
+          ? store.directoryOfSync(rootfs.id) ?? ""
+          : "";
+    },
+    dataDir: dataDir,
+  ),
+};
+
+/// Where the CLI programs and their sessions' folders are kept: the cache,
+/// except on iOS, where the emulator sees the app's data directory at its
+/// own path and nothing else of the host.
+String cliCacheRoot({required String cache, required String dataDir}) =>
+    Platform.isIOS ? p.join(dataDir, "cli-cache") : cache;
 
 /// What keeps the host shell's commands in. Linux's is the Landlock helper
 /// [hostDriver] is built with, macOS's the Seatbelt one; a phone's is the
