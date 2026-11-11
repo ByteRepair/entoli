@@ -435,3 +435,44 @@ final class ModelPickController extends SettingController {
 
   Future<void> set(ModelChoice choice) => _write(choice);
 }
+
+/// Text, typed in place or in a dialog the row opens; cleared back to empty
+/// where it has a [clearLabel].
+final class TextController extends SettingController {
+  TextController(
+    super.spec, {
+    required this.value,
+    required Future<SettingNotice?> Function(String value) onSet,
+    this.emptyLabel,
+    this.prompt,
+    this.lines = 1,
+    this.clearLabel,
+    this.secret = false,
+    super.title,
+    super.description,
+    super.footnote,
+    super.enabled,
+    super.visible,
+  }) : _write = onSet;
+
+  final String value;
+
+  /// What the row says while [value] is empty.
+  final String? emptyLabel;
+
+  /// What the field asking for it says under it.
+  final String? prompt;
+
+  /// How many lines it is typed over: more than one for a list of patterns.
+  final int lines;
+
+  /// What clearing it is called, where it can be.
+  final String? clearLabel;
+
+  /// Whether it is typed hidden, as a password is.
+  final bool secret;
+
+  final Future<SettingNotice?> Function(String) _write;
+
+  Future<SettingNotice?> set(String value) => _write(value);
+}

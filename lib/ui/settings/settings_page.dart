@@ -26,7 +26,6 @@ import "connect_provider.dart";
 import "running_models.dart";
 import "local_model_settings.dart";
 import "provider_usage_view.dart";
-import "memory_settings.dart";
 import "on_device_catalog.dart";
 import "privacy_policy_page.dart";
 import "provider_picker.dart";
@@ -172,11 +171,7 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
   SettingsCategory.images => const [SchemaSections(SettingsPageId.images)],
   // The two things the agent carries between conversations: the files the
   // user writes (instructions) and the ones it writes (memories).
-  SettingsCategory.memory => const [
-    InstructionsSection(),
-    Divider(),
-    AutoMemorySection(),
-  ],
+  SettingsCategory.memory => const [SchemaSections(SettingsPageId.memory)],
   SettingsCategory.data => const [_BackupSection()],
   SettingsCategory.shortcuts => const [ShortcutsSection()],
   SettingsCategory.about => const [_AboutSection()],

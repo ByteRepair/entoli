@@ -20,6 +20,7 @@ extension BindSetting on SettingContext {
     String? description,
     bool visible = true,
     bool enabled = true,
+    bool? shown,
     Future<void> Function(bool? value)? write,
     SettingNotice? Function(bool? value)? after,
   }) {
@@ -27,7 +28,7 @@ extension BindSetting on SettingContext {
     return ToggleController(
       spec,
       value: _value(setting),
-      effective: scope.resolve(setting) ?? false,
+      effective: shown ?? scope.resolve(setting) ?? false,
       unsettable: unsettable,
       description: description,
       visible: visible,

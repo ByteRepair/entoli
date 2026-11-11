@@ -34,6 +34,13 @@ enum UiHint {
 
   /// A button: the default for an action controller.
   button,
+
+  /// A row showing the value, opened to edit it in a dialog: the default for
+  /// a text controller.
+  row,
+
+  /// A field typed into in place.
+  field,
 }
 
 /// The pages settings is filed under, in the order they are offered. A

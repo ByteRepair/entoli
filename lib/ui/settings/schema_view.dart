@@ -9,6 +9,7 @@ import "../../domain/app_icon.dart";
 import "../widgets/app_mark.dart" show AppIconImage;
 import "../widgets/choice.dart";
 import "../widgets/dialogs.dart";
+import "../widgets/editable_row.dart";
 import "../widgets/environment_section.dart";
 import "../widgets/model_picker.dart";
 import "../widgets/thinking_slider.dart";
@@ -101,6 +102,7 @@ class SettingRow extends StatelessWidget {
       final KeyValuesController c => _KeyValues(c),
       final ActionController c => _Action(c),
       final GroupController c => _Group(c),
+      final TextController c => _Text(c),
       final NumberController c => _Number(c, labelled: !nested),
       final ModelPickController c => LabelledField(
         label: c.title,
@@ -148,7 +150,9 @@ class SettingRow extends StatelessWidget {
     UiHint.levels ||
     UiHint.slider ||
     UiHint.keyValues ||
-    UiHint.button => _Dropdown<T>(c),
+    UiHint.button ||
+    UiHint.row ||
+    UiHint.field => _Dropdown<T>(c),
   };
 }
 
@@ -653,5 +657,45 @@ class _Number extends StatelessWidget {
       ),
     );
     return labelled ? LabelledField(label: c.title, child: tile) : tile;
+  }
+}
+
+/// Text shown on a row, typed in a dialog the row opens.
+class _Text extends StatelessWidget {
+  const _Text(this.c);
+
+  final TextController c;
+
+  Future<void> _edit(BuildContext context) async {
+    final text = await promptForText(
+      context,
+      title: c.title,
+      initial: c.value,
+      confirmLabel: "Save",
+      hint: c.prompt,
+      maxLines: c.lines,
+    );
+    if (text == null || !context.mounted) return;
+    await _tell(context, c.set(text));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = c.value.isEmpty ? c.emptyLabel : c.value;
+    final clear = c.clearLabel;
+    if (clear == null) {
+      return ListTile(
+        title: Text(c.title),
+        subtitle: shown == null ? null : Text(shown),
+        onTap: c.enabled ? () => _edit(context) : null,
+      );
+    }
+    return EditableRow(
+      title: c.title,
+      subtitle: shown,
+      removeLabel: clear,
+      onTap: c.enabled ? () => _edit(context) : null,
+      onRemove: () => _tell(context, c.set("")),
+    );
   }
 }
