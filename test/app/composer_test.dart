@@ -170,4 +170,40 @@ void main() {
       expect(controller.text, "/goal the tests pass");
     });
   });
+
+  group("the state a frontend draws", () {
+    test("what was typed in a frontend's field bumps no revision", () {
+      final before = logic.state.value.revision;
+      logic.edited((text: "typed", start: 5, end: 5));
+      expect(logic.state.value.value.text, "typed");
+      expect(logic.state.value.revision, before);
+    });
+
+    test("what the core sets bumps it, even to what was typed", () async {
+      logic.edited((text: "/goal x", start: 7, end: 7));
+      final typed = logic.state.value.revision;
+      await logic.run(ComposerAction.newGoal);
+      expect(logic.state.value.value.text, "/goal x");
+      await logic.run(ComposerAction.insertAgent);
+      expect(logic.state.value.revision, isNot(typed));
+      controller.text = "now";
+      final set = logic.state.value.revision;
+      await logic.run(ComposerAction.send);
+      expect(logic.state.value.value.text, isEmpty);
+      expect(logic.state.value.revision, isNot(set));
+    });
+
+    test("two fields never share a revision", () {
+      final other = ComposerController();
+      addTearDown(other.dispose);
+      expect(other.revision, isNot(controller.revision));
+    });
+
+    test("a focus asked for is a new request each time", () {
+      final first = logic.state.value.focusRequest;
+      logic.requestFocus();
+      logic.requestFocus();
+      expect(logic.state.value.focusRequest, first + 2);
+    });
+  });
 }

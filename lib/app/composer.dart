@@ -41,6 +41,9 @@ enum ComposerAction {
   newGoal,
 }
 
+/// The field's text and selection, in UTF-16 code units.
+typedef TextValue = ({String text, int start, int end});
+
 /// What the composer needs of the field that holds its text, whichever
 /// frontend draws it. [message] is what is sent, [text] what the field holds:
 /// the two differ by the embeds, each one character of [text].
@@ -52,12 +55,62 @@ abstract interface class ComposerText implements Listenable {
   /// The caret, or null where the field has none.
   int? get caret;
 
+  /// The text and selection now.
+  TextValue get textValue;
+
+  /// Bumped whenever the text is set other than by [edited]: a completion
+  /// taken, a message restored, the field cleared on send. A frontend whose
+  /// field is not this one applies a value only when this moved, so it never
+  /// echoes back what was typed — which mid-composition would undo an input
+  /// method's marked text.
+  int get revision;
+
+  /// What the user typed in a frontend's own field, which bumps nothing.
+  void edited(TextValue value);
+
   /// Replace the whole text and put the caret at [caret].
   void edit(String text, int caret);
 
   /// Put [said] ahead of what the field holds.
   void prepend(String said);
   void clear();
+}
+
+/// The composer as a frontend draws it: the business state, and nothing of
+/// how it looks.
+class ComposerState {
+  const ComposerState({
+    required this.value,
+    required this.revision,
+    required this.focusRequest,
+    required this.mode,
+    required this.callback,
+    required this.speaking,
+    required this.voice,
+    required this.attachments,
+    required this.embeds,
+  });
+
+  /// What the field holds, and [revision] counting the times the core set it.
+  final TextValue value;
+  final int revision;
+
+  /// Bumped when something wants the field focused: Reply on a passage.
+  final int focusRequest;
+  final ComposerMode mode;
+
+  /// Which callback is typed, not what to call it.
+  final WiredCall? callback;
+
+  /// A turn is running: an empty field's button is Stop.
+  final bool speaking;
+
+  /// Voice mode can be opened from here.
+  final bool voice;
+  final List<Attachment> attachments;
+
+  /// How many embeds the field holds.
+  final int embeds;
 }
 
 /// The composer's business, apart from how it is drawn: what is attached,
@@ -74,6 +127,36 @@ class ComposerModel extends ChangeNotifier {
     _sync();
   }
 
+  /// Everything a frontend draws, as one value: changes on every keystroke.
+  ValueListenable<ComposerState> get state => _state;
+  late final ValueNotifier<ComposerState> _state = ValueNotifier(_snapshot());
+
+  var _focusRequest = 0;
+
+  /// Ask the frontend for the field's focus: choosing Reply is asking to
+  /// write.
+  void requestFocus() {
+    _focusRequest++;
+    _publish();
+  }
+
+  ComposerState _snapshot() => ComposerState(
+    value: _field.textValue,
+    revision: _field.revision,
+    focusRequest: _focusRequest,
+    mode: _mode,
+    callback: _callback,
+    speaking: _turn.agentSpeaking,
+    voice: _turn.onVoice != null,
+    attachments: attachments,
+    embeds: _embeds,
+  );
+
+  void _publish() => _state.value = _snapshot();
+
+  /// What the user typed in a frontend's own field.
+  void edited(TextValue value) => _field.edited(value);
+
   /// Runs the frontend's picker: the files the user chose.
   final Future<List<Attachment>> Function(AttachmentKind kind) pick;
 
@@ -84,6 +167,7 @@ class ComposerModel extends ChangeNotifier {
     _field.removeListener(_sync);
     _field = value..addListener(_sync);
     _sync();
+    _publish();
   }
 
   var _turn = (
@@ -153,6 +237,7 @@ class ComposerModel extends ChangeNotifier {
   @override
   void dispose() {
     _field.removeListener(_sync);
+    _state.dispose();
     canSend.dispose();
     queues.dispose();
     super.dispose();
@@ -202,11 +287,12 @@ class ComposerModel extends ChangeNotifier {
         ? ComposerMode.callback
         : ComposerMode.message;
     final embeds = _field.embedCount;
-    if (mode == _mode && embeds == _embeds && wired == _callback) return;
+    final reshaped = mode != _mode || embeds != _embeds || wired != _callback;
     _mode = mode;
     _callback = wired;
     _embeds = embeds;
-    notifyListeners();
+    _publish();
+    if (reshaped) notifyListeners();
   }
 
   void _refresh() {
@@ -262,6 +348,7 @@ class ComposerModel extends ChangeNotifier {
 
   void _changed() {
     _refresh();
+    _publish();
     notifyListeners();
   }
 }

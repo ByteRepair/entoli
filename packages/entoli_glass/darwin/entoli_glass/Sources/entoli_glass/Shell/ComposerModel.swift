@@ -119,14 +119,19 @@ final class ComposerModel: ObservableObject {
     if restyle { editor?.restyle() }
   }
 
-  /// The value Dart and the field last agreed on, so a report that changes
-  /// nothing is not sent: one keystroke both edits the text and moves the
-  /// caret, and the field says so for each.
-  private var known: ComposerValueSnapshot?
+  /// The text and selection Dart and the field last agreed on, so a report
+  /// that changes nothing is not sent: one keystroke both edits the text and
+  /// moves the caret, and the field says so for each.
+  private var known: (text: String, start: Int64, end: Int64)?
+
+  /// The last revision applied: Dart sends a value only when it set one.
+  private var revision: Int64 = -1
 
   /// A value Dart set: a completion taken, a message restored, a send.
   func apply(_ value: ComposerValueSnapshot) {
-    known = value
+    guard value.revision != revision else { return }
+    revision = value.revision
+    known = (value.text, value.start, value.end)
     if let editor {
       editor.apply(text: value.text, start: Int(value.start), end: Int(value.end))
     } else {
@@ -149,8 +154,8 @@ final class ComposerModel: ObservableObject {
   /// The field changed, or its caret moved.
   func edited(text: String, start: Int, end: Int) {
     shown(text: text)
-    let value = ComposerValueSnapshot(text: text, start: Int64(start), end: Int64(end))
-    guard value != known else { return }
+    let value = (text: text, start: Int64(start), end: Int64(end))
+    if let known, known == value { return }
     known = value
     say?.edited(text: text, start: value.start, end: value.end) { _ in }
   }

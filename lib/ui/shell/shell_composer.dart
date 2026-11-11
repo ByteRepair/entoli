@@ -78,22 +78,20 @@ class ShellComposerState extends ConsumerState<ShellComposer>
     implements ComposerHandle, ComposerIntents {
   late final ShellOutbox _outbox = ref.read(shellOutboxProvider);
   late final ShellAnswers _answers = ref.read(shellAnswersProvider);
-  late final ComposerModel _logic = ComposerModel(
+  late final ComposerModel _model = ComposerModel(
     widget.config.controller,
     pick: (kind) => ref.read(attachmentPickerProvider).pick(kind),
   );
   late final Listenable _shape = Listenable.merge([
-    _logic,
-    _logic.canSend,
-    _logic.queues,
+    _model,
+    _model.canSend,
+    _model.queues,
     widget.config.controller,
   ]);
 
-  /// The value the shell is reporting, so the change it makes is not sent
-  /// back to it — which mid-composition would undo the input method's marked
-  /// text. Held only while that change lands: a later one of Dart's own to
-  /// the same value has to reach the shell.
-  TextEditingValue? _reported;
+  /// The last revision and focus request of the model's state acted on.
+  int? _sentRevision;
+  int? _seenFocus;
 
   /// The completion token a press of Escape closed the menu on; it stays
   /// closed until the caret is in another.
@@ -118,34 +116,33 @@ class ShellComposerState extends ConsumerState<ShellComposer>
     _answers.composer.take(this);
     _focus.addListener(_sendFocus);
     _configure();
-    widget.config.controller.addListener(_pushValue);
-    _pushValue();
+    _model.state.addListener(_follow);
+    _seenFocus = _model.state.value.focusRequest;
+    _follow();
   }
 
   @override
   void didUpdateWidget(ShellComposer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.config.controller != widget.config.controller) {
-      oldWidget.config.controller.removeListener(_pushValue);
-      widget.config.controller.addListener(_pushValue);
-      _logic.field = widget.config.controller;
-      _pushValue();
+      _sentRevision = null;
+      _model.field = widget.config.controller;
     }
     _configure();
   }
 
   @override
   void dispose() {
-    widget.config.controller.removeListener(_pushValue);
+    _model.state.removeListener(_follow);
     if (_answers.composer.release(this)) {
       _outbox.composer(ComposerSnapshot(present: false));
     }
     _focus.dispose();
-    _logic.dispose();
+    _model.dispose();
     super.dispose();
   }
 
-  void _configure() => _logic.configure(
+  void _configure() => _model.configure(
     agentSpeaking: widget.config.agentSpeaking,
     onSend: widget.config.onSend,
     onQueue: widget.config.onQueue,
@@ -155,13 +152,13 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   );
 
   @override
-  void restore(Draft said) => _logic.restore(said);
+  void restore(Draft said) => _model.restore(said);
 
   /// Add [embed] and put the caret in the field, as [Composer.embed] does.
   @override
   void embed(ComposerEmbed embed) {
     widget.config.controller.append(embed);
-    _focus.requestFocus();
+    _model.requestFocus();
   }
 
   void _sendFocus() {
@@ -176,41 +173,37 @@ class ShellComposerState extends ConsumerState<ShellComposer>
     focused ? _focus.requestFocus() : _focus.unfocus();
   }
 
-  void _pushValue() {
-    final value = widget.config.controller.value;
-    if (value == _reported) return;
-    _outbox.composerValue(_valueOf(value));
-  }
-
-  static ComposerValueSnapshot _valueOf(TextEditingValue value) {
-    final selection = value.selection.isValid
-        ? value.selection
-        : TextSelection.collapsed(offset: value.text.length);
-    return ComposerValueSnapshot(
-      text: value.text,
-      start: selection.start,
-      end: selection.end,
-    );
+  /// What the core set goes to the shell's field, once per revision, and a
+  /// focus asked for takes the keyboard.
+  void _follow() {
+    final state = _model.state.value;
+    if (state.revision != _sentRevision) {
+      _sentRevision = state.revision;
+      final (:text, :start, :end) = state.value;
+      _outbox.composerValue(
+        ComposerValueSnapshot(
+          text: text,
+          start: start,
+          end: end,
+          revision: state.revision,
+        ),
+      );
+    }
+    if (state.focusRequest != _seenFocus) {
+      _seenFocus = state.focusRequest;
+      _focus.requestFocus();
+    }
   }
 
   void _add(List<Attachment> files) {
-    if (mounted) _logic.attach(files);
+    if (mounted) _model.attach(files);
   }
 
   ComposerController get _controller => widget.config.controller;
 
   @override
-  Future<void> edited(String text, int start, int end) async {
-    int at(int offset) => offset.clamp(0, text.length);
-    final value = TextEditingValue(
-      text: text,
-      selection: TextSelection(baseOffset: at(start), extentOffset: at(end)),
-    );
-    _reported = value;
-    _outbox.rememberComposerValue(_valueOf(value));
-    _controller.value = value;
-    _reported = null;
-  }
+  Future<void> edited(String text, int start, int end) async =>
+      _model.edited((text: text, start: start, end: end));
 
   @override
   Future<void> run(shell.ComposerAction action) async {
@@ -221,7 +214,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
         run == ComposerAction.newGoal) {
       _dismissed = null;
     }
-    await _logic.run(run);
+    await _model.run(run);
     if (mounted) setState(() {});
   }
 
@@ -240,7 +233,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   }
 
   @override
-  void unattach(int index) => _logic.unattach(index);
+  void unattach(int index) => _model.unattach(index);
 
   @override
   Future<void> unembed(int code) async {
@@ -341,7 +334,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
             : const <CompletionOption>[];
         _token = token;
         _matches = open ? matchingCompletions(options, token.query) : const [];
-        final mode = _logic.mode;
+        final mode = _model.mode;
         _outbox.composer(
           ComposerSnapshot(
             present: true,
@@ -350,16 +343,16 @@ class ShellComposerState extends ConsumerState<ShellComposer>
               ComposerMode.shell => InputMode.shell,
               ComposerMode.callback => InputMode.callback,
             },
-            callback: switch (_logic.callback) {
+            callback: switch (_model.callback) {
               final wired? => callbackKindOf(wired),
               null => null,
             },
-            canSend: _logic.canSend.value,
-            queues: _logic.queues.value,
-            speaking: _logic.speaking,
-            voice: _logic.voice,
+            canSend: _model.canSend.value,
+            queues: _model.queues.value,
+            speaking: _model.speaking,
+            voice: _model.voice,
             attachments: [
-              for (final a in _logic.attachments)
+              for (final a in _model.attachments)
                 ComposerAttachment(
                   name: a.filename,
                   image: a.mimeType.startsWith("image/"),

@@ -32,12 +32,6 @@ class ShellOutbox {
   void palette(PaletteSnapshot snapshot) =>
       _post("palette", snapshot, _shell.palette);
 
-  /// Take [value] as what the shell's composer already holds, without sending
-  /// it: what it reported itself, which sent back would undo what it is
-  /// doing.
-  void rememberComposerValue(ComposerValueSnapshot value) =>
-      _sent["composerValue"] = value;
-
   /// The microphone's level: many times a second, nothing to compare against.
   void voiceLevel(double level) =>
       _watch("voiceLevel", _shell.voiceLevel(level));

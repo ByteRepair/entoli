@@ -364,11 +364,13 @@ class ComposerSnapshot {
 
 /// The composer's text and selection, in UTF-16 code units, sent when the app
 /// changed them: a completion taken, a message restored, the field cleared on
-/// send. What the user typed is never sent back to them.
+/// send. [revision] counts those, so a value the same as one the user typed
+/// is still a change; what the user typed is never sent back to them.
 class ComposerValueSnapshot {
   String text;
   int start;
   int end;
+  int revision;
 }
 
 /// One thing the chat has running: a pill, standing alone or in its group.

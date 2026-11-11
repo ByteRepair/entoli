@@ -185,29 +185,30 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   /// build resolves the field's decoration and the buttons either side of
   /// it, so it follows the model's shape and leaves Send's flips to the
   /// buttons' own builders.
-  late final ComposerModel _logic = ComposerModel(
+  late final ComposerModel _model = ComposerModel(
     widget.controller,
     pick: (kind) => ref.read(attachmentPickerProvider).pick(kind),
   )..addListener(_reshaped);
   late final Listenable _sendState = Listenable.merge([
-    _logic.canSend,
-    _logic.queues,
+    _model.canSend,
+    _model.queues,
   ]);
 
   @override
   void initState() {
     super.initState();
     _configure();
+    _model.state.addListener(_followFocus);
   }
 
   @override
   void didUpdateWidget(Composer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _logic.field = widget.controller;
+    _model.field = widget.controller;
     _configure();
   }
 
-  void _configure() => _logic.configure(
+  void _configure() => _model.configure(
     agentSpeaking: widget.agentSpeaking,
     onSend: widget.onSend,
     onQueue: widget.onQueue,
@@ -218,7 +219,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
 
   @override
   void dispose() {
-    _logic.dispose();
+    _model.dispose();
     _focus.dispose();
     super.dispose();
   }
@@ -251,7 +252,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   }
 
   void _add(List<Attachment> files) {
-    if (mounted) _logic.attach(files);
+    if (mounted) _model.attach(files);
   }
 
   /// Add [embed] to the message and put the caret on the line under it, so
@@ -261,22 +262,31 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   @override
   void embed(ComposerEmbed embed) {
     widget.controller.append(embed);
+    _model.requestFocus();
+  }
+
+  late int _seenFocus = _model.state.value.focusRequest;
+
+  void _followFocus() {
+    final asked = _model.state.value.focusRequest;
+    if (asked == _seenFocus) return;
+    _seenFocus = asked;
     _focus.requestFocus();
   }
 
   /// Put back a message that was sent and taken back, ahead of whatever has
   /// been typed or attached since.
   @override
-  void restore(Draft said) => _logic.restore(said);
+  void restore(Draft said) => _model.restore(said);
 
-  void _submit({bool queue = false}) => _logic.submit(queue: queue);
+  void _submit({bool queue = false}) => _model.submit(queue: queue);
 
   /// How many lines the field grows to before it scrolls: two more per embed,
   /// each taller than a line, up to four of them.
-  int get _maxLines => 6 + 2 * _logic.embeds.clamp(0, 4);
+  int get _maxLines => 6 + 2 * _model.embeds.clamp(0, 4);
 
   Future<void> _run(ComposerAction action) async {
-    await _logic.run(action);
+    await _model.run(action);
     if (action == ComposerAction.insertSkill ||
         action == ComposerAction.insertAgent) {
       _field.currentState?.reopen();
@@ -331,9 +341,9 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final shell = _logic.mode == ComposerMode.shell;
-    final wired = _logic.mode == ComposerMode.callback;
-    final embeds = _logic.embeds;
+    final shell = _model.mode == ComposerMode.shell;
+    final wired = _model.mode == ComposerMode.callback;
+    final embeds = _model.embeds;
 
     return Container(
       decoration: BoxDecoration(
@@ -394,13 +404,13 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
             children: [
               menu,
               if (shell) _cwdBar(theme),
-              if (_logic.attachments.isNotEmpty)
+              if (_model.attachments.isNotEmpty)
                 AttachmentStrip(
                   children: [
-                    for (final (i, attachment) in _logic.attachments.indexed)
+                    for (final (i, attachment) in _model.attachments.indexed)
                       AttachmentChip.pending(
                         attachment,
-                        onRemove: () => _logic.unattach(i),
+                        onRemove: () => _model.unattach(i),
                       ),
                   ],
                 ),
@@ -422,7 +432,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
                   // laid out again on every frame of it, and `Expanded` above
                   // takes whatever this gives up.
                   ValueListenableBuilder<bool>(
-                    valueListenable: _logic.canSend,
+                    valueListenable: _model.canSend,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -449,7 +459,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
                   // running turn, in the slot the voice button gives up:
                   // outlined beside the filled Send, which steers.
                   ValueListenableBuilder<bool>(
-                    valueListenable: _logic.queues,
+                    valueListenable: _model.queues,
                     builder: (context, queues, _) => AnimatedSize(
                       duration: const Duration(milliseconds: 180),
                       curve: Curves.easeOut,
@@ -473,14 +483,14 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
                   ListenableBuilder(
                     listenable: _sendState,
                     builder: (context, _) =>
-                        widget.agentSpeaking && !_logic.canSend.value
+                        widget.agentSpeaking && !_model.canSend.value
                         ? IconButton.filled(
                             onPressed: () => _run(ComposerAction.stop),
                             icon: const Icon(Icons.stop),
                             tooltip: "Stop",
                           )
                         : IconButton.filled(
-                            onPressed: _logic.canSend.value
+                            onPressed: _model.canSend.value
                                 ? () => _run(ComposerAction.send)
                                 : null,
                             icon: Icon(
@@ -490,9 +500,9 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
                                   ? Icons.auto_awesome
                                   : Icons.send,
                             ),
-                            tooltip: _logic.mode.sendLabel(
-                              queues: _logic.queues.value,
-                              callback: _logic.callback,
+                            tooltip: _model.mode.sendLabel(
+                              queues: _model.queues.value,
+                              callback: _model.callback,
                             ),
                           ),
                   ),
