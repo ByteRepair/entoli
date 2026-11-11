@@ -105,6 +105,8 @@ class SidebarRow {
   });
 
   String id;
+
+  /// Empty for a chat not named yet.
   String title;
   bool pinned;
 
@@ -126,10 +128,31 @@ class SidebarRow {
 
 /// The rows under one heading; a paired device's list is one group with no
 /// heading, a mirror answering to no date this sidebar could place it under.
+/// How long ago a group's chats last changed, or that they are pinned; the
+/// client words the heading.
+enum ChatPeriod {
+  pinned,
+  today,
+  yesterday,
+  previousWeek,
+  previousMonth,
+  month,
+  none,
+}
+
 class SidebarGroup {
-  String heading;
+  SidebarGroup({required this.period, this.month, this.rows = const []});
+
+  /// [ChatPeriod.none] for a list with no headings: a paired device's.
+  ChatPeriod period;
+
+  /// For [ChatPeriod.month], its first day, in milliseconds since the epoch.
+  int? month;
   List<SidebarRow> rows;
 }
+
+/// Why the sidebar has no rows.
+enum SidebarEmpty { noChats, noMirrored, noMatch }
 
 /// A page the app opens over the conversation from the shell's chrome.
 enum ShellPage {
@@ -167,8 +190,8 @@ class SidebarSnapshot {
   /// What the search field holds: the app's, so switching project clears it.
   String query;
 
-  /// What to say where there are no rows, null where there are.
-  String? empty;
+  /// Why there are no rows, null where there are.
+  SidebarEmpty? empty;
 
   /// This device's projects, the default and the built-ins first: the
   /// switcher's, and where a local chat can be moved to.
@@ -315,8 +338,8 @@ class ComposerAttachment {
 
 /// One entry of the composer's `/` or `@` menu.
 class ComposerMenuItem {
-  /// The trigger and the name, as they will be typed.
-  String label;
+  /// The skill's or the agent's name, without its trigger.
+  String name;
 
   /// Which menu it is in: an agent's row leads with its face.
   ComposerTrigger trigger;
@@ -407,33 +430,37 @@ class ComposerValueSnapshot {
 }
 
 /// One thing the chat has running: a pill, standing alone or in its group.
+/// What a chat has running beside the reply.
+enum RunningKind { browser, job, subAgent }
+
+/// One thing the chat has running: what it is and its name, the client
+/// wording the pill, its group and its tooltip.
 class RunningSnapshot {
   RunningSnapshot({
     required this.id,
-    required this.label,
-    required this.tooltip,
-    this.group,
-    this.glyph,
-    this.mono = false,
+    required this.kind,
+    required this.name,
+    this.hidden = false,
   });
 
   /// What [TurnIntents.running] names it by.
   int id;
-  String label;
-  String tooltip;
+  RunningKind kind;
 
-  /// The kind it is gathered under, as a singular noun; null standing alone.
-  String? group;
+  /// The browser page's host, the job's command, the sub-agent's name.
+  String name;
 
-  /// In place of the spinner.
-  Glyph? glyph;
-  bool mono;
+  /// The browser is hidden from the agent.
+  bool hidden;
 }
 
 /// A say the turn has not read yet: its id and its one line.
 class SteerSnapshot {
   String id;
-  String line;
+
+  /// What was said, and the files it carried.
+  String text;
+  List<String> files;
 }
 
 /// A call the turn stopped on, and which answers it offers.
@@ -489,18 +516,26 @@ class QuestionRequest {
 /// Where a chat's goal stands: `GoalStatus` in the domain.
 enum GoalPhase { active, paused, met, blocked }
 
+/// Why a project could not be made: the name was not one, or the making
+/// failed.
+enum ProjectError { badName, failed }
+
 /// The chat's goal, the row above the composer while there is one.
 class GoalSnapshot {
   String objective;
   GoalPhase phase;
 
-  /// What a goal at [phase] is called — "Goal paused" — worded by Dart, so
-  /// the two rows read alike.
-  String label;
+  /// Why it stands where it does: the user's pause, the reviewer's verdict.
+  String? reason;
+}
 
-  /// The goal in full — where it stands and the reviewer's last word — for
-  /// the row's tooltip.
-  String summary;
+/// An unfinished turn the resume bar offers to carry on.
+class ResumeSnapshot {
+  /// When it started, in milliseconds since the epoch.
+  int startedAt;
+
+  /// What the backend said of it, where it said something.
+  String? notice;
 }
 
 /// What a running turn puts above the composer: the offer to carry on an
@@ -521,8 +556,8 @@ class TurnSnapshot {
   /// The chat's goal, null for none.
   GoalSnapshot? goal;
 
-  /// The resume bar's line, null for none.
-  String? resume;
+  /// The unfinished turn to carry on, null for none.
+  ResumeSnapshot? resume;
   List<RunningSnapshot> running;
   List<SteerSnapshot> steers;
 
@@ -660,7 +695,8 @@ class PaletteItem {
     this.project,
     this.glyph,
     this.omada = false,
-    this.trailing = "",
+    this.count,
+    this.chatProject,
     this.busy = false,
     this.current = false,
   });
@@ -678,8 +714,11 @@ class PaletteItem {
   Glyph? glyph;
   bool omada;
 
-  /// A project's chat count, or a chat's project.
-  String trailing;
+  /// A project's chat count.
+  int? count;
+
+  /// A chat's project, as named.
+  String? chatProject;
 
   /// It, or one of its chats, is running.
   bool busy;
@@ -689,8 +728,13 @@ class PaletteItem {
 }
 
 /// A heading, empty for none, and its rows.
+/// Which of the palette's lists a section is: the default and built-in
+/// projects, the user's own below a rule, the paired devices', every match
+/// while searching, and the chats.
+enum PaletteList { projects, mine, devices, found, chats }
+
 class PaletteSection {
-  String heading;
+  PaletteList list;
   List<PaletteItem> items;
 }
 
@@ -796,9 +840,9 @@ abstract class SidebarIntents {
   void move(String id, String? project);
   void delete(String id);
 
-  /// Answers an error to show, or null once the project is made.
+  /// Answers what went wrong, or null once the project is made.
   @async
-  String? createProject(String name, String description, bool omada);
+  ProjectError? createProject(String name, String description, bool omada);
   void openPage(ShellPage page);
 }
 
@@ -847,7 +891,6 @@ abstract class ComposerIntents {
   /// Take files off the clipboard: answers whether there were any.
   @async
   bool paste();
-  void copyCwd();
 }
 
 /// An answer to an approval.

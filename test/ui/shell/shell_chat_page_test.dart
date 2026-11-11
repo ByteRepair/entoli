@@ -177,7 +177,7 @@ void main() {
     await openChat(tester, finished: false);
     await pump(tester);
     await settleIo(tester);
-    expect(shell.lastTurn?.resume, startsWith("Unfinished turn"));
+    expect(shell.lastTurn?.resume?.startedAt, isPositive);
   });
 
   testWidgets("a finished chat sends an empty turn surface", (tester) async {

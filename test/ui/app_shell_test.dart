@@ -7,7 +7,7 @@ import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/ui/app_shell.dart";
-import "package:agent_chat/app/chat_groups.dart";
+import "package:agent_chat/ui/sidebar/chat_headings.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/theme.dart";

@@ -18,7 +18,7 @@ import "../settings/settings_category.dart";
 import "../selection.dart";
 import "../widgets/nothing.dart";
 import "../widgets/search_field.dart";
-import "../../app/chat_groups.dart";
+import "chat_headings.dart";
 import "project_palette.dart";
 import "../../app/remote_projects.dart";
 
@@ -332,17 +332,15 @@ class _ChatList extends ConsumerWidget {
       builder: (context, text, _) {
         final found = chatsMatching(chats, text);
         if (found.isEmpty) return const Nothing(_noMatch);
+        final now = DateTime.now();
         // A sliver per group rather than one list over headings and chats
         // flattened together: the flat form has to say which of the two each
         // row is, and there is no shape for that which is not two nullable
         // fields of which exactly one is ever set.
         return CustomScrollView(
           slivers: [
-            for (final group in groupChatsByDate(
-              found,
-              now: DateTime.now(),
-            )) ...[
-              SliverToBoxAdapter(child: ListHeading(group.heading)),
+            for (final group in groupChatsByDate(found, now: now)) ...[
+              SliverToBoxAdapter(child: ListHeading(group.headingAt(now))),
               SliverList.builder(
                 itemCount: group.chats.length,
                 itemBuilder: (context, i) => _ChatTile(

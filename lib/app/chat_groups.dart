@@ -1,28 +1,31 @@
 import "../domain/models.dart";
 
+/// How long ago a group's chats last changed, or that they are pinned:
+/// what the sidebar heads each group with, worded by each frontend.
+enum ChatPeriod { pinned, today, yesterday, previousWeek, previousMonth, month }
+
 /// The chats under one of the sidebar's headings.
 class ChatGroup {
-  const ChatGroup(this.heading, this.chats);
+  const ChatGroup(this.period, this.chats, {this.month});
 
-  final String heading;
+  final ChatPeriod period;
+
+  /// For [ChatPeriod.month], the month: its first day, local.
+  final DateTime? month;
   final List<ChatState> chats;
 }
 
-/// The heading pinned chats sit under, ahead of every date group. A category
-/// of one is still drawn — the pin is what the user asked to see, not a date.
-const pinnedHeading = "Pinned";
-
-/// [chats] newest first, under the heading their last change puts them in.
+/// [chats] newest first, under the period their last change puts them in.
 ///
 /// [now] is a parameter rather than read here so a test can say where the
 /// boundaries fall; the sidebar passes the real clock.
 ///
-/// Pinned chats come first under [pinnedHeading], newest first among
-/// themselves; the rest follow under the date headings, in the order the chats
-/// come in. The order the headings come out in is what saves ranking them:
-/// sorted newest first, each chat lands in the group it is already in or one
-/// further down, and never one further up — and the pinned group is always
-/// above the date groups because it is drawn before them.
+/// Pinned chats come first, newest first among themselves — a category of
+/// one is still drawn, the pin being what the user asked to see, not a date
+/// — and the rest follow under their periods, in the order the chats come
+/// in. The order the periods come out in is what saves ranking them: sorted
+/// newest first, each chat lands in the group it is already in or one
+/// further down, and never one further up.
 List<ChatGroup> groupChatsByDate(
   Iterable<ChatState> chats, {
   required DateTime now,
@@ -31,42 +34,27 @@ List<ChatGroup> groupChatsByDate(
     ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
   final pinned = sorted.where((c) => c.pinned).toList();
   final rest = sorted.where((c) => !c.pinned).toList();
-  final groups = <String, List<ChatState>>{};
+  final groups = <(ChatPeriod, DateTime?), List<ChatState>>{};
   for (final chat in rest) {
-    final heading = _heading(chat.updatedAt.toLocal(), now.toLocal());
-    groups.putIfAbsent(heading, () => []).add(chat);
+    final key = _period(chat.updatedAt.toLocal(), now.toLocal());
+    groups.putIfAbsent(key, () => []).add(chat);
   }
   return [
-    if (pinned.isNotEmpty) ChatGroup(pinnedHeading, pinned),
-    for (final group in groups.entries) ChatGroup(group.key, group.value),
+    if (pinned.isNotEmpty) ChatGroup(ChatPeriod.pinned, pinned),
+    for (final MapEntry(key: (period, month), value: chats) in groups.entries)
+      ChatGroup(period, chats, month: month),
   ];
 }
 
-const _months = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
-
-String _heading(DateTime at, DateTime now) {
+(ChatPeriod, DateTime?) _period(DateTime at, DateTime now) {
   final days = _daysBetween(at, now);
   // A chat dated in the future is a clock that has gone back, and today is the
   // least surprising place for it.
-  if (days <= 0) return "Today";
-  if (days == 1) return "Yesterday";
-  if (days < 7) return "Previous 7 days";
-  if (days < 30) return "Previous 30 days";
-  final month = _months[at.month - 1];
-  return at.year == now.year ? month : "$month ${at.year}";
+  if (days <= 0) return (ChatPeriod.today, null);
+  if (days == 1) return (ChatPeriod.yesterday, null);
+  if (days < 7) return (ChatPeriod.previousWeek, null);
+  if (days < 30) return (ChatPeriod.previousMonth, null);
+  return (ChatPeriod.month, DateTime(at.year, at.month));
 }
 
 /// Whole days from one local date to another, counted on a UTC calendar: a

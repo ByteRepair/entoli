@@ -63,13 +63,13 @@ void main() {
     await pump(tester);
     expect(titles(), containsAll(["first", "second"]));
     expect(last().empty, isNull);
-    expect(last().groups.first.heading, isNotEmpty);
+    expect(last().groups.first.period, isNot(ChatPeriod.none));
   });
 
   testWidgets("an empty project says so", (tester) async {
     await pump(tester);
     expect(titles(), isEmpty);
-    expect(last().empty, "No chats in this project yet.");
+    expect(last().empty, SidebarEmpty.noChats);
   });
 
   testWidgets("a search narrows the rows, and switching project clears it", (
@@ -112,7 +112,7 @@ void main() {
     await run(tester, (s) => s.pin(id, true));
     await settleUntil(
       tester,
-      () => last().groups.first.heading == "Pinned",
+      () => last().groups.first.period == ChatPeriod.pinned,
       what: "the Pinned heading",
     );
 
@@ -153,11 +153,9 @@ void main() {
     expect(query!.query, "fir");
   });
 
-  testWidgets("a name no project can have is refused with a reason", (
-    tester,
-  ) async {
+  testWidgets("a name no project can have is refused as one", (tester) async {
     await pump(tester);
     final answer = await sidebar.createProject("   ", "", false);
-    expect(answer, isA<String>());
+    expect(answer, ProjectError.badName);
   });
 }

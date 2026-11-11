@@ -98,7 +98,7 @@ final class ComposerModel: ObservableObject {
     let restyle = next.mode != look.mode || next.cards != look.cards
     // A different list starts again at its first row; the same one keeps the
     // row the arrows are on — a face arriving for a row is the same list.
-    if next.menu.map(\.label) != look.menu.map(\.label) { highlighted = 0 }
+    if next.menu.map(\.name) != look.menu.map(\.name) { highlighted = 0 }
     // Each snapshot's bytes are a fresh object, so a face is known again by
     // its bytes and decoded only the first time.
     var decoded: [Data: Image] = [:]

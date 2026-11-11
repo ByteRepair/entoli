@@ -16,7 +16,7 @@ import "../../../app/mirror_controller.dart" show chatViewProvider;
 import "../activity/activity.dart";
 import "../activity/card.dart" show ActivityStatus, DrawerAction;
 import "../activity/tool_run.dart" show toolRunView;
-import "../widgets/running_pill.dart" show RunningThing;
+import "../widgets/running_pill.dart" show RunningKind, RunningThing;
 import "tool_ui.dart";
 
 /// What voice mode says of a command, whoever ran it — the model through
@@ -158,6 +158,8 @@ List<RunningThing> jobsRunning(
 ) => [
   for (final job in view.runningJobs.values)
     RunningThing(
+      kind: RunningKind.job,
+      name: firstLine(job.command),
       group: "background task",
       label: firstLine(job.command),
       mono: true,

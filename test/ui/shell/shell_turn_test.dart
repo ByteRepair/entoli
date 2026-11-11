@@ -140,7 +140,7 @@ void main() {
     )!;
     expect(goal.objective, "the tests pass");
     expect(goal.phase, GoalPhase.blocked);
-    expect(goal.summary, "Goal blocked: the tests pass · Needs a key.");
+    expect(goal.reason, "Needs a key.");
   });
 
   testWidgets("the goal row's buttons come back as /goal commands", (

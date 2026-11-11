@@ -14,7 +14,6 @@ import "../chat/widgets/composer_controller.dart";
 import "../chat/widgets/composer_embed.dart";
 import "faces.dart";
 import "../widgets/completion_field.dart";
-import "../widgets/dialogs.dart";
 import "shell_outbox.dart";
 import "shell_answers.dart";
 
@@ -230,14 +229,6 @@ class ShellComposerState extends ConsumerState<ShellComposer>
     return files.isNotEmpty;
   }
 
-  @override
-  Future<void> copyCwd() async {
-    final cwd = _cwd();
-    if (cwd != null && mounted) {
-      await copyToClipboard(context, cwd, said: "Copied working directory");
-    }
-  }
-
   /// Where a `!` command is about to run: the shell's own report where it has
   /// made one, else the workspace in the guest's own words. See
   /// `Composer._cwdBar`.
@@ -338,8 +329,8 @@ class ShellComposerState extends ConsumerState<ShellComposer>
             menu: [
               for (final option in _matches)
                 ComposerMenuItem(
-                  label: "${token!.kind.trigger}${option.name}",
-                  trigger: triggerOf(token.kind),
+                  name: option.name,
+                  trigger: triggerOf(token!.kind),
                   hint: option.argumentHint,
                   detail: option.description,
                   picture: token.kind == CompletionKind.agent

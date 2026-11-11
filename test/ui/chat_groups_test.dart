@@ -2,7 +2,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/chat_search.dart";
 import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/app/chat_groups.dart";
+import "package:agent_chat/ui/sidebar/chat_headings.dart";
 
 void main() {
   final now = DateTime(2026, 8, 17, 14, 30);
@@ -25,7 +25,7 @@ void main() {
   /// The headings in the order they are drawn, which is the order the chats
   /// come in rather than a rank of their own.
   List<String> headingsOf(Iterable<ChatState> chats) =>
-      groupChatsByDate(chats, now: now).map((g) => g.heading).toList();
+      groupChatsByDate(chats, now: now).map((g) => g.headingAt(now)).toList();
 
   group("grouping", () {
     test("the day, then the days, then the weeks, then the month", () {
@@ -54,7 +54,7 @@ void main() {
       ], now: now);
 
       expect(groups, hasLength(2));
-      expect(groups.first.heading, "Today");
+      expect(groups.first.headingAt(now), "Today");
       expect(groups.first.chats.map((c) => c.title), ["newer", "older"]);
       expect(groups.last.chats.single.title, "yesterday's");
     });
@@ -94,7 +94,7 @@ void main() {
       test("a pinned chat sits under Pinned", () {
         final groups = groupChatsByDate([pinnedChat("kept")], now: now);
         expect(groups, hasLength(1));
-        expect(groups.first.heading, pinnedHeading);
+        expect(groups.first.headingAt(now), pinnedHeading);
         expect(groups.first.chats.single.title, "kept");
       });
 
@@ -113,7 +113,7 @@ void main() {
           pinnedChat("newer", updatedAt: DateTime(2026, 8, 17, 13)),
         ], now: now);
         expect(groups, hasLength(1));
-        expect(groups.first.heading, pinnedHeading);
+        expect(groups.first.headingAt(now), pinnedHeading);
         expect(groups.first.chats.map((c) => c.title), ["newer", "older"]);
       });
 
@@ -122,7 +122,7 @@ void main() {
           pinnedChat("kept"),
           pinnedChat("released", pinned: false),
         ], now: now);
-        expect(groups.map((g) => g.heading), [pinnedHeading, "Today"]);
+        expect(groups.map((g) => g.headingAt(now)), [pinnedHeading, "Today"]);
         expect(groups.last.chats.single.title, "released");
       });
     });

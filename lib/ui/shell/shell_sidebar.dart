@@ -1,6 +1,8 @@
 import "dart:async";
 
 import "package:entoli_glass/entoli_glass.dart";
+
+import "../../app/chat_groups.dart" as app show ChatPeriod;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -15,7 +17,7 @@ import "../profile/profile_page.dart";
 import "../project_actions.dart";
 import "../selection.dart";
 import "../settings/settings_category.dart";
-import "../../app/chat_groups.dart";
+import "../../app/chat_groups.dart" show groupChatsByDate;
 import "../sidebar/project_palette.dart";
 import "../../app/remote_projects.dart";
 import "../app_routes.dart";
@@ -84,7 +86,7 @@ SidebarSnapshot _sidebarSnapshot(Ref ref) {
   final remote = selected.device != null;
   final ProjectChoice current;
   final List<SidebarGroup> groups;
-  final String? empty;
+  final SidebarEmpty? empty;
   if (remote) {
     current =
         mirrored
@@ -117,18 +119,20 @@ SidebarSnapshot _sidebarSnapshot(Ref ref) {
         if (titleMatches(e.state, needle))
           SidebarRow(
             id: e.chatId,
-            title: e.state.title.orUntitled,
+            title: e.state.title,
             pinned: e.state.pinned,
             offline: !e.online,
             mutable: e.online,
             remote: true,
           ),
     ];
-    groups = [if (rows.isNotEmpty) SidebarGroup(heading: "", rows: rows)];
+    groups = [
+      if (rows.isNotEmpty) SidebarGroup(period: ChatPeriod.none, rows: rows),
+    ];
     empty = mine.isEmpty
-        ? "Nothing mirrored from this device yet."
+        ? SidebarEmpty.noMirrored
         : rows.isEmpty
-        ? "No chat's title matches that."
+        ? SidebarEmpty.noMatch
         : null;
   } else {
     current = local(selected.project);
@@ -137,12 +141,20 @@ SidebarSnapshot _sidebarSnapshot(Ref ref) {
     groups = [
       for (final group in groupChatsByDate(found, now: DateTime.now()))
         SidebarGroup(
-          heading: group.heading,
+          period: switch (group.period) {
+            app.ChatPeriod.pinned => ChatPeriod.pinned,
+            app.ChatPeriod.today => ChatPeriod.today,
+            app.ChatPeriod.yesterday => ChatPeriod.yesterday,
+            app.ChatPeriod.previousWeek => ChatPeriod.previousWeek,
+            app.ChatPeriod.previousMonth => ChatPeriod.previousMonth,
+            app.ChatPeriod.month => ChatPeriod.month,
+          },
+          month: group.month?.millisecondsSinceEpoch,
           rows: [
             for (final chat in group.chats)
               SidebarRow(
                 id: chat.id,
-                title: chat.title.orUntitled,
+                title: chat.title,
                 pinned: chat.pinned,
                 busy: busy.contains(chat.id),
                 temporary: chat.tempTtlExpiresAt != null,
@@ -151,9 +163,9 @@ SidebarSnapshot _sidebarSnapshot(Ref ref) {
         ),
     ];
     empty = mine.isEmpty
-        ? "No chats in this project yet."
+        ? SidebarEmpty.noChats
         : found.isEmpty
-        ? "No chat's title matches that."
+        ? SidebarEmpty.noMatch
         : null;
   }
 
@@ -255,13 +267,13 @@ class SidebarRunner implements SidebarIntents {
   );
 
   @override
-  Future<String?> createProject(
+  Future<ProjectError?> createProject(
     String name,
     String description,
     bool omada,
   ) async {
     final named = projectNameFrom(name);
-    if (named == null) return "That is not a name a project can have.";
+    if (named == null) return ProjectError.badName;
     try {
       await _createProject((
         name: named,
@@ -271,7 +283,7 @@ class SidebarRunner implements SidebarIntents {
       return null;
     } catch (e) {
       logFailure("shell", "createProject", e);
-      return "The project could not be created.";
+      return ProjectError.failed;
     }
   }
 

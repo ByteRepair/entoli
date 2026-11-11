@@ -1,3 +1,6 @@
+import "../../../app/running.dart";
+
+export "../../../app/running.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -65,13 +68,24 @@ Widget runningSpinner(Color colour) => SizedBox(
 /// composer draws it.
 class RunningThing {
   const RunningThing({
+    required this.kind,
+    required this.name,
     required this.label,
     required this.tooltip,
     required this.open,
+    this.hidden = false,
     this.group,
     this.icon,
     this.mono = false,
   });
+
+  /// What it is, and its name — the page's host, the job's command, the
+  /// sub-agent — for a frontend that words it itself.
+  final RunningKind kind;
+  final String name;
+
+  /// The browser is hidden from the agent.
+  final bool hidden;
 
   /// What it is gathered under with the rest of its kind, as a singular noun
   /// ("background task"); null for one that stands alone, ahead of the

@@ -392,9 +392,12 @@ a turn streams: `window`, `sidebar`, `chatBar` (the chat's state, which
 the Swift builds its own bar from), `pageBar` (a Flutter page's
 `TitleBarSnapshot`), `composer` and `composerValue`, `turn`, `newChat`,
 `voice`, `palette`. **A snapshot is state, not presentation**: the composer's
-hint and send label, its height, voice mode's words and colours, and the
-chat bar's buttons are the Swift's to write, in Apple's terms, and the
-contract carries what they are written from. The microphone's level goes raw, many times a second, and
+hint and send label, its height, voice mode's words and colours, the chat
+bar's buttons, the goal row's words, the resume line, the running pills and
+their groups, a steer's line, the sidebar's headings and empty states, the
+palette's sections and a new project's errors are the Swift's to write, in
+Apple's terms, and the contract carries what they are written from: a phase,
+a time, a kind, a name, a count. The microphone's level goes raw, many times a second, and
 the glow reads it per frame rather than redrawing the shell for it.
 `ShellModel` is the Swift's `NativeShell`, holding what the last snapshot
 said and nothing of its own.

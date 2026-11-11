@@ -59,7 +59,7 @@ PaletteSnapshot _paletteSnapshot(Ref ref, PaletteState palette) {
     project: p,
     glyph: projectShellGlyph(p),
     omada: ref.watch(omadaOnProvider(p)),
-    trailing: "${counts[p] ?? 0}",
+    count: counts[p] ?? 0,
     busy: busy.contains(p),
     current: selected == localProject(p),
   );
@@ -70,7 +70,7 @@ PaletteSnapshot _paletteSnapshot(Ref ref, PaletteState palette) {
     project: e.scope.project,
     glyph: Glyph.remote,
     omada: e.omada,
-    trailing: "${e.count}",
+    count: e.count,
     current: e.scope == selected,
   );
 
@@ -88,34 +88,34 @@ PaletteSnapshot _paletteSnapshot(Ref ref, PaletteState palette) {
   final sections = [
     if (!listing.searching) ...[
       PaletteSection(
-        heading: "",
+        list: PaletteList.projects,
         items: [for (final p in listing.projects) local(p)],
       ),
       PaletteSection(
-        heading: "",
+        list: PaletteList.mine,
         items: [for (final p in listing.mine) local(p)],
       ),
       PaletteSection(
-        heading: "Other Devices",
+        list: PaletteList.devices,
         items: [for (final e in listing.devices) mirrored(e)],
       ),
     ] else
       PaletteSection(
-        heading: "Projects",
+        list: PaletteList.found,
         items: [
           for (final p in listing.projects) local(p),
           for (final e in listing.devices) mirrored(e),
         ],
       ),
     PaletteSection(
-      heading: "Chats",
+      list: PaletteList.chats,
       items: [
         for (final chat in listing.chats)
           PaletteItem(
             id: "c:${chat.id}",
-            label: chat.title.orUntitled,
+            label: chat.title,
             chat: chat.id,
-            trailing: projectLabel(chat.project),
+            chatProject: projectLabel(chat.project),
             busy: running.contains(chat.id),
             current: chat.id == selectedChat,
           ),

@@ -286,7 +286,7 @@ struct ComposerView: View {
           .foregroundStyle(.secondary)
           .frame(width: Self.menuFace, height: Self.menuFace)
       }
-      Text(option.label).fontWeight(.semibold).lineLimit(1)
+      Text(option.trigger.glyph + option.name).fontWeight(.semibold).lineLimit(1)
       if let hint = option.hint {
         Text(hint).italic().foregroundStyle(.secondary).lineLimit(1)
       }
@@ -312,7 +312,12 @@ struct ComposerView: View {
 
   private func cwdRow(_ cwd: String) -> some View {
     Button {
-      model.say?.copyCwd { _ in }
+      #if os(iOS)
+        UIPasteboard.general.string = cwd
+      #else
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(cwd, forType: .string)
+      #endif
     } label: {
       HStack(spacing: 8) {
         Image(systemName: "terminal")

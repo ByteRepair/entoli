@@ -81,7 +81,7 @@ void main() {
     expect(voice.present, isTrue);
     expect(voice.title, "Walk");
     expect(voice.lines.map((l) => l.text), containsAll(["go on", "Half a"]));
-    expect(native.lastTurn?.resume, startsWith("Unfinished turn"));
+    expect(native.lastTurn?.resume?.startedAt, isPositive);
   });
 
   testWidgets("the microphone's level goes as it moves", (tester) async {

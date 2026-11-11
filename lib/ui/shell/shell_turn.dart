@@ -1,4 +1,6 @@
 import "package:entoli_glass/entoli_glass.dart";
+
+import "../../app/running.dart" as app;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -7,10 +9,8 @@ import "../../domain/models.dart";
 import "../../domain/room/room_state.dart";
 import "../../app/chat_controller.dart";
 import "../chat/widgets/approval_banner.dart";
-import "../chat/widgets/resume_bar.dart";
-import "../chat/widgets/running_pill.dart";
+import "../chat/widgets/running_pill.dart" show RunningThing;
 import "../chat/widgets/running_strip.dart" show runningOf;
-import "../chat/widgets/steer_strip.dart";
 import "../../app/approvals.dart";
 import "shell_outbox.dart";
 import "glyphs.dart";
@@ -147,8 +147,8 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface>
       TurnSnapshot(
         goal: goalSnapshotOf(chat?.goal),
         resume: chat != null && chat.unfinished && !view.isRunning
-            ? ResumeBar.lineOf(
-                chat.messages.last.createdAt,
+            ? ResumeSnapshot(
+                startedAt: chat.messages.last.createdAt.millisecondsSinceEpoch,
                 notice: view.unfinishedNotice,
               )
             : null,
@@ -156,16 +156,22 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface>
           for (final (i, thing) in _running.indexed)
             RunningSnapshot(
               id: i,
-              label: thing.label,
-              tooltip: thing.tooltip,
-              group: thing.group,
-              glyph: glyphOf(thing.icon),
-              mono: thing.mono,
+              kind: switch (thing.kind) {
+                app.RunningKind.browser => RunningKind.browser,
+                app.RunningKind.job => RunningKind.job,
+                app.RunningKind.subAgent => RunningKind.subAgent,
+              },
+              name: thing.name,
+              hidden: thing.hidden,
             ),
         ],
         steers: [
           for (final say in view.steering)
-            SteerSnapshot(id: say.id, line: SteerStrip.line(say)),
+            SteerSnapshot(
+              id: say.id,
+              text: say.plainText.trim(),
+              files: [for (final f in say.files) f.filename],
+            ),
         ],
         withdrawable: widget.onWithdrawn != null,
         approvals: [
@@ -225,6 +231,5 @@ GoalSnapshot? goalSnapshotOf(ChatGoal? goal) => goal == null
           GoalStatus.met => GoalPhase.met,
           GoalStatus.blocked => GoalPhase.blocked,
         },
-        label: goalStatusLabel(goal.status),
-        summary: goalSummary(goal),
+        reason: goal.reason,
       );

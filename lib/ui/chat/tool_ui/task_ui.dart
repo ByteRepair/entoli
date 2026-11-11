@@ -9,7 +9,7 @@ import "../sub_agent_transcript.dart" show subAgentLiveProvider;
 import "../activity/activity.dart";
 import "../activity/card.dart" show ActivitySource, liveMessageOf;
 import "../widgets/message_bubble.dart" show MessageBubble;
-import "../widgets/running_pill.dart" show RunningThing;
+import "../widgets/running_pill.dart" show RunningKind, RunningThing;
 import "tool_ui.dart";
 
 /// A sub-agent's call, read from the call's own arguments.
@@ -96,6 +96,8 @@ List<RunningThing> subAgentsRunning(
       in view.runningSubAgents.entries)
     for (final agent in agents)
       RunningThing(
+        kind: RunningKind.subAgent,
+        name: agent.agent,
         group: "sub-agent",
         label: "@${agent.agent}",
         tooltip: "Sub-agent @${agent.agent}",
