@@ -1,3 +1,5 @@
+import "dart:math" as math;
+
 import "package:agent_chat/app/bot_avatar/stage.dart";
 import "package:agent_chat/domain/bot_avatar/definition.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -35,7 +37,8 @@ void main() {
   });
 
   test("a tap plays its reaction on a still, and ends", () {
-    final stage = BotStage();
+    // A reaction that does not spin, which would turn the eyes out of view.
+    final stage = BotStage(random: _NoSpin());
     final key = stage.keyOf(_box);
     var frame = stage.frame("a", key, now: Duration.zero, live: false)!;
     expect(frame.first, 0);
@@ -63,4 +66,16 @@ void main() {
     expect(stage.geometry("nobody#0"), isNull);
     expect(stage.frame("a", "nobody#0", now: Duration.zero), isNull);
   });
+}
+
+/// A random source whose every draw is the top of the range: no tap spins.
+class _NoSpin implements math.Random {
+  @override
+  double nextDouble() => 0.999;
+
+  @override
+  int nextInt(int max) => max - 1;
+
+  @override
+  bool nextBool() => false;
 }
