@@ -5,7 +5,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/goal.dart";
 import "../../domain/models.dart";
 import "../../domain/room/room_state.dart";
-import "../chat/chat_controller.dart";
+import "../../app/chat_controller.dart";
 import "../chat/widgets/approval_banner.dart";
 import "../chat/widgets/resume_bar.dart";
 import "../chat/widgets/running_pill.dart";

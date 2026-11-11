@@ -7,7 +7,7 @@ import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/goal.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/room/room_state.dart";
-import "package:agent_chat/ui/chat/chat_controller.dart";
+import "package:agent_chat/app/chat_controller.dart";
 import "package:agent_chat/ui/shell/shell_turn.dart";
 
 import "fake_native_shell.dart";

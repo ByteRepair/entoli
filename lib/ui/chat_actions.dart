@@ -13,7 +13,7 @@ import "../domain/models.dart";
 import "../domain/project.dart";
 import "../providers.dart";
 import "app_command.dart";
-import "chat/chat_controller.dart";
+import "../app/chat_controller.dart";
 import "selection.dart";
 import "widgets/dialogs.dart";
 

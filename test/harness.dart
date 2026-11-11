@@ -59,9 +59,9 @@ import "package:agent_chat/domain/project.dart" show ProjectRef;
 import "package:agent_chat/data/builtin/llm/providers/presets.dart"
     show CliProvider;
 import "package:agent_chat/providers.dart";
-import "package:agent_chat/ui/chat/chat_controller.dart";
+import "package:agent_chat/app/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
-import "package:agent_chat/ui/chat/mirror_controller.dart";
+import "package:agent_chat/app/mirror_controller.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 import "package:agent_chat/ui/focus_follows_keyboard.dart";

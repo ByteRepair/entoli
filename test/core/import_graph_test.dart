@@ -89,21 +89,45 @@ void main() {
   });
 
   // Between the layers, `domain/` is the app's own terms and knows nothing of
-  // how it is stored or drawn, and `data/` stores and runs without knowing
-  // how it is drawn. `core/` and `main.dart` assemble the app and may reach
+  // how it is stored or drawn, `data/` stores and runs without knowing how it
+  // is drawn, and `app/` is the core every frontend renders, so it knows
+  // none of them. `core/` and `main.dart` assemble the app and may reach
   // anything.
-  test("domain imports nothing of data or ui, and data nothing of ui", () {
-    final lib = p.absolute("lib");
-    const above = {
-      "domain": {"data", "ui"},
-      "data": {"ui"},
-    };
-    String layer(String file) => p.split(p.relative(file, from: lib)).first;
+  test(
+    "domain imports nothing of data, app or ui; data and app nothing of ui",
+    () {
+      final lib = p.absolute("lib");
+      const above = {
+        "domain": {"data", "app", "ui"},
+        "data": {"app", "ui"},
+        "app": {"ui"},
+      };
+      String layer(String file) => p.split(p.relative(file, from: lib)).first;
+      expect([
+        for (final MapEntry(key: file, value: imports) in _graph().entries)
+          for (final target in imports)
+            if (above[layer(file)]?.contains(layer(target)) ?? false)
+              "${p.relative(file, from: lib)} -> ${p.relative(target, from: lib)}",
+      ], isEmpty);
+    },
+  );
+
+  // The graph above sees only the app's own files, so a widget library is
+  // checked by name. `foundation` is the listenables a model is made of.
+  test("app imports no Flutter library but foundation", () {
+    final app = p.absolute("lib", "app");
+    final flutter = RegExp(
+      r'^(?:import|export)\s+"package:flutter/(\w+)\.dart"',
+      multiLine: true,
+    );
     expect([
-      for (final MapEntry(key: file, value: imports) in _graph().entries)
-        for (final target in imports)
-          if (above[layer(file)]?.contains(layer(target)) ?? false)
-            "${p.relative(file, from: lib)} -> ${p.relative(target, from: lib)}",
+      for (final file in Directory(
+        app,
+      ).listSync(recursive: true).whereType<File>())
+        if (file.path.endsWith(".dart"))
+          for (final m in flutter.allMatches(file.readAsStringSync()))
+            if (m.group(1) != "foundation")
+              "${p.relative(file.path, from: app)} -> flutter/${m.group(1)}",
     ], isEmpty);
   });
 

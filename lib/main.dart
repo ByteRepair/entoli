@@ -50,7 +50,7 @@ import "ui/command_intents.dart";
 import "ui/initial_setup_gate.dart";
 import "ui/routes.dart";
 import "ui/welcome_gate.dart";
-import "ui/chat/chat_controller.dart";
+import "app/chat_controller.dart";
 import "ui/chat/controller_turn_sender.dart";
 import "ui/assistant/incoming_assistant.dart";
 import "ui/focus_follows_keyboard.dart";

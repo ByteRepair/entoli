@@ -9,7 +9,7 @@ import "../domain/builtin_project.dart";
 import "../domain/project.dart";
 import "../providers.dart";
 import "app_command.dart";
-import "chat/chat_controller.dart";
+import "../app/chat_controller.dart";
 import "chat/chat_settings_page.dart";
 import "chat/plan_page.dart";
 import "chat_actions.dart";

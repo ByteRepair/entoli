@@ -3,7 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/chat_log.dart";
 import "../../domain/turn_sender.dart";
 import "../../providers.dart";
-import "chat_controller.dart";
+import "../../app/chat_controller.dart";
 
 /// Sends a turn — a trigger's, a shortcut's — through [ChatController], the
 /// same path the user takes — the same path [VoiceController] takes when it speaks into a chat.

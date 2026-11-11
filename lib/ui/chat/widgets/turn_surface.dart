@@ -4,7 +4,7 @@ import "../../../domain/permission.dart" show addDirectoryName;
 import "../../../domain/goal.dart" show ChatGoals;
 import "../../../domain/models.dart";
 import "../../../domain/room/room_state.dart";
-import "../chat_controller.dart";
+import "../../../app/chat_controller.dart";
 import "approval_banner.dart";
 import "browser_strip.dart";
 import "goal_strip.dart";

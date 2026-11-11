@@ -4,7 +4,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/models.dart";
-import "../chat/chat_controller.dart";
+import "../../app/chat_controller.dart";
 import "../theme.dart";
 import "../voice/transcript.dart";
 import "../voice/voice_controller.dart";

@@ -23,7 +23,7 @@ import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/widgets/omada_separator.dart";
 import "package:agent_chat/ui/widgets/agent_picture.dart"
     show AgentPictureImage;
-import "package:agent_chat/ui/chat/chat_controller.dart";
+import "package:agent_chat/app/chat_controller.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/widgets/side_panel_frame.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";

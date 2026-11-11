@@ -13,7 +13,7 @@ import "../domain/chat_meta.dart";
 import "../domain/models.dart";
 import "../domain/project.dart";
 import "../providers.dart";
-import "chat/chat_controller.dart";
+import "../app/chat_controller.dart";
 import "widgets/nav_drawer.dart";
 
 /// Which chat the pane is showing, or null for the new-chat screen. **Null is

@@ -4,7 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../../domain/agent_backend.dart" show taskToolName;
 import "../../../domain/room/room_state.dart" show ChatViewState;
 import "../../../domain/tool_arg.dart";
-import "../mirror_controller.dart" show chatViewProvider;
+import "../../../app/mirror_controller.dart" show chatViewProvider;
 import "../sub_agent_transcript.dart" show subAgentLiveProvider;
 import "../activity/activity.dart";
 import "../activity/card.dart" show ActivitySource, liveMessageOf;

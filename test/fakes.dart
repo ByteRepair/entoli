@@ -70,7 +70,7 @@ import "package:agent_chat/domain/voice_model_store.dart";
 import "package:agent_chat/domain/project.dart" show ProjectRef;
 import "package:agent_chat/providers.dart"
     show DeviceProjects, PairedDevices, RemoteChats, RemoteProjectNotifier;
-import "package:agent_chat/ui/chat/mirror_controller.dart";
+import "package:agent_chat/app/mirror_controller.dart";
 import "package:uuid/uuid.dart";
 
 /// A [LinkOpener] that records what it was asked to open, for UI tests that

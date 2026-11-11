@@ -2,18 +2,18 @@ import "dart:async";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../core/log.dart";
-import "../../domain/chat_log.dart";
-import "../../domain/chat_repository.dart";
-import "../../domain/reminder_alarms.dart";
-import "../../domain/models.dart";
-import "../../domain/reaction.dart";
-import "../../domain/project_settings.dart"
+import "../core/log.dart";
+import "../domain/chat_log.dart";
+import "../domain/chat_repository.dart";
+import "../domain/reminder_alarms.dart";
+import "../domain/models.dart";
+import "../domain/reaction.dart";
+import "../domain/project_settings.dart"
     show OmadaOrdering, defaultOmadaOrdering;
-import "../../domain/room/chat_room.dart";
-import "../../domain/room/room_state.dart";
-import "../../domain/room/roster.dart";
-import "../../providers.dart";
+import "../domain/room/chat_room.dart";
+import "../domain/room/room_state.dart";
+import "../domain/room/roster.dart";
+import "../providers.dart";
 
 /// What a page needs of whatever is driving its turn. [ChatController] for a
 /// chat on this device, `MirrorChatController` for one whose home device is a

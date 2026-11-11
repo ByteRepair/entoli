@@ -11,7 +11,7 @@ import "../../domain/room/room_state.dart";
 import "../../domain/speech_text.dart";
 import "../../domain/voice.dart";
 import "../../providers.dart";
-import "../chat/chat_controller.dart";
+import "../../app/chat_controller.dart";
 import "../selection.dart";
 import "../theme.dart";
 import "read_aloud.dart";

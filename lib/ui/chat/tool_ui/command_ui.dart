@@ -12,7 +12,7 @@ import "../../../domain/tool_arg.dart";
 import "../../../providers.dart";
 import "../../widgets/dialogs.dart" show catchAndSay;
 import "../../widgets/text_file_page.dart";
-import "../mirror_controller.dart" show chatViewProvider;
+import "../../../app/mirror_controller.dart" show chatViewProvider;
 import "../activity/activity.dart";
 import "../activity/card.dart" show ActivityStatus, DrawerAction;
 import "../activity/tool_run.dart" show toolRunView;

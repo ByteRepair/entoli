@@ -5,7 +5,7 @@ import "../../domain/chat_meta.dart";
 import "../../domain/models.dart";
 import "../../domain/room/room_state.dart";
 import "../../providers.dart";
-import "../chat/chat_controller.dart";
+import "../../app/chat_controller.dart";
 import "../chat/widgets/turn_surface.dart";
 import "../settings/settings_category.dart";
 import "../shell/shell_voice.dart";

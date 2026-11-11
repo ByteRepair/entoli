@@ -3,7 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../domain/plan.dart";
 import "../../../providers.dart";
-import "../mirror_controller.dart" show chatViewProvider;
+import "../../../app/mirror_controller.dart" show chatViewProvider;
 import "message_text.dart" show MessageText;
 
 /// The chat's `PLAN.md`, parsed; null where there is none or it could not be
