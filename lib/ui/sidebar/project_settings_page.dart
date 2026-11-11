@@ -22,7 +22,8 @@ import "../profile/profile_page.dart";
 import "../settings/agents_settings.dart";
 import "../settings/permissions_section.dart";
 import "../settings/skills_settings.dart";
-import "../settings/terminal_settings.dart" show pickedConfinement;
+import "../../app/settings/pages/terminal.dart" show pickedConfinement;
+import "../../app/settings/spec.dart" show WidgetReader;
 import "../settings/work_folders_section.dart";
 import "../widgets/destructive_button.dart";
 import "../widgets/dialogs.dart" show confirm, promptForText;
@@ -227,7 +228,7 @@ class ProjectSettingsPage extends ConsumerWidget {
                   // see them, or where nothing is confined, where the list
                   // would change nothing — both of which the picked
                   // confinement answers.
-                  if (!remote && pickedConfinement(ref).enforcesSandbox) ...[
+                  if (!remote && pickedConfinement(WidgetReader(ref)).enforcesSandbox) ...[
                     WorkFoldersSection(at: at),
                     const Divider(),
                   ],

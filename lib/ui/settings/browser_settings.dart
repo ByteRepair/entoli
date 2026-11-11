@@ -11,7 +11,7 @@ import "../../providers.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
-import "downloads.dart";
+import "../../app/downloads/downloads.dart";
 
 /// The one thing [Downloads] holds here: the embedded browser, Helium. It
 /// replaces the copy the running browser was started from, so that one is

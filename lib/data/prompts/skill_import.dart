@@ -8,8 +8,7 @@ import "package:archive/archive.dart";
 import "package:path/path.dart" as p;
 
 import "../../core/config.dart";
-import "../../data/prompts/bundled_skill_data.dart"
-    show bundledSkillFiles, bundledAgentFiles;
+import "bundled_skill_data.dart" show bundledSkillFiles, bundledAgentFiles;
 import "../../domain/bundled_prompt_file.dart" show bundledPromptFileOf;
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";

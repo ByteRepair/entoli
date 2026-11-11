@@ -6,9 +6,8 @@ import "dart:io";
 import "dart:typed_data";
 
 import "../../core/config.dart";
-import "../../data/prompts/bundled_skill_data.dart"
-    show bundledSkillFiles, bundledAgentFiles;
-import "../../data/zip.dart" show archiveOf;
+import "bundled_skill_data.dart" show bundledSkillFiles, bundledAgentFiles;
+import "../zip.dart" show archiveOf;
 import "../../domain/app_link.dart" show AppLink;
 import "../../domain/backup_handoff.dart";
 import "../../domain/bundled_prompt_file.dart"

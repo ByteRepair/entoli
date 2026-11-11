@@ -12,7 +12,7 @@ import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/rootfs.dart" show alpine;
 import "package:agent_chat/domain/shell.dart" show ShellResult;
 
-import "../../data/builtin/builtin_fakes.dart" show FakeShell;
+import "../builtin/builtin_fakes.dart" show FakeShell;
 import "../../harness.dart";
 
 /// What the setup contract is: where the script installs is the store's to

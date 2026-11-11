@@ -6,7 +6,7 @@ import "../../domain/app_settings.dart";
 import "../../domain/local_model.dart";
 import "../../domain/local_model_store.dart";
 import "../../providers.dart";
-import "model_downloads.dart";
+import "../../app/downloads/model_downloads.dart";
 import "../widgets/catalog.dart";
 import "../../core/formatting.dart";
 import "../widgets/resettable_field.dart";

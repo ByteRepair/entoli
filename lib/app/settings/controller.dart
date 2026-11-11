@@ -1,4 +1,5 @@
 import "../../domain/app_icon.dart";
+import "../../domain/download.dart" show DownloadProgress;
 import "../../domain/llm_provider.dart";
 import "../../domain/models.dart" show ModelChoice;
 import "../model_role.dart";
@@ -30,6 +31,7 @@ class SettingSpec {
     required this.build,
     this.description,
     this.glyph,
+    this.at,
   });
 
   final String id;
@@ -42,6 +44,11 @@ class SettingSpec {
   final String? description;
   final UiHint hint;
   final SettingGlyph? glyph;
+
+  /// The level it is always set at, whatever level its page is shown for:
+  /// the default project's rules on the app's Terminal page.
+  final ScopeAddress? at;
+
   final SettingController Function(SettingContext context) build;
 }
 
@@ -514,6 +521,7 @@ final class NoticeController extends SettingController {
   NoticeController(
     super.spec, {
     required this.lines,
+    this.tone = NoticeTone.plain,
     super.title,
     super.description,
     super.footnote,
@@ -523,7 +531,12 @@ final class NoticeController extends SettingController {
   });
 
   final List<NoticeLine> lines;
+
+  /// How much it matters: a warning is drawn in the error colour.
+  final NoticeTone tone;
 }
+
+enum NoticeTone { plain, good, warning }
 
 /// A paragraph, or a link where it has a [url].
 class NoticeLine {
@@ -531,4 +544,203 @@ class NoticeLine {
 
   final String text;
   final Uri? url;
+}
+
+/// Items of one kind — permission rules, providers, agents — each opened to
+/// edit through a [SettingForm] and removed on its own, and added to at the
+/// end of the list.
+final class CollectionController<T> extends SettingController {
+  CollectionController(
+    super.spec, {
+    required this.items,
+    required this.addLabel,
+    required Future<void> Function(List<T> items) onSet,
+    required this.describe,
+    this.form,
+    this.removeLabel = "Remove",
+    super.title,
+    super.description,
+    super.footnote,
+    super.enabled,
+    super.visible,
+    super.accessory,
+  }) : _write = onSet;
+
+  final List<T> items;
+  final String addLabel;
+  final String removeLabel;
+
+  /// What an item's row says.
+  final CollectionItem Function(T item) describe;
+
+  /// The form an item is added or edited through, given the item or null
+  /// for a new one; null where items are not edited here.
+  final SettingForm<T> Function(T? item)? form;
+
+  final Future<void> Function(List<T>) _write;
+
+  List<CollectionItem> get rows => [for (final item in items) describe(item)];
+
+  /// [item] in place of the one at [index], or added at the end.
+  Future<void> put(T item, {int? index}) => _write(
+    [...items]
+      ..removeAtOrNot(index)
+      ..add(item),
+  );
+
+  Future<void> remove(int index) => _write([...items]..removeAt(index));
+
+  /// [build] called with this controller's own item type.
+  R typed<R>(R Function<V>(CollectionController<V> c) build) => build<T>(this);
+}
+
+extension on List {
+  void removeAtOrNot(int? index) {
+    if (index != null) removeAt(index);
+  }
+}
+
+/// An item's row: its name and the line under it.
+class CollectionItem {
+  const CollectionItem(this.title, {this.subtitle});
+
+  final String title;
+  final String? subtitle;
+}
+
+/// A form that adds or edits one item: the questions asked given the answers
+/// so far, what is wrong with them, and the item they make. Every frontend
+/// draws [fields] again after each answer, so a question that depends on
+/// another comes and goes with it.
+abstract class SettingForm<T> {
+  /// "Add rule", "Edit rule".
+  String get title;
+
+  /// The answers it opens with.
+  Map<String, String> get initial;
+
+  List<FormFieldSpec> fields(Map<String, String> answers);
+
+  /// Why it cannot be saved, or null where it can. Empty where a field
+  /// already says so, or where there is nothing to say yet.
+  String? problem(Map<String, String> answers);
+
+  /// The item [answers] make. Called only where [problem] is null.
+  T build(Map<String, String> answers);
+}
+
+/// One part of a form.
+sealed class FormFieldSpec {
+  const FormFieldSpec();
+}
+
+/// A heading over the fields that answer it.
+final class FormQuestion extends FormFieldSpec {
+  const FormQuestion(this.text);
+
+  final String text;
+}
+
+/// Text typed in.
+final class FormText extends FormFieldSpec {
+  const FormText(
+    this.id,
+    this.label, {
+    this.hint,
+    this.helper,
+    this.error,
+    this.focused = false,
+  });
+
+  final String id;
+  final String label;
+  final String? hint;
+  final String? helper;
+  final String? error;
+
+  /// Whether the caret starts here.
+  final bool focused;
+}
+
+/// One of [options], each by its answer; the help of the one picked is said
+/// under it.
+final class FormChoice extends FormFieldSpec {
+  const FormChoice(this.id, this.options, {this.label});
+
+  final String id;
+  final String? label;
+  final List<FormOption> options;
+}
+
+class FormOption {
+  const FormOption(this.answer, this.label, {this.help});
+
+  final String answer;
+  final String label;
+  final String? help;
+}
+
+/// Things this device downloads — a Linux, a model — each with the one
+/// thing that can be done to it now: download, cancel, or delete.
+final class CatalogController extends SettingController {
+  CatalogController(
+    super.spec, {
+    required this.items,
+    required Future<void> Function(String id) download,
+    required Future<void> Function(String id) cancel,
+    required Future<void> Function(String id) delete,
+    super.title,
+    super.description,
+    super.footnote,
+    super.enabled,
+    super.visible,
+    super.accessory,
+  }) : _onDownload = download,
+       _onCancel = cancel,
+       _onDelete = delete;
+
+  final List<CatalogItem> items;
+  final Future<void> Function(String) _onDownload;
+  final Future<void> Function(String) _onCancel;
+  final Future<void> Function(String) _onDelete;
+
+  Future<void> download(String id) => _onDownload(id);
+
+  Future<void> cancel(String id) => _onCancel(id);
+
+  /// Called only once [CatalogItem.deleteConfirm] has been agreed to.
+  Future<void> delete(String id) => _onDelete(id);
+}
+
+class CatalogItem {
+  const CatalogItem({
+    required this.id,
+    required this.title,
+    required this.deleteConfirm,
+    this.summary,
+    this.note,
+    this.failure,
+    this.progress,
+    this.installed = false,
+    this.downloadable = true,
+  });
+
+  final String id;
+  final String title;
+  final String? summary;
+  final String? note;
+
+  /// Why the last attempt stopped.
+  final String? failure;
+
+  /// Where it is being fetched right now.
+  final DownloadProgress? progress;
+
+  final bool installed;
+
+  /// Whether this device can fetch it at all: a row that cannot is drawn
+  /// dead rather than left out, so the reader can see it exists.
+  final bool downloadable;
+
+  final SettingConfirm deleteConfirm;
 }

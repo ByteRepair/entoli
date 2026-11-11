@@ -44,6 +44,15 @@ enum UiHint {
 
   /// Paragraphs to read: the default for a notice controller.
   notice,
+
+  /// A line with an icon beside it, under what it is about.
+  banner,
+
+  /// A line with an icon, set apart on a card of its own.
+  card,
+
+  /// A dropdown of what is on this device, saying so where nothing is.
+  installed,
 }
 
 /// The pages settings is filed under, in the order they are offered. A
@@ -124,6 +133,7 @@ class SectionSpec {
     this.description,
     this.describe,
     this.shown,
+    this.keepEmpty = false,
   });
 
   final SettingsPageId page;
@@ -136,8 +146,12 @@ class SectionSpec {
   final String? description;
   final String? Function(SettingReader ref)? describe;
   final bool Function(SettingReader ref)? shown;
+
+  /// Whether its header stands with nothing under it, where what it says is
+  /// that there is nothing to set.
+  final bool keepEmpty;
 }
 
 /// What an icon beside a setting stands for, never how it is drawn: each
 /// frontend picks its own picture in an exhaustive switch.
-enum SettingGlyph { deleteForever, play, stop }
+enum SettingGlyph { deleteForever, play, stop, warning, shield }

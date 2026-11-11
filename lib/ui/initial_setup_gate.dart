@@ -8,8 +8,8 @@ import "../domain/download.dart";
 import "../domain/rootfs.dart";
 import "../providers.dart";
 import "settings/browser_settings.dart";
-import "settings/downloads.dart" show DownloadState;
-import "settings/rootfs_downloads.dart";
+import "../app/downloads/downloads.dart" show DownloadState;
+import "../app/downloads/rootfs_downloads.dart";
 import "widgets/app_mark.dart";
 
 /// What a platform's first launch sets up ahead of the welcome tour: its

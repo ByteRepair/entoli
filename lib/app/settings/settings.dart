@@ -21,7 +21,9 @@ SettingController buildSetting(
 ) {
   final spec = schema.settings[id];
   if (spec == null) throw ArgumentError.value(id, "id", "no such setting");
-  return spec.build(SettingContext(reader, scopeAt(reader, address), spec));
+  return spec.build(
+    SettingContext(reader, scopeAt(reader, spec.at ?? address), spec),
+  );
 }
 
 /// [page] at [address] as it stands, built through [reader]: the sections
@@ -34,15 +36,19 @@ List<SectionView> buildPage(
   SettingsPageId page,
   ScopeAddress address,
 ) {
-  final scope = scopeAt(reader, address);
+  final scopes = <ScopeAddress, SettingsScope>{};
+  SettingsScope scope(ScopeAddress at) =>
+      scopes.putIfAbsent(at, () => scopeAt(reader, at));
   return [
     for (final (section, specs) in schema.page(page))
       if (section.shown?.call(reader) ?? true)
         if ([
               for (final spec in specs)
-                spec.build(SettingContext(reader, scope, spec)),
+                spec.build(
+                  SettingContext(reader, scope(spec.at ?? address), spec),
+                ),
             ].where((c) => c.visible).toList()
-            case final shown when shown.isNotEmpty)
+            case final shown when shown.isNotEmpty || section.keepEmpty)
           SectionView(
             section,
             section.describe?.call(reader) ?? section.description,

@@ -12,7 +12,7 @@ import "../widgets/add_button_row.dart";
 import "../widgets/catalog.dart";
 import "../widgets/section_header.dart";
 import "local_model_settings.dart" show AddLocalModelPage;
-import "model_downloads.dart";
+import "../../app/downloads/model_downloads.dart";
 
 /// Every model this device can download, text and voice, each kind its own
 /// section since they answer separate questions, every row the same

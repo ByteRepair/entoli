@@ -15,7 +15,7 @@ import "package:agent_chat/domain/download.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/initial_setup_gate.dart";
-import "package:agent_chat/ui/settings/downloads.dart" show DownloadState;
+import "package:agent_chat/app/downloads/downloads.dart" show DownloadState;
 import "package:agent_chat/domain/rootfs.dart";
 
 import "../fakes.dart";

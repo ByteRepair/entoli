@@ -8,7 +8,10 @@ import "../../app/settings/spec.dart";
 import "../../domain/app_icon.dart";
 import "../widgets/app_mark.dart" show AppIconImage;
 import "../../providers.dart";
-import "../widgets/catalog.dart" show InstalledPicker;
+import "../widgets/add_button_row.dart";
+import "../widgets/catalog.dart";
+import "../widgets/settings_warning_banner.dart";
+import "form_dialog.dart";
 import "../widgets/choice.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/editable_row.dart";
@@ -105,7 +108,13 @@ class SettingRow extends StatelessWidget {
       final ActionController c => _Action(c),
       final GroupController c => _Group(c),
       final TextController c => _Text(c),
-      final NoticeController c => _Notice(c),
+      final NoticeController c => switch (c.hint) {
+        UiHint.banner => _Banner(c),
+        UiHint.card => _Card(c),
+        _ => _Notice(c),
+      },
+      final CollectionController c => c.typed(<V>(c) => _Collection<V>(c)),
+      final CatalogController c => _Catalog(c),
       final NumberController c => _Number(c, labelled: !nested),
       final ModelPickController c => LabelledField(
         label: c.title,
@@ -167,6 +176,8 @@ IconData? _icon(SettingGlyph? glyph) => switch (glyph) {
   SettingGlyph.deleteForever => Icons.delete_forever,
   SettingGlyph.play => Icons.play_circle_outline,
   SettingGlyph.stop => Icons.stop_circle_outlined,
+  SettingGlyph.warning => Icons.warning_amber_rounded,
+  SettingGlyph.shield => Icons.shield_outlined,
   null => null,
 };
 
@@ -253,7 +264,8 @@ class _Dropdown<T> extends StatelessWidget {
       );
     }
     final none = c.noneLabel;
-    if (none != null && c is ChoiceController<String>) {
+    if ((none != null || c.hint == UiHint.installed) &&
+        c is ChoiceController<String>) {
       final strings = c as ChoiceController<String>;
       return InstalledPicker(
         label: c.title,
@@ -785,4 +797,120 @@ class _Notice extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// A warning line under what it is about.
+class _Banner extends StatelessWidget {
+  const _Banner(this.c);
+
+  final NoticeController c;
+
+  @override
+  Widget build(BuildContext context) => SettingsWarningBanner(
+    icon: _icon(c.glyph) ?? Icons.info_outline,
+    color: _toneColour(context, c.tone),
+    text: c.lines.map((l) => l.text).join("\n"),
+  );
+}
+
+Color _toneColour(BuildContext context, NoticeTone tone) {
+  final scheme = Theme.of(context).colorScheme;
+  return switch (tone) {
+    NoticeTone.warning => scheme.error,
+    NoticeTone.good || NoticeTone.plain => scheme.primary,
+  };
+}
+
+/// A line set apart on a card, an icon saying how it stands.
+class _Card extends StatelessWidget {
+  const _Card(this.c);
+
+  final NoticeController c;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    margin: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+    child: ListTile(
+      leading: Icon(switch (c.tone) {
+        NoticeTone.warning => Icons.warning_amber_rounded,
+        NoticeTone.good => Icons.shield_outlined,
+        NoticeTone.plain => Icons.info_outline,
+      }, color: _toneColour(context, c.tone)),
+      title: Text(c.lines.map((l) => l.text).join("\n")),
+    ),
+  );
+}
+
+/// The items as rows, each opened to edit through its form, and the button
+/// that adds one.
+class _Collection<T> extends StatelessWidget {
+  const _Collection(this.c);
+
+  final CollectionController<T> c;
+
+  Future<void> _edit(BuildContext context, {int? index}) async {
+    final form = c.form;
+    if (form == null) return;
+    final edited = await showSettingForm(
+      context,
+      form(index == null ? null : c.items[index]),
+    );
+    if (edited == null || !context.mounted) return;
+    await c.put(edited, index: index);
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      for (final (index, row) in c.rows.indexed)
+        EditableRow(
+          title: row.title,
+          subtitle: row.subtitle,
+          removeLabel: c.removeLabel,
+          onTap: c.form == null ? null : () => _edit(context, index: index),
+          onRemove: () => c.remove(index),
+        ),
+      if (c.form != null)
+        AddButtonRow(
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.add),
+            label: Text(c.addLabel),
+            onPressed: () => _edit(context),
+          ),
+        ),
+    ],
+  );
+}
+
+/// One row per thing to download, with the single button that applies to it
+/// now.
+class _Catalog extends StatelessWidget {
+  const _Catalog(this.c);
+
+  final CatalogController c;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      for (final item in c.items)
+        CatalogTile(
+          title: Text(item.title),
+          summary: item.summary,
+          note: item.note,
+          failure: item.failure,
+          progress: item.progress,
+          trailing: CatalogAction(
+            downloading: item.progress != null,
+            installed: item.installed,
+            onCancel: () => c.cancel(item.id),
+            onDelete: () => c.delete(item.id),
+            deleteTitle: item.deleteConfirm.title,
+            deleteMessage: item.deleteConfirm.message,
+            onDownload: item.downloadable ? () => c.download(item.id) : null,
+          ),
+        ),
+    ],
+  );
 }

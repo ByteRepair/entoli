@@ -10,7 +10,7 @@ import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/download.dart";
 import "../../domain/llm_provider.dart";
 import "../../providers.dart";
-import "cli_downloads.dart";
+import "../../app/downloads/cli_downloads.dart";
 
 /// Where a sign-in has got to.
 sealed class _Stage {

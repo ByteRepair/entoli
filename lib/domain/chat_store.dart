@@ -2,9 +2,9 @@ import "dart:typed_data";
 
 import "package:uuid/uuid.dart";
 
-import "../domain/chat_log.dart";
-import "../domain/chat_meta.dart";
-import "../domain/models.dart";
+import "chat_log.dart";
+import "chat_meta.dart";
+import "models.dart";
 
 /// Persistent on-disk store for chats. Implements `state.json` + `conv.jsonl`
 /// layout under the data directory.

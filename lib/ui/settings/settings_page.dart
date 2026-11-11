@@ -32,7 +32,6 @@ import "shortcuts_settings.dart";
 import "triggers.dart";
 import "skills_settings.dart";
 import "sync_settings.dart";
-import "terminal_settings.dart";
 import "settings_category.dart";
 import "schema_view.dart";
 import "../../app/settings/spec.dart";
@@ -125,15 +124,7 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
   SettingsCategory.general => const [SchemaSections(SettingsPageId.general)],
   // Its own category for the reason Voice is one: the picker is a line and
   // the catalog under it is the rest of the page.
-  SettingsCategory.terminal => const [
-    TerminalSection(),
-    SandboxStatusCard(),
-    Divider(),
-    TerminalPermissionsSection(),
-    // Draws its own divider, since a build with no proot in it has no
-    // catalog to put under one.
-    RootfsCatalogSection(),
-  ],
+  SettingsCategory.terminal => const [SchemaSections(SettingsPageId.terminal)],
   // Beside Terminal rather than under LLMs, and for the same reason it is:
   // what is picked is two lines and the catalog under it is the rest of the
   // page. Where a model runs is also a machine question rather than a
