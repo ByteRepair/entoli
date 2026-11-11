@@ -609,24 +609,25 @@ github-cli installed.
 
 ## The native shell
 
-With Liquid Glass on (see "Liquid Glass" in `lib/ui/AGENTS.md`) the
-`entoli_glass` plugin makes a `UIHostingController` the scene window's root,
-with the `FlutterViewController` the storyboard made embedded in it as a
-child. The Runner is untouched: the implicit engine, its registrations and
-`SceneDelegate` are as they were. The plugin swaps the root on
+The `entoli_glass` plugin makes a `UIHostingController` the scene window's
+root at every launch, with the `FlutterViewController` the storyboard made
+embedded in it as a child, drawn alone until Dart's `shell(on: true)` puts the
+native chrome around it (see "Liquid Glass" in `lib/ui/AGENTS.md`). The
+Runner is untouched: the implicit engine, its registrations and
+`SceneDelegate` are as they were. The plugin takes the root on
 `UIScene.willConnectNotification`, which comes with the storyboard's window
 made and hidden and Flutter's view not yet loaded. Not `addSceneDelegate`:
 the implicit engine registers its plugins before the scene connects, and
 Flutter forwards a connection only to an engine whose view is already in
 the scene, so a plugin's scene delegate never hears this one.
 
-**The swap is before the window shows, and that is load-bearing.** Swapped
-once Flutter's controller had appeared as the root — Dart's `start`, as it
-first was — UIKit sent it `viewDidDisappear` only as the new root appeared,
-after the `viewWillAppear` it had as the container's child, and Flutter, which
-tears its surface down on a disappearance, drew no frame again. Never having
-appeared, it has no disappearance to come, and the container takes it as it
-loads like any child.
+**The root is taken before the window shows, and that is load-bearing.**
+Swapped once Flutter's controller had appeared as the root, UIKit sent it
+`viewDidDisappear` only as the new root appeared, after the `viewWillAppear`
+it had as the container's child, and Flutter, which tears its surface down on
+a disappearance, drew no frame again. Never having appeared as the root, it
+has no disappearance to come; switching to the chrome moves it between
+containers inside the host, which each take it as they appear.
 
 The plugin's package is iOS 17 and macOS 14, the floor the app already has for
 MLX, and the Runner's targets say 17.0 outright rather than "the recommended

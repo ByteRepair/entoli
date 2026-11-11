@@ -328,18 +328,15 @@ colours' place: while it is on the theme colours and the corners are not on
 the page, and `appLookProvider` hands `entoliTheme` the defaults — the iOS /
 macOS theme — whatever was picked, leaving what was picked where it was for
 the switch going off. Light, Dark and System stay, being the one appearance
-choice the native chrome follows too. **It is read once, at launch, by the
-Swift**: before Dart runs, `LaunchSettings.swift` reads `liquidGlass` out of
-`settings.json` and the shell takes the window before it is shown, so the
-Flutter view is never on screen outside it. Dart asks `hosting` and draws for
-the answer (`_glassAtLaunch` in `main`) rather than deciding again, so the two
-cannot disagree. That reader is a second copy of `dataDir()` — `$ENTOLI_CONFIG`,
-else `~/.config/<leaf>` on macOS, the debug leaf from the Runner's xcconfigs
-as `EntoliDataLeaf`, and `Documents/entoli` on iOS — and of the setting's
-default, and moving either means moving it too; it reads before the
-migrations run, so a migration that moves `settings.json` breaks it. Switching
-the setting away from what the launch started with asks, in a dialog, for the
-app to be quit and reopened rather than appearing to do nothing. The in-app restart a restore makes is not one: it is this process
+choice the native chrome follows too. **It is read once, at launch, by the core**: `chooseFrontend`
+(`lib/app/frontend.dart`) picks the frontend from the settings after the
+migrations have run, and `main` tells the host with `shell(on:)` before
+`runApp`. The host is the window's root from launch either way, with
+Flutter's controller as its child drawn alone until told otherwise, so
+Flutter's controller is never moved out of the root and a launch that never
+hears from Dart is simply the Flutter frontend. Switching the setting away from
+what the launch started with asks, in a dialog, for the app to be quit and
+reopened rather than appearing to do nothing. The in-app restart a restore makes is not one: it is this process
 still running, its window already the shell's or not. `LiquidGlass` (`widgets/liquid_glass.dart`) is the
 launch's answer — `available` on the two Apples, and `on` as it started, the
 window then being the shell's.
@@ -360,7 +357,7 @@ tests. `tool/prepare.sh` runs it, and its output is not committed. A field or
 an intent the two sides read differently does not compile. It is a protocol a
 client could implement anywhere: the app holds every rule and all the state,
 and the client holds only the last snapshot of each concern. `NativeShell` is
-what the app says — `hosting`, a snapshot per concern, the one-offs
+what the app says — `shell`, a snapshot per concern, the one-offs
 `voiceLevel` and `composerFocus`, and `strip`, answered later (below); each
 `*Intents` API is what a surface's client says the user did, a method per
 intent, the few the client waits on (a project's error, a paste's yes or no)

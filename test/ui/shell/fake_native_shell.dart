@@ -53,7 +53,7 @@ class FakeNativeShell implements TestNativeShell {
   }
 
   @override
-  bool hosting() => true;
+  void shell(bool on) {}
   @override
   void window(WindowSnapshot snapshot) => _add("window", snapshot);
   @override

@@ -51,6 +51,7 @@ import "ui/initial_setup_gate.dart";
 import "ui/routes.dart";
 import "ui/welcome_gate.dart";
 import "app/chat_controller.dart";
+import "app/frontend.dart";
 import "ui/chat/controller_turn_sender.dart";
 import "ui/assistant/incoming_assistant.dart";
 import "ui/focus_follows_keyboard.dart";
@@ -147,14 +148,21 @@ class AppSession {
     final glassAvailable =
         defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.macOS;
-    // The shell decided at launch, from the same settings file, before Dart
-    // ran; the app draws for what it did.
-    _glassAtLaunch ??=
-        glassAvailable &&
-        await NativeShell().hosting().catchError((Object e) {
-          logFailure("shell", "hosting: $e");
-          return false;
+    // Once per process: a restore's restart is this process, its window
+    // already the frontend's. The host draws Flutter's until it is told.
+    if (_glassAtLaunch == null) {
+      final frontend = chooseFrontend(
+        AppSettings.load(config),
+        defaultTargetPlatform,
+      );
+      _glassAtLaunch = frontend == Frontend.swiftUI;
+      if (glassAvailable) {
+        await NativeShell().shell(_glassAtLaunch!).catchError((Object e) {
+          logFailure("shell", "shell: $e");
+          _glassAtLaunch = false;
         });
+      }
+    }
     // Started here and awaited before the identity load below: the keyring
     // probe is decided once, so the identity's own first read must not race
     // this one, and the mirror the registry reads keys through is filled by

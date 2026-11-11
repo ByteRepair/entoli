@@ -673,9 +673,10 @@ class ChoiceStrip {
 /// changed.
 @HostApi(dartHostTestHandler: "TestNativeShell")
 abstract class NativeShell {
-  /// Whether the window is the shell's. The client decides at launch, from
-  /// `settings.json`, before Dart runs; the app draws for whichever it was.
-  bool hosting();
+  /// Which frontend draws in the window: this one's chrome, or the Flutter
+  /// one alone, which is what the window is until this is said. Said once,
+  /// at launch, before the first frame.
+  void shell(bool on);
 
   void window(WindowSnapshot snapshot);
   void sidebar(SidebarSnapshot snapshot);

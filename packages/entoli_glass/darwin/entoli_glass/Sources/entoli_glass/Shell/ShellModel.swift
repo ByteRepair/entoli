@@ -51,8 +51,12 @@ final class ShellModel: ObservableObject {
   /// The composer's own object, so a keystroke redraws it and nothing else.
   private(set) lazy var composer = ComposerModel(shell: self)
 
-  /// Whether the host took the window at launch, which Dart asks for.
-  var hosted = false
+  /// Whether the window is this frontend's chrome or the Flutter one alone,
+  /// as Dart chose at launch. Until it says, the Flutter frontend.
+  @Published private(set) var shell = false
+
+  /// Told once, when Dart turns the chrome on: what the host sets up for it.
+  var onShell: (() -> Void)?
 
   /// Told when the window's own state changes, for what SwiftUI cannot set:
   /// the window's appearance.
@@ -78,7 +82,11 @@ final class ShellModel: ObservableObject {
 /// A snapshot from Dart replaces what was there: Dart sends one only when it
 /// changed.
 extension ShellModel: NativeShell {
-  func hosting() throws -> Bool { hosted }
+  func shell(on: Bool) throws {
+    guard on, !shell else { return }
+    shell = true
+    onShell?()
+  }
 
   func window(snapshot: WindowSnapshot) throws {
     window = snapshot

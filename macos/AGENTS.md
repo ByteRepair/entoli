@@ -80,16 +80,17 @@ otherwise add Show Tab Bar and Show All Tabs to the View menu.
 
 ## The native shell
 
-With Liquid Glass on (see "Liquid Glass" in `lib/ui/AGENTS.md`) the window's
-content is SwiftUI's, and the Runner does not know: `MainFlutterWindow` makes
-the `FlutterViewController` and its channels exactly as it always has, and the
-`entoli_glass` plugin, as the Runner registers it in `awakeFromNib` and
-before the window shows, puts an `NSHostingController` in as
-the window's content with that same controller embedded in it — taken as a
-child of a container rather than handed to SwiftUI, since SwiftUI makes a
-representable's controller again whenever its identity changes and the
-Flutter one has one parent at a time. The frame is kept, `sizingOptions` is
-empty so nothing SwiftUI lays out resizes the window, and
+The window's content is SwiftUI's at every launch, and the Runner does not
+know: `MainFlutterWindow` makes the `FlutterViewController` and its channels
+exactly as it always has, and the `entoli_glass` plugin, as the Runner
+registers it in `awakeFromNib` and before the window shows, puts an
+`NSHostingController` in as the window's content with that same controller
+embedded in it — taken as a child of a container rather than handed to
+SwiftUI, since SwiftUI makes a representable's controller again whenever its
+identity changes and the Flutter one has one parent at a time. The frame is
+kept and `sizingOptions` is empty so nothing SwiftUI lays out resizes the
+window. Until Dart says `shell(on: true)` (see "Liquid Glass" in
+`lib/ui/AGENTS.md`) the container is all there is; then
 `sceneBridgingOptions` makes the split view's toolbar and title the window's
 own, unified, over full-size content. The wake and hide paths, the model host
 and every channel are untouched; only what fills the window changes.

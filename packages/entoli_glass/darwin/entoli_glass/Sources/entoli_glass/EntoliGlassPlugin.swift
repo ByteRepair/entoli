@@ -8,15 +8,15 @@
 
 /// The native shell's plugin: one file of source for both Runners
 /// (`sharedDarwinSource`), the platform's own halves behind `#if os(...)`.
-/// The shell takes the window at launch, before it is shown, where Liquid
-/// Glass is on: macOS as the runner registers its plugins, iOS as the scene
-/// connects. Dart asks which it did.
+/// The host takes the window at launch, before it is shown: macOS as the
+/// runner registers its plugins, iOS as the scene connects. Dart then says
+/// which frontend draws in it.
 #if os(macOS)
   public final class EntoliGlassPlugin: NSObject, FlutterPlugin {
     public static func register(with registrar: FlutterPluginRegistrar) {
       let host = ShellHost(messenger: registrar.messenger, view: registrar.view)
       ShellHost.shared = host
-      host.start()
+      host.install()
     }
   }
 #else
@@ -33,7 +33,7 @@
         forName: UIScene.willConnectNotification, object: nil, queue: nil
       ) { note in
         guard let scene = note.object as? UIScene else { return }
-        host.start(in: scene)
+        host.install(in: scene)
         if let observer { NotificationCenter.default.removeObserver(observer) }
       }
     }

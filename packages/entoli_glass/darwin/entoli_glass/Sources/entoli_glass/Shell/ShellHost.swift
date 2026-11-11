@@ -8,12 +8,11 @@ import SwiftUI
   import FlutterMacOS
 #endif
 
-/// The shell's host: at launch, with Liquid Glass on, the window's content
-/// becomes SwiftUI's, with the Flutter view controller the runner made
-/// embedded in it — before the window is shown, so the Flutter controller is
-/// never on screen anywhere else. The runner's window, its channels and its
-/// wake paths are untouched; only what fills the window changes. One per
-/// process: there is one window, and the shell is its.
+/// The window's root from launch, whichever frontend Dart picks: the Flutter
+/// view controller the runner made is always its child, drawn alone until
+/// Dart says `shell(on: true)`, so Flutter's controller is never the window's
+/// root and is never moved out of one. The runner's window, its channels and
+/// its wake paths are untouched. One per process: there is one window.
 final class ShellHost {
   static var shared: ShellHost?
 
@@ -21,7 +20,7 @@ final class ShellHost {
 
   #if os(macOS)
     private weak var view: NSView?
-    private var host: NSHostingController<ShellView>?
+    private var host: NSHostingController<ShellRoot>?
     private var pointerMonitor: Any?
 
     init(messenger: FlutterBinaryMessenger, view: NSView?) {
@@ -30,7 +29,7 @@ final class ShellHost {
       listen(messenger)
     }
   #else
-    private var host: UIHostingController<ShellView>?
+    private var host: UIHostingController<ShellRoot>?
 
     init(messenger: FlutterBinaryMessenger) {
       model = ShellModel(messenger: messenger)
@@ -40,28 +39,35 @@ final class ShellHost {
 
   private func listen(_ messenger: FlutterBinaryMessenger) {
     NativeShellSetup.setUp(binaryMessenger: messenger, api: model)
+    model.onShell = { [weak self] in self?.chrome() }
   }
 
   #if os(macOS)
     /// From the plugin's registration, inside the runner's `awakeFromNib`:
     /// the Flutter controller is the window's content and nothing is shown.
-    func start() {
-      guard host == nil, LaunchSettings.liquidGlass, let window = view?.window,
+    func install() {
+      guard host == nil, let window = view?.window,
         let flutter = window.contentViewController
       else { return }
       let frame = window.frame
-      let host = NSHostingController(rootView: ShellView(model: model, flutter: flutter))
+      let host = NSHostingController(rootView: ShellRoot(model: model, flutter: flutter))
       // The window keeps the size it has; nothing SwiftUI lays out asks it
       // for another.
       host.sizingOptions = []
+      host.sceneBridgingOptions = []
+      window.contentViewController = host
+      window.setFrame(frame, display: true)
+      self.host = host
+    }
+
+    /// What the chrome needs of the window, set when Dart turns it on.
+    private func chrome() {
+      guard let host, let window = host.view.window else { return }
+      let flutter = host.rootView.flutter
       // The split view's toolbar and title are the window's own.
       host.sceneBridgingOptions = [.toolbars, .title]
       window.styleMask.insert(.fullSizeContentView)
       window.toolbarStyle = .unified
-      window.contentViewController = host
-      window.setFrame(frame, display: true)
-      self.host = host
-      model.hosted = true
       window.acceptsMouseMovedEvents = true
       pointerMonitor = NSEvent.addLocalMonitorForEvents(
         matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
@@ -92,16 +98,19 @@ final class ShellHost {
   #else
     /// From the scene's connection: the storyboard has made the window, its
     /// root the Flutter view controller, and not yet shown it.
-    func start(in scene: UIScene) {
-      guard host == nil, LaunchSettings.liquidGlass,
+    func install(in scene: UIScene) {
+      guard host == nil,
         let window = (scene as? UIWindowScene)?.windows
           .first(where: { $0.rootViewController is FlutterViewController }),
         let flutter = window.rootViewController
       else { return }
-      let host = UIHostingController(rootView: ShellView(model: model, flutter: flutter))
+      let host = UIHostingController(rootView: ShellRoot(model: model, flutter: flutter))
       window.rootViewController = host
       self.host = host
-      model.hosted = true
+    }
+
+    private func chrome() {
+      guard let window = host?.view.window else { return }
       // The window's, which is the app's here: a popover and a sheet are
       // presented from it and take its style.
       model.onWindow = { [weak window] state in
@@ -115,4 +124,19 @@ final class ShellHost {
       model.onWindow?(model.window)
     }
   #endif
+}
+
+/// The window's content: the Flutter frontend alone, filling the window as
+/// it did when it was the root, or the shell's chrome around it.
+struct ShellRoot: View {
+  @ObservedObject var model: ShellModel
+  let flutter: PlatformViewController
+
+  var body: some View {
+    if model.shell {
+      ShellView(model: model, flutter: flutter)
+    } else {
+      FlutterPane(controller: flutter).ignoresSafeArea()
+    }
+  }
 }
