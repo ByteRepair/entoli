@@ -581,11 +581,7 @@ struct InfoRow: View {
       } else if let link = info.link.flatMap(URL.init(string:)) {
         Link(destination: link) { infoLabel(info) }
       } else if let opens = info.opens {
-        NavigationLink {
-          TextPage(model: model, title: info.title, opens: opens)
-        } label: {
-          infoLabel(info)
-        }
+        OpenLink(model: model, title: info.title, opens: opens) { infoLabel(info) }
       } else {
         infoLabel(info)
       }
@@ -609,6 +605,35 @@ struct InfoRow: View {
   }
 }
 
+/// A page of text to push: what a link names to open.
+struct OpenedText: Hashable {
+  let title: String
+  let opens: String
+}
+
+/// A link to a page of text that answers only for itself. NavigationLinks
+/// sharing a list row all fire on a tap anywhere in it, the last one winning.
+struct OpenLink<Label: View>: View {
+  let model: SettingsModel
+  let title: String
+  let opens: String
+  @ViewBuilder let label: Label
+
+  var body: some View {
+    Button {
+      model.path.append(OpenedText(title: title, opens: opens))
+    } label: {
+      HStack {
+        label
+        Spacer(minLength: 4)
+        Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+      }
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+  }
+}
+
 /// A page of text the app holds: the privacy policy, the licences.
 struct TextPage: View {
   let model: SettingsModel
@@ -618,7 +643,7 @@ struct TextPage: View {
 
   var body: some View {
     ScrollView {
-      Text(text.map { (try? AttributedString(markdown: $0, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString($0) } ?? "")
+      MarkdownBlocks(text: text ?? "")
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
@@ -674,5 +699,92 @@ struct ModelList: View {
     .searchable(text: $search)
     .navigationTitle(row.title)
     .task { entries = await model.models(row.id) }
+  }
+}
+
+/// Markdown by its blocks — headings, list items, code fences, paragraphs —
+/// each block's inline syntax left to AttributedString, which reads no
+/// blocks itself.
+struct MarkdownBlocks: View {
+  let text: String
+
+  private enum Block: Hashable {
+    case heading(Int, String)
+    case item(Int, String)
+    case code(String)
+    case paragraph(String)
+  }
+
+  private var blocks: [Block] {
+    var blocks: [Block] = []
+    var paragraph: [String] = []
+    var code: [String]?
+    func flush() {
+      if !paragraph.isEmpty { blocks.append(.paragraph(paragraph.joined(separator: " "))) }
+      paragraph = []
+    }
+    for line in text.components(separatedBy: "\n") {
+      let trimmed = line.trimmingCharacters(in: .whitespaces)
+      if trimmed.hasPrefix("```") {
+        if let open = code {
+          blocks.append(.code(open.joined(separator: "\n")))
+          code = nil
+        } else {
+          flush()
+          code = []
+        }
+      } else if code != nil {
+        code!.append(line)
+      } else if trimmed.isEmpty {
+        flush()
+      } else if let hashes = trimmed.firstIndex(where: { $0 != "#" }), hashes != trimmed.startIndex,
+        trimmed[hashes] == " "
+      {
+        flush()
+        let level = trimmed.distance(from: trimmed.startIndex, to: hashes)
+        blocks.append(.heading(level, String(trimmed[hashes...]).trimmingCharacters(in: .whitespaces)))
+      } else if let marker = ["- ", "* ", "+ "].first(where: trimmed.hasPrefix) {
+        flush()
+        let indent = line.prefix(while: { $0 == " " }).count / 2
+        blocks.append(.item(indent, String(trimmed.dropFirst(marker.count))))
+      } else {
+        paragraph.append(trimmed)
+      }
+    }
+    if let open = code { blocks.append(.code(open.joined(separator: "\n"))) }
+    flush()
+    return blocks
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+        switch block {
+        case .heading(let level, let words):
+          inline(words).font(level == 1 ? .title2.bold() : level == 2 ? .title3.bold() : .headline)
+            .padding(.top, 4)
+        case .item(let indent, let words):
+          HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text("•")
+            inline(words)
+          }
+          .padding(.leading, CGFloat(indent) * 16)
+        case .code(let source):
+          ScrollView(.horizontal) {
+            Text(source).font(.callout.monospaced()).padding(10)
+          }
+          .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+        case .paragraph(let words):
+          inline(words)
+        }
+      }
+    }
+  }
+
+  private func inline(_ words: String) -> Text {
+    Text(
+      (try? AttributedString(
+        markdown: words, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+        ?? AttributedString(words))
   }
 }

@@ -17,8 +17,12 @@ public final class SettingsModel: ObservableObject, NativeSettings {
 
   @Published var pages: [SettingsPageData] = []
 
-  /// The page asked for last, which the settings open at.
-  @Published var page: SettingsPageKey = .general
+  /// The page asked for last, which the settings open at; none on a phone
+  /// opened plainly, which starts at the list of pages.
+  @Published var page: SettingsPageKey? = .general
+
+  /// What is pushed over the page: subpages and pages of text.
+  @Published var path = NavigationPath()
 
   /// Whether the settings are up, where they are a sheet: iOS.
   @Published var presented = false
@@ -34,12 +38,13 @@ public final class SettingsModel: ObservableObject, NativeSettings {
   }
 
   func show(page: SettingsPageKey?) throws {
-    if let page { self.page = page }
     #if os(macOS)
+      if let page { self.page = page }
       // The app's Settings scene: AppKit's own action opens its window.
       NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
       NSApp.activate()
     #else
+      self.page = page
       presented = true
     #endif
   }

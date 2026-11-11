@@ -31,7 +31,7 @@ public struct SettingsRoot: View {
 
   public var body: some View {
     NavigationSplitView {
-      List(selection: Binding($model.page)) {
+      List(selection: $model.page) {
         ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
           Section {
             ForEach(group, id: \.key) { page in
@@ -47,11 +47,12 @@ public struct SettingsRoot: View {
         .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 260)
       #endif
     } detail: {
-      NavigationStack {
-        if let page = model.page(model.page) {
+      NavigationStack(path: $model.path) {
+        if let key = model.page, let page = model.page(key) {
           SettingsPageView(model: model, page: page)
         }
       }
+      .onChange(of: model.page) { model.path = NavigationPath() }
     }
     #if os(macOS)
       .frame(minWidth: 720, minHeight: 480)
@@ -89,6 +90,9 @@ struct SettingsPageView: View {
     .navigationTitle(page.title)
     .navigationDestination(for: SettingsPageKey.self) { key in
       if let sub = model.page(key) { SettingsPageView(model: model, page: sub) }
+    }
+    .navigationDestination(for: OpenedText.self) { opened in
+      TextPage(model: model, title: opened.title, opens: opened.opens)
     }
   }
 }

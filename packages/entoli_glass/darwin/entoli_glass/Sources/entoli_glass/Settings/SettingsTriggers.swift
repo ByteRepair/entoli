@@ -19,7 +19,10 @@ struct TriggersView: View {
       Button {
         editing = CollectionRow.Editing(index: nil)
       } label: {
+        // A list row tints its images with the accent, which on the
+        // prominent button is the button itself.
         Label(row.addLabel ?? "Add trigger", systemImage: "plus")
+          .foregroundStyle(.white)
           .frame(maxWidth: .infinity)
           .padding(.vertical, 6)
       }
@@ -71,6 +74,9 @@ struct TriggersView: View {
     .padding(14)
     .contentShape(RoundedRectangle(cornerRadius: 20))
     .glassSurface(RoundedRectangle(cornerRadius: 20))
+    #if os(iOS)
+      .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 20))
+    #endif
     .onTapGesture { editing = CollectionRow.Editing(index: index) }
     .contextMenu {
       ForEach(item.actions.compactMap { $0 }, id: \.id) { action in

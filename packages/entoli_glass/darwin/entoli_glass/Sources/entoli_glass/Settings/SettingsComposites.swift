@@ -27,11 +27,12 @@ struct CollectionRow: View {
 
   var body: some View {
     let items = row.items.compactMap { $0 }
-    Group {
+    VStack(alignment: .leading, spacing: 10) {
       if items.isEmpty, let empty = row.emptyItems {
         Text(empty).foregroundStyle(.secondary)
       }
       ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+        if index > 0 { Divider() }
         HStack(alignment: .center) {
           if let data = item.image?.data, let image = PlatformImage(data: data) {
             Image(platformImage: image).resizable().scaledToFill()
@@ -44,11 +45,7 @@ struct CollectionRow: View {
           }
           VStack(alignment: .leading, spacing: 2) {
             if let opens = item.opens {
-              NavigationLink {
-                TextPage(model: model, title: item.title, opens: opens)
-              } label: {
-                Text(item.title)
-              }
+              OpenLink(model: model, title: item.title, opens: opens) { Text(item.title) }
             } else {
               Text(item.title)
             }
@@ -67,7 +64,12 @@ struct CollectionRow: View {
           }
           let actions = item.actions.compactMap { $0 }
           if actions.count > 2 || row.takesImages {
+            // One control for the lot, Edit and Remove included, so a row
+            // never ends in a strip of buttons.
             Menu {
+              if row.editable {
+                Button("Edit") { editing = Editing(index: index) }
+              }
               if row.takesImages {
                 Button("Choose photo…") { picking = index }
               }
@@ -77,8 +79,13 @@ struct CollectionRow: View {
                 }
                 .disabled(!action.enabled)
               }
+              if row.removable && row.editable {
+                Button(row.removeLabel ?? "Remove", role: .destructive) {
+                  model.say.removeItem(id: row.id, index: Int64(index), completion: ignore)
+                }
+              }
             } label: {
-              Image(systemName: "ellipsis.circle")
+              Image(systemName: "ellipsis.circle").font(.title3)
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -90,18 +97,18 @@ struct CollectionRow: View {
               .buttonStyle(.borderless)
               .disabled(!action.enabled)
             }
-          }
-          if row.editable {
-            Button("Edit") { editing = Editing(index: index) }.buttonStyle(.borderless)
-          }
-          if row.removable && row.editable {
-            Button(role: .destructive) {
-              model.say.removeItem(id: row.id, index: Int64(index), completion: ignore)
-            } label: {
-              Image(systemName: "xmark.circle")
+            if row.editable {
+              Button("Edit") { editing = Editing(index: index) }.buttonStyle(.borderless)
             }
-            .buttonStyle(.borderless)
-            .help(row.removeLabel ?? "Remove")
+            if row.removable && row.editable {
+              Button(role: .destructive) {
+                model.say.removeItem(id: row.id, index: Int64(index), completion: ignore)
+              } label: {
+                Image(systemName: "xmark.circle")
+              }
+              .buttonStyle(.borderless)
+              .help(row.removeLabel ?? "Remove")
+            }
           }
         }
       }
@@ -238,6 +245,13 @@ struct FormSheet: View {
           Text(part.label ?? "").font(.caption).foregroundStyle(.secondary)
           TextEditor(text: binding(key)).frame(minHeight: CGFloat(part.lines) * 18)
         } else {
+          #if os(iOS)
+            // An iOS field's label is only its placeholder, gone once filled
+            // or where a hint stands in it.
+            if part.hint != nil || !binding(key).wrappedValue.isEmpty {
+              Text(part.label ?? "").font(.caption).foregroundStyle(.secondary)
+            }
+          #endif
           TextField(part.label ?? "", text: binding(key), prompt: part.hint.map(Text.init))
         }
         helper(part)
@@ -301,7 +315,7 @@ struct FormSheet: View {
       let picked = Set(((answers[key] ?? nil) ?? "").split(separator: ",").map(String.init))
       VStack(alignment: .leading, spacing: 6) {
         Text(part.label ?? "").font(.caption).foregroundStyle(.secondary)
-        HStack {
+        Flow(spacing: 8) {
           ForEach(part.options.compactMap { $0 }, id: \.answer) { option in
             let on = picked.contains(option.answer)
             Button {
@@ -309,7 +323,7 @@ struct FormSheet: View {
               if on { next.remove(option.answer) } else { next.insert(option.answer) }
               binding(key).wrappedValue = next.sorted().joined(separator: ",")
             } label: {
-              Text(option.label).font(.callout)
+              Text(option.label).font(.callout).lineLimit(1)
                 .padding(.horizontal, 10).padding(.vertical, 5)
             }
             .glassButton(prominent: on)
@@ -623,7 +637,6 @@ struct SetupRow: View {
 }
 
 #if os(macOS)
-  typealias PlatformImage = NSImage
 
   extension NSImage {
     /// As a PNG, the format an agent's picture is kept in.
@@ -639,7 +652,6 @@ struct SetupRow: View {
     init(platformImage: NSImage) { self.init(nsImage: platformImage) }
   }
 #else
-  typealias PlatformImage = UIImage
 
   extension UIImage {
     var png: Data? { pngData() }
@@ -649,3 +661,51 @@ struct SetupRow: View {
     init(platformImage: UIImage) { self.init(uiImage: platformImage) }
   }
 #endif
+
+/// Its views in rows, a row wrapping where the next would not fit.
+struct Flow: Layout {
+  var spacing: CGFloat = 8
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    let rows = arrange(subviews, width: proposal.width ?? .infinity)
+    let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(rows.count - 1, 0))
+    return CGSize(width: proposal.width ?? rows.map(\.width).max() ?? 0, height: height)
+  }
+
+  func placeSubviews(
+    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+  ) {
+    var y = bounds.minY
+    for row in arrange(subviews, width: bounds.width) {
+      var x = bounds.minX
+      for index in row.indices {
+        let size = subviews[index].sizeThatFits(.unspecified)
+        subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+        x += size.width + spacing
+      }
+      y += row.height + spacing
+    }
+  }
+
+  private struct Row {
+    var indices: [Int] = []
+    var width: CGFloat = 0
+    var height: CGFloat = 0
+  }
+
+  private func arrange(_ subviews: Subviews, width: CGFloat) -> [Row] {
+    var rows = [Row()]
+    for index in subviews.indices {
+      let size = subviews[index].sizeThatFits(.unspecified)
+      let needed = rows[rows.count - 1].indices.isEmpty ? size.width : size.width + spacing
+      if rows[rows.count - 1].width + needed > width, !rows[rows.count - 1].indices.isEmpty {
+        rows.append(Row())
+      }
+      let added = rows[rows.count - 1].indices.isEmpty ? size.width : size.width + spacing
+      rows[rows.count - 1].indices.append(index)
+      rows[rows.count - 1].width += added
+      rows[rows.count - 1].height = max(rows[rows.count - 1].height, size.height)
+    }
+    return rows
+  }
+}

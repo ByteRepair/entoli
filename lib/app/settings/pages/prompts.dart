@@ -244,6 +244,8 @@ final promptSettings = [
           ],
         ),
         form: (agent) => AgentForm(agent, taken: files.has),
+        // Removing is the confirmed "remove" action, not the list.
+        removable: false,
         onSet: (_) async {},
         submit: (answers, index) async {
           final previous = index == null ? null : agents[index];
@@ -386,6 +388,8 @@ final promptSettings = [
               ),
           ],
         ),
+        // Removing is the confirmed "remove" action, not the list.
+        removable: false,
         onSet: (_) async {},
         act: (index, action) async {
           final skill = skills[index];
