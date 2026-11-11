@@ -629,7 +629,7 @@ struct OpenLink<Label: View>: View {
 
   var body: some View {
     Button {
-      model.path.append(OpenedText(title: title, opens: opens))
+      model.push(OpenedText(title: title, opens: opens))
     } label: {
       HStack {
         label
@@ -668,14 +668,44 @@ struct ModelPickRow: View {
   let row: SettingRowData
 
   var body: some View {
-    NavigationLink {
-      ModelList(model: model, row: row)
-    } label: {
+    PushRow(model: model, to: OpenedModels(row: row.id)) {
       VStack(alignment: .leading, spacing: 2) {
         LabeledContent(row.title, value: row.modelLabel ?? "")
         if let detail = row.detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
       }
     }
+  }
+}
+
+/// A model picker's page, by the row it picks for.
+struct OpenedModels: Hashable {
+  let row: String
+}
+
+/// A row that opens a page, drawn as a link: pushed through the model, so it
+/// is animated on every platform.
+struct PushRow<Label: View>: View {
+  let model: SettingsModel
+  let to: AnyHashable
+  @ViewBuilder let label: Label
+
+  init(model: SettingsModel, to: some Hashable, @ViewBuilder label: () -> Label) {
+    self.model = model
+    self.to = AnyHashable(to)
+    self.label = label()
+  }
+
+  var body: some View {
+    Button {
+      model.push(to)
+    } label: {
+      HStack {
+        label
+        Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+      }
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
   }
 }
 

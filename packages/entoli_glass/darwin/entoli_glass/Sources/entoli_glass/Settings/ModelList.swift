@@ -40,14 +40,17 @@ struct ModelList: View {
     }
   }
 
+  // A grouped Form rather than a List: a Mac's List sizes rows of varying
+  // height from an estimate until they scroll, drawing every card squashed.
   var body: some View {
-    List {
+    Form {
       if let data {
         content(data)
       } else {
         HStack { Spacer(); ProgressView(); Spacer() }
       }
     }
+    .formStyle(.grouped)
     .searchable(text: $search, prompt: "Search \(cards.count) models")
     .safeAreaInset(edge: .top, spacing: 0) { filters }
     .navigationTitle("Choose a \(data?.noun ?? "model")")

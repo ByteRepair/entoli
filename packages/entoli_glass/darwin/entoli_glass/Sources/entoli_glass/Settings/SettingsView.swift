@@ -99,6 +99,9 @@ struct SettingsPageView: View {
     .navigationDestination(for: OpenedAvatars.self) { opened in
       BotAvatarsPage(model: model, opened: opened)
     }
+    .navigationDestination(for: OpenedModels.self) { opened in
+      if let row = model.row(opened.row) { ModelList(model: model, row: row) }
+    }
   }
 }
 
@@ -141,7 +144,7 @@ struct SettingRowView: View {
     case .info: InfoRow(model: model, row: row)
     case .subpage:
       if let page = row.page {
-        NavigationLink(value: page) {
+        PushRow(model: model, to: page) {
           LabeledContent(row.title, value: row.summary ?? "")
         }
       }

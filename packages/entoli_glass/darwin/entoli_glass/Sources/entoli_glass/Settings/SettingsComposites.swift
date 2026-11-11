@@ -171,7 +171,7 @@ struct CollectionRow: View {
     if row.hint == .agents, action.id == "botAvatar" {
       let items = row.items.compactMap { $0 }
       if items.indices.contains(index) {
-        model.path.append(OpenedAvatars(agent: items[index].title, row: row.id, index: index))
+        model.push(OpenedAvatars(agent: items[index].title, row: row.id, index: index))
       }
       return
     }
@@ -768,7 +768,7 @@ private struct OpenAvatars: View {
 
   var body: some View {
     Button {
-      model.path.append(OpenedAvatars(agent: nil, row: row, index: -1))
+      model.push(OpenedAvatars(agent: nil, row: row, index: -1))
     } label: {
       HStack {
         Label("View Bot Avatars", systemImage: "face.smiling")

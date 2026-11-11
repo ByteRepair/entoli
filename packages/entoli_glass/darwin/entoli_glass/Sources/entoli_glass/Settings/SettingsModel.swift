@@ -72,6 +72,22 @@ public final class SettingsModel: ObservableObject, NativeSettings {
     pages.first { $0.key == key }
   }
 
+  /// The row [id] names, on whichever page it is.
+  func row(_ id: String) -> SettingRowData? {
+    for page in pages {
+      for section in page.sections.compactMap({ $0 }) {
+        if let row = section.rows.compactMap({ $0 }).first(where: { $0.id == id }) { return row }
+      }
+    }
+    return nil
+  }
+
+  /// Pushes [value]'s page over the one shown. Animated: a Mac's stack
+  /// slides a page in only for a change made in an animation.
+  func push(_ value: some Hashable) {
+    withAnimation(.smooth(duration: 0.3)) { path.append(value) }
+  }
+
   /// [row]'s own rows: a group's children, and an accessory drawn at its end.
   func children(of row: SettingRowData, in section: SettingsSectionData) -> [SettingRowData] {
     section.rows.compactMap { $0 }.filter { $0.parent == row.id && !$0.accessory }
