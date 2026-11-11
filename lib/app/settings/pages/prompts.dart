@@ -9,7 +9,7 @@ import "../../../domain/agent_definition.dart";
 import "../../../domain/agent_face.dart";
 import "../../../domain/bot_avatar/spec.dart";
 import "../../../domain/models.dart";
-import "../../../domain/project.dart" show everyProject, projectLabel;
+import "../../../domain/project.dart" show projectLabel;
 import "../../../domain/prompt_library.dart";
 import "../../../providers.dart";
 import "../../bot_avatar/stage.dart";
@@ -46,12 +46,7 @@ class SkillDestination extends Notifier<String?> {
 /// Re-read every project's library after a change to the default project's,
 /// which each of them reads a rung of, and what lists the user's own.
 Future<void> _reload(SettingReader ref) async {
-  final named = await ref.read(projectListProvider.future);
-  await Future.wait(
-    everyProject(named).map(
-      (project) => ref.read(promptLibraryProvider(project).notifier).reload(),
-    ),
-  );
+  await reloadAllPromptLibraries(ref.read);
   ref.invalidate(ownAgentsProvider);
   ref.invalidate(ownSkillsProvider);
 }

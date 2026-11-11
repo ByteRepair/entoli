@@ -1,3 +1,4 @@
+import "../../../core/formatting.dart";
 import "../../../data/builtin/llm/providers/presets.dart" show providerOf;
 import "../../../domain/llm_provider.dart";
 import "../../../domain/model_options.dart";
@@ -10,9 +11,6 @@ import "../spec.dart";
 
 const _llms = SettingsPageId.llms;
 const _images = SettingsPageId.images;
-
-/// "256k" for 256000; a count that is not whole thousands as it is.
-String inK(int n) => n >= 1000 && n % 1000 == 0 ? "${n ~/ 1000}k" : "$n";
 
 const llmSections = [
   SectionSpec(page: _llms, id: "newChats", title: "New chats", weight: 0),
@@ -33,26 +31,6 @@ const llmSections = [
     weight: 0,
   ),
 ];
-
-/// A sub-setting of a group: its own id under the group's, so a frontend can
-/// name it in an intent.
-SettingContext _part(
-  SettingContext c,
-  String id,
-  String title, {
-  UiHint hint = UiHint.toggle,
-}) => SettingContext(
-  c.ref,
-  c.scope,
-  SettingSpec(
-    id: "${c.spec.id}.$id",
-    path: c.spec.path,
-    weight: 0,
-    title: title,
-    hint: hint,
-    build: c.spec.build,
-  ),
-);
 
 final llmSettings = [
   // What a new chat gets. A live reference, not a snapshot: retargeting it
@@ -169,7 +147,7 @@ final llmSettings = [
         c.spec,
         children: [
           ToggleController(
-            _part(c, "on", "Automatic retry").spec,
+            c.part("on", "Automatic retry").spec,
             value: on,
             effective: on,
             onSet: (value) async {
@@ -181,7 +159,7 @@ final llmSettings = [
             },
           ),
           RangeController(
-            _part(c, "count", "Retries", hint: UiHint.slider).spec,
+            c.part("count", "Retries", hint: UiHint.slider).spec,
             value: retries,
             inherited: SettingKeys.defaultTurnRetries,
             min: 1,
@@ -195,8 +173,8 @@ final llmSettings = [
           ),
         ],
         footnote: on
-            ? "Carried on automatically up to $retries "
-                  "time${retries == 1 ? "" : "s"} when a connection drops or "
+            ? "Carried on automatically up to ${plural(retries, "time")} "
+                  "when a connection drops or "
                   "the provider fails. Off, a failed turn waits for you to "
                   "press Continue."
             : null,
@@ -251,13 +229,11 @@ final llmSettings = [
       return GroupController(
         c.spec,
         children: [
-          _part(
-            c,
-            "on",
-            "Summarize long conversations",
-          ).toggle(SettingKeys.autoCompact),
+          c
+              .part("on", "Summarize long conversations")
+              .toggle(SettingKeys.autoCompact),
           RangeController(
-            _part(c, "percent", "Compact at", hint: UiHint.slider).spec,
+            c.part("percent", "Compact at", hint: UiHint.slider).spec,
             value: percent,
             inherited: SettingKeys.defaultAutoCompactPercent,
             stops: SettingKeys.autoCompactPercentStops,
@@ -292,13 +268,11 @@ final llmSettings = [
       return GroupController(
         c.spec,
         children: [
-          _part(
-            c,
-            "cap",
-            "Apply a maximum response length",
-          ).toggle(SettingKeys.capResponseLength),
+          c
+              .part("cap", "Apply a maximum response length")
+              .toggle(SettingKeys.capResponseLength),
           NumberController(
-            _part(c, "length", "Maximum response length").spec,
+            c.part("length", "Maximum response length").spec,
             value: length,
             fallback: SettingKeys.defaultResponseLength,
             min: SettingKeys.minResponseLength,

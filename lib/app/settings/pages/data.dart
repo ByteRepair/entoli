@@ -53,21 +53,6 @@ String _describe(Backup backup) {
       "${formatSize(backup.size)}.";
 }
 
-SettingSpec _part(
-  SettingContext c,
-  String id,
-  String title,
-  SettingGlyph glyph,
-) => SettingSpec(
-  id: "${c.spec.id}.$id",
-  path: c.spec.path,
-  weight: 0,
-  title: title,
-  hint: UiHint.button,
-  glyph: glyph,
-  build: c.spec.build,
-);
-
 final dataSettings = [
   // Everything the app holds, out as one file and back in. The format is
   // `data/backup.dart`'s; this is the two buttons, and what the second has to
@@ -91,7 +76,14 @@ final dataSettings = [
         busy: busy,
         children: [
           ActionController(
-            _part(c, "export", "Export", SettingGlyph.download),
+            c
+                .part(
+                  "export",
+                  "Export",
+                  hint: UiHint.button,
+                  glyph: SettingGlyph.download,
+                )
+                .spec,
             label: "Export",
             enabled: !busy,
             run: () => runner.run(() async {
@@ -108,7 +100,14 @@ final dataSettings = [
             }),
           ),
           ActionController(
-            _part(c, "import", "Import", SettingGlyph.upload),
+            c
+                .part(
+                  "import",
+                  "Import",
+                  hint: UiHint.button,
+                  glyph: SettingGlyph.upload,
+                )
+                .spec,
             label: "Import",
             secondary: true,
             enabled: !busy,

@@ -633,12 +633,14 @@ final promptLibraryProvider =
 /// The project list comes from the cached [projectListProvider] rather than a
 /// fresh directory walk, and the per-project reloads overlap since each reads
 /// its own dir.
-Future<void> reloadAllPromptLibraries(WidgetRef ref) async {
-  final named = await ref.read(projectListProvider.future);
+Future<void> reloadAllPromptLibraries(
+  T Function<T>(ProviderListenable<T> provider) read,
+) async {
+  final named = await read(projectListProvider.future);
   await Future.wait(
-    everyProject(named).map(
-      (project) => ref.read(promptLibraryProvider(project).notifier).reload(),
-    ),
+    everyProject(
+      named,
+    ).map((project) => read(promptLibraryProvider(project).notifier).reload()),
   );
 }
 

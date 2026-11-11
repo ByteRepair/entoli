@@ -72,14 +72,7 @@ final providerSettings = [
         c.spec,
         children: [
           NoticeController(
-            SettingSpec(
-              id: "recommendedProvider.why",
-              path: c.spec.path,
-              weight: 0,
-              title: "Ollama Cloud",
-              hint: UiHint.notice,
-              build: c.spec.build,
-            ),
+            c.part("why", "Ollama Cloud", hint: UiHint.notice).spec,
             lines: [
               const NoticeLine(
                 "Entoli works with both privacy-respecting and other "
@@ -97,14 +90,7 @@ final providerSettings = [
             ],
           ),
           TextController(
-            SettingSpec(
-              id: "recommendedProvider.key",
-              path: c.spec.path,
-              weight: 0,
-              title: "Already have a key?",
-              hint: UiHint.input,
-              build: c.spec.build,
-            ),
+            c.part("key", "Already have a key?", hint: UiHint.input).spec,
             value: "",
             prompt: "Ollama API key",
             secret: true,

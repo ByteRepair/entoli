@@ -27,15 +27,9 @@ final browserRunningProvider = NotifierProvider<BrowserRunning, bool>(
   BrowserRunning.new,
 );
 
-class BrowserRunning extends Notifier<bool> {
+class BrowserRunning extends Notifier<bool> with ListenableValue<bool> {
   @override
-  bool build() {
-    final running = ref.watch(agentBrowserProvider).running;
-    void update() => state = running.value;
-    running.addListener(update);
-    ref.onDispose(() => running.removeListener(update));
-    return running.value;
-  }
+  bool build() => bridge(ref.watch(agentBrowserProvider).running);
 }
 
 /// A browser being picked from the disk: started first, to check it can be

@@ -22,7 +22,14 @@ class SettingsSchema {
   final Map<String, SettingSpec> settings;
 
   /// [page]'s sections in order, each with its settings in order.
-  List<(SectionSpec, List<SettingSpec>)> page(SettingsPageId page) {
+  List<(SectionSpec, List<SettingSpec>)> page(SettingsPageId page) =>
+      _pages[page]!;
+
+  late final _pages = {
+    for (final page in SettingsPageId.values) page: _layOut(page),
+  };
+
+  List<(SectionSpec, List<SettingSpec>)> _layOut(SettingsPageId page) {
     final found = [
       for (final section in sections.values)
         if (section.page == page)

@@ -285,5 +285,8 @@ class SettingsDocument {
 
   Map<String, Object?> toJson() => {..._json};
 
-  SettingsDocument copy() => SettingsDocument(json: _json, root: root);
+  /// The same document, its decoded values kept: a change to the copy drops
+  /// only what it sets.
+  SettingsDocument copy() =>
+      SettingsDocument(json: _json, root: root).._cache.addAll(_cache);
 }

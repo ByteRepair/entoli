@@ -19,6 +19,9 @@ String formatSize(int bytes) {
 }
 
 /// "200K", "1M": a window as providers write it.
+/// "256k" for 256000; a count that is not whole thousands as it is.
+String inK(int n) => n >= 1000 && n % 1000 == 0 ? "${n ~/ 1000}k" : "$n";
+
 String tokenCount(int n) {
   if (n >= 1000000) {
     final m = n / 1000000;

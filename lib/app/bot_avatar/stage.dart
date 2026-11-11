@@ -110,10 +110,6 @@ class BotStage {
   /// A tap on [instance] at [now]: it reacts, live while the reaction plays.
   void tap(String instance, Duration now) => _actors[instance]?.tap(now);
 
-  /// Whether [instance] is playing a reaction at [now].
-  bool reacting(String instance, Duration now) =>
-      _actors[instance]?.reactingAt(now) ?? false;
-
   /// [instance] is off screen for good.
   void drop(String instance) => _actors.remove(instance);
 }
@@ -132,23 +128,28 @@ Float64List encodeFrame(
   Map<VolumeSlice, int> slices, {
   bool reacting = false,
 }) {
-  final out = <double>[
-    if (reacting) 1 else 0,
-    ..._affine(frame.root),
-    frame.shapes.length.toDouble(),
-  ];
+  final out = Float64List(8 + 13 * frame.shapes.length);
+  var at = 0;
+  void put(double v) => out[at++] = v;
+  void affine(Affine m) {
+    put(m.a);
+    put(m.b);
+    put(m.c);
+    put(m.d);
+    put(m.e);
+    put(m.f);
+  }
+
+  put(reacting ? 1 : 0);
+  affine(frame.root);
+  put(frame.shapes.length.toDouble());
   for (final shape in frame.shapes) {
-    out.addAll(switch (shape) {
-      SliceShape(:final slice) => [
-        0,
-        (slices[slice] ?? -1).toDouble(),
-        0,
-        0,
-        0,
-        0,
-        0,
-      ],
-      EyeShapeMark(
+    switch (shape) {
+      case SliceShape(:final slice):
+        put(0);
+        put((slices[slice] ?? -1).toDouble());
+        at += 5;
+      case EyeShapeMark(
         mark: PillMark(
           :final x,
           :final y,
@@ -156,9 +157,15 @@ Float64List encodeFrame(
           :final height,
           :final radius,
         ),
-      ) =>
-        [1, x, y, width, height, radius, 0],
-      EyeShapeMark(
+      ):
+        put(1);
+        put(x);
+        put(y);
+        put(width);
+        put(height);
+        put(radius);
+        put(0);
+      case EyeShapeMark(
         mark: ArcMark(
           :final x0,
           :final x1,
@@ -167,12 +174,16 @@ Float64List encodeFrame(
           :final cy,
           :final strokeWidth,
         ),
-      ) =>
-        [2, x0, x1, y, cx, cy, strokeWidth],
-    });
-    out.addAll(_affine(shape.matrix));
+      ):
+        put(2);
+        put(x0);
+        put(x1);
+        put(y);
+        put(cx);
+        put(cy);
+        put(strokeWidth);
+    }
+    affine(shape.matrix);
   }
-  return Float64List.fromList(out);
+  return out;
 }
-
-List<double> _affine(Affine m) => [m.a, m.b, m.c, m.d, m.e, m.f];

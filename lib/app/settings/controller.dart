@@ -21,6 +21,27 @@ class SettingContext {
 
   final SettingsScope scope;
   final SettingSpec spec;
+
+  /// A part of this setting — a group's child, an accessory — under an id of
+  /// its own beneath this one's, so a frontend can name it in an intent.
+  SettingContext part(
+    String id,
+    String title, {
+    UiHint hint = UiHint.toggle,
+    SettingGlyph? glyph,
+  }) => SettingContext(
+    ref,
+    scope,
+    SettingSpec(
+      id: "${spec.id}.$id",
+      path: spec.path,
+      weight: 0,
+      title: title,
+      hint: hint,
+      glyph: glyph,
+      build: spec.build,
+    ),
+  );
 }
 
 /// One setting, as data: what it is called and says, where it is filed and
@@ -207,7 +228,7 @@ final class ToggleController extends SettingController {
     super.enabled,
     super.visible,
     super.accessory,
-  }) : _write = onSet;
+  }) : set = onSet;
 
   /// What is set here, null where nothing is.
   final bool? value;
@@ -216,9 +237,7 @@ final class ToggleController extends SettingController {
   final bool effective;
 
   final bool unsettable;
-  final Future<SettingNotice?> Function(bool?) _write;
-
-  Future<SettingNotice?> set(bool? value) => _write(value);
+  final Future<SettingNotice?> Function(bool? value) set;
 }
 
 /// One of [options], or unset where [unsettable]: [inheritedLabel] then
@@ -239,7 +258,7 @@ final class ChoiceController<T> extends SettingController {
     super.enabled,
     super.visible,
     super.accessory,
-  }) : _write = onSet;
+  }) : set = onSet;
 
   final List<SettingOption<T>> options;
 
@@ -259,12 +278,10 @@ final class ChoiceController<T> extends SettingController {
   /// What went wrong with the last pick, said under the field.
   final String? error;
 
-  final Future<SettingNotice?> Function(T?) _write;
+  final Future<SettingNotice?> Function(T? value) set;
 
   SettingOption<T>? get picked =>
       options.where((o) => o.value == value).firstOrNull;
-
-  Future<SettingNotice?> set(T? value) => _write(value);
 
   /// [build] called with this controller's own option type, which a switch
   /// over the kinds loses: a frontend's widgets are typed by it.
@@ -285,13 +302,11 @@ final class SlotsController<T> extends SettingController {
     super.enabled,
     super.visible,
     super.accessory,
-  }) : _write = onSet;
+  }) : set = onSet;
 
   final List<SettingOption<T>> slots;
   final List<OptionGroup<T>> groups;
-  final Future<void> Function(int, T) _write;
-
-  Future<void> set(int slot, T value) => _write(slot, value);
+  final Future<void> Function(int slot, T value) set;
 
   /// [build] called with this controller's own option type.
   R typed<R>(R Function<V>(SlotsController<V> c) build) => build<T>(this);
@@ -316,7 +331,7 @@ final class RangeController extends SettingController {
     super.enabled,
     super.visible,
     super.accessory,
-  }) : _write = onSet;
+  }) : set = onSet;
 
   /// Whether it is written once a drag ends rather than as it moves: each
   /// write of the cores restarts the server.
@@ -328,11 +343,9 @@ final class RangeController extends SettingController {
   final int? min;
   final int? max;
   final bool unsettable;
-  final Future<SettingNotice?> Function(int?) _write;
+  final Future<SettingNotice?> Function(int? value) set;
 
   int get effective => value ?? inherited;
-
-  Future<SettingNotice?> set(int? value) => _write(value);
 }
 
 /// Names and their values, edited one pair at a time and saved whole.
@@ -489,7 +502,7 @@ final class ModelPickController extends SettingController {
     super.enabled,
     super.visible,
     super.accessory,
-  }) : _write = onSet;
+  }) : set = onSet;
 
   final ModelChoice choice;
 
@@ -504,9 +517,7 @@ final class ModelPickController extends SettingController {
 
   final ModelRole role;
 
-  final Future<void> Function(ModelChoice) _write;
-
-  Future<void> set(ModelChoice choice) => _write(choice);
+  final Future<void> Function(ModelChoice choice) set;
 }
 
 /// Text, typed in place or in a dialog the row opens; cleared back to empty
@@ -529,7 +540,7 @@ final class TextController extends SettingController {
     super.enabled,
     super.visible,
     super.accessory,
-  }) : _write = onSet;
+  }) : set = onSet;
 
   final String value;
 
@@ -555,9 +566,7 @@ final class TextController extends SettingController {
   /// Whether it is typed hidden, as a password is.
   final bool secret;
 
-  final Future<SettingNotice?> Function(String) _write;
-
-  Future<SettingNotice?> set(String value) => _write(value);
+  final Future<SettingNotice?> Function(String value) set;
 }
 
 /// Something to read rather than set: lines of text, and links out.
@@ -598,7 +607,7 @@ final class CollectionController<T> extends SettingController {
     super.spec, {
     required this.items,
     required this.addLabel,
-    required Future<void> Function(List<T> items) onSet,
+    Future<void> Function(List<T> items)? onSet,
     required this.describe,
     this.form,
     this.removeLabel = "Remove",
@@ -613,7 +622,7 @@ final class CollectionController<T> extends SettingController {
     super.enabled,
     super.visible,
     super.accessory,
-  }) : _write = onSet,
+  }) : _write = onSet ?? _keep,
        _onAct = act,
        _onSubmit = submit,
        _onImage = image;
@@ -680,6 +689,10 @@ final class CollectionController<T> extends SettingController {
   /// [build] called with this controller's own item type.
   R typed<R>(R Function<V>(CollectionController<V> c) build) => build<T>(this);
 }
+
+/// A collection whose items are kept by its [CollectionController.submit]
+/// and item actions alone.
+Future<void> _keep(List<Object?> _) async {}
 
 extension on List {
   void removeAtOrNot(int? index) {
@@ -1046,7 +1059,6 @@ final class PairingController extends SettingController {
     super.spec, {
     required this.hub,
     required this.activity,
-    this.canScan = false,
     this.scanner,
     super.title,
     super.description,
@@ -1062,12 +1074,11 @@ final class PairingController extends SettingController {
   /// The pairing in flight, or null.
   final PairingActivity? activity;
 
-  /// Whether this device is one that is pointed at a code: a phone, with a
-  /// camera page to point.
-  final bool canScan;
-
-  /// The camera page, answering the code it read.
+  /// The camera page, answering the code it read: a phone's, the device
+  /// pointed at a code.
   final Future<String?> Function()? scanner;
+
+  bool get canScan => scanner != null;
 
   /// Reads a code another screen shows and pairs with it.
   Future<String?> scan() async {
@@ -1082,8 +1093,6 @@ final class PairingController extends SettingController {
 
   /// The invite to send the other device by hand.
   Future<String> createInvite() => hub.createManualInvite();
-
-  void cancelInvite() => hub.cancelManualInvite();
 
   /// Pairs with the code or the answer the other device gave.
   Future<String?> join(String code) => hub.pairWith(code.trim());

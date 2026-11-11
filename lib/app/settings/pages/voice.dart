@@ -45,15 +45,14 @@ ActionController _preview(SettingContext c, {bool enabled = true}) {
   final playing = c.ref.watch(readAloudProvider) == previewId;
   final reader = c.ref.read(readAloudProvider.notifier);
   return ActionController(
-    SettingSpec(
-      id: "${c.spec.id}.preview",
-      path: c.spec.path,
-      weight: 0,
-      title: playing ? "Stop" : "Hear this voice",
-      hint: UiHint.button,
-      glyph: SettingGlyph.play,
-      build: c.spec.build,
-    ),
+    c
+        .part(
+          "preview",
+          playing ? "Stop" : "Hear this voice",
+          hint: UiHint.button,
+          glyph: SettingGlyph.play,
+        )
+        .spec,
     label: playing ? "Stop" : "Hear this voice",
     glyphOverride: playing ? SettingGlyph.stop : SettingGlyph.play,
     enabled: enabled,

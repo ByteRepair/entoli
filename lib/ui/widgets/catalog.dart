@@ -3,6 +3,7 @@ import "package:flutter/material.dart";
 import "../../domain/download.dart";
 import "../../domain/installable.dart" show ModelFacts;
 import "dialogs.dart";
+import "../../app/model_facts.dart";
 import "../../core/formatting.dart";
 import "resettable_field.dart";
 
@@ -232,30 +233,19 @@ class InstalledPicker extends StatelessWidget {
   }
 }
 
-/// A model's facts as tags, as many as are known of it, in one order for every
-/// catalog.
-List<Widget> modelTags(ModelFacts facts) => switch (facts) {
-  (
-    :final parameters,
-    :final languages,
-    :final bytes,
-    :final quantisation,
-    :final context,
-    :final voices,
-    :final licence,
-  ) =>
-    [
-      if (parameters != null) InfoTag(Icons.memory, "$parameters params"),
-      if (languages != null) InfoTag(Icons.translate, languages),
-      if (bytes != null) InfoTag(Icons.download_outlined, formatSize(bytes)),
-      if (quantisation != null) InfoTag(Icons.compress, quantisation),
-      if (context != null)
-        InfoTag(Icons.data_usage, "${tokenCount(context)} context"),
-      if (voices != null)
-        InfoTag(Icons.record_voice_over_outlined, plural(voices, "voice")),
-      if (licence != null) InfoTag(Icons.gavel_outlined, licence),
-    ],
-};
+/// A model's facts as tags, by [modelFactTags].
+List<Widget> modelTags(ModelFacts facts) => [
+  for (final (fact, text) in modelFactTags(facts))
+    InfoTag(switch (fact) {
+      ModelFact.parameters => Icons.memory,
+      ModelFact.languages => Icons.translate,
+      ModelFact.size => Icons.download_outlined,
+      ModelFact.quantisation => Icons.compress,
+      ModelFact.context => Icons.data_usage,
+      ModelFact.voices => Icons.record_voice_over_outlined,
+      ModelFact.licence => Icons.gavel_outlined,
+    }, text),
+];
 
 /// One fact about a thing, as a small labelled chip.
 class InfoTag extends StatelessWidget {

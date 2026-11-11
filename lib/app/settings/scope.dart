@@ -7,15 +7,10 @@ import "spec.dart";
 /// provider is keyed by, and what a frontend names when it asks for one.
 sealed class ScopeAddress {
   const ScopeAddress();
-
-  SettingScope get level;
 }
 
 final class AppAddress extends ScopeAddress {
   const AppAddress();
-
-  @override
-  SettingScope get level => SettingScope.app;
 
   @override
   bool operator ==(Object other) => other is AppAddress;
@@ -37,9 +32,6 @@ final class ProjectAddress extends ScopeAddress {
   ProjectRef get ref => (device: device, project: project);
 
   @override
-  SettingScope get level => SettingScope.project;
-
-  @override
   bool operator ==(Object other) =>
       other is ProjectAddress &&
       other.project == project &&
@@ -55,8 +47,6 @@ final class ProjectAddress extends ScopeAddress {
 /// [parent]'s answer.
 sealed class SettingsScope {
   SettingsScope get root;
-
-  SettingScope get level;
 
   SettingsScope? get parent;
 
@@ -77,14 +67,12 @@ sealed class SettingsScope {
       own(setting) ?? inherited(setting);
 
   /// Sets [setting] here, or clears it where [value] is null.
-  Future<void> write<T extends Object>(Setting<T> setting, T? value);
+  Future<void> write<T extends Object>(Setting<T> setting, T? value) =>
+      writeAll({setting: value});
 
   /// Sets each of [values] here in one write, so a pair is never half
   /// written.
   Future<void> writeAll(Map<Setting, Object?> values);
-
-  /// Whether this level may hold [setting] at all.
-  bool holds(Setting setting) => setting.scopes.contains(level);
 }
 
 /// The app's `settings.json`, the top of every chain.
@@ -98,24 +86,14 @@ final class AppScope extends SettingsScope {
   SettingsScope get root => this;
 
   @override
-  SettingScope get level => SettingScope.app;
-
-  @override
   SettingsScope? get parent => null;
 
   @override
   SettingsDocument get document => _document;
 
   @override
-  Future<void> write<T extends Object>(Setting<T> setting, T? value) =>
-      _notifier.put(setting, value);
-
-  @override
   Future<void> writeAll(Map<Setting, Object?> values) =>
       _notifier.putAll(values);
-
-  /// The notifier, for a value whose setter has more to do than write it.
-  AppSettingsNotifier get notifier => _notifier;
 }
 
 /// A project's `project.json`, over the app's. What only projects and chats
@@ -151,17 +129,10 @@ final class ProjectScope extends SettingsScope {
   SettingsScope get root => _parent;
 
   @override
-  SettingScope get level => SettingScope.project;
-
-  @override
   AppScope get parent => _parent;
 
   @override
   SettingsDocument get document => _document;
-
-  @override
-  Future<void> write<T extends Object>(Setting<T> setting, T? value) =>
-      _notifier.put(setting, value);
 
   @override
   Future<void> writeAll(Map<Setting, Object?> values) =>
@@ -184,20 +155,10 @@ final class ChatScope extends SettingsScope {
   SettingsScope get root => _parent.root;
 
   @override
-  SettingScope get level => SettingScope.chat;
-
-  @override
   ProjectScope get parent => _parent;
 
   @override
   SettingsDocument get document => _document;
-
-  @override
-  Future<void> write<T extends Object>(Setting<T> setting, T? value) {
-    _document.set(setting, value);
-    onChange();
-    return Future.value();
-  }
 
   @override
   Future<void> writeAll(Map<Setting, Object?> values) {

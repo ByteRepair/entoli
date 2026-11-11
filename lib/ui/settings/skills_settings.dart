@@ -162,7 +162,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
   /// import can land in any of them, so it reloads every project's; a
   /// project's own pages have one target and reload that one alone.
   Future<void> _reload(String? target) => target == null
-      ? reloadAllPromptLibraries(ref)
+      ? reloadAllPromptLibraries(ref.read)
       : ref.read(promptLibraryProvider(target).notifier).reload();
 
   Future<void> _export(String name) => _guard(

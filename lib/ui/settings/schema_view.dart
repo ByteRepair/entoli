@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/settings/controller.dart";
+import "../../core/formatting.dart";
 import "../../app/settings/scope.dart";
 import "../../app/settings/settings.dart";
 import "../../app/settings/spec.dart";
@@ -20,9 +21,7 @@ import "connect_provider.dart";
 import "byte_repair_settings.dart";
 import "../../app/settings/pages/triggers.dart" show triggerPermissionsProvider;
 import "../../domain/trigger.dart";
-import "agents_settings.dart" show AgentsSection;
 import "form_dialog.dart";
-import "skills_settings.dart" show SkillsSection;
 import "triggers.dart" show TriggerEditorPage;
 import "local_model_settings.dart" show AddLocalModelPage;
 import "running_models.dart";
@@ -69,37 +68,6 @@ class SchemaSections extends ConsumerWidget {
   }
 }
 
-/// A page whose one setting is the whole of it, its own list and its own
-/// footer: Agents and Skills. Drawn alone, under no list of the page's.
-class SchemaWhole extends ConsumerWidget {
-  const SchemaWhole(this.page, {super.key});
-
-  final SettingsPageId page;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = [
-      for (final section in buildPage(
-        WidgetReader(ref),
-        ref.watch(settingsSchemaProvider),
-        page,
-        const AppAddress(),
-      ))
-        ...section.settings,
-    ];
-    for (final setting in settings) {
-      switch (setting.hint) {
-        case UiHint.agents:
-          return const AgentsSection();
-        case UiHint.skills:
-          return const SkillsSection();
-        default:
-      }
-    }
-    return const SizedBox.shrink();
-  }
-}
-
 /// One of [page]'s sections at [at], alone: a page that shows a part of
 /// settings among its own, as the welcome tour does. [only] keeps to those
 /// settings where it names any.
@@ -119,19 +87,20 @@ class SchemaSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final found = buildPage(
+    final found = buildSection(
       WidgetReader(ref),
       ref.watch(settingsSchemaProvider),
       page,
+      section,
       at,
-    ).where((s) => s.spec.id == section).firstOrNull;
+      only: only,
+    );
     if (found == null) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionHeader(found.spec.title, description: found.description),
-        for (final setting in found.settings)
-          if (only?.contains(setting.id) ?? true) SettingRow(setting),
+        for (final setting in found.settings) SettingRow(setting),
       ],
     );
   }
@@ -779,9 +748,7 @@ class _Number extends StatelessWidget {
   final NumberController c;
   final bool labelled;
 
-  String _shown(int n) =>
-      "${n >= 1000 && n % 1000 == 0 ? "${n ~/ 1000}k" : "$n"}"
-      "${c.unit == null ? "" : " ${c.unit}"}";
+  String _shown(int n) => "${inK(n)}${c.unit == null ? "" : " ${c.unit}"}";
 
   @override
   Widget build(BuildContext context) {

@@ -99,7 +99,7 @@ class _SkillInstallPreviewPageState
     await platform.readOnlyDirs.skills(skillsDir).write(() async {
       await installSkillPackage(config, pkg, project: target);
     });
-    await reloadAllPromptLibraries(ref);
+    await reloadAllPromptLibraries(ref.read);
     if (mounted) {
       setState(() => _installing = false);
       ScaffoldMessenger.of(context).showSnackBar(

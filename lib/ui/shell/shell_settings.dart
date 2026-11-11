@@ -7,6 +7,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../app/settings/controller.dart";
 import "../../app/bot_avatar/library.dart";
 import "../../app/bot_avatar/stage.dart";
+import "../../app/model_facts.dart";
 import "../../app/model_role.dart";
 import "../../app/settings/forms/model.dart";
 import "../../app/settings/scope.dart";
@@ -24,7 +25,6 @@ import "../../domain/llm_provider.dart";
 import "../../domain/model_registry.dart" show ModelCatalog, modelInfoOf;
 import "../../providers.dart";
 import "../../app/prompts/skill_files.dart";
-import "../bot_avatar/face_png.dart";
 import "../widgets/model_catalog_page.dart" show CatalogEntry, catalogEntries;
 
 /// Every page the native settings offer, as rows, and the controller each
@@ -33,16 +33,6 @@ typedef NativeSettingsPages = ({
   SettingsSnapshot snapshot,
   Map<String, SettingController> controllers,
 });
-
-/// An agent of the default project's face as a PNG, painted once its face
-/// is read: what the native agents list shows beside each name.
-final agentFacePngProvider = FutureProvider.autoDispose
-    .family<Uint8List?, String>((ref, name) async {
-      final face = await ref.watch(
-        agentPictureProvider((project: null, name: name)).future,
-      );
-      return agentFacePng(face);
-    });
 
 /// The pages this platform offers, built through the provider's ref and
 /// rebuilt whenever anything one reads changes. Welcome is the tour, not
@@ -54,20 +44,17 @@ final nativeSettingsProvider = Provider<NativeSettingsPages>((ref) {
   final providers = ref.watch(appSettingsProvider).llmProviders;
   final stage = ref.watch(botStageProvider);
   // A Bot Avatar is drawn live by the client from its rig; a photo is sent.
-  BotAvatarSpec? bot(String name) => switch (ref
+  _Face face(String name) => switch (ref
       .watch(agentPictureProvider((project: null, name: name)))
       .value) {
-    AgentBot(:final spec) => spec,
-    _ => null,
+    AgentPhoto(:final bytes) => (photo: bytes, bot: null, colour: null),
+    AgentBot(:final spec) => (
+      photo: null,
+      bot: stage.keyOf(spec.definition),
+      colour: spec.colour,
+    ),
+    null => (photo: null, bot: null, colour: null),
   };
-  final faces = (
-    png: (String name) =>
-        bot(name) == null ? ref.watch(agentFacePngProvider(name)).value : null,
-    bot: (String name) => switch (bot(name)) {
-      final spec? => (key: stage.keyOf(spec.definition), colour: spec.colour),
-      null => null,
-    },
-  );
   final pages = [
     for (final page in SettingsPageId.values)
       if (page != SettingsPageId.welcome &&
@@ -90,7 +77,7 @@ final nativeSettingsProvider = Provider<NativeSettingsPages>((ref) {
                 detail: section.description,
                 rows: [
                   for (final setting in section.settings)
-                    ..._rows(setting, controllers, providers, faces),
+                    ..._rows(setting, controllers, providers, face),
                 ],
               ),
           ],
@@ -99,36 +86,33 @@ final nativeSettingsProvider = Provider<NativeSettingsPages>((ref) {
   return (snapshot: SettingsSnapshot(pages: pages), controllers: controllers);
 });
 
+/// An agent's face: a photo's bytes, or a Bot Avatar as the stage's key and
+/// its colour; all null for none, or not read yet.
+typedef _Face = ({Uint8List? photo, String? bot, int? colour});
+
 /// [c] as the rows that carry it: its own, then a group's children and an
 /// accessory, each naming it their parent.
-/// Each agent's face, by its name: a photo as a PNG, null for none or not
-/// painted yet; a Bot Avatar as the stage's key and its colour.
-typedef _Faces = ({
-  Uint8List? Function(String name) png,
-  ({String key, int colour})? Function(String name) bot,
-});
-
 List<SettingRowData> _rows(
   SettingController c,
   Map<String, SettingController> controllers,
   List<LlmProviderConfig> providers,
-  _Faces faces, {
+  _Face Function(String agent) face, {
   String? parent,
   bool accessory = false,
 }) {
   controllers[c.id] = c;
   return [
-    _row(c, providers, faces, parent: parent, accessory: accessory),
+    _row(c, providers, face, parent: parent, accessory: accessory),
     if (c case GroupController(:final children))
       for (final child in children)
         if (child.visible)
-          ..._rows(child, controllers, providers, faces, parent: c.id),
+          ..._rows(child, controllers, providers, face, parent: c.id),
     if (c.accessory case final action?)
       ..._rows(
         action,
         controllers,
         providers,
-        faces,
+        face,
         parent: c.id,
         accessory: true,
       ),
@@ -191,7 +175,7 @@ String _modelLabel(ModelPickController c, List<LlmProviderConfig> providers) {
 SettingRowData _row(
   SettingController c,
   List<LlmProviderConfig> providers,
-  _Faces faces, {
+  _Face Function(String agent) face, {
   String? parent,
   bool accessory = false,
 }) {
@@ -298,39 +282,36 @@ SettingRowData _row(
         ]
         ..tone = _tone(c.tone);
     case CollectionController():
+      _Face? faceOf(CollectionItem item) =>
+          c.hint == UiHint.agents && item.id != null ? face(item.id!) : null;
       row
         ..kind = SettingKind.collection
         ..items = [
           for (final item in c.rows)
-            SettingItemData(
-              title: item.title,
-              subtitle: item.subtitle,
-              error: item.error,
-              icon: _icon(item.glyph),
-              tone: _tone(item.tone),
-              on: item.on,
-              opens: item.opens,
-              image: c.hint == UiHint.agents && item.id != null
-                  ? faces.png(item.id!)
-                  : null,
-              bot: c.hint == UiHint.agents && item.id != null
-                  ? faces.bot(item.id!)?.key
-                  : null,
-              botColour: c.hint == UiHint.agents && item.id != null
-                  ? faces.bot(item.id!)?.colour
-                  : null,
-              actions: [
-                for (final action in item.actions)
-                  SettingItemActionData(
-                    id: action.id,
-                    label: action.label,
-                    enabled: action.enabled,
-                    destructive: action.destructive,
-                    confirm: _confirm(action.confirm),
-                    handsOff: action.handsOff,
-                  ),
-              ],
-            ),
+            if (faceOf(item) case final face)
+              SettingItemData(
+                title: item.title,
+                subtitle: item.subtitle,
+                error: item.error,
+                icon: _icon(item.glyph),
+                tone: _tone(item.tone),
+                on: item.on,
+                opens: item.opens,
+                image: face?.photo,
+                bot: face?.bot,
+                botColour: face?.colour,
+                actions: [
+                  for (final action in item.actions)
+                    SettingItemActionData(
+                      id: action.id,
+                      label: action.label,
+                      enabled: action.enabled,
+                      destructive: action.destructive,
+                      confirm: _confirm(action.confirm),
+                      handsOff: action.handsOff,
+                    ),
+                ],
+              ),
         ]
         ..addLabel = c.addLabel
         ..removeLabel = c.removeLabel
@@ -349,18 +330,10 @@ SettingRowData _row(
               summary: item.summary,
               note: item.note,
               badge: item.badge,
-              tags: switch (item.facts) {
-                null => const [],
-                final f => [
-                  if (f.parameters case final p?) "$p params",
-                  ?f.languages,
-                  if (f.bytes case final b?) formatSize(b),
-                  ?f.quantisation,
-                  if (f.context case final n?) "$n context",
-                  if (f.voices case final v?) plural(v, "voice"),
-                  ?f.licence,
-                ],
-              },
+              tags: [
+                if (item.facts case final f?)
+                  for (final (_, text) in modelFactTags(f)) text,
+              ],
               failure: item.failure,
               received: item.progress?.received,
               total: item.progress?.total,
@@ -786,8 +759,10 @@ class SettingsBridge implements SettingsIntents {
     final providers = _pickerProviders(c);
     final entries = _catalogOf(c);
     final favourites = _container.read(appSettingsProvider).favouriteModels;
+    final starred = favourites.toSet();
     bool picked(String? providerId, String? modelId) =>
         c.choice.providerId == providerId && c.choice.modelId == modelId;
+    final index = {for (final (i, e) in entries.indexed) e.ref: i};
     final names = {
       for (final p in providers) p.id: p.displayName,
       for (final e in entries) e.providerId: e.providerName,
@@ -831,14 +806,11 @@ class SettingsBridge implements SettingsIntents {
             speaks: e.info.speaks,
             custom: e.custom,
             selected: picked(e.providerId, e.info.id),
-            favourite: favourites.contains(e.ref),
+            favourite: starred.contains(e.ref),
           ),
       ],
       // In the order they were starred, which is the order they were wanted.
-      favourites: [
-        for (final f in favourites)
-          if (entries.indexWhere((e) => e.ref == f) case final i when i >= 0) i,
-      ],
+      favourites: [for (final f in favourites) ?index[f]],
       providers: [
         for (final MapEntry(key: id, value: name) in names.entries)
           ModelProviderData(id: id, name: name),
@@ -862,12 +834,15 @@ class SettingsBridge implements SettingsIntents {
     String? modelId,
   ) {
     final providers = _pickerProviders(c);
+    // Only a model added by hand is edited.
     final model = modelId == null
         ? null
-        : _catalogOf(c)
-              .where((e) => e.providerId == providerId && e.info.id == modelId)
+        : providers
+              .where((p) => p.id == providerId)
               .firstOrNull
-              ?.info;
+              ?.customModels
+              .where((m) => m.id == modelId)
+              .firstOrNull;
     if (modelId != null && model == null) return null;
     return ModelForm(
       role: c.role,
@@ -965,20 +940,20 @@ class SettingsBridge implements SettingsIntents {
 
   @override
   Future<BotAvatarsData> botAvatars(String? agent) async {
-    final face = agent == null
-        ? null
-        : await _container.read(
-            agentPictureProvider((project: null, name: agent)).future,
-          );
+    final (face, presets, imported) = await (
+      agent == null
+          ? Future<AgentFace?>.value()
+          : _container.read(
+              agentPictureProvider((project: null, name: agent)).future,
+            ),
+      _container.read(botAvatarPresetsProvider.future),
+      _container.read(importedBotAvatarsProvider.future),
+    ).wait;
     final initial = switch (face) {
       AgentBot(:final spec) => spec,
       _ => null,
     };
-    final entries = botAvatarEntries(
-      await _container.read(botAvatarPresetsProvider.future),
-      await _container.read(importedBotAvatarsProvider.future),
-      initial: initial,
-    );
+    final entries = botAvatarEntries(presets, imported, initial: initial);
     return BotAvatarsData(
       entries: [
         for (final e in entries)

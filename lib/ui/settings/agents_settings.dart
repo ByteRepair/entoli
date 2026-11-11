@@ -244,7 +244,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
   /// reads a rung of that one, so it reloads every project's; a project's
   /// own pages have one target and reload that one alone.
   Future<void> _reload(String? target) => target == null
-      ? reloadAllPromptLibraries(ref)
+      ? reloadAllPromptLibraries(ref.read)
       : ref.read(promptLibraryProvider(target).notifier).reload();
 
   Future<void> _export(PromptDocument agent) => _guard(
