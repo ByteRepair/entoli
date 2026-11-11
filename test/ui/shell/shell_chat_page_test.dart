@@ -51,6 +51,10 @@ void main() {
     ),
   );
 
+  /// The shell composer on top, as the Swift reaches it.
+  ComposerIntents composer() =>
+      app.container.read(shellSlotsProvider).composer.top!;
+
   /// A chat with something said in it, open: [said] messages, enough past
   /// the window's height to scroll.
   Future<void> openChat(
@@ -187,9 +191,6 @@ void main() {
   });
 
   group("the keyboard", () {
-    ComposerIntents composer() =>
-        app.container.read(shellSlotsProvider).composer.top!;
-
     testWidgets("goes with a drag back through the conversation", (
       tester,
     ) async {
@@ -243,9 +244,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(position.pixels, lessThan(position.maxScrollExtent));
 
-    final composer = app.container.read(shellSlotsProvider).composer.top!;
-    composer.edited("hello", 5, 5);
-    composer.send();
+    composer().edited("hello", 5, 5);
+    composer().send();
     await settleIo(tester);
     expect(position.pixels, position.maxScrollExtent);
   });

@@ -706,10 +706,8 @@ abstract class NativeShell {
 /// The window's own state, which the client reports.
 @FlutterApi()
 abstract class WindowEvents {
-  /// How much of the Flutter view the client's bars cover, from its edges —
-  /// a bar riding on the keyboard reaches over the keyboard too. The app
-  /// hands it to the conversation as padding, less what Flutter knows of the
-  /// keyboard, so it scrolls under them.
+  /// How much of the Flutter view the client's bars cover from its edges, a
+  /// bar riding on the keyboard reaching over it; see `ShellInsets`.
   void insets(double left, double top, double right, double bottom);
 
   /// The sidebar shown or hidden by the client's own control.

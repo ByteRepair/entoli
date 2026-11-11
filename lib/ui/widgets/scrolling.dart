@@ -56,16 +56,20 @@ class ScrollFollow {
     jumpIfFollowing();
   }
 
-  /// What the caller's `NotificationListener<ScrollMetricsNotification>`
-  /// forwards. The viewport shrinking — the keyboard coming up — would
-  /// otherwise leave the end it was following under the keyboard.
-  bool onMetrics(ScrollMetricsNotification notification) {
-    jumpIfFollowing();
-    return false;
-  }
+  double? _viewport;
 
-  /// What the caller's `NotificationListener<ScrollNotification>` forwards.
-  bool onNotification(ScrollNotification notification) {
+  /// What the caller's `NotificationListener` forwards: its scroll
+  /// notifications, and its metrics, of which only the viewport's size
+  /// matters here — the keyboard coming up would otherwise leave the end it
+  /// was following under the keys. The content growing is the caller's to
+  /// say, by [jumpIfFollowing].
+  bool onNotification(Notification notification) {
+    if (notification is ScrollMetricsNotification) {
+      final viewport = notification.metrics.viewportDimension;
+      if (_viewport != null && viewport != _viewport) jumpIfFollowing();
+      _viewport = viewport;
+      return false;
+    }
     if (notification is UserScrollNotification) {
       // On a normal (non-reversed) list `forward` is the user's drag running
       // toward the older messages — the gesture that says stop — and

@@ -188,7 +188,7 @@ class _ThoughtPainter extends CustomPainter {
 
   /// A dot's colour by how much of a line it is, in [_steps] steps, lit and
   /// not: built once per pair of colours rather than per dot, or per pick.
-  static const _steps = 256;
+  static const _steps = 64;
   static final _ramps = <(Color, Color), (List<Color>, List<Color>)>{};
   late final _shades = _ramps.putIfAbsent((
     scheme.outlineVariant,
@@ -203,6 +203,10 @@ class _ThoughtPainter extends CustomPainter {
         i / (_steps - 1),
       )!.withValues(alpha: alpha + gain * i / (_steps - 1)),
   ];
+
+  var _xs = Float32List(0), _ys = Float32List(0), _points = Float32List(0);
+  var _stepOf = Uint16List(0);
+  final _counts = Int32List(2 * _steps + 1), _next = Int32List(2 * _steps + 1);
 
   double _pointX(int i, double width) => (i + 0.5) / count * width;
 
@@ -224,9 +228,17 @@ class _ThoughtPainter extends CustomPainter {
     // apiece. Lit steps come after the dim ones.
     final columns = (size.width / _cell).ceil(),
         rows = (size.height / _cell).ceil();
-    final xs = Float32List(columns * rows), ys = Float32List(columns * rows);
-    final steps = Uint16List(columns * rows);
-    final counts = List.filled(2 * _steps + 1, 0);
+    final cells = columns * rows;
+    // Kept between frames, which the field is redrawn on for as long as it
+    // moves: only a new size makes new ones.
+    if (_xs.length != cells) {
+      _xs = Float32List(cells);
+      _ys = Float32List(cells);
+      _stepOf = Uint16List(cells);
+      _points = Float32List(2 * cells);
+    }
+    final (xs, ys, steps, points) = (_xs, _ys, _stepOf, _points);
+    final counts = _counts..fillRange(0, _counts.length, 0);
     var dots = 0;
     for (var x = _cell / 2; x < size.width; x += _cell) {
       final u = x / size.width;
@@ -261,8 +273,7 @@ class _ThoughtPainter extends CustomPainter {
     for (var i = 1; i < counts.length; i++) {
       counts[i] += counts[i - 1];
     }
-    final points = Float32List(2 * dots);
-    final next = [...counts];
+    final next = _next..setAll(0, counts);
     for (var i = 0; i < dots; i++) {
       final at = 2 * next[steps[i]]++;
       points[at] = xs[i];

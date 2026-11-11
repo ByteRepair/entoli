@@ -173,9 +173,7 @@ void main() {
     testWidgets(
       "on iOS a swipe from the edge goes back to the list, a short one stays",
       (tester) async {
-        await app.pump(tester, const SettingsPage());
-        await tester.tap(tile("General"));
-        await settleIo(tester);
+        await pumpSettings(tester, app, SettingsCategory.general);
         final edge = Offset(5, tester.getCenter(find.text("Appearance")).dy);
 
         await tester.dragFrom(edge, const Offset(40, 0));

@@ -27,12 +27,8 @@ struct SidebarView: View {
 
   private var state: SidebarSnapshot { model.sidebar }
 
-  #if os(iOS)
-    @Environment(\.horizontalSizeClass) private var width
-    private var collapsed: Bool { width == .compact }
-  #else
-    private let collapsed = false
-  #endif
+  /// The split view is one column: an iPhone.
+  let collapsed: Bool
 
   /// The chat that is open, highlighted — except where the split view is one
   /// column, where a selection is what holds the detail in front: with one

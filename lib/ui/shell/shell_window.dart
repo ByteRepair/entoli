@@ -39,10 +39,8 @@ final windowSnapshotProvider = Provider<WindowSnapshot>((ref) {
 final shellInsets = ValueNotifier(EdgeInsets.zero);
 
 /// [shellInsets] as the view padding of everything under [child], and the
-/// padding Flutter derives from it as it does from the system's: less the
-/// view insets, the keyboard Flutter hears of itself and shrinks a page by.
-/// Taken as padding whole, the keyboard was counted twice, the conversation
-/// held a keyboard's height above the composer. Above the Navigator, from
+/// padding less the view insets, as Flutter derives the system's: the
+/// keyboard is in both, and a page is already shrunk by it. Above the Navigator, from
 /// `MaterialApp.builder`: a page pushed over the conversation is the
 /// Navigator's, not the bridge's, and its bar has to clear the toolbar as
 /// the conversation does.

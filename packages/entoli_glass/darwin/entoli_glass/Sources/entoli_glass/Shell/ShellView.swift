@@ -28,12 +28,11 @@ struct ShellView: View {
     private let collapsed = false
   #endif
 
-  /// The swipe in from the edge to the list where the split view is one
-  /// column and the chat is in front: the Flutter app's drawer swipe, and
-  /// the split view's own back swipe, which went with the back button the
-  /// bar hides for the sidebar button. A Flutter page keeps the edge for
-  /// its own back swipe.
-  private var edgeSwipe: (() -> Void)? {
+  /// The way to the list where the split view is one column and the chat is
+  /// in front: the bar's sidebar button, and the swipe in from the edge that
+  /// went with the split view's back button the bar hides for it. A Flutter
+  /// page keeps the edge for its own back swipe.
+  private var toList: (() -> Void)? {
     collapsed && !model.window.covered && !model.voice.present ? model.showSidebar : nil
   }
 
@@ -45,7 +44,7 @@ struct ShellView: View {
     NavigationSplitView(
       columnVisibility: $columns, preferredCompactColumn: $model.compactColumn
     ) {
-      SidebarView(model: model)
+      SidebarView(model: model, collapsed: collapsed)
         .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 400)
     } detail: {
       GeometryReader { proxy in
@@ -57,10 +56,9 @@ struct ShellView: View {
         }
       }
       #if os(iOS)
-        // The Flutter view keeps the whole height: Flutter hears of the
-        // keyboard itself and shrinks its page by it. The bottom inset still
-        // reaches over the keyboard, under the composer that rides on it,
-        // and Dart takes Flutter's view insets out of it (`ShellInsets`).
+        // The Flutter view keeps the whole height and shrinks its page for
+        // the keyboard itself; the inset still reaches over the keyboard,
+        // which Dart's `ShellInsets` takes out.
         .ignoresSafeArea(.keyboard)
       #endif
       // Over the Flutter view, which draws nothing there: the new-chat
@@ -83,9 +81,9 @@ struct ShellView: View {
         }
         .animation(ComposerView.motion, value: model.turn.isEmpty)
       }
-      .windowBar(model, collapsed: collapsed)
+      .windowBar(model, toList: toList)
       #if os(iOS)
-        .edgeSwipe(edgeSwipe)
+        .edgeSwipe(toList)
       #endif
     }
     // Voice mode over everything: the sidebar too, as the Flutter page was
@@ -170,16 +168,15 @@ extension View {
   /// The window's title bar: the chat's, or the Flutter page's over it — a
   /// way back and the page's own buttons in place of the chat's. A page with
   /// no bar of its own leaves the chat's title standing and nothing to press.
-  /// The chat's leads with the way to the list where the split view is
-  /// [collapsed].
-  fileprivate func windowBar(_ model: ShellModel, collapsed: Bool) -> some View {
+  /// The chat's leads with [toList] where there is one.
+  fileprivate func windowBar(_ model: ShellModel, toList: (() -> Void)?) -> some View {
     let page = model.window.covered
     let bar =
       !page ? model.chatBar : model.pageBar.present ? model.pageBar : model.chatBar.bare
     return self
       .titleBar(
         bar, intents: page ? model.say.pageBar : model.say.chatBar,
-        sidebar: page || !collapsed ? nil : model.showSidebar)
+        sidebar: toList)
       #if os(iOS)
         // A page whose bar Flutter still draws has it alone: one on screen.
         .toolbar(page && !model.pageBar.present ? .hidden : .automatic, for: .navigationBar)

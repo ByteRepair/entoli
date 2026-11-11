@@ -248,22 +248,11 @@ class _PagesState extends State<_Pages> with SingleTickerProviderStateMixin {
             is CupertinoPageTransitionsBuilder;
   }
 
-  double get _leadingPadding {
-    final padding = MediaQuery.paddingOf(context);
-    return Directionality.of(context) == TextDirection.ltr
-        ? padding.left
-        : padding.right;
-  }
+  bool get _ltr => Directionality.of(context) == TextDirection.ltr;
 
   /// The share of the width a drag of [delta] is, leading edge to trailing.
-  double _share(double delta) {
-    final width = context.size?.width ?? 1;
-    return switch (Directionality.of(context)) {
-          TextDirection.ltr => delta,
-          TextDirection.rtl => -delta,
-        } /
-        width;
-  }
+  double _share(double delta) =>
+      (_ltr ? delta : -delta) / (context.size?.width ?? 1);
 
   void _swipe(DragUpdateDetails details) =>
       _page.value -= _share(details.primaryDelta ?? 0);
@@ -300,6 +289,7 @@ class _PagesState extends State<_Pages> with SingleTickerProviderStateMixin {
   Widget build(BuildContext context) {
     final paged = widget.paged;
     final animation = paged ? _page : kAlwaysCompleteAnimation;
+    final padding = MediaQuery.paddingOf(context);
     return IgnorePointer(
       // As a route does: a tap mid-slide is on neither page.
       ignoring: animation.isAnimating,
@@ -339,7 +329,7 @@ class _PagesState extends State<_Pages> with SingleTickerProviderStateMixin {
               top: 0,
               bottom: 0,
               // iOS's own edge, or the safe area where that is wider.
-              width: math.max(20, _leadingPadding),
+              width: math.max(20, _ltr ? padding.left : padding.right),
               child: GestureDetector(
                 behavior: HitTestBehavior.translucent,
                 onHorizontalDragUpdate: _swipe,
