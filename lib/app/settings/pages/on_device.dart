@@ -179,6 +179,28 @@ final onDeviceSettings = [
     },
   ),
   SettingSpec(
+    id: "unloadAll",
+    path: (page: _page, section: "running"),
+    weight: 5,
+    title: "Unload all",
+    // Part of the loaded models' own view where a frontend draws that whole.
+    hint: UiHint.running,
+    build: (c) {
+      final engine = c.ref.read(localEngineProvider);
+      final running = c.ref.watch(localLlmStateProvider);
+      return ActionController(
+        c.spec,
+        label: "Unload all",
+        description: "Frees what every loaded model holds.",
+        visible: running.isNotEmpty,
+        run: () async {
+          await engine.stopAll();
+          return null;
+        },
+      );
+    },
+  ),
+  SettingSpec(
     id: "onDeviceLlm",
     path: (page: _page, section: "running"),
     weight: 10,

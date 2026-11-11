@@ -156,6 +156,8 @@ class SettingRow extends StatelessWidget {
       final SlotsController c => c.typed(<V>(c) => _Slots<V>(c)),
       final RangeController c => _Range(c),
       final KeyValuesController c => _KeyValues(c),
+      // The loaded models' view draws its own Unload all.
+      ActionController(hint: UiHint.running) => const SizedBox.shrink(),
       final ActionController c => _Action(c),
       final GroupController c when c.hint == UiHint.buttons => _Buttons(c),
       final GroupController c when c.hint == UiHint.recommended => _Recommended(
