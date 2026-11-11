@@ -2,10 +2,10 @@ import SwiftUI
 
 #if os(iOS)
   import UIKit
-  typealias PlatformViewController = UIViewController
+  public typealias PlatformViewController = UIViewController
 #else
   import AppKit
-  typealias PlatformViewController = NSViewController
+  public typealias PlatformViewController = NSViewController
 #endif
 
 /// The one Flutter view controller, inside SwiftUI. It is held by a container

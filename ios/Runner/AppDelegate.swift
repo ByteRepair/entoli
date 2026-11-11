@@ -1,54 +1,64 @@
 import Flutter
-import UIKit
+import SwiftUI
 import UserNotifications
+import entoli_glass
 import entoli_menu
 
+/// The app, as SwiftUI's own template has one: a window whose content is
+/// the frontend the core picked, and the app's menus. The one Flutter engine
+/// is the delegate's, started before the window is asked for.
 @main
-@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+struct EntoliApp: App {
+  @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+
+  var body: some Scene {
+    WindowGroup {
+      FrontendView(flutter: delegate.flutter)
+        // Scene URLs come to SwiftUI, not to the delegate: handed on, as
+        // the plugins listen there (`app_links` for `entoli://`).
+        .onOpenURL { url in
+          _ = delegate.application(UIApplication.shared, open: url, options: [:])
+        }
+        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+          _ = delegate.application(
+            UIApplication.shared, continue: activity, restorationHandler: { _ in })
+        }
+    }
+    .commands { AppCommands() }
+  }
+}
+
+/// A `FlutterAppDelegate` still, which is how plugins hear the app's events.
+final class AppDelegate: FlutterAppDelegate {
+  let engine = FlutterEngine(name: "entoli")
+
+  /// The engine's view, the engine running and every plugin and channel on
+  /// it, set up the first time anything asks: the window's content or the
+  /// launch, whichever SwiftUI gets to first.
+  @MainActor private(set) lazy var flutter: FlutterViewController = {
+    engine.run()
+    GeneratedPluginRegistrant.register(with: engine)
+    let messenger = engine.binaryMessenger
+    VoiceChannel.register(with: messenger)
+    RemindersPlugin.register(with: messenger)
+    AppleFmChannel.register(with: messenger)
+    // The models run in the app's own process here: iOS cannot start one.
+    MlxChannel.register(with: messenger)
+    ClipboardChannel.register(with: messenger)
+    IntentBridge.shared.register(with: messenger)
+    BrowserChannel.register(with: messenger)
+    return FlutterViewController(engine: engine, nibName: nil, bundle: nil)
+  }()
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    let launched = super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    _ = flutter
     // Before this returns, or the tap that launched the app reaches no
     // delegate and its chat never opens.
     UNUserNotificationCenter.current().delegate = RemindersPlugin.shared
-    return launched
-  }
-
-  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
-    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-    VoiceChannel.register(with: engineBridge)
-    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "RemindersPlugin") {
-      RemindersPlugin.register(with: registrar.messenger())
-    }
-    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "AppleFmChannel") {
-      AppleFmChannel.register(with: registrar.messenger())
-    }
-    // The models run in the app's own process here: iOS cannot start one.
-    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "MlxChannel") {
-      MlxChannel.register(with: registrar.messenger())
-    }
-    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ClipboardChannel") {
-      ClipboardChannel.register(with: registrar.messenger())
-    }
-    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "IntentBridge") {
-      IntentBridge.shared.register(with: registrar.messenger())
-    }
-    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "BrowserChannel") {
-      BrowserChannel.register(with: registrar.messenger())
-    }
-  }
-
-  /// The menu bar is `entoli_menu`'s; UIKit asks only the app's own
-  /// responders to build it and to run its items.
-  override func buildMenu(with builder: UIMenuBuilder) {
-    super.buildMenu(with: builder)
-    EntoliMenuPlugin.shared.build(builder)
-  }
-
-  @objc func entoliMenuItem(_ sender: UICommand) {
-    EntoliMenuPlugin.shared.select(sender)
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 }
 

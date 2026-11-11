@@ -28,18 +28,9 @@ import Speech
 class VoiceChannel: NSObject {
   private static var instance: VoiceChannel?
 
-#if os(iOS)
-  static func register(with bridge: FlutterImplicitEngineBridge) {
-    guard let registrar = bridge.pluginRegistry.registrar(forPlugin: "VoiceChannel") else {
-      return
-    }
-    instance = VoiceChannel(messenger: registrar.messenger())
-  }
-#else
   static func register(with messenger: FlutterBinaryMessenger) {
     instance = VoiceChannel(messenger: messenger)
   }
-#endif
 
   private let channel: FlutterMethodChannel
   private let synthesizer = AVSpeechSynthesizer()

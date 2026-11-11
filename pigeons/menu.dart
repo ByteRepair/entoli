@@ -14,19 +14,9 @@ import "package:pigeon/pigeon.dart";
         "packages/entoli_menu/darwin/entoli_menu/Sources/entoli_menu/Contract/MenuContract.g.swift",
   ),
 )
-/// What the platform itself does from a menu: macOS's alone, iPadOS having
-/// its own already.
-enum NativeSystemItem {
-  services,
-  hide,
-  hideOthers,
-  showAll,
-  quit,
-  toggleFullScreen,
-  minimize,
-  zoom,
-  arrangeInFront,
-}
+/// What a menu is to the platform: its own app, File, View and Help menus,
+/// which the app's items join, or a menu of the app's own.
+enum NativeMenuRole { app, file, view, help, own }
 
 /// One item: [key] is the character typed with the chord key, lower case.
 class NativeMenuItem {
@@ -47,23 +37,18 @@ class NativeMenuItem {
   bool enabled;
 }
 
-/// One menu: its items in groups, a separator between each, and the
-/// platform's own after them.
+/// One menu: its items in groups, a separator between each.
 class NativeMenu {
-  NativeMenu({
-    required this.title,
-    this.groups = const [],
-    this.system = const [],
-  });
+  NativeMenu({required this.title, required this.role, this.groups = const []});
 
   String title;
+  NativeMenuRole role;
   List<List<NativeMenuItem>> groups;
-  List<NativeSystemItem> system;
 }
 
 @HostApi()
 abstract class NativeMenuBar {
-  /// The whole bar, replacing what was there. The first menu is the app's.
+  /// The whole bar, replacing what was there.
   void show(List<NativeMenu> menus);
 }
 

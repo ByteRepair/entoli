@@ -33,11 +33,14 @@ struct ShellView: View {
   /// went with the split view's back button the bar hides for it. A Flutter
   /// page keeps the edge for its own back swipe.
   private var toList: (() -> Void)? {
-    collapsed && !model.window.covered && !model.voice.present ? model.showSidebar : nil
+    model.ready && collapsed && !model.window.covered && !model.voice.present
+      ? model.showSidebar : nil
   }
 
+  /// Before the app is up — the welcome tour, first-run setup — the
+  /// conversation's column alone.
   private func visibility(_ shown: Bool) -> NavigationSplitViewVisibility {
-    shown ? .all : .detailOnly
+    shown && model.ready ? .all : .detailOnly
   }
 
   var body: some View {
@@ -113,9 +116,22 @@ struct ShellView: View {
       .toolbar(model.voice.present ? .hidden : .automatic, for: .windowToolbar)
     #endif
     .preferredColorScheme(model.window.colorScheme)
+    #if os(macOS)
+      // The app's, not the window's: popovers, menus and sheets are windows
+      // of their own, and the system's glass follows the app. Nil follows the
+      // system.
+      .onChange(of: model.window.dark, initial: true) { _, dark in
+        NSApp.appearance = dark.map { NSAppearance(named: $0 ? .darkAqua : .aqua) } ?? nil
+      }
+      .reportsPointer(over: flutter, to: model)
+    #endif
+    .welcome(!model.ready)
     .onChange(of: model.window.sidebarShown, initial: true) { _, shown in
       guard visibility(shown) != columns else { return }
       withAnimation(.smooth(duration: 0.3)) { columns = visibility(shown) }
+    }
+    .onChange(of: model.ready) { _, _ in
+      columns = visibility(model.window.sidebarShown)
     }
     .onChange(of: columns) { _, columns in
       let shown = columns != .detailOnly
@@ -188,3 +204,39 @@ extension View {
       #endif
   }
 }
+
+extension View {
+  /// The welcome tour and first-run setup stand alone: no toolbar to leave
+  /// by, no way to the sidebar.
+  @ViewBuilder fileprivate func welcome(_ on: Bool) -> some View {
+    if on {
+      self.toolbar(removing: .sidebarToggle)
+        #if os(macOS)
+          .toolbar(.hidden, for: .windowToolbar)
+        #else
+          .toolbar(.hidden, for: .navigationBar)
+        #endif
+    } else {
+      self
+    }
+  }
+}
+
+#if os(macOS)
+  extension View {
+    /// The pointer over the window, in [flutter]'s own coordinates, for the
+    /// agent's face to follow wherever it is over the window: the sidebar
+    /// lies to the view's left, so its x is negative there, and AppKit's
+    /// bottom-left origin is flipped to Flutter's top-left.
+    fileprivate func reportsPointer(over flutter: NSViewController, to model: ShellModel)
+      -> some View
+    {
+      onContinuousHover { _ in
+        guard let window = flutter.view.window else { return }
+        let view = flutter.view
+        let point = view.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        model.say.window.pointer(x: point.x - view.bounds.minX, y: view.bounds.maxY - point.y) { _ in }
+      }
+    }
+  }
+#endif

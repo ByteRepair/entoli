@@ -36,9 +36,16 @@ struct NewChatView: View {
     if state.starting {
       ProgressView().controlSize(.large)
     } else {
-      // The composer pads the page rather than ending it: the page scrolls
-      // on beneath it, seen through the glass.
-      page
+      // Right above the composer, and like it padding the page rather than
+      // ending it: the page scrolls on beneath both, seen through the glass.
+      page.safeAreaInset(edge: .bottom, spacing: 0) {
+        Text("Type / for commands, @ for agents.")
+          .font(.caption)
+          .foregroundStyle(.tertiary)
+          .multilineTextAlignment(.center)
+          .padding(.horizontal, 24)
+          .padding(.vertical, 12)
+      }
     }
   }
 
@@ -82,12 +89,6 @@ struct NewChatView: View {
           }
         }
         if state.showStarters { starters }
-        // The page's last line, as the Flutter screen has it: pinned over
-        // the composer, it lay across whatever scrolled beneath.
-        Text("Type / for commands, @ for agents.")
-          .font(.caption)
-          .foregroundStyle(.tertiary)
-          .multilineTextAlignment(.center)
       }
       .padding(.horizontal, 24)
       .padding(.vertical, 32)

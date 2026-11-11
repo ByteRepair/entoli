@@ -164,52 +164,34 @@ String titleOf(AppItem item, AppFacts facts) => switch (item) {
   _ => item.title,
 };
 
-/// What the platform itself does from a menu: macOS's alone.
-enum SystemMenuItem {
-  services,
-  hide,
-  hideOthers,
-  showAll,
-  quit,
-  toggleFullScreen,
-  minimize,
-  zoom,
-  arrangeInFront,
-}
+/// What a menu is to the platform, which has its own of some: the app's
+/// menu, File, View and Help are the platform's, the app's items added to
+/// them; any other is a menu of the app's own. What the platform puts in
+/// them itself (Hide, Quit, Full Screen, the Window menu) is its business.
+enum MenuRole { app, file, view, help, own }
 
-/// One menu of the bar: its items in groups, and the platform's own after
-/// them.
+/// One menu of the bar: its items in groups.
 class AppMenu {
-  const AppMenu(this.title, this.groups, {this.system = const []});
+  const AppMenu(this.title, this.role, this.groups);
 
   final String title;
+  final MenuRole role;
   final List<List<AppItem>> groups;
-  final List<SystemMenuItem> system;
 }
 
-/// The menu bar, as data: the one layout both frontends show. The first menu
-/// is the app's own, which the platform titles with the app's name.
+/// The menu bar, as data: the one layout both frontends show. The app's
+/// menu is titled with the app's name by the platform whatever this says.
 const List<AppMenu> appMenus = [
-  AppMenu(
-    "Entoli",
-    [
-      [Destination.about],
-      [Destination.settings, Destination.profile, Destination.marketplace],
-    ],
-    system: [
-      SystemMenuItem.services,
-      SystemMenuItem.hide,
-      SystemMenuItem.hideOthers,
-      SystemMenuItem.showAll,
-      SystemMenuItem.quit,
-    ],
-  ),
-  AppMenu("File", [
+  AppMenu("Entoli", MenuRole.app, [
+    [Destination.about],
+    [Destination.settings, Destination.profile, Destination.marketplace],
+  ]),
+  AppMenu("File", MenuRole.file, [
     [AppAction.newChat, AppAction.newAnonymousChat, AppAction.newOmadaChat],
     [Destination.switchProject],
     [Destination.backUp],
   ]),
-  AppMenu("Chat", [
+  AppMenu("Chat", MenuRole.own, [
     [AppAction.pinChat, AppAction.renameChat, AppAction.moveChat],
     [
       Destination.chatSettings,
@@ -219,30 +201,17 @@ const List<AppMenu> appMenus = [
     ],
     [AppAction.deleteChat],
   ]),
-  AppMenu("Project", [
+  AppMenu("Project", MenuRole.own, [
     [
       Destination.projectWorkspace,
       Destination.projectMemories,
       Destination.projectSettings,
     ],
   ]),
-  AppMenu(
-    "View",
-    [
-      [Destination.toggleSidebar],
-    ],
-    system: [SystemMenuItem.toggleFullScreen],
-  ),
-  AppMenu(
-    "Window",
-    [],
-    system: [
-      SystemMenuItem.minimize,
-      SystemMenuItem.zoom,
-      SystemMenuItem.arrangeInFront,
-    ],
-  ),
-  AppMenu("Help", [
+  AppMenu("View", MenuRole.view, [
+    [Destination.toggleSidebar],
+  ]),
+  AppMenu("Help", MenuRole.help, [
     [Destination.welcome, Destination.keyboardShortcuts],
   ]),
 ];

@@ -17,8 +17,8 @@ flutter:
   plugin:
     platforms:
       ios:
-        pluginClass: EntoliMenuPlugin
+        pluginClass: MenuModel
         sharedDarwinSource: true
       macos:
-        pluginClass: EntoliMenuPlugin
+        pluginClass: MenuModel
         sharedDarwinSource: true

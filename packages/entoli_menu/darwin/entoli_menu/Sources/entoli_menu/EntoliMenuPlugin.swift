@@ -1,22 +1,21 @@
+import SwiftUI
+
 #if os(iOS)
   import Flutter
-  import UIKit
 #else
-  import AppKit
   import FlutterMacOS
 #endif
 
-/// The app's menu bar, one source for both Runners (`sharedDarwinSource`):
-/// Dart sends the menus as data with `show`, and an item picked goes back by
-/// its id. macOS sets `NSApp.mainMenu`; iPadOS builds through `UIMenuBuilder`,
-/// which an iPhone answers with its keys. Each item carries its keys as the
-/// platform's own key equivalent, so the menu holds them and the app's key
-/// handler stands down for them.
-public final class EntoliMenuPlugin: NSObject, FlutterPlugin, NativeMenuBar {
-  public static let shared = EntoliMenuPlugin()
+/// The app's menus as Dart last sent them, and the way back: one source for
+/// both Runners (`sharedDarwinSource`). The menu bar itself is SwiftUI's —
+/// `AppCommands`, in the app's `.commands` — so the platform puts in what it
+/// always does (Hide, Quit, Full Screen, the Window menu) and this adds the
+/// app's items to it.
+public final class MenuModel: NSObject, ObservableObject, NativeMenuBar, FlutterPlugin {
+  public static let shared = MenuModel()
 
+  @Published var menus: [NativeMenu] = []
   private var picks: NativeMenuPicks?
-  private var menus: [NativeMenu] = []
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     #if os(iOS)
@@ -28,152 +27,90 @@ public final class EntoliMenuPlugin: NSObject, FlutterPlugin, NativeMenuBar {
     NativeMenuBarSetup.setUp(binaryMessenger: messenger, api: shared)
   }
 
-  func show(menus: [NativeMenu]) throws {
-    self.menus = menus
-    #if os(iOS)
-      UIMenuSystem.main.setNeedsRebuild()
-    #else
-      NSApp.mainMenu = mainMenu()
-    #endif
+  func show(menus: [NativeMenu]) throws { self.menus = menus }
+
+  func pick(_ id: String) { picks?.picked(id: id) { _ in } }
+
+  func groups(_ role: NativeMenuRole) -> [[NativeMenuItem]] {
+    menus.first { $0.role == role }?.groups ?? []
   }
 
-  private func picked(_ id: String) {
-    picks?.picked(id: id) { _ in }
+  /// The app's own menus, in order.
+  var own: [NativeMenu] { menus.filter { $0.role == .own } }
+}
+
+/// The menu bar's items, for the app's `.commands`. Each holds its keys as a
+/// keyboard shortcut, so the menu runs them and the Flutter key handler
+/// stands down for them.
+public struct AppCommands: Commands {
+  @ObservedObject var model: MenuModel
+
+  public init(model: MenuModel = .shared) { self.model = model }
+
+  public var body: some Commands {
+    // The app's menu: About in About's place, the rest in Settings'.
+    CommandGroup(replacing: .appInfo) {
+      MenuGroups(model: model, groups: Array(model.groups(.app).prefix(1)))
+    }
+    CommandGroup(replacing: .appSettings) {
+      MenuGroups(model: model, groups: Array(model.groups(.app).dropFirst()))
+    }
+    CommandGroup(replacing: .newItem) {
+      MenuGroups(model: model, groups: model.groups(.file))
+    }
+    CommandGroup(before: .sidebar) {
+      MenuGroups(model: model, groups: model.groups(.view))
+    }
+    CommandGroup(replacing: .help) {
+      MenuGroups(model: model, groups: model.groups(.help))
+    }
+    // A menu bar is a fixed list of declarations, so each of the app's own
+    // menus has a slot.
+    OwnMenu(model: model, index: 0)
+    OwnMenu(model: model, index: 1)
+    OwnMenu(model: model, index: 2)
+    OwnMenu(model: model, index: 3)
   }
+}
 
-  #if os(iOS)
-    /// From the app delegate's `buildMenu(with:)`, which UIKit asks only of
-    /// the app's own responders. The first menu's items go into UIKit's
-    /// application menu; a menu titled as one of UIKit's goes at the top of
-    /// it; the rest go before Window, in order. The system's Settings goes,
-    /// the app's own taking ⌘,.
-    public func build(_ builder: UIMenuBuilder) {
-      guard builder.system == .main, let app = menus.first else { return }
-      builder.remove(menu: .preferences)
-      builder.insertChild(menu(app, inline: true), atStartOfMenu: .application)
-      let system: [String: UIMenu.Identifier] = [
-        "File": .file, "Edit": .edit, "View": .view, "Window": .window, "Help": .help,
-      ]
-      for item in menus.dropFirst() where !item.groups.isEmpty {
-        if let id = system[item.title] {
-          builder.insertChild(menu(item, inline: true), atStartOfMenu: id)
-        } else {
-          builder.insertSibling(menu(item, inline: false), beforeMenu: .window)
-        }
+struct OwnMenu: Commands {
+  @ObservedObject var model: MenuModel
+  let index: Int
+
+  var body: some Commands {
+    if index < model.own.count {
+      CommandMenu(model.own[index].title) {
+        MenuGroups(model: model, groups: model.own[index].groups)
       }
     }
+  }
+}
 
-    /// From the app delegate's action for every item: the item says which by
-    /// its id.
-    public func select(_ command: UICommand) {
-      guard let id = command.propertyList as? String else { return }
-      picked(id)
-    }
+/// Groups of items, a divider between each.
+struct MenuGroups: View {
+  let model: MenuModel
+  let groups: [[NativeMenuItem]]
 
-    private func menu(_ menu: NativeMenu, inline: Bool) -> UIMenu {
-      let groups = menu.groups.map { group in
-        UIMenu(title: "", options: .displayInline, children: group.map(command))
-      }
-      return UIMenu(
-        title: inline ? "" : menu.title,
-        identifier: UIMenu.Identifier("io.byterepair.entoli.menu.\(menu.title)"),
-        options: inline ? .displayInline : [],
-        children: groups)
-    }
-
-    private func command(_ item: NativeMenuItem) -> UIMenuElement {
-      let action = Selector(("entoliMenuItem:"))
-      let command: UICommand
-      if let key = item.key {
-        var flags: UIKeyModifierFlags = .command
-        if item.shift { flags.insert(.shift) }
-        if item.alt { flags.insert(.alternate) }
-        command = UIKeyCommand(
-          title: item.title, action: action, input: key, modifierFlags: flags,
-          propertyList: item.id)
-      } else {
-        command = UICommand(title: item.title, action: action, propertyList: item.id)
-      }
-      if !item.enabled { command.attributes = .disabled }
-      return command
-    }
-  #else
-    /// The whole bar: the app's menu titled with the app's name, Window and
-    /// Help given to AppKit as its own so it fills them as it does.
-    private func mainMenu() -> NSMenu {
-      let bar = NSMenu()
-      for (i, menu) in menus.enumerated() {
-        let title = i == 0 ? ProcessInfo.processInfo.processName : menu.title
-        let submenu = NSMenu(title: title)
-        for (g, group) in menu.groups.enumerated() {
-          if g > 0 { submenu.addItem(.separator()) }
-          for item in group { submenu.addItem(self.item(item)) }
-        }
-        if !menu.system.isEmpty, !menu.groups.isEmpty { submenu.addItem(.separator()) }
-        for system in menu.system { add(system, to: submenu) }
-        let holder = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        holder.submenu = submenu
-        bar.addItem(holder)
-        switch menu.title {
-        case "Window": NSApp.windowsMenu = submenu
-        case "Help": NSApp.helpMenu = submenu
-        default: break
-        }
-      }
-      return bar
-    }
-
-    private func item(_ item: NativeMenuItem) -> NSMenuItem {
-      let menuItem = NSMenuItem(
-        title: item.title, action: item.enabled ? #selector(choose(_:)) : nil,
-        keyEquivalent: item.key ?? "")
-      var mask: NSEvent.ModifierFlags = .command
-      if item.shift { mask.insert(.shift) }
-      if item.alt { mask.insert(.option) }
-      menuItem.keyEquivalentModifierMask = mask
-      menuItem.target = self
-      menuItem.representedObject = item.id
-      return menuItem
-    }
-
-    @objc private func choose(_ sender: NSMenuItem) {
-      if let id = sender.representedObject as? String { picked(id) }
-    }
-
-    private func add(_ system: NativeSystemItem, to menu: NSMenu) {
-      let app = ProcessInfo.processInfo.processName
-      func add(_ title: String, _ action: Selector, _ key: String = "",
-        _ mask: NSEvent.ModifierFlags = .command)
-      {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
-        item.keyEquivalentModifierMask = mask
-        menu.addItem(item)
-      }
-      switch system {
-      case .services:
-        let services = NSMenu(title: "Services")
-        let item = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
-        item.submenu = services
-        menu.addItem(item)
-        NSApp.servicesMenu = services
-        menu.addItem(.separator())
-      case .hide: add("Hide \(app)", #selector(NSApplication.hide(_:)), "h")
-      case .hideOthers:
-        add(
-          "Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h",
-          [.command, .option])
-      case .showAll: add("Show All", #selector(NSApplication.unhideAllApplications(_:)))
-      case .quit:
-        menu.addItem(.separator())
-        add("Quit \(app)", #selector(NSApplication.terminate(_:)), "q")
-      case .toggleFullScreen:
-        add("Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control])
-      case .minimize: add("Minimize", #selector(NSWindow.performMiniaturize(_:)), "m")
-      case .zoom: add("Zoom", #selector(NSWindow.performZoom(_:)))
-      case .arrangeInFront:
-        menu.addItem(.separator())
-        add("Bring All to Front", #selector(NSApplication.arrangeInFront(_:)))
+  var body: some View {
+    ForEach(Array(groups.enumerated()), id: \.offset) { i, group in
+      if i > 0 { Divider() }
+      ForEach(group, id: \.id) { item in
+        Button(item.title) { model.pick(item.id) }
+          .keyboardShortcut(item.shortcut)
+          .disabled(!item.enabled)
       }
     }
-  #endif
+  }
+}
+
+extension NativeMenuItem {
+  /// The chord key and [key], with Shift and Option as given; none for an
+  /// item with no keys.
+  var shortcut: KeyboardShortcut? {
+    guard let key = key?.first else { return nil }
+    var modifiers: EventModifiers = .command
+    if shift { modifiers.insert(.shift) }
+    if alt { modifiers.insert(.option) }
+    return KeyboardShortcut(KeyEquivalent(key), modifiers: modifiers)
+  }
 }

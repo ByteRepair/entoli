@@ -50,7 +50,13 @@ class NativeAppMenus implements AppMenus, NativeMenuPicks {
                   ),
               ],
           ],
-          system: [for (final item in menu.system) _system(item)],
+          role: switch (menu.role) {
+            MenuRole.app => NativeMenuRole.app,
+            MenuRole.file => NativeMenuRole.file,
+            MenuRole.view => NativeMenuRole.view,
+            MenuRole.help => NativeMenuRole.help,
+            MenuRole.own => NativeMenuRole.own,
+          },
         ),
     ];
     if (_same(native, _shown)) return;
@@ -62,16 +68,4 @@ class NativeAppMenus implements AppMenus, NativeMenuPicks {
       b != null &&
       a.length == b.length &&
       [for (var i = 0; i < a.length; i++) a[i] == b[i]].every((same) => same);
-
-  static NativeSystemItem _system(SystemMenuItem item) => switch (item) {
-    SystemMenuItem.services => NativeSystemItem.services,
-    SystemMenuItem.hide => NativeSystemItem.hide,
-    SystemMenuItem.hideOthers => NativeSystemItem.hideOthers,
-    SystemMenuItem.showAll => NativeSystemItem.showAll,
-    SystemMenuItem.quit => NativeSystemItem.quit,
-    SystemMenuItem.toggleFullScreen => NativeSystemItem.toggleFullScreen,
-    SystemMenuItem.minimize => NativeSystemItem.minimize,
-    SystemMenuItem.zoom => NativeSystemItem.zoom,
-    SystemMenuItem.arrangeInFront => NativeSystemItem.arrangeInFront,
-  };
 }
