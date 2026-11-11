@@ -994,3 +994,62 @@ final class SubpageController extends SettingController {
   /// What the row says the page holds now: the relay's address.
   final String? summary;
 }
+
+/// Tooling put in place for a project to work: what stands in its way, the
+/// command to run first where one is needed, setting it up and importing a
+/// piece of it by hand, what is installed now, and taking it all away.
+final class SetupController extends SettingController {
+  SetupController(
+    super.spec, {
+    required this.tools,
+    required this.running,
+    required Future<void> Function() setUp,
+    required Future<void> Function() import,
+    required Future<void> Function() delete,
+    required this.deleteConfirm,
+    this.blocked,
+    this.notice,
+    this.prerequisite,
+    this.error,
+    super.title,
+    super.description,
+    super.footnote,
+    super.enabled,
+    super.visible,
+    super.accessory,
+  }) : _onSetUp = setUp,
+       _onImport = import,
+       _onDelete = delete;
+
+  /// Why it cannot run here at all, where it cannot: nothing else is offered.
+  final String? blocked;
+
+  /// Something to know before running it.
+  final String? notice;
+
+  /// A command to run by hand first, and why.
+  final ({String why, String command})? prerequisite;
+
+  /// Each tool and the version found, null where it is not installed; null
+  /// while they are being asked.
+  final Map<String, String?>? tools;
+
+  final bool running;
+
+  /// What went wrong with the last run.
+  final String? error;
+
+  final SettingConfirm deleteConfirm;
+
+  final Future<void> Function() _onSetUp;
+  final Future<void> Function() _onImport;
+  final Future<void> Function() _onDelete;
+
+  Future<void> setUp() => _onSetUp();
+
+  /// Imports a binary the user picks, in place of the one setup fetches.
+  Future<void> import() => _onImport();
+
+  /// Called only once [deleteConfirm] has been agreed to.
+  Future<void> delete() => _onDelete();
+}

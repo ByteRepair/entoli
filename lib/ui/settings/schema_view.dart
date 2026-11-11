@@ -18,6 +18,7 @@ import "../widgets/settings_warning_banner.dart";
 import "../widgets/page_bar.dart";
 import "../../domain/llm_provider.dart";
 import "connect_provider.dart";
+import "byte_repair_settings.dart";
 import "form_dialog.dart";
 import "local_model_settings.dart" show AddLocalModelPage;
 import "running_models.dart";
@@ -159,6 +160,7 @@ class SettingRow extends StatelessWidget {
       final CatalogController c when c.hint == UiHint.single => _Single(c),
       final CatalogController c => _Catalog(c),
       final InfoController c => _Info(c),
+      final SetupController c => SetupView(c),
       final NumberController c => _Number(c, labelled: !nested),
       final ModelPickController c => LabelledField(
         label: c.title,

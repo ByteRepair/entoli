@@ -1,5 +1,6 @@
 import "pages/about.dart";
 import "pages/browser.dart";
+import "pages/byte_repair.dart";
 import "pages/data.dart";
 import "pages/general.dart";
 import "pages/llms.dart";
@@ -25,6 +26,7 @@ final entoliSettings = SettingsSchema(
     ...dataSections,
     ...providerSections,
     ...onDeviceSections,
+    ...byteRepairSections,
   ],
   settings: [
     ...generalSettings,
@@ -38,5 +40,6 @@ final entoliSettings = SettingsSchema(
     ...dataSettings,
     ...providerSettings,
     ...onDeviceSettings,
+    ...byteRepairSettings,
   ],
 );

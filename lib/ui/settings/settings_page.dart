@@ -3,7 +3,6 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../widgets/side_panel_frame.dart";
 import "agents_settings.dart";
-import "byte_repair_settings.dart";
 import "triggers.dart";
 import "skills_settings.dart";
 import "settings_category.dart";
@@ -116,7 +115,9 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
   SettingsCategory.agentBrowser => const [
     SchemaSections(SettingsPageId.agentBrowser),
   ],
-  SettingsCategory.byteRepair => const [ByteRepairSection()],
+  SettingsCategory.byteRepair => const [
+    SchemaSections(SettingsPageId.byteRepair),
+  ],
   SettingsCategory.sync => const [SchemaSections(SettingsPageId.sync)],
   SettingsCategory.providers => const [
     SchemaSections(SettingsPageId.providers),

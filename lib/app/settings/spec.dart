@@ -1,5 +1,6 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:flutter_riverpod/misc.dart" show ProviderListenable;
+import "package:flutter_riverpod/misc.dart"
+    show ProviderListenable, ProviderOrFamily;
 
 /// How a setting would like to be drawn. A hint, not a kind: a frontend
 /// that cannot honour one draws its controller's kind the default way.
@@ -83,6 +84,9 @@ enum UiHint {
 
   /// Models to download, each with its facts.
   models,
+
+  /// Tooling to set up: the default for a setup controller.
+  setup,
 }
 
 /// The pages settings is filed under, in the order they are offered. A
@@ -135,6 +139,11 @@ abstract interface class SettingReader {
   T watch<T>(ProviderListenable<T> provider);
 
   T read<T>(ProviderListenable<T> provider);
+
+  /// Has [provider] asked again, where what it answered has changed under it.
+  /// Nothing where the reader's owner is gone, as it may be by the time an
+  /// action's await returns.
+  void invalidate(ProviderOrFamily provider);
 }
 
 /// A provider's [Ref] as a [SettingReader].
@@ -148,6 +157,11 @@ final class RefReader implements SettingReader {
 
   @override
   T read<T>(ProviderListenable<T> provider) => ref.read(provider);
+
+  @override
+  void invalidate(ProviderOrFamily provider) {
+    if (ref.mounted) ref.invalidate(provider);
+  }
 }
 
 /// A widget's [WidgetRef] as a [SettingReader].
@@ -161,6 +175,11 @@ final class WidgetReader implements SettingReader {
 
   @override
   T read<T>(ProviderListenable<T> provider) => ref.read(provider);
+
+  @override
+  void invalidate(ProviderOrFamily provider) {
+    if (ref.context.mounted) ref.invalidate(provider);
+  }
 }
 
 /// A titled part of a page. Its [describe] and [shown] read state, so a
