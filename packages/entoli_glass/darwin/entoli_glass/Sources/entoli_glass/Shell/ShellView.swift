@@ -45,12 +45,6 @@ struct ShellView: View {
       set: { if model.ready { columns = $0 } })
   }
 
-  /// Before the app is up — the welcome tour, first-run setup — the
-  /// conversation's column alone.
-  private func visibility(_ shown: Bool) -> NavigationSplitViewVisibility {
-    shown && model.ready ? .all : .detailOnly
-  }
-
   var body: some View {
     NavigationSplitView(
       columnVisibility: shownColumns,
@@ -139,12 +133,13 @@ struct ShellView: View {
       }
       .reportsPointer(over: flutter, to: model)
     #endif
+    // `columns` is the user's choice alone; `shownColumns` hides it before
+    // the app is up. Gating it here too wrote the hidden column back to Dart
+    // at launch, and the sidebar started collapsed.
     .onChange(of: model.window.sidebarShown, initial: true) { _, shown in
-      guard visibility(shown) != columns else { return }
-      withAnimation(.smooth(duration: 0.3)) { columns = visibility(shown) }
-    }
-    .onChange(of: model.ready) { _, _ in
-      columns = visibility(model.window.sidebarShown)
+      let wanted: NavigationSplitViewVisibility = shown ? .all : .detailOnly
+      guard wanted != columns else { return }
+      withAnimation(.smooth(duration: 0.3)) { columns = wanted }
     }
     .onChange(of: columns) { _, columns in
       let shown = columns != .detailOnly
