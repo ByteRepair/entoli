@@ -15,10 +15,10 @@ import "actor.dart";
 /// hash, so an import and an agent's older copy of it stay apart — and each
 /// live avatar is an instance, a [BotActor] on the client's clock.
 class BotStage {
-  /// [random] picks each tap's reaction; a test fixes it.
-  BotStage({math.Random? random}) : _random = random;
+  BotStage({this.random});
 
-  final math.Random? _random;
+  /// What picks each tap's reaction; a test fixes it.
+  final math.Random? random;
   final _definitions = <String, BotAvatarDefinition>{};
   final _slices = <String, Map<VolumeSlice, int>>{};
   final _actors = <String, BotActor>{};
@@ -84,7 +84,7 @@ class BotStage {
   }) {
     final definition = _definitions[key];
     if (definition == null) return null;
-    final actor = _actors[instance] ??= BotActor(definition, random: _random);
+    final actor = _actors[instance] ??= BotActor(definition, random: random);
     actor.definition = definition;
     final frame = thumbnail
         ? actor.still(view: thumbnailView, gaze: thumbnailGaze)
