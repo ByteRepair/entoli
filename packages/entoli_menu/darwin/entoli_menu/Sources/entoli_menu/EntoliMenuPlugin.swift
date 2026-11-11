@@ -25,6 +25,18 @@ public final class MenuModel: NSObject, ObservableObject, NativeMenuBar, Flutter
     #endif
     shared.picks = NativeMenuPicks(binaryMessenger: messenger)
     NativeMenuBarSetup.setUp(binaryMessenger: messenger, api: shared)
+    #if os(macOS)
+      // SwiftUI fills a menu when it is opened, and a shortcut finds only
+      // what is filled: every chord fills them first.
+      NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+        if event.modifierFlags.contains(.command) {
+          for menu in NSApp.mainMenu?.items.compactMap(\.submenu) ?? [] {
+            menu.delegate?.menuNeedsUpdate?(menu)
+          }
+        }
+        return event
+      }
+    #endif
   }
 
   func show(menus: [NativeMenu]) throws { self.menus = menus }

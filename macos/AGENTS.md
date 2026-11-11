@@ -75,8 +75,15 @@ Because the bar is always there, the sidebar does not draw Profile,
 Marketplace and Settings — `menuBarAlwaysShown` is true here alone.
 
 Window tabbing is off (`NSWindow.allowsAutomaticWindowTabbing`, in
-`MainFlutterWindow.awakeFromNib`): the app has one window, and AppKit would
+`applicationWillFinishLaunching`): the app has one window, and AppKit would
 otherwise add Show Tab Bar and Show All Tabs to the View menu.
+
+Two SwiftUI traps, both from Dart's menus arriving after launch. A `Window`
+app's File menu is made only if its group has something in it when the bar
+is first built, so a blank item holds the place until Dart sends. And SwiftUI
+fills a menu when it is opened, while a shortcut finds only what is filled,
+so a key-down monitor fills them all before every ⌘ chord; without it no
+shortcut fires until its menu has been opened once.
 
 ## The native shell
 
