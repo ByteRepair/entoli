@@ -15,6 +15,7 @@ import "../../data/privacy_policy_data.dart";
 import "../../domain/llm_provider.dart";
 import "../../domain/model_registry.dart" show ModelCatalog, modelInfoOf;
 import "../../providers.dart";
+import "../../app/prompts/skill_files.dart";
 import "../bot_avatar/face_png.dart";
 import "../widgets/model_catalog_page.dart" show catalogEntries;
 
@@ -285,6 +286,7 @@ SettingRowData _row(
               icon: _icon(item.glyph),
               tone: _tone(item.tone),
               on: item.on,
+              opens: item.opens,
               image: c.hint == UiHint.agents && item.id != null
                   ? faces(item.id!)
                   : null,
@@ -745,8 +747,30 @@ class SettingsBridge implements SettingsIntents {
   @override
   Future<String> page(String opens) async => switch (opens) {
     "privacyPolicy" => bundledPrivacyPolicy,
+    final skill when skill.startsWith("skill:") => await _skill(
+      skill.substring("skill:".length),
+    ),
     _ => await _licences(),
   };
+
+  /// A skill as its view page tells it: what it is for, what its folder is
+  /// wrong about, its instructions, and its other files.
+  Future<String> _skill(String name) async {
+    final detail = await skillDetail(_container.read(appConfigProvider), name);
+    if (detail == null) {
+      return "The skill's files could not be read. It may have been removed.";
+    }
+    final md = detail.skillMd;
+    return [
+      "# $name",
+      ?md?.description,
+      if (detail.problems.isNotEmpty)
+        "**Not loaded:** ${detail.problems.join("; ")}",
+      ?md?.body,
+      if (detail.files.isNotEmpty)
+        "**Files**\n\n${[for (final (path, bytes) in detail.files) "- $path (${formatSize(bytes.length)})"].join("\n")}",
+    ].join("\n\n");
+  }
 
   /// Every library the app is built on, and its licence, as text.
   static Future<String> _licences() async {

@@ -43,7 +43,15 @@ struct CollectionRow: View {
             Image(systemName: icon.symbol).foregroundStyle(item.tone.colour).font(.caption)
           }
           VStack(alignment: .leading, spacing: 2) {
-            Text(item.title)
+            if let opens = item.opens {
+              NavigationLink {
+                TextPage(model: model, title: item.title, opens: opens)
+              } label: {
+                Text(item.title)
+              }
+            } else {
+              Text(item.title)
+            }
             if let subtitle = item.subtitle, !subtitle.isEmpty {
               Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }

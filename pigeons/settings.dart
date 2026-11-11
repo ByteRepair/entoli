@@ -206,6 +206,7 @@ class SettingItemData {
     this.on,
     this.actions = const [],
     this.image,
+    this.opens,
   });
 
   String title;
@@ -216,6 +217,9 @@ class SettingItemData {
 
   /// Its picture, as a PNG: an agent's face.
   Uint8List? image;
+
+  /// A page of the app's that tells more of it, its text asked by this name.
+  String? opens;
 
   /// Whether it is armed, where its row carries a switch.
   bool? on;

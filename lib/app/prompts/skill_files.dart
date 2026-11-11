@@ -1,9 +1,12 @@
+import "dart:convert";
 import "dart:io";
+import "dart:typed_data";
 
 import "package:path/path.dart" as p;
 
 import "../../core/config.dart";
 import "../../core/platform/platform.dart" as platform;
+import "../../data/prompts/prompt_export.dart" show skillSourceEntries;
 import "../../data/prompts/skill_import.dart";
 import "../../data/prompts/skill_validate.dart";
 import "../../domain/frontmatter.dart";
@@ -69,4 +72,40 @@ class SkillFiles {
           skillDirectory(config, name, project: project),
         ).delete(recursive: true);
       });
+}
+
+/// A skill as its view page shows it: its SKILL.md read, what its
+/// frontmatter is wrong about, and its other files.
+typedef SkillDetail = ({
+  Frontmatter? skillMd,
+  List<String> problems,
+  List<(String, Uint8List)> files,
+});
+
+/// [name]'s files as the library serves them — this project's own, a bundled
+/// preset, or the default project's — or null where none could be read.
+Future<SkillDetail?> skillDetail(
+  AppConfig config,
+  String name, {
+  String? project,
+}) async {
+  final entries = await skillSourceEntries(config, name, project: project);
+  if (entries == null) return null;
+  final skillMd = entries.where((e) => e.$1 == "SKILL.md").firstOrNull;
+  final parsed = skillMd == null
+      ? null
+      : Frontmatter.parse(utf8.decode(skillMd.$2));
+  return (
+    skillMd: parsed,
+    problems: parsed == null
+        ? const <String>[]
+        : skillProblems(
+            name: parsed.name ?? name,
+            description: parsed.description,
+            frontmatter: parsed.scalars,
+            folderName: name,
+          ),
+    files: entries.where((e) => e.$1 != "SKILL.md").toList()
+      ..sort((a, b) => a.$1.compareTo(b.$1)),
+  );
 }

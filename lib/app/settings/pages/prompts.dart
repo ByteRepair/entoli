@@ -8,7 +8,7 @@ import "../../../data/prompts/skill_import.dart";
 import "../../../domain/agent_definition.dart";
 import "../../../domain/agent_face.dart";
 import "../../../domain/models.dart";
-import "../../../domain/project.dart" show everyProject;
+import "../../../domain/project.dart" show everyProject, projectLabel;
 import "../../../domain/prompt_library.dart";
 import "../../../providers.dart";
 import "../../prompts/agent_files.dart";
@@ -27,6 +27,19 @@ final ownAgentsProvider = FutureProvider<Set<String>>(
 final ownSkillsProvider = FutureProvider<Map<String, List<String>>>(
   (ref) => SkillFiles(ref.watch(appConfigProvider)).own(),
 );
+
+/// Where an imported skill goes: null is the default project, the base set
+/// every project inherits.
+final skillDestinationProvider = NotifierProvider<SkillDestination, String?>(
+  SkillDestination.new,
+);
+
+class SkillDestination extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void pick(String? project) => state = project;
+}
 
 /// Re-read every project's library after a change to the default project's,
 /// which each of them reads a rung of, and what lists the user's own.
@@ -353,6 +366,7 @@ final promptSettings = [
           id: skill.name,
           subtitle: skill.description?.nullIfEmpty,
           error: own[skill.name]?.join("; ").nullIfEmpty,
+          opens: "skill:${skill.name}",
           actions: [
             const ItemAction("export", "Export"),
             if (own.containsKey(skill.name))
@@ -393,6 +407,31 @@ final promptSettings = [
       );
     },
   ),
+  // The global page's import can land in any project.
+  SettingSpec(
+    id: "skillDestination",
+    path: (page: SettingsPageId.skills, section: "skills"),
+    weight: 5,
+    title: "Install to",
+    hint: UiHint.dropdown,
+    build: (c) {
+      final named = c.ref.watch(projectListProvider).value ?? const <String>[];
+      final picker = c.ref.read(skillDestinationProvider.notifier);
+      return ChoiceController<String?>(
+        c.spec,
+        options: [
+          const SettingOption(null, "Global"),
+          for (final project in named)
+            SettingOption(project, projectLabel(project)),
+        ],
+        value: c.ref.watch(skillDestinationProvider),
+        onSet: (project) async {
+          picker.pick(project);
+          return null;
+        },
+      );
+    },
+  ),
   SettingSpec(
     id: "importSkill",
     path: (page: SettingsPageId.skills, section: "skills"),
@@ -402,6 +441,7 @@ final promptSettings = [
     glyph: SettingGlyph.upload,
     build: (c) {
       final files = SkillFiles(c.ref.read(appConfigProvider));
+      final target = c.ref.watch(skillDestinationProvider);
       SkillPackage? package;
       return ActionController(
         c.spec,
@@ -420,7 +460,7 @@ final promptSettings = [
           } on SkillImportException catch (e) {
             return SettingConfirm.note("That file cannot be imported: $e.");
           }
-          if (!files.has(package!.name)) return null;
+          if (!files.has(package!.name, target: target)) return null;
           return SettingConfirm(
             title: "Replace ${package!.name}?",
             message:
@@ -432,9 +472,9 @@ final promptSettings = [
         run: () async {
           final skill = package;
           if (skill == null) return null;
-          await files.install(skill);
+          await files.install(skill, target: target);
           await _reload(c.ref);
-          return SettingNotice(installedSnack("Imported", skill.name, null));
+          return SettingNotice(installedSnack("Imported", skill.name, target));
         },
       );
     },

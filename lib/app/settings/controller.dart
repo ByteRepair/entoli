@@ -707,6 +707,7 @@ class CollectionItem {
     this.tone = NoticeTone.plain,
     this.actions = const [],
     this.on,
+    this.opens,
   });
 
   final String title;
@@ -731,6 +732,10 @@ class CollectionItem {
   /// Whether it is armed, where its row carries a switch: flipped through the
   /// item action "toggle".
   final bool? on;
+
+  /// A page of the app's that tells more of it, by the name a frontend asks
+  /// its text by: `skill:` and the skill.
+  final String? opens;
 }
 
 /// Something done to one item from its row: connect, disconnect, revoke.

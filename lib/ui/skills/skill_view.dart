@@ -1,13 +1,10 @@
-import "dart:convert";
 import "dart:typed_data";
 
-import "package:collection/collection.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../chat/widgets/markdown_text.dart";
-import "../../data/prompts/prompt_export.dart";
-import "../../data/prompts/skill_validate.dart";
+import "../../app/prompts/skill_files.dart";
 import "../../domain/frontmatter.dart";
 import "../../providers.dart";
 import "../../core/formatting.dart" show formatSize;
@@ -57,35 +54,17 @@ class _SkillViewPageState extends ConsumerState<SkillViewPage> {
   }
 
   Future<void> _load() async {
-    final config = ref.read(appConfigProvider);
-    final entries = await skillSourceEntries(
-      config,
+    final detail = await skillDetail(
+      ref.read(appConfigProvider),
       widget.name,
       project: widget.project,
     );
     if (!mounted) return;
-    var problems = const <String>[];
-    var otherFiles = const <(String, Uint8List)>[];
-    Frontmatter? parsed;
-    if (entries != null) {
-      final skillMd = entries.where((e) => e.$1 == "SKILL.md").firstOrNull;
-      if (skillMd != null) {
-        parsed = Frontmatter.parse(utf8.decode(skillMd.$2));
-        problems = skillProblems(
-          name: parsed.name ?? widget.name,
-          description: parsed.description,
-          frontmatter: parsed.scalars,
-          folderName: widget.name,
-        );
-      }
-      otherFiles = entries.where((e) => e.$1 != "SKILL.md").toList()
-        ..sort((a, b) => a.$1.compareTo(b.$1));
-    }
     setState(() {
-      _entries = entries;
-      _parsed = parsed;
-      _problems = problems;
-      _otherFiles = otherFiles;
+      _entries = detail == null ? null : const [];
+      _parsed = detail?.skillMd;
+      _problems = detail?.problems ?? const [];
+      _otherFiles = detail?.files ?? const [];
       _loading = false;
     });
   }
