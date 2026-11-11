@@ -81,10 +81,13 @@ class SettingSpec {
 /// What a change has to say back, for the frontend to show: a restart a
 /// switch needs, what an export wrote.
 class SettingNotice {
-  const SettingNotice(this.message, {this.title});
+  const SettingNotice(this.message, {this.title, this.copy});
 
   final String? title;
   final String message;
+
+  /// Text put on the clipboard as the notice is said: an install link.
+  final String? copy;
 }
 
 /// What an action asks before it runs. With no [confirmLabel] there is
@@ -715,6 +718,10 @@ class CollectionItem {
     this.on,
     this.opens,
     this.tap,
+    this.badge,
+    this.face,
+    this.editable = true,
+    this.takesImage = true,
   });
 
   final String title;
@@ -740,13 +747,41 @@ class CollectionItem {
   /// item action "toggle".
   final bool? on;
 
-  /// A page of the app's that tells more of it, by the name a frontend asks
-  /// its text by: `skill:` and the skill.
-  final String? opens;
+  /// A page of the app's that tells more of it.
+  final ItemPage? opens;
+
+  /// A word set beside it: where an entry not of this level came from,
+  /// "Bundled", "Inherited".
+  final String? badge;
+
+  /// The agent whose face leads the row.
+  final ({String? project, String name})? face;
+
+  /// Whether it is edited through the list's form: an entry of another
+  /// level's is shown and not changed.
+  final bool editable;
+
+  /// Whether its picture can be set, where the list takes pictures.
+  final bool takesImage;
 
   /// The item action a tap on the row runs, where the row is not edited
   /// through a form: a device's own page.
   final String? tap;
+}
+
+/// A page of the app's an item opens.
+sealed class ItemPage {
+  const ItemPage();
+}
+
+/// A skill as its view page tells it: [origin] is where it came from, or
+/// "Not loaded".
+final class SkillPage extends ItemPage {
+  const SkillPage(this.name, {required this.origin, this.project});
+
+  final String name;
+  final String? project;
+  final String origin;
 }
 
 /// Something done to one item from its row: connect, disconnect, revoke.
@@ -1011,7 +1046,10 @@ final class FormList extends FormFieldSpec {
   final bool enabled;
 }
 
-/// Any of [options], answered as their answers joined by commas.
+/// Any of [options], answered as their answers joined by commas. Options of
+/// one [FormOption.kind] are one thing worded two ways: picking one unpicks
+/// the others. With [all], the label is a switch over the lot: on while each
+/// kind has one picked, and switched on, each kind's first.
 final class FormMulti extends FormFieldSpec {
   const FormMulti(
     this.id,
@@ -1019,6 +1057,7 @@ final class FormMulti extends FormFieldSpec {
     this.options, {
     this.error,
     this.enabled = true,
+    this.all = false,
   });
 
   final String id;
@@ -1026,6 +1065,41 @@ final class FormMulti extends FormFieldSpec {
   final List<FormOption> options;
   final String? error;
   final bool enabled;
+  final bool all;
+
+  String _kind(FormOption option) => option.kind ?? option.answer;
+
+  /// [picked] with [answer] switched [on].
+  Set<String> toggled(Set<String> picked, String answer, bool on) {
+    final option = options.firstWhere((o) => o.answer == answer);
+    return {
+      for (final p in picked)
+        if (p != answer &&
+            !(on &&
+                options.any((o) => o.answer == p && _kind(o) == _kind(option))))
+          p,
+      if (on) answer,
+    };
+  }
+
+  /// Whether every kind has one of its options in [picked].
+  bool allOn(Set<String> picked) => options.every(
+    (o) =>
+        options.any((p) => _kind(p) == _kind(o) && picked.contains(p.answer)),
+  );
+
+  /// [picked] with every option switched [on] — each kind's first — or off.
+  Set<String> withAll(Set<String> picked, bool on) {
+    final mine = {for (final o in options) o.answer};
+    final kinds = <String>{};
+    return {
+      for (final p in picked)
+        if (!mine.contains(p)) p,
+      if (on)
+        for (final o in options)
+          if (kinds.add(_kind(o))) o.answer,
+    };
+  }
 }
 
 /// Words to read in the form: why a part of it cannot be changed.
@@ -1043,6 +1117,7 @@ class FormOption {
     this.group,
     this.tags = const [],
     this.glyph,
+    this.kind,
   });
 
   final String answer;
@@ -1058,6 +1133,10 @@ class FormOption {
   /// What it is at a glance, a card's chips.
   final List<FormTag> tags;
   final SettingGlyph? glyph;
+
+  /// What it is underneath, where two options are one thing worded two
+  /// ways: in a [FormMulti], picking one unpicks the other.
+  final String? kind;
 }
 
 class FormTag {

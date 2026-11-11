@@ -1215,3 +1215,42 @@ Future<void> writePrompt(
   await tester.tap(find.descendant(of: page, matching: find.text("Save")));
   await settleIo(tester);
 }
+
+/// [label] run from the settings list row titled [title]: its button where
+/// the row draws its few side by side, its menu's item where they are many.
+Future<void> rowAction(
+  WidgetTester tester,
+  String title,
+  String label, {
+  bool settle = true,
+}) async {
+  final row = find.widgetWithText(ListTile, title);
+  await scrollTo(tester, row);
+  final button = find.descendant(
+    of: row,
+    matching: find.widgetWithText(TextButton, label),
+  );
+  if (button.evaluate().isNotEmpty) {
+    await tester.tap(button);
+  } else {
+    await openRowMenu(tester, title);
+    await tester.tap(find.text(label).last);
+  }
+  if (settle) {
+    await settleIo(tester);
+  } else {
+    await frames(tester);
+  }
+}
+
+/// The menu of the settings list row titled [title] open, where it has one:
+/// what the row offers is then either on it or in the menu.
+Future<void> openRowMenu(WidgetTester tester, String title) async {
+  final row = find.widgetWithText(ListTile, title);
+  await scrollTo(tester, row);
+  final menu = find.descendant(of: row, matching: find.byTooltip("More"));
+  if (menu.evaluate().isEmpty) return;
+  await tester.tap(menu);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
+}

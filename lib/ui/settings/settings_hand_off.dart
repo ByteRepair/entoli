@@ -42,7 +42,8 @@ void bindSettingsHandOff(
     }
     ..addModelByLink = (() => push<void>(const AddLocalModelPage()))
     ..pairedDevice = ((id) => push<void>(PairedDevicePage(deviceId: id)))
-    ..scanCode = (() => push<String>(const ScanQrPage()));
+    ..scanCode = (() => push<String>(const ScanQrPage()))
+    ..browseBotAvatars = (() => push<void>(const BotAvatarEditorPage.browse()));
 }
 
 /// [child], with the settings' hand-offs bound to this frontend's pages for

@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:convert";
 
 import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/foundation.dart";
@@ -46,17 +47,16 @@ final nativeSettingsProvider = Provider<NativeSettingsPages>((ref) {
   final providers = ref.watch(appSettingsProvider).llmProviders;
   final stage = ref.watch(botStageProvider);
   // A Bot Avatar is drawn live by the client from its rig; a photo is sent.
-  _Face face(String name) => switch (ref
-      .watch(agentPictureProvider((project: null, name: name)))
-      .value) {
-    AgentPhoto(:final bytes) => (photo: bytes, bot: null, colour: null),
-    AgentBot(:final spec) => (
-      photo: null,
-      bot: stage.keyOf(spec.definition),
-      colour: spec.colour,
-    ),
-    null => (photo: null, bot: null, colour: null),
-  };
+  _Face face(({String? project, String name}) agent) =>
+      switch (ref.watch(agentPictureProvider(agent)).value) {
+        AgentPhoto(:final bytes) => (photo: bytes, bot: null, colour: null),
+        AgentBot(:final spec) => (
+          photo: null,
+          bot: stage.keyOf(spec.definition),
+          colour: spec.colour,
+        ),
+        null => (photo: null, bot: null, colour: null),
+      };
   final pages = [
     for (final page in SettingsPageId.values)
       if (page != SettingsPageId.welcome &&
@@ -98,7 +98,7 @@ List<SettingRowData> _rows(
   SettingController c,
   Map<String, SettingController> controllers,
   List<LlmProviderConfig> providers,
-  _Face Function(String agent) face, {
+  _Face Function(({String? project, String name}) agent) face, {
   String? parent,
   bool accessory = false,
 }) {
@@ -139,7 +139,11 @@ SettingConfirmData? _confirm(SettingConfirm? ask) => ask == null
 
 SettingNoticeData? _notice(SettingNotice? notice) => notice == null
     ? null
-    : SettingNoticeData(title: notice.title, message: notice.message);
+    : SettingNoticeData(
+        title: notice.title,
+        message: notice.message,
+        copy: notice.copy,
+      );
 
 SettingOptionData _option(SettingOption option) => SettingOptionData(
   label: option.label,
@@ -177,7 +181,7 @@ String _modelLabel(ModelPickController c, List<LlmProviderConfig> providers) {
 SettingRowData _row(
   SettingController c,
   List<LlmProviderConfig> providers,
-  _Face Function(String agent) face, {
+  _Face Function(({String? project, String name}) agent) face, {
   String? parent,
   bool accessory = false,
 }) {
@@ -284,7 +288,7 @@ SettingRowData _row(
         ..tone = _tone(c.tone);
     case CollectionController():
       _Face? faceOf(CollectionItem item) =>
-          c.hint == UiHint.agents && item.id != null ? face(item.id!) : null;
+          item.face == null ? null : face(item.face!);
       row
         ..kind = SettingKind.collection
         ..items = [
@@ -297,8 +301,14 @@ SettingRowData _row(
                 icon: _icon(item.glyph),
                 tone: _tone(item.tone),
                 on: item.on,
-                opens: item.opens,
+                opens: switch (item.opens) {
+                  final SkillPage page => _skillPage(page),
+                  null => null,
+                },
                 tap: item.tap,
+                badge: item.badge,
+                editable: item.editable,
+                takesImage: item.takesImage,
                 image: face?.photo,
                 bot: face?.bot,
                 botColour: face?.colour,
@@ -416,8 +426,15 @@ List<FormOptionData> _formOptions(List<FormOption> options) => [
         for (final tag in option.tags)
           FormTagData(text: tag.text, tone: _tone(tag.tone)),
       ],
+      kind: option.kind,
     ),
 ];
+
+const _skillOpens = "skill:";
+
+/// [page] as the name the client asks its text by.
+String _skillPage(SkillPage page) =>
+    "$_skillOpens${jsonEncode([page.project, page.name])}";
 
 /// [answers] as the client sends them, every key a string.
 Map<String, String> _answersOf(Map<String?, String?> answers) => {
@@ -702,6 +719,7 @@ class SettingsBridge implements SettingsIntents {
               error: part.error,
               options: _formOptions(part.options),
               enabled: part.enabled,
+              all: part.all,
             ),
             FormNote(:final text) => FormPartData(
               kind: FormPartKind.note,
@@ -1057,16 +1075,24 @@ class SettingsBridge implements SettingsIntents {
   @override
   Future<String> page(String opens) async => switch (opens) {
     "privacyPolicy" => bundledPrivacyPolicy,
-    final skill when skill.startsWith("skill:") => await _skill(
-      skill.substring("skill:".length),
-    ),
-    _ => await _licences(),
+    "licences" => await _licences(),
+    final skill when skill.startsWith(_skillOpens) => switch (jsonDecode(
+      skill.substring(_skillOpens.length),
+    )) {
+      [final String? project, final String name] => await _skill(name, project),
+      _ => "",
+    },
+    _ => "",
   };
 
   /// A skill as its view page tells it: what it is for, what its folder is
   /// wrong about, its instructions, and its other files.
-  Future<String> _skill(String name) async {
-    final detail = await skillDetail(_container.read(appConfigProvider), name);
+  Future<String> _skill(String name, String? project) async {
+    final detail = await skillDetail(
+      _container.read(appConfigProvider),
+      name,
+      project: project,
+    );
     if (detail == null) {
       return "The skill's files could not be read. It may have been removed.";
     }

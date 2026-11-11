@@ -3,9 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../widgets/side_panel_frame.dart";
 import "settings_category.dart";
-import "agents_settings.dart" show AgentsSection;
 import "schema_view.dart";
-import "skills_settings.dart" show SkillsSection;
 import "welcome_page.dart";
 import "../widgets/page_bar.dart";
 
@@ -77,13 +75,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 }
 
 /// What a category draws in either layout: its schema page. Welcome is the
-/// tour rather than a list of sections, a pager with its own bar; Agents and
-/// Skills scroll their own list to keep their footers fixed to the bottom.
+/// tour rather than a list of sections, a pager with its own bar.
 Widget _categoryBody(SettingsCategory category, {Key? key}) =>
     switch (category) {
       SettingsCategory.welcome => const WelcomeTour(),
-      SettingsCategory.skills => const SkillsSection(),
-      SettingsCategory.agents => const AgentsSection(),
       _ => ListView(key: key, children: [SchemaSections(category.page)]),
     };
 

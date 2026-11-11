@@ -7,12 +7,9 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/data/prompts/skill_import.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
-import "package:agent_chat/ui/widgets/install_destination.dart";
 
 import "../harness.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
-
-final _exportButtons = find.byIcon(Icons.download);
 
 void main() {
   late TestApp app;
@@ -37,9 +34,7 @@ void main() {
       // The bundled presets plus the project's own review — every row
       // exports. The bundled skills lengthen the list, so what is counted is
       // that the row exists and exports, not how many rows there are.
-      expect(_exportButtons, findsWidgets);
-      await scrollTo(tester, find.byTooltip("Export review"));
-      await tester.tap(find.byTooltip("Export review"));
+      await rowAction(tester, "review", "Export");
       await settleIo(tester, least: 10);
 
       expect(app.backups.saved, hasLength(1));
@@ -69,12 +64,8 @@ void main() {
       await pumpSettings(tester, app, SettingsCategory.skills);
       await reloadLibrary(tester, app);
 
-      // No directory scan needed — export is on every row, scan or not.
-      // The bundled presets lengthen the list; the point here is that a
-      // bundled row's export reads the embedded preset, wherever it sits.
-      expect(_exportButtons, findsWidgets);
-      await scrollTo(tester, find.byTooltip("Export artifact"));
-      await tester.tap(find.byTooltip("Export artifact"));
+      // A bundled row's export reads the embedded preset.
+      await rowAction(tester, "artifact", "Export");
       await settleIo(tester, least: 10);
 
       final saved = app.backups.saved.single;
@@ -98,7 +89,7 @@ void main() {
       await pumpSettings(tester, app, SettingsCategory.agents);
       await reloadLibrary(tester, app);
 
-      await tester.tap(find.byTooltip("Export researcher"));
+      await rowAction(tester, "researcher", "Export");
       await settleIo(tester, least: 10);
 
       final saved = app.backups.saved.single;
@@ -145,42 +136,6 @@ void main() {
     });
   });
 
-  group("the fixed footers", () {
-    testWidgets("the import and add buttons stay put while the list scrolls", (
-      tester,
-    ) async {
-      await io(tester, () async {
-        for (var i = 0; i < 30; i++) {
-          await writeSkill(app, "skill-$i");
-        }
-      });
-
-      await pumpSettings(tester, app, SettingsCategory.skills);
-      await reloadLibrary(tester, app);
-
-      final importButton = find.text("Import skill");
-      final before = tester.getTopRight(importButton).dy;
-      await tester.drag(find.byType(ListView).first, const Offset(0, -600));
-      await tester.pumpAndSettle();
-      expect(tester.getTopRight(importButton).dy, before);
-      expect(importButton, findsOneWidget);
-      // The combo rides the footer with it.
-      expect(find.byType(InstallDestination), findsOneWidget);
-
-      // The agents page's footer is the same rule with its own buttons.
-      await pumpSettings(tester, app, SettingsCategory.agents);
-      await reloadLibrary(tester, app);
-
-      final addButton = find.text("Add agent");
-      final importAgent = find.text("Import agent");
-      final beforeAdd = tester.getTopRight(addButton).dy;
-      await tester.drag(find.byType(ListView).first, const Offset(0, -600));
-      await tester.pumpAndSettle();
-      expect(tester.getTopRight(addButton).dy, beforeAdd);
-      expect(importAgent, findsOneWidget);
-    });
-  });
-
   group("importing an agent", () {
     testWidgets("an .md written to the project's directory reloads the "
         "library with it", (tester) async {
@@ -213,7 +168,8 @@ void main() {
       await reloadLibrary(tester, app, project: "work");
       expect(find.text("imported"), findsOneWidget);
       // The project's own row, against the inherited and bundled ones.
-      expect(find.byIcon(Icons.close), findsOneWidget);
+      await openRowMenu(tester, "imported");
+      expect(find.text("Remove"), findsOneWidget);
     });
   });
 }

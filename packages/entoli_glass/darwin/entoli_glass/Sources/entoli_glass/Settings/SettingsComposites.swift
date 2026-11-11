@@ -79,19 +79,24 @@ struct CollectionRow: View {
             words
             Spacer()
           }
+          if let badge = item.badge {
+            Text(badge).font(.caption).foregroundStyle(.secondary)
+          }
           if let on = item.on {
             Toggle(
               "", isOn: Binding(get: { on }, set: { _ in run(index, "toggle") })
             ).labelsHidden()
           }
-          if actions.count >= 2 || row.takesImages {
+          let editable = row.editable && item.editable
+          let pictured = row.takesImages && item.takesImage
+          if actions.count >= 2 || pictured {
             // One control for the lot, Edit and Remove included, so a row
             // never ends in a strip of buttons.
             Menu {
-              if row.editable {
+              if editable {
                 Button("Edit") { editing = Editing(index: index) }
               }
-              if row.takesImages {
+              if pictured {
                 Button("Choose photo…") { picking = index }
               }
               ForEach(actions, id: \.id) { action in
@@ -100,7 +105,7 @@ struct CollectionRow: View {
                 }
                 .disabled(!action.enabled)
               }
-              if row.removable && row.editable {
+              if row.removable && editable {
                 Button(row.removeLabel ?? "Remove", role: .destructive) {
                   model.say.removeItem(id: row.id, index: Int64(index), completion: ignore)
                 }
@@ -118,10 +123,10 @@ struct CollectionRow: View {
               .buttonStyle(.borderless)
               .disabled(!action.enabled)
             }
-            if row.editable {
+            if editable {
               Button("Edit") { editing = Editing(index: index) }.buttonStyle(.borderless)
             }
-            if row.removable && row.editable {
+            if row.removable && editable {
               Button(role: .destructive) {
                 model.say.removeItem(id: row.id, index: Int64(index), completion: ignore)
               } label: {
@@ -143,12 +148,6 @@ struct CollectionRow: View {
         Button(add) { editing = Editing(index: nil) }
           .buttonStyle(.borderless)
           .foregroundStyle(Color.accentColor)
-      }
-      if row.hint == .agents {
-        PushRow(model: model, to: .avatars(OpenedAvatars(agent: nil, row: row.id, index: -1))) {
-          Label("View Bot Avatars", systemImage: "face.smiling")
-        }
-        .foregroundStyle(Color.accentColor)
       }
     }
     .sheet(item: $editing) { editing in
@@ -518,13 +517,43 @@ struct FormSheet: View {
     let key = part.id ?? ""
     let picked = Set(((answers[key] ?? nil) ?? "").split(separator: ",").map(String.init))
     let options = part.options.compactMap { $0 }
-    let toggle = { (answer: String) in
-      var next = picked
-      if picked.contains(answer) { next.remove(answer) } else { next.insert(answer) }
+    let kind = { (o: FormOptionData) in o.kind ?? o.answer }
+    let write = { (next: Set<String>) in
       binding(key).wrappedValue = next.sorted().joined(separator: ",")
     }
+    // Options of one kind are one thing worded two ways: picking one
+    // unpicks the others.
+    let toggle = { (answer: String) in
+      guard let option = options.first(where: { $0.answer == answer }) else { return }
+      if picked.contains(answer) {
+        write(picked.subtracting([answer]))
+      } else {
+        let others = options.filter { kind($0) == kind(option) }.map(\.answer)
+        write(picked.subtracting(others).union([answer]))
+      }
+    }
+    let allOn = options.allSatisfy { o in
+      options.contains { kind($0) == kind(o) && picked.contains($0.answer) }
+    }
     VStack(alignment: .leading, spacing: 6) {
-      Text(part.label ?? "").font(.caption).foregroundStyle(.secondary)
+      if part.all {
+        Toggle(
+          part.label ?? "",
+          isOn: Binding(
+            get: { allOn },
+            set: { on in
+              var next = picked.subtracting(options.map(\.answer))
+              if on {
+                var kinds = Set<String>()
+                for o in options where kinds.insert(kind(o)).inserted { next.insert(o.answer) }
+              }
+              write(next)
+            })
+        )
+        .font(.headline)
+      } else {
+        Text(part.label ?? "").font(.caption).foregroundStyle(.secondary)
+      }
       if options.contains(where: { $0.help != nil }) {
         // Options that say what they are: a switch each, with its words.
         ForEach(options, id: \.answer) { option in

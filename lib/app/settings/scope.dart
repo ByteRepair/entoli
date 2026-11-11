@@ -106,9 +106,13 @@ final class ProjectScope extends SettingsScope {
     this._notifier,
     this._parent, {
     this.base,
+    this.device,
   });
 
   final String? project;
+
+  /// The paired device the project is on, null for this one.
+  final String? device;
   final SettingsDocument _document;
   final ProjectSettingsNotifier _notifier;
   final AppScope _parent;
@@ -193,6 +197,7 @@ ProjectScope projectScopeAt(SettingReader reader, ProjectAddress at) {
       reader.read(provider.notifier),
       app,
       base: base,
+      device: at.device,
     );
   }
 

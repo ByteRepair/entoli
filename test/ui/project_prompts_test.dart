@@ -10,7 +10,6 @@ import "package:agent_chat/data/prompts/skill_package.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/ui/skills/skill_install_preview.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
-import "package:agent_chat/ui/settings/agents_settings.dart";
 import "package:agent_chat/ui/widgets/install_destination.dart";
 
 import "../fakes.dart" show FakeChatStore;
@@ -80,14 +79,10 @@ void main() {
       // first, and `review` is then below it, still a forward scroll away.
       await scrollTo(tester, find.text("local-note"));
       expect(find.text("local-note"), findsOneWidget);
-      expect(find.byIcon(Icons.close), findsOneWidget);
 
-      // Removing it deletes the project's own directory, not the default's —
-      // tapped while the row is on screen, since bringing `review` up from
-      // below would take this one off the top of the window again.
-      await tester.tap(find.byIcon(Icons.close));
-      await settleIo(tester);
-      await tester.tap(find.text("Remove"));
+      // Removing it deletes the project's own directory, not the default's.
+      await rowAction(tester, "local-note", "Remove");
+      await tester.tap(find.text("Remove").last);
       await settleIo(tester, least: 15);
 
       final dir = app.config.promptsDir(CompletionKind.skill, project: "work");
@@ -121,8 +116,9 @@ void main() {
       tester,
     ) async {
       await pumpSettings(tester, app, SettingsCategory.skills);
+      await scrollTo(tester, find.text("Import skill"));
       expect(find.text("Import skill"), findsOneWidget);
-      expect(find.byType(InstallDestination), findsOneWidget);
+      expect(find.text("Install to"), findsOneWidget);
     });
   });
 
@@ -142,19 +138,24 @@ void main() {
       // Reloaded, the library is the real sources: the bundled agents for
       // both projects, and none of the test's seed. The default project's
       // are inherited here.
-      expect(find.byType(AgentsSection), findsOneWidget);
       expect(find.text("general"), findsOneWidget);
       expect(find.text("Bundled"), findsNWidgets(3));
-      expect(find.byIcon(Icons.edit_outlined), findsNothing);
-      expect(find.text("Add agent"), findsOneWidget);
+      await openRowMenu(tester, "general");
+      expect(find.text("Remove"), findsNothing);
+      await tester.tapAt(Offset.zero);
+      await tester.pumpAndSettle();
 
+      await scrollTo(tester, find.text("Add agent"));
       await tester.tap(find.text("Add agent"));
       await settleIo(tester);
 
       await tester.enterText(find.byType(TextField).at(0), "tester");
       await tester.enterText(find.byType(TextField).at(1), "A test agent");
       await writePrompt(tester, "You test things.", label: "System prompt");
-      await tester.tap(find.text("Save"));
+      await tester.pump();
+      await tester.tap(
+        find.descendant(of: find.byType(AppBar), matching: find.text("Save")),
+      );
       await settleIo(tester, least: 15);
 
       final file = File(
@@ -163,11 +164,9 @@ void main() {
       expect(file.existsSync(), isTrue);
       expect(file.readAsStringSync(), contains("You test things."));
 
-      // Own rows edit and remove; removing takes the project's file only.
-      expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
-      await tester.tap(find.byIcon(Icons.close));
-      await settleIo(tester);
-      await tester.tap(find.text("Remove"));
+      // Own rows remove; removing takes the project's file only.
+      await rowAction(tester, "tester", "Remove");
+      await tester.tap(find.text("Remove").last);
       await settleIo(tester, least: 15);
       expect(file.existsSync(), isFalse);
       // The default project's agents are untouched.
@@ -195,8 +194,9 @@ void main() {
       expect(find.text("Bundled"), findsNWidgets(4));
       expect(find.text("Inherited"), findsNothing);
       expect(find.text("Add agent"), findsNothing);
-      expect(find.byIcon(Icons.edit_outlined), findsNothing);
-      expect(find.byIcon(Icons.close), findsNothing);
+      expect(find.text("Import agent"), findsNothing);
+      await openRowMenu(tester, "esbmc-verifier");
+      expect(find.text("Remove"), findsNothing);
     });
 
     testWidgets(
@@ -214,8 +214,9 @@ void main() {
         expect(find.text("artifact"), findsOneWidget);
         expect(find.text("Bundled"), findsWidgets);
         expect(find.text("Import skill"), findsNothing);
-        expect(find.byType(InstallDestination), findsNothing);
-        expect(find.byIcon(Icons.close), findsNothing);
+        expect(find.text("Install to"), findsNothing);
+        await openRowMenu(tester, "artifact");
+        expect(find.text("Remove"), findsNothing);
       },
     );
   });

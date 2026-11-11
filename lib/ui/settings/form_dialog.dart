@@ -619,7 +619,8 @@ class _DateField extends StatelessWidget {
 }
 
 /// Any of a field's options: a switch each, with what it is under it, where
-/// the options say; chips where they are only names.
+/// the options say; chips where they are only names. A field over all of
+/// them leads with the switch that takes the lot.
 class _Multi extends StatelessWidget {
   const _Multi({
     required this.field,
@@ -632,8 +633,7 @@ class _Multi extends StatelessWidget {
   final ValueChanged<Set<String>> onChanged;
 
   ValueChanged<bool>? _set(String answer) => field.enabled
-      ? (on) =>
-            onChanged(on ? {...picked, answer} : ({...picked}..remove(answer)))
+      ? (on) => onChanged(field.toggled(picked, answer, on))
       : null;
 
   @override
@@ -642,14 +642,32 @@ class _Multi extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(field.label, style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 4),
+        if (field.all)
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(field.label),
+            value: field.allOn(picked),
+            onChanged: field.enabled
+                ? (on) => onChanged(field.withAll(picked, on))
+                : null,
+          )
+        else ...[
+          Text(field.label, style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 4),
+        ],
         if (explained)
           for (final option in field.options)
             SwitchListTile(
-              contentPadding: EdgeInsets.zero,
+              dense: field.all,
+              contentPadding: EdgeInsets.only(left: field.all ? 16 : 0),
               title: Text(option.label),
-              subtitle: option.help == null ? null : Text(option.help!),
+              subtitle: option.help == null
+                  ? null
+                  : Text(
+                      option.help!,
+                      maxLines: field.all ? 2 : null,
+                      overflow: field.all ? TextOverflow.ellipsis : null,
+                    ),
               value: picked.contains(option.answer),
               onChanged: _set(option.answer),
             )

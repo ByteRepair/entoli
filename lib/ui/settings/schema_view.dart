@@ -1,7 +1,11 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "package:flutter/services.dart";
+
 import "../../app/settings/controller.dart";
+import "../skills/skill_view.dart";
+import "../widgets/agent_picture.dart";
 import "../../core/formatting.dart";
 import "../../app/settings/scope.dart";
 import "../../app/settings/settings.dart";
@@ -11,6 +15,7 @@ import "../app_command.dart";
 import "../theme.dart" show appTitle;
 import "../widgets/app_mark.dart";
 import "privacy_policy_page.dart";
+import "../../domain/models.dart" show AttachmentKind;
 import "../../providers.dart";
 import "../widgets/add_button_row.dart";
 import "../widgets/catalog.dart";
@@ -248,6 +253,10 @@ Future<void> _run(BuildContext context, ActionController c) async {
 Future<void> _tell(BuildContext context, Future<SettingNotice?> change) async {
   final notice = await change;
   if (notice == null || !context.mounted) return;
+  if (notice.copy case final text?) {
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!context.mounted) return;
+  }
   final title = notice.title;
   if (title == null) return say(context, notice.message);
   await tell(context, title: title, message: notice.message);
@@ -1364,6 +1373,9 @@ class _DragSliderState extends State<_DragSlider> {
   }
 }
 
+/// The action a list taking pictures offers on each row that takes one.
+const _photo = "\u0000photo";
+
 /// The items as rows, each with what [CollectionItem] says of it: its state
 /// at a glance, its words and what went wrong, the switch that arms it, what
 /// can be done to it, and a tap that edits it through its form; and the
@@ -1377,6 +1389,7 @@ class _Collection<T> extends StatelessWidget {
   final Widget Function(CollectionItem item)? detail;
 
   Future<void> _act(BuildContext context, int index, ItemAction action) async {
+    if (action.id == _photo) return _picture(context, index);
     if (action.confirm case final ask?) {
       final yes = await confirm(
         context,
@@ -1394,6 +1407,7 @@ class _Collection<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final rows = c.rows;
+    final inline = MediaQuery.sizeOf(context).width >= 600;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1403,67 +1417,87 @@ class _Collection<T> extends StatelessWidget {
             child: mutedParagraph(context, c.emptyLabel!),
           ),
         for (final (index, row) in rows.indexed)
-          ListTile(
-            leading: switch (_icon(row.glyph)) {
-              null => null,
-              final icon => Icon(
-                icon,
-                color: switch (row.tone) {
-                  NoticeTone.good => Colors.green,
-                  NoticeTone.warning => theme.colorScheme.error,
-                  NoticeTone.plain => theme.colorScheme.onSurfaceVariant,
-                },
-              ),
-            },
-            title: Text(row.title),
-            subtitle: _words(context, row),
-            onTap: _tap(context, index, row),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (row.on case final on?)
-                  Switch(value: on, onChanged: (_) => c.act(index, "toggle")),
-                // A few side by side; more in a menu.
-                if (row.actions.length <= 3)
-                  for (final action in row.actions)
-                    TextButton(
-                      onPressed: action.enabled
-                          ? () => _act(context, index, action)
-                          : null,
-                      style: action.destructive
-                          ? TextButton.styleFrom(
-                              foregroundColor: theme.colorScheme.error,
-                            )
-                          : null,
-                      child: Text(action.label),
-                    )
-                else
-                  PopupMenuButton<ItemAction>(
-                    tooltip: "More",
-                    onSelected: (action) => _act(context, index, action),
-                    itemBuilder: (_) => [
-                      for (final action in row.actions)
-                        PopupMenuItem(
-                          value: action,
-                          enabled: action.enabled,
-                          child: Text(
-                            action.label,
-                            style: action.destructive
-                                ? TextStyle(color: theme.colorScheme.error)
-                                : null,
+          if ([
+                if (c.takesImages && row.takesImage)
+                  const ItemAction(_photo, "Upload photo"),
+                ...row.actions,
+              ]
+              case final actions)
+            ListTile(
+              leading: switch ((row.face, _icon(row.glyph))) {
+                // Live, and happy at a tap: a row scrolled out of view is not
+                // painted, which stops its ticker until it is back.
+                ((:final project, :final name)?, _) => AgentPicture(
+                  name: name,
+                  project: project,
+                  animate: true,
+                  reactToTap: true,
+                ),
+                (null, null) => null,
+                (null, final icon?) => Icon(
+                  icon,
+                  color: switch (row.tone) {
+                    NoticeTone.good => Colors.green,
+                    NoticeTone.warning => theme.colorScheme.error,
+                    NoticeTone.plain => theme.colorScheme.onSurfaceVariant,
+                  },
+                ),
+              },
+              title: Text(row.title),
+              subtitle: _words(context, row),
+              onTap: _tap(context, index, row),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (row.badge case final badge?)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: Text(badge),
+                    ),
+                  if (row.on case final on?)
+                    Switch(value: on, onChanged: (_) => c.act(index, "toggle")),
+                  // A few side by side where there is room; more, or a
+                  // narrow window, in a menu.
+                  if (actions.length <= 3 && inline)
+                    for (final action in actions)
+                      TextButton(
+                        onPressed: action.enabled
+                            ? () => _act(context, index, action)
+                            : null,
+                        style: action.destructive
+                            ? TextButton.styleFrom(
+                                foregroundColor: theme.colorScheme.error,
+                              )
+                            : null,
+                        child: Text(action.label),
+                      )
+                  else
+                    PopupMenuButton<ItemAction>(
+                      tooltip: "More",
+                      onSelected: (action) => _act(context, index, action),
+                      itemBuilder: (_) => [
+                        for (final action in actions)
+                          PopupMenuItem(
+                            value: action,
+                            enabled: action.enabled,
+                            child: Text(
+                              action.label,
+                              style: action.destructive
+                                  ? TextStyle(color: theme.colorScheme.error)
+                                  : null,
+                            ),
                           ),
-                        ),
-                    ],
-                  ),
-                if (c.removable)
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    tooltip: row.removeLabel ?? c.removeLabel,
-                    onPressed: () => c.remove(index),
-                  ),
-              ],
+                      ],
+                    ),
+                  if (c.removable)
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      tooltip: row.removeLabel ?? c.removeLabel,
+                      onPressed: () => c.remove(index),
+                    ),
+                ],
+              ),
             ),
-          ),
         if (c.editable)
           AddButtonRow(
             child: OutlinedButton.icon(
@@ -1476,10 +1510,37 @@ class _Collection<T> extends StatelessWidget {
     );
   }
 
-  /// What a tap on the row does: edits it through its form, or runs the
-  /// action it names.
+  /// A picture picked as the item's, through the app's own picker; anything
+  /// but a PNG is refused, a picture being kept as the PNG it was given as.
+  Future<void> _picture(BuildContext context, int index) async {
+    final picks = await ProviderScope.containerOf(
+      context,
+    ).read(attachmentPickerProvider).pick(AttachmentKind.image);
+    if (picks.isEmpty || !context.mounted) return;
+    final pick = picks.single;
+    if (!pick.filename.toLowerCase().endsWith(".png")) {
+      return say(context, "The picture is saved as a .png — pick a PNG image.");
+    }
+    await c.setImage(index, pick.bytes);
+  }
+
+  /// What a tap on the row does: edits it through its form, opens its page,
+  /// or runs the action it names.
   VoidCallback? _tap(BuildContext context, int index, CollectionItem row) {
-    if (c.editable) return () => editItem(context, c, index: index);
+    if (c.editable && row.editable) {
+      return () => editItem(context, c, index: index);
+    }
+    if (row.opens case final SkillPage page) {
+      return () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => SkillViewPage(
+            name: page.name,
+            project: page.project,
+            origin: page.origin,
+          ),
+        ),
+      );
+    }
     final tap = row.actions.where((a) => a.id == row.tap).firstOrNull;
     if (tap != null) return () => _act(context, index, tap);
     return null;

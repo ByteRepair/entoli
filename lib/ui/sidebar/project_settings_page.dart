@@ -19,12 +19,11 @@ import "../../domain/tristate.dart";
 import "../../providers.dart";
 import "../memory/memory_page.dart";
 import "../profile/profile_page.dart";
-import "../settings/agents_settings.dart";
+import "../settings/schema_view.dart" show SchemaSections;
 import "../settings/permissions_section.dart";
-import "../settings/skills_settings.dart";
 import "../../app/settings/pages/terminal.dart" show pickedConfinement;
 import "../../app/settings/scope.dart";
-import "../../app/settings/spec.dart" show WidgetReader;
+import "../../app/settings/spec.dart" show SettingsPageId, WidgetReader;
 import "../../domain/settings/keys.dart";
 import "../settings/work_folders_section.dart";
 import "../widgets/destructive_button.dart";
@@ -641,19 +640,15 @@ class _PromptsCard extends ConsumerWidget {
         MaterialPageRoute(
           builder: (_) => Scaffold(
             appBar: PageBar(title: "${kind.label} — $project"),
-            // The section owns the scroll: its footer (import, install-to)
-            // is pinned to the bottom of the page rather than one row more
-            // of a list here.
-            body: switch (kind) {
-              CompletionKind.skill => SkillsSection(
-                project: project,
-                device: at.device,
-              ),
-              CompletionKind.agent => AgentsSection(
-                project: project,
-                device: at.device,
-              ),
-            },
+            // The global pages' own specs, at this project.
+            body: ListView(
+              children: [
+                SchemaSections(switch (kind) {
+                  CompletionKind.skill => SettingsPageId.skills,
+                  CompletionKind.agent => SettingsPageId.agents,
+                }, at: ProjectAddress(project, device: at.device)),
+              ],
+            ),
           ),
         ),
       ),

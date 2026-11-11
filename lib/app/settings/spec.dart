@@ -96,6 +96,10 @@ enum UiHint {
 
   /// Skills, each with what its folder is wrong about, the whole of its page.
   skills,
+
+  /// The way to every Bot Avatar, where a frontend has a page of its own
+  /// for them.
+  botAvatars,
 }
 
 /// The pages settings is filed under, in the order they are offered. A

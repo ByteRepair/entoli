@@ -27,6 +27,9 @@ class SettingsHandOff {
   /// the code read.
   Future<String?> Function()? scanCode;
 
+  /// Every Bot Avatar, to look through, import and delete.
+  Future<void> Function()? browseBotAvatars;
+
   /// Unbinds every hook, for a frontend going away.
   void clear() {
     editBotAvatar = null;
@@ -34,6 +37,7 @@ class SettingsHandOff {
     addModelByLink = null;
     pairedDevice = null;
     scanCode = null;
+    browseBotAvatars = null;
   }
 }
 

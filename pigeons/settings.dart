@@ -74,6 +74,7 @@ enum SettingHint {
   triggers,
   agents,
   skills,
+  botAvatars,
 }
 
 /// What an icon beside a setting stands for: the schema's `SettingGlyph`,
@@ -208,6 +209,9 @@ class SettingItemData {
     this.bot,
     this.botColour,
     this.tap,
+    this.badge,
+    this.editable = true,
+    this.takesImage = true,
   });
 
   String title;
@@ -233,6 +237,15 @@ class SettingItemData {
 
   /// The item action a tap on the row runs.
   String? tap;
+
+  /// Where an entry not of this level came from: "Bundled", "Inherited".
+  String? badge;
+
+  /// Whether it is edited through the list's form.
+  bool editable;
+
+  /// Whether its picture can be set, where the list takes pictures.
+  bool takesImage;
 
   List<SettingItemActionData?> actions;
 }
@@ -564,10 +577,13 @@ class SettingConfirmData {
 }
 
 class SettingNoticeData {
-  SettingNoticeData({required this.message, this.title});
+  SettingNoticeData({required this.message, this.title, this.copy});
 
   String? title;
   String message;
+
+  /// Text put on the clipboard as the notice is said.
+  String? copy;
 }
 
 enum FormPartKind {
@@ -608,6 +624,7 @@ class FormPartData {
     this.message,
     this.accept,
     this.linkLabel,
+    this.all = false,
   });
 
   FormPartKind kind;
@@ -648,6 +665,10 @@ class FormPartData {
   String? message;
   String? accept;
   String? linkLabel;
+
+  /// A multi's label is a switch over all its options: on while each kind
+  /// has one picked, and switched on, each kind's first.
+  bool all;
 }
 
 class FormTagData {
@@ -665,6 +686,7 @@ class FormOptionData {
     this.group,
     this.icon,
     this.tags = const [],
+    this.kind,
   });
 
   String answer;
@@ -673,6 +695,10 @@ class FormOptionData {
   String? group;
   SettingIcon? icon;
   List<FormTagData?> tags;
+
+  /// What it is underneath: in a multi, picking one unpicks the others of
+  /// its kind.
+  String? kind;
 }
 
 /// Why a form's Save was refused: said on [field] where it names one, with

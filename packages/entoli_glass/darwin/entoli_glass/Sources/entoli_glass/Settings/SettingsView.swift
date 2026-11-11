@@ -132,7 +132,16 @@ struct SettingRowView: View {
     case .slots: SlotsRow(model: model, row: row)
     case .range: RangeRow(model: model, row: row)
     case .keyValues: KeyValuesRow(model: model, row: row)
-    case .action: ActionRow(model: model, row: row)
+    case .action:
+      if row.hint == .botAvatars {
+        // This frontend's own page of them, rather than Flutter's.
+        PushRow(model: model, to: .avatars(OpenedAvatars(agent: nil, row: row.id, index: -1))) {
+          Label(row.title, systemImage: "face.smiling")
+        }
+        .foregroundStyle(Color.accentColor)
+      } else {
+        ActionRow(model: model, row: row)
+      }
     case .group: GroupRow(model: model, row: row)
     case .number: NumberRow(model: model, row: row)
     case .modelPick: ModelPickRow(model: model, row: row)
@@ -239,6 +248,16 @@ struct Asking: ViewModifier {
 
   func body(content: Content) -> some View {
     content
+      // A notice carrying a link has it put on the clipboard as it is said.
+      .onChange(of: notice?.copy) { _, copy in
+        guard let copy else { return }
+        #if os(macOS)
+          NSPasteboard.general.clearContents()
+          NSPasteboard.general.setString(copy, forType: .string)
+        #else
+          UIPasteboard.general.string = copy
+        #endif
+      }
       .alert(
         confirm?.title ?? "", isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }),
         presenting: confirm
