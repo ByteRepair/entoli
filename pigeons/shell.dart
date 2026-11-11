@@ -310,7 +310,14 @@ enum InputMode { message, shell, callback }
 /// question stands in its place, or the project needs setting up.
 /// Which callback the field holds, for the client to name: the core says
 /// what it is, never what to call it.
-enum CallbackKind { compact, setGoal, resumeGoal, pauseGoal, clearGoal, showGoal }
+enum CallbackKind {
+  compact,
+  setGoal,
+  resumeGoal,
+  pauseGoal,
+  clearGoal,
+  showGoal,
+}
 
 class ComposerSnapshot {
   ComposerSnapshot({
