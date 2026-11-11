@@ -7,6 +7,8 @@ import "../../app/settings/settings.dart";
 import "../../app/settings/spec.dart";
 import "../../domain/app_icon.dart";
 import "../widgets/app_mark.dart" show AppIconImage;
+import "../../providers.dart";
+import "../widgets/catalog.dart" show InstalledPicker;
 import "../widgets/choice.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/editable_row.dart";
@@ -103,6 +105,7 @@ class SettingRow extends StatelessWidget {
       final ActionController c => _Action(c),
       final GroupController c => _Group(c),
       final TextController c => _Text(c),
+      final NoticeController c => _Notice(c),
       final NumberController c => _Number(c, labelled: !nested),
       final ModelPickController c => LabelledField(
         label: c.title,
@@ -145,22 +148,37 @@ class SettingRow extends StatelessWidget {
         help: c.description,
       ),
     ),
-    UiHint.toggle ||
-    UiHint.dropdown ||
-    UiHint.levels ||
-    UiHint.slider ||
-    UiHint.keyValues ||
-    UiHint.button ||
-    UiHint.row ||
-    UiHint.field => _Dropdown<T>(c),
+    // Every other hint is another kind's; a choice is a dropdown.
+    _ => _Dropdown<T>(c),
   };
 }
 
-/// Says what a change had to say, where it said anything.
+/// Says what a change had to say, where it said anything: in a dialog where
+/// it has a title, in passing where it does not.
 Future<void> _tell(BuildContext context, Future<SettingNotice?> change) async {
   final notice = await change;
   if (notice == null || !context.mounted) return;
-  await tell(context, title: notice.title ?? "", message: notice.message);
+  final title = notice.title;
+  if (title == null) return say(context, notice.message);
+  await tell(context, title: title, message: notice.message);
+}
+
+IconData? _icon(SettingGlyph? glyph) => switch (glyph) {
+  SettingGlyph.deleteForever => Icons.delete_forever,
+  SettingGlyph.play => Icons.play_circle_outline,
+  SettingGlyph.stop => Icons.stop_circle_outlined,
+  null => null,
+};
+
+/// A setting's accessory, as the icon button at its end.
+Widget? _accessory(BuildContext context, SettingController c) {
+  final action = c.accessory;
+  if (action == null) return null;
+  return IconButton(
+    onPressed: action.enabled ? () => _tell(context, action.run()) : null,
+    icon: Icon(_icon(action.glyph) ?? Icons.more_horiz),
+    tooltip: action.label,
+  );
 }
 
 class _Toggle extends StatelessWidget {
@@ -234,26 +252,49 @@ class _Dropdown<T> extends StatelessWidget {
         onChanged: (value) => _tell(context, c.set(value)),
       );
     }
+    final none = c.noneLabel;
+    if (none != null && c is ChoiceController<String>) {
+      final strings = c as ChoiceController<String>;
+      return InstalledPicker(
+        label: c.title,
+        none: none,
+        description: c.description,
+        value: strings.value,
+        options: {for (final o in strings.options) o.value: o.label},
+        onPick: (value) => _tell(context, strings.set(value)),
+      );
+    }
+    final field = DropdownButtonFormField<T>(
+      initialValue: c.value,
+      isExpanded: true,
+      decoration: InputDecoration(helperText: c.description),
+      items: [
+        for (final option in c.options)
+          DropdownMenuItem(
+            value: option.value,
+            enabled: option.enabled,
+            child: Text(option.label),
+          ),
+      ],
+      // Null is an option of its own where the type holds it: the default
+      // project is one.
+      onChanged: c.enabled
+          ? (value) {
+              if (value != null || null is T) _tell(context, c.set(value));
+            }
+          : null,
+    );
+    final accessory = _accessory(context, c);
     return LabelledField(
       label: c.title,
-      child: DropdownButtonFormField<T>(
-        initialValue: c.value,
-        isExpanded: true,
-        decoration: InputDecoration(helperText: c.description),
-        items: [
-          for (final option in c.options)
-            DropdownMenuItem(
-              value: option.value,
-              enabled: option.enabled,
-              child: Text(option.label),
+      child: accessory == null
+          ? field
+          : Row(
+              children: [
+                Expanded(child: field),
+                accessory,
+              ],
             ),
-        ],
-        onChanged: c.enabled
-            ? (value) {
-                if (value != null) _tell(context, c.set(value));
-              }
-            : null,
-      ),
     );
   }
 }
@@ -543,11 +584,6 @@ class _Action extends StatelessWidget {
 
   final ActionController c;
 
-  static IconData? _icon(SettingGlyph? glyph) => switch (glyph) {
-    SettingGlyph.deleteForever => Icons.delete_forever,
-    null => null,
-  };
-
   Future<void> _press(BuildContext context) async {
     final ask = await c.confirm();
     if (!context.mounted) return;
@@ -674,6 +710,7 @@ class _Text extends StatelessWidget {
       confirmLabel: "Save",
       hint: c.prompt,
       maxLines: c.lines,
+      allowBlank: c.allowBlank,
     );
     if (text == null || !context.mounted) return;
     await _tell(context, c.set(text));
@@ -683,6 +720,19 @@ class _Text extends StatelessWidget {
   Widget build(BuildContext context) {
     final shown = c.value.isEmpty ? c.emptyLabel : c.value;
     final clear = c.clearLabel;
+    if (c.hint == UiHint.field) {
+      final description = c.description;
+      return LabelledField(
+        label: c.title,
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+          title: Text(shown ?? ""),
+          subtitle: description == null ? null : Text(description),
+          onTap: c.enabled ? () => _edit(context) : null,
+          trailing: _accessory(context, c),
+        ),
+      );
+    }
     if (clear == null) {
       return ListTile(
         title: Text(c.title),
@@ -696,6 +746,43 @@ class _Text extends StatelessWidget {
       removeLabel: clear,
       onTap: c.enabled ? () => _edit(context) : null,
       onRemove: () => _tell(context, c.set("")),
+    );
+  }
+}
+
+/// Paragraphs to read, then the links they point at.
+class _Notice extends ConsumerWidget {
+  const _Notice(this.c);
+
+  final NoticeController c;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final links = c.lines.where((l) => l.url != null);
+    return Padding(
+      // The inset every other block on a page keeps: a paragraph flush to the
+      // edge reads as belonging to something else.
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final line in c.lines)
+            if (line.url == null) mutedParagraph(context, line.text),
+          if (links.isNotEmpty) const SizedBox(height: 8),
+          for (final line in links)
+            TextButton(
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                alignment: Alignment.centerLeft,
+              ),
+              onPressed: () =>
+                  ref.read(linkOpenerProvider).open(context, line.url!),
+              child: Text(line.text),
+            ),
+        ],
+      ),
     );
   }
 }

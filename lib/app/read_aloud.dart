@@ -101,4 +101,10 @@ class ReadAloud extends Notifier<String?> {
   }
 }
 
+/// What the preview in settings says, and the id it is read under. A question
+/// and an answer's worth: enough to hear a voice's rhythm rather than one word
+/// of it.
+const previewSpeech = "Hi, how are you? What can I do for you?";
+const previewId = "preview";
+
 final readAloudProvider = NotifierProvider<ReadAloud, String?>(ReadAloud.new);

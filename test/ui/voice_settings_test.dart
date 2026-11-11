@@ -8,7 +8,7 @@ import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/domain/voice_model.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/on_device_catalog.dart";
-import "package:agent_chat/ui/settings/voice_settings.dart";
+import "package:agent_chat/ui/settings/schema_view.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
 import "../fakes.dart";
@@ -220,7 +220,7 @@ void main() {
   /// Scoped to the section: the categories panel beside it has a tile called
   /// Voice, which is not the field this is about.
   Finder voicePicker() => find.descendant(
-    of: find.byType(VoiceSection),
+    of: find.byType(SchemaSections),
     matching: find.text("Voice"),
   );
 

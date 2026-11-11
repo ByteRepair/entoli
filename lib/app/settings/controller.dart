@@ -135,6 +135,7 @@ sealed class SettingController {
     this.footnote,
     this.enabled = true,
     this.visible = true,
+    this.accessory,
   }) : title = title ?? spec.title,
        description = description ?? spec.description;
 
@@ -160,6 +161,9 @@ sealed class SettingController {
   /// Whether this platform, or the state of the settings around it, has
   /// anything for this to set. One that is not visible is not drawn.
   final bool visible;
+
+  /// Something done beside it, drawn at its end: hearing the voice picked.
+  final ActionController? accessory;
 }
 
 /// On or off, or unset where [unsettable].
@@ -175,6 +179,7 @@ final class ToggleController extends SettingController {
     super.footnote,
     super.enabled,
     super.visible,
+    super.accessory,
   }) : _write = onSet;
 
   /// What is set here, null where nothing is.
@@ -199,11 +204,13 @@ final class ChoiceController<T> extends SettingController {
     required Future<SettingNotice?> Function(T? value) onSet,
     this.unsettable = false,
     this.inheritedLabel,
+    this.noneLabel,
     super.title,
     super.description,
     super.footnote,
     super.enabled,
     super.visible,
+    super.accessory,
   }) : _write = onSet;
 
   final List<SettingOption<T>> options;
@@ -216,6 +223,10 @@ final class ChoiceController<T> extends SettingController {
   /// The label of what unset stands for — the "Relay" of "Default (Relay)" —
   /// where it stands for an option.
   final String? inheritedLabel;
+
+  /// What picking nothing is called where nothing is an answer of its own
+  /// rather than an inherited one: "Device language".
+  final String? noneLabel;
 
   final Future<SettingNotice?> Function(T?) _write;
 
@@ -242,6 +253,7 @@ final class SlotsController<T> extends SettingController {
     super.footnote,
     super.enabled,
     super.visible,
+    super.accessory,
   }) : _write = onSet;
 
   final List<SettingOption<T>> slots;
@@ -271,6 +283,7 @@ final class RangeController extends SettingController {
     super.footnote,
     super.enabled,
     super.visible,
+    super.accessory,
   }) : _write = onSet;
 
   final int? value;
@@ -298,6 +311,7 @@ final class KeyValuesController extends SettingController {
     super.footnote,
     super.enabled,
     super.visible,
+    super.accessory,
   }) : _write = onSet;
 
   final Map<String, String> entries;
@@ -325,6 +339,7 @@ final class ActionController extends SettingController {
   ActionController(
     super.spec, {
     required this.label,
+    this.glyphOverride,
     required Future<SettingNotice?> Function() run,
     Future<SettingConfirm?> Function()? confirm,
     this.destructive = false,
@@ -333,10 +348,19 @@ final class ActionController extends SettingController {
     super.footnote,
     super.enabled,
     super.visible,
+    super.accessory,
   }) : _action = run,
        _ask = confirm;
 
   final String label;
+
+  /// The picture where it is not the spec's: a play button that is a stop
+  /// button while it plays.
+  final SettingGlyph? glyphOverride;
+
+  @override
+  SettingGlyph? get glyph => glyphOverride ?? super.glyph;
+
   final bool destructive;
   final Future<SettingNotice?> Function() _action;
   final Future<SettingConfirm?> Function()? _ask;
@@ -358,6 +382,7 @@ final class GroupController extends SettingController {
     super.footnote,
     super.enabled,
     super.visible,
+    super.accessory,
   });
 
   /// Drawn in order; one that is not visible is left out.
@@ -381,6 +406,7 @@ final class NumberController extends SettingController {
     super.footnote,
     super.enabled,
     super.visible,
+    super.accessory,
   }) : _write = onSet;
 
   final int value;
@@ -416,6 +442,7 @@ final class ModelPickController extends SettingController {
     super.footnote,
     super.enabled,
     super.visible,
+    super.accessory,
   }) : _write = onSet;
 
   final ModelChoice choice;
@@ -446,6 +473,7 @@ final class TextController extends SettingController {
     this.emptyLabel,
     this.prompt,
     this.lines = 1,
+    this.allowBlank = false,
     this.clearLabel,
     this.secret = false,
     super.title,
@@ -453,6 +481,7 @@ final class TextController extends SettingController {
     super.footnote,
     super.enabled,
     super.visible,
+    super.accessory,
   }) : _write = onSet;
 
   final String value;
@@ -466,6 +495,9 @@ final class TextController extends SettingController {
   /// How many lines it is typed over: more than one for a list of patterns.
   final int lines;
 
+  /// Whether an empty answer is one: clearing it by typing nothing.
+  final bool allowBlank;
+
   /// What clearing it is called, where it can be.
   final String? clearLabel;
 
@@ -475,4 +507,28 @@ final class TextController extends SettingController {
   final Future<SettingNotice?> Function(String) _write;
 
   Future<SettingNotice?> set(String value) => _write(value);
+}
+
+/// Something to read rather than set: lines of text, and links out.
+final class NoticeController extends SettingController {
+  NoticeController(
+    super.spec, {
+    required this.lines,
+    super.title,
+    super.description,
+    super.footnote,
+    super.enabled,
+    super.visible,
+    super.accessory,
+  });
+
+  final List<NoticeLine> lines;
+}
+
+/// A paragraph, or a link where it has a [url].
+class NoticeLine {
+  const NoticeLine(this.text, {this.url});
+
+  final String text;
+  final Uri? url;
 }

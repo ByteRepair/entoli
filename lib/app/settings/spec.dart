@@ -39,8 +39,11 @@ enum UiHint {
   /// a text controller.
   row,
 
-  /// A field typed into in place.
+  /// A labelled field showing the value, opened to edit it.
   field,
+
+  /// Paragraphs to read: the default for a notice controller.
+  notice,
 }
 
 /// The pages settings is filed under, in the order they are offered. A
@@ -137,4 +140,4 @@ class SectionSpec {
 
 /// What an icon beside a setting stands for, never how it is drawn: each
 /// frontend picks its own picture in an exhaustive switch.
-enum SettingGlyph { deleteForever }
+enum SettingGlyph { deleteForever, play, stop }

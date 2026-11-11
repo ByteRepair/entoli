@@ -114,12 +114,12 @@ extension BindSetting on SettingContext {
     String? description,
     bool visible = true,
     Future<void> Function(ModelChoice choice)? write,
+    ModelChoice? choice,
   }) => ModelPickController(
     spec,
-    choice: (
-      providerId: scope.own(keys.provider),
-      modelId: scope.own(keys.model),
-    ),
+    choice:
+        choice ??
+        (providerId: scope.own(keys.provider), modelId: scope.own(keys.model)),
     nullLabel: nullLabel,
     defaultOf: defaultOf,
     role: role,

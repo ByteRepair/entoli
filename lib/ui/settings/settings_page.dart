@@ -19,7 +19,6 @@ import "../../core/formatting.dart";
 import "../widgets/side_panel_frame.dart";
 import "../widgets/section_header.dart";
 import "agents_settings.dart";
-import "assistant_settings.dart";
 import "browser_settings.dart";
 import "byte_repair_settings.dart";
 import "connect_provider.dart";
@@ -34,7 +33,6 @@ import "triggers.dart";
 import "skills_settings.dart";
 import "sync_settings.dart";
 import "terminal_settings.dart";
-import "voice_settings.dart";
 import "settings_category.dart";
 import "schema_view.dart";
 import "../../app/settings/spec.dart";
@@ -152,9 +150,7 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
     // catalog to put under one.
     OnDeviceCatalog(),
   ],
-  // The assistant section draws nothing where the platform has no
-  // gesture, and opens its own divider.
-  SettingsCategory.voice => const [VoiceSection(), AssistantSection()],
+  SettingsCategory.voice => const [SchemaSections(SettingsPageId.voice)],
   SettingsCategory.triggers => const [TriggersSection()],
   // Rendered by [_categoryBody] whole rather than filed here, for the
   // footers pinned to their bottoms.
