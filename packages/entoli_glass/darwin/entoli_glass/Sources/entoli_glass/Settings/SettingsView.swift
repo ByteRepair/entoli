@@ -78,6 +78,9 @@ public struct SettingsRoot: View {
         }
       }
     #endif
+    // Dart builds the pages only while they are on screen.
+    .onAppear { model.say.shown(on: true, completion: ignore) }
+    .onDisappear { model.say.shown(on: false, completion: ignore) }
   }
 }
 

@@ -55,6 +55,16 @@ void main() {
     expect(rows[at + 1].parent, "autoCompact");
   });
 
+  testWidgets("nothing is built until the settings are shown", (tester) async {
+    final bridge = SettingsBridge(app.container);
+    addTearDown(bridge.close);
+    expect(app.container.exists(nativeSettingsProvider), isFalse);
+
+    bridge.shown(true);
+    expect(app.container.exists(nativeSettingsProvider), isTrue);
+    await settleIo(tester);
+  });
+
   testWidgets("an intent naming a row sets what its controller sets", (
     tester,
   ) async {

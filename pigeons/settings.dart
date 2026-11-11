@@ -814,6 +814,12 @@ abstract class NativeSettings {
 /// next: a confirm, a notice, a form.
 @FlutterApi()
 abstract class SettingsIntents {
+  /// Whether the settings are on screen. The pages are sent only while they
+  /// are, and first built when they first are: they read what only the
+  /// settings show — each provider's usage, the skills on disk, the browsers
+  /// installed — which a launch that never opens them should not pay for.
+  void shown(bool on);
+
   void toggle(String id, bool? on);
 
   /// Picks [option] by its place, or nothing.

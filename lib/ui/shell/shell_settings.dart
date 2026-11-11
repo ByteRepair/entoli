@@ -416,7 +416,22 @@ List<FormOptionData> _formOptions(List<FormOption> options) => [
 class SettingsBridge implements SettingsIntents {
   SettingsBridge(this._container) {
     SettingsIntents.setUp(this);
-    _sending = _container.listen<NativeSettingsPages>(
+  }
+
+  final ProviderContainer _container;
+  final _native = NativeSettings();
+
+  /// The pages as they change, while the settings are on screen.
+  ProviderSubscription<NativeSettingsPages>? _sending;
+
+  @override
+  void shown(bool on) {
+    if (!on) {
+      _sending?.close();
+      _sending = null;
+      return;
+    }
+    _sending ??= _container.listen<NativeSettingsPages>(
       nativeSettingsProvider,
       (_, pages) => _send(pages),
       // A page that cannot be built says why rather than taking the shell
@@ -425,10 +440,6 @@ class SettingsBridge implements SettingsIntents {
       fireImmediately: true,
     );
   }
-
-  final ProviderContainer _container;
-  final _native = NativeSettings();
-  late final ProviderSubscription<NativeSettingsPages> _sending;
 
   /// An action's controller from when it was asked, run on its agreement:
   /// what it opened while asking is that instance's.
@@ -453,7 +464,7 @@ class SettingsBridge implements SettingsIntents {
   );
 
   void close() {
-    _sending.close();
+    shown(false);
     SettingsIntents.setUp(null);
   }
 
