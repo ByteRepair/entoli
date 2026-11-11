@@ -48,6 +48,9 @@ enum ModelRole {
     _ => "model",
   };
 
+  /// The article [noun] takes: "an image model", "a model".
+  String get article => "aeiou".contains(noun[0]) ? "an" : "a";
+
   /// What a picker with no models at all says, for a role that is most often
   /// a provider without such models rather than a model missing from a list.
   String? get emptyNote => switch (this) {

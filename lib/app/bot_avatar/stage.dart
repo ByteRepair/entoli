@@ -62,7 +62,10 @@ class BotStage {
 
   /// The frame of [instance], wearing [key], at [now] on its own clock
   /// ([encodeFrame]): moving where [live], else the still — or the
-  /// thumbnail's pose where [thumbnail]. [turn] is a drag's.
+  /// thumbnail's pose where [thumbnail]. [turn] is a drag's. [pointer] is
+  /// where the pointer is over the avatar's [size]-square box, its origin
+  /// the box's top left, which a live avatar looks toward; null where there
+  /// is none to follow.
   Float64List? frame(
     String instance,
     String key, {
@@ -71,6 +74,8 @@ class BotStage {
     bool live = true,
     bool thumbnail = false,
     ViewTurn turn = ViewTurn.none,
+    (double, double)? pointer,
+    double size = 0,
   }) {
     final definition = _definitions[key];
     if (definition == null) return null;
@@ -79,7 +84,21 @@ class BotStage {
     final frame = thumbnail
         ? actor.still(view: thumbnailView, gaze: thumbnailGaze)
         : live || actor.reactingAt(now)
-        ? actor.frame(now, mood: mood, view: turn)
+        ? actor.frame(
+            now,
+            mood: mood,
+            view: turn,
+            target: pointer == null || size <= 0
+                ? null
+                : pointerGaze(
+                    (x: pointer.$1, y: pointer.$2),
+                    (left: 0, top: 0, width: size, height: size),
+                    origin: (
+                      x: definition.eyes.x / 100,
+                      y: definition.eyes.y / 100,
+                    ),
+                  ),
+          )
         : actor.still(mood: mood, view: turn);
     return encodeFrame(
       frame,

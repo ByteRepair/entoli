@@ -47,12 +47,8 @@ struct CollectionRow: View {
           if let icon = item.icon {
             Image(systemName: icon.symbol).foregroundStyle(item.tone.colour).font(.caption)
           }
-          VStack(alignment: .leading, spacing: 2) {
-            if let opens = item.opens {
-              OpenLink(model: model, title: item.title, opens: opens) { Text(item.title) }
-            } else {
-              Text(item.title)
-            }
+          let words = VStack(alignment: .leading, spacing: 2) {
+            Text(item.title)
             if let subtitle = item.subtitle, !subtitle.isEmpty {
               Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
@@ -60,7 +56,16 @@ struct CollectionRow: View {
               Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
           }
-          Spacer()
+          // An item with a page of its own opens it from its words; the
+          // chevron ends the row, after its actions.
+          if let opens = item.opens {
+            OpenLink(model: model, title: item.title, opens: opens, chevron: false) {
+              words.frame(maxWidth: .infinity, alignment: .leading)
+            }
+          } else {
+            words
+            Spacer()
+          }
           if let on = item.on {
             Toggle(
               "", isOn: Binding(get: { on }, set: { _ in run(index, "toggle") })
@@ -113,6 +118,10 @@ struct CollectionRow: View {
               .buttonStyle(.borderless)
               .help(row.removeLabel ?? "Remove")
             }
+          }
+          if item.opens != nil {
+            Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+              .foregroundStyle(.tertiary)
           }
         }
       }
@@ -171,7 +180,7 @@ struct CollectionRow: View {
     if row.hint == .agents, action.id == "botAvatar" {
       let items = row.items.compactMap { $0 }
       if items.indices.contains(index) {
-        model.push(OpenedAvatars(agent: items[index].title, row: row.id, index: index))
+        model.push(.avatars(OpenedAvatars(agent: items[index].title, row: row.id, index: index)))
       }
       return
     }
@@ -768,7 +777,7 @@ private struct OpenAvatars: View {
 
   var body: some View {
     Button {
-      model.push(OpenedAvatars(agent: nil, row: row, index: -1))
+      model.push(.avatars(OpenedAvatars(agent: nil, row: row, index: -1)))
     } label: {
       HStack {
         Label("View Bot Avatars", systemImage: "face.smiling")

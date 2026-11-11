@@ -775,6 +775,7 @@ class SettingsBridge implements SettingsIntents {
     final c = _at<ModelPickController>(id);
     if (c == null) {
       return ModelPickerData(
+        title: "Choose a model",
         noun: "model",
         quick: const [],
         models: const [],
@@ -792,6 +793,7 @@ class SettingsBridge implements SettingsIntents {
       for (final e in entries) e.providerId: e.providerName,
     }..removeWhere((id, _) => !entries.any((e) => e.providerId == id));
     return ModelPickerData(
+      title: "Choose ${c.role.article} ${c.role.noun}",
       noun: c.role.noun,
       fetched: ModelCatalog.notifier.value.fetched != null,
       canAdd: providers.isNotEmpty,
@@ -939,6 +941,9 @@ class SettingsBridge implements SettingsIntents {
     double nowMs,
     double turnYaw,
     double turnPitch,
+    double? pointerX,
+    double? pointerY,
+    double size,
   ) async => _stage.frame(
     instance,
     key,
@@ -947,6 +952,8 @@ class SettingsBridge implements SettingsIntents {
     live: live,
     thumbnail: thumbnail,
     turn: ViewTurn(turnYaw, turnPitch),
+    pointer: pointerX == null || pointerY == null ? null : (pointerX, pointerY),
+    size: size,
   );
 
   @override

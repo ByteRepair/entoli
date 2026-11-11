@@ -53,7 +53,7 @@ struct ModelList: View {
     .formStyle(.grouped)
     .searchable(text: $search, prompt: "Search \(cards.count) models")
     .safeAreaInset(edge: .top, spacing: 0) { filters }
-    .navigationTitle("Choose a \(data?.noun ?? "model")")
+    .navigationTitle(data?.title ?? "")
     .toolbar {
       if data?.canAdd == true {
         ToolbarItem(placement: .primaryAction) {

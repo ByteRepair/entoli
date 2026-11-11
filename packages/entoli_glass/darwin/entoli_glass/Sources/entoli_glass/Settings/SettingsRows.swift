@@ -625,20 +625,35 @@ struct OpenLink<Label: View>: View {
   let model: SettingsModel
   let title: String
   let opens: String
+  /// Drawn by the row instead, where something sits between them.
+  var chevron = true
   @ViewBuilder let label: Label
 
   var body: some View {
     Button {
-      model.push(OpenedText(title: title, opens: opens))
+      model.push(.text(OpenedText(title: title, opens: opens)))
     } label: {
       HStack {
         label
-        Spacer(minLength: 4)
-        Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+        if chevron {
+          Spacer(minLength: 4)
+          Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+        }
       }
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+  }
+}
+
+extension Color {
+  /// What a page stands on: the grouped form's own background.
+  static var pageBackground: Color {
+    #if os(macOS)
+      Color(nsColor: .windowBackgroundColor)
+    #else
+      Color(uiColor: .systemGroupedBackground)
+    #endif
   }
 }
 
@@ -656,6 +671,8 @@ struct TextPage: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
     }
+    // Opaque, as a grouped page is: bare, the page under it showed through.
+    .background(Color.pageBackground)
     .navigationTitle(title)
     .task { text = await model.text(of: opens) }
   }
@@ -668,7 +685,7 @@ struct ModelPickRow: View {
   let row: SettingRowData
 
   var body: some View {
-    PushRow(model: model, to: OpenedModels(row: row.id)) {
+    PushRow(model: model, to: .models(OpenedModels(row: row.id))) {
       VStack(alignment: .leading, spacing: 2) {
         LabeledContent(row.title, value: row.modelLabel ?? "")
         if let detail = row.detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
@@ -684,14 +701,12 @@ struct OpenedModels: Hashable {
 
 /// A row that opens a page, drawn as a link: pushed through the model, so it
 /// is animated on every platform.
-/// Generic over what it pushes rather than erased: a stack matches a page's
-/// destination by the value's own type, which an `AnyHashable` hides.
-struct PushRow<Value: Hashable, Label: View>: View {
+struct PushRow<Label: View>: View {
   let model: SettingsModel
-  let to: Value
+  let to: SettingsRoute
   @ViewBuilder let label: Label
 
-  init(model: SettingsModel, to: Value, @ViewBuilder label: () -> Label) {
+  init(model: SettingsModel, to: SettingsRoute, @ViewBuilder label: () -> Label) {
     self.model = model
     self.to = to
     self.label = label()

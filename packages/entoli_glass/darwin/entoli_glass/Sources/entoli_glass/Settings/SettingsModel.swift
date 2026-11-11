@@ -21,8 +21,9 @@ public final class SettingsModel: ObservableObject, NativeSettings {
   /// opened plainly, which starts at the list of pages.
   @Published var page: SettingsPageKey? = .general
 
-  /// What is pushed over the page: subpages and pages of text.
-  @Published var path = NavigationPath()
+  /// What is pushed over the page, and what Back left behind for Forward.
+  @Published var path: [SettingsRoute] = []
+  @Published var ahead: [SettingsRoute] = []
 
   /// Whether the settings are up, where they are a sheet: iOS.
   @Published var presented = false
@@ -82,10 +83,24 @@ public final class SettingsModel: ObservableObject, NativeSettings {
     return nil
   }
 
-  /// Pushes [value]'s page over the one shown. Animated: a Mac's stack
-  /// slides a page in only for a change made in an animation.
-  func push(_ value: some Hashable) {
-    withAnimation(.smooth(duration: 0.3)) { path.append(value) }
+  /// Pushes [route]'s page over the one shown, clearing Forward. Animated:
+  /// a Mac's stack slides a page in only for a change made in an animation.
+  func push(_ route: SettingsRoute) {
+    ahead = []
+    withAnimation(.smooth(duration: 0.3)) { path.append(route) }
+  }
+
+  /// Back one page, kept for Forward.
+  func back() {
+    guard let last = path.last else { return }
+    ahead.append(last)
+    withAnimation(.smooth(duration: 0.3)) { _ = path.removeLast() }
+  }
+
+  /// The page Back left.
+  func forward() {
+    guard let next = ahead.popLast() else { return }
+    withAnimation(.smooth(duration: 0.3)) { path.append(next) }
   }
 
   /// [row]'s own rows: a group's children, and an accessory drawn at its end.
@@ -206,3 +221,11 @@ func ignore(_: Result<Void, PigeonError>) {}
     }
   }
 #endif
+
+/// A page pushed over a settings page.
+enum SettingsRoute: Hashable {
+  case page(SettingsPageKey)
+  case text(OpenedText)
+  case avatars(OpenedAvatars)
+  case models(OpenedModels)
+}

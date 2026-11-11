@@ -51,10 +51,13 @@ public struct SettingsRoot: View {
     } detail: {
       NavigationStack(path: $model.path) {
         if let key = model.page, let page = model.page(key) {
-          SettingsPageView(model: model, page: page)
+          SettingsPageView(model: model, page: page).pageNavigation(model)
         }
       }
-      .onChange(of: model.page) { model.path = NavigationPath() }
+      .onChange(of: model.page) {
+        model.path = []
+        model.ahead = []
+      }
     }
     #if os(macOS)
       .frame(minWidth: 720, minHeight: 480)
@@ -90,17 +93,20 @@ struct SettingsPageView: View {
     }
     .formStyle(.grouped)
     .navigationTitle(page.title)
-    .navigationDestination(for: SettingsPageKey.self) { key in
-      if let sub = model.page(key) { SettingsPageView(model: model, page: sub) }
-    }
-    .navigationDestination(for: OpenedText.self) { opened in
-      TextPage(model: model, title: opened.title, opens: opened.opens)
-    }
-    .navigationDestination(for: OpenedAvatars.self) { opened in
-      BotAvatarsPage(model: model, opened: opened)
-    }
-    .navigationDestination(for: OpenedModels.self) { opened in
-      if let row = model.row(opened.row) { ModelList(model: model, row: row) }
+    .navigationDestination(for: SettingsRoute.self) { route in
+      Group {
+        switch route {
+        case .page(let key):
+          if let sub = model.page(key) { SettingsPageView(model: model, page: sub) }
+        case .text(let opened):
+          TextPage(model: model, title: opened.title, opens: opened.opens)
+        case .avatars(let opened):
+          BotAvatarsPage(model: model, opened: opened)
+        case .models(let opened):
+          if let row = model.row(opened.row) { ModelList(model: model, row: row) }
+        }
+      }
+      .pageNavigation(model)
     }
   }
 }
@@ -144,7 +150,7 @@ struct SettingRowView: View {
     case .info: InfoRow(model: model, row: row)
     case .subpage:
       if let page = row.page {
-        PushRow(model: model, to: page) {
+        PushRow(model: model, to: .page(page)) {
           LabeledContent(row.title, value: row.summary ?? "")
         }
       }
@@ -263,5 +269,37 @@ extension View {
     agreed: @escaping () -> Void
   ) -> some View {
     modifier(Asking(confirm: confirm, notice: notice, agreed: agreed))
+  }
+}
+
+extension View {
+  /// On a Mac, Back and Forward at the leading edge of the toolbar, as the
+  /// system's Settings has them, in place of the stack's own back button.
+  @ViewBuilder func pageNavigation(_ model: SettingsModel) -> some View {
+    #if os(macOS)
+      navigationBarBackButtonHidden(true)
+        .toolbar {
+          ToolbarItemGroup(placement: .navigation) {
+            ControlGroup {
+              Button {
+                model.back()
+              } label: {
+                Label("Back", systemImage: "chevron.left")
+              }
+              .disabled(model.path.isEmpty)
+              .keyboardShortcut("[", modifiers: .command)
+              Button {
+                model.forward()
+              } label: {
+                Label("Forward", systemImage: "chevron.right")
+              }
+              .disabled(model.ahead.isEmpty)
+              .keyboardShortcut("]", modifiers: .command)
+            }
+          }
+        }
+    #else
+      self
+    #endif
   }
 }

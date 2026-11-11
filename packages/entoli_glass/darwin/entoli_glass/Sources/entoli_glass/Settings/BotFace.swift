@@ -28,7 +28,9 @@ struct BotFaceView: View {
   private var moving: Bool { !reduceMotion && !thumbnail && (live || driver.reacting) }
 
   var body: some View {
-    TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !moving)) { timeline in
+    // Thirty a second: each frame is a round trip to the core, and the
+    // faces share the main thread with everything else on screen.
+    TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !moving)) { timeline in
       Canvas { context, canvas in
         guard let geometry = driver.geometry, let frame = driver.frame else { return }
         BotFacePainter.draw(
@@ -38,6 +40,14 @@ struct BotFaceView: View {
       .onChange(of: timeline.date) { _, date in ask(at: date) }
     }
     .frame(width: size, height: size)
+    .background {
+      // Where the face is in its window, for the pointer it follows.
+      GeometryReader { geometry in
+        Color.clear
+          .onAppear { driver.frameInWindow = geometry.frame(in: .global) }
+          .onChange(of: geometry.frame(in: .global)) { _, frame in driver.frameInWindow = frame }
+      }
+    }
     .contentShape(Rectangle())
     .gesture(turnable ? drag : nil)
     .onTapGesture(count: 2) {
@@ -58,6 +68,9 @@ struct BotFaceView: View {
     .onDisappear {
       model.say.botDrop(instance: driver.instance, completion: ignore)
     }
+    // A face that neither turns nor reacts takes no clicks, which reach what
+    // holds it: a thumbnail's button.
+    .allowsHitTesting(turnable || reactToTap)
     .accessibilityHidden(true)
   }
 
@@ -79,9 +92,12 @@ struct BotFaceView: View {
     guard !driver.asking else { return }
     driver.asking = true
     let ms = driver.ms(date)
+    let pointer = moving ? driver.pointer() : nil
     model.say.botFrame(
       instance: driver.instance, key: key, mood: Int64(mood), live: !reduceMotion && live,
-      thumbnail: thumbnail, nowMs: ms, turnYaw: driver.turn.0, turnPitch: driver.turn.1
+      thumbnail: thumbnail, nowMs: ms, turnYaw: driver.turn.0, turnPitch: driver.turn.1,
+      pointerX: pointer.map { Double($0.x) }, pointerY: pointer.map { Double($0.y) },
+      size: Double(size)
     ) { result in
       Task { @MainActor in
         driver.asking = false
@@ -106,6 +122,23 @@ final class BotFaceDriver: ObservableObject {
   var asking = false
   var turn: (CGFloat, CGFloat) = (0, 0)
   var dragFrom: (CGFloat, CGFloat)?
+  var frameInWindow: CGRect = .zero
+
+  /// Where the mouse is over this face's box, from its top left, while it is
+  /// in the window: what a live face looks toward, wherever the mouse is in
+  /// the window, as the Flutter app's do. None on a touch screen.
+  func pointer() -> CGPoint? {
+    #if os(macOS)
+      guard let window = NSApp.keyWindow, let content = window.contentView else { return nil }
+      let at = window.mouseLocationOutsideOfEventStream
+      guard content.bounds.contains(at) else { return nil }
+      // AppKit counts up from the bottom; SwiftUI's frame down from the top.
+      let fromTop = content.bounds.height - at.y
+      return CGPoint(x: at.x - frameInWindow.minX, y: fromTop - frameInWindow.minY)
+    #else
+      return nil
+    #endif
+  }
 
   /// Milliseconds into this avatar's clock.
   func ms(_ date: Date) -> Double { date.timeIntervalSince(start) * 1000 }

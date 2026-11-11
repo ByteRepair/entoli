@@ -697,6 +697,7 @@ class ModelProviderData {
 /// and what to say where there are none.
 class ModelPickerData {
   ModelPickerData({
+    required this.title,
     required this.noun,
     required this.quick,
     required this.models,
@@ -708,7 +709,10 @@ class ModelPickerData {
     this.emptyNote,
   });
 
-  /// What one of its models is called: "chat model".
+  /// The page's title: "Choose an image model".
+  String title;
+
+  /// What one of its models is called: "image model".
   String noun;
   List<ModelQuickData?> quick;
   List<ModelCardData?> models;
@@ -904,7 +908,9 @@ abstract class SettingsIntents {
   /// One frame of the avatar [instance], wearing [key], [nowMs] into its own
   /// clock (`encodeFrame`): live, or a still, or the thumbnail's pose.
   /// [mood] is idle, thinking or happy by place; [turnYaw] and [turnPitch]
-  /// a drag's turn. The core animates; the client draws what it is sent.
+  /// a drag's turn. [pointerX] and [pointerY] are where the pointer is over
+  /// the avatar's [size]-square box, from its top left, null where there is
+  /// none to follow. The core animates; the client draws what it is sent.
   @async
   Float64List? botFrame(
     String instance,
@@ -915,6 +921,9 @@ abstract class SettingsIntents {
     double nowMs,
     double turnYaw,
     double turnPitch,
+    double? pointerX,
+    double? pointerY,
+    double size,
   );
 
   /// A tap on [instance] [nowMs] into its clock: it reacts, and is live

@@ -247,7 +247,7 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
         ];
         return Scaffold(
           appBar: PageBar(
-            title: "Choose a ${widget.role.noun}",
+            title: "Choose ${widget.role.article} ${widget.role.noun}",
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(112),
               child: _Readable(
