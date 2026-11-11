@@ -12,7 +12,8 @@ import "../../core/formatting.dart";
 import "../../core/log.dart";
 import "../../data/builtin/llm/hosted_models.dart" show ModelHost;
 import "../../data/privacy_policy_data.dart";
-import "../../domain/model_registry.dart" show ModelCatalog;
+import "../../domain/llm_provider.dart";
+import "../../domain/model_registry.dart" show ModelCatalog, modelInfoOf;
 import "../../providers.dart";
 import "../widgets/model_catalog_page.dart" show catalogEntries;
 
@@ -30,6 +31,7 @@ final nativeSettingsProvider = Provider<NativeSettingsPages>((ref) {
   final reader = RefReader(ref);
   final schema = ref.watch(settingsSchemaProvider);
   final controllers = <String, SettingController>{};
+  final providers = ref.watch(appSettingsProvider).llmProviders;
   final pages = [
     for (final page in SettingsPageId.values)
       if (page != SettingsPageId.welcome &&
@@ -52,7 +54,7 @@ final nativeSettingsProvider = Provider<NativeSettingsPages>((ref) {
                 detail: section.description,
                 rows: [
                   for (final setting in section.settings)
-                    ..._rows(setting, controllers),
+                    ..._rows(setting, controllers, providers),
                 ],
               ),
           ],
@@ -65,18 +67,20 @@ final nativeSettingsProvider = Provider<NativeSettingsPages>((ref) {
 /// accessory, each naming it their parent.
 List<SettingRowData> _rows(
   SettingController c,
-  Map<String, SettingController> controllers, {
+  Map<String, SettingController> controllers,
+  List<LlmProviderConfig> providers, {
   String? parent,
   bool accessory = false,
 }) {
   controllers[c.id] = c;
   return [
-    _row(c, parent: parent, accessory: accessory),
+    _row(c, providers, parent: parent, accessory: accessory),
     if (c case GroupController(:final children))
       for (final child in children)
-        if (child.visible) ..._rows(child, controllers, parent: c.id),
+        if (child.visible)
+          ..._rows(child, controllers, providers, parent: c.id),
     if (c.accessory case final action?)
-      ..._rows(action, controllers, parent: c.id, accessory: true),
+      ..._rows(action, controllers, providers, parent: c.id, accessory: true),
   ];
 }
 
@@ -122,16 +126,24 @@ SettingOptionData _option(SettingOption option) => SettingOptionData(
   },
 );
 
-/// What a model pick's field reads as: the null entry, a provider's Default,
-/// or the model by its id. The picker's list names each by the catalog.
-String _modelLabel(ModelPickController c, List<String> names) {
+/// What a model pick's field reads as: the null entry, a provider's Default
+/// and the model it resolves to, or the model by the catalog's name for it.
+String _modelLabel(ModelPickController c, List<LlmProviderConfig> providers) {
   final (:providerId, :modelId) = c.choice;
   if (providerId == null && modelId == null) return c.nullLabel;
-  return modelId ?? "${names.firstOrNull ?? providerId} - Default";
+  final provider = providers.where((p) => p.id == providerId).firstOrNull;
+  if (modelId == null) {
+    final model = provider == null ? null : c.defaultOf(provider);
+    return model == null
+        ? c.nullLabel
+        : "${provider!.displayName} - Default ($model)";
+  }
+  return modelInfoOf(provider, modelId)?.name ?? modelId;
 }
 
 SettingRowData _row(
-  SettingController c, {
+  SettingController c,
+  List<LlmProviderConfig> providers, {
   String? parent,
   bool accessory = false,
 }) {
@@ -217,7 +229,7 @@ SettingRowData _row(
     case ModelPickController():
       row
         ..kind = SettingKind.modelPick
-        ..modelLabel = _modelLabel(c, const [])
+        ..modelLabel = _modelLabel(c, providers)
         ..noneLabel = c.nullLabel;
     case TextController():
       row
@@ -367,6 +379,9 @@ class SettingsBridge implements SettingsIntents {
     _sending = _container.listen<NativeSettingsPages>(
       nativeSettingsProvider,
       (_, pages) => _send(pages),
+      // A page that cannot be built says why rather than taking the shell
+      // down with it.
+      onError: (e, _) => logFailure("settings", "building the pages", e),
       fireImmediately: true,
     );
   }

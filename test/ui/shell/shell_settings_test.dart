@@ -72,4 +72,14 @@ void main() {
       AppTheme.values.indexOf(AppTheme.dark),
     );
   });
+
+  testWidgets("a switch's intent sets it", (tester) async {
+    final bridge = SettingsBridge(app.container);
+    addTearDown(bridge.close);
+
+    bridge.toggle("showCommandChips", true);
+    await settleIo(tester);
+
+    expect(AppSettings.load(app.config).showCommandChips, isTrue);
+  });
 }

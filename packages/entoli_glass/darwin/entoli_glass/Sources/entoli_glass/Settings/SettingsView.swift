@@ -20,13 +20,25 @@ public struct SettingsRoot: View {
 
   public init(model: SettingsModel) { self.model = model }
 
+  /// The listed pages in their groups, a group starting at each page that
+  /// says it does.
+  private var groups: [[SettingsPageData]] {
+    model.listed.reduce(into: [[SettingsPageData]]()) { groups, page in
+      if page.groupStart || groups.isEmpty { groups.append([]) }
+      groups[groups.count - 1].append(page)
+    }
+  }
+
   public var body: some View {
     NavigationSplitView {
       List(selection: Binding($model.page)) {
-        ForEach(Array(model.listed.enumerated()), id: \.element.key) { i, page in
-          if i > 0 && page.groupStart { Divider() }
-          NavigationLink(value: page.key) {
-            Label(page.title, systemImage: page.key.symbol)
+        ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
+          Section {
+            ForEach(group, id: \.key) { page in
+              NavigationLink(value: page.key) {
+                Label(page.title, systemImage: page.key.symbol)
+              }
+            }
           }
         }
       }

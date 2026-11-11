@@ -110,7 +110,12 @@ struct Looks: View {
   let pick: (Int) -> Void
 
   var body: some View {
-    LazyVGrid(columns: [GridItem(.adaptive(minimum: 44), spacing: 10)], alignment: .leading, spacing: 10) {
+    // Words want more room than a swatch or a corner does.
+    let words = options.contains { $0.argb == nil && $0.radius == nil }
+    LazyVGrid(
+      columns: [GridItem(.adaptive(minimum: words ? 96 : 44), spacing: 10)],
+      alignment: .leading, spacing: 10
+    ) {
       ForEach(Array(options.enumerated()), id: \.offset) { i, o in
         Button { pick(i) } label: { look(o, selected: i == picked) }
           .buttonStyle(.plain)
@@ -140,8 +145,10 @@ struct Looks: View {
         .overlay(Text(o.label).font(.caption2))
     } else {
       Text(o.label)
-        .padding(.horizontal, 10).padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 8).stroke(ring, lineWidth: selected ? 2 : 1))
+        .lineLimit(1)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 10).stroke(ring, lineWidth: selected ? 2 : 1))
     }
   }
 }
