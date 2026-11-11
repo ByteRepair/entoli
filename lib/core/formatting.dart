@@ -35,3 +35,6 @@ String safeCut(String text, int end) {
   final last = text.codeUnitAt(at - 1);
   return text.substring(0, last >= 0xD800 && last <= 0xDBFF ? at - 1 : at);
 }
+
+/// "1 chat", "3 chats".
+String plural(int count, String unit) => "$count $unit${count == 1 ? "" : "s"}";

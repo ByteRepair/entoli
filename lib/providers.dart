@@ -12,6 +12,7 @@ import "package:uuid/uuid.dart";
 
 import "app/app_menus.dart";
 import "../core/config.dart";
+import "domain/settings/setting.dart";
 import "domain/chat_intents.dart";
 import "domain/file_tools.dart" show resolveWorkspacePath;
 import "../core/platform/platform.dart"
@@ -1133,6 +1134,15 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setLicenceAccepted(bool accepted) =>
       _update((s) => s.licenceAccepted = accepted);
 
+  /// Sets [setting] to [value], or clears it: what a settings controller
+  /// writes, where no setter of its own has more to do.
+  Future<void> put<T extends Object>(Setting<T> setting, T? value) =>
+      _update((s) => s.doc.set(setting, value));
+
+  /// Sets each of [values] in one write.
+  Future<void> putAll(Map<Setting, Object?> values) =>
+      _update((s) => s.doc.setAll(values));
+
   /// Change a copy and publish it: the notifier compares by identity, so
   /// editing in place would save the file and update nothing on screen.
   /// [_update] for a writer outside the UI — the customization tools — so
@@ -1916,6 +1926,14 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
     _config = ref.watch(appConfigProvider);
     return ProjectSettings.load(_config, project: project);
   }
+
+  /// Sets [setting] to [value] here, or clears it to inherit.
+  Future<void> put<T extends Object>(Setting<T> setting, T? value) =>
+      _update((s) => s.doc.set(setting, value));
+
+  /// Sets each of [values] here in one write.
+  Future<void> putAll(Map<Setting, Object?> values) =>
+      _update((s) => s.doc.setAll(values));
 
   /// Which auto-memory store this project's chats use.
   Future<void> setMemory(Tristate value) => _update((s) => s.memory = value);

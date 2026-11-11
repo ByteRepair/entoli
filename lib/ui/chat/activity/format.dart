@@ -1,3 +1,7 @@
+import "../../../core/formatting.dart" show plural;
+
+export "../../../core/formatting.dart" show plural;
+
 /// "12 seconds", "2 minutes 5 seconds" — what a label reads after "Thought for".
 String formatThinkingTime(int milliseconds) {
   final seconds = milliseconds ~/ 1000;
@@ -39,6 +43,3 @@ String formatUntil(Duration left) {
   if (left.inDays < 1) return "in ${plural(left.inHours, "hour")}";
   return "in ${plural(left.inDays, "day")}";
 }
-
-/// "1 chat", "3 chats". Public because three files past this one say it.
-String plural(int count, String unit) => "$count $unit${count == 1 ? "" : "s"}";

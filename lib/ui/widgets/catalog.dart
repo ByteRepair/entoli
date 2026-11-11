@@ -2,7 +2,6 @@ import "package:flutter/material.dart";
 
 import "../../domain/download.dart";
 import "../../domain/installable.dart" show ModelFacts;
-import "../chat/activity/format.dart" show plural;
 import "dialogs.dart";
 import "../../core/formatting.dart";
 import "resettable_field.dart";

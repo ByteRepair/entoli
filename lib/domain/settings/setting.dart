@@ -188,6 +188,11 @@ class Setting<T extends Object> {
   /// The keys [legacy] reads, dropped from the file on a write.
   final List<String> retired;
 
+  /// [SettingsDocument.set] with [value] typed by this setting, for a
+  /// caller holding values of several types at once.
+  void _setIn(SettingsDocument document, Object? value) =>
+      document.set(this, value as T?);
+
   @override
   String toString() => "Setting($key)";
 }
@@ -267,6 +272,13 @@ class SettingsDocument {
       _json[setting.key] = setting.codec.encode(value);
     }
     _cache.remove(setting);
+  }
+
+  /// Sets each of [values], as [set] would one at a time.
+  void setAll(Map<Setting, Object?> values) {
+    for (final MapEntry(key: setting, :value) in values.entries) {
+      setting._setIn(this, value);
+    }
   }
 
   bool get isEmpty => _json.isEmpty;

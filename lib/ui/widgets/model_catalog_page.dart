@@ -9,6 +9,7 @@ import "../../domain/llm_provider.dart";
 import "../../domain/local_model.dart" show isTitleOnlyModel;
 import "../../domain/model_capability.dart";
 import "../../domain/model_registry.dart";
+import "../../app/model_role.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
 import "../../core/formatting.dart";
@@ -16,6 +17,8 @@ import "../fonts.dart";
 import "catalog.dart" show InfoTag;
 import "dialogs.dart" show confirm;
 import "page_bar.dart";
+
+export "../../app/model_role.dart";
 
 /// One model a picker can offer, with the provider it is reached through.
 class CatalogEntry {
@@ -34,53 +37,6 @@ class CatalogEntry {
   final bool custom;
 
   ModelRef get ref => (providerId: providerId, modelId: info.id);
-}
-
-/// What a picker's model is for, which decides what it is offered.
-enum ModelRole {
-  /// Answers turns, which the agent does through tools: only models that call
-  /// them.
-  agent,
-
-  /// A background completion — a classifier verdict, a memory pass — which
-  /// needs only text in and text out.
-  text,
-
-  /// A chat's title: [text], plus the models that answer nothing else
-  /// ([isTitleOnlyModel]).
-  title,
-
-  /// Answers `image_generation`: only models that make images.
-  image,
-
-  /// Voice mode's ears through a provider: only models that transcribe.
-  transcription,
-
-  /// Voice mode's voice through a provider: only models that speak.
-  speech;
-
-  bool offers(Model m) => switch (this) {
-    agent => m is ChatModel && m.info.answersTurns,
-    text || title => m is ChatModel,
-    image => m is ImageModel,
-    transcription => m is TranscriptionModel,
-    speech => m is SynthesisModel,
-  };
-
-  /// Whether its models are chat models: the ones only an endpoint's own list
-  /// names are offered, being taken for chat models since nothing says
-  /// otherwise, and whether one sees images is worth filtering on.
-  bool get chat => this == agent || this == text || this == title;
-
-  bool get voice => this == transcription || this == speech;
-
-  /// What the picker's page is called, and what its empty list says.
-  String get noun => switch (this) {
-    image => "image model",
-    transcription => "transcription model",
-    speech => "speech model",
-    _ => "model",
-  };
 }
 
 /// What a picker offers: each provider's models that [role] can use — the

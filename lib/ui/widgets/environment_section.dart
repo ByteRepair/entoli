@@ -9,7 +9,7 @@ import "section_header.dart";
 /// holds them — the app's, and a project's beside it. The values are mostly
 /// API keys, so they are drawn masked, and the edit and remove are the pair
 /// dialog and the row's cross.
-class EnvironmentSection extends StatefulWidget {
+class EnvironmentSection extends StatelessWidget {
   const EnvironmentSection({
     super.key,
     required this.env,
@@ -17,21 +17,37 @@ class EnvironmentSection extends StatefulWidget {
     required this.onSaved,
   });
 
+  final Map<String, String> env;
+  final String description;
+  final Future<void> Function(Map<String, String>) onSaved;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SectionHeader("Environment", description: description),
+      EnvironmentRows(env: env, onSaved: onSaved),
+    ],
+  );
+}
+
+/// The variables under a header someone else draws: one row each, opened to
+/// edit, and a button to add one.
+class EnvironmentRows extends StatefulWidget {
+  const EnvironmentRows({super.key, required this.env, required this.onSaved});
+
   /// The variables as they stand.
   final Map<String, String> env;
-
-  /// The section's own line: what the variables are for at this level.
-  final String description;
 
   /// What the whole map is saved as. A rename is a new map with the old name
   /// out of it.
   final Future<void> Function(Map<String, String>) onSaved;
 
   @override
-  State<EnvironmentSection> createState() => _EnvironmentSectionState();
+  State<EnvironmentRows> createState() => _EnvironmentRowsState();
 }
 
-class _EnvironmentSectionState extends State<EnvironmentSection> {
+class _EnvironmentRowsState extends State<EnvironmentRows> {
   Future<void> _edit({String? name}) async {
     final env = widget.env;
     final pair = await promptForPair(
@@ -60,7 +76,6 @@ class _EnvironmentSectionState extends State<EnvironmentSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionHeader("Environment", description: widget.description),
         for (final name in names)
           EditableRow(
             title: name,
