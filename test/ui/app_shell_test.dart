@@ -309,5 +309,38 @@ void main() {
       expect(find.byType(Sidebar), findsNothing);
       expect(menus.shown, contains("Show Sidebar"));
     }, variant: mac);
+
+    // The menu holds the keys of what it shows: Flutter's handler standing
+    // down for them is what keeps a key from running its item twice.
+    testWidgets("holds the keys, which Flutter's handler leaves to it", (
+      tester,
+    ) async {
+      await pumpMac(tester);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      final handled = await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await tester.pumpAndSettle();
+
+      expect(handled, isFalse, reason: "left to the menu bar");
+      expect(find.byType(Sidebar), findsOneWidget);
+    }, variant: mac);
+
+    testWidgets("with no menu bar, Flutter's handler runs the keys", (
+      tester,
+    ) async {
+      await pumpAt(tester, const Size(1200, 800));
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Sidebar), findsNothing);
+    }, variant: mac);
   });
 }
