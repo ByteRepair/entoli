@@ -1,5 +1,69 @@
 # Settings, and backing it all up
 
+## Settings as data
+
+Every settings page is built from data, and each frontend builds its own from
+the same data: Flutter's settings page, and on iOS and macOS under Liquid
+Glass the platform's own settings (a Settings window on a Mac, a sheet on
+iOS). The layers, each knowing only the one below it:
+
+- **The store** (`lib/domain/settings/`). `settings.json`, `project.json` and
+  a chat's `meta.json` are each a `SettingsDocument`: the JSON as the source
+  of truth, read and written through a `Setting` declaration per key in
+  `SettingKeys` — the key, a codec, the levels it may be set at, and for the
+  app's level a fallback. A value equal to its fallback is not written at the
+  app's level, so a file that predates a default gets it; a key this build
+  does not know is kept through a save; a key under an old name is moved
+  under its own as the file loads (`SettingKeys.upgrades`). `AppSettings`,
+  `ProjectSettings` and `ChatMeta` are typed views over their documents, a
+  getter and a setter a key, so nothing that reads them changed.
+- **Scopes** (`lib/app/settings/scope.dart`). `AppScope`, `ProjectScope` and
+  `ChatScope` are the objects that read and write a level: what this level
+  holds (`own`), what it would take from above (`inherited`), and `write`. A
+  project inherits the app's; what only projects and chats hold — the
+  sandbox, the rules — a project other than the default inherits from the
+  default project's, the tier every other project builds on. A chat's scope
+  is a draft over the page's copy of its `meta.json`, saved whole by Save.
+- **Controllers** (`controller.dart`). One setting bound to one scope: its
+  state, and what may be done to it. A sealed set, **each a kind of
+  behaviour rather than a setting** — a toggle, a choice, a range, a typed
+  number, text, a model pick, a group, an action, a collection edited
+  through a form, a download catalog, pairing, tooling setup, notices and
+  read-only rows. A one-off quirk is a parameter of a kind, so a frontend's
+  switch over the kinds stays short and a new kind is a compile error in
+  every frontend until it draws it. What a change sets off — a restart to
+  say, a re-anchor of every chat's TTL, a launcher icon — is the controller's,
+  through the notifier setter that does it.
+- **The schema** (`pages/`, `catalog.dart`). A `SettingSpec` per setting: an
+  id, its path (page and section), its weight there, title and description,
+  the UI it would like (`UiHint`, a hint and not a kind: a frontend that has
+  no such widget draws the kind its own way), and how its controller is
+  built at a level. `SectionSpec`s say a section's words and whether it
+  shows. Composite settings declare the methods their state is changed
+  through — a catalog's download, cancel and delete; a collection's form,
+  submit and item actions; pairing's window, invite and codes — and every
+  frontend calls those, so the logic is the core's. The file work behind the
+  Agents and Skills pages is `lib/app/prompts/`, which both frontends call.
+- **Builders.** `schema_view.dart` is Flutter's: `SchemaSections` draws a
+  page, `SettingRow` a controller, each hint with the widget the page drew
+  before the schema, so it looks the same. It builds the controllers in place
+  through the widget's ref (`buildPage` over a `WidgetReader`), since a
+  Riverpod chain between the settings and what is drawn rebuilt mid-frame
+  when a page paused under another route came back. Forms are one dialog
+  for every form (`form_dialog.dart`). The native settings are
+  `lib/ui/shell/shell_settings.dart`: every page sent as rows over
+  `pigeons/settings.dart`, a row's id naming its controller in what the
+  client says back; and the SwiftUI under `packages/entoli_glass/.../Settings/`.
+
+While the SwiftUI frontend is up, `openSettings` opens the native settings
+rather than the Flutter page — its bridge sets `nativeSettingsOpener` — and
+the Flutter settings page is not shown over the native UI. The welcome tour
+is not settings, and stays Flutter's own page everywhere.
+
+The chat and project settings pages are still Flutter on every platform and
+still built by hand: their fields read and write through a `ChatScope` or a
+`ProjectScope` rather than reaching for each level themselves.
+
 ## Setting overrides
 
 A chat's `meta.json` overrides the app default in `settings.json`. Each level
@@ -46,9 +110,8 @@ Repair** (where commands run); **Sync, Data** (the device and all of it at
 once); and **Welcome, About** (the app rather than anything it does), last.
 **Welcome** is the
 tour rather than a list of sections — `welcome_page.dart`, not this file — so
-`_categoryBody` renders it whole where every other category is
-`ListView(children: _sectionsOf(...))`; its switch arm here is exhaustiveness
-only. It is the first-run screen too: a `WelcomeGate` wrapper in the home chain
+`_categoryBody` renders it whole where every other category is its schema
+page (below). It is the first-run screen too: a `WelcomeGate` wrapper in the home chain
 (around the shell, under the `Incoming*` wrappers, so what they open stays above
 the tour) shows `WelcomePage` instead of the shell while `licenceAccepted` in
 `settings.json` is still false, and the tour's Done writes the flag through the

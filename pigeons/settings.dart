@@ -15,6 +15,8 @@ import "package:pigeon/pigeon.dart";
     dartOut: "packages/entoli_glass/lib/src/settings_contract.g.dart",
     swiftOut:
         "packages/entoli_glass/darwin/entoli_glass/Sources/entoli_glass/Contract/SettingsContract.g.swift",
+    // The shell's contract, in the same Swift module, declares the one.
+    swiftOptions: SwiftOptions(includeErrorClass: false),
   ),
 )
 /// What a row is: the kind of controller it was sent from, which decides how

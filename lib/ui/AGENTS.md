@@ -340,9 +340,12 @@ draws its own apps in — Liquid Glass on 26, its materials before that, since
 every glass call names what the OS provides rather than drawing a look of its
 own (`Glass.swift`). The conversation itself, and every page pushed over it,
 stay Flutter: one Flutter view, embedded in the SwiftUI window. So a feature
-in a reply or on a settings page is still built once, and only the chrome is
-built twice — a native copy of what the Flutter app draws, with the rules
-shared.
+in a reply is still built once, and only the chrome is built twice — a native
+copy of what the Flutter app draws, with the rules shared. The app's settings
+are the one page that is the platform's own, a Settings window on a Mac and a
+sheet on iOS, built from the same schema the Flutter page is: see "Settings
+as data" in `lib/ui/settings/AGENTS.md`. A chat's and a project's settings
+stay Flutter pages.
 
 **It is the switch in Settings > General > Appearance**, `liquidGlass` in
 `settings.json`, on by default and written only when off, the way `autoUpdate`
