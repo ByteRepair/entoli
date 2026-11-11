@@ -136,8 +136,9 @@ final class AppDelegate: FlutterAppDelegate {
   /// A wake session is not an opening anyone is watching: the trigger's
   /// launchd job started the process, so the whole app hides — a window
   /// ordered out alone loses to AppKit's visible-at-launch ordering.
+  /// No `super`: `FlutterAppDelegate` has no such method, and the call
+  /// throws, which AppKit swallows along with the rest of this.
   override func applicationDidFinishLaunching(_ notification: Notification) {
-    super.applicationDidFinishLaunching(notification)
     if Self.wake { NSApp.hide(nil) }
   }
 

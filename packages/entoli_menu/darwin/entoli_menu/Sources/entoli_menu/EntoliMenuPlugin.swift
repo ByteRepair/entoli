@@ -56,6 +56,9 @@ public struct AppCommands: Commands {
       MenuGroups(model: model, groups: Array(model.groups(.app).dropFirst()))
     }
     CommandGroup(replacing: .newItem) {
+      // A window app's File menu is made only if this has something in it
+      // at launch, before Dart has sent anything: a blank item holds the place.
+      if model.menus.isEmpty { Button("") {}.disabled(true) }
       MenuGroups(model: model, groups: model.groups(.file))
     }
     CommandGroup(before: .sidebar) {
@@ -114,3 +117,4 @@ extension NativeMenuItem {
     return KeyboardShortcut(KeyEquivalent(key), modifiers: modifiers)
   }
 }
+
