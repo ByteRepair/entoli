@@ -671,7 +671,8 @@ struct TextPage: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
     }
-    // Opaque, as a grouped page is: bare, the page under it showed through.
+    // Opaque, as a grouped page is: a page sliding in is drawn over the one
+    // it covers.
     .background(Color.pageBackground)
     .navigationTitle(title)
     .task { text = await model.text(of: opens) }

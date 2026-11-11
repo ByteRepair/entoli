@@ -293,10 +293,7 @@ from the wallpaper, so an icon whose meaning lives in its colour has none there.
 under a name of its own — the app-info icon then gets the adaptive form too,
 and there is one fewer image to keep in step.
 
-There used to be a second icon the user could pick, switched by enabling an
-`activity-alias` in `MainActivity`'s place; it went, and with it every intent
-filter written twice and every intent that had to find whichever launcher entry
-was enabled. `MainActivity` is the one entry, and an explicit intent names it.
+`MainActivity` is the one launcher entry, and an explicit intent names it.
 
 ### The debug build's own
 

@@ -45,11 +45,11 @@ iOS). The layers, each knowing only the one below it:
   frontend calls those, so the logic is the core's. The file work behind the
   Agents and Skills pages is `lib/app/prompts/`, which both frontends call.
 - **Builders.** `schema_view.dart` is Flutter's: `SchemaSections` draws a
-  page, `SettingRow` a controller, each hint with the widget the page drew
-  before the schema, so it looks the same. It builds the controllers in place
-  through the widget's ref (`buildPage` over a `WidgetReader`), since a
-  Riverpod chain between the settings and what is drawn rebuilt mid-frame
-  when a page paused under another route came back. Forms are one dialog
+  page, `SettingRow` a controller, each hint with its Flutter widget. It
+  builds the controllers in place through the widget's ref (`buildPage` over
+  a `WidgetReader`), since a Riverpod chain between the settings and what is
+  drawn rebuilds mid-frame when a page paused under another route comes
+  back. Forms are one dialog
   for every form (`form_dialog.dart`). The native settings are
   `lib/ui/shell/shell_settings.dart`: every page sent as rows over
   `pigeons/settings.dart`, a row's id naming its controller in what the

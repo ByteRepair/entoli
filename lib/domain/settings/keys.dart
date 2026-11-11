@@ -21,13 +21,12 @@ import "setting.dart";
 Map<String, String>? _opencodeEnv(Map<String, Object?> json) =>
     const StringMapCodec().decode(json["opencodeEnv"]);
 
-// `localModelKvCacheChats` is what this was called while it was thought to
-// count chats.
+// The setting's former key, read from files that still hold it.
 int? _kvCacheChats(Map<String, Object?> json) =>
     const IntCodec().decode(json["localModelKvCacheChats"]);
 
-// `useProjectMemory` is the bool the tristate replaced; true was a store of
-// the project's own.
+// A bool a file may hold in the tristate's place: true is a store of the
+// project's own.
 Tristate? _useProjectMemory(Map<String, Object?> json) =>
     json["useProjectMemory"] == true ? Tristate.on : null;
 
@@ -122,7 +121,7 @@ abstract final class SettingKeys {
   static const maxTotalContext = 1000000000;
 
   /// The reply length a model with no known limit gets, and the cap's
-  /// starting point: the 8192 every Anthropic request used to send.
+  /// starting point.
   static const defaultResponseLength = 8192;
 
   /// The bounds Maximum response length is clamped to, at load and at the
@@ -527,7 +526,7 @@ abstract final class SettingKeys {
   ///
   /// One prompt is one request to the model, so it is neither per chat nor per
   /// turn: a turn writes one for each step it takes, and the bound is over
-  /// every chat at once. It was called `Chats` and counted neither. See
+  /// every chat at once. See
   /// "Persisting the KV cache to disk" in `lib/data/local/AGENTS.md`.
   static const localModelKvCachePrompts = Setting<int>(
     "localModelKvCachePrompts",
@@ -672,8 +671,8 @@ abstract final class SettingKeys {
 
   /// Whether the welcome tour was finished with its licence ticked: what first
   /// launch reads to decide whether to show the tour, and what its Done
-  /// writes. It replaced `welcomeSeen`, which a file from before still
-  /// carries and nothing reads, so those installs walk the tour once more.
+  /// writes. A file may still carry `welcomeSeen`, which nothing reads, so
+  /// such an install walks the tour once more.
   static const licenceAccepted = DefaultedSetting<bool>(
     "licenceAccepted",
     BoolCodec(),
