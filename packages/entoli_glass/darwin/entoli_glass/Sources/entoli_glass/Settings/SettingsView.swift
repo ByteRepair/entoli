@@ -61,6 +61,7 @@ public struct SettingsRoot: View {
     }
     #if os(macOS)
       .frame(minWidth: 720, minHeight: 480)
+      .background(UnifiedToolbar())
     #else
       .toolbar {
         ToolbarItem(placement: .confirmationAction) {
@@ -313,6 +314,24 @@ extension View {
       .disabled(model.ahead.isEmpty)
       .keyboardShortcut("]", modifiers: .command)
       .help("Forward")
+    }
+  }
+#endif
+
+#if os(macOS)
+  /// The Settings window's toolbar as the main window's: one row, the title
+  /// in it beside Back and Forward. A Settings scene's window is AppKit's
+  /// preference style — the title on a row of its own over the toolbar's
+  /// items, centred — and SwiftUI's scene modifier does not reach it.
+  private struct UnifiedToolbar: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { Hook() }
+    func updateNSView(_ view: NSView, context: Context) {}
+
+    final class Hook: NSView {
+      override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.toolbarStyle = .unified
+      }
     }
   }
 #endif

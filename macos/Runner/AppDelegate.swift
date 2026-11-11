@@ -40,9 +40,6 @@ struct EntoliApp: App {
     .commands { AppCommands() }
     // The settings, as the platform's own window, built from what Dart sends.
     Settings { SettingsWindow() }
-      // One toolbar row with the title in it, as the main window has, rather
-      // than a title row over a toolbar row.
-      .windowToolbarStyle(.unified)
   }
 }
 

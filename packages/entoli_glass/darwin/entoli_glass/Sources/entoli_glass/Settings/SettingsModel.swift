@@ -87,7 +87,15 @@ public final class SettingsModel: ObservableObject, NativeSettings {
   /// a Mac's stack slides a page in only for a change made in an animation.
   func push(_ route: SettingsRoute) {
     ahead = []
-    withAnimation(.smooth(duration: 0.3)) { path.append(route) }
+    move { path.append(route) }
+  }
+
+  /// [change] to the stack, animated even from inside a form row, whose tap
+  /// otherwise carries a transaction with animations turned off.
+  private func move(_ change: () -> Void) {
+    var transaction = Transaction(animation: .smooth(duration: 0.3))
+    transaction.disablesAnimations = false
+    withTransaction(transaction, change)
   }
 
   /// What [route]'s page is called, for its header.
@@ -104,13 +112,13 @@ public final class SettingsModel: ObservableObject, NativeSettings {
   func back() {
     guard let last = path.last else { return }
     ahead.append(last)
-    withAnimation(.smooth(duration: 0.3)) { _ = path.removeLast() }
+    move { _ = path.removeLast() }
   }
 
   /// The page Back left.
   func forward() {
     guard let next = ahead.popLast() else { return }
-    withAnimation(.smooth(duration: 0.3)) { path.append(next) }
+    move { path.append(next) }
   }
 
   /// [row]'s own rows: a group's children, and an accessory drawn at its end.
