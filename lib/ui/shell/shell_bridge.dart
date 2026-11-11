@@ -3,7 +3,6 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../core/log.dart";
 import "../app_command.dart";
 import "../app_menu_bar.dart";
 import "../command_intents.dart";
@@ -49,11 +48,6 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     _bind(this);
     _publisher = ShellPublisher(
       ProviderScope.containerOf(context, listen: false),
-    );
-    // Once per process: the window stays the shell's across a restore's
-    // restart, and a second start is answered with nothing to do.
-    NativeShell().start().catchError(
-      (Object e) => logFailure("shell", "start: $e"),
     );
   }
 

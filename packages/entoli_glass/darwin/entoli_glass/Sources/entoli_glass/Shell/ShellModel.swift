@@ -51,8 +51,8 @@ final class ShellModel: ObservableObject {
   /// The composer's own object, so a keystroke redraws it and nothing else.
   private(set) lazy var composer = ComposerModel(shell: self)
 
-  /// Told when Dart says `start`: the host takes the window.
-  var onStart: (() -> Void)?
+  /// Whether the host took the window at launch, which Dart asks for.
+  var hosted = false
 
   /// Told when the window's own state changes, for what SwiftUI cannot set:
   /// the window's appearance.
@@ -78,7 +78,7 @@ final class ShellModel: ObservableObject {
 /// A snapshot from Dart replaces what was there: Dart sends one only when it
 /// changed.
 extension ShellModel: NativeShell {
-  func start() throws { onStart?() }
+  func hosting() throws -> Bool { hosted }
 
   func window(snapshot: WindowSnapshot) throws {
     window = snapshot

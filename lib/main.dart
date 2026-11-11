@@ -1,12 +1,14 @@
 import "dart:async";
 import "dart:ui" show AppExitResponse;
 
+import "package:entoli_glass/entoli_glass.dart" show NativeShell;
 import "package:flutter/foundation.dart" show defaultTargetPlatform;
 import "package:flutter/material.dart";
 import "package:flutter/scheduler.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "core/config.dart";
+import "core/log.dart";
 import "core/platform/app_icon.dart";
 import "core/platform/background_work.dart";
 import "core/platform/clipboard_files.dart";
@@ -145,7 +147,14 @@ class AppSession {
     final glassAvailable =
         defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.macOS;
-    _glassAtLaunch ??= glassAvailable && AppSettings.load(config).liquidGlass;
+    // The shell decided at launch, from the same settings file, before Dart
+    // ran; the app draws for what it did.
+    _glassAtLaunch ??=
+        glassAvailable &&
+        await NativeShell().hosting().catchError((Object e) {
+          logFailure("shell", "hosting: $e");
+          return false;
+        });
     // Started here and awaited before the identity load below: the keyring
     // probe is decided once, so the identity's own first read must not race
     // this one, and the mirror the registry reads keys through is filled by

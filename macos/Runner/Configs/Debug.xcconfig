@@ -1,3 +1,7 @@
 #include "../../Flutter/Flutter-Debug.xcconfig"
 #include "Warnings.xcconfig"
 #include "FoundationModels.xcconfig"
+
+// The data directory's leaf, as Dart's kDebugMode picks it; read by the
+// shell at launch (LaunchSettings.swift).
+ENTOLI_DATA_LEAF = entoli-debug

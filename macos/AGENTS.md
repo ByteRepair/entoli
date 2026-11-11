@@ -83,7 +83,8 @@ otherwise add Show Tab Bar and Show All Tabs to the View menu.
 With Liquid Glass on (see "Liquid Glass" in `lib/ui/AGENTS.md`) the window's
 content is SwiftUI's, and the Runner does not know: `MainFlutterWindow` makes
 the `FlutterViewController` and its channels exactly as it always has, and the
-`entoli_glass` plugin, on Dart's `start`, puts an `NSHostingController` in as
+`entoli_glass` plugin, as the Runner registers it in `awakeFromNib` and
+before the window shows, puts an `NSHostingController` in as
 the window's content with that same controller embedded in it — taken as a
 child of a container rather than handed to SwiftUI, since SwiftUI makes a
 representable's controller again whenever its identity changes and the
