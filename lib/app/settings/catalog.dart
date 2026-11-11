@@ -1,5 +1,6 @@
 import "pages/about.dart";
 import "pages/browser.dart";
+import "pages/data.dart";
 import "pages/general.dart";
 import "pages/llms.dart";
 import "pages/memory.dart";
@@ -19,6 +20,7 @@ final entoliSettings = SettingsSchema(
     ...browserSections,
     ...aboutSections,
     ...syncSections,
+    ...dataSections,
   ],
   settings: [
     ...generalSettings,
@@ -29,5 +31,6 @@ final entoliSettings = SettingsSchema(
     ...browserSettings,
     ...aboutSettings,
     ...syncSettings,
+    ...dataSettings,
   ],
 );

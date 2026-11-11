@@ -114,6 +114,7 @@ class SettingRow extends StatelessWidget {
       final RangeController c => _Range(c),
       final KeyValuesController c => _KeyValues(c),
       final ActionController c => _Action(c),
+      final GroupController c when c.hint == UiHint.buttons => _Buttons(c),
       final GroupController c => _Group(c),
       final TextController c => _Text(c),
       final NoticeController c => switch (c.hint) {
@@ -186,6 +187,26 @@ class SettingRow extends StatelessWidget {
   };
 }
 
+/// Runs [c], asking first what it asks: a confirm, a passing note that
+/// stops it, or nothing at all where what it opened was dismissed.
+Future<void> _run(BuildContext context, ActionController c) async {
+  final ask = await c.confirm();
+  if (!context.mounted) return;
+  if (ask != null) {
+    if (ask.cancelled) return;
+    if (ask.brief) return say(context, ask.message);
+    final yes = await confirm(
+      context,
+      title: ask.title,
+      message: ask.message,
+      confirmLabel: ask.confirmLabel,
+      destructive: ask.destructive,
+    );
+    if (!yes || !context.mounted) return;
+  }
+  await _tell(context, c.run());
+}
+
 /// Says what a change had to say, where it said anything: in a dialog where
 /// it has a title, in passing where it does not.
 Future<void> _tell(BuildContext context, Future<SettingNotice?> change) async {
@@ -207,6 +228,8 @@ IconData? _icon(SettingGlyph? glyph) => switch (glyph) {
   SettingGlyph.privacy => Icons.privacy_tip_outlined,
   SettingGlyph.licence => Icons.balance_outlined,
   // Drawn as the app's own mark, not an icon.
+  SettingGlyph.download => Icons.download,
+  SettingGlyph.upload => Icons.upload_file,
   SettingGlyph.online => Icons.circle,
   SettingGlyph.connecting || SettingGlyph.offline => Icons.circle_outlined,
   SettingGlyph.failed => Icons.error_outline,
@@ -634,21 +657,7 @@ class _Action extends StatelessWidget {
 
   final ActionController c;
 
-  Future<void> _press(BuildContext context) async {
-    final ask = await c.confirm();
-    if (!context.mounted) return;
-    if (ask != null) {
-      final yes = await confirm(
-        context,
-        title: ask.title,
-        message: ask.message,
-        confirmLabel: ask.confirmLabel,
-        destructive: ask.destructive,
-      );
-      if (!yes || !context.mounted) return;
-    }
-    await _tell(context, c.run());
-  }
+  Future<void> _press(BuildContext context) => _run(context, c);
 
   @override
   Widget build(BuildContext context) {
@@ -1263,4 +1272,47 @@ class _Devices extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Actions side by side, the first filled and the rest outlined, and the bar
+/// that runs while one of them does.
+class _Buttons extends StatelessWidget {
+  const _Buttons(this.c);
+
+  final GroupController c;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      AddButtonRow(
+        child: Row(
+          spacing: 12,
+          children: [
+            for (final child in c.children)
+              if (child case final ActionController action when action.visible)
+                action.secondary
+                    ? OutlinedButton.icon(
+                        icon: Icon(_icon(action.glyph)),
+                        label: Text(action.label),
+                        onPressed: action.enabled
+                            ? () => _run(context, action)
+                            : null,
+                      )
+                    : FilledButton.icon(
+                        icon: Icon(_icon(action.glyph)),
+                        label: Text(action.label),
+                        onPressed: action.enabled
+                            ? () => _run(context, action)
+                            : null,
+                      ),
+          ],
+        ),
+      ),
+      SizedBox(
+        height: 2,
+        child: c.busy ? const LinearProgressIndicator(minHeight: 2) : null,
+      ),
+    ],
+  );
 }

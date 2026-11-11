@@ -1,19 +1,12 @@
-import "dart:io";
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../data/backup.dart";
 import "../../data/builtin/llm/providers/presets.dart";
-import "../../core/platform/platform.dart" as platform;
 import "../../domain/llm_provider.dart";
 import "../../providers.dart";
-import "../chat/activity/format.dart";
 import "../widgets/add_button_row.dart";
-import "../widgets/busy.dart";
-import "../widgets/dialogs.dart";
 import "../widgets/editable_row.dart";
-import "../../core/formatting.dart";
 import "../widgets/side_panel_frame.dart";
 import "../widgets/section_header.dart";
 import "agents_settings.dart";
@@ -155,7 +148,7 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
   // The two things the agent carries between conversations: the files the
   // user writes (instructions) and the ones it writes (memories).
   SettingsCategory.memory => const [SchemaSections(SettingsPageId.memory)],
-  SettingsCategory.data => const [_BackupSection()],
+  SettingsCategory.data => const [SchemaSections(SettingsPageId.data)],
   SettingsCategory.shortcuts => const [
     SchemaSections(SettingsPageId.shortcuts),
   ],
@@ -366,135 +359,4 @@ class _ProvidersEditor extends ConsumerWidget {
     if (provider is CliProvider) return "${provider.command} · $status";
     return provider.terms == null ? "${config.baseUrl} · $status" : status;
   }
-}
-
-/// Everything the app holds, out as one file and back in. The format is
-/// `domain/backup.dart`'s; this is the two buttons, and what the second of them
-/// has to ask before it goes ahead.
-class _BackupSection extends ConsumerStatefulWidget {
-  const _BackupSection();
-
-  @override
-  ConsumerState<_BackupSection> createState() => _BackupSectionState();
-}
-
-class _BackupSectionState extends ConsumerState<_BackupSection> {
-  final _busy = ValueNotifier(false);
-
-  @override
-  void dispose() {
-    _busy.dispose();
-    super.dispose();
-  }
-
-  Future<void> _export() => _guard(() async {
-    var size = 0;
-    final saved = await ref.read(backupHandoffProvider).save(
-      backupFilename(DateTime.now()),
-      (path) async {
-        await writeBackup(ref.read(appConfigProvider), path);
-        size = await File(path).length();
-      },
-    );
-    if (saved) _say("Backup written — ${formatSize(size)}.");
-  });
-
-  Future<void> _import() async {
-    // A courtesy rather than a safeguard: the restart stops the turn either
-    // way, and killing someone's work without saying so is the rude version.
-    if (ref.read(agentBackendProvider).runningTurns.value.isNotEmpty) {
-      return _say("A turn is still running. Stop it first.");
-    }
-    final path = await ref.read(backupHandoffProvider).pick();
-    if (path == null || !mounted) return;
-
-    final Backup backup;
-    try {
-      backup = await openBackup(path);
-    } on BackupFormatException catch (e) {
-      return _say("That file cannot be restored: $e.");
-    }
-    if (!mounted) return;
-
-    final confirmed = await confirm(
-      context,
-      title: "Restore this backup?",
-      message:
-          "${_describe(backup)}\n\nEverything here now — every chat, "
-          "project, workspace and setting — is replaced by what is in it, and "
-          "Entoli starts again on what was restored.",
-      confirmLabel: "Restore",
-      destructive: true,
-    );
-    if (!confirmed) return;
-
-    // The restore runs inside the restart, with no session over the files it
-    // replaces: everything that writes to them — a turn, the sweep, a
-    // checkpoint — belongs to the session, so stopping it is what a check
-    // against one writer could only approximate.
-    final config = ref.read(appConfigProvider);
-    await _guard(
-      () => ref
-          .read(appRestartProvider)
-          .restart(
-            // `deleteTree` is the platform's, which gets past proot's mode-0000
-            // stubs in a `projects/<project>/rootfs/` an earlier restore left
-            // behind, and past the read-only skill directories.
-            whileStopped: () =>
-                restoreBackup(config, backup, deleteTree: platform.deleteTree),
-          ),
-    );
-  }
-
-  Future<void> _guard(Future<void> Function() work) =>
-      whileBusy(context, _busy, work);
-
-  void _say(String message) {
-    if (mounted) say(context, message);
-  }
-
-  String _describe(Backup backup) {
-    final made = backup.createdAt;
-    final when = made == null
-        ? "A backup"
-        : "A backup from ${formatAge(DateTime.now().difference(made))}";
-    return "$when, holding ${plural(backup.chats, "chat")} and "
-        "${formatSize(backup.size)}.";
-  }
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const SectionHeader(
-        "Backup",
-        description:
-            "Every chat, project, workspace, prompt and setting as "
-            "one zip. Restoring one replaces what is here.",
-      ),
-      // The icons the explorer already uses for the same two directions:
-      // a download leaves the app, an upload arrives in it.
-      AddButtonRow(
-        child: ValueListenableBuilder(
-          valueListenable: _busy,
-          builder: (context, busy, _) => Row(
-            spacing: 12,
-            children: [
-              FilledButton.icon(
-                icon: const Icon(Icons.download),
-                label: const Text("Export"),
-                onPressed: busy ? null : _export,
-              ),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.upload_file),
-                label: const Text("Import"),
-                onPressed: busy ? null : _import,
-              ),
-            ],
-          ),
-        ),
-      ),
-      BusyBar(_busy),
-    ],
-  );
 }

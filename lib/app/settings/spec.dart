@@ -68,6 +68,9 @@ enum UiHint {
 
   /// Devices, each with its state and what can be done to it.
   devices,
+
+  /// Actions side by side in a row.
+  buttons,
 }
 
 /// The pages settings is filed under, in the order they are offered. A
@@ -191,6 +194,8 @@ enum SettingGlyph {
   code,
   privacy,
   licence,
+  download,
+  upload,
   online,
   connecting,
   offline,

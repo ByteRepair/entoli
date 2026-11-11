@@ -72,12 +72,33 @@ class SettingConfirm {
     required this.message,
     this.confirmLabel,
     this.destructive = false,
-  });
+  }) : brief = false,
+       cancelled = false;
+
+  /// Something to say in passing, and the action does not run.
+  const SettingConfirm.note(this.message)
+    : title = "",
+      confirmLabel = null,
+      destructive = false,
+      brief = true,
+      cancelled = false;
+
+  /// Nothing to say, and the action does not run: the file picker it opened
+  /// was dismissed.
+  const SettingConfirm.nothing()
+    : title = "",
+      message = "",
+      confirmLabel = null,
+      destructive = false,
+      brief = false,
+      cancelled = true;
 
   final String title;
   final String message;
   final String? confirmLabel;
   final bool destructive;
+  final bool brief;
+  final bool cancelled;
 }
 
 /// What an option looks like where it is more than its label: the colours of
@@ -357,6 +378,7 @@ final class ActionController extends SettingController {
     required Future<SettingNotice?> Function() run,
     Future<SettingConfirm?> Function()? confirm,
     this.destructive = false,
+    this.secondary = false,
     super.title,
     super.description,
     super.footnote,
@@ -376,6 +398,10 @@ final class ActionController extends SettingController {
   SettingGlyph? get glyph => glyphOverride ?? super.glyph;
 
   final bool destructive;
+
+  /// Whether it is the lesser of two side by side: drawn outlined.
+  final bool secondary;
+
   final Future<SettingNotice?> Function() _action;
   final Future<SettingConfirm?> Function()? _ask;
 
@@ -386,11 +412,13 @@ final class ActionController extends SettingController {
 }
 
 /// Settings that are one subject under one label: a switch and the count it
-/// turns on, and a line saying what the two of them do together.
+/// turns on, and a line saying what the two of them do together; or actions
+/// side by side, with [busy] while one of them runs.
 final class GroupController extends SettingController {
   GroupController(
     super.spec, {
     required this.children,
+    this.busy = false,
     super.title,
     super.description,
     super.footnote,
@@ -401,6 +429,9 @@ final class GroupController extends SettingController {
 
   /// Drawn in order; one that is not visible is left out.
   final List<SettingController> children;
+
+  /// Whether one of its actions is running, which holds the others.
+  final bool busy;
 }
 
 /// A whole number typed rather than slid to — a value set occasionally —
