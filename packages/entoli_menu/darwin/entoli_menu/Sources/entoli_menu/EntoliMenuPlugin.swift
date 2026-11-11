@@ -117,4 +117,3 @@ extension NativeMenuItem {
     return KeyboardShortcut(KeyEquivalent(key), modifiers: modifiers)
   }
 }
-
