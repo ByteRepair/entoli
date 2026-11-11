@@ -1,5 +1,6 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../providers.dart";
 import "catalog.dart";
 import "controller.dart";
 import "schema.dart";
@@ -68,3 +69,16 @@ final settingsPageProvider =
         key.$2,
       ),
     );
+
+/// Whether this platform can do anything [page] sets. One it cannot is
+/// neither listed nor opened, so its page never has to say so. On-device
+/// holds the model server's downloads and the voice models', so a build with
+/// neither has no page to offer.
+bool pageOffered(SettingReader ref, SettingsPageId page) => switch (page) {
+  SettingsPageId.agentBrowser => ref.watch(agentBrowserProvider).available,
+  SettingsPageId.triggers => ref.watch(reminderAlarmsProvider).available,
+  SettingsPageId.onDevice =>
+    ref.watch(localEngineProvider).available ||
+        ref.watch(voiceProvider).hasModelCatalog,
+  _ => page.listed,
+};

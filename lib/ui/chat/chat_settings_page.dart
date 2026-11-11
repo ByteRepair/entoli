@@ -4,7 +4,10 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/app_settings.dart"
     show ReasoningEffort, reasoningEffortLabels;
 import "../../domain/builtin_project.dart";
+import "../../app/settings/scope.dart";
+import "../../app/settings/spec.dart" show WidgetReader;
 import "../../domain/chat_meta.dart";
+import "../../domain/settings/keys.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
 import "../../providers.dart";
@@ -31,7 +34,7 @@ import "../widgets/page_bar.dart";
 /// Delete button all answer for a chat on disk, and there is none. Folded in,
 /// they were five null checks and two `!`s through a page whose ordinary
 /// subject exists — the same shape this change took out of the repository.
-class NewChatSettingsPage extends StatefulWidget {
+class NewChatSettingsPage extends ConsumerStatefulWidget {
   const NewChatSettingsPage({super.key, required this.initial, this.project});
 
   final ChatMeta initial;
@@ -40,52 +43,54 @@ class NewChatSettingsPage extends StatefulWidget {
   final String? project;
 
   @override
-  State<NewChatSettingsPage> createState() => _NewChatSettingsPageState();
+  ConsumerState<NewChatSettingsPage> createState() =>
+      _NewChatSettingsPageState();
 }
 
-class _NewChatSettingsPageState extends State<NewChatSettingsPage> {
+class _NewChatSettingsPageState extends ConsumerState<NewChatSettingsPage> {
   /// A copy: the fields write in place, so backing out has to leave the
   /// screen behind this holding what it had.
   late final ChatMeta _meta = widget.initial.copy();
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: PageBar(
-      title: "Chat settings",
-      actions: [
-        PageAction.confirm(onPressed: () => Navigator.of(context).pop(_meta)),
-      ],
-    ),
-    body: ListView(
-      children: [
-        // `_LlmField` writes the pair onto the meta it was given and hands
-        // back that same object, so there is nothing to take from it.
-        _LlmField(meta: _meta, onChanged: (_) => setState(() {})),
-        _ThinkingField(
-          value: _meta.reasoningEffort,
-          onChanged: (v) => setState(() => _meta.reasoningEffort = v),
-        ),
-        const Divider(),
-        _ApprovalField(
-          value: _meta.approveMode,
-          onChanged: (v) => setState(() => _meta.approveMode = v),
-        ),
-        const Divider(),
-        _MemoryField(
-          value: _meta.memoryOff,
-          project: widget.project,
-          onChanged: (v) => setState(() => _meta.memoryOff = v),
-        ),
-        const Divider(),
-        TempChatTtlField(
-          value: _meta.tempChatTtl,
-          onChanged: (v) => setState(() => _meta.tempChatTtl = v),
-          project: widget.project,
-        ),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final scope = _chatScope(ref, _meta, widget.project, () => setState(() {}));
+    return Scaffold(
+      appBar: PageBar(
+        title: "Chat settings",
+        actions: [
+          PageAction.confirm(onPressed: () => Navigator.of(context).pop(_meta)),
+        ],
+      ),
+      body: ListView(
+        children: [
+          _LlmField(scope),
+          _ThinkingField(scope),
+          const Divider(),
+          _ApprovalField(scope),
+          const Divider(),
+          _MemoryField(scope, project: widget.project),
+          const Divider(),
+          _TtlField(scope, project: widget.project),
+        ],
+      ),
+    );
+  }
 }
+
+/// The chat's settings as a scope over [meta], the project's above it: what
+/// the fields read their own and inherited values from, and write to. A
+/// draft, saved whole by the page.
+ChatScope _chatScope(
+  WidgetRef ref,
+  ChatMeta meta,
+  String? project,
+  void Function() onChange,
+) => ChatScope(
+  meta.doc,
+  projectScopeAt(WidgetReader(ref), ProjectAddress(project)),
+  onChange: onChange,
+);
 
 /// Open [chatId]'s settings: its title bar and the app's Chat menu.
 void openChatSettings(BuildContext context, String chatId) => Navigator.of(
@@ -181,6 +186,10 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final mirrored = ref.watch(isMirroredChatProvider(widget.chatId));
+    final meta = _meta;
+    final scope = meta == null
+        ? null
+        : _chatScope(ref, meta, _project, () => setState(() {}));
     final deviceName = ref.watch(
       remoteChatsProvider.select((chats) {
         for (final c in chats) {
@@ -256,36 +265,16 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                       // device may not have.
                       if (!mirrored) ...[
                         const Divider(),
-                        _LlmField(
-                          meta: _meta!,
-                          onChanged: (m) => setState(() => _meta = m),
-                        ),
-                        _ThinkingField(
-                          value: _meta!.reasoningEffort,
-                          onChanged: (v) =>
-                              setState(() => _meta!.reasoningEffort = v),
-                        ),
+                        _LlmField(scope!),
+                        _ThinkingField(scope),
                       ],
                       const Divider(),
-                      _ApprovalField(
-                        value: _meta!.approveMode,
-                        onChanged: (v) =>
-                            setState(() => _meta!.approveMode = v),
-                      ),
+                      _ApprovalField(scope!),
                       // What it inherits is the home device's project, which a
                       // mirror cannot read.
-                      if (!mirrored)
-                        _SandboxField(
-                          value: _meta!.sandbox,
-                          project: _project,
-                          onChanged: (v) => setState(() => _meta!.sandbox = v),
-                        ),
+                      if (!mirrored) _SandboxField(scope),
                       const Divider(),
-                      _MemoryField(
-                        value: _meta!.memoryOff,
-                        project: _project,
-                        onChanged: (v) => setState(() => _meta!.memoryOff = v),
-                      ),
+                      _MemoryField(scope, project: _project),
                       const Divider(),
                       if (_state?.pinned ?? false)
                         LabelledField(
@@ -301,12 +290,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                           ),
                         )
                       else
-                        TempChatTtlField(
-                          value: _meta!.tempChatTtl,
-                          onChanged: (v) =>
-                              setState(() => _meta!.tempChatTtl = v),
-                          project: _project,
-                        ),
+                        _TtlField(scope, project: _project),
                       const Divider(),
                       if (!frozen) _DeleteButton(chatId: widget.chatId),
                     ],
@@ -343,56 +327,54 @@ class _DeleteButton extends ConsumerWidget {
   }
 }
 
-class _LlmField extends ConsumerWidget {
-  const _LlmField({required this.meta, required this.onChanged});
+class _LlmField extends StatelessWidget {
+  const _LlmField(this.scope);
 
-  final ChatMeta meta;
-  final ValueChanged<ChatMeta> onChanged;
+  final ChatScope scope;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final defaults = ref.watch(appSettingsProvider);
-    return LabelledField(
-      label: "LLM",
-      child: ModelPicker(
-        nullLabel: defaultOptionLabel,
-        choice: (providerId: meta.provider, modelId: meta.model),
-        inherited: (
-          providerId: defaults.defaultProviderId,
-          modelId: defaults.defaultModelId,
-        ),
-        onChanged: (choice) => onChanged(
-          meta
-            ..provider = choice.providerId
-            ..model = choice.modelId,
-        ),
+  Widget build(BuildContext context) => LabelledField(
+    label: "LLM",
+    child: ModelPicker(
+      nullLabel: defaultOptionLabel,
+      choice: (
+        providerId: scope.own(SettingKeys.provider),
+        modelId: scope.own(SettingKeys.model),
       ),
-    );
-  }
+      inherited: (
+        providerId: scope.root.resolve(SettingKeys.defaultProviderId),
+        modelId: scope.root.resolve(SettingKeys.defaultModelId),
+      ),
+      onChanged: (choice) => scope.writeAll({
+        SettingKeys.provider: choice.providerId,
+        SettingKeys.model: choice.modelId,
+      }),
+    ),
+  );
 }
 
-/// How long this chat's model thinks. Null follows Settings > LLMs, which the
-/// slider then shows and the reset restores, the way [InheritableSlider] does.
-class _ThinkingField extends ConsumerWidget {
-  const _ThinkingField({required this.value, required this.onChanged});
+/// How long this chat's model thinks. Unset follows Settings > LLMs, which
+/// the slider then shows and the reset restores, the way [InheritableSlider]
+/// does.
+class _ThinkingField extends StatelessWidget {
+  const _ThinkingField(this.scope);
 
-  final ReasoningEffort? value;
-  final ValueChanged<ReasoningEffort?> onChanged;
+  final ChatScope scope;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final inherited = ref.watch(
-      appSettingsProvider.select((s) => s.reasoningEffort),
-    );
+  Widget build(BuildContext context) {
+    final value = scope.own(SettingKeys.reasoningEffort);
+    final inherited = scope.inherited(SettingKeys.reasoningEffort)!;
+    void set(ReasoningEffort? v) => scope.write(SettingKeys.reasoningEffort, v);
     return LabelledField(
       label: "Thinking",
       child: ResettableField(
-        onReset: () => onChanged(null),
+        onReset: () => set(null),
         resetLabel: "Settings > LLMs (${reasoningEffortLabels[inherited]})",
         child: ThinkingSlider(
           stops: reasoningEffortLabels,
           value: value ?? inherited,
-          onChanged: onChanged,
+          onChanged: set,
           help: value == null ? "Follows Settings > LLMs." : null,
         ),
       ),
@@ -400,28 +382,17 @@ class _ThinkingField extends ConsumerWidget {
   }
 }
 
-/// Whether this chat keeps out of the memory subsystem. The on position
-/// stores null — the chat follows whatever the project answers — and the off
-/// one stores the off. A project that has no memory of its own takes the
-/// subsystem away outright, and for that one the row says so and takes
-/// nothing.
-class _SandboxField extends ConsumerWidget {
-  const _SandboxField({
-    required this.value,
-    required this.project,
-    required this.onChanged,
-  });
+/// Whether this chat's commands run under the sandbox, over the project's
+/// answer and the default project's under it.
+class _SandboxField extends StatelessWidget {
+  const _SandboxField(this.scope);
 
-  final bool? value;
-  final String? project;
-  final ValueChanged<bool?> onChanged;
+  final ChatScope scope;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final inherited =
-        ref.watch(projectSettingsProvider(project)).sandbox ??
-        ref.watch(projectSettingsProvider(null)).sandbox ??
-        true;
+  Widget build(BuildContext context) {
+    final value = scope.own(SettingKeys.sandbox);
+    final inherited = scope.inherited(SettingKeys.sandbox) ?? true;
     return InheritableSwitch(
       title: "Sandbox",
       subtitle: (value ?? inherited)
@@ -429,25 +400,26 @@ class _SandboxField extends ConsumerWidget {
           : "Off: this chat's commands write wherever you can.",
       value: value,
       inherited: inherited,
-      onChanged: onChanged,
+      onChanged: (v) => scope.write(SettingKeys.sandbox, v),
     );
   }
 }
 
+/// Whether this chat keeps out of the memory subsystem. The on position
+/// stores nothing — the chat follows whatever the project answers — and the
+/// off one stores the off. A project that has no memory of its own takes the
+/// subsystem away outright, and for that one the row says so and takes
+/// nothing.
 class _MemoryField extends StatelessWidget {
-  const _MemoryField({
-    required this.value,
-    required this.project,
-    required this.onChanged,
-  });
+  const _MemoryField(this.scope, {required this.project});
 
-  final bool? value;
+  final ChatScope scope;
   final String? project;
-  final ValueChanged<bool?> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final taken = builtinProjectOf(project)?.memory == MemoryPolicy.off;
+    final value = scope.own(SettingKeys.memoryOff);
     return SwitchListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
       title: const Text("Project memory"),
@@ -457,37 +429,56 @@ class _MemoryField extends StatelessWidget {
             : "Off, the agent reads, recalls and keeps no memories in this chat.",
       ),
       value: taken ? false : value != true,
-      onChanged: taken ? null : (v) => onChanged(v ? null : true),
+      onChanged: taken
+          ? null
+          : (v) => scope.write(SettingKeys.memoryOff, v ? null : true),
     );
   }
 }
 
-/// Whether this chat's commands wait for the user.
-class _ApprovalField extends ConsumerWidget {
-  const _ApprovalField({required this.value, required this.onChanged});
+/// How long this chat lives once its TTL is enabled, over the project's
+/// answer and the app's.
+class _TtlField extends StatelessWidget {
+  const _TtlField(this.scope, {required this.project});
 
-  final ApproveMode? value;
-  final ValueChanged<ApproveMode?> onChanged;
+  final ChatScope scope;
+  final String? project;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(appSettingsProvider);
-    final noClassifier = settings.classifierProviderId == null;
+  Widget build(BuildContext context) => TempChatTtlField(
+    value: scope.own(SettingKeys.tempChatTtl),
+    onChanged: (v) => scope.write(SettingKeys.tempChatTtl, v),
+    project: project,
+  );
+}
+
+/// Whether this chat's commands wait for the user.
+class _ApprovalField extends StatelessWidget {
+  const _ApprovalField(this.scope);
+
+  final ChatScope scope;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = scope.own(SettingKeys.approveMode);
+    final inherited = scope.inherited(SettingKeys.approveMode)!;
+    final noClassifier =
+        scope.root.resolve(SettingKeys.classifierProviderId) == null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         InheritableDropdown<ApproveMode>(
           label: "Running commands",
           value: value,
-          inherited: approveModeLabels[settings.approveMode],
+          inherited: approveModeLabels[inherited],
           options: approveModeLabels,
           disabled: {if (noClassifier) ApproveMode.auto},
-          onChanged: onChanged,
+          onChanged: (v) => scope.write(SettingKeys.approveMode, v),
         ),
         // The auto posture hides two decisions from the user it names: the
         // classifier can refuse without asking, and a run of escalations
         // falls back to asking. The label cannot carry that; this line can.
-        if ((value ?? settings.approveMode) == ApproveMode.auto)
+        if ((value ?? inherited) == ApproveMode.auto)
           const Padding(
             padding: EdgeInsets.only(left: 16, top: 2),
             child: Text(
