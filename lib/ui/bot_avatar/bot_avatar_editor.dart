@@ -4,6 +4,7 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../app/bot_avatar/library.dart";
 import "../../domain/bot_avatar/definition.dart";
 import "../../domain/bot_avatar/import.dart";
 import "../../domain/bot_avatar/pose.dart";
@@ -22,31 +23,6 @@ import "colour_dialog.dart";
 final _spec = Uri.parse(
   "https://dominikscholz.github.io/open-bot-avatar/#/docs",
 );
-
-/// One shape the editor offers, and where it came from.
-class BotAvatarEntry {
-  const BotAvatarEntry(this.definition, this.ownColour, this.source);
-
-  final BotAvatarDefinition definition;
-
-  /// The colour it shows until one is picked for it, and what Reset
-  /// returns it to.
-  final int ownColour;
-
-  final BotAvatarSource source;
-}
-
-enum BotAvatarSource {
-  /// Shipped with the app.
-  preset,
-
-  /// Pasted in on the Import tab; removable.
-  imported,
-
-  /// What the agent wore when the editor opened, where that is neither —
-  /// an import since deleted, say.
-  current,
-}
 
 /// Choose and colour the Bot Avatar an agent wears. The live preview stands
 /// over the controls on a tall screen and beside them on a wide one; the
@@ -104,29 +80,11 @@ class _BotAvatarEditorPageState extends ConsumerState<BotAvatarEditorPage>
     super.dispose();
   }
 
-  List<BotAvatarEntry> _entries() {
-    final presets = ref.watch(botAvatarPresetsProvider).value ?? const [];
-    final imported = ref.watch(importedBotAvatarsProvider).value ?? const [];
-    final entries = [
-      for (final p in presets)
-        BotAvatarEntry(p.definition, p.colour, BotAvatarSource.preset),
-      for (final d in imported)
-        BotAvatarEntry(d, BotPalette.ownColour(d.id), BotAvatarSource.imported),
-    ];
-    final initial = widget.initial;
-    if (initial != null &&
-        !entries.any((e) => e.definition == initial.definition)) {
-      entries.insert(
-        0,
-        BotAvatarEntry(
-          initial.definition,
-          initial.colour,
-          BotAvatarSource.current,
-        ),
-      );
-    }
-    return entries;
-  }
+  List<BotAvatarEntry> _entries() => botAvatarEntries(
+    ref.watch(botAvatarPresetsProvider).value ?? const [],
+    ref.watch(importedBotAvatarsProvider).value ?? const [],
+    initial: widget.initial,
+  );
 
   BotAvatarEntry? _current(List<BotAvatarEntry> entries) =>
       entries.firstWhereOrNull((e) => e.definition == _selected) ??

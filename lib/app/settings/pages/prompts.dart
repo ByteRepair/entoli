@@ -7,10 +7,12 @@ import "../../../data/prompts/prompt_export.dart";
 import "../../../data/prompts/skill_import.dart";
 import "../../../domain/agent_definition.dart";
 import "../../../domain/agent_face.dart";
+import "../../../domain/bot_avatar/spec.dart";
 import "../../../domain/models.dart";
 import "../../../domain/project.dart" show everyProject, projectLabel;
 import "../../../domain/prompt_library.dart";
 import "../../../providers.dart";
+import "../../bot_avatar/stage.dart";
 import "../../prompts/agent_files.dart";
 import "../../prompts/skill_files.dart";
 import "../controller.dart";
@@ -284,10 +286,30 @@ final promptSettings = [
               await files.setFace(agent.name, null);
               await _reload(c.ref);
               return null;
-            default:
+            // A Bot Avatar chosen in the native editor: the stage's key for
+            // its shape, and its colour as hex.
+            case final use when use.startsWith("useBot:"):
+              final [_, key, colour] = use.split(":");
+              final definition = c.ref.read(botStageProvider).definition(key);
+              final rgb = int.tryParse(colour, radix: 16);
+              if (definition == null || rgb == null) return null;
+              if (!own.contains(agent.name)) {
+                return const SettingNotice(
+                  "Only an agent of your own can wear a Bot Avatar.",
+                );
+              }
+              await files.setFace(
+                agent.name,
+                AgentBot(BotAvatarSpec(definition: definition, colour: rgb)),
+              );
+              await _reload(c.ref);
+              return null;
+            case "remove":
               await files.delete(agent.name);
               await _reload(c.ref);
               return SettingNotice("Removed ${agent.name}.");
+            default:
+              return null;
           }
         },
       );

@@ -201,6 +201,8 @@ class SettingItemData {
     this.actions = const [],
     this.image,
     this.opens,
+    this.bot,
+    this.botColour,
   });
 
   String title;
@@ -211,6 +213,12 @@ class SettingItemData {
 
   /// Its picture, as a PNG: an agent's face.
   Uint8List? image;
+
+  /// Its face as a Bot Avatar, drawn live: its key, for
+  /// [SettingsIntents.botGeometry] and [SettingsIntents.botFrame], and its
+  /// colour as 0xRRGGBB.
+  String? bot;
+  int? botColour;
 
   /// A page of the app's that tells more of it, its text asked by this name.
   String? opens;
@@ -723,6 +731,66 @@ class ModelPickerData {
   String? emptyNote;
 }
 
+/// One Bot Avatar the editor offers: its key, and its own colour as
+/// 0xRRGGBB.
+class BotAvatarEntryData {
+  BotAvatarEntryData({
+    required this.key,
+    required this.name,
+    required this.colour,
+    this.removable = false,
+  });
+
+  String key;
+  String name;
+  int colour;
+
+  /// An import of the user's, which can be deleted.
+  bool removable;
+}
+
+/// One of the palette's colours.
+class BotSwatchData {
+  BotSwatchData({required this.name, required this.rgb});
+
+  String name;
+  int rgb;
+}
+
+/// The Bot Avatar editor: every avatar on offer, the palette, and, opened
+/// for an agent, what it wears now.
+class BotAvatarsData {
+  BotAvatarsData({
+    required this.entries,
+    required this.palette,
+    this.selected,
+    this.selectedColour,
+  });
+
+  List<BotAvatarEntryData?> entries;
+  List<BotSwatchData?> palette;
+  String? selected;
+  int? selectedColour;
+}
+
+/// What an import made of the text pasted: its errors and hints where it
+/// failed, its notes, and the key of the last avatar it added.
+class BotImportData {
+  BotImportData({
+    this.errors = const [],
+    this.hints = const [],
+    this.notes = const [],
+    this.added,
+    this.count = 0,
+  });
+
+  List<String?> errors;
+  List<String?> hints;
+  List<String?> notes;
+  String? added;
+  int count;
+}
+
 /// What the app says to the client.
 @HostApi(dartHostTestHandler: "TestNativeSettings")
 abstract class NativeSettings {
@@ -827,6 +895,46 @@ abstract class SettingsIntents {
 
   /// Deletes a model added by hand.
   void deleteModel(String providerId, String modelId);
+
+  /// A Bot Avatar's slices, sent once: what its frames name by place
+  /// (`BotStage.geometry`). Null for a key never handed out.
+  @async
+  Float64List? botGeometry(String key);
+
+  /// One frame of the avatar [instance], wearing [key], [nowMs] into its own
+  /// clock (`encodeFrame`): live, or a still, or the thumbnail's pose.
+  /// [mood] is idle, thinking or happy by place; [turnYaw] and [turnPitch]
+  /// a drag's turn. The core animates; the client draws what it is sent.
+  @async
+  Float64List? botFrame(
+    String instance,
+    String key,
+    int mood,
+    bool live,
+    bool thumbnail,
+    double nowMs,
+    double turnYaw,
+    double turnPitch,
+  );
+
+  /// A tap on [instance] [nowMs] into its clock: it reacts, and is live
+  /// while the reaction plays, which [botFrame]'s next answers say.
+  void botTap(String instance, double nowMs);
+
+  /// [instance] has left the screen.
+  void botDrop(String instance);
+
+  /// The avatars the editor offers, opened for [agent] or to browse.
+  @async
+  BotAvatarsData botAvatars(String? agent);
+
+  /// Imports the definitions in [text].
+  @async
+  BotImportData importBotAvatars(String text);
+
+  /// Deletes an import of the user's, answering once it is gone.
+  @async
+  void deleteBotAvatar(String key);
 
   /// The text of a page the app holds: the privacy policy, the licences.
   @async

@@ -1,4 +1,3 @@
-import "dart:math" as math;
 import "dart:typed_data";
 import "dart:ui" as ui;
 
@@ -6,25 +5,15 @@ import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 import "package:flutter/scheduler.dart";
 
-import "../../domain/bot_avatar/animation.dart";
+import "../../app/bot_avatar/actor.dart";
 import "../../domain/bot_avatar/frame.dart";
 import "../../domain/bot_avatar/pose.dart";
 import "../../domain/bot_avatar/spec.dart";
 import "../../domain/bot_avatar/volume.dart";
 import "../widgets/decorative_motion.dart";
 
-/// How a thumbnail stands: turned a little right, tipped up, looking up and
-/// right, so a grid of them faces one way. The reference editor's pose.
-const thumbnailView = ViewTurn(0.5, 0.12);
-const thumbnailGaze = Gaze(0.7, -1);
-
-/// Where an idle still looks when nothing gives it a look: down and to the
-/// right, so a face at rest reads as reading the page beside it rather than
-/// staring out of it. Thinking keeps its own look; happy eyes are arcs.
-const stillGaze = Gaze(0.7, 0.7);
-
-Gaze? _stillGaze(BotMood mood, Gaze? given) =>
-    given ?? (mood == BotMood.idle ? stillGaze : null);
+export "../../app/bot_avatar/actor.dart"
+    show stillGaze, thumbnailGaze, thumbnailView;
 
 /// Where the user last pointed, anywhere in the app: one global pointer
 /// route shared by every avatar that follows, held only while one does.
@@ -156,10 +145,10 @@ class BotAvatarView extends StatefulWidget {
 class _BotAvatarViewState extends State<BotAvatarView>
     with SingleTickerProviderStateMixin {
   late final Ticker _ticker = createTicker(_tick);
-  final _animator = BotAnimator();
-  late PreparedBotAvatar _prepared = PreparedBotAvatar.of(
-    widget.spec.definition,
-  );
+
+  /// The motion, the mood's easing and a tap's reaction: the core's, which
+  /// the native frontend's avatars run too.
+  late final _actor = BotActor(widget.spec.definition);
 
   /// Made by the first [_sync], with the frame it would otherwise replace.
   ValueNotifier<BotAvatarFrame>? _frameOrNull;
@@ -173,12 +162,6 @@ class _BotAvatarViewState extends State<BotAvatarView>
   /// The last frame set was painted; a tick that finds it was not stops the
   /// ticker, and the next paint starts it again.
   bool _painted = true;
-
-  static final _random = math.Random();
-
-  /// The animation a tap started, and when on [_now]'s clock; null once it
-  /// has run its length.
-  (BotAnimation, Duration)? _playing;
 
   /// The touch this view last saw, and until when it looks at it.
   int _seenTouch = 0;
@@ -196,11 +179,9 @@ class _BotAvatarViewState extends State<BotAvatarView>
   /// than on every tick.
   bool _reduced = false;
 
-  BotMood get _mood => _playing?.$1.mood ?? widget.mood;
-
   /// Moving now: asked to and motion not reduced, or a reaction playing on
   /// a still. Under reduce-motion an avatar is always a still.
-  bool get _live => !_reduced && (widget.animate || _playing != null);
+  bool get _live => !_reduced && (widget.animate || _actor.reactingAt(_now));
 
   @override
   void didChangeDependencies() {
@@ -213,8 +194,7 @@ class _BotAvatarViewState extends State<BotAvatarView>
   void didUpdateWidget(BotAvatarView old) {
     super.didUpdateWidget(old);
     if (old.spec.definition != widget.spec.definition) {
-      _prepared = PreparedBotAvatar.of(widget.spec.definition);
-      _animator.reset();
+      _actor.definition = widget.spec.definition;
     } else if (old.mood == widget.mood &&
         old.animate == widget.animate &&
         old.view == widget.view &&
@@ -247,7 +227,7 @@ class _BotAvatarViewState extends State<BotAvatarView>
   /// A tap's reaction: live while it plays — a still woken for it, and put
   /// back by the tick that sees it end.
   void _react() => setState(() {
-    _playing = (BotAnimation.tapped(_random), _now);
+    _actor.tap(_now);
     _sync();
   });
 
@@ -283,14 +263,13 @@ class _BotAvatarViewState extends State<BotAvatarView>
     });
   }
 
-  BotAvatarFrame _still() => _prepared.frame(
-    mood: _mood,
-    reducedMotion: true,
+  BotAvatarFrame _still() => _actor.still(
+    mood: widget.mood,
     view: ViewTurn(
       widget.view.yaw + _turn.yaw,
       widget.view.pitch + _turn.pitch,
     ),
-    gaze: _stillGaze(_mood, widget.gaze),
+    gaze: widget.gaze,
   );
 
   void _tick(Duration elapsed) {
@@ -306,36 +285,17 @@ class _BotAvatarViewState extends State<BotAvatarView>
     if (!_live) setState(_sync);
   }
 
-  BotAvatarFrame _render({bool look = true}) {
-    final ms = _now.inMicroseconds / 1000;
-    if (_playing case (
-      final played,
-      final from,
-    ) when _now - from >= played.duration) {
-      _playing = null;
-    }
-    final spin = switch (_playing) {
-      (final played, final from) => played.yawAt(_now - from),
-      _ => 0.0,
-    };
-    final mood = _mood;
-    final step = _animator.step(
-      now: ms,
-      mood: mood,
-      target: look ? _target() : null,
-      hold: _dragFrom != null,
-    );
-    return _prepared.frame(
-      time: ms / 1000,
-      mood: mood,
-      gaze: step.gaze ?? _stillGaze(mood, widget.gaze),
-      blend: step.blend,
-      view: ViewTurn(
-        widget.view.yaw + _turn.yaw + spin,
-        widget.view.pitch + _turn.pitch,
-      ),
-    );
-  }
+  BotAvatarFrame _render({bool look = true}) => _actor.frame(
+    _now,
+    mood: widget.mood,
+    target: look ? _target() : null,
+    hold: _dragFrom != null,
+    view: ViewTurn(
+      widget.view.yaw + _turn.yaw,
+      widget.view.pitch + _turn.pitch,
+    ),
+    gaze: widget.gaze,
+  );
 
   /// Where the pointer is, as a look from this avatar's eyes, or null where
   /// there is nothing to look at: no mouse in the window, or a touch whose

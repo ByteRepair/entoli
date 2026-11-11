@@ -96,6 +96,9 @@ struct SettingsPageView: View {
     .navigationDestination(for: OpenedText.self) { opened in
       TextPage(model: model, title: opened.title, opens: opened.opens)
     }
+    .navigationDestination(for: OpenedAvatars.self) { opened in
+      BotAvatarsPage(model: model, opened: opened)
+    }
   }
 }
 

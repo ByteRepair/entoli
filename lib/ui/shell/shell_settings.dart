@@ -5,6 +5,8 @@ import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/settings/controller.dart";
+import "../../app/bot_avatar/library.dart";
+import "../../app/bot_avatar/stage.dart";
 import "../../app/model_role.dart";
 import "../../app/settings/forms/model.dart";
 import "../../app/settings/scope.dart";
@@ -14,6 +16,10 @@ import "../../core/formatting.dart";
 import "../../core/log.dart";
 import "../../data/builtin/llm/hosted_models.dart" show ModelHost;
 import "../../data/privacy_policy_data.dart";
+import "../../domain/agent_face.dart";
+import "../../domain/bot_avatar/import.dart";
+import "../../domain/bot_avatar/pose.dart";
+import "../../domain/bot_avatar/spec.dart";
 import "../../domain/llm_provider.dart";
 import "../../domain/model_registry.dart" show ModelCatalog, modelInfoOf;
 import "../../providers.dart";
@@ -46,7 +52,22 @@ final nativeSettingsProvider = Provider<NativeSettingsPages>((ref) {
   final schema = ref.watch(settingsSchemaProvider);
   final controllers = <String, SettingController>{};
   final providers = ref.watch(appSettingsProvider).llmProviders;
-  Uint8List? face(String name) => ref.watch(agentFacePngProvider(name)).value;
+  final stage = ref.watch(botStageProvider);
+  // A Bot Avatar is drawn live by the client from its rig; a photo is sent.
+  BotAvatarSpec? bot(String name) => switch (ref
+      .watch(agentPictureProvider((project: null, name: name)))
+      .value) {
+    AgentBot(:final spec) => spec,
+    _ => null,
+  };
+  final faces = (
+    png: (String name) =>
+        bot(name) == null ? ref.watch(agentFacePngProvider(name)).value : null,
+    bot: (String name) => switch (bot(name)) {
+      final spec? => (key: stage.keyOf(spec.definition), colour: spec.colour),
+      null => null,
+    },
+  );
   final pages = [
     for (final page in SettingsPageId.values)
       if (page != SettingsPageId.welcome &&
@@ -69,7 +90,7 @@ final nativeSettingsProvider = Provider<NativeSettingsPages>((ref) {
                 detail: section.description,
                 rows: [
                   for (final setting in section.settings)
-                    ..._rows(setting, controllers, providers, face),
+                    ..._rows(setting, controllers, providers, faces),
                 ],
               ),
           ],
@@ -80,8 +101,12 @@ final nativeSettingsProvider = Provider<NativeSettingsPages>((ref) {
 
 /// [c] as the rows that carry it: its own, then a group's children and an
 /// accessory, each naming it their parent.
-/// Each agent's face, by its name; null for none, or not painted yet.
-typedef _Faces = Uint8List? Function(String name);
+/// Each agent's face, by its name: a photo as a PNG, null for none or not
+/// painted yet; a Bot Avatar as the stage's key and its colour.
+typedef _Faces = ({
+  Uint8List? Function(String name) png,
+  ({String key, int colour})? Function(String name) bot,
+});
 
 List<SettingRowData> _rows(
   SettingController c,
@@ -286,7 +311,13 @@ SettingRowData _row(
               on: item.on,
               opens: item.opens,
               image: c.hint == UiHint.agents && item.id != null
-                  ? faces(item.id!)
+                  ? faces.png(item.id!)
+                  : null,
+              bot: c.hint == UiHint.agents && item.id != null
+                  ? faces.bot(item.id!)?.key
+                  : null,
+              botColour: c.hint == UiHint.agents && item.id != null
+                  ? faces.bot(item.id!)?.colour
                   : null,
               actions: [
                 for (final action in item.actions)
@@ -892,6 +923,99 @@ class SettingsBridge implements SettingsIntents {
         .read(appSettingsProvider.notifier)
         .removeCustomModel(providerId, modelId),
   );
+
+  BotStage get _stage => _container.read(botStageProvider);
+
+  @override
+  Future<Float64List?> botGeometry(String key) async => _stage.geometry(key);
+
+  @override
+  Future<Float64List?> botFrame(
+    String instance,
+    String key,
+    int mood,
+    bool live,
+    bool thumbnail,
+    double nowMs,
+    double turnYaw,
+    double turnPitch,
+  ) async => _stage.frame(
+    instance,
+    key,
+    now: Duration(microseconds: (nowMs * 1000).round()),
+    mood: BotMood.values[mood.clamp(0, BotMood.values.length - 1)],
+    live: live,
+    thumbnail: thumbnail,
+    turn: ViewTurn(turnYaw, turnPitch),
+  );
+
+  @override
+  void botTap(String instance, double nowMs) =>
+      _stage.tap(instance, Duration(microseconds: (nowMs * 1000).round()));
+
+  @override
+  void botDrop(String instance) => _stage.drop(instance);
+
+  @override
+  Future<BotAvatarsData> botAvatars(String? agent) async {
+    final face = agent == null
+        ? null
+        : await _container.read(
+            agentPictureProvider((project: null, name: agent)).future,
+          );
+    final initial = switch (face) {
+      AgentBot(:final spec) => spec,
+      _ => null,
+    };
+    final entries = botAvatarEntries(
+      await _container.read(botAvatarPresetsProvider.future),
+      await _container.read(importedBotAvatarsProvider.future),
+      initial: initial,
+    );
+    return BotAvatarsData(
+      entries: [
+        for (final e in entries)
+          BotAvatarEntryData(
+            key: _stage.keyOf(e.definition),
+            name: e.definition.name,
+            colour: e.ownColour,
+            removable: e.source == BotAvatarSource.imported,
+          ),
+      ],
+      palette: [
+        for (final s in BotPalette.all) BotSwatchData(name: s.name, rgb: s.rgb),
+      ],
+      selected: initial == null ? null : _stage.keyOf(initial.definition),
+      selectedColour: initial?.colour,
+    );
+  }
+
+  @override
+  Future<BotImportData> importBotAvatars(String text) async {
+    final result = BotAvatarImport.parse(text);
+    switch (result) {
+      case BotAvatarImportFailed(:final errors, :final hints, :final notes):
+        return BotImportData(errors: errors, hints: hints, notes: notes);
+      case BotAvatarImported(:final definitions, :final notes):
+        await _container
+            .read(importedBotAvatarsProvider.notifier)
+            .add(definitions);
+        return BotImportData(
+          notes: notes,
+          added: _stage.keyOf(definitions.last),
+          count: definitions.length,
+        );
+    }
+  }
+
+  @override
+  Future<void> deleteBotAvatar(String key) async {
+    final definition = _stage.definition(key);
+    if (definition == null) return;
+    await _container
+        .read(importedBotAvatarsProvider.notifier)
+        .remove(definition.id);
+  }
 
   @override
   Future<String> page(String opens) async => switch (opens) {

@@ -34,7 +34,11 @@ struct CollectionRow: View {
       ForEach(Array(items.enumerated()), id: \.offset) { index, item in
         if index > 0 { Divider() }
         HStack(alignment: .center) {
-          if let data = item.image?.data, let image = PlatformImage(data: data) {
+          if let bot = item.bot {
+            BotFaceView(
+              model: model, key: bot, colour: Int(item.botColour ?? 0xff6a1a), size: 32,
+              reactToTap: true)
+          } else if let data = item.image?.data, let image = PlatformImage(data: data) {
             Image(platformImage: image).resizable().scaledToFill()
               .frame(width: 32, height: 32).clipShape(Circle())
           } else if row.hint == .agents {
@@ -112,8 +116,13 @@ struct CollectionRow: View {
           }
         }
       }
+      // Borderless, as every control here: a default button in a list row
+      // answers a tap anywhere in the row.
       if row.editable, let add = row.addLabel {
-        Button(add) { editing = Editing(index: nil) }
+        Button(add) { editing = Editing(index: nil) }.buttonStyle(.borderless)
+      }
+      if row.hint == .agents {
+        OpenAvatars(model: model, row: row.id)
       }
     }
     .sheet(item: $editing) { editing in
@@ -158,6 +167,14 @@ struct CollectionRow: View {
   }
 
   private func act(_ index: Int, _ action: SettingItemActionData) {
+    // The Bot Avatar editor is this frontend's own page, not Flutter's.
+    if row.hint == .agents, action.id == "botAvatar" {
+      let items = row.items.compactMap { $0 }
+      if items.indices.contains(index) {
+        model.path.append(OpenedAvatars(agent: items[index].title, row: row.id, index: index))
+      }
+      return
+    }
     if let ask = action.confirm {
       confirm = (ask, index, action.id)
     } else {
@@ -197,6 +214,9 @@ struct FormSheet: View {
 
   @State private var form: SettingFormData?
   @State private var answers: [String?: String?] = [:]
+  /// How many times the form has been asked for, so only the latest answer
+  /// is drawn: replies can land out of order.
+  @State private var asked = 0
   @State private var failed: String?
   @Environment(\.dismiss) private var dismiss
 
@@ -245,7 +265,13 @@ struct FormSheet: View {
       get: { (answers[key] ?? nil) ?? "" },
       set: { text in
         answers[key] = text
-        Task { @MainActor in form = await load(answers) }
+        asked += 1
+        let ask = asked
+        let now = answers
+        Task { @MainActor in
+          let next = await load(now)
+          if ask == asked { form = next }
+        }
       })
   }
 
@@ -335,16 +361,22 @@ struct FormSheet: View {
         Flow(spacing: 8) {
           ForEach(part.options.compactMap { $0 }, id: \.answer) { option in
             let on = picked.contains(option.answer)
+            // A plain capsule rather than a glass button: switching a glass
+            // button's style rebuilds it, which stalled every tap.
             Button {
               var next = picked
               if on { next.remove(option.answer) } else { next.insert(option.answer) }
               binding(key).wrappedValue = next.sorted().joined(separator: ",")
             } label: {
               Text(option.label).font(.callout).lineLimit(1)
-                .padding(.horizontal, 10).padding(.vertical, 5)
+                .foregroundStyle(on ? Color.white : Color.primary)
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(on ? Color.accentColor : Color.primary.opacity(0.08), in: Capsule())
+                .contentShape(Capsule())
             }
-            .glassButton(prominent: on)
+            .buttonStyle(.plain)
             .fixedSize()
+            .animation(.snappy(duration: 0.15), value: on)
           }
         }
         if let error = part.error { Text(error).font(.caption).foregroundStyle(.red) }
@@ -725,5 +757,27 @@ struct Flow: Layout {
       rows[rows.count - 1].height = max(rows[rows.count - 1].height, size.height)
     }
     return rows
+  }
+}
+
+/// The agents list's way to every Bot Avatar, to look through, import and
+/// delete them.
+private struct OpenAvatars: View {
+  let model: SettingsModel
+  let row: String
+
+  var body: some View {
+    Button {
+      model.path.append(OpenedAvatars(agent: nil, row: row, index: -1))
+    } label: {
+      HStack {
+        Label("View Bot Avatars", systemImage: "face.smiling")
+        Spacer()
+        Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+      }
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .foregroundStyle(Color.accentColor)
   }
 }
