@@ -714,6 +714,7 @@ class CollectionItem {
     this.actions = const [],
     this.on,
     this.opens,
+    this.tap,
   });
 
   final String title;
@@ -742,6 +743,10 @@ class CollectionItem {
   /// A page of the app's that tells more of it, by the name a frontend asks
   /// its text by: `skill:` and the skill.
   final String? opens;
+
+  /// The item action a tap on the row runs, where the row is not edited
+  /// through a form: a device's own page.
+  final String? tap;
 }
 
 /// Something done to one item from its row: connect, disconnect, revoke.
@@ -773,8 +778,21 @@ class ItemAction {
 /// draws [fields] again after each answer, so a question that depends on
 /// another comes and goes with it.
 abstract class SettingForm<T> {
+  const SettingForm();
+
   /// "Add rule", "Edit rule".
   String get title;
+
+  /// Whether it is long enough to be a page of its own rather than a
+  /// dialog, where a frontend has the difference.
+  bool get page => false;
+
+  /// What leaving it with something typed asks, where leaving loses it.
+  String? get discard => null;
+
+  /// Told when it is left without saving, for what it made on the way: a
+  /// program signed in under a new entry's id.
+  Future<void> dismissed(Map<String, String> answers) async {}
 
   /// The answers it opens with.
   Map<String, String> get initial;
@@ -812,6 +830,8 @@ final class FormText extends FormFieldSpec {
     this.focused = false,
     this.lines = 1,
     this.enabled = true,
+    this.secret = false,
+    this.file = false,
   });
 
   final String id;
@@ -827,16 +847,46 @@ final class FormText extends FormFieldSpec {
 
   /// Whether the caret starts here.
   final bool focused;
+
+  /// Whether it is typed hidden, as a key is.
+  final bool secret;
+
+  /// Whether a file picked from the disk can fill it, its path the answer.
+  final bool file;
+}
+
+/// Prose the model reads — a trigger's prompt, a system prompt — written
+/// where `/skills` and `@agents` complete from [project]'s library, and
+/// shown the way the chat sets it where a frontend can.
+final class FormPrompt extends FormFieldSpec {
+  const FormPrompt(
+    this.id,
+    this.label, {
+    this.hint,
+    this.project,
+    this.enabled = true,
+  });
+
+  final String id;
+  final String label;
+  final String? hint;
+
+  /// Whose library completes it: null is the default project.
+  final String? project;
+  final bool enabled;
 }
 
 /// One of [options], each by its answer; the help of the one picked is said
-/// under it. [segmented] asks for every option side by side.
+/// under it. [segmented] asks for every option side by side; [cards] for
+/// each as a row of its own with its detail and tags, under its group, the
+/// whole of the form while nothing is picked.
 final class FormChoice extends FormFieldSpec {
   const FormChoice(
     this.id,
     this.options, {
     this.label,
     this.segmented = false,
+    this.cards = false,
     this.enabled = true,
   });
 
@@ -844,7 +894,83 @@ final class FormChoice extends FormFieldSpec {
   final String? label;
   final List<FormOption> options;
   final bool segmented;
+  final bool cards;
   final bool enabled;
+}
+
+/// A link out of the app: where a key is made, a provider's policy.
+/// [prominent] is the one thing the form is waiting on the user to do.
+final class FormLink extends FormFieldSpec {
+  const FormLink(this.label, this.url, {this.prominent = false});
+
+  final String label;
+  final Uri url;
+  final bool prominent;
+}
+
+/// The fields after it folded away until it is opened: answered "open", or
+/// nothing while shut. Which fields it holds is the form's to say.
+final class FormFold extends FormFieldSpec {
+  const FormFold(this.id, this.label);
+
+  final String id;
+  final String label;
+}
+
+/// Something the user has to agree to before the rest is asked: answered
+/// "yes" once they do.
+final class FormConsent extends FormFieldSpec {
+  const FormConsent(
+    this.id, {
+    required this.title,
+    required this.message,
+    required this.accept,
+    this.link,
+  });
+
+  final String id;
+  final String title;
+  final String message;
+
+  /// What agreeing is called: "I understand, add it".
+  final String accept;
+
+  /// Where the terms behind it are read, and what that is called.
+  final (String, Uri)? link;
+}
+
+/// Names and their values, one `NAME=value` a line: what a program runs
+/// with.
+final class FormEntries extends FormFieldSpec {
+  const FormEntries(this.id, this.label, {this.helper, this.enabled = true});
+
+  final String id;
+  final String label;
+  final String? helper;
+  final bool enabled;
+}
+
+/// [config]'s program signed in, from inside the form: where its account
+/// stands, and Sign in, or Sign in again.
+final class FormSignIn extends FormFieldSpec {
+  const FormSignIn(this.config);
+
+  final LlmProviderConfig config;
+}
+
+/// Why a Save was refused, thrown by a submit: said on [field], with Save
+/// turned into [anywayLabel] where saving the same again is allowed — the
+/// answer [anyway] then set "yes", and cleared once [field] changes.
+class FormRefusal implements Exception {
+  const FormRefusal(this.field, this.message, {this.anyway, this.anywayLabel});
+
+  final String field;
+  final String message;
+  final String? anyway;
+  final String? anywayLabel;
+
+  @override
+  String toString() => message;
 }
 
 /// A moment, answered as ISO 8601 local time.
@@ -910,11 +1036,35 @@ final class FormNote extends FormFieldSpec {
 }
 
 class FormOption {
-  const FormOption(this.answer, this.label, {this.help});
+  const FormOption(
+    this.answer,
+    this.label, {
+    this.help,
+    this.group,
+    this.tags = const [],
+    this.glyph,
+  });
 
   final String answer;
   final String label;
+
+  /// What it is beyond its name: said under the picked one, and under each
+  /// where they are cards.
   final String? help;
+
+  /// The heading a card sits under.
+  final String? group;
+
+  /// What it is at a glance, a card's chips.
+  final List<FormTag> tags;
+  final SettingGlyph? glyph;
+}
+
+class FormTag {
+  const FormTag(this.text, {this.tone = NoticeTone.plain});
+
+  final String text;
+  final NoticeTone tone;
 }
 
 /// Things this device downloads — a Linux, a model — each with the one

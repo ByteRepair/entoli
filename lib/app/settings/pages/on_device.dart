@@ -111,6 +111,7 @@ CatalogController _catalog(
   final state = c.ref.watch(modelDownloadsProvider);
   final downloads = c.ref.read(modelDownloadsProvider.notifier);
   final byId = {for (final (model, _, _) in models) model.id: model};
+  final add = c.ref.read(settingsHandOffProvider).addModelByLink;
   return CatalogController(
     c.spec,
     items: [
@@ -132,8 +133,8 @@ CatalogController _catalog(
           ),
         ),
     ],
-    addLabel: addLabel,
-    add: c.ref.read(settingsHandOffProvider).addModelByLink,
+    addLabel: add == null ? null : addLabel,
+    add: add,
     download: (id) async => downloads.install(byId[id]!),
     cancel: (id) async => downloads.cancel(id),
     delete: (id) => downloads.delete(byId[id]!),

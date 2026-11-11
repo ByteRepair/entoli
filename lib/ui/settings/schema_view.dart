@@ -16,18 +16,11 @@ import "../widgets/add_button_row.dart";
 import "../widgets/catalog.dart";
 import "../widgets/settings_warning_banner.dart";
 import "../widgets/page_bar.dart";
-import "../../domain/llm_provider.dart";
-import "connect_provider.dart";
 import "byte_repair_settings.dart";
 import "../../app/settings/pages/triggers.dart" show triggerPermissionsProvider;
-import "../../domain/trigger.dart";
 import "form_dialog.dart";
-import "triggers.dart" show TriggerEditorPage;
-import "local_model_settings.dart" show AddLocalModelPage;
 import "running_models.dart";
-import "provider_picker.dart";
 import "provider_usage_view.dart";
-import "paired_device_page.dart";
 import "sync_pairing.dart";
 import "../widgets/choice.dart";
 import "../widgets/dialogs.dart";
@@ -146,11 +139,17 @@ class SettingRow extends StatelessWidget {
         UiHint.card => _Card(c),
         _ => _Notice(c),
       },
-      final CollectionController c when c.hint == UiHint.devices => _Devices(c),
-      final CollectionController c when c.hint == UiHint.providers =>
-        _Providers(c),
-      final CollectionController c when c.hint == UiHint.triggers => _Triggers(
-        c,
+      final CollectionController c when c.hint == UiHint.providers => c.typed(
+        <V>(c) =>
+            _Collection<V>(c, detail: (item) => ProviderUsageView(item.id!)),
+      ),
+      // The permissions above them are asked again each time the app comes
+      // back from the system's settings.
+      final CollectionController c when c.hint == UiHint.triggers => _OnResume(
+        () => ProviderScope.containerOf(
+          context,
+        ).invalidate(triggerPermissionsProvider),
+        child: c.typed(<V>(c) => _Collection<V>(c)),
       ),
       // Its own header says what the models take up together, measured
       // while it is on screen.
@@ -276,6 +275,10 @@ IconData? _icon(SettingGlyph? glyph) => switch (glyph) {
   SettingGlyph.online => Icons.circle,
   SettingGlyph.connecting || SettingGlyph.offline => Icons.circle_outlined,
   SettingGlyph.failed => Icons.error_outline,
+  SettingGlyph.cloud => Icons.cloud_outlined,
+  SettingGlyph.computer => Icons.computer,
+  SettingGlyph.terminal => Icons.terminal,
+  SettingGlyph.tune => Icons.tune,
   SettingGlyph.appMark || null => null,
 };
 
@@ -915,48 +918,6 @@ class _Card extends StatelessWidget {
   );
 }
 
-/// The items as rows, each opened to edit through its form, and the button
-/// that adds one.
-class _Collection<T> extends StatelessWidget {
-  const _Collection(this.c);
-
-  final CollectionController<T> c;
-
-  Future<void> _edit(BuildContext context, {int? index}) async {
-    final form = c.form;
-    if (form == null) return;
-    final edited = await showSettingForm(
-      context,
-      form(index == null ? null : c.items[index]),
-    );
-    if (edited == null || !context.mounted) return;
-    await c.put(edited, index: index);
-  }
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      for (final (index, row) in c.rows.indexed)
-        EditableRow(
-          title: row.title,
-          subtitle: row.subtitle,
-          removeLabel: c.removeLabel,
-          onTap: c.form == null ? null : () => _edit(context, index: index),
-          onRemove: () => c.remove(index),
-        ),
-      if (c.form != null)
-        AddButtonRow(
-          child: OutlinedButton.icon(
-            icon: const Icon(Icons.add),
-            label: Text(c.addLabel),
-            onPressed: () => _edit(context),
-          ),
-        ),
-    ],
-  );
-}
-
 /// One row per thing to download, with the single button that applies to it
 /// now.
 class _Catalog extends StatelessWidget {
@@ -1002,9 +963,7 @@ class _Catalog extends StatelessWidget {
           child: OutlinedButton.icon(
             icon: const Icon(Icons.add_link),
             label: Text(add),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const AddLocalModelPage()),
-            ),
+            onPressed: c.add,
           ),
         ),
     ],
@@ -1242,97 +1201,6 @@ class _Input extends StatelessWidget {
   }
 }
 
-/// Devices as rows: the state at a glance, the name, and what can be done
-/// to each; a tap opens the device's own page.
-class _Devices extends StatelessWidget {
-  const _Devices(this.c);
-
-  final CollectionController c;
-
-  Future<void> _act(BuildContext context, int index, ItemAction action) async {
-    if (action.confirm case final ask?) {
-      final yes = await confirm(
-        context,
-        title: ask.title,
-        message: ask.message,
-        confirmLabel: ask.confirmLabel,
-        destructive: ask.destructive,
-      );
-      if (!yes || !context.mounted) return;
-    }
-    await _tell(context, c.act(index, action.id));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final (index, row) in c.rows.indexed)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: InkWell(
-              onTap: row.id == null
-                  ? null
-                  : () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => PairedDevicePage(deviceId: row.id!),
-                      ),
-                    ),
-              borderRadius: const BorderRadius.all(Radius.circular(12)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        _icon(row.glyph) ?? Icons.circle_outlined,
-                        size: 16,
-                        color: switch (row.glyph) {
-                          SettingGlyph.online => Colors.green,
-                          SettingGlyph.connecting => theme.colorScheme.primary,
-                          SettingGlyph.failed => theme.colorScheme.error,
-                          _ => theme.colorScheme.onSurfaceVariant,
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(row.title)),
-                      // A page of its own is the row's tap here.
-                      for (final action in row.actions)
-                        if (!action.handsOff)
-                          TextButton(
-                            onPressed: action.enabled
-                                ? () => _act(context, index, action)
-                                : null,
-                            style: action.destructive
-                                ? TextButton.styleFrom(
-                                    foregroundColor: theme.colorScheme.error,
-                                  )
-                                : null,
-                            child: Text(action.label),
-                          ),
-                    ],
-                  ),
-                  if (row.error case final error?)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 24, right: 8),
-                      child: SelectableText(
-                        error,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.error,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
 /// Actions side by side, the first filled and the rest outlined, and the bar
 /// that runs while one of them does.
 class _Buttons extends StatelessWidget {
@@ -1447,60 +1315,6 @@ class _RecommendedState extends ConsumerState<_Recommended> {
   }
 }
 
-/// The endpoints as rows, each with what it has spent under it, opened in
-/// the provider dialog; added through the preset picker first.
-class _Providers extends ConsumerWidget {
-  const _Providers(this.c);
-
-  final CollectionController c;
-
-  Future<void> _add(BuildContext context, WidgetRef ref) async {
-    final chosen = await pickProviderPreset(context);
-    if (chosen != null && context.mounted) {
-      final preset = chosen.preset;
-      await editProvider(
-        context,
-        ref,
-        initial: preset,
-        title: preset == null
-            ? "Add provider"
-            : "Connect ${preset.displayName}",
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final providers = c.items.cast<LlmProviderConfig>();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final (index, row) in c.rows.indexed)
-          EditableRow(
-            title: row.title,
-            subtitle: row.subtitle,
-            removeLabel: row.removeLabel ?? c.removeLabel,
-            onTap: () => editProvider(
-              context,
-              ref,
-              initial: providers[index],
-              title: "Edit ${row.title}",
-            ),
-            onRemove: () => c.remove(index),
-            detail: ProviderUsageView(row.id!),
-          ),
-        AddButtonRow(
-          child: OutlinedButton.icon(
-            icon: const Icon(Icons.add),
-            label: Text(c.addLabel),
-            onPressed: () => _add(context, ref),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 /// A slider written once the drag ends rather than on every pixel, with a
 /// reset to what unset means and a line saying where it stands.
 class _DragSlider extends StatefulWidget {
@@ -1550,21 +1364,160 @@ class _DragSliderState extends State<_DragSlider> {
   }
 }
 
-/// Triggers as rows, each with the switch that arms it and opened in the
-/// editor; the editor again for a new one. The permissions above them are
-/// asked again each time the app comes back from the system's settings.
-class _Triggers extends ConsumerStatefulWidget {
-  const _Triggers(this.c);
+/// The items as rows, each with what [CollectionItem] says of it: its state
+/// at a glance, its words and what went wrong, the switch that arms it, what
+/// can be done to it, and a tap that edits it through its form; and the
+/// button that adds one.
+class _Collection<T> extends StatelessWidget {
+  const _Collection(this.c, {this.detail});
 
-  final CollectionController c;
+  final CollectionController<T> c;
+
+  /// What a row draws under its words beyond them: a provider's allowances.
+  final Widget Function(CollectionItem item)? detail;
+
+  Future<void> _act(BuildContext context, int index, ItemAction action) async {
+    if (action.confirm case final ask?) {
+      final yes = await confirm(
+        context,
+        title: ask.title,
+        message: ask.message,
+        confirmLabel: ask.confirmLabel,
+        destructive: ask.destructive,
+      );
+      if (!yes || !context.mounted) return;
+    }
+    await _tell(context, c.act(index, action.id));
+  }
 
   @override
-  ConsumerState<_Triggers> createState() => _TriggersState();
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final rows = c.rows;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (rows.isEmpty && c.emptyLabel != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: mutedParagraph(context, c.emptyLabel!),
+          ),
+        for (final (index, row) in rows.indexed)
+          ListTile(
+            leading: switch (_icon(row.glyph)) {
+              null => null,
+              final icon => Icon(
+                icon,
+                color: switch (row.tone) {
+                  NoticeTone.good => Colors.green,
+                  NoticeTone.warning => theme.colorScheme.error,
+                  NoticeTone.plain => theme.colorScheme.onSurfaceVariant,
+                },
+              ),
+            },
+            title: Text(row.title),
+            subtitle: _words(context, row),
+            onTap: _tap(context, index, row),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (row.on case final on?)
+                  Switch(value: on, onChanged: (_) => c.act(index, "toggle")),
+                // A few side by side; more in a menu.
+                if (row.actions.length <= 3)
+                  for (final action in row.actions)
+                    TextButton(
+                      onPressed: action.enabled
+                          ? () => _act(context, index, action)
+                          : null,
+                      style: action.destructive
+                          ? TextButton.styleFrom(
+                              foregroundColor: theme.colorScheme.error,
+                            )
+                          : null,
+                      child: Text(action.label),
+                    )
+                else
+                  PopupMenuButton<ItemAction>(
+                    tooltip: "More",
+                    onSelected: (action) => _act(context, index, action),
+                    itemBuilder: (_) => [
+                      for (final action in row.actions)
+                        PopupMenuItem(
+                          value: action,
+                          enabled: action.enabled,
+                          child: Text(
+                            action.label,
+                            style: action.destructive
+                                ? TextStyle(color: theme.colorScheme.error)
+                                : null,
+                          ),
+                        ),
+                    ],
+                  ),
+                if (c.removable)
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    tooltip: row.removeLabel ?? c.removeLabel,
+                    onPressed: () => c.remove(index),
+                  ),
+              ],
+            ),
+          ),
+        if (c.editable)
+          AddButtonRow(
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.add),
+              label: Text(c.addLabel),
+              onPressed: () => editItem(context, c),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// What a tap on the row does: edits it through its form, or runs the
+  /// action it names.
+  VoidCallback? _tap(BuildContext context, int index, CollectionItem row) {
+    if (c.editable) return () => editItem(context, c, index: index);
+    final tap = row.actions.where((a) => a.id == row.tap).firstOrNull;
+    if (tap != null) return () => _act(context, index, tap);
+    return null;
+  }
+
+  Widget? _words(BuildContext context, CollectionItem row) {
+    final more = detail?.call(row);
+    final error = row.error;
+    if (row.subtitle == null && error == null && more == null) return null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (row.subtitle case final subtitle?) Text(subtitle),
+        if (error != null)
+          SelectableText(
+            error,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        ?more,
+      ],
+    );
+  }
 }
 
-class _TriggersState extends ConsumerState<_Triggers> {
+/// [child], running [onResume] each time the app comes back to the front.
+class _OnResume extends StatefulWidget {
+  const _OnResume(this.onResume, {required this.child});
+
+  final VoidCallback onResume;
+  final Widget child;
+
+  @override
+  State<_OnResume> createState() => _OnResumeState();
+}
+
+class _OnResumeState extends State<_OnResume> {
   late final _lifecycle = AppLifecycleListener(
-    onResume: () => ref.invalidate(triggerPermissionsProvider),
+    onResume: () => widget.onResume(),
   );
 
   @override
@@ -1579,37 +1532,6 @@ class _TriggersState extends ConsumerState<_Triggers> {
     super.dispose();
   }
 
-  Future<void> _open([Trigger? trigger]) => Navigator.of(context).push(
-    MaterialPageRoute(builder: (_) => TriggerEditorPage(trigger: trigger)),
-  );
-
   @override
-  Widget build(BuildContext context) {
-    final c = widget.c;
-    final triggers = c.items.cast<Trigger>();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final (index, row) in c.rows.indexed)
-          ListTile(
-            title: Text(row.title),
-            subtitle: Text(
-              row.subtitle ?? "",
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            trailing: Switch(
-              value: row.on ?? false,
-              onChanged: (_) => c.act(index, "toggle"),
-            ),
-            onTap: () => _open(triggers[index]),
-          ),
-        ListTile(
-          leading: const Icon(Icons.add_circle_outline),
-          title: Text(c.addLabel),
-          onTap: _open,
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => widget.child;
 }

@@ -9,9 +9,9 @@ import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/triggers/incoming_open.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
-import "package:agent_chat/ui/settings/triggers.dart";
 import "package:agent_chat/ui/widgets/prompt_field.dart";
-import "package:agent_chat/ui/widgets/resettable_field.dart";
+import "package:agent_chat/ui/widgets/resettable_field.dart"
+    show defaultOptionLabel;
 
 import "../fakes.dart";
 import "../harness.dart";
@@ -27,8 +27,14 @@ Finder get _promptField => find.descendant(
 /// known today rather than the machine's.
 final _now = DateTime(2026, 7, 1, 12);
 
-Finder _on(Type page, String label) =>
-    find.descendant(of: find.byType(page), matching: find.text(label));
+/// Save on the editor's bar, which is over the list's own words.
+Future<void> _save(WidgetTester tester) async {
+  await tester.pump();
+  await tester.tap(
+    find.descendant(of: find.byType(AppBar), matching: find.text("Save")),
+  );
+  await settleIo(tester);
+}
 
 void main() {
   testWidgets("a platform with no clock does not list the category", (
@@ -136,10 +142,18 @@ void main() {
     await tester.tap(find.text("Add trigger"));
     await tester.pumpAndSettle();
 
-    await scrollTo(tester, find.text("Save"));
-    await tester.tap(find.text("Save"));
-    await tester.pump();
     expect(find.textContaining("Write the prompt first."), findsOneWidget);
+    expect(
+      tester
+          .widget<TextButton>(
+            find.descendant(
+              of: find.byType(AppBar),
+              matching: find.widgetWithText(TextButton, "Save"),
+            ),
+          )
+          .onPressed,
+      isNull,
+    );
   });
 
   testWidgets("a saved reminder is listed and on disk", (tester) async {
@@ -153,9 +167,7 @@ void main() {
     await settleIo(tester);
 
     await writePrompt(tester, "Summarise the workspace");
-    await scrollTo(tester, _on(TriggerEditorPage, "Save"));
-    await tester.tap(_on(TriggerEditorPage, "Save"));
-    await settleIo(tester);
+    await _save(tester);
 
     // The editor closed and the row is there, named by its only text.
     await pumpUntil(tester, find.textContaining("Summarise the workspace"));
@@ -170,15 +182,10 @@ void main() {
   group("the editor", () {
     late TestApp app;
 
-    /// The member dropdown, found through its row's label — the project
-    /// dropdown beside it is the same type.
-    Finder memberDropdown() => find.descendant(
-      of: find.ancestor(
-        of: find.text("Address to"),
-        matching: find.byType(LabelledField),
-      ),
-      matching: find.byType(DropdownButtonFormField<String?>),
-    );
+    /// The member dropdown, by its label — the project dropdown beside it is
+    /// the same type.
+    Finder memberDropdown() =>
+        find.widgetWithText(DropdownButtonFormField<String>, "Address to");
 
     Future<void> openEditor(WidgetTester tester, {Trigger? trigger}) async {
       app = TestApp.create(
@@ -244,11 +251,11 @@ void main() {
       // Untouched: back leaves at once.
       await tester.pageBack();
       await settleIo(tester);
-      expect(find.byType(TriggerEditorPage), findsNothing);
+      expect(find.text("Edit trigger"), findsNothing);
 
       await tester.tap(find.text("Morning sweep"));
       await settleIo(tester);
-      await tester.enterText(find.byType(TextFormField).first, "Evening");
+      await tester.enterText(find.widgetWithText(TextField, "Name"), "Evening");
       await tester.pageBack();
       await settleIo(tester);
       expect(
@@ -258,7 +265,7 @@ void main() {
 
       await tester.tap(find.text("Discard"));
       await settleIo(tester);
-      expect(find.byType(TriggerEditorPage), findsNothing);
+      expect(find.text("Edit trigger"), findsNothing);
       expect(app.container.read(triggersProvider).single.name, "Morning sweep");
     });
 
@@ -319,20 +326,19 @@ void main() {
       await writePrompt(tester, "check builds");
       await scrollTo(tester, find.text("Temporary chat"));
 
-      expect(
-        find.byType(DropdownButtonFormField<TempChatTtl?>),
-        findsOneWidget,
+      final ttl = find.widgetWithText(
+        DropdownButtonFormField<String>,
+        "Temporary chat",
       );
+      expect(ttl, findsOneWidget);
       expect(find.textContaining("$defaultOptionLabel ("), findsWidgets);
 
-      await tester.tap(find.byType(DropdownButtonFormField<TempChatTtl?>));
+      await tester.tap(ttl);
       await settleIo(tester);
       await tester.tap(find.text("24 hours").last);
       await settleIo(tester);
 
-      await scrollTo(tester, _on(TriggerEditorPage, "Save"));
-      await tester.tap(_on(TriggerEditorPage, "Save"));
-      await settleIo(tester);
+      await _save(tester);
 
       expect(
         app.container.read(triggersProvider).single.tempChatTtl,
@@ -352,9 +358,7 @@ void main() {
       await tester.tap(find.text("@explore").last);
       await settleIo(tester);
 
-      await scrollTo(tester, _on(TriggerEditorPage, "Save"));
-      await tester.tap(_on(TriggerEditorPage, "Save"));
-      await settleIo(tester);
+      await _save(tester);
 
       final stored = app.container.read(triggersProvider).single;
       expect(stored.member, "explore");
@@ -386,9 +390,7 @@ void main() {
       await settleIo(tester);
       await tester.tap(find.text("@vanished (deleted)").last);
       await settleIo(tester);
-      await scrollTo(tester, _on(TriggerEditorPage, "Save"));
-      await tester.tap(_on(TriggerEditorPage, "Save"));
-      await settleIo(tester);
+      await _save(tester);
 
       expect(app.container.read(triggersProvider).single.member, "vanished");
     });

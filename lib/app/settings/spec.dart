@@ -247,4 +247,8 @@ enum SettingGlyph {
   connecting,
   offline,
   failed,
+  cloud,
+  computer,
+  terminal,
+  tune,
 }

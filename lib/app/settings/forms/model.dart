@@ -1,6 +1,9 @@
 import "../../../domain/model_info.dart";
 import "../../model_role.dart";
+import "../../../domain/llm_provider.dart";
+import "../../../providers.dart";
 import "../controller.dart";
+import "../spec.dart";
 
 /// What a model form makes: the model, the provider it is reached through,
 /// and the entry it replaces where it was an edit.
@@ -14,7 +17,7 @@ typedef ModelDraft = ({
 /// [role]: the fields the catalog reads, for every frontend to ask. [model]
 /// is the model being edited, on [providerId]; null adds one, on the provider
 /// the picker was narrowed to where it was.
-class ModelForm implements SettingForm<ModelDraft> {
+class ModelForm extends SettingForm<ModelDraft> {
   ModelForm({
     required this.role,
     required this.providers,
@@ -31,15 +34,27 @@ class ModelForm implements SettingForm<ModelDraft> {
   final ModelInfo? model;
 
   static const _caps = [
-    ("toolCall", "Tool calling"),
-    ("reasoning", "Reasoning"),
-    ("readsImages", "Sees images"),
-    ("readsPdfs", "Reads PDFs"),
-    ("makesImages", "Makes images"),
+    (
+      "toolCall",
+      "Tool calling",
+      "Required for agentic use: without it, the model is not offered for "
+          "chats",
+    ),
+    ("reasoning", "Reasoning", null),
+    ("readsImages", "Sees images", "Images are sent to it rather than named"),
+    (
+      "readsPdfs",
+      "Reads PDFs",
+      "PDFs are sent to it, where the provider takes them",
+    ),
+    ("makesImages", "Makes images", null),
   ];
 
   @override
   String get title => model == null ? "Add model" : "Edit model";
+
+  @override
+  bool get page => true;
 
   @override
   Map<String, String> get initial {
@@ -140,7 +155,10 @@ class ModelForm implements SettingForm<ModelDraft> {
         FormMulti(
           "caps",
           "What it can do",
-          [for (final (id, label) in _caps) FormOption(id, label)],
+          [
+            for (final (id, label, help) in _caps)
+              FormOption(id, label, help: help),
+          ],
           error: caps.contains("toolCall")
               ? null
               : "Without tool calling it is not offered for chats.",
@@ -194,4 +212,54 @@ class ModelForm implements SettingForm<ModelDraft> {
       replacing: before == null ? null : (providerId!, before.id),
     );
   }
+}
+
+/// The providers a picker of [role] offers anything through: none for
+/// transcription where the device cannot cut the microphone into utterances,
+/// so no Default entry and no model to add is offered for one there.
+List<LlmProviderConfig> pickerProviders(SettingReader ref, ModelRole role) {
+  final cuts = ref.read(voiceProvider).hasModelCatalog;
+  return role == ModelRole.transcription && !cuts
+      ? const []
+      : ref.read(appSettingsProvider).llmProviders;
+}
+
+/// The form adding a model to a picker of [role] — on [providerId] where the
+/// picker is narrowed to one — or editing [model], added by hand earlier, on
+/// it. Null where [model] names one that is not there to edit.
+ModelForm? modelFormFor(
+  SettingReader ref,
+  ModelRole role, {
+  String? providerId,
+  String? model,
+}) {
+  final providers = pickerProviders(ref, role);
+  // Only a model added by hand is edited.
+  final info = model == null
+      ? null
+      : providers
+            .where((p) => p.id == providerId)
+            .firstOrNull
+            ?.customModels
+            .where((m) => m.id == model)
+            .firstOrNull;
+  if (model != null && info == null) return null;
+  return ModelForm(
+    role: role,
+    providers: [for (final p in providers) (p.id, p.displayName)],
+    providerId: providerId,
+    model: info,
+  );
+}
+
+/// Keeps what [form] was answered with on its provider.
+Future<void> saveModel(
+  SettingReader ref,
+  ModelForm form,
+  Map<String, String> answers,
+) {
+  final draft = form.build(answers);
+  return ref
+      .read(appSettingsProvider.notifier)
+      .putCustomModel(draft.providerId, draft.info, replacing: draft.replacing);
 }

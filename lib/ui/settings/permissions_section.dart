@@ -52,12 +52,16 @@ class PermissionRows extends StatelessWidget {
     PermissionRule? rule,
     int? index,
   }) async {
-    final edited = await showSettingForm(context, PermissionRuleForm(rule));
-    if (edited == null || !context.mounted) return;
-    final next = [...rules];
-    if (index != null) next.removeAt(index);
-    next.add(edited);
-    await onSaved(next);
+    final form = PermissionRuleForm(rule);
+    await showSettingForm(
+      context,
+      form,
+      save: (answers) {
+        final next = [...rules];
+        if (index != null) next.removeAt(index);
+        return onSaved(next..add(form.build(answers)));
+      },
+    );
   }
 
   @override

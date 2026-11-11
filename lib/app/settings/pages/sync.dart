@@ -160,6 +160,7 @@ final syncSettings = [
         describe: (peer) => CollectionItem(
           peer.name,
           id: peer.deviceId,
+          tap: handOff.pairedDevice == null ? null : "open",
           error: peer.error,
           glyph: _statusGlyph(peer.status),
           tone: switch (peer.status) {

@@ -35,7 +35,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// Save, once the last answer typed is drawn: Save waits on the form.
   Future<void> saveDialog(WidgetTester tester) async {
+    await tester.pump();
     await tester.tap(find.text("Save"));
     await settleIo(tester);
   }
@@ -272,12 +274,14 @@ void main() {
         await addProvider(tester, "Google Gemini");
 
         expect(find.textContaining("free tier is not private"), findsOneWidget);
-        await tester.tap(find.text("Cancel").last);
-        await settleIo(tester);
         expect(dialogField("Access key"), findsNothing);
+        expect(
+          tester
+              .widget<FilledButton>(find.widgetWithText(FilledButton, "Save"))
+              .onPressed,
+          isNull,
+        );
 
-        await tester.tap(find.text("Google Gemini").last);
-        await settleIo(tester);
         await tester.tap(find.text("I understand, add it"));
         await settleIo(tester);
         await tester.enterText(dialogField("Access key"), "gm-secret");

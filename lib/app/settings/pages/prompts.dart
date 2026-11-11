@@ -75,7 +75,7 @@ final _grantable = [
 
 /// An agent written by hand: its name, which is its file's, what it is for,
 /// the system prompt, and the tools it is granted, group by group.
-class AgentForm implements SettingForm<PromptDocument> {
+class AgentForm extends SettingForm<PromptDocument> {
   AgentForm(this.agent, {required this.taken});
 
   final PromptDocument? agent;
@@ -94,6 +94,12 @@ class AgentForm implements SettingForm<PromptDocument> {
 
   @override
   String get title => agent == null ? "Add agent" : "Edit ${agent!.name}";
+
+  @override
+  bool get page => true;
+
+  @override
+  String get discard => "Throw away the edits to this agent?";
 
   @override
   Map<String, String> get initial => {
@@ -141,7 +147,11 @@ class AgentForm implements SettingForm<PromptDocument> {
       focused: agent == null,
     ),
     const FormText("description", "Description"),
-    const FormText("instructions", "System prompt", lines: 8),
+    const FormPrompt(
+      "instructions",
+      "System prompt",
+      hint: "The system prompt the agent runs under.",
+    ),
     const FormQuestion("Tools"),
     for (final group in ToolGroup.values)
       if (_grantable.any((t) => t.group == group))

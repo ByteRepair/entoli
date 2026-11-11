@@ -155,7 +155,7 @@ extension SettingsModel {
   }
 
   func submit(_ id: String, _ index: Int?, _ answers: [String?: String?]) async
-    -> SettingNoticeData?
+    -> FormSaveData?
   {
     await reply(or: nil) {
       say.submitForm(id: id, index: index.map(Int64.init), answers: answers, completion: $0)
@@ -177,10 +177,25 @@ extension SettingsModel {
 
   func submitModelForm(
     _ id: String, _ providerId: String?, _ modelId: String?, _ answers: [String?: String?]
-  ) async -> SettingNoticeData? {
+  ) async -> FormSaveData? {
     await reply(or: nil) {
       say.submitModelForm(
         id: id, providerId: providerId, modelId: modelId, answers: answers, completion: $0)
+    }
+  }
+
+  /// The program a collection's form names signed in, the app's window
+  /// brought forward for the sign-in it draws.
+  func formSignIn(_ id: String, _ index: Int?, _ answers: [String?: String?], again: Bool)
+    async
+  {
+    #if os(macOS)
+      NSApp.windows.first { $0.isVisible && !($0.identifier?.rawValue ?? "").contains("Settings") }?
+        .makeKeyAndOrderFront(nil)
+    #endif
+    _ = await reply {
+      say.formSignIn(
+        id: id, index: index.map(Int64.init), answers: answers, again: again, completion: $0)
     }
   }
 

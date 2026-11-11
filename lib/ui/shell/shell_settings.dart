@@ -3,13 +3,15 @@ import "dart:async";
 import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:flutter_riverpod/misc.dart"
+    show ProviderListenable, ProviderOrFamily;
 
 import "../../app/settings/controller.dart";
 import "../../app/bot_avatar/library.dart";
 import "../../app/bot_avatar/stage.dart";
 import "../../app/model_facts.dart";
-import "../../app/model_role.dart";
 import "../../app/settings/forms/model.dart";
+import "../../app/settings/hand_off.dart";
 import "../../app/settings/scope.dart";
 import "../../app/settings/settings.dart";
 import "../../app/settings/spec.dart";
@@ -296,6 +298,7 @@ SettingRowData _row(
                 tone: _tone(item.tone),
                 on: item.on,
                 opens: item.opens,
+                tap: item.tap,
                 image: face?.photo,
                 bot: face?.bot,
                 botColour: face?.colour,
@@ -407,8 +410,30 @@ List<FormOptionData> _formOptions(List<FormOption> options) => [
       answer: option.answer,
       label: option.label,
       help: option.help,
+      group: option.group,
+      icon: _icon(option.glyph),
+      tags: [
+        for (final tag in option.tags)
+          FormTagData(text: tag.text, tone: _tone(tag.tone)),
+      ],
     ),
 ];
+
+/// [answers] as the client sends them, every key a string.
+Map<String, String> _answersOf(Map<String?, String?> answers) => {
+  for (final MapEntry(:key, :value) in answers.entries) ?key: value ?? "",
+};
+
+/// What a submit threw, as the form says it.
+FormSaveData _refusal(Object e) => switch (e) {
+  FormRefusal() => FormSaveData(
+    message: e.message,
+    field: e.field,
+    anyway: e.anyway,
+    anywayLabel: e.anywayLabel,
+  ),
+  _ => FormSaveData(message: "$e"),
+};
 
 /// The native settings' end of the app: sends every page as it changes, and
 /// runs what the client says the user did against the controller the row
@@ -419,6 +444,7 @@ class SettingsBridge implements SettingsIntents {
   }
 
   final ProviderContainer _container;
+  late final _reader = _ContainerReader(_container);
   final _native = NativeSettings();
 
   /// The pages as they change, while the settings are on screen.
@@ -560,10 +586,7 @@ class SettingsBridge implements SettingsIntents {
     int? index,
     Map<String?, String?>? answers,
   ) async {
-    final c = _at<CollectionController>(id);
-    final form = c?.typed(
-      <V>(c) => c.form?.call(index == null ? null : c.items[index]),
-    );
+    final form = _formOf(id, index);
     if (form == null) {
       return SettingFormData(title: "", answers: const {}, parts: const []);
     }
@@ -575,12 +598,7 @@ class SettingsBridge implements SettingsIntents {
     SettingForm<Object?> form,
     Map<String?, String?>? answers,
   ) {
-    final now = answers == null
-        ? {...form.initial}
-        : {
-            for (final MapEntry(:key, :value) in answers.entries)
-              ?key: value ?? "",
-          };
+    final now = answers == null ? {...form.initial} : _answersOf(answers);
     final problem = form.problem(now);
     return SettingFormData(
       title: form.title,
@@ -604,6 +622,16 @@ class SettingsBridge implements SettingsIntents {
               focused: part.focused,
               lines: part.lines,
               enabled: part.enabled,
+              secret: part.secret,
+              file: part.file,
+            ),
+            FormPrompt() => FormPartData(
+              kind: FormPartKind.prompt,
+              id: part.id,
+              label: part.label,
+              hint: part.hint,
+              lines: 8,
+              enabled: part.enabled,
             ),
             FormChoice() => FormPartData(
               kind: FormPartKind.choice,
@@ -612,6 +640,38 @@ class SettingsBridge implements SettingsIntents {
               options: _formOptions(part.options),
               enabled: part.enabled,
               segmented: part.segmented,
+              cards: part.cards,
+            ),
+            FormLink() => FormPartData(
+              kind: FormPartKind.link,
+              label: part.label,
+              url: part.url.toString(),
+              prominent: part.prominent,
+            ),
+            FormFold() => FormPartData(
+              kind: FormPartKind.fold,
+              id: part.id,
+              label: part.label,
+            ),
+            FormConsent() => FormPartData(
+              kind: FormPartKind.consent,
+              id: part.id,
+              label: part.title,
+              message: part.message,
+              accept: part.accept,
+              linkLabel: part.link?.$1,
+              url: part.link?.$2.toString(),
+            ),
+            FormEntries() => FormPartData(
+              kind: FormPartKind.entries,
+              id: part.id,
+              label: part.label,
+              helper: part.helper,
+              enabled: part.enabled,
+            ),
+            FormSignIn(:final config) => FormPartData(
+              kind: FormPartKind.signIn,
+              label: config.displayName,
             ),
             FormDate() => FormPartData(
               kind: FormPartKind.date,
@@ -652,21 +712,47 @@ class SettingsBridge implements SettingsIntents {
     );
   }
 
+  /// The form a collection's item at [index], or a new one, is edited
+  /// through.
+  SettingForm<Object?>? _formOf(String id, int? index) =>
+      _at<CollectionController>(
+        id,
+      )?.typed(<V>(c) => c.form?.call(index == null ? null : c.items[index]));
+
   @override
-  Future<SettingNoticeData?> submitForm(
+  Future<FormSaveData?> submitForm(
     String id,
     int? index,
     Map<String?, String?> answers,
   ) async {
     try {
-      await _at<CollectionController>(id)?.submit({
-        for (final MapEntry(:key, :value) in answers.entries) ?key: value ?? "",
-      }, index: index);
+      await _at<CollectionController>(
+        id,
+      )?.submit(_answersOf(answers), index: index);
       return null;
     } catch (e) {
-      return SettingNoticeData(message: "$e");
+      return _refusal(e);
     }
   }
+
+  @override
+  Future<void> formSignIn(
+    String id,
+    int? index,
+    Map<String?, String?> answers,
+    bool again,
+  ) async {
+    final form = _formOf(id, index);
+    final now = _answersOf(answers);
+    final signIn = form?.fields(now).whereType<FormSignIn>().firstOrNull;
+    final hook = _container.read(settingsHandOffProvider).signIn;
+    if (signIn == null || hook == null) return;
+    await hook(signIn.config, again: again);
+  }
+
+  @override
+  void formDismissed(String id, int? index, Map<String?, String?> answers) =>
+      unawaited(_formOf(id, index)?.dismissed(_answersOf(answers)));
 
   @override
   void catalog(String id, String item, String op) {
@@ -732,16 +818,6 @@ class SettingsBridge implements SettingsIntents {
     }
   }
 
-  /// The providers a picker of [c]'s role offers anything through: none for
-  /// transcription where the device cannot cut the microphone into
-  /// utterances, as the Flutter catalog does.
-  List<LlmProviderConfig> _pickerProviders(ModelPickController c) {
-    final cuts = _container.read(voiceProvider).hasModelCatalog;
-    return c.role == ModelRole.transcription && !cuts
-        ? const []
-        : _container.read(appSettingsProvider).llmProviders;
-  }
-
   List<CatalogEntry> _catalogOf(ModelPickController c) => catalogEntries(
     ModelCatalog.notifier.value,
     _container.read(modelProvidersProvider),
@@ -765,7 +841,7 @@ class SettingsBridge implements SettingsIntents {
         providers: const [],
       );
     }
-    final providers = _pickerProviders(c);
+    final providers = pickerProviders(_reader, c.role);
     final entries = _catalogOf(c);
     final favourites = _container.read(appSettingsProvider).favouriteModels;
     final starred = favourites.toSet();
@@ -836,32 +912,6 @@ class SettingsBridge implements SettingsIntents {
     )),
   );
 
-  /// The form adding a model to [c]'s picker, or editing [modelId] on
-  /// [providerId].
-  ModelForm? _modelForm(
-    ModelPickController c,
-    String? providerId,
-    String? modelId,
-  ) {
-    final providers = _pickerProviders(c);
-    // Only a model added by hand is edited.
-    final model = modelId == null
-        ? null
-        : providers
-              .where((p) => p.id == providerId)
-              .firstOrNull
-              ?.customModels
-              .where((m) => m.id == modelId)
-              .firstOrNull;
-    if (modelId != null && model == null) return null;
-    return ModelForm(
-      role: c.role,
-      providers: [for (final p in providers) (p.id, p.displayName)],
-      providerId: providerId,
-      model: model,
-    );
-  }
-
   @override
   Future<SettingFormData> modelForm(
     String id,
@@ -870,7 +920,9 @@ class SettingsBridge implements SettingsIntents {
     Map<String?, String?>? answers,
   ) async {
     final c = _at<ModelPickController>(id);
-    final form = c == null ? null : _modelForm(c, providerId, modelId);
+    final form = c == null
+        ? null
+        : modelFormFor(_reader, c.role, providerId: providerId, model: modelId);
     if (form == null) {
       return SettingFormData(title: "", answers: const {}, parts: const []);
     }
@@ -878,29 +930,22 @@ class SettingsBridge implements SettingsIntents {
   }
 
   @override
-  Future<SettingNoticeData?> submitModelForm(
+  Future<FormSaveData?> submitModelForm(
     String id,
     String? providerId,
     String? modelId,
     Map<String?, String?> answers,
   ) async {
     final c = _at<ModelPickController>(id);
-    final form = c == null ? null : _modelForm(c, providerId, modelId);
+    final form = c == null
+        ? null
+        : modelFormFor(_reader, c.role, providerId: providerId, model: modelId);
     if (form == null) return null;
-    final draft = form.build({
-      for (final MapEntry(:key, :value) in answers.entries) ?key: value ?? "",
-    });
     try {
-      await _container
-          .read(appSettingsProvider.notifier)
-          .putCustomModel(
-            draft.providerId,
-            draft.info,
-            replacing: draft.replacing,
-          );
+      await saveModel(_reader, form, _answersOf(answers));
       return null;
     } catch (e) {
-      return SettingNoticeData(message: "$e");
+      return _refusal(e);
     }
   }
 
@@ -1048,4 +1093,21 @@ class SettingsBridge implements SettingsIntents {
     }
     return parts.join("\n\n———\n\n");
   }
+}
+
+/// The container as a [SettingReader], for the core's helpers an intent
+/// calls.
+final class _ContainerReader implements SettingReader {
+  const _ContainerReader(this.container);
+
+  final ProviderContainer container;
+
+  @override
+  T watch<T>(ProviderListenable<T> provider) => container.read(provider);
+
+  @override
+  T read<T>(ProviderListenable<T> provider) => container.read(provider);
+
+  @override
+  void invalidate(ProviderOrFamily provider) => container.invalidate(provider);
 }

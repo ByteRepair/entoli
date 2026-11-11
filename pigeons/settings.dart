@@ -101,6 +101,10 @@ enum SettingIcon {
   connecting,
   offline,
   failed,
+  cloud,
+  computer,
+  terminal,
+  tune,
 }
 
 enum SettingTone { plain, good, warning }
@@ -203,6 +207,7 @@ class SettingItemData {
     this.opens,
     this.bot,
     this.botColour,
+    this.tap,
   });
 
   String title;
@@ -225,6 +230,9 @@ class SettingItemData {
 
   /// Whether it is armed, where its row carries a switch.
   bool? on;
+
+  /// The item action a tap on the row runs.
+  String? tap;
 
   List<SettingItemActionData?> actions;
 }
@@ -562,7 +570,22 @@ class SettingNoticeData {
   String message;
 }
 
-enum FormPartKind { question, text, choice, date, duration, list, multi, note }
+enum FormPartKind {
+  question,
+  text,
+  choice,
+  date,
+  duration,
+  list,
+  multi,
+  note,
+  prompt,
+  link,
+  fold,
+  consent,
+  entries,
+  signIn,
+}
 
 class FormPartData {
   FormPartData({
@@ -577,6 +600,14 @@ class FormPartData {
     this.options = const [],
     this.enabled = true,
     this.segmented = false,
+    this.cards = false,
+    this.secret = false,
+    this.file = false,
+    this.url,
+    this.prominent = false,
+    this.message,
+    this.accept,
+    this.linkLabel,
   });
 
   FormPartKind kind;
@@ -597,14 +628,68 @@ class FormPartData {
 
   /// A choice drawn with every option side by side.
   bool segmented;
+
+  /// A choice drawn as a card per option, under its group, with its help
+  /// and tags.
+  bool cards;
+
+  /// Text typed hidden.
+  bool secret;
+
+  /// Text a file picked from the disk fills, its path the answer.
+  bool file;
+
+  /// A link's, and a consent's terms.
+  String? url;
+  bool prominent;
+
+  /// A consent's: what is agreed to, what agreeing is called, and what its
+  /// terms' link says. Its title is [label].
+  String? message;
+  String? accept;
+  String? linkLabel;
+}
+
+class FormTagData {
+  FormTagData({required this.text, this.tone = SettingTone.plain});
+
+  String text;
+  SettingTone tone;
 }
 
 class FormOptionData {
-  FormOptionData({required this.answer, required this.label, this.help});
+  FormOptionData({
+    required this.answer,
+    required this.label,
+    this.help,
+    this.group,
+    this.icon,
+    this.tags = const [],
+  });
 
   String answer;
   String label;
   String? help;
+  String? group;
+  SettingIcon? icon;
+  List<FormTagData?> tags;
+}
+
+/// Why a form's Save was refused: said on [field] where it names one, with
+/// Save turned into [anywayLabel] where saving again is allowed — the
+/// answer [anyway] then set "yes", and cleared once [field] changes.
+class FormSaveData {
+  FormSaveData({
+    required this.message,
+    this.field,
+    this.anyway,
+    this.anywayLabel,
+  });
+
+  String message;
+  String? field;
+  String? anyway;
+  String? anywayLabel;
 }
 
 /// A form as it stands for [answers]: the fields to ask, and what stops it
@@ -859,11 +944,23 @@ abstract class SettingsIntents {
   SettingFormData form(String id, int? index, Map<String?, String?>? answers);
 
   @async
-  SettingNoticeData? submitForm(
+  FormSaveData? submitForm(
     String id,
     int? index,
     Map<String?, String?> answers,
   );
+
+  /// The program the form's sign-in names, signed in; afresh where [again].
+  @async
+  void formSignIn(
+    String id,
+    int? index,
+    Map<String?, String?> answers,
+    bool again,
+  );
+
+  /// The form left unsaved, as [answers] stood.
+  void formDismissed(String id, int? index, Map<String?, String?> answers);
 
   /// [op] is "download", "cancel" or "delete".
   void catalog(String id, String item, String op);
@@ -900,7 +997,7 @@ abstract class SettingsIntents {
   );
 
   @async
-  SettingNoticeData? submitModelForm(
+  FormSaveData? submitModelForm(
     String id,
     String? providerId,
     String? modelId,

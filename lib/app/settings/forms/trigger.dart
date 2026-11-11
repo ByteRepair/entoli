@@ -77,12 +77,13 @@ Trigger savedTrigger(
 /// what it says, where its chat goes and how long that chat lives. One the
 /// agent registered is shown and not changed: the switch and the delete on
 /// its row are what is left.
-class TriggerForm implements SettingForm<Trigger> {
+class TriggerForm extends SettingForm<Trigger> {
   TriggerForm(
     this.trigger, {
     required this.now,
     required this.projects,
     required this.members,
+    required this.inheritedTtl,
   });
 
   final Trigger? trigger;
@@ -95,6 +96,10 @@ class TriggerForm implements SettingForm<Trigger> {
   /// The agents a fire can be addressed to in a project, by its key.
   final List<String> Function(String project) members;
 
+  /// How long a chat in a project lives where the trigger says nothing: the
+  /// Default its Temporary chat names.
+  final TempChatTtl Function(String project) inheritedTtl;
+
   bool get _registered => trigger?.byAgent ?? false;
 
   /// A new schedule defaults to the next whole hour, so picking a time is one
@@ -104,6 +109,12 @@ class TriggerForm implements SettingForm<Trigger> {
 
   @override
   String get title => trigger == null ? "New trigger" : "Edit trigger";
+
+  @override
+  bool get page => true;
+
+  @override
+  String get discard => "Throw away the edits to this trigger?";
 
   @override
   Map<String, String> get initial {
@@ -234,16 +245,16 @@ class TriggerForm implements SettingForm<Trigger> {
           ),
         for (final name in names) FormOption(name, "@$name"),
       ]),
-      FormText(
+      FormPrompt(
         "prompt",
         "Prompt",
         hint: "What should the agent do?",
-        lines: 6,
+        project: project.isEmpty ? null : project,
         enabled: editable,
       ),
       if (editable) ...[
         FormChoice("ttl", label: "Temporary chat", [
-          const FormOption("", "Default"),
+          FormOption("", "Default (${inheritedTtl(project).label})"),
           for (final ttl in TempChatTtl.values) FormOption(ttl.name, ttl.label),
         ]),
         FormChoice("project", label: "Project", [

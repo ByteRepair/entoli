@@ -212,6 +212,10 @@ extension SettingIcon {
     case .online: "circle.fill"
     case .connecting, .offline: "circle"
     case .failed: "exclamationmark.circle"
+    case .cloud: "cloud"
+    case .computer: "desktopcomputer"
+    case .terminal: "terminal"
+    case .tune: "slider.horizontal.3"
     }
   }
 }

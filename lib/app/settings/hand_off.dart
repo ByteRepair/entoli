@@ -4,9 +4,9 @@ import "../../domain/bot_avatar/spec.dart";
 import "../../domain/llm_provider.dart";
 
 /// What a frontend draws with its own page rather than as a setting: the Bot
-/// Avatar editor, which is the Flutter app's whatever draws the settings.
-/// The frontend that can show it binds it; unbound, a setting that needs it
-/// does not offer it.
+/// Avatar editor, a program's sign-in, a paired device's page. The frontend
+/// at the window's root binds them; unbound, a setting that needs one does
+/// not offer it.
 class SettingsHandOff {
   /// The avatar editor opened on [initial], answering what was made, or null
   /// where it was left.
@@ -26,6 +26,15 @@ class SettingsHandOff {
   /// The camera, pointed at a pairing code another screen shows, answering
   /// the code read.
   Future<String?> Function()? scanCode;
+
+  /// Unbinds every hook, for a frontend going away.
+  void clear() {
+    editBotAvatar = null;
+    signIn = null;
+    addModelByLink = null;
+    pairedDevice = null;
+    scanCode = null;
+  }
 }
 
 final settingsHandOffProvider = Provider<SettingsHandOff>(

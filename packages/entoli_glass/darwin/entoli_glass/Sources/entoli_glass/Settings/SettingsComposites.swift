@@ -49,6 +49,7 @@ struct CollectionRow: View {
           if let icon = item.icon {
             Image(systemName: icon.symbol).foregroundStyle(item.tone.colour).font(.caption)
           }
+          let actions = item.actions.compactMap { $0 }
           let words = VStack(alignment: .leading, spacing: 2) {
             Text(item.title)
             if let subtitle = item.subtitle, !subtitle.isEmpty {
@@ -67,6 +68,13 @@ struct CollectionRow: View {
             ) {
               words.frame(maxWidth: .infinity, alignment: .leading)
             }
+          } else if let tap = item.tap, let action = actions.first(where: { $0.id == tap }) {
+            // A row that runs an action of its own when tapped: a device's
+            // page.
+            Button { act(index, action) } label: {
+              words.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
           } else {
             words
             Spacer()
@@ -76,7 +84,6 @@ struct CollectionRow: View {
               "", isOn: Binding(get: { on }, set: { _ in run(index, "toggle") })
             ).labelsHidden()
           }
-          let actions = item.actions.compactMap { $0 }
           if actions.count >= 2 || row.takesImages {
             // One control for the lot, Edit and Remove included, so a row
             // never ends in a strip of buttons.
@@ -201,17 +208,28 @@ struct FormSheet: View {
   let load: ([String?: String?]?) async -> SettingFormData?
 
   /// Saves it, or says why it could not.
-  let save: ([String?: String?]) async -> SettingNoticeData?
+  let save: ([String?: String?]) async -> FormSaveData?
+
+  /// Signs in the program it names; afresh where asked to.
+  var signIn: (([String?: String?], Bool) async -> Void)?
+
+  /// Told it was left unsaved.
+  var dismissed: (([String?: String?]) -> Void)?
 
   /// A collection item's form: the item at [index], or a new one.
   init(model: SettingsModel, id: String, index: Int?) {
     load = { await model.form(id, index, $0) }
     save = { await model.submit(id, index, $0) }
+    signIn = { await model.formSignIn(id, index, $0, again: $1) }
+    dismissed = {
+      model.say.formDismissed(
+        id: id, index: index.map(Int64.init), answers: $0, completion: ignore)
+    }
   }
 
   init(
     load: @escaping ([String?: String?]?) async -> SettingFormData?,
-    save: @escaping ([String?: String?]) async -> SettingNoticeData?
+    save: @escaping ([String?: String?]) async -> FormSaveData?
   ) {
     self.load = load
     self.save = save
@@ -222,8 +240,12 @@ struct FormSheet: View {
   /// How many times the form has been asked for, so only the latest answer
   /// is drawn: replies can land out of order.
   @State private var asked = 0
-  @State private var failed: String?
+  /// Why the last Save was refused.
+  @State private var refused: FormSaveData?
+  @State private var saved = false
+  @State private var picking: String?
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.openURL) private var openURL
 
   var body: some View {
     NavigationStack {
@@ -235,7 +257,7 @@ struct FormSheet: View {
           if let problem = form.problem, !problem.isEmpty {
             Text(problem).foregroundStyle(.red)
           }
-          if let failed { Text(failed).foregroundStyle(.red) }
+          if let refused, refused.field == nil { Text(refused.message).foregroundStyle(.red) }
         } else {
           ProgressView()
         }
@@ -245,11 +267,14 @@ struct FormSheet: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Save") {
+          Button(refused?.anywayLabel ?? "Save") {
             Task { @MainActor in
-              if let notice = await save(answers) {
-                failed = notice.message
+              var now = answers
+              if let anyway = refused?.anyway { now[anyway] = "yes" }
+              if let answer = await save(now) {
+                refused = answer
               } else {
+                saved = true
                 dismiss()
               }
             }
@@ -263,6 +288,18 @@ struct FormSheet: View {
       form = await load(nil)
       answers = form?.answers ?? [:]
     }
+    .onDisappear { if !saved { dismissed?(answers) } }
+    #if os(macOS)
+      .fileImporter(
+        isPresented: Binding(get: { picking != nil }, set: { if !$0 { picking = nil } }),
+        allowedContentTypes: [.item]
+      ) { result in
+        if let key = picking, case .success(let url) = result {
+          binding(key).wrappedValue = url.path
+        }
+        picking = nil
+      }
+    #endif
   }
 
   private func binding(_ key: String) -> Binding<String> {
@@ -270,6 +307,10 @@ struct FormSheet: View {
       get: { (answers[key] ?? nil) ?? "" },
       set: { text in
         answers[key] = text
+        if refused?.field == key {
+          if let anyway = refused?.anyway { answers[anyway] = nil }
+          refused = nil
+        }
         asked += 1
         let ask = asked
         let now = answers
@@ -286,7 +327,7 @@ struct FormSheet: View {
     case .question:
       Text(part.label ?? "").font(.headline).padding(.top, 8)
     case .note:
-      Text(part.label ?? "").font(.callout).italic().foregroundStyle(.secondary)
+      Text(part.label ?? "").font(.callout).foregroundStyle(.secondary)
     case .text:
       VStack(alignment: .leading, spacing: 2) {
         if part.lines > 1 {
@@ -300,32 +341,75 @@ struct FormSheet: View {
               Text(part.label ?? "").font(.caption).foregroundStyle(.secondary)
             }
           #endif
-          TextField(part.label ?? "", text: binding(key), prompt: part.hint.map(Text.init))
+          HStack {
+            if part.secret {
+              SecureField(part.label ?? "", text: binding(key), prompt: part.hint.map(Text.init))
+            } else {
+              TextField(part.label ?? "", text: binding(key), prompt: part.hint.map(Text.init))
+            }
+            #if os(macOS)
+              if part.file { Button("Choose…") { picking = key } }
+            #endif
+          }
         }
         helper(part)
       }
       .disabled(!part.enabled)
-    case .choice:
-      let options = part.options.compactMap { $0 }
-      let picked = (answers[key] ?? nil) ?? ""
-      VStack(alignment: .leading, spacing: 4) {
-        if part.segmented {
-          if let label = part.label { Text(label).font(.caption).foregroundStyle(.secondary) }
-          Picker(part.label ?? "", selection: binding(key)) {
-            ForEach(options, id: \.answer) { o in Text(o.label).tag(o.answer) }
-          }
-          .pickerStyle(.segmented)
-          .labelsHidden()
-        } else {
-          Picker(part.label ?? "", selection: binding(key)) {
-            ForEach(options, id: \.answer) { o in Text(o.label).tag(o.answer) }
-          }
-        }
-        if let help = options.first(where: { $0.answer == picked })?.help {
-          Text(help).font(.caption).foregroundStyle(.secondary)
+    case .prompt:
+      VStack(alignment: .leading, spacing: 2) {
+        Text(part.label ?? "").font(.caption).foregroundStyle(.secondary)
+        TextEditor(text: binding(key)).frame(minHeight: CGFloat(part.lines) * 18)
+        if let hint = part.hint, binding(key).wrappedValue.isEmpty {
+          Text(hint).font(.caption).foregroundStyle(.tertiary)
         }
       }
       .disabled(!part.enabled)
+    case .choice:
+      if part.cards { cards(part) } else { choice(part) }
+    case .link:
+      if let url = part.url.flatMap(URL.init(string:)) {
+        if part.prominent {
+          Button { openURL(url) } label: {
+            Label(part.label ?? "", systemImage: "arrow.up.forward.square")
+          }
+          .buttonStyle(.borderedProminent)
+        } else {
+          Link(part.label ?? "", destination: url)
+        }
+      }
+    case .fold:
+      let open = binding(key).wrappedValue == "open"
+      Button {
+        binding(key).wrappedValue = open ? "" : "open"
+      } label: {
+        Label(part.label ?? "", systemImage: open ? "chevron.down" : "chevron.right")
+      }
+      .buttonStyle(.borderless)
+    case .consent:
+      VStack(alignment: .leading, spacing: 8) {
+        Label(part.label ?? "", systemImage: "hand.raised").font(.headline)
+          .foregroundStyle(.red)
+        Text(part.message ?? "")
+        if let url = part.url.flatMap(URL.init(string:)) {
+          Link(part.linkLabel ?? "", destination: url)
+        }
+        Button(part.accept ?? "", role: .destructive) { binding(key).wrappedValue = "yes" }
+      }
+    case .entries:
+      VStack(alignment: .leading, spacing: 2) {
+        Text(part.label ?? "").font(.caption).foregroundStyle(.secondary)
+        TextEditor(text: binding(key)).font(.body.monospaced()).frame(minHeight: 70)
+        Text("One NAME=value a line.").font(.caption).foregroundStyle(.secondary)
+        helper(part)
+      }
+      .disabled(!part.enabled)
+    case .signIn:
+      HStack {
+        Text(part.label ?? "")
+        Spacer()
+        Button("Sign in…") { Task { @MainActor in await signIn?(answers, false) } }
+        Button("Sign in again…") { Task { @MainActor in await signIn?(answers, true) } }
+      }
     case .date:
       DatePicker(
         part.label ?? "",
@@ -360,18 +444,104 @@ struct FormSheet: View {
       }
       .disabled(!part.enabled)
     case .multi:
-      let picked = Set(((answers[key] ?? nil) ?? "").split(separator: ",").map(String.init))
-      VStack(alignment: .leading, spacing: 6) {
-        Text(part.label ?? "").font(.caption).foregroundStyle(.secondary)
+      multi(part)
+    }
+  }
+
+  @ViewBuilder private func choice(_ part: FormPartData) -> some View {
+    let key = part.id ?? ""
+    let options = part.options.compactMap { $0 }
+    let picked = (answers[key] ?? nil) ?? ""
+    VStack(alignment: .leading, spacing: 4) {
+      if part.segmented {
+        if let label = part.label { Text(label).font(.caption).foregroundStyle(.secondary) }
+        Picker(part.label ?? "", selection: binding(key)) {
+          ForEach(options, id: \.answer) { o in Text(o.label).tag(o.answer) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+      } else {
+        Picker(part.label ?? "", selection: binding(key)) {
+          ForEach(options, id: \.answer) { o in Text(o.label).tag(o.answer) }
+        }
+      }
+      if let help = options.first(where: { $0.answer == picked })?.help {
+        Text(help).font(.caption).foregroundStyle(.secondary)
+      }
+    }
+    .disabled(!part.enabled)
+  }
+
+  /// Every option as a row of its own, under its group: what it is, and its
+  /// tags.
+  @ViewBuilder private func cards(_ part: FormPartData) -> some View {
+    let key = part.id ?? ""
+    let options = part.options.compactMap { $0 }
+    ForEach(Array(options.enumerated()), id: \.offset) { i, option in
+      if option.group != (i == 0 ? nil : options[i - 1].group), let group = option.group {
+        Text(group).font(.caption.weight(.semibold)).foregroundStyle(Color.accentColor)
+          .padding(.top, 6)
+      }
+      Button {
+        binding(key).wrappedValue = option.answer
+      } label: {
+        HStack(alignment: .top, spacing: 12) {
+          Image(systemName: option.icon?.symbol ?? "cloud")
+            .foregroundStyle(Color.accentColor).frame(width: 28)
+          VStack(alignment: .leading, spacing: 4) {
+            Text(option.label).font(.headline)
+            if let help = option.help {
+              Text(help).font(.caption).foregroundStyle(.secondary)
+            }
+            let tags = option.tags.compactMap { $0 }
+            if !tags.isEmpty {
+              FlowLayout(spacing: 6, centred: false) {
+                ForEach(Array(tags.enumerated()), id: \.offset) { _, tag in
+                  Text(tag.text).font(.caption2)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(tag.tone.colour.opacity(0.18), in: RoundedRectangle(cornerRadius: 6))
+                }
+              }
+            }
+          }
+          Spacer(minLength: 0)
+          Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+        }
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .disabled(!part.enabled)
+    }
+  }
+
+  @ViewBuilder private func multi(_ part: FormPartData) -> some View {
+    let key = part.id ?? ""
+    let picked = Set(((answers[key] ?? nil) ?? "").split(separator: ",").map(String.init))
+    let options = part.options.compactMap { $0 }
+    let toggle = { (answer: String) in
+      var next = picked
+      if picked.contains(answer) { next.remove(answer) } else { next.insert(answer) }
+      binding(key).wrappedValue = next.sorted().joined(separator: ",")
+    }
+    VStack(alignment: .leading, spacing: 6) {
+      Text(part.label ?? "").font(.caption).foregroundStyle(.secondary)
+      if options.contains(where: { $0.help != nil }) {
+        // Options that say what they are: a switch each, with its words.
+        ForEach(options, id: \.answer) { option in
+          Toggle(
+            isOn: Binding(get: { picked.contains(option.answer) }, set: { _ in toggle(option.answer) })
+          ) {
+            Titled(title: option.label, detail: option.help)
+          }
+        }
+      } else {
         FlowLayout(spacing: 8, centred: false) {
-          ForEach(part.options.compactMap { $0 }, id: \.answer) { option in
+          ForEach(options, id: \.answer) { option in
             let on = picked.contains(option.answer)
             // A plain capsule rather than a glass button: switching a glass
             // button's style rebuilds it, which stalled every tap.
             Button {
-              var next = picked
-              if on { next.remove(option.answer) } else { next.insert(option.answer) }
-              binding(key).wrappedValue = next.sorted().joined(separator: ",")
+              toggle(option.answer)
             } label: {
               Text(option.label).font(.callout).lineLimit(1)
                 .foregroundStyle(on ? Color.white : Color.primary)
@@ -384,14 +554,16 @@ struct FormSheet: View {
             .animation(.snappy(duration: 0.15), value: on)
           }
         }
-        if let error = part.error { Text(error).font(.caption).foregroundStyle(.red) }
       }
-      .disabled(!part.enabled)
+      if let error = part.error { Text(error).font(.caption).foregroundStyle(.red) }
     }
+    .disabled(!part.enabled)
   }
 
   @ViewBuilder private func helper(_ part: FormPartData) -> some View {
-    if let error = part.error {
+    if let refused, let key = part.id, refused.field == key {
+      Text(refused.message).font(.caption).foregroundStyle(.red)
+    } else if let error = part.error {
       Text(error).font(.caption).foregroundStyle(.red)
     } else if let helper = part.helper {
       Text(helper).font(.caption).foregroundStyle(.secondary)

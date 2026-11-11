@@ -132,7 +132,7 @@ CollectionItem describeRule(PermissionRule rule) => CollectionItem(
 /// happens before one runs, and what a command can write to once it does.
 /// Each option names an outcome, and the line under it says what that means;
 /// Default is the rule leaving that question to everything else.
-class PermissionRuleForm implements SettingForm<PermissionRule> {
+class PermissionRuleForm extends SettingForm<PermissionRule> {
   const PermissionRuleForm(this.rule);
 
   final PermissionRule? rule;

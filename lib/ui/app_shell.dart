@@ -9,6 +9,7 @@ import "command_intents.dart";
 import "commands.dart";
 import "sidebar/sidebar.dart";
 import "selection.dart";
+import "settings/settings_hand_off.dart";
 import "widgets/side_panel_frame.dart";
 
 /// The sidebar and the chat pane, in a [SidePanelFrame]: beside each other
@@ -49,13 +50,15 @@ class _AppShellState extends ConsumerState<AppShell> {
   bool _key(KeyEvent event) => runKey(event, ref, _commands);
 
   @override
-  Widget build(BuildContext context) => AppMenuSync(
-    child: SidePanelFrame(
-      panel: const Sidebar(),
-      panelWidth: sidebarWidth,
-      shown: ref.watch(sidebarShownProvider),
-      onShow: () => ref.read(sidebarShownProvider.notifier).set(true),
-      child: const ChatPage(),
+  Widget build(BuildContext context) => SettingsHandOffs(
+    child: AppMenuSync(
+      child: SidePanelFrame(
+        panel: const Sidebar(),
+        panelWidth: sidebarWidth,
+        shown: ref.watch(sidebarShownProvider),
+        onShow: () => ref.read(sidebarShownProvider.notifier).set(true),
+        child: const ChatPage(),
+      ),
     ),
   );
 }

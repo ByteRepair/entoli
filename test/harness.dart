@@ -74,6 +74,7 @@ import "package:agent_chat/ui/widgets/decorative_motion.dart";
 
 import "fakes.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
+import "package:agent_chat/ui/settings/settings_hand_off.dart";
 import "package:agent_chat/domain/rootfs.dart";
 
 /// The shell a test gets by default: a real host shell where the test pretends
@@ -523,7 +524,8 @@ class TestApp {
           navigatorObservers: [container.read(appRoutesProvider)],
           builder: (context, app) =>
               DecorativeMotion(enabled: false, child: app!),
-          home: FocusFollowsKeyboard(child: child),
+          // As the frontend at the root binds them.
+          home: SettingsHandOffs(child: FocusFollowsKeyboard(child: child)),
         ),
       ),
     );

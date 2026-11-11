@@ -1,3 +1,4 @@
+import "../../../core/log.dart";
 import "../../../data/builtin/llm/providers/presets.dart";
 import "../../../domain/llm_provider.dart";
 import "../../../providers.dart";
@@ -5,7 +6,6 @@ import "package:uuid/uuid.dart";
 
 import "../../provider_usage_words.dart";
 import "../controller.dart";
-import "../hand_off.dart";
 import "../forms/provider.dart";
 import "../spec.dart";
 
@@ -119,18 +119,9 @@ final providerSettings = [
     build: (c) {
       final providers = c.ref.watch(appSettingsProvider).llmProviders;
       final notifier = c.ref.read(appSettingsProvider.notifier);
-      final settings = c.ref.read(appSettingsProvider);
-      final secrets = c.ref.read(appSecretsProvider);
-      final check = c.ref.read(keyCheckProvider);
-      final handOff = c.ref.read(settingsHandOffProvider);
       final now = DateTime.now();
-      ProviderForm form(LlmProviderConfig? provider) => ProviderForm(
-        provider,
-        nameTaken: (name) =>
-            settings.providerNameTaken(name, exceptId: provider?.id),
-        storedKey: provider == null ? null : secrets.providerKey(provider.id),
-        encrypted: secrets.encrypted,
-      );
+      ProviderForm form(LlmProviderConfig? provider) =>
+          providerForm(c.ref, provider);
       return CollectionController<LlmProviderConfig>(
         c.spec,
         items: providers,
@@ -147,63 +138,84 @@ final providerSettings = [
               describeUsage(usage, now),
           ].join("\n"),
           removeLabel: "Remove ${provider.displayName}",
-          actions: [
-            if (provider.api.isCli && handOff.signIn != null) ...[
-              const ItemAction("signIn", "Sign in", handsOff: true),
-              const ItemAction("signInAgain", "Sign in again", handsOff: true),
-            ],
-          ],
         ),
         form: (provider) => _ConfigForm(form(provider)),
         onSet: notifier.setProviders,
-        // A key the provider refuses is said, and saving the same one again
-        // keeps it anyway.
-        submit: (answers, index) async {
-          final editing = index == null ? null : providers[index];
-          final draft = form(editing).build(answers);
-          final key = draft.setKey;
-          if (key != null && key.isNotEmpty && !_refused.remove(key)) {
-            bool? accepted;
-            try {
-              accepted = await check(draft.config, key);
-            } catch (_) {}
-            if (accepted == false) {
-              _refused.add(key);
-              throw const _Refused();
-            }
-          }
-          await notifier.upsertProvider(
-            draft.config.copyWith(id: editing?.id ?? const Uuid().v4()),
-            setKey: key,
-          );
-        },
-        act: (index, action) async {
-          await handOff.signIn?.call(
-            providers[index],
-            again: action == "signInAgain",
-          );
-          return null;
-        },
+        submit: (answers, index) => saveProvider(
+          c.ref,
+          form(index == null ? null : providers[index]),
+          answers,
+        ),
       );
     },
   ),
 ];
 
-/// Keys a provider refused once: the next save of the same one keeps it.
-final _refused = <String>{};
+/// The form [provider] is added or edited through, or a new one started on
+/// [preset].
+ProviderForm providerForm(
+  SettingReader ref,
+  LlmProviderConfig? provider, {
+  LlmProvider? preset,
+}) {
+  final secrets = ref.read(appSecretsProvider);
+  final programs = ref.read(cliProgramsProvider);
+  return ProviderForm(
+    provider,
+    preset: preset,
+    nameTaken: (name) => ref
+        .read(appSettingsProvider)
+        .providerNameTaken(name, exceptId: provider?.id),
+    storedKey: provider == null ? null : secrets.providerKey(provider.id),
+    encrypted: secrets.encrypted,
+    newId: const Uuid().v4(),
+    // A new entry given up on: its folders under every program go, and any
+    // sign-in made in them, the form having perhaps been switched to another
+    // program first.
+    forget: (id) async {
+      for (final cli in programs) {
+        await cli.withConfig(cli.config.copyWith(id: id)).forget();
+      }
+    },
+  );
+}
 
-class _Refused implements Exception {
-  const _Refused();
-
-  @override
-  String toString() =>
-      "The provider did not accept this key. Check it was copied whole, or "
-      "save again to keep it anyway.";
+/// Saves what [form] was answered with. A typed key is put to the provider
+/// first: one it refuses is said on the key, and saving the same again keeps
+/// it anyway; one it could not be asked about is saved, since no answer is
+/// not a no. [adopt] has it answer new chats at its own defaults.
+Future<void> saveProvider(
+  SettingReader ref,
+  ProviderForm form,
+  Map<String, String> answers, {
+  bool adopt = false,
+}) async {
+  final notifier = ref.read(appSettingsProvider.notifier);
+  final draft = form.build(answers);
+  final key = draft.setKey;
+  if (key != null && key.isNotEmpty && answers["anyway"] != "yes") {
+    bool? accepted;
+    try {
+      accepted = await ref.read(keyCheckProvider)(draft.config, key);
+    } catch (e) {
+      logFailure("llm", "checking ${draft.config.id}'s key failed", e);
+    }
+    if (accepted == false) {
+      final service = presetOf(draft.config)?.displayName ?? "The provider";
+      throw FormRefusal(
+        "key",
+        "$service did not accept this key. Check it was copied whole.",
+        anyway: "anyway",
+        anywayLabel: "Save anyway",
+      );
+    }
+  }
+  await notifier.upsertProvider(draft.config, setKey: key, adopt: adopt);
 }
 
 /// [ProviderForm] as a form over the configs themselves, what the list
 /// edits; what a submit saves is the whole draft, the key with it.
-class _ConfigForm implements SettingForm<LlmProviderConfig> {
+class _ConfigForm extends SettingForm<LlmProviderConfig> {
   _ConfigForm(this._form);
 
   final ProviderForm _form;
