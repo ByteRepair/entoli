@@ -111,8 +111,13 @@ with nothing either, which is why nothing user-facing names it at all.
 ### Imports point one way
 
 No file in `lib/` reaches itself through its imports, `domain/` imports
-nothing of `data/` or `ui/`, and `data/` nothing of `ui/`;
-`test/core/import_graph_test.dart` fails on the first file that does. A cycle
+nothing of `data/`, `app/` or `ui/`, and `data/` and `app/` nothing of `ui/`;
+`test/core/import_graph_test.dart` fails on the first file that does.
+`app/` is the core the frontends render — the chat controllers, each
+surface's model (state and actions), the app's actions and destinations, the
+menu bar's layout — and imports no Flutter library but `foundation`, so a
+frontend decides everything about how it looks: the Flutter one in `ui/`,
+on every platform, and the SwiftUI one in `packages/entoli_glass` on Apple's. A cycle
 is a file that is both something others build on and a user of those
 builders, and each place it could happen is held apart the same few ways:
 
