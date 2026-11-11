@@ -89,8 +89,13 @@ class _FormDialogState<T> extends State<_FormDialog<T>> {
       padding: const EdgeInsets.only(top: 20, bottom: 4),
       child: Text(text, style: Theme.of(context).textTheme.titleSmall),
     ),
+    FormNote(:final text) => Text(
+      text,
+      style: const TextStyle(fontStyle: FontStyle.italic),
+    ),
     FormText() => TextField(
       controller: _text(field.id),
+      enabled: field.enabled,
       autofocus: field.focused,
       minLines: field.lines > 1 ? field.lines : null,
       maxLines: field.lines > 1 ? null : 1,
@@ -102,6 +107,16 @@ class _FormDialogState<T> extends State<_FormDialog<T>> {
       ),
       onChanged: (text) => setState(() => _answers[field.id] = text),
       onSubmitted: (_) => _save(),
+    ),
+    FormChoice(segmented: true) => SegmentedButton<String>(
+      segments: [
+        for (final option in field.options)
+          ButtonSegment(value: option.answer, label: Text(option.label)),
+      ],
+      selected: {?_answers[field.id]},
+      onSelectionChanged: field.enabled
+          ? (picked) => setState(() => _answers[field.id] = picked.first)
+          : null,
     ),
     FormChoice() => DropdownButtonFormField<String>(
       initialValue: _answers[field.id],
@@ -118,9 +133,135 @@ class _FormDialogState<T> extends State<_FormDialog<T>> {
         for (final option in field.options)
           DropdownMenuItem(value: option.answer, child: Text(option.label)),
       ],
-      onChanged: (answer) {
-        if (answer != null) setState(() => _answers[field.id] = answer);
+      onChanged: field.enabled
+          ? (answer) {
+              if (answer != null) setState(() => _answers[field.id] = answer);
+            }
+          : null,
+    ),
+    FormDate() => _DateField(
+      label: field.label,
+      value: DateTime.tryParse(_answers[field.id] ?? "") ?? DateTime.now(),
+      onChanged: field.enabled
+          ? (at) => setState(() => _answers[field.id] = at.toIso8601String())
+          : null,
+    ),
+    FormDuration() => TextField(
+      controller: _text(field.id),
+      enabled: field.enabled,
+      keyboardType: TextInputType.number,
+      decoration: InputDecoration(
+        labelText: "${field.label} (minutes)",
+        helperText: field.helper,
+      ),
+      onChanged: (text) => setState(() => _answers[field.id] = text),
+    ),
+    FormList() => TextField(
+      controller: _text(field.id),
+      enabled: field.enabled,
+      minLines: 2,
+      maxLines: null,
+      decoration: InputDecoration(
+        labelText: field.label,
+        hintText: field.hint,
+        helperText: field.helper,
+        helperMaxLines: 3,
+        errorText: field.error,
+      ),
+      onChanged: (text) => setState(() => _answers[field.id] = text),
+    ),
+    FormMulti() => _Multi(
+      field: field,
+      picked: {
+        for (final answer in (_answers[field.id] ?? "").split(","))
+          if (answer.isNotEmpty) answer,
       },
+      onChanged: (picked) =>
+          setState(() => _answers[field.id] = picked.join(",")),
     ),
   };
+}
+
+/// A moment picked as a date and then a time.
+class _DateField extends StatelessWidget {
+  const _DateField({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final DateTime value;
+  final ValueChanged<DateTime>? onChanged;
+
+  Future<void> _pick(BuildContext context) async {
+    final day = await showDatePicker(
+      context: context,
+      initialDate: value,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
+    );
+    if (day == null || !context.mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(value),
+    );
+    if (time == null) return;
+    onChanged?.call(
+      DateTime(day.year, day.month, day.day, time.hour, time.minute),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    contentPadding: EdgeInsets.zero,
+    title: Text(label),
+    subtitle: Text(MaterialLocalizations.of(context).formatFullDate(value)),
+    trailing: Text(TimeOfDay.fromDateTime(value).format(context)),
+    onTap: onChanged == null ? null : () => _pick(context),
+  );
+}
+
+/// Any of a field's options, as chips.
+class _Multi extends StatelessWidget {
+  const _Multi({
+    required this.field,
+    required this.picked,
+    required this.onChanged,
+  });
+
+  final FormMulti field;
+  final Set<String> picked;
+  final ValueChanged<Set<String>> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(field.label, style: Theme.of(context).textTheme.bodySmall),
+      const SizedBox(height: 4),
+      Wrap(
+        spacing: 8,
+        children: [
+          for (final option in field.options)
+            FilterChip(
+              label: Text(option.label),
+              selected: picked.contains(option.answer),
+              onSelected: field.enabled
+                  ? (on) => onChanged(
+                      on
+                          ? {...picked, option.answer}
+                          : ({...picked}..remove(option.answer)),
+                    )
+                  : null,
+            ),
+        ],
+      ),
+      if (field.error case final error?)
+        Text(
+          error,
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        ),
+    ],
+  );
 }

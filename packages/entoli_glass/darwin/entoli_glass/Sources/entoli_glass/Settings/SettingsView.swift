@@ -122,7 +122,12 @@ struct SettingRowView: View {
     case .modelPick: ModelPickRow(model: model, row: row)
     case .text: TextRow(model: model, row: row, accessory: accessory)
     case .notice: NoticeRow(row: row)
-    case .collection: CollectionRow(model: model, row: row)
+    case .collection:
+      if row.hint == .triggers {
+        TriggersView(model: model, row: row)
+      } else {
+        CollectionRow(model: model, row: row)
+      }
     case .catalog: CatalogRow(model: model, row: row)
     case .info: InfoRow(model: model, row: row)
     case .subpage:
@@ -185,6 +190,9 @@ extension SettingIcon {
     case .upload: "square.and.arrow.up"
     case .notificationsOff: "bell.slash"
     case .alarmOff: "alarm"
+    case .schedule: "calendar.badge.clock"
+    case .countdown: "timer"
+    case .files: "doc.text.magnifyingglass"
     case .online: "circle.fill"
     case .connecting, .offline: "circle"
     case .failed: "exclamationmark.circle"

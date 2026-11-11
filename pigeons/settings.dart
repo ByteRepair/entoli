@@ -95,6 +95,9 @@ enum SettingIcon {
   upload,
   notificationsOff,
   alarmOff,
+  schedule,
+  countdown,
+  files,
   online,
   connecting,
   offline,
@@ -539,7 +542,7 @@ class SettingNoticeData {
   String message;
 }
 
-enum FormPartKind { question, text, choice }
+enum FormPartKind { question, text, choice, date, duration, list, multi, note }
 
 class FormPartData {
   FormPartData({
@@ -552,6 +555,8 @@ class FormPartData {
     this.focused = false,
     this.lines = 1,
     this.options = const [],
+    this.enabled = true,
+    this.segmented = false,
   });
 
   FormPartKind kind;
@@ -567,6 +572,11 @@ class FormPartData {
 
   /// A choice's options, each the answer it stores and its label and help.
   List<FormOptionData?> options;
+
+  bool enabled;
+
+  /// A choice drawn with every option side by side.
+  bool segmented;
 }
 
 class FormOptionData {

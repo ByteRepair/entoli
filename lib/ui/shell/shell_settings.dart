@@ -370,6 +370,15 @@ SettingRowData _row(
   return row;
 }
 
+List<FormOptionData> _formOptions(List<FormOption> options) => [
+  for (final option in options)
+    FormOptionData(
+      answer: option.answer,
+      label: option.label,
+      help: option.help,
+    ),
+];
+
 /// The native settings' end of the app: sends every page as it changes, and
 /// runs what the client says the user did against the controller the row
 /// was sent from.
@@ -540,19 +549,49 @@ class SettingsBridge implements SettingsIntents {
               error: part.error,
               focused: part.focused,
               lines: part.lines,
+              enabled: part.enabled,
             ),
             FormChoice() => FormPartData(
               kind: FormPartKind.choice,
               id: part.id,
               label: part.label,
-              options: [
-                for (final option in part.options)
-                  FormOptionData(
-                    answer: option.answer,
-                    label: option.label,
-                    help: option.help,
-                  ),
-              ],
+              options: _formOptions(part.options),
+              enabled: part.enabled,
+              segmented: part.segmented,
+            ),
+            FormDate() => FormPartData(
+              kind: FormPartKind.date,
+              id: part.id,
+              label: part.label,
+              enabled: part.enabled,
+            ),
+            FormDuration() => FormPartData(
+              kind: FormPartKind.duration,
+              id: part.id,
+              label: part.label,
+              helper: part.helper,
+              enabled: part.enabled,
+            ),
+            FormList() => FormPartData(
+              kind: FormPartKind.list,
+              id: part.id,
+              label: part.label,
+              hint: part.hint,
+              helper: part.helper,
+              error: part.error,
+              enabled: part.enabled,
+            ),
+            FormMulti() => FormPartData(
+              kind: FormPartKind.multi,
+              id: part.id,
+              label: part.label,
+              error: part.error,
+              options: _formOptions(part.options),
+              enabled: part.enabled,
+            ),
+            FormNote(:final text) => FormPartData(
+              kind: FormPartKind.note,
+              label: text,
             ),
           },
       ],

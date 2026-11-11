@@ -4,11 +4,11 @@ import "dart:convert";
 import "package:clock/clock.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:uuid/uuid.dart";
 
 import "../../domain/date_words.dart" show shortDate, timeOfDay;
 import "../../domain/models.dart" show CompletionKind;
 import "../../domain/project.dart";
+import "../../app/settings/forms/trigger.dart";
 import "../../domain/trigger.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
@@ -414,48 +414,24 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
 
   Future<void> _save() async {
     final isNew = widget.trigger == null;
-    final prompt = _prompt.trim();
-    // A one-shot set in the past would be born already fired; a repeating one
-    // in the past is fine, since it has occurrences ahead of it.
-    final refusal = prompt.isEmpty
-        ? "Write the prompt first."
-        : switch (_source) {
-            ScheduleSource(:final at, repeat: ScheduleRepeat.off)
-                when isNew && !at.isAfter(_clock.now()) =>
-              "Pick a time in the future.",
-            FileSource(:final paths) when paths.isEmpty =>
-              "Name at least one path to watch.",
-            FileSource(:final events) when events.isEmpty =>
-              "Pick what a change is — with nothing picked it would never fire.",
-            _ => null,
-          };
+    final now = _clock.now();
+    final refusal = triggerRefusal(_source, _prompt, isNew: isNew, now: now);
     if (refusal != null) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text(refusal)));
       return;
     }
-    if (_source case TimerSource(:final duration)) {
-      // A countdown fires once from being set; re-saving re-sets it.
-      _source = TimerSource(duration: duration, registeredAt: _clock.now());
-    }
-    // Recomputed on save rather than carried over: an edit into the past means
-    // the next occurrence after now, never a fire in the past.
-    final next = _source.nextAfter(_clock.now());
-    final trigger = (widget.trigger ?? _newTrigger(prompt))
-        .copyWith(
-          name: _name.text.trim(),
-          prompt: prompt,
-          source: _source,
-          project: _project,
-          member: _member,
-          clearMember: _member == null,
-          tempChatTtl: _tempChatTtl,
-          clearTempChatTtl: _tempChatTtl == null,
-          enabled: true,
-          clearNextFireAt: true,
-        )
-        .copyWith(nextFireAt: next);
+    final trigger = savedTrigger(
+      widget.trigger,
+      name: _name.text,
+      prompt: _prompt,
+      source: _source,
+      project: _project,
+      member: _member,
+      tempChatTtl: _tempChatTtl,
+      now: now,
+    );
     final notifier = ref.read(triggersProvider.notifier);
     if (isNew) {
       await notifier.add(trigger);
@@ -465,16 +441,6 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
     if (!mounted) return;
     Navigator.of(context).pop();
   }
-
-  Trigger _newTrigger(String prompt) => Trigger(
-    id: const Uuid().v4(),
-    name: "",
-    prompt: prompt,
-    source: _source,
-    project: _project,
-    member: _member,
-    tempChatTtl: _tempChatTtl,
-  );
 
   Future<void> _delete() async {
     final ok = await confirm(

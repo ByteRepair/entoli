@@ -160,35 +160,128 @@ struct FormSheet: View {
   }
 
   @ViewBuilder private func field(_ part: FormPartData) -> some View {
+    let key = part.id ?? ""
     switch part.kind {
     case .question:
       Text(part.label ?? "").font(.headline).padding(.top, 8)
+    case .note:
+      Text(part.label ?? "").font(.callout).italic().foregroundStyle(.secondary)
     case .text:
       VStack(alignment: .leading, spacing: 2) {
         if part.lines > 1 {
-          Text(part.label ?? "").font(.caption)
-          TextEditor(text: binding(part.id ?? "")).frame(minHeight: CGFloat(part.lines) * 18)
+          Text(part.label ?? "").font(.caption).foregroundStyle(.secondary)
+          TextEditor(text: binding(key)).frame(minHeight: CGFloat(part.lines) * 18)
         } else {
-          TextField(part.label ?? "", text: binding(part.id ?? ""), prompt: part.hint.map(Text.init))
+          TextField(part.label ?? "", text: binding(key), prompt: part.hint.map(Text.init))
         }
-        if let error = part.error {
-          Text(error).font(.caption).foregroundStyle(.red)
-        } else if let helper = part.helper {
-          Text(helper).font(.caption).foregroundStyle(.secondary)
-        }
+        helper(part)
       }
+      .disabled(!part.enabled)
     case .choice:
       let options = part.options.compactMap { $0 }
-      let picked = (answers[part.id ?? ""] ?? nil) ?? ""
-      VStack(alignment: .leading, spacing: 2) {
-        Picker(part.label ?? "", selection: binding(part.id ?? "")) {
-          ForEach(options, id: \.answer) { o in Text(o.label).tag(o.answer) }
+      let picked = (answers[key] ?? nil) ?? ""
+      VStack(alignment: .leading, spacing: 4) {
+        if part.segmented {
+          if let label = part.label { Text(label).font(.caption).foregroundStyle(.secondary) }
+          Picker(part.label ?? "", selection: binding(key)) {
+            ForEach(options, id: \.answer) { o in Text(o.label).tag(o.answer) }
+          }
+          .pickerStyle(.segmented)
+          .labelsHidden()
+        } else {
+          Picker(part.label ?? "", selection: binding(key)) {
+            ForEach(options, id: \.answer) { o in Text(o.label).tag(o.answer) }
+          }
         }
         if let help = options.first(where: { $0.answer == picked })?.help {
           Text(help).font(.caption).foregroundStyle(.secondary)
         }
       }
+      .disabled(!part.enabled)
+    case .date:
+      DatePicker(
+        part.label ?? "",
+        selection: Binding(
+          get: { Self.date((answers[key] ?? nil) ?? "") ?? Date() },
+          set: { binding(key).wrappedValue = Self.iso($0) }),
+        displayedComponents: [.date, .hourAndMinute]
+      )
+      .datePickerStyle(.graphical)
+      .disabled(!part.enabled)
+    case .duration:
+      let minutes = Int((answers[key] ?? nil) ?? "") ?? 0
+      VStack(alignment: .leading, spacing: 4) {
+        Stepper(
+          value: Binding(
+            get: { minutes },
+            set: { binding(key).wrappedValue = "\(max($0, 1))" }),
+          in: 1...(60 * 24 * 30), step: minutes < 60 ? 5 : 30
+        ) {
+          LabeledContent(part.label ?? "", value: Self.spoken(minutes))
+        }
+        helper(part)
+      }
+      .disabled(!part.enabled)
+    case .list:
+      VStack(alignment: .leading, spacing: 2) {
+        Text(part.label ?? "").font(.caption).foregroundStyle(.secondary)
+        TextEditor(text: binding(key))
+          .font(.body.monospaced())
+          .frame(minHeight: 70)
+        helper(part)
+      }
+      .disabled(!part.enabled)
+    case .multi:
+      let picked = Set(((answers[key] ?? nil) ?? "").split(separator: ",").map(String.init))
+      VStack(alignment: .leading, spacing: 6) {
+        Text(part.label ?? "").font(.caption).foregroundStyle(.secondary)
+        HStack {
+          ForEach(part.options.compactMap { $0 }, id: \.answer) { option in
+            let on = picked.contains(option.answer)
+            Button {
+              var next = picked
+              if on { next.remove(option.answer) } else { next.insert(option.answer) }
+              binding(key).wrappedValue = next.sorted().joined(separator: ",")
+            } label: {
+              Text(option.label).font(.callout)
+                .padding(.horizontal, 10).padding(.vertical, 5)
+            }
+            .glassButton(prominent: on)
+          }
+        }
+        if let error = part.error { Text(error).font(.caption).foregroundStyle(.red) }
+      }
+      .disabled(!part.enabled)
     }
+  }
+
+  @ViewBuilder private func helper(_ part: FormPartData) -> some View {
+    if let error = part.error {
+      Text(error).font(.caption).foregroundStyle(.red)
+    } else if let helper = part.helper {
+      Text(helper).font(.caption).foregroundStyle(.secondary)
+    }
+  }
+
+  /// ISO 8601 local time, the shape Dart's `DateTime.parse` reads back.
+  private static let local: DateFormatter = {
+    let format = DateFormatter()
+    format.locale = Locale(identifier: "en_US_POSIX")
+    format.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+    return format
+  }()
+
+  static func date(_ text: String) -> Date? {
+    local.date(from: String(text.prefix(19)))
+  }
+
+  static func iso(_ date: Date) -> String { local.string(from: date) }
+
+  static func spoken(_ minutes: Int) -> String {
+    let formatter = DateComponentsFormatter()
+    formatter.unitsStyle = .full
+    formatter.allowedUnits = [.day, .hour, .minute]
+    return formatter.string(from: TimeInterval(minutes * 60)) ?? "\(minutes) min"
   }
 }
 

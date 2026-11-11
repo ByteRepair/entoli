@@ -783,6 +783,7 @@ final class FormText extends FormFieldSpec {
     this.error,
     this.focused = false,
     this.lines = 1,
+    this.enabled = true,
   });
 
   final String id;
@@ -794,18 +795,90 @@ final class FormText extends FormFieldSpec {
   /// How many lines it is typed over.
   final int lines;
 
+  final bool enabled;
+
   /// Whether the caret starts here.
   final bool focused;
 }
 
 /// One of [options], each by its answer; the help of the one picked is said
-/// under it.
+/// under it. [segmented] asks for every option side by side.
 final class FormChoice extends FormFieldSpec {
-  const FormChoice(this.id, this.options, {this.label});
+  const FormChoice(
+    this.id,
+    this.options, {
+    this.label,
+    this.segmented = false,
+    this.enabled = true,
+  });
 
   final String id;
   final String? label;
   final List<FormOption> options;
+  final bool segmented;
+  final bool enabled;
+}
+
+/// A moment, answered as ISO 8601 local time.
+final class FormDate extends FormFieldSpec {
+  const FormDate(this.id, this.label, {this.enabled = true});
+
+  final String id;
+  final String label;
+  final bool enabled;
+}
+
+/// A length of time, answered in whole minutes.
+final class FormDuration extends FormFieldSpec {
+  const FormDuration(this.id, this.label, {this.helper, this.enabled = true});
+
+  final String id;
+  final String label;
+  final String? helper;
+  final bool enabled;
+}
+
+/// Several lines, each an entry: paths to watch. Answered one a line.
+final class FormList extends FormFieldSpec {
+  const FormList(
+    this.id,
+    this.label, {
+    this.hint,
+    this.helper,
+    this.error,
+    this.enabled = true,
+  });
+
+  final String id;
+  final String label;
+  final String? hint;
+  final String? helper;
+  final String? error;
+  final bool enabled;
+}
+
+/// Any of [options], answered as their answers joined by commas.
+final class FormMulti extends FormFieldSpec {
+  const FormMulti(
+    this.id,
+    this.label,
+    this.options, {
+    this.error,
+    this.enabled = true,
+  });
+
+  final String id;
+  final String label;
+  final List<FormOption> options;
+  final String? error;
+  final bool enabled;
+}
+
+/// Words to read in the form: why a part of it cannot be changed.
+final class FormNote extends FormFieldSpec {
+  const FormNote(this.text);
+
+  final String text;
 }
 
 class FormOption {

@@ -1,10 +1,12 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../domain/date_words.dart" show describeFire, shortDate;
+import "../../../domain/models.dart" show CompletionKind;
 import "../../../domain/project.dart";
 import "../../../domain/trigger.dart";
 import "../../../providers.dart";
 import "../controller.dart";
+import "../forms/trigger.dart";
 import "../spec.dart";
 
 const _page = SettingsPageId.triggers;
@@ -121,17 +123,55 @@ final triggerSettings = [
             : "Last fired ${shortDate(trigger.lastFiredAt!)}";
       }
 
+      TriggerForm form(Trigger? trigger) => TriggerForm(
+        trigger,
+        now: now,
+        projects: [
+          for (final project in everyProject(named))
+            (project ?? "", projectLabel(project)),
+        ],
+        members: (project) => c.ref
+            .read(promptLibraryProvider(project.isEmpty ? null : project))
+            .entries(CompletionKind.agent)
+            .map((e) => e.name)
+            .toList(),
+      );
       return CollectionController<Trigger>(
         c.spec,
         items: triggers,
         addLabel: "Add trigger",
+        removable: false,
         describe: (trigger) => CollectionItem(
           trigger.label,
           id: trigger.id,
           subtitle: summary(trigger),
           on: trigger.enabled,
+          glyph: switch (trigger.source) {
+            ScheduleSource() => SettingGlyph.schedule,
+            TimerSource() => SettingGlyph.countdown,
+            FileSource() => SettingGlyph.files,
+          },
+          actions: const [
+            ItemAction(
+              "delete",
+              "Delete",
+              destructive: true,
+              confirm: SettingConfirm(
+                title: "Delete trigger",
+                message: "Delete this trigger?",
+                confirmLabel: "Delete",
+                destructive: true,
+              ),
+            ),
+          ],
         ),
+        form: form,
         onSet: (_) async {},
+        submit: (answers, index) async {
+          final editing = index == null ? null : triggers[index];
+          final made = form(editing).build(answers);
+          await (editing == null ? notifier.add(made) : notifier.replace(made));
+        },
         act: (index, action) async {
           final trigger = triggers[index];
           await switch (action) {
