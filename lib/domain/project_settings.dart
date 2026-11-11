@@ -1,146 +1,105 @@
 import "dart:convert";
 
 import "../core/config.dart";
+import "omada_ordering.dart";
 import "permission.dart";
+import "settings/keys.dart";
+import "settings/setting.dart";
 import "temp_chat_ttl.dart";
 import "tone.dart";
 import "tristate.dart";
 
-/// How the agents of a project's rounds run. The project's Omada section
-/// names the default for its chats; a chat's own override, where Phase 2
-/// adds one, wins over it.
-enum OmadaOrdering {
-  sequential,
-  parallel,
-  relay;
+export "omada_ordering.dart";
 
-  /// Whether the room waits for every running turn to end before it hands
-  /// off or dispatches what was said meanwhile. Relay alone does not.
-  bool get waitsForWave => this != relay;
-
-  /// Whether a dispatch pass may start a member's next item. [started] is how
-  /// many items this pass has started; [memberBusy], whether the member has a
-  /// turn in flight. The room-wide wait is [waitsForWave]'s, at the callers.
-  bool admits({required int started, required bool memberBusy}) =>
-      switch (this) {
-        sequential => started == 0,
-        parallel => true,
-        relay => !memberBusy,
-      };
-}
-
-/// Human-readable labels, shared by the project settings page so the
-/// dropdown and the section's inherited entry name the same thing. The
-/// parallel ordering is Crossfire: several members working at the same time,
-/// each writing their own reply. Relay is the same start with no wave
-/// barrier: what a reply names runs while its siblings are still speaking.
-const omadaOrderingLabels = {
-  OmadaOrdering.sequential: "Sequential",
-  OmadaOrdering.parallel: "Crossfire",
-  OmadaOrdering.relay: "Relay",
-};
-
-/// One line each, under the ordering dropdown: what the round does under
-/// that ordering. The description shown is the effective one — the
-/// project's pick, else the app default, else relay.
-const omadaOrderingDescriptions = {
-  OmadaOrdering.sequential:
-      "Members run one after another, in the order "
-      "the message names them.",
-  OmadaOrdering.parallel:
-      "Members run at the same time, each writes their "
-      "own reply, in whatever order they finish.",
-  OmadaOrdering.relay:
-      "Members start as soon as they are named, without "
-      "waiting for the room to settle.",
-};
-
-/// The default when nothing is set anywhere: relay.
-const defaultOmadaOrdering = OmadaOrdering.relay;
-
-/// Project-scoped overrides. A project can override the app-level
-/// [TempChatTtl] with one of its own, choose which auto-memory store it uses,
-/// and set command environment variables of its own beside the app-level
-/// ones. Null means "inherit the app default". What a project says to its
-/// turns is not here: that is the AGENTS.md at its workspace root, read with
-/// the instructions.
+/// A project's own settings, `project.json`: a typed view of its document,
+/// where unset inherits the app's. What a project says to its turns is not
+/// here: that is the AGENTS.md at its workspace root, read with the
+/// instructions.
 class ProjectSettings {
   ProjectSettings({
-    this.tempChatTtl,
-    this.environment,
-    this.memory = Tristate.inherit,
-    this.omada = false,
-    this.omadaOrdering,
-    this.omadaMaxGenerations,
-    this.turnMaxSteps,
-    this.tone,
-    this.citations,
-    this.permissions = const [],
-    this.writableDirs = const [],
-    this.sandbox,
-    this.description,
-  });
+    TempChatTtl? tempChatTtl,
+    Map<String, String>? environment,
+    Tristate memory = Tristate.inherit,
+    bool omada = false,
+    OmadaOrdering? omadaOrdering,
+    int? omadaMaxGenerations,
+    int? turnMaxSteps,
+    Tone? tone,
+    bool? citations,
+    List<PermissionRule> permissions = const [],
+    List<String> writableDirs = const [],
+    bool? sandbox,
+    String? description,
+  }) : doc = SettingsDocument() {
+    this
+      ..tempChatTtl = tempChatTtl
+      ..environment = environment
+      ..memory = memory
+      ..omada = omada
+      ..omadaOrdering = omadaOrdering
+      ..omadaMaxGenerations = omadaMaxGenerations
+      ..turnMaxSteps = turnMaxSteps
+      ..tone = tone
+      ..citations = citations
+      ..permissions = permissions
+      ..writableDirs = writableDirs
+      ..sandbox = sandbox
+      ..description = description;
+  }
 
-  /// How long a temporary chat in this project lives. Null means inherit the
-  /// app default.
-  TempChatTtl? tempChatTtl;
+  ProjectSettings.of(this.doc);
 
-  /// What the project's commands run under, beside the app-level variables:
-  /// a name set here wins over one set there. Null means none.
-  Map<String, String>? environment;
+  final SettingsDocument doc;
 
-  /// Which auto-memory store this project's chats use: none, the default
-  /// project's ([Tristate.inherit]), or one of its own. Meaningless for the
-  /// default project itself, which is the one every other falls back to.
-  Tristate memory;
+  TempChatTtl? get tempChatTtl => doc.read(SettingKeys.tempChatTtl);
+  set tempChatTtl(TempChatTtl? value) =>
+      doc.set(SettingKeys.tempChatTtl, value);
 
-  /// Whether this project's chats can carry several agents in one round. A
-  /// user project's toggle; a built-in's answer is its spec, in code, and
-  /// never read from here. Absent from `project.json` loads as false, so
-  /// existing files need no migration.
-  bool omada;
+  Map<String, String>? get environment => doc.read(SettingKeys.environment);
+  set environment(Map<String, String>? value) =>
+      doc.set(SettingKeys.environment, value);
 
-  /// The project's default for how its rounds run. Null inherits the app
-  /// default, resolved live.
-  OmadaOrdering? omadaOrdering;
+  /// Meaningless for the default project itself, which is the one every
+  /// other falls back to.
+  Tristate get memory => doc.read(SettingKeys.memory) ?? Tristate.inherit;
+  set memory(Tristate value) =>
+      doc.set(SettingKeys.memory, value == Tristate.inherit ? null : value);
 
-  /// How many handoff generations one round may run before it stops for the
-  /// user. Null inherits the app default. The user's own message is
-  /// generation one and uncapped; this bounds only the waves that follow it.
-  int? omadaMaxGenerations;
+  bool get omada => doc.read(SettingKeys.omada) ?? false;
+  set omada(bool value) => doc.set(SettingKeys.omada, value ? true : null);
 
-  /// How many model calls one direct turn may make before it stops for the
-  /// user. Null inherits the app default, which is the backend's own.
-  /// Omada rounds are never under it: a round is several turns in flight,
-  /// and one number over them all would say nothing about any member's turn.
-  int? turnMaxSteps;
+  OmadaOrdering? get omadaOrdering => doc.read(SettingKeys.omadaOrdering);
+  set omadaOrdering(OmadaOrdering? value) =>
+      doc.set(SettingKeys.omadaOrdering, value);
 
-  /// How this project's turns are worded. Null means inherit the app
-  /// default.
-  Tone? tone;
+  int? get omadaMaxGenerations => doc.read(SettingKeys.omadaMaxGenerations);
+  set omadaMaxGenerations(int? value) =>
+      doc.set(SettingKeys.omadaMaxGenerations, value);
 
-  /// Whether this project's turns number the web pages they drew on. Null
-  /// means inherit the app default.
-  bool? citations;
+  int? get turnMaxSteps => doc.read(SettingKeys.turnMaxSteps);
+  set turnMaxSteps(int? value) => doc.set(SettingKeys.turnMaxSteps, value);
 
-  /// The text the new-chat screen asks over this project's badge, in place
-  /// of the app-wide question. Empty is a deliberate answer — the screen
-  /// then asks nothing — and null is the app default.
-  String? description;
+  Tone? get tone => doc.read(SettingKeys.tone);
+  set tone(Tone? value) => doc.set(SettingKeys.tone, value);
 
-  /// The project's standing permission rules, in front of the app's.
-  List<PermissionRule> permissions;
+  bool? get citations => doc.read(SettingKeys.citations);
+  set citations(bool? value) => doc.set(SettingKeys.citations, value);
 
-  /// Directories this project's commands may additionally write to, beside
-  /// the workspace the sandbox grants — the machine paths a turn works in
-  /// that are not the workspaces. The settings page calls them work folders;
-  /// one not on this machine grants nothing (`grantsNow`).
-  List<String> writableDirs;
+  String? get description => doc.read(SettingKeys.description);
+  set description(String? value) => doc.set(SettingKeys.description, value);
 
-  /// Whether commands on the machine run under Landlock at all. Null inherits
-  /// the app default, which is on. A guest's rootfs is its own boundary and
-  /// this does not reach it.
-  bool? sandbox;
+  List<PermissionRule> get permissions =>
+      doc.read(SettingKeys.permissions) ?? const [];
+  set permissions(List<PermissionRule> value) =>
+      doc.set(SettingKeys.permissions, value);
+
+  List<String> get writableDirs =>
+      doc.read(SettingKeys.writableDirs) ?? const [];
+  set writableDirs(List<String> value) =>
+      doc.set(SettingKeys.writableDirs, value);
+
+  bool? get sandbox => doc.read(SettingKeys.sandbox);
+  set sandbox(bool? value) => doc.set(SettingKeys.sandbox, value);
 
   static ProjectSettings load(AppConfig config, {String? project}) {
     final text = config.documents.read(
@@ -154,39 +113,10 @@ class ProjectSettings {
     }
   }
 
-  factory ProjectSettings.fromJson(Map<String, dynamic> json) {
-    // A decode gives a `Map<String, dynamic>`, so the value test is what
-    // keeps a number in there out of a command's environment.
-    final env = json["environment"];
-    final environment =
-        env is Map<String, dynamic> && env.values.every((v) => v is String)
-        ? {for (final e in env.entries) e.key: e.value as String}
-        : null;
-    return ProjectSettings(
-      tempChatTtl: TempChatTtl.values.asNameMap()[json["tempChatTtl"]],
-      environment: environment,
-      // `useProjectMemory` is the bool this replaced; true was a store of
-      // the project's own.
-      memory:
-          Tristate.values.asNameMap()[json["memory"]] ??
-          (json["useProjectMemory"] == true ? Tristate.on : Tristate.inherit),
-      omada: json["omada"] as bool? ?? false,
-      omadaOrdering: OmadaOrdering.values.asNameMap()[json["omadaOrdering"]],
-      omadaMaxGenerations: json["omadaMaxGenerations"] as int?,
-      turnMaxSteps: json["turnMaxSteps"] as int?,
-      tone: Tone.values.asNameMap()[json["tone"]],
-      citations: json["citations"] as bool?,
-      permissions: permissionRulesFromJson(
-        json["permissions"] as List<dynamic>?,
-      ),
-      writableDirs: [
-        for (final w in (json["writableDirs"] as List<dynamic>? ?? const []))
-          if (w is String) w,
-      ],
-      sandbox: json["sandbox"] as bool?,
-      description: json["description"] as String?,
-    );
-  }
+  factory ProjectSettings.fromJson(Map<String, dynamic> json) =>
+      ProjectSettings.of(
+        SettingsDocument(json: json, upgrades: SettingKeys.upgrades),
+      );
 
   Future<void> save(AppConfig config, {String? project}) =>
       config.documents.write(
@@ -194,25 +124,7 @@ class ProjectSettings {
         jsonEncode(toJson()),
       );
 
-  Map<String, dynamic> toJson() => {
-    if (tempChatTtl != null) "tempChatTtl": tempChatTtl!.name,
-    if (environment != null && environment!.isNotEmpty)
-      "environment": environment,
-    if (memory != Tristate.inherit) "memory": memory.name,
-    if (omada) "omada": omada,
-    if (omadaOrdering != null) "omadaOrdering": omadaOrdering!.name,
-    if (omadaMaxGenerations != null) "omadaMaxGenerations": omadaMaxGenerations,
-    if (turnMaxSteps != null) "turnMaxSteps": turnMaxSteps,
-    if (tone != null) "tone": tone!.name,
-    if (citations != null) "citations": citations,
-    if (permissions.isNotEmpty)
-      "permissions": permissionRulesToJson(permissions),
-    if (writableDirs.isNotEmpty) "writableDirs": writableDirs,
-    if (sandbox != null) "sandbox": sandbox,
-    // Empty is written as it stands: the screen asking nothing is a value
-    // here, where an absent key is the app default.
-    if (description != null) "description": description,
-  };
+  Map<String, dynamic> toJson() => doc.toJson();
 
-  ProjectSettings copy() => ProjectSettings.fromJson(toJson());
+  ProjectSettings copy() => ProjectSettings.of(doc.copy());
 }
