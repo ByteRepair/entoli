@@ -10,351 +10,30 @@ import "package:url_launcher/url_launcher.dart";
 import "../../core/log.dart";
 import "../../core/platform/form_factor.dart";
 import "../../data/sync/sync_hub.dart";
-import "../../domain/app_settings.dart";
-import "../../providers.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
-import "paired_device_page.dart";
 import "../widgets/page_bar.dart";
-
-/// The Sync category: this device's name, then how to pair a new device, the
-/// paired-device list, and the relay and TURN rows for reaching peers over
-/// the internet. Shown on every platform.
-class SyncSection extends ConsumerWidget {
-  const SyncSection({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(appSettingsProvider);
-    final hub = ref.watch(syncHubProvider);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SectionHeader(
-          "Sync",
-          description:
-              "Pair with another device to mirror chats and take "
-              "remote control. Chats stay on their home device; a mirror is "
-              "RAM-only and never written to disk.",
-        ),
-        LabelledField(
-          label: "Device name",
-          child: ResettableField(
-            onReset: () =>
-                ref.read(appSettingsProvider.notifier).setDeviceName(null),
-            child: TextFormField(
-              initialValue: settings.deviceName ?? "",
-              decoration: InputDecoration(
-                // The name the other device would file this one under with
-                // nothing typed here, rather than a stand-in for it.
-                hintText: hub.defaultDeviceName,
-                isDense: true,
-              ),
-              onChanged: (value) => ref
-                  .read(appSettingsProvider.notifier)
-                  .setDeviceName(value.isEmpty ? null : value),
-            ),
-          ),
-        ),
-        Divider(),
-        // Always here: a pairing in flight is its own screen and this page's
-        // controls stay where they were. Nothing about a pairing hides them —
-        // pairing another device is always one button away.
-        _PairingControls(hub: hub),
-        Divider(),
-        _PairedDevices(hub: hub),
-        if (_android) ...[Divider(), _KeepAliveField(settings: settings)],
-        Divider(),
-        ListTile(
-          title: const Text("Internet relay"),
-          subtitle: Text(settings.syncRelayUrl ?? "Not set"),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const RelaySettingsPage())),
-        ),
-        ListTile(
-          title: const Text("TURN server"),
-          subtitle: Text(settings.turnUrl ?? "Not set"),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const TurnSettingsPage())),
-        ),
-      ],
-    );
-  }
-}
-
-/// Where the sync keep-alive's foreground service exists: Android only, the
-/// one platform whose process freezes with the screen. Everywhere else the
-/// setting has nothing to switch, so the row is not drawn.
-bool get _android => isAndroid;
 
 /// Where the paste-a-code field gets a camera button: the phones, the devices
 /// that are pointed at a code another screen shows.
 bool get _canScan => isPhone;
 
-/// The Internet relay, on its own screen — reached from the row on the Sync
-/// page. One field: the `wss://` URL both devices dial to pair across the
-/// internet, where the local network cannot reach them.
-class RelaySettingsPage extends ConsumerWidget {
-  const RelaySettingsPage({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(appSettingsProvider);
-    return Scaffold(
-      appBar: PageBar(title: "Internet relay"),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: mutedParagraph(
-              context,
-              "A WebSocket relay for pairing when the devices are not on "
-              "the same network. Both dial the same room, derived from the "
-              "pairing secret, so the relay sees nothing readable.",
-            ),
-          ),
-          LabelledField(
-            label: "Relay URL",
-            child: TextFormField(
-              initialValue: settings.syncRelayUrl ?? "",
-              decoration: const InputDecoration(
-                hintText: "wss://relay.example.com",
-                isDense: true,
-              ),
-              onChanged: (value) => ref
-                  .read(appSettingsProvider.notifier)
-                  .setSyncRelayUrl(value.isEmpty ? null : value),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: mutedParagraph(
-              context,
-              "Any relay that speaks the room protocol works; "
-              "tool/sync/sync_relay_server.dart is a reference one. Leave "
-              "empty when the devices meet over the local network or "
-              "manual paste.",
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The TURN server, on its own screen — reached from the row on the Sync
-/// page, and only about NAT traversal: pairing needs nothing here when a
-/// direct connection works. The password is held in the secret store.
-class TurnSettingsPage extends ConsumerWidget {
-  const TurnSettingsPage({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(appSettingsProvider);
-    final secrets = ref.watch(appSecretsProvider);
-    return Scaffold(
-      appBar: PageBar(title: "TURN server"),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: mutedParagraph(
-              context,
-              "For NAT traversal. Bring your own, a self-hosted coturn is "
-              "recommended. Without one, symmetric-NAT pairs fail "
-              "honestly.",
-            ),
-          ),
-          LabelledField(
-            label: "TURN URL",
-            child: TextFormField(
-              initialValue: settings.turnUrl ?? "",
-              decoration: const InputDecoration(
-                hintText: "turn:turn.example.com:3478",
-                isDense: true,
-              ),
-              onChanged: (value) => ref
-                  .read(appSettingsProvider.notifier)
-                  .setTurnUrl(value.isEmpty ? null : value),
-            ),
-          ),
-          LabelledField(
-            label: "TURN username",
-            child: TextFormField(
-              initialValue: settings.turnUsername ?? "",
-              decoration: const InputDecoration(isDense: true),
-              onChanged: (value) => ref
-                  .read(appSettingsProvider.notifier)
-                  .setTurnUsername(value.isEmpty ? null : value),
-            ),
-          ),
-          LabelledField(
-            label: "TURN password",
-            child: TextFormField(
-              // Held in the secret store, not settings, so it does not ride
-              // a backup — read through the mirror here the way every other
-              // field reads its own value.
-              initialValue: secrets.turnPassword ?? "",
-              obscureText: true,
-              decoration: const InputDecoration(isDense: true),
-              onChanged: (value) =>
-                  secrets.setTurnPassword(value.isEmpty ? null : value),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Android-only — the parent draws this row nowhere else, since the setting
-/// has nothing to answer for on a platform whose process survives the screen.
-class _KeepAliveField extends ConsumerWidget {
-  const _KeepAliveField({required this.settings});
-
-  final AppSettings settings;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return SwitchListTile(
-      title: const Text("Keep connected off screen"),
-      subtitle: const Text(
-        "While a device is connected, hold the app open off screen with a "
-        "notification naming it and a Disconnect action. Costs battery — "
-        "a wake lock for as long as the connection lasts.",
-      ),
-      value: settings.syncKeepAlive,
-      onChanged: (value) =>
-          ref.read(appSettingsProvider.notifier).setSyncKeepAlive(value),
-    );
-  }
-}
-
-class _PairedDevices extends ConsumerWidget {
-  const _PairedDevices({required this.hub});
-
-  final SyncHub hub;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // One source for both membership and status. Reading the registry here
-    // instead meant a device paired while this page was open did not appear
-    // until the page was left and come back to.
-    final peers = ref.watch(syncPeersProvider).values.toList()
-      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SectionHeader(
-          "Paired devices",
-          description: peers.isEmpty
-              ? "No devices paired yet. Pair a new device above."
-              : null,
-        ),
-        for (final peer in peers) _PairedDeviceRow(hub: hub, peer: peer),
-      ],
-    );
-  }
-}
-
-class _PairedDeviceRow extends StatelessWidget {
-  const _PairedDeviceRow({required this.hub, required this.peer});
-
-  final SyncHub hub;
-  final PeerState peer;
-
-  @override
-  Widget build(BuildContext context) {
-    final status = peer.status;
-    final theme = Theme.of(context);
-    final failure = peer.error;
-    void tried(Future<void> Function() work) => catchAndSay(context, work);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: InkWell(
-        // The row is the device's page's way in: clicking it anywhere that
-        // is not a button opens the device's own screen.
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => PairedDevicePage(deviceId: peer.deviceId),
-          ),
-        ),
-        borderRadius: const BorderRadius.all(Radius.circular(12)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  peerStatusIcon(status),
-                  size: 16,
-                  color: peerStatusColor(status, theme),
-                ),
-                const SizedBox(width: 8),
-                Expanded(child: Text(peer.name)),
-                if (status == PeerStatus.online)
-                  TextButton(
-                    onPressed: () => tried(() => hub.disconnect(peer.deviceId)),
-                    child: const Text("Disconnect"),
-                  )
-                else
-                  TextButton(
-                    onPressed: status == PeerStatus.connecting
-                        ? null
-                        : () => tried(() => hub.connect(peer.deviceId)),
-                    child: const Text("Connect"),
-                  ),
-                TextButton(
-                  onPressed: () => confirmRevokeDevice(
-                    context,
-                    peer.name,
-                    () => hub.revoke(peer.deviceId),
-                  ),
-                  style: TextButton.styleFrom(
-                    foregroundColor: theme.colorScheme.error,
-                  ),
-                  child: const Text("Revoke"),
-                ),
-              ],
-            ),
-            if (failure != null)
-              Padding(
-                padding: const EdgeInsets.only(left: 24, right: 8),
-                child: SelectableText(
-                  failure,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.error,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// The buttons that start a pairing, plus the paste-a-code field. Every
+/// The buttons that start a pairing, plus the paste-a-code field: the
+/// Flutter frontend's drawing of the pairing setting, under its header. Every
 /// pairing goes to a screen of its own — the window's, the invite's, the
 /// joiner's — where the wait, the codes and the end are shown. Nothing
 /// renders inline here, and the section keeps these controls the whole time.
-class _PairingControls extends ConsumerStatefulWidget {
-  const _PairingControls({required this.hub});
+class PairingControls extends ConsumerStatefulWidget {
+  const PairingControls({super.key, required this.hub});
 
   final SyncHub hub;
 
   @override
-  ConsumerState<_PairingControls> createState() => _PairingControlsState();
+  ConsumerState<PairingControls> createState() => _PairingControlsState();
 }
 
-class _PairingControlsState extends ConsumerState<_PairingControls> {
+class _PairingControlsState extends ConsumerState<PairingControls> {
   final _joinController = TextEditingController();
 
   @override
@@ -368,12 +47,6 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionHeader(
-          "Pair a new device",
-          description:
-              "Open a window and show the code, or paste a code "
-              "from another device.",
-        ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Wrap(

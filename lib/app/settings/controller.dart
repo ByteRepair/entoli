@@ -1,3 +1,5 @@
+import "../../data/sync/pairing.dart" show PairingActivity;
+import "../../data/sync/sync_hub.dart" show SyncHub;
 import "../../domain/app_icon.dart";
 import "../../domain/download.dart" show DownloadProgress;
 import "../../domain/llm_provider.dart";
@@ -563,17 +565,33 @@ final class CollectionController<T> extends SettingController {
     required this.describe,
     this.form,
     this.removeLabel = "Remove",
+    this.removable = true,
+    this.emptyLabel,
+    Future<SettingNotice?> Function(int index, String action)? act,
     super.title,
     super.description,
     super.footnote,
     super.enabled,
     super.visible,
     super.accessory,
-  }) : _write = onSet;
+  }) : _write = onSet,
+       _onAct = act;
 
   final List<T> items;
   final String addLabel;
   final String removeLabel;
+
+  /// Whether an item can be removed from its row.
+  final bool removable;
+
+  /// What the list says while it is empty.
+  final String? emptyLabel;
+
+  final Future<SettingNotice?> Function(int, String)? _onAct;
+
+  /// Runs the item action [action] on the item at [index].
+  Future<SettingNotice?> act(int index, String action) async =>
+      _onAct?.call(index, action);
 
   /// What an item's row says.
   final CollectionItem Function(T item) describe;
@@ -605,12 +623,53 @@ extension on List {
   }
 }
 
-/// An item's row: its name and the line under it.
+/// An item's row: its name, the line under it, and what can be done to it
+/// from the row besides opening and removing it.
 class CollectionItem {
-  const CollectionItem(this.title, {this.subtitle});
+  const CollectionItem(
+    this.title, {
+    this.id,
+    this.subtitle,
+    this.error,
+    this.glyph,
+    this.tone = NoticeTone.plain,
+    this.actions = const [],
+  });
 
   final String title;
+
+  /// What it is known by, where a frontend opens a page of its own for it.
+  final String? id;
+
   final String? subtitle;
+
+  /// What went wrong with it last, in the error colour.
+  final String? error;
+
+  /// Its state at a glance: a device online, connecting, unreachable.
+  final SettingGlyph? glyph;
+  final NoticeTone tone;
+
+  final List<ItemAction> actions;
+}
+
+/// Something done to one item from its row: connect, disconnect, revoke.
+class ItemAction {
+  const ItemAction(
+    this.id,
+    this.label, {
+    this.enabled = true,
+    this.destructive = false,
+    this.confirm,
+  });
+
+  final String id;
+  final String label;
+  final bool enabled;
+  final bool destructive;
+
+  /// What it asks first; null runs it straight away.
+  final SettingConfirm? confirm;
 }
 
 /// A form that adds or edits one item: the questions asked given the answers
@@ -799,3 +858,67 @@ class InfoRow {
 /// The pages an info row can open, each drawn by the frontend from what the
 /// app holds: the policy's text, the libraries' licences.
 enum InfoPage { privacyPolicy, licences }
+
+/// Pairing another device: a window this device shows a code in, an invite
+/// pasted across by hand, or a code from the other device; then the codes
+/// both screens show, confirmed matching, and paired or failed.
+final class PairingController extends SettingController {
+  PairingController(
+    super.spec, {
+    required this.hub,
+    required this.activity,
+    this.canScan = false,
+    super.title,
+    super.description,
+    super.footnote,
+    super.enabled,
+    super.visible,
+    super.accessory,
+  });
+
+  /// For a frontend whose own screens drive the pairing step by step.
+  final SyncHub hub;
+
+  /// The pairing in flight, or null.
+  final PairingActivity? activity;
+
+  /// Whether this device is one that is pointed at a code: a phone.
+  final bool canScan;
+
+  Future<void> openWindow() => hub.startPairingWindow();
+
+  void closeWindow() => hub.cancelPairingWindow();
+
+  /// The invite to send the other device by hand.
+  Future<String> createInvite() => hub.createManualInvite();
+
+  void cancelInvite() => hub.cancelManualInvite();
+
+  /// Pairs with the code or the answer the other device gave.
+  Future<String?> join(String code) => hub.pairWith(code.trim());
+
+  /// Whether the codes both devices show match.
+  void confirm(bool match) => hub.confirmPairing(match);
+
+  void cancel() => hub.cancelPairing();
+}
+
+/// Another page of settings, opened from a row on this one.
+final class SubpageController extends SettingController {
+  SubpageController(
+    super.spec, {
+    required this.page,
+    this.summary,
+    super.title,
+    super.description,
+    super.footnote,
+    super.enabled,
+    super.visible,
+    super.accessory,
+  });
+
+  final SettingsPageId page;
+
+  /// What the row says the page holds now: the relay's address.
+  final String? summary;
+}

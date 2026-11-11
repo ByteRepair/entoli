@@ -59,6 +59,15 @@ enum UiHint {
 
   /// Rows to read: the default for an info controller.
   info,
+
+  /// A text field typed into in place.
+  input,
+
+  /// A paragraph between fields.
+  paragraph,
+
+  /// Devices, each with its state and what can be done to it.
+  devices,
 }
 
 /// The pages settings is filed under, in the order they are offered. A
@@ -81,12 +90,23 @@ enum SettingsPageId {
   data("Data"),
   welcome("Welcome", groupStart: true),
   shortcuts("Shortcuts"),
-  about("About");
+  about("About"),
 
-  const SettingsPageId(this.title, {this.groupStart = false});
+  // Opened from a row on another page rather than listed.
+  syncRelay("Internet relay", listed: false),
+  syncTurn("TURN server", listed: false);
+
+  const SettingsPageId(
+    this.title, {
+    this.groupStart = false,
+    this.listed = true,
+  });
 
   final String title;
   final bool groupStart;
+
+  /// Whether it is offered among the pages, rather than opened from a row.
+  final bool listed;
 }
 
 /// Where a setting is filed: its page, and the section on it.
@@ -171,4 +191,8 @@ enum SettingGlyph {
   code,
   privacy,
   licence,
+  online,
+  connecting,
+  offline,
+  failed,
 }

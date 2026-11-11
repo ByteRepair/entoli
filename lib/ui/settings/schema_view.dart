@@ -15,7 +15,10 @@ import "../../providers.dart";
 import "../widgets/add_button_row.dart";
 import "../widgets/catalog.dart";
 import "../widgets/settings_warning_banner.dart";
+import "../widgets/page_bar.dart";
 import "form_dialog.dart";
+import "paired_device_page.dart";
+import "sync_pairing.dart";
 import "../widgets/choice.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/editable_row.dart";
@@ -46,7 +49,8 @@ class SchemaSections extends ConsumerWidget {
       children: [
         for (final (i, section) in sections.indexed) ...[
           if (i > 0) const Divider(),
-          SectionHeader(section.spec.title, description: section.description),
+          if (section.spec.title.isNotEmpty || section.description != null)
+            SectionHeader(section.spec.title, description: section.description),
           for (final setting in section.settings) SettingRow(setting),
         ],
       ],
@@ -114,10 +118,24 @@ class SettingRow extends StatelessWidget {
       final TextController c => _Text(c),
       final NoticeController c => switch (c.hint) {
         UiHint.banner => _Banner(c),
+        UiHint.paragraph => Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: mutedParagraph(context, c.lines.map((l) => l.text).join("\n")),
+        ),
         UiHint.card => _Card(c),
         _ => _Notice(c),
       },
+      final CollectionController c when c.hint == UiHint.devices => _Devices(c),
       final CollectionController c => c.typed(<V>(c) => _Collection<V>(c)),
+      final PairingController c => PairingControls(hub: c.hub),
+      final SubpageController c => ListTile(
+        title: Text(c.title),
+        subtitle: c.summary == null ? null : Text(c.summary!),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => SchemaPage(c.page))),
+      ),
       final CatalogController c when c.hint == UiHint.single => _Single(c),
       final CatalogController c => _Catalog(c),
       final InfoController c => _Info(c),
@@ -189,6 +207,9 @@ IconData? _icon(SettingGlyph? glyph) => switch (glyph) {
   SettingGlyph.privacy => Icons.privacy_tip_outlined,
   SettingGlyph.licence => Icons.balance_outlined,
   // Drawn as the app's own mark, not an icon.
+  SettingGlyph.online => Icons.circle,
+  SettingGlyph.connecting || SettingGlyph.offline => Icons.circle_outlined,
+  SettingGlyph.failed => Icons.error_outline,
   SettingGlyph.appMark || null => null,
 };
 
@@ -760,6 +781,7 @@ class _Text extends StatelessWidget {
   Widget build(BuildContext context) {
     final shown = c.value.isEmpty ? c.emptyLabel : c.value;
     final clear = c.clearLabel;
+    if (c.hint == UiHint.input) return _Input(c);
     if (c.hint == UiHint.field) {
       final description = c.description;
       return LabelledField(
@@ -1089,6 +1111,153 @@ class _Keys extends StatelessWidget {
               cap,
               textAlign: TextAlign.center,
               style: theme.textTheme.labelMedium,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// A page of settings of its own, opened from a row: its sections under a
+/// bar named for it.
+class SchemaPage extends StatelessWidget {
+  const SchemaPage(this.page, {super.key, this.at = const AppAddress()});
+
+  final SettingsPageId page;
+  final ScopeAddress at;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: PageBar(title: page.title),
+    body: ListView(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      children: [SchemaSections(page, at: at)],
+    ),
+  );
+}
+
+/// Text typed in place, saved as it is typed; a reset beside it where it
+/// can be cleared.
+class _Input extends StatelessWidget {
+  const _Input(this.c);
+
+  final TextController c;
+
+  @override
+  Widget build(BuildContext context) {
+    final field = TextFormField(
+      initialValue: c.value,
+      obscureText: c.secret,
+      enabled: c.enabled,
+      decoration: InputDecoration(hintText: c.prompt, isDense: true),
+      onChanged: (value) => c.set(value),
+    );
+    final clear = c.clearLabel;
+    final footnote = c.footnote;
+    final labelled = LabelledField(
+      label: c.title,
+      child: clear == null
+          ? field
+          : ResettableField(onReset: () => c.set(""), child: field),
+    );
+    // A footnote under a field is a paragraph of its own, set in the page's
+    // muted voice.
+    if (footnote == null) return labelled;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        labelled,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: mutedParagraph(context, footnote),
+        ),
+      ],
+    );
+  }
+}
+
+/// Devices as rows: the state at a glance, the name, and what can be done
+/// to each; a tap opens the device's own page.
+class _Devices extends StatelessWidget {
+  const _Devices(this.c);
+
+  final CollectionController c;
+
+  Future<void> _act(BuildContext context, int index, ItemAction action) async {
+    if (action.confirm case final ask?) {
+      final yes = await confirm(
+        context,
+        title: ask.title,
+        message: ask.message,
+        confirmLabel: ask.confirmLabel,
+        destructive: ask.destructive,
+      );
+      if (!yes || !context.mounted) return;
+    }
+    await _tell(context, c.act(index, action.id));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final (index, row) in c.rows.indexed)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: InkWell(
+              onTap: row.id == null
+                  ? null
+                  : () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => PairedDevicePage(deviceId: row.id!),
+                      ),
+                    ),
+              borderRadius: const BorderRadius.all(Radius.circular(12)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        _icon(row.glyph) ?? Icons.circle_outlined,
+                        size: 16,
+                        color: switch (row.glyph) {
+                          SettingGlyph.online => Colors.green,
+                          SettingGlyph.connecting => theme.colorScheme.primary,
+                          SettingGlyph.failed => theme.colorScheme.error,
+                          _ => theme.colorScheme.onSurfaceVariant,
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(row.title)),
+                      for (final action in row.actions)
+                        TextButton(
+                          onPressed: action.enabled
+                              ? () => _act(context, index, action)
+                              : null,
+                          style: action.destructive
+                              ? TextButton.styleFrom(
+                                  foregroundColor: theme.colorScheme.error,
+                                )
+                              : null,
+                          child: Text(action.label),
+                        ),
+                    ],
+                  ),
+                  if (row.error case final error?)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 24, right: 8),
+                      child: SelectableText(
+                        error,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.error,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
       ],

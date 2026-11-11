@@ -26,7 +26,6 @@ import "on_device_catalog.dart";
 import "provider_picker.dart";
 import "triggers.dart";
 import "skills_settings.dart";
-import "sync_settings.dart";
 import "settings_category.dart";
 import "schema_view.dart";
 import "../../app/settings/spec.dart";
@@ -146,7 +145,7 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
     SchemaSections(SettingsPageId.agentBrowser),
   ],
   SettingsCategory.byteRepair => const [ByteRepairSection()],
-  SettingsCategory.sync => const [SyncSection()],
+  SettingsCategory.sync => const [SchemaSections(SettingsPageId.sync)],
   SettingsCategory.providers => const [_ProvidersEditor()],
   // The agent's own settings are under LLMs, beside the model it runs: the
   // classifier picker travels with the mode because auto mode is unusable
