@@ -684,14 +684,16 @@ struct OpenedModels: Hashable {
 
 /// A row that opens a page, drawn as a link: pushed through the model, so it
 /// is animated on every platform.
-struct PushRow<Label: View>: View {
+/// Generic over what it pushes rather than erased: a stack matches a page's
+/// destination by the value's own type, which an `AnyHashable` hides.
+struct PushRow<Value: Hashable, Label: View>: View {
   let model: SettingsModel
-  let to: AnyHashable
+  let to: Value
   @ViewBuilder let label: Label
 
-  init(model: SettingsModel, to: some Hashable, @ViewBuilder label: () -> Label) {
+  init(model: SettingsModel, to: Value, @ViewBuilder label: () -> Label) {
     self.model = model
-    self.to = AnyHashable(to)
+    self.to = to
     self.label = label()
   }
 
