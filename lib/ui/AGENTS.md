@@ -303,12 +303,15 @@ groups of items, and the platform's own after them (Hide, Quit, Full Screen —
 macOS's alone). `packages/entoli_menu` draws it, one Swift source for macOS and
 iPadOS over its own Pigeon contract (`pigeons/menu.dart`): Dart sends the
 whole bar, titled and greyed, whenever that changed, and Swift sends back the
-id of the item picked. macOS sets `NSApp.mainMenu`; iPadOS builds through
-`UIMenuBuilder`, the Runner's `AppDelegate` forwarding its `buildMenu(with:)`
-and the one selector every item runs, since UIKit asks only the app's own
-responders. It is a port, `AppMenus` (`lib/app/app_menus.dart`), bound in
-`main` as `NativeAppMenus` (`core/platform/app_menus.dart`) on the two Apples
-and absent everywhere else.
+id of the item picked. The bar is SwiftUI's — `AppCommands`, in each Runner's
+`.commands` — so the platform puts in what it always does (Hide, Quit, Full
+Screen, the Window menu) and the layout says only each menu's role: the app
+menu, File, View and Help take the app's items into the platform's own, and
+an `own` menu is one of the app's. It is a port, `AppMenus`
+(`lib/app/app_menus.dart`), bound in `main` as `NativeAppMenus`
+(`core/platform/app_menus.dart`) on the two Apples and absent everywhere
+else. Before the app is up nothing is sent, so the welcome tour has no app
+items to reach past it by.
 
 `AppMenuSync` (`app_menu.dart`) is how a frontend uses it: mounted in
 `AppShell` and in `ShellBridge`, below the Navigator, it shows the layout as

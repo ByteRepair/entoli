@@ -609,33 +609,26 @@ github-cli installed.
 
 ## The native shell
 
-The `entoli_glass` plugin makes a `UIHostingController` the scene window's
-root at every launch, with the `FlutterViewController` the storyboard made
-embedded in it as a child, drawn alone until Dart's `shell(on: true)` puts the
-native chrome around it (see "Liquid Glass" in `lib/ui/AGENTS.md`). The
-Runner is untouched: the implicit engine, its registrations and
-`SceneDelegate` are as they were. The plugin takes the root on
-`UIScene.willConnectNotification`, which comes with the storyboard's window
-made and hidden and Flutter's view not yet loaded. Not `addSceneDelegate`:
-the implicit engine registers its plugins before the scene connects, and
-Flutter forwards a connection only to an engine whose view is already in
-the scene, so a plugin's scene delegate never hears this one.
+**The Runner is a SwiftUI app**, as Xcode's own template makes one:
+`EntoliApp` (`AppDelegate.swift`) is the `@main` `App`, its `WindowGroup`
+showing `FrontendView` from `entoli_glass` and its `.commands` the menu bar
+(`AppCommands`, see "The menu bar"). The delegate, through
+`@UIApplicationDelegateAdaptor`, is still a `FlutterAppDelegate` — `app_links`
+and `record` hear the app's events through it — and owns the one
+`FlutterEngine`, set up the first time anything asks for its view: the
+plugins, every channel of the Runner's, and the notification delegate before
+launch finishes. Scene URLs come to SwiftUI, so `.onOpenURL` and
+`.onContinueUserActivity` hand them to the delegate for the plugins. There is
+no storyboard and no scene delegate.
 
-**The root is taken before the window shows, and that is load-bearing.**
-Swapped once Flutter's controller had appeared as the root, UIKit sent it
-`viewDidDisappear` only as the new root appeared, after the `viewWillAppear`
-it had as the container's child, and Flutter, which tears its surface down on
-a disappearance, drew no frame again. Never having appeared as the root, it
-has no disappearance to come; switching to the chrome moves it between
-containers inside the host, which each take it as they appear. **A move out
-of a container on screen is a disappearance said by hand**: in a debug build
-Dart answers seconds after the window shows, and the controller moved without
-one never let its surface go and drew no frame again — the window kept its
-first, light frame until the sidebar took it out and back. `FlutterContainer`
-tells it it disappeared before taking it, and appeared where its new
-container already shows. The launch screen and the containers are
-`systemBackground` until Flutter's first frame, so a dark device never
-flashes white.
+**The Flutter view goes in one place per launch.** `FrontendView` shows
+only the launch colour until Dart says which frontend the core picked
+(`shell(on:)`, before `runApp`), then Flutter's view alone or the shell around
+it. The shell keeps its sidebar, title bar and toolbar out of the way until
+the app proper is up — its first window snapshot, which `ShellBridge` sends
+past the welcome tour and first-run setup — so the tour stands alone and
+nothing bypasses it. The launch screen and the view's background are
+`systemBackground`, so a dark device never flashes white.
 
 The plugin's package is iOS 17 and macOS 14, the floor the app already has for
 MLX, and the Runner's targets say 17.0 outright rather than "the recommended
@@ -666,16 +659,11 @@ looking at than either.
 
 ## The menu bar
 
-`entoli_menu` builds it (see "The menu bar" in `lib/ui/AGENTS.md`). Each
-`show` stores the menus and asks UIKit to rebuild; `AppDelegate`'s
-`buildMenu(with:)` hands the builder to the plugin, and its `entoliMenuItem:`
-is the one selector every item runs, the item saying which by its id — UIKit
-asks only the app's own responders for either. The first menu's items go into
-the application menu, whose own Settings item is removed so the app's takes
-⌘,; a menu titled File, Edit, View, Window or Help goes at the top of UIKit's
-of that name; the rest go before Window. An item with keys is a
-`UIKeyCommand`, so an iPhone with a keyboard gets the same keys and the
-⌘-hold sheet lists them, and Flutter's key handler stands down for them.
+`entoli_menu`'s SwiftUI commands are the app's menus here as on macOS (see
+"The menu bar" in `lib/ui/AGENTS.md`): iPadOS draws them in its menu bar, and
+each item's keys are a keyboard shortcut, so an iPhone with a keyboard gets
+the same keys, the ⌘-hold sheet lists them, and Flutter's key handler stands
+down for them.
 
 The sidebar keeps its Profile, Marketplace and Settings here: the menu bar
 hides until asked for, and is not there at all without a pointer.
