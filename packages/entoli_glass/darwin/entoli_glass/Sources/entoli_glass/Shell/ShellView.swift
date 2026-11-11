@@ -47,23 +47,26 @@ struct ShellView: View {
       SidebarView(model: model, collapsed: collapsed)
         .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 400)
     } detail: {
-      GeometryReader { proxy in
-        FlutterCanvas(flutter: flutter) {
-          StripLayer(model: model)
+      ZStack {
+        GeometryReader { proxy in
+          FlutterCanvas(flutter: flutter) {
+            StripLayer(model: model)
+          }
+          .onChange(of: proxy.safeAreaInsets, initial: true) { _, insets in
+            model.insets(
+              EdgeInsets(top: insets.top, leading: 0, bottom: insets.bottom, trailing: 0))
+          }
         }
-        .onChange(of: proxy.safeAreaInsets, initial: true) { _, insets in
-          model.insets(EdgeInsets(top: insets.top, leading: 0, bottom: insets.bottom, trailing: 0))
-        }
-      }
-      #if os(iOS)
-        // The Flutter view keeps the whole height and shrinks its page for
-        // the keyboard itself; the inset still reaches over the keyboard,
-        // which Dart's `ShellInsets` takes out.
-        .ignoresSafeArea(.keyboard)
-      #endif
-      // Over the Flutter view, which draws nothing there: the new-chat
-      // screen, between the toolbar and the composer.
-      .overlay {
+        #if os(iOS)
+          // The Flutter view keeps the whole height and shrinks its page for
+          // the keyboard itself; the inset still reaches over the keyboard,
+          // which Dart's `ShellInsets` takes out.
+          .ignoresSafeArea(.keyboard)
+        #endif
+        // Beside the Flutter view rather than over it, so it keeps to the
+        // keyboard's safe area: the composer rides on the keyboard and pads
+        // the new-chat screen up with it, where an overlay of the view above
+        // would have run on under the composer and the keys.
         if model.newChat.present && !model.window.covered {
           NewChatView(model: model).transition(.opacity)
         }

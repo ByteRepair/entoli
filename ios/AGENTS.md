@@ -627,7 +627,15 @@ Swapped once Flutter's controller had appeared as the root, UIKit sent it
 it had as the container's child, and Flutter, which tears its surface down on
 a disappearance, drew no frame again. Never having appeared as the root, it
 has no disappearance to come; switching to the chrome moves it between
-containers inside the host, which each take it as they appear.
+containers inside the host, which each take it as they appear. **A move out
+of a container on screen is a disappearance said by hand**: in a debug build
+Dart answers seconds after the window shows, and the controller moved without
+one never let its surface go and drew no frame again — the window kept its
+first, light frame until the sidebar took it out and back. `FlutterContainer`
+tells it it disappeared before taking it, and appeared where its new
+container already shows. The launch screen and the containers are
+`systemBackground` until Flutter's first frame, so a dark device never
+flashes white.
 
 The plugin's package is iOS 17 and macOS 14, the floor the app already has for
 MLX, and the Runner's targets say 17.0 outright rather than "the recommended

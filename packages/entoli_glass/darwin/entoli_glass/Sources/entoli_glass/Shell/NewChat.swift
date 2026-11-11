@@ -36,15 +36,9 @@ struct NewChatView: View {
     if state.starting {
       ProgressView().controlSize(.large)
     } else {
-      VStack(spacing: 0) {
-        page
-        Text("Type / for commands, @ for agents.")
-          .font(.caption)
-          .foregroundStyle(.tertiary)
-          .multilineTextAlignment(.center)
-          .padding(.horizontal, 24)
-          .padding(.vertical, 12)
-      }
+      // The composer pads the page rather than ending it: the page scrolls
+      // on beneath it, seen through the glass.
+      page
     }
   }
 
@@ -88,6 +82,12 @@ struct NewChatView: View {
           }
         }
         if state.showStarters { starters }
+        // The page's last line, as the Flutter screen has it: pinned over
+        // the composer, it lay across whatever scrolled beneath.
+        Text("Type / for commands, @ for agents.")
+          .font(.caption)
+          .foregroundStyle(.tertiary)
+          .multilineTextAlignment(.center)
       }
       .padding(.horizontal, 24)
       .padding(.vertical, 32)
@@ -95,6 +95,10 @@ struct NewChatView: View {
       .frame(maxWidth: .infinity)
     }
     .scrollBounceBehavior(.basedOnSize)
+    // A drag through the page takes the keyboard down, as one back through
+    // the conversation does.
+    .scrollDismissesKeyboard(.immediately)
+    .clearUnderComposer()
     .animation(ComposerView.motion, value: state)
   }
 

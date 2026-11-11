@@ -490,6 +490,15 @@ the system's. Taken as padding whole, as it first was, the keyboard counted
 twice: a keyboard's height of empty conversation over the composer, which a
 simulator with a hardware keyboard never shows.
 
+**The composer pads the layout and is clear glass.** The new-chat screen
+sits beside the Flutter view rather than over it, so it keeps to the
+keyboard's safe area and the composer rides up with it; its page scrolls on
+beneath the composer, seen through the glass, with the system's edge effect
+turned off there (`clearUnderComposer`), and a drag through it takes the
+keyboard down as one through the conversation does. Its "Type / for
+commands" line is the page's last, as in Flutter, not pinned over the
+composer.
+
 `FlutterCanvas` is the Flutter view and every layer drawn in its coordinates,
 in one container: the edges are said once, and a layer gets exactly the
 view's frame, so a point Dart names is the same point there. What floats over
