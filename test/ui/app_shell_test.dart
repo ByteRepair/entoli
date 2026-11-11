@@ -3,6 +3,7 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/app/frontend.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/project.dart";
@@ -271,6 +272,25 @@ void main() {
       expect(menus.shown, contains("Profile…"));
       expect(menus.shown, contains("Marketplace…"));
       expect(find.text("Marketplace"), findsNothing);
+    }, variant: mac);
+
+    // The SwiftUI frontend's Settings scene puts the platform's own item in
+    // the app menu, which opens the native settings; Dart's would be a
+    // second one.
+    testWidgets("leaves Settings to the Settings scene under SwiftUI", (
+      tester,
+    ) async {
+      menus = FakeAppMenus();
+      app.dispose();
+      app = TestApp.create(
+        menus: menus,
+        frontend: const FrontendChoice(current: Frontend.swiftUI, native: true),
+      );
+      await pumpAt(tester, const Size(1200, 800));
+
+      expect(menus.shown, isNot(contains("Settings…")));
+      expect(menus.shown, contains("About Entoli"));
+      expect(menus.shown, contains("Profile…"));
     }, variant: mac);
 
     testWidgets("leaves the new chat to a compose button in the sidebar's "
