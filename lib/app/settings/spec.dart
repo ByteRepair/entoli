@@ -53,6 +53,9 @@ enum UiHint {
 
   /// A dropdown of what is on this device, saying so where nothing is.
   installed,
+
+  /// One thing to download, kept current with an Update beside Delete.
+  single,
 }
 
 /// The pages settings is filed under, in the order they are offered. A

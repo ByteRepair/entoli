@@ -228,7 +228,8 @@ class ProjectSettingsPage extends ConsumerWidget {
                   // see them, or where nothing is confined, where the list
                   // would change nothing — both of which the picked
                   // confinement answers.
-                  if (!remote && pickedConfinement(WidgetReader(ref)).enforcesSandbox) ...[
+                  if (!remote &&
+                      pickedConfinement(WidgetReader(ref)).enforcesSandbox) ...[
                     WorkFoldersSection(at: at),
                     const Divider(),
                   ],

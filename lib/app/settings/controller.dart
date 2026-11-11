@@ -212,6 +212,7 @@ final class ChoiceController<T> extends SettingController {
     this.unsettable = false,
     this.inheritedLabel,
     this.noneLabel,
+    this.error,
     super.title,
     super.description,
     super.footnote,
@@ -234,6 +235,9 @@ final class ChoiceController<T> extends SettingController {
   /// What picking nothing is called where nothing is an answer of its own
   /// rather than an inherited one: "Device language".
   final String? noneLabel;
+
+  /// What went wrong with the last pick, said under the field.
+  final String? error;
 
   final Future<SettingNotice?> Function(T?) _write;
 
@@ -708,7 +712,8 @@ final class CatalogController extends SettingController {
 
   Future<void> cancel(String id) => _onCancel(id);
 
-  /// Called only once [CatalogItem.deleteConfirm] has been agreed to.
+  /// Called only once [CatalogItem.deleteConfirm], where there is one, has
+  /// been agreed to.
   Future<void> delete(String id) => _onDelete(id);
 }
 
@@ -716,13 +721,14 @@ class CatalogItem {
   const CatalogItem({
     required this.id,
     required this.title,
-    required this.deleteConfirm,
+    this.deleteConfirm,
     this.summary,
     this.note,
     this.failure,
     this.progress,
     this.installed = false,
     this.downloadable = true,
+    this.updatable = false,
   });
 
   final String id;
@@ -742,5 +748,9 @@ class CatalogItem {
   /// dead rather than left out, so the reader can see it exists.
   final bool downloadable;
 
-  final SettingConfirm deleteConfirm;
+  /// Whether one already here can be fetched again for a newer one.
+  final bool updatable;
+
+  /// What deleting it asks first; null deletes it straight away.
+  final SettingConfirm? deleteConfirm;
 }

@@ -19,7 +19,6 @@ import "../../core/formatting.dart";
 import "../widgets/side_panel_frame.dart";
 import "../widgets/section_header.dart";
 import "agents_settings.dart";
-import "browser_settings.dart";
 import "byte_repair_settings.dart";
 import "connect_provider.dart";
 import "running_models.dart";
@@ -147,7 +146,9 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
   // footers pinned to their bottoms.
   SettingsCategory.skills => const [],
   SettingsCategory.agents => const [],
-  SettingsCategory.agentBrowser => const [AgentBrowserSection()],
+  SettingsCategory.agentBrowser => const [
+    SchemaSections(SettingsPageId.agentBrowser),
+  ],
   SettingsCategory.byteRepair => const [ByteRepairSection()],
   SettingsCategory.sync => const [SyncSection()],
   SettingsCategory.providers => const [_ProvidersEditor()],

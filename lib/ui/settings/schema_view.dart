@@ -114,6 +114,7 @@ class SettingRow extends StatelessWidget {
         _ => _Notice(c),
       },
       final CollectionController c => c.typed(<V>(c) => _Collection<V>(c)),
+      final CatalogController c when c.hint == UiHint.single => _Single(c),
       final CatalogController c => _Catalog(c),
       final NumberController c => _Number(c, labelled: !nested),
       final ModelPickController c => LabelledField(
@@ -277,9 +278,15 @@ class _Dropdown<T> extends StatelessWidget {
       );
     }
     final field = DropdownButtonFormField<T>(
+      key: ValueKey(c.value),
       initialValue: c.value,
       isExpanded: true,
-      decoration: InputDecoration(helperText: c.description),
+      decoration: InputDecoration(
+        helperText: c.description,
+        helperMaxLines: 3,
+        errorText: c.error,
+        errorMaxLines: 4,
+      ),
       items: [
         for (final option in c.options)
           DropdownMenuItem(
@@ -614,6 +621,17 @@ class _Action extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (c.hint == UiHint.row) {
+      final description = c.description;
+      return ListTile(
+        title: Text(c.title),
+        subtitle: description == null ? null : Text(description),
+        trailing: OutlinedButton(
+          onPressed: c.enabled ? () => _press(context) : null,
+          child: Text(c.label),
+        ),
+      );
+    }
     final colors = Theme.of(context).colorScheme;
     final icon = _icon(c.glyph);
     final style = c.destructive
@@ -906,11 +924,71 @@ class _Catalog extends StatelessWidget {
             installed: item.installed,
             onCancel: () => c.cancel(item.id),
             onDelete: () => c.delete(item.id),
-            deleteTitle: item.deleteConfirm.title,
-            deleteMessage: item.deleteConfirm.message,
+            deleteTitle: item.deleteConfirm?.title ?? "Delete ${item.title}?",
+            deleteMessage: item.deleteConfirm?.message ?? "",
             onDownload: item.downloadable ? () => c.download(item.id) : null,
           ),
         ),
     ],
   );
+}
+
+/// One thing to download, kept current: its version or why it stopped, the
+/// bar while it comes, and Delete beside Update once it is here.
+class _Single extends StatelessWidget {
+  const _Single(this.c);
+
+  final CatalogController c;
+
+  @override
+  Widget build(BuildContext context) =>
+      Column(children: [for (final item in c.items) _row(item)]);
+
+  Widget _row(CatalogItem item) {
+    final progress = item.progress;
+    return ListTile(
+      title: Text(item.title),
+      subtitle: progress != null
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  progress.unpacking
+                      ? "Installing…"
+                      : progress.total > 0
+                      ? "Downloading · ${progress.received >> 20} of "
+                            "${progress.total >> 20} MB"
+                      : "Downloading…",
+                ),
+                const SizedBox(height: 4),
+                LinearProgressIndicator(value: progress.bar),
+              ],
+            )
+          : Text(item.failure ?? item.summary ?? ""),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (progress != null)
+            TextButton(
+              onPressed: () => c.cancel(item.id),
+              child: const Text("Cancel"),
+            )
+          else ...[
+            if (item.installed)
+              IconButton(
+                tooltip: "Delete",
+                icon: const Icon(Icons.delete_outline),
+                onPressed: () => c.delete(item.id),
+              ),
+            FilledButton.tonal(
+              onPressed: item.downloadable ? () => c.download(item.id) : null,
+              child: Text(
+                item.installed && item.updatable ? "Update" : "Download",
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }

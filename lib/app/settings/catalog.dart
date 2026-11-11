@@ -1,3 +1,4 @@
+import "pages/browser.dart";
 import "pages/general.dart";
 import "pages/llms.dart";
 import "pages/memory.dart";
@@ -13,6 +14,7 @@ final entoliSettings = SettingsSchema(
     ...memorySections,
     ...voiceSections,
     ...terminalSections,
+    ...browserSections,
   ],
   settings: [
     ...generalSettings,
@@ -20,5 +22,6 @@ final entoliSettings = SettingsSchema(
     ...memorySettings,
     ...voiceSettings,
     ...terminalSettings,
+    ...browserSettings,
   ],
 );
