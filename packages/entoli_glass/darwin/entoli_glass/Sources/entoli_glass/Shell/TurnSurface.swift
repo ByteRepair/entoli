@@ -49,10 +49,20 @@ struct TurnSurfaceView: View {
 
   // MARK: Resume
 
-  private func resumeRow(_ text: String) -> some View {
-    HStack(spacing: 8) {
+  /// The backend's notice where it gave one, else how long ago the turn
+  /// stopped.
+  private func resumeRow(_ resume: ResumeSnapshot) -> some View {
+    let started = Date(timeIntervalSince1970: Double(resume.startedAt) / 1000)
+    return HStack(spacing: 8) {
       Image(systemName: "pause.circle").foregroundStyle(.secondary)
-      Text(text).font(.callout).lineLimit(1)
+      Group {
+        if let notice = resume.notice {
+          Text(notice)
+        } else {
+          Text("Unfinished turn from \(started, format: .relative(presentation: .named))")
+        }
+      }
+      .font(.callout).lineLimit(1)
       Spacer(minLength: 8)
       Button {
         say.resume { _ in }
@@ -115,7 +125,7 @@ struct TurnSurfaceView: View {
     .padding(.horizontal, 14)
     .frame(minHeight: 34)
     .glassSurface(Capsule())
-    .help(goal.summary)
+    .help([goal.label + ": " + goal.objective, goal.reason].compactMap { $0 }.joined(separator: " · "))
     .transition(.opacity.combined(with: .move(edge: .bottom)))
   }
 
@@ -171,7 +181,7 @@ struct TurnSurfaceView: View {
           ProgressView().controlSize(.mini)
         }
         Text(thing.label)
-          .font(thing.mono ? .callout.monospaced() : .callout)
+          .font(thing.kind == .job ? .callout.monospaced() : .callout)
           .lineLimit(1)
       }
       .padding(.horizontal, 12)
@@ -225,7 +235,7 @@ struct TurnSurfaceView: View {
   private func approvalCard(_ approval: ApprovalSnapshot) -> some View {
     VStack(alignment: .leading, spacing: 10) {
       HStack(spacing: 10) {
-        Image(systemName: approval.symbol)
+        Image(systemName: approval.glyph.systemImage)
           .font(.callout)
           .frame(width: 28, height: 28)
           .background(.tint.opacity(0.2), in: Circle())
@@ -270,5 +280,62 @@ struct TurnSurfaceView: View {
 
   private func answer(_ approval: ApprovalSnapshot, _ answer: ApprovalAnswer) {
     say.approve(id: approval.id, answer: answer) { _ in }
+  }
+}
+
+/// This frontend's words for the turn's state.
+extension GoalSnapshot {
+  var label: String {
+    switch phase {
+    case .active: "Goal active"
+    case .paused: "Goal paused"
+    case .met: "Goal met"
+    case .blocked: "Goal blocked"
+    }
+  }
+}
+
+extension RunningSnapshot {
+  /// The pill's words: the browser's page, the job's command, the
+  /// sub-agent's handle.
+  var label: String {
+    switch kind {
+    case .browser: hidden ? "Browser · \(name) · hidden from the agent" : "Browser · \(name)"
+    case .job: name
+    case .subAgent: "@\(name)"
+    }
+  }
+
+  var tooltip: String {
+    switch kind {
+    case .browser: "Watch the agent's browser"
+    case .job: "Background job"
+    case .subAgent: "Sub-agent @\(name)"
+    }
+  }
+
+  /// What it is gathered under with the rest of its kind; none standing
+  /// alone, ahead of the groups.
+  var group: String? {
+    switch kind {
+    case .browser: nil
+    case .job: "background task"
+    case .subAgent: "sub-agent"
+    }
+  }
+
+  /// In place of the spinner.
+  var symbol: String? {
+    switch kind {
+    case .browser: (hidden ? Glyph.hidden : Glyph.browse).systemImage
+    case .job, .subAgent: nil
+    }
+  }
+}
+
+extension SteerSnapshot {
+  /// What was said, or the files it carried where it said nothing.
+  var line: String {
+    text.isEmpty ? files.joined(separator: ", ") : text.replacingOccurrences(of: "\n", with: " ")
   }
 }

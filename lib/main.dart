@@ -2,15 +2,17 @@ import "dart:async";
 import "dart:ui" show AppExitResponse;
 
 import "package:entoli_glass/entoli_glass.dart" show NativeShell;
-import "package:flutter/foundation.dart" show defaultTargetPlatform;
 import "package:flutter/material.dart";
 import "package:flutter/scheduler.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "core/config.dart";
 import "core/log.dart";
+import "app/app_menus.dart";
 import "core/platform/app_icon.dart";
+import "core/platform/app_menus.dart";
 import "core/platform/background_work.dart";
+import "core/platform/form_factor.dart" show isApple;
 import "core/platform/clipboard_files.dart";
 import "core/platform/platform.dart" as platform;
 import "core/platform/system_palette.dart";
@@ -41,17 +43,20 @@ import "providers.dart";
 import "ui/bot_avatar/licence.dart";
 import "ui/chat/activity/activities.dart" show ChatActivities;
 import "ui/chat/activity/activity.dart" show activityCatalogProvider;
-import "ui/chat/remote_turns.dart";
+import "app/remote_turns.dart";
 import "ui/app_licence.dart" show registerAppLicence, registerBlinkLicence;
-import "ui/app_menu_bar.dart";
-import "ui/app_shell.dart";
-import "ui/chat_actions.dart" show chatEditsProvider;
+import "app/chat_edits.dart" show chatEditsProvider;
 import "ui/command_intents.dart";
 import "ui/initial_setup_gate.dart";
 import "ui/routes.dart";
 import "ui/welcome_gate.dart";
-import "ui/chat/chat_controller.dart";
-import "ui/chat/controller_turn_sender.dart";
+import "app/chat_controller.dart";
+import "app/frontend.dart";
+import "ui/app_shell.dart";
+import "ui/shell/shell_bridge.dart";
+import "ui/shell/shell_overrides.dart";
+import "ui/app_chrome.dart" show appChromeProvider;
+import "app/controller_turn_sender.dart";
 import "ui/assistant/incoming_assistant.dart";
 import "ui/focus_follows_keyboard.dart";
 import "ui/fonts.dart";
@@ -61,10 +66,7 @@ import "ui/share/incoming_shares.dart";
 import "ui/triggers/incoming_open.dart";
 import "ui/selection.dart";
 import "ui/theme.dart";
-import "ui/shell/shell_bridge.dart";
-import "ui/shell/shell_window.dart";
 import "ui/app_routes.dart";
-import "ui/widgets/liquid_glass.dart";
 
 /// The model host's entry point: Entoli's own executable launched again as
 /// `entoli-models`, running the on-device models for the app that started it
@@ -80,7 +82,6 @@ void modelHostMain(List<String> arguments) => ModelHostServer.run(
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  installMenuChannel();
   registerBundledFontLicences();
   registerBotAvatarLicence();
   registerBundledSkillLicences();
@@ -106,7 +107,10 @@ var _updateChecked = false;
 /// session's settings. The process's for the reason [_updateChecked] is: a
 /// restore's restart is this process still running, its window already set
 /// up one way or the other.
-bool? _glassAtLaunch;
+Frontend? _frontendAtLaunch;
+
+/// The menu bar's, once per process: it answers the platform's channel.
+NativeAppMenus? _menus;
 
 /// Everything the app reads out of the data directory, and the container it is
 /// all reached through. One per run of the app — and a second one when a backup
@@ -144,17 +148,28 @@ class AppSession {
     // last step to the launch after it.
     await recoverRestore(dataDir, deleteTree: platform.deleteTree);
     final config = await AppConfig.load(dataDir);
-    final glassAvailable =
-        defaultTargetPlatform == TargetPlatform.iOS ||
-        defaultTargetPlatform == TargetPlatform.macOS;
-    // The shell decided at launch, from the same settings file, before Dart
-    // ran; the app draws for what it did.
-    _glassAtLaunch ??=
-        glassAvailable &&
-        await NativeShell().hosting().catchError((Object e) {
-          logFailure("shell", "hosting: $e");
-          return false;
+    final glassAvailable = isApple;
+    // Once per process: a restore's restart is this process, its window
+    // already the frontend's. The host draws Flutter's until it is told.
+    if (_frontendAtLaunch == null) {
+      final chosen = chooseFrontend(
+        AppSettings.load(config),
+        native: glassAvailable,
+      );
+      _frontendAtLaunch = chosen;
+      if (glassAvailable) {
+        await NativeShell().shell(chosen == Frontend.swiftUI).catchError((
+          Object e,
+        ) {
+          logFailure("shell", "shell: $e");
+          _frontendAtLaunch = Frontend.flutter;
         });
+      }
+    }
+    final frontend = FrontendChoice(
+      current: _frontendAtLaunch!,
+      native: glassAvailable,
+    );
     // Started here and awaited before the identity load below: the keyring
     // probe is decided once, so the identity's own first read must not race
     // this one, and the mirror the registry reads keys through is filled by
@@ -382,9 +397,11 @@ class AppSession {
         appUpdateHostProvider.overrideWithValue(
           platform.createAppUpdateHost(cache),
         ),
-        liquidGlassProvider.overrideWithValue(
-          LiquidGlass(available: glassAvailable, on: _glassAtLaunch!),
+        if (frontend.swiftUI) ...shellOverrides,
+        appMenusProvider.overrideWithValue(
+          glassAvailable ? _menus ??= NativeAppMenus() : const NoAppMenus(),
         ),
+        frontendProvider.overrideWithValue(frontend),
         agentBrowserProvider.overrideWithValue(browser),
         localEngineProvider.overrideWithValue(engine),
         appleFmProvider.overrideWithValue(apple),
@@ -641,9 +658,7 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       themeMode: mode,
       onGenerateRoute: appRoute,
       navigatorObservers: [ref.read(appRoutesProvider)],
-      builder: ref.watch(liquidGlassProvider).on
-          ? (context, child) => ShellInsets(child: child!)
-          : null,
+      builder: ref.watch(appChromeProvider).builder,
       // All wrapped rather than folded into the shell: what another app
       // shared has to be offered a workspace over whatever is on screen, an
       // entoli:// link has to open what it names over it and the assistant
@@ -667,14 +682,14 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
   }
 }
 
-/// The Flutter app's own shell, or the Flutter half of the native one: which
-/// is the launch's, and never moves.
+/// The frontend's root: the Flutter app's own shell, or the Flutter half of
+/// the native one, which is the launch's and never moves.
 class _Shell extends ConsumerWidget {
   const _Shell();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) =>
-      ref.watch(liquidGlassProvider).on
+      ref.watch(frontendProvider).swiftUI
       ? const ShellBridge()
       : const AppShell();
 }

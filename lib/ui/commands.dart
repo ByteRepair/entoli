@@ -9,7 +9,7 @@ import "../domain/builtin_project.dart";
 import "../domain/project.dart";
 import "../providers.dart";
 import "app_command.dart";
-import "chat/chat_controller.dart";
+import "../app/chat_controller.dart";
 import "chat/chat_settings_page.dart";
 import "chat/plan_page.dart";
 import "chat_actions.dart";
@@ -19,13 +19,17 @@ import "project_actions.dart";
 import "selection.dart";
 import "settings/settings_category.dart";
 import "voice/voice_page.dart";
-import "shell/shell_palette.dart";
 import "sidebar/project_palette.dart";
-import "widgets/liquid_glass.dart";
 
-/// What each [AppCommand] does, and whether it can now: one snapshot of the
-/// app taken from [context], which is the chat pane's — below the Navigator,
-/// so every page a command opens goes over it.
+/// Where a frontend takes the app for each [Destination]. Each frontend has
+/// its own, an exhaustive switch with no default.
+typedef Navigate = Future<void> Function(Commands commands, Destination to);
+
+/// What each [AppItem] does, and whether it can now: one snapshot of the app
+/// taken from [context], which is the chat pane's — below the Navigator, so
+/// every page an item opens goes over it. An [AppAction] is run here, the
+/// frontend asking first for what it needs; a [Destination] goes to the
+/// frontend's [Navigate].
 ///
 /// [Commands.watch] is for a build, so a menu greys and labels its items
 /// afresh as the app changes; [Commands.read] for a key or a click, which
@@ -33,24 +37,29 @@ import "widgets/liquid_glass.dart";
 class Commands {
   Commands._(
     this.context,
-    this.ref, {
-    required this.front,
+    this.ref,
+    this._navigate, {
     required this.project,
     required this.chatId,
-    required this.pinned,
-    required this.running,
-    required this.sidebarShown,
+    required this.facts,
   });
 
-  factory Commands.watch(BuildContext context, WidgetRef ref) =>
-      Commands._of(context, ref, ref.watch);
+  factory Commands.watch(
+    BuildContext context,
+    WidgetRef ref, [
+    Navigate navigate = flutterNavigate,
+  ]) => Commands._of(context, ref, navigate, ref.watch);
 
-  factory Commands.read(BuildContext context, WidgetRef ref) =>
-      Commands._of(context, ref, ref.read);
+  factory Commands.read(
+    BuildContext context,
+    WidgetRef ref, [
+    Navigate navigate = flutterNavigate,
+  ]) => Commands._of(context, ref, navigate, ref.read);
 
   factory Commands._of(
     BuildContext context,
     WidgetRef ref,
+    Navigate navigate,
     T Function<T>(ProviderListenable<T>) get,
   ) {
     final id = get(selectedChatIdProvider);
@@ -66,144 +75,127 @@ class Commands {
                   : (pinned: s.chat!.state.pinned, running: s.isRunning),
             ),
           );
+    final project = get(selectedProjectProvider);
     return Commands._(
       context,
       ref,
-      front: ModalRoute.isCurrentOf(context) ?? true,
-      project: get(selectedProjectProvider),
+      navigate,
+      project: project,
       chatId: open == null ? null : id,
-      pinned: open?.pinned ?? false,
-      running: open?.running ?? false,
-      sidebarShown: get(sidebarShownProvider),
+      facts: (
+        front: ModalRoute.isCurrentOf(context) ?? true,
+        chatOpen: open != null,
+        pinned: open?.pinned ?? false,
+        running: open?.running ?? false,
+        sidebarShown: get(sidebarShownProvider),
+        hasWorkspace: projectHasWorkspace(project),
+        hasMemories: projectHasMemories(project),
+        hasSettings: projectHasSettings(project),
+      ),
     );
   }
 
   final BuildContext context;
   final WidgetRef ref;
+  final Navigate _navigate;
 
-  /// Whether the chat pane is the page on top.
-  final bool front;
   final ProjectRef project;
 
   /// The open chat, where it is one of this device's and has been read.
   final String? chatId;
-  final bool pinned;
-  final bool running;
-  final bool sidebarShown;
 
-  /// Whether [command] can run now, and why not where it cannot: the one
-  /// answer the keys, the menus and Shortcuts all ask.
-  Availability availability(AppCommand command) {
-    if (!command.anywhere && !front) {
-      return const Unavailable("A page is open over the chat.");
+  /// What the menus are greyed and labelled by.
+  final AppFacts facts;
+
+  /// Whether [item] can run now, and why not where it cannot.
+  Availability availability(AppItem item) => availabilityOf(item, facts);
+
+  /// [item]'s title, saying which way a toggle goes.
+  String label(AppItem item) => titleOf(item, facts);
+
+  /// Run [item] if it can be; what stopped it where it cannot.
+  Availability run(AppItem item) {
+    final availability = this.availability(item);
+    if (availability.isAvailable) {
+      unawaited(switch (item) {
+        final AppAction action => _act(action),
+        final Destination to => _navigate(this, to),
+      });
     }
-    Availability needs(bool ok, String why) =>
-        ok ? const Available() : Unavailable(why);
-    return switch (command) {
-      AppCommand.pinChat ||
-      AppCommand.renameChat ||
-      AppCommand.moveChat ||
-      AppCommand.deleteChat ||
-      AppCommand.chatSettings ||
-      // The page says where a chat has none.
-      AppCommand.showPlan => needs(chatId != null, "No chat is open."),
-      AppCommand.stopTurn => needs(running, "No turn is running."),
-      AppCommand.projectWorkspace => needs(
-        projectHasWorkspace(project),
-        "This project has no workspace.",
-      ),
-      AppCommand.projectMemories => needs(
-        projectHasMemories(project),
-        "This project keeps no memories.",
-      ),
-      AppCommand.projectSettings => needs(
-        projectHasSettings(project),
-        "This project has no settings.",
-      ),
-      _ => const Available(),
-    };
-  }
-
-  /// [command]'s label, saying which way a toggle goes.
-  String label(AppCommand command) => switch (command) {
-    AppCommand.pinChat when pinned => "Unpin Chat",
-    AppCommand.toggleSidebar => sidebarShown ? "Hide Sidebar" : "Show Sidebar",
-    _ => command.label,
-  };
-
-  /// Run [command] if it can be; what stopped it where it cannot.
-  Availability run(AppCommand command) {
-    final availability = this.availability(command);
-    if (availability.isAvailable) unawaited(_run(command));
     return availability;
   }
 
-  Future<void> _run(AppCommand command) async {
+  /// Exhaustive: a new action does not compile until it runs here.
+  Future<void> _act(AppAction action) async {
     final chatId = this.chatId;
-    switch (command) {
-      case AppCommand.about:
-        _settings(SettingsCategory.about);
-      case AppCommand.settings:
-        _settings(null);
-      case AppCommand.backUp:
-        _settings(SettingsCategory.data);
-      case AppCommand.welcome:
-        _settings(SettingsCategory.welcome);
-      case AppCommand.keyboardShortcuts:
-        _settings(SettingsCategory.shortcuts);
-      case AppCommand.profile:
-        openProfile(context);
-      case AppCommand.marketplace:
-        openMarketplace(context);
-      case AppCommand.newChat:
+    switch (action) {
+      case AppAction.newChat:
         openNewChatIn(context, ref, null);
-      case AppCommand.newAnonymousChat:
+      case AppAction.newAnonymousChat:
         openNewChatIn(context, ref, const AnonymousProject().dir);
-      case AppCommand.newOmadaChat:
+      case AppAction.newOmadaChat:
         openNewChatIn(context, ref, omadaBaseProject);
-      // Under the native shell, the shell's own palette.
-      case AppCommand.switchProject:
-        if (ref.read(liquidGlassProvider).on) {
-          ref.read(shellPaletteProvider.notifier).open();
-        } else {
-          await showProjectPalette(context, ref);
-        }
-      case AppCommand.toggleSidebar:
-        ref.read(sidebarShownProvider.notifier).toggle();
-      case AppCommand.pinChat ||
-          AppCommand.renameChat ||
-          AppCommand.moveChat ||
-          AppCommand.deleteChat:
+      case AppAction.pinChat ||
+          AppAction.renameChat ||
+          AppAction.moveChat ||
+          AppAction.deleteChat:
         // Read as it is now: what the menu was drawn from is two facts of it.
         final chat = ref.read(chatControllerProvider(chatId!)).chat!.state;
-        await runOnChat(context, ref, chat, command);
-      case AppCommand.chatSettings:
-        openChatSettings(context, chatId!);
-      case AppCommand.showPlan:
-        openPlan(context, chatId!);
-      // Into the open chat, or a new one where none is open — the new-chat
-      // screen's circle.
-      case AppCommand.voiceMode:
-        await (chatId == null
-            ? startVoiceChat(context, ref)
-            : openVoice(context, ref, chatId));
-      case AppCommand.stopTurn:
+        await runOnChat(context, ref, chat, action);
+      case AppAction.stopTurn:
         await ref.read(chatControllerProvider(chatId!).notifier).abort();
-      case AppCommand.projectWorkspace:
-        openProjectWorkspace(context, ref, project);
-      case AppCommand.projectMemories:
-        openProjectMemories(context, project);
-      case AppCommand.projectSettings:
-        openProjectSettings(context, project);
     }
   }
 
   /// Settings, at [category] — in place of a Settings already on top rather
   /// than a second one over it.
-  void _settings(SettingsCategory? category) {
+  void settings(SettingsCategory? category) {
     Navigator.of(
       context,
     ).popUntil((route) => route.settings.name != settingsRoute);
     unawaited(openSettings(context, category: category));
+  }
+}
+
+/// The Flutter frontend's way to every [Destination].
+Future<void> flutterNavigate(Commands c, Destination to) async {
+  final context = c.context;
+  final ref = c.ref;
+  final chatId = c.chatId;
+  switch (to) {
+    case Destination.about:
+      c.settings(SettingsCategory.about);
+    case Destination.settings:
+      c.settings(null);
+    case Destination.backUp:
+      c.settings(SettingsCategory.data);
+    case Destination.welcome:
+      c.settings(SettingsCategory.welcome);
+    case Destination.keyboardShortcuts:
+      c.settings(SettingsCategory.shortcuts);
+    case Destination.profile:
+      openProfile(context);
+    case Destination.marketplace:
+      openMarketplace(context);
+    case Destination.switchProject:
+      await showProjectPalette(context, ref);
+    case Destination.toggleSidebar:
+      ref.read(sidebarShownProvider.notifier).toggle();
+    case Destination.chatSettings:
+      openChatSettings(context, chatId!);
+    case Destination.showPlan:
+      openPlan(context, chatId!);
+    // Into the open chat, or a new one where none is open — the new-chat
+    // screen's circle.
+    case Destination.voiceMode:
+      await (chatId == null
+          ? startVoiceChat(context, ref)
+          : openVoice(context, ref, chatId));
+    case Destination.projectWorkspace:
+      openProjectWorkspace(context, ref, c.project);
+    case Destination.projectMemories:
+      openProjectMemories(context, c.project);
+    case Destination.projectSettings:
+      openProjectSettings(context, c.project);
   }
 }

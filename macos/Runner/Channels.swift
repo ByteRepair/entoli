@@ -1,0 +1,224 @@
+import Cocoa
+import FlutterMacOS
+
+/// Answers `running` on `agent_chat/background`, the channel Android's
+/// foreground services answer: while a turn runs, closing the window does not
+/// quit the app (`AppDelegate.applicationShouldTerminateAfterLastWindowClosed`)
+/// and macOS may not end it. In this file rather than its own so the Xcode project
+/// needs no new entry. See "Closing the window during a turn" in
+/// macos/AGENTS.md.
+enum TurnHold {
+  private(set) static var isRunning = false
+
+  static func register(with messenger: FlutterBinaryMessenger) {
+    FlutterMethodChannel(name: "agent_chat/background", binaryMessenger: messenger)
+      .setMethodCallHandler { call, result in
+        guard call.method == "running" else { return result(FlutterMethodNotImplemented) }
+        update(running: ((call.arguments as? NSNumber)?.intValue ?? 0) > 0)
+        result(nil)
+      }
+  }
+
+  private static func update(running: Bool) {
+    guard running != isRunning else { return }
+    isRunning = running
+    let reason = "A turn is running"
+    if running {
+      ProcessInfo.processInfo.disableAutomaticTermination(reason)
+      ProcessInfo.processInfo.disableSuddenTermination()
+    } else {
+      ProcessInfo.processInfo.enableAutomaticTermination(reason)
+      ProcessInfo.processInfo.enableSuddenTermination()
+      AppDelegate.quitIfUnwatched()
+    }
+  }
+}
+
+/// The model host's engine: `modelHostMain` with no view, `AppleFmChannel`
+/// the one native piece registered on it, and a watch on the app that
+/// started it. In this file rather than its own so the Xcode project needs no
+/// new entry. See "The model host" in macos/AGENTS.md.
+enum ModelHost {
+  private static var engine: FlutterEngine?
+  private static var parent: DispatchSourceProcess?
+
+  static func start() {
+    // The Dart code is the app's: this bundle is `Contents/Helpers/Entoli
+    // Models.app` inside it, and carries no copy of its own.
+    let app = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent()
+    let project = FlutterDartProject(
+      precompiledDartBundle: Bundle(url: app.appendingPathComponent("Frameworks/App.framework")))
+    // What follows the flag is the socket to connect to, then the app's pid.
+    let arguments = Array(
+      ProcessInfo.processInfo.arguments.drop { $0 != "entoli-models" }.dropFirst())
+    project.dartEntrypointArguments = arguments
+    let engine = FlutterEngine(name: "models", project: project, allowHeadlessExecution: true)
+    // The models, and nothing else: the system model and every other channel
+    // are the app's, in the app's process.
+    MlxChannel.register(with: engine.binaryMessenger)
+    let channel = FlutterMethodChannel(
+      name: "agent_chat/model_host", binaryMessenger: engine.binaryMessenger)
+    channel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "quit":
+        result(nil)
+        quit()
+      case "footprint":
+        result(footprint())
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    engine.run(withEntrypoint: "modelHostMain")
+    self.engine = engine
+    // Opened through LaunchServices, this host's parent is launchd: the app
+    // is the pid it was handed.
+    watch(arguments.count > 1 ? pid_t(arguments[1]) ?? 0 : 0)
+  }
+
+  /// This process's memory as Activity Monitor counts it: `phys_footprint`,
+  /// which takes in the GPU buffers MLX keeps — resident size alone leaves
+  /// out the gigabytes a model is.
+  static func footprint() -> Int? {
+    var info = task_vm_info_data_t()
+    var count = mach_msg_type_number_t(
+      MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+    let status = withUnsafeMutablePointer(to: &info) {
+      $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+        task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+      }
+    }
+    return status == KERN_SUCCESS ? Int(info.phys_footprint) : nil
+  }
+
+  /// Stops the generations, then leaves through `_exit`. `exit` runs the C++
+  /// static destructors, MLX's Metal device among them, while a generation
+  /// may still be encoding on another thread — the crash every quit during an
+  /// MLX turn used to end in. Bounded, so a generation that will not stop
+  /// cannot keep a host alive past its app.
+  static func quit() {
+    Task { @MainActor in
+      await MlxChannel.stopAll()
+      _exit(0)
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 3) { _exit(0) }
+  }
+
+  /// The app going, however it goes — a crash closes no socket in time to be
+  /// read — is this host going. No pid to watch is no app to serve.
+  private static func watch(_ pid: pid_t) {
+    guard pid > 1 else { return quit() }
+    let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .main)
+    source.setEventHandler { quit() }
+    source.resume()
+    parent = source
+    // Gone before the source was armed, which it would never report.
+    if kill(pid, 0) != 0 { quit() }
+  }
+}
+
+/// Opens the model host — `Contents/Helpers/Entoli Models.app` — as an
+/// application of its own, through LaunchServices rather than as a child: a
+/// child is this app's to macOS, its GPU work scheduled as the app's own
+/// beside the window's frames. The key the host proves itself with goes in
+/// its environment, which no other process can read, where an `open --env`
+/// would have put it on a command line any process can. In this file rather
+/// than its own so the Xcode project needs no new entry.
+enum ModelHostLauncher {
+  static func register(with messenger: FlutterBinaryMessenger) {
+    FlutterMethodChannel(name: "agent_chat/model_host_launcher", binaryMessenger: messenger)
+      .setMethodCallHandler { call, result in
+        guard call.method == "open", let args = call.arguments as? [String: Any] else {
+          return result(FlutterMethodNotImplemented)
+        }
+        let helper = Bundle.main.bundleURL.appendingPathComponent(
+          "Contents/Helpers/Entoli Models.app")
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = false
+        configuration.addsToRecentItems = false
+        configuration.createsNewApplicationInstance = true
+        configuration.arguments = args["arguments"] as? [String] ?? []
+        configuration.environment = args["environment"] as? [String: String] ?? [:]
+        NSWorkspace.shared.openApplication(at: helper, configuration: configuration) {
+          _, error in
+          DispatchQueue.main.async {
+            if let error {
+              result(FlutterError(code: "open", message: error.localizedDescription, details: nil))
+            } else {
+              result(nil)
+            }
+          }
+        }
+      }
+  }
+}
+
+/// The copy with formatting, which Flutter's own clipboard call cannot make:
+/// it writes plain text only. And the files a paste brings, which it cannot
+/// read. See rich_clipboard.dart and clipboard_files.dart. In this file rather
+/// than its own so the Xcode project needs no new entry.
+enum ClipboardChannel {
+  private static var channel: FlutterMethodChannel?
+
+  static func register(with messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(name: "agent_chat/clipboard", binaryMessenger: messenger)
+    channel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "setHtml":
+        guard let args = call.arguments as? [String: Any],
+              let plain = args["plain"] as? String, let html = args["html"] as? String
+        else { return result(FlutterError(code: "bad-args", message: "plain and html", details: nil)) }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(html, forType: .html)
+        // Pages, TextEdit and Notes read RTF and not HTML, and fall back to
+        // the plain entry — which is markdown — without it. RTFD first: it
+        // carries a formula's picture, which RTF drops.
+        if let text = attributedOf(html) {
+          let all = NSRange(location: 0, length: text.length)
+          if let rtfd = text.rtfd(from: all, documentAttributes: [:]) {
+            pasteboard.setData(rtfd, forType: .rtfd)
+          }
+          if let rtf = text.rtf(from: all, documentAttributes: [:]) {
+            pasteboard.setData(rtf, forType: .rtf)
+          }
+        }
+        pasteboard.setString(plain, forType: .string)
+        result(nil)
+      case "readFiles":
+        result(readFiles())
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    self.channel = channel
+  }
+
+  /// [html] read by AppKit's own HTML reader — a formula's picture becomes
+  /// an attachment — for the RTF a target that reads no HTML keeps. Nil
+  /// where it will not read it.
+  private static func attributedOf(_ html: String) -> NSAttributedString? {
+    guard let data = html.data(using: .utf8) else { return nil }
+    return NSAttributedString(html: data, documentAttributes: nil)
+  }
+
+  /// A Finder copy carries the names as text too, so files win over text, and
+  /// text over an image: a spreadsheet's cells come with a picture of
+  /// themselves.
+  private static func readFiles() -> [[String: Any]] {
+    let pasteboard = NSPasteboard.general
+    if let urls = pasteboard.readObjects(
+      forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
+      !urls.isEmpty
+    {
+      return urls.map { ["path": $0.path] }
+    }
+    if pasteboard.string(forType: .string) != nil { return [] }
+    let png = pasteboard.data(forType: .png)
+      ?? pasteboard.data(forType: .tiff).flatMap {
+        NSBitmapImageRep(data: $0)?.representation(using: .png, properties: [:])
+      }
+    guard let png else { return [] }
+    return [["bytes": FlutterStandardTypedData(bytes: png)]]
+  }
+}

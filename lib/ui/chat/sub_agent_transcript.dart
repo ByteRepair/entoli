@@ -7,7 +7,7 @@ import "../../domain/chat_repository.dart";
 import "../../domain/models.dart";
 import "../../domain/sub_agent_log.dart";
 import "../../providers.dart";
-import "mirror_controller.dart" show chatViewProvider;
+import "../../app/mirror_controller.dart" show chatViewProvider;
 import "activity/card.dart" show LiveMessage;
 
 /// Which sub-agent: the chat, and the `task` call that spawned it.

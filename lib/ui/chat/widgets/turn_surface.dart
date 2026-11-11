@@ -1,10 +1,10 @@
+import "../../../app/approvals.dart";
 import "package:flutter/material.dart";
 
-import "../../../domain/permission.dart" show addDirectoryName;
 import "../../../domain/goal.dart" show ChatGoals;
 import "../../../domain/models.dart";
 import "../../../domain/room/room_state.dart";
-import "../chat_controller.dart";
+import "../../../app/chat_controller.dart";
 import "approval_banner.dart";
 import "browser_strip.dart";
 import "goal_strip.dart";
@@ -26,19 +26,6 @@ import "steer_strip.dart";
 /// goes differs — the chat page swaps it for the composer, because there is
 /// nothing useful to type until it is answered, while the voice screen keeps
 /// the circle above it — but how it is wired does not.
-/// Which answers [approval] is offered beside Deny, which always is: Allow for
-/// this call, and the Always answers that write a rule. A this-turn-only
-/// answer to a directory grant would lapse at the next turn, so where a rule
-/// can be written that is the answer; a mirrored chat keeps Allow, its
-/// Always answers being absent.
-({bool allow, bool always}) approvalAnswers(
-  TurnDriver driver,
-  ToolApproval approval,
-) => (
-  allow: !(driver.rulesWritable && approval.toolName == addDirectoryName),
-  always: driver.rulesWritable,
-);
-
 class TurnSurface extends StatelessWidget {
   const TurnSurface({
     super.key,
@@ -89,27 +76,19 @@ class TurnSurface extends StatelessWidget {
                 approval: approval,
                 onAllow: !offers.allow
                     ? null
-                    : () => notifier.respondApproval(
-                        approval.id,
-                        ApprovalResponse.allow,
-                      ),
-                onDeny: () => notifier.respondApproval(
-                  approval.id,
-                  ApprovalResponse.deny,
-                ),
+                    : () => notifier.answer(approval, ApprovalResponse.allow),
+                onDeny: () => notifier.answer(approval, ApprovalResponse.deny),
                 onAlwaysAllowChat: !offers.always
                     ? null
-                    : () => notifier.respondApproval(
-                        approval.id,
+                    : () => notifier.answer(
+                        approval,
                         ApprovalResponse.alwaysAllowChat,
-                        approval: approval,
                       ),
                 onAlwaysAllowProject: !offers.always
                     ? null
-                    : () => notifier.respondApproval(
-                        approval.id,
+                    : () => notifier.answer(
+                        approval,
                         ApprovalResponse.alwaysAllowProject,
-                        approval: approval,
                       ),
               ),
       ],

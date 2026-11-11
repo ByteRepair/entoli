@@ -13,7 +13,7 @@ import SwiftUI
 /// pushed over the list.
 struct TitleBar: ViewModifier {
   let bar: TitleBarSnapshot
-  let intents: TitleBarIntents
+  let intents: TitleBarIntentsProtocol
   let sidebar: (() -> Void)?
 
   /// What leads the bar where Dart says nothing does.
@@ -37,16 +37,13 @@ struct TitleBar: ViewModifier {
 
 extension View {
   func titleBar(
-    _ bar: TitleBarSnapshot, intents: TitleBarIntents, sidebar: (() -> Void)?
+    _ bar: TitleBarSnapshot, intents: TitleBarIntentsProtocol, sidebar: (() -> Void)?
   ) -> some View {
     modifier(TitleBar(bar: bar, intents: intents, sidebar: sidebar))
   }
 }
 
 extension TitleBarSnapshot {
-  /// The chat's, before Dart has said what it is.
-  static let initial = TitleBarSnapshot(present: true, title: "Entoli", subtitle: "", items: [])
-
   /// No page's bar: the window keeps the chat's title.
   static let absent = TitleBarSnapshot(present: false, title: "", subtitle: "", items: [])
 
@@ -66,7 +63,7 @@ extension TitleBarMenuItem: Identifiable {}
 
 private struct TitleBarContent: ToolbarContent {
   let bar: TitleBarSnapshot
-  let intents: TitleBarIntents
+  let intents: TitleBarIntentsProtocol
   let sidebar: (() -> Void)?
 
   private var buttons: [TitleBarItem] {
@@ -127,12 +124,12 @@ private struct TitleBarContent: ToolbarContent {
 /// One of a bar's buttons, drawn as its style says.
 private struct TitleBarButton: View {
   let item: TitleBarItem
-  let intents: TitleBarIntents
+  let intents: TitleBarIntentsProtocol
 
   private func press(_ id: String) { intents.press(id: id) { _ in } }
 
   private var icon: some View {
-    Label(item.label, systemImage: item.symbol ?? "circle")
+    Label(item.label, systemImage: item.glyph?.systemImage ?? "circle")
   }
 
   var body: some View {
@@ -144,7 +141,7 @@ private struct TitleBarButton: View {
             Button {
               press(choice.id)
             } label: {
-              if let symbol = choice.checked ? "checkmark" : choice.symbol {
+              if let symbol = choice.checked ? "checkmark" : choice.glyph?.systemImage {
                 Label(choice.label, systemImage: symbol)
               } else {
                 Text(choice.label)
@@ -211,4 +208,53 @@ private func subtitle(_ bar: TitleBarSnapshot) -> Text {
   guard let expires = bar.expires else { return Text(bar.subtitle) }
   let lead = bar.subtitle.isEmpty ? Text("") : Text("\(bar.subtitle) · ")
   return lead + Text("Expires in ") + Text(expires, style: .relative)
+}
+
+/// The chat's bar, this frontend's own: built from the chat's state, its
+/// presses sent back as where to go.
+extension ChatBarSnapshot {
+  static let initial = ChatBarSnapshot(
+    title: "", draft: false, pinned: false, running: false, settings: true)
+
+  var titleBar: TitleBarSnapshot {
+    var items: [TitleBarItem] = []
+    if running {
+      items.append(TitleBarItem(id: "running", label: "Running", spinner: true, style: .icon, enabled: true, menu: []))
+    }
+    if let done = planDone, let total = planTotal {
+      items.append(
+        TitleBarItem(
+          id: Self.plan, label: "Plan, \(done) of \(total) done", glyph: .checklist,
+          spinner: false, style: .icon, enabled: true, menu: []))
+    }
+    if settings {
+      items.append(
+        TitleBarItem(
+          id: Self.settings, label: "Chat Settings",
+          glyph: draft ? .tune : .info,
+          spinner: false, style: .icon, enabled: true, menu: []))
+    }
+    return TitleBarSnapshot(
+      present: true, title: draft ? "New Chat" : title.orUntitled,
+      subtitle: [project, pinned ? "Pinned" : nil].compactMap { $0 }.joined(separator: " · "),
+      expiresAt: expiresAt, items: items)
+  }
+
+  static let plan = "plan"
+  static let settings = "settings"
+}
+
+/// The chat bar's presses, as where they go.
+struct ChatBarPresses: TitleBarIntentsProtocol {
+  let intents: ChatBarIntents
+
+  func back(completion: @escaping (Result<Void, PigeonError>) -> Void) { completion(.success(())) }
+
+  func press(id: String, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    switch id {
+    case ChatBarSnapshot.plan: intents.open(to: .plan, completion: completion)
+    case ChatBarSnapshot.settings: intents.open(to: .settings, completion: completion)
+    default: completion(.success(()))
+    }
+  }
 }

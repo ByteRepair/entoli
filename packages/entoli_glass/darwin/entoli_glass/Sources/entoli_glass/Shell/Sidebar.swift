@@ -2,14 +2,14 @@ import SwiftUI
 
 extension SidebarSnapshot {
   static let initial = SidebarSnapshot(
-    project: ProjectChoice(label: "", symbol: "house", omada: false, count: 0), pages: [],
+    project: ProjectChoice(label: "", glyph: .home, omada: false, count: 0), pages: [],
     groups: [], query: "", projects: [], devices: [], omadaByDefault: false)
 }
 
 extension SidebarRow: Identifiable {}
 
 extension SidebarGroup: Identifiable {
-  var id: String { heading }
+  var id: String { "\(period)-\(month ?? 0)" }
 }
 
 /// The native sidebar: the project switcher over the project's chats, the
@@ -55,13 +55,13 @@ struct SidebarView: View {
               .contextMenu { if row.mutable { menu(row) } }
           }
         } header: {
-          if !group.heading.isEmpty { Text(group.heading) }
+          if let heading = group.heading { Text(heading) }
         }
       }
     }
     .overlay {
       if let empty = state.empty {
-        Text(empty)
+        Text(empty.words)
           .font(.callout)
           .foregroundStyle(.secondary)
           .multilineTextAlignment(.center)
@@ -117,7 +117,7 @@ struct SidebarView: View {
       Button("Delete", role: .destructive) { model.say.sidebar.delete(id: row.id) { _ in } }
       Button("Cancel", role: .cancel) {}
     } message: { row in
-      Text("Delete \u{201C}\(row.title)\u{201D}? This cannot be undone.")
+      Text("Delete \u{201C}\(row.shownTitle)\u{201D}? This cannot be undone.")
     }
     .sheet(isPresented: $creating) {
       NewProjectSheet(model: model, omada: state.omadaByDefault)
@@ -187,7 +187,7 @@ private struct ChatRow: View {
       }
       .frame(width: 14)
       VStack(alignment: .leading, spacing: 1) {
-        Text(row.title).lineLimit(1)
+        Text(row.shownTitle).lineLimit(1)
         if row.offline {
           Text("offline").font(.caption).foregroundStyle(.red)
         }
@@ -223,7 +223,7 @@ private struct ProjectHeader: View {
         Button("New Project…") { creating = true }
       } label: {
         HStack(spacing: 8) {
-          Image(systemName: state.project.symbol)
+          Image(systemName: (state.project.glyph ?? .folder).systemImage)
           Text(state.project.label)
             .font(.headline)
             .italic(state.project.omada)
@@ -266,7 +266,7 @@ private struct ProjectHeader: View {
         Text(choice.count > 0 ? "\(choice.label)  \(choice.count)" : choice.label)
           .italic(choice.omada)
       } icon: {
-        Image(systemName: choice.symbol)
+        Image(systemName: (choice.glyph ?? .folder).systemImage)
       }
       .labelStyle(.titleAndIcon)
     }
@@ -334,7 +334,7 @@ struct NewProjectSheet: View {
             making = false
             let error = (try? result.get()) ?? nil
             if let error {
-              failure = error
+              failure = error.words
             } else {
               dismiss()
               made()
@@ -350,4 +350,53 @@ struct NewProjectSheet: View {
     .padding(20)
     .frame(width: 420)
   }
+}
+
+/// This frontend's words for the sidebar's state.
+extension SidebarGroup {
+  /// A month of an earlier year says the year, or two Augusts would read as
+  /// one.
+  var heading: String? {
+    switch period {
+    case .none: return nil
+    case .pinned: return "Pinned"
+    case .today: return "Today"
+    case .yesterday: return "Yesterday"
+    case .previousWeek: return "Previous 7 Days"
+    case .previousMonth: return "Previous 30 Days"
+    case .month:
+      guard let month else { return nil }
+      let date = Date(timeIntervalSince1970: Double(month) / 1000)
+      let sameYear = Calendar.current.isDate(date, equalTo: .now, toGranularity: .year)
+      return date.formatted(sameYear ? .dateTime.month(.wide) : .dateTime.month(.wide).year())
+    }
+  }
+}
+
+extension SidebarEmpty {
+  var words: String {
+    switch self {
+    case .noChats: "No chats in this project yet."
+    case .noMirrored: "Nothing mirrored from this device yet."
+    case .noMatch: "No chat\u{2019}s title matches that."
+    }
+  }
+}
+
+extension ProjectError {
+  var words: String {
+    switch self {
+    case .badName: "That is not a name a project can have."
+    case .failed: "The project could not be created."
+    }
+  }
+}
+
+extension SidebarRow {
+  var shownTitle: String { title.orUntitled }
+}
+
+extension String {
+  /// A chat's title as shown, which a chat not named yet has none of.
+  var orUntitled: String { isEmpty ? "Untitled" : self }
 }

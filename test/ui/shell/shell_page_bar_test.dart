@@ -3,8 +3,9 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/ui/shell/shell_slots.dart";
-import "package:agent_chat/ui/widgets/liquid_glass.dart";
+import "package:agent_chat/ui/shell/shell_page_bar.dart" show drawShellPageBar;
+import "package:agent_chat/ui/shell/shell_answers.dart";
+import "package:agent_chat/app/frontend.dart";
 import "package:agent_chat/ui/widgets/page_bar.dart";
 
 import "fake_native_shell.dart";
@@ -22,9 +23,13 @@ void main() {
     shell = FakeNativeShell.install();
     container = ProviderContainer(
       overrides: [
-        liquidGlassProvider.overrideWithValue(
-          LiquidGlass(available: true, on: glass),
+        frontendProvider.overrideWithValue(
+          FrontendChoice(
+            current: glass ? Frontend.swiftUI : Frontend.flutter,
+            native: true,
+          ),
         ),
+        if (glass) pageBarDrawProvider.overrideWithValue(drawShellPageBar),
       ],
     );
     await tester.pumpWidget(
@@ -44,7 +49,7 @@ void main() {
   }
 
   /// The bar the window's title bar is answering for.
-  TitleBarIntents bar() => container.read(shellSlotsProvider).pageBar.top!;
+  TitleBarIntents bar() => container.read(shellAnswersProvider).pageBar.owner!;
 
   TitleBarSnapshot sent() => shell.lastPageBar!;
   List<TitleBarItem> items() => sent().items;
@@ -74,9 +79,9 @@ void main() {
     expect(find.byType(AppBar), findsNothing);
     expect(sent().title, "Chat settings");
     expect(sent().leading, TitleBarLeading.back);
-    expect(items().map((i) => (i.symbol, i.style, i.enabled)), [
-      ("plus", TitleBarItemStyle.icon, false),
-      ("checkmark", TitleBarItemStyle.confirm, true),
+    expect(items().map((i) => (i.glyph, i.style, i.enabled)), [
+      (Glyph.add, TitleBarItemStyle.icon, false),
+      (Glyph.check, TitleBarItemStyle.confirm, true),
     ]);
 
     bar().press(items()[1].id);

@@ -45,7 +45,7 @@ class CommandScope {
 
 final commandScopeProvider = Provider<CommandScope>((ref) => CommandScope());
 
-/// One [AppCommand] as an action Shortcuts can name: `command.<name>`, the
+/// One [AppItem] as an action Shortcuts can name: `command.<id>`, the
 /// enum's name being the id it is never renamed from.
 final class CommandIntent implements IntentAction {
   const CommandIntent(this.command, this.scope);
@@ -53,14 +53,14 @@ final class CommandIntent implements IntentAction {
   /// Every command, over [scope].
   static List<IntentAction> all(CommandScope scope) => [
     CommandListAction(),
-    for (final command in AppCommand.values) CommandIntent(command, scope),
+    for (final command in appItems) CommandIntent(command, scope),
   ];
 
-  final AppCommand command;
+  final AppItem command;
   final CommandScope scope;
 
   @override
-  String get id => "command.${command.name}";
+  String get id => "command.${command.id}";
 
   @override
   Future<Object?> perform(IntentArgs args) async {
@@ -80,7 +80,7 @@ final class CommandListAction implements IntentAction {
 
   @override
   Future<Object?> perform(IntentArgs args) async => [
-    for (final command in AppCommand.values)
-      {"id": command.name, "label": command.label.replaceAll("…", "")},
+    for (final command in appItems)
+      {"id": command.id, "label": command.title.replaceAll("…", "")},
   ];
 }

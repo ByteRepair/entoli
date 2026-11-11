@@ -16,9 +16,9 @@ void main() {
   ) async {
     await pumpSettings(tester, app, SettingsCategory.shortcuts);
 
-    final keyed = AppCommand.values.where((c) => c.key != null);
+    final keyed = appItems.where((c) => c.key != null);
     for (final command in keyed) {
-      expect(find.text(command.label), findsOneWidget);
+      expect(find.text(command.title), findsOneWidget);
     }
     expect(find.text("Ctrl"), findsNWidgets(keyed.length));
     expect(find.text("Shift"), findsNWidgets(2));

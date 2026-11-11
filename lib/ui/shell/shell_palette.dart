@@ -7,9 +7,9 @@ import "../../domain/project.dart";
 import "../../providers.dart";
 import "../selection.dart";
 import "../sidebar/project_palette.dart" show paletteListing;
-import "../sidebar/remote_projects.dart";
+import "../../app/remote_projects.dart";
 import "../app_routes.dart";
-import "shell_sidebar.dart" show projectSymbol, remoteSymbol;
+import "glyphs.dart";
 
 /// Whether the native palette is open, what is typed in it, and which opening
 /// this is.
@@ -57,9 +57,9 @@ PaletteSnapshot _paletteSnapshot(Ref ref, PaletteState palette) {
     id: "p::${p ?? ""}",
     label: projectLabel(p),
     project: p,
-    symbol: projectSymbol(p),
+    glyph: projectShellGlyph(p),
     omada: ref.watch(omadaOnProvider(p)),
-    trailing: "${counts[p] ?? 0}",
+    count: counts[p] ?? 0,
     busy: busy.contains(p),
     current: selected == localProject(p),
   );
@@ -68,9 +68,9 @@ PaletteSnapshot _paletteSnapshot(Ref ref, PaletteState palette) {
     label: e.label,
     device: e.scope.device,
     project: e.scope.project,
-    symbol: remoteSymbol,
+    glyph: Glyph.remote,
     omada: e.omada,
-    trailing: "${e.count}",
+    count: e.count,
     current: e.scope == selected,
   );
 
@@ -88,34 +88,34 @@ PaletteSnapshot _paletteSnapshot(Ref ref, PaletteState palette) {
   final sections = [
     if (!listing.searching) ...[
       PaletteSection(
-        heading: "",
+        list: PaletteList.projects,
         items: [for (final p in listing.projects) local(p)],
       ),
       PaletteSection(
-        heading: "",
+        list: PaletteList.mine,
         items: [for (final p in listing.mine) local(p)],
       ),
       PaletteSection(
-        heading: "Other Devices",
+        list: PaletteList.devices,
         items: [for (final e in listing.devices) mirrored(e)],
       ),
     ] else
       PaletteSection(
-        heading: "Projects",
+        list: PaletteList.found,
         items: [
           for (final p in listing.projects) local(p),
           for (final e in listing.devices) mirrored(e),
         ],
       ),
     PaletteSection(
-      heading: "Chats",
+      list: PaletteList.chats,
       items: [
         for (final chat in listing.chats)
           PaletteItem(
             id: "c:${chat.id}",
-            label: chat.title.orUntitled,
+            label: chat.title,
             chat: chat.id,
-            trailing: projectLabel(chat.project),
+            chatProject: projectLabel(chat.project),
             busy: running.contains(chat.id),
             current: chat.id == selectedChat,
           ),
@@ -132,9 +132,6 @@ PaletteSnapshot _paletteSnapshot(Ref ref, PaletteState palette) {
     serial: palette.serial,
   );
 }
-
-/// The app's own, under a name [PaletteRunner]'s methods do not hide.
-const _selectProject = selectProject;
 
 /// Runs what the native palette sends, in [context] under the Navigator. A
 /// project made from the palette is the sidebar's `createProject`.
@@ -156,7 +153,10 @@ class PaletteRunner implements PaletteIntents {
   Future<void> pickProject(String? device, String? project) async {
     _palette.close();
     if (!await toConversation(context, ref.read(appRoutesProvider))) return;
-    _selectProject(ref, (device: device, project: project));
+    ref.read(selectedProjectProvider.notifier).switchTo((
+      device: device,
+      project: project,
+    ));
   }
 
   @override

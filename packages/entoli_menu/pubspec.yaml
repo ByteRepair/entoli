@@ -1,0 +1,24 @@
+name: entoli_menu
+description: The app's menu bar on macOS and iPadOS, built by AppKit and UIKit from menus the app sends as data.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.2
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # The generated contract's annotations.
+  meta: any
+
+flutter:
+  plugin:
+    platforms:
+      ios:
+        pluginClass: MenuModel
+        sharedDarwinSource: true
+      macos:
+        pluginClass: MenuModel
+        sharedDarwinSource: true

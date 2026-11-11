@@ -1,0 +1,187 @@
+import "dart:async";
+
+import "package:flutter_riverpod/flutter_riverpod.dart";
+
+import "../data/sync/sync_hub.dart";
+import "../domain/ask.dart";
+import "../domain/chat_log.dart";
+import "../domain/models.dart";
+import "../domain/reaction.dart";
+import "../domain/room/roster.dart" show isCommand;
+import "../domain/room/room_state.dart";
+import "../providers.dart";
+import "chat_controller.dart" show TurnDriver, chatControllerProvider;
+
+/// The controller a mirrored chat is read through — the counterpart
+/// [ChatController] would have been if it read from the wire instead of the
+/// store. Deliberately its own family rather than an arm of
+/// [chatControllerProvider]: that one's build hits the local disk and wires
+/// appends into the repository, both of which are exactly wrong for a chat
+/// whose home device is somewhere else.
+///
+/// State comes from [SyncHub]'s mirror of the peer: records replay through
+/// the same pure `chatFrom`/`replayTree` a reload uses, so what the page
+/// draws is the log, not a second rendering of it.
+///
+/// It is a [TurnDriver] as well, and none of that runs anything here. Every
+/// verb goes over the wire to the chat's home device, which runs it through
+/// its own [ChatController]. A paired device is the user's own, so any one
+/// following the chat may drive it.
+class MirrorChatController extends Notifier<ChatViewState>
+    implements TurnDriver {
+  MirrorChatController(this.chatId);
+
+  final String chatId;
+  StreamSubscription<String>? _sub;
+
+  @override
+  ChatViewState build() {
+    final hub = ref.watch(syncHubProvider);
+    hub.followChat(chatId);
+    ref.onDispose(() => hub.unfollowChat(chatId));
+    _sub = hub.mirrorUpdates.where((id) => id == chatId).listen((_) {
+      if (ref.mounted) state = _viewOf(hub);
+    });
+    ref.onDispose(() => _sub?.cancel());
+    return _viewOf(hub);
+  }
+
+  ChatViewState _viewOf(SyncHub hub) {
+    final mirror = hub.mirror(chatId);
+    if (mirror == null) return ChatViewState(mirrored: true);
+    final online = hub.isChatOnline(chatId);
+    return ChatViewState(
+      mirrored: true,
+      chat: chatFrom(mirror.state, mirror.records),
+      isRunning: online && mirror.running,
+      // A mirror sees one turn, the home device's — keyed by that turn's
+      // own reply, the shape the state asks for.
+      approvals: online ? {"mirror": mirror.approvals} : const {},
+      // Rebuilt from the call's own arguments rather than from a second
+      // encoding of the questions — the same string the home device read.
+      questions: online
+          ? {
+              "mirror": [
+                for (final asked in mirror.asks)
+                  AskRequest(
+                    id: asked.id,
+                    questions: askQuestionsFrom(asked.argumentsJson),
+                    argumentsJson: asked.argumentsJson,
+                  ),
+              ],
+            }
+          : const {},
+      retry: online ? mirror.retry : null,
+      // Offline outranks whatever the turn was last saying: a status line from
+      // before the connection dropped is a turn claiming to still be alive,
+      // and an approval nothing can carry the answer to is worse than none.
+      status: online
+          ? mirror.status
+          : "offline — showing what this device last had",
+    );
+  }
+
+  SyncHub get _hub => ref.read(syncHubProvider);
+
+  /// Attachments go with the prompt, and are saved under the chat there.
+  /// Throws [Undelivered] where it did not arrive: the composer has already
+  /// cleared, so the page says so.
+  @override
+  Future<void> send(
+    String text, {
+    List<Attachment> attachments = const [],
+    bool queue = false,
+  }) async {
+    final reply = await _hub.sendRemotePrompt(
+      chatId,
+      text,
+      attachments: attachments,
+      queue: queue,
+    );
+    if (reply == null || !reply.ok) {
+      throw const Undelivered("The message did not reach the other device.");
+    }
+  }
+
+  /// A say waiting for its turn is the home device's view state, which no
+  /// mirror is sent, so there is none here to act on.
+  @override
+  Future<void> queueSteer(String id) async {}
+
+  @override
+  Future<Draft?> withdrawSteer(String id) async => null;
+
+  /// Who is speaking is the home device's to judge, so anything but a command
+  /// is offered both ways and it decides.
+  @override
+  bool steers(String text) => !isCommand(text);
+
+  @override
+  Future<void> resume() => _hub.resumeRemote(chatId);
+
+  @override
+  Future<void> abort() => _hub.abortRemote(chatId);
+
+  @override
+  bool get rulesWritable => false;
+
+  @override
+  Future<void> respondApproval(
+    String approvalId,
+    ApprovalResponse r, {
+    ToolApproval? approval,
+  }) => _hub.respondRemoteApproval(
+    chatId,
+    approvalId,
+    r == ApprovalResponse.allow ||
+        r == ApprovalResponse.alwaysAllowChat ||
+        r == ApprovalResponse.alwaysAllowProject,
+  );
+
+  @override
+  Future<void> answerQuestions(String requestId, List<String?> answers) =>
+      _hub.answerRemoteQuestions(chatId, requestId, answers);
+
+  @override
+  Future<void> editAndResend(String messageId, String text) =>
+      _hub.editRemote(chatId, messageId, text);
+
+  @override
+  Future<void> regenerate(String messageId) =>
+      _hub.regenerateRemote(chatId, messageId);
+
+  @override
+  Future<void> react(String messageId, Reaction reaction) =>
+      _hub.reactRemote(chatId, messageId, reaction.emoji);
+
+  @override
+  Future<void> stepThread(String messageId, int step) =>
+      _hub.stepThreadRemote(chatId, messageId, step);
+
+  @override
+  Future<void> deleteThread(String messageId) =>
+      _hub.deleteThreadRemote(chatId, messageId);
+}
+
+final mirrorChatControllerProvider =
+    NotifierProvider.family<MirrorChatController, ChatViewState, String>(
+      MirrorChatController.new,
+    );
+
+/// A chat's view from whichever controller reads it, for a page that draws a
+/// mirrored chat and a local one alike. Only the one it is gets built.
+final chatViewProvider = Provider.family<ChatViewState, String>(
+  (ref, chatId) => ref.watch(isMirroredChatProvider(chatId))
+      ? ref.watch(mirrorChatControllerProvider(chatId))
+      : ref.watch(chatControllerProvider(chatId)),
+);
+
+/// A message a paired device did not take. [message] is said to the user.
+class Undelivered implements Exception {
+  const Undelivered(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}

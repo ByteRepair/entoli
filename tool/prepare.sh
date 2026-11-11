@@ -14,6 +14,8 @@ dart run build_runner build
 # The native shell's protocol, both ends: the Dart in packages/entoli_glass and
 # the Swift its plugin compiles. See "Liquid Glass" in lib/ui/AGENTS.md.
 dart run pigeon --input pigeons/shell.dart
+# The menu bar's, which both frontends use: packages/entoli_menu.
+dart run pigeon --input pigeons/menu.dart
 dart run tool/gen_bundled_skills.dart
 dart run tool/gen_prompts.dart
 dart run tool/gen_privacy_policy.dart

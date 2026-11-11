@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 
-import "../voice_controller.dart";
+import "../../../app/voice_controller.dart";
+import "../voice_look.dart";
 
 /// The three things there are to do to a voice session: shut the microphone,
 /// stop the reply being read out, and go back to typing.

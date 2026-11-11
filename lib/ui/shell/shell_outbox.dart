@@ -17,7 +17,7 @@ class ShellOutbox {
       _post("window", snapshot, _shell.window);
   void sidebar(SidebarSnapshot snapshot) =>
       _post("sidebar", snapshot, _shell.sidebar);
-  void chatBar(TitleBarSnapshot snapshot) =>
+  void chatBar(ChatBarSnapshot snapshot) =>
       _post("chatBar", snapshot, _shell.chatBar);
   void pageBar(TitleBarSnapshot snapshot) =>
       _post("pageBar", snapshot, _shell.pageBar);
@@ -31,12 +31,6 @@ class ShellOutbox {
   void voice(VoiceSnapshot snapshot) => _post("voice", snapshot, _shell.voice);
   void palette(PaletteSnapshot snapshot) =>
       _post("palette", snapshot, _shell.palette);
-
-  /// Take [value] as what the shell's composer already holds, without sending
-  /// it: what it reported itself, which sent back would undo what it is
-  /// doing.
-  void rememberComposerValue(ComposerValueSnapshot value) =>
-      _sent["composerValue"] = value;
 
   /// The microphone's level: many times a second, nothing to compare against.
   void voiceLevel(double level) =>

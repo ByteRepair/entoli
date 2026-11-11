@@ -1,41 +1,45 @@
+import SwiftUI
+
 #if os(iOS)
   import Flutter
-  import UIKit
 #else
   import FlutterMacOS
-  import AppKit
 #endif
 
 /// The native shell's plugin: one file of source for both Runners
-/// (`sharedDarwinSource`), the platform's own halves behind `#if os(...)`.
-/// The shell takes the window at launch, before it is shown, where Liquid
-/// Glass is on: macOS as the runner registers its plugins, iOS as the scene
-/// connects. Dart asks which it did.
-#if os(macOS)
-  public final class EntoliGlassPlugin: NSObject, FlutterPlugin {
-    public static func register(with registrar: FlutterPluginRegistrar) {
-      let host = ShellHost(messenger: registrar.messenger, view: registrar.view)
-      ShellHost.shared = host
-      host.start()
+/// (`sharedDarwinSource`). Registering only listens for what Dart says; the
+/// window is the app's own `WindowGroup`, which shows `FrontendView`.
+public final class EntoliGlassPlugin: NSObject, FlutterPlugin {
+  public static func register(with registrar: FlutterPluginRegistrar) {
+    #if os(iOS)
+      let messenger = registrar.messenger()
+    #else
+      let messenger = registrar.messenger
+    #endif
+    let model = ShellModel(messenger: messenger)
+    ShellModel.shared = model
+    NativeShellSetup.setUp(binaryMessenger: messenger, api: model)
+  }
+}
+
+/// The window's content: the frontend the core picked. Nothing but the
+/// window's colour until Dart says which, so the Flutter view is put in one
+/// place once — Flutter's alone, filling the window, or the shell's around
+/// it.
+public struct FrontendView: View {
+  @ObservedObject private var model: ShellModel
+  private let flutter: PlatformViewController
+
+  public init(flutter: PlatformViewController) {
+    model = ShellModel.shared!
+    self.flutter = flutter
+  }
+
+  public var body: some View {
+    switch model.frontend {
+    case true?: ShellView(model: model, flutter: flutter)
+    case false?: FlutterPane(controller: flutter).ignoresSafeArea()
+    case nil: Rectangle().fill(.background).ignoresSafeArea()
     }
   }
-#else
-  public final class EntoliGlassPlugin: NSObject, FlutterPlugin {
-    public static func register(with registrar: FlutterPluginRegistrar) {
-      let host = ShellHost(messenger: registrar.messenger())
-      ShellHost.shared = host
-      // The engine registers before the scene connects, and Flutter forwards
-      // a connection only to an engine whose view is already in it, so
-      // `addSceneDelegate` never hears this one. The notification comes with
-      // the storyboard's window made and hidden, Flutter's view not loaded.
-      var observer: NSObjectProtocol?
-      observer = NotificationCenter.default.addObserver(
-        forName: UIScene.willConnectNotification, object: nil, queue: nil
-      ) { note in
-        guard let scene = note.object as? UIScene else { return }
-        host.start(in: scene)
-        if let observer { NotificationCenter.default.removeObserver(observer) }
-      }
-    }
-  }
-#endif
+}

@@ -33,37 +33,49 @@ struct ShellView: View {
   /// went with the split view's back button the bar hides for it. A Flutter
   /// page keeps the edge for its own back swipe.
   private var toList: (() -> Void)? {
-    collapsed && !model.window.covered && !model.voice.present ? model.showSidebar : nil
+    model.ready && collapsed && !model.window.covered && !model.voice.present
+      ? model.showSidebar : nil
   }
 
-  private func visibility(_ shown: Bool) -> NavigationSplitViewVisibility {
-    shown ? .all : .detailOnly
+  /// Before the app is up — the welcome tour, first-run setup — the
+  /// conversation's column alone, whatever the split view is asked.
+  private var shownColumns: Binding<NavigationSplitViewVisibility> {
+    Binding(
+      get: { model.ready ? columns : .detailOnly },
+      set: { if model.ready { columns = $0 } })
   }
 
   var body: some View {
     NavigationSplitView(
-      columnVisibility: $columns, preferredCompactColumn: $model.compactColumn
+      columnVisibility: shownColumns,
+      preferredCompactColumn: model.ready ? $model.compactColumn : .constant(.detail)
     ) {
-      SidebarView(model: model, collapsed: collapsed)
-        .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 400)
-    } detail: {
-      GeometryReader { proxy in
-        FlutterCanvas(flutter: flutter) {
-          StripLayer(model: model)
-        }
-        .onChange(of: proxy.safeAreaInsets, initial: true) { _, insets in
-          model.insets(EdgeInsets(top: insets.top, leading: 0, bottom: insets.bottom, trailing: 0))
-        }
+      // Nothing to swipe in before the app is up.
+      if model.ready {
+        SidebarView(model: model, collapsed: collapsed)
+          .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 400)
       }
-      #if os(iOS)
-        // The Flutter view keeps the whole height and shrinks its page for
-        // the keyboard itself; the inset still reaches over the keyboard,
-        // which Dart's `ShellInsets` takes out.
-        .ignoresSafeArea(.keyboard)
-      #endif
-      // Over the Flutter view, which draws nothing there: the new-chat
-      // screen, between the toolbar and the composer.
-      .overlay {
+    } detail: {
+      ZStack {
+        GeometryReader { proxy in
+          FlutterCanvas(flutter: flutter) {
+            StripLayer(model: model)
+          }
+          .onChange(of: proxy.safeAreaInsets, initial: true) { _, insets in
+            model.insets(
+              EdgeInsets(top: insets.top, leading: 0, bottom: insets.bottom, trailing: 0))
+          }
+        }
+        #if os(iOS)
+          // The Flutter view keeps the whole height and shrinks its page for
+          // the keyboard itself; the inset still reaches over the keyboard,
+          // which Dart's `ShellInsets` takes out.
+          .ignoresSafeArea(.keyboard)
+        #endif
+        // Beside the Flutter view rather than over it, so it keeps to the
+        // keyboard's safe area: the composer rides on the keyboard and pads
+        // the new-chat screen up with it, where an overlay of the view above
+        // would have run on under the composer and the keys.
         if model.newChat.present && !model.window.covered {
           NewChatView(model: model).transition(.opacity)
         }
@@ -82,10 +94,12 @@ struct ShellView: View {
         .animation(ComposerView.motion, value: model.turn.isEmpty)
       }
       .windowBar(model, toList: toList)
+      .welcome(!model.ready)
       #if os(iOS)
         .edgeSwipe(toList)
       #endif
     }
+    .toolbar(removing: model.ready ? nil : .sidebarToggle)
     // Voice mode over everything: the sidebar too, as the Flutter page was
     // pushed over the whole window.
     .overlay {
@@ -110,9 +124,22 @@ struct ShellView: View {
       .toolbar(model.voice.present ? .hidden : .automatic, for: .windowToolbar)
     #endif
     .preferredColorScheme(model.window.colorScheme)
+    #if os(macOS)
+      // The app's, not the window's: popovers, menus and sheets are windows
+      // of their own, and the system's glass follows the app. Nil follows the
+      // system.
+      .onChange(of: model.window.dark, initial: true) { _, dark in
+        NSApp.appearance = dark.map { NSAppearance(named: $0 ? .darkAqua : .aqua) } ?? nil
+      }
+      .reportsPointer(over: flutter, to: model)
+    #endif
+    // `columns` is the user's choice alone; `shownColumns` hides it before
+    // the app is up. Gating it here too wrote the hidden column back to Dart
+    // at launch, and the sidebar started collapsed.
     .onChange(of: model.window.sidebarShown, initial: true) { _, shown in
-      guard visibility(shown) != columns else { return }
-      withAnimation(.smooth(duration: 0.3)) { columns = visibility(shown) }
+      let wanted: NavigationSplitViewVisibility = shown ? .all : .detailOnly
+      guard wanted != columns else { return }
+      withAnimation(.smooth(duration: 0.3)) { columns = wanted }
     }
     .onChange(of: columns) { _, columns in
       let shown = columns != .detailOnly
@@ -172,10 +199,12 @@ extension View {
   fileprivate func windowBar(_ model: ShellModel, toList: (() -> Void)?) -> some View {
     let page = model.window.covered
     let bar =
-      !page ? model.chatBar : model.pageBar.present ? model.pageBar : model.chatBar.bare
+      !page
+      ? model.chatBar.titleBar
+      : model.pageBar.present ? model.pageBar : model.chatBar.titleBar.bare
     return self
       .titleBar(
-        bar, intents: page ? model.say.pageBar : model.say.chatBar,
+        bar, intents: page ? model.say.pageBar as TitleBarIntentsProtocol : model.say.chatBar,
         sidebar: toList)
       #if os(iOS)
         // A page whose bar Flutter still draws has it alone: one on screen.
@@ -183,3 +212,34 @@ extension View {
       #endif
   }
 }
+
+extension View {
+  /// The welcome tour and first-run setup stand alone, with no bar to
+  /// leave by: set on the column, whose bar it is.
+  fileprivate func welcome(_ on: Bool) -> some View {
+    #if os(macOS)
+      toolbar(on ? .hidden : .automatic, for: .windowToolbar)
+    #else
+      toolbar(on ? .hidden : .automatic, for: .navigationBar)
+    #endif
+  }
+}
+
+#if os(macOS)
+  extension View {
+    /// The pointer over the window, in [flutter]'s own coordinates, for the
+    /// agent's face to follow wherever it is over the window: the sidebar
+    /// lies to the view's left, so its x is negative there, and AppKit's
+    /// bottom-left origin is flipped to Flutter's top-left.
+    fileprivate func reportsPointer(over flutter: NSViewController, to model: ShellModel)
+      -> some View
+    {
+      onContinuousHover { _ in
+        guard let window = flutter.view.window else { return }
+        let view = flutter.view
+        let point = view.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        model.say.window.pointer(x: point.x - view.bounds.minX, y: view.bounds.maxY - point.y) { _ in }
+      }
+    }
+  }
+#endif

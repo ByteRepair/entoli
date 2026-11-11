@@ -98,3 +98,16 @@ extension View {
     modifier(GlassSurface(shape: shape, tint: tint))
   }
 }
+
+extension View {
+  /// What scrolls under the composer stays as it is: the composer pads the
+  /// layout and is clear glass, and the system's edge effect would fade or
+  /// blur what is behind it.
+  @ViewBuilder func clearUnderComposer() -> some View {
+    if #available(iOS 26, macOS 26, *) {
+      scrollEdgeEffectHidden(true, for: .bottom)
+    } else {
+      self
+    }
+  }
+}

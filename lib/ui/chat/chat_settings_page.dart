@@ -9,7 +9,7 @@ import "../../domain/models.dart";
 import "../../domain/permission.dart";
 import "../../providers.dart";
 import "../selection.dart";
-import "chat_controller.dart";
+import "../../app/chat_controller.dart";
 import "context_page.dart";
 import "widgets/view_only_bar.dart" show MirrorStrip;
 import "../widgets/destructive_button.dart";

@@ -2,10 +2,10 @@ import SwiftUI
 
 #if os(iOS)
   import UIKit
-  typealias PlatformViewController = UIViewController
+  public typealias PlatformViewController = UIViewController
 #else
   import AppKit
-  typealias PlatformViewController = NSViewController
+  public typealias PlatformViewController = NSViewController
 #endif
 
 /// The one Flutter view controller, inside SwiftUI. It is held by a container
@@ -77,6 +77,10 @@ import SwiftUI
 
     override func loadView() {
       view = UIView()
+      // The system's, in its appearance, until Flutter's first frame: the
+      // launch screen's colour, so nothing flashes white in the dark.
+      view.backgroundColor = .systemBackground
+      flutter.view.backgroundColor = .systemBackground
       adopt()
     }
 
@@ -85,16 +89,29 @@ import SwiftUI
       adopt()
     }
 
+    /// Taken from a container on screen — the Flutter frontend's, when Dart
+    /// turns the chrome on after the window has shown — Flutter is told it
+    /// disappeared first, then appears with this container. Moved without
+    /// it, it never let its surface go, and on appearing again drew no frame:
+    /// the window kept its first one until the sidebar took it out and back.
     private func adopt() {
       guard flutter.parent !== self else { return }
+      let shown = flutter.view.window != nil
+      if shown { flutter.beginAppearanceTransition(false, animated: false) }
       flutter.willMove(toParent: nil)
       flutter.view.removeFromSuperview()
       flutter.removeFromParent()
+      if shown { flutter.endAppearanceTransition() }
       addChild(flutter)
       flutter.view.frame = view.bounds
       flutter.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
       view.addSubview(flutter.view)
       flutter.didMove(toParent: self)
+      // A container already showing forwards no appearance of its own.
+      if view.window != nil {
+        flutter.beginAppearanceTransition(true, animated: false)
+        flutter.endAppearanceTransition()
+      }
     }
   }
 #endif

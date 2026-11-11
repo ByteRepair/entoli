@@ -4,15 +4,20 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:super_sliver_list/super_sliver_list.dart";
 
+import "package:agent_chat/ui/app_chrome.dart" show appChromeProvider;
+import "package:agent_chat/ui/shell/shell_app_chrome.dart";
+import "package:agent_chat/ui/chat/chat_chrome.dart" show chatChromeProvider;
+import "package:agent_chat/ui/shell/shell_chat_chrome.dart";
+import "package:agent_chat/ui/shell/shell_page_bar.dart" show drawShellPageBar;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/project.dart" show defaultEmptyChatQuestion;
 import "package:agent_chat/providers.dart" show appSettingsProvider;
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/shell/shell_new_chat.dart";
-import "package:agent_chat/ui/shell/shell_slots.dart";
+import "package:agent_chat/ui/shell/shell_answers.dart";
 import "package:agent_chat/ui/shell/shell_window.dart";
-import "package:agent_chat/ui/widgets/liquid_glass.dart";
+import "package:agent_chat/app/frontend.dart";
 import "package:agent_chat/ui/widgets/page_bar.dart";
 
 import "../../harness.dart";
@@ -36,8 +41,11 @@ void main() {
     tester,
     ProviderScope(
       overrides: [
-        liquidGlassProvider.overrideWithValue(
-          const LiquidGlass(available: true, on: true),
+        pageBarDrawProvider.overrideWithValue(drawShellPageBar),
+        chatChromeProvider.overrideWithValue(const ShellChatChrome()),
+        appChromeProvider.overrideWithValue(const ShellAppChrome()),
+        frontendProvider.overrideWithValue(
+          const FrontendChoice(current: Frontend.swiftUI, native: true),
         ),
       ],
       child: Builder(
@@ -53,7 +61,7 @@ void main() {
 
   /// The shell composer on top, as the Swift reaches it.
   ComposerIntents composer() =>
-      app.container.read(shellSlotsProvider).composer.top!;
+      app.container.read(shellAnswersProvider).composer.owner!;
 
   /// A chat with something said in it, open: [said] messages, enough past
   /// the window's height to scroll.
@@ -88,7 +96,7 @@ void main() {
     expect(find.byType(AppBar), findsNothing);
     expect(shell.lastNewChat?.present, isTrue);
     expect(shell.lastNewChat?.question, defaultEmptyChatQuestion);
-    expect(shell.lastChatBar?.title, "New Chat");
+    expect(shell.lastChatBar?.draft, isTrue);
     expect(shell.lastComposer?.present, isTrue);
   });
 
@@ -169,7 +177,7 @@ void main() {
     await openChat(tester, finished: false);
     await pump(tester);
     await settleIo(tester);
-    expect(shell.lastTurn?.resume, startsWith("Unfinished turn"));
+    expect(shell.lastTurn?.resume?.startedAt, isPositive);
   });
 
   testWidgets("a finished chat sends an empty turn surface", (tester) async {
@@ -245,7 +253,7 @@ void main() {
     expect(position.pixels, lessThan(position.maxScrollExtent));
 
     composer().edited("hello", 5, 5);
-    composer().send();
+    composer().run(ComposerAction.send);
     await settleIo(tester);
     expect(position.pixels, position.maxScrollExtent);
   });

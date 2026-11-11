@@ -1,5 +1,5 @@
 /// Something Shortcuts can ask the app to do, by name. The boundary's own
-/// type: what it adapts — `AppCommand`s, [ChatIntents] — does not know it
+/// type: what it adapts — `AppItem`s, [ChatIntents] — does not know it
 /// exists, and each adapter owns turning its arguments in and its result
 /// out, so every cast between the wire and a typed call is in one place.
 ///

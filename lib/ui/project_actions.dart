@@ -9,21 +9,13 @@ library;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../domain/builtin_project.dart";
 import "../domain/project.dart";
 import "../providers.dart";
+
+export "../app/projects.dart";
 import "memory/memory_page.dart";
 import "sidebar/project_settings_page.dart";
 import "workspace/workspace_page.dart";
-
-bool projectHasWorkspace(ProjectRef at) =>
-    at.device == null &&
-    (builtinProjectOf(at.project)?.sharedWorkspace ?? true);
-
-bool projectHasMemories(ProjectRef at) =>
-    builtinProjectOf(at.project)?.memory != MemoryPolicy.off;
-
-bool projectHasSettings(ProjectRef at) => projectHasSettingsPage(at.project);
 
 void openProjectWorkspace(BuildContext context, WidgetRef ref, ProjectRef at) {
   Navigator.of(context).push(

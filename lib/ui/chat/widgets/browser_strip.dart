@@ -14,7 +14,7 @@ import "../../../domain/agent_browser.dart";
 import "../../../providers.dart";
 import "browser_input.dart";
 import "../../../domain/room/room_state.dart" show ChatViewState;
-import "running_pill.dart" show RunningThing;
+import "running_pill.dart" show RunningKind, RunningThing;
 
 /// The chat's browser tab and the card that watches it, where there is one to
 /// show. Not on a mirrored chat, whose browser is the other device's.
@@ -160,11 +160,15 @@ List<RunningThing> browserRunning(
   final tab = ref.watch(_browserTabProvider(chatId));
   if (tab == null) return const [];
   final hold = tab.hold;
+  final where = _where(tab.page);
   return [
     RunningThing(
+      kind: RunningKind.browser,
+      name: where,
+      hidden: hold != null,
       icon: hold == null ? Icons.travel_explore : Icons.visibility_off,
       label:
-          "Browser · ${_where(tab.page)}"
+          "Browser · $where"
           "${hold == null ? "" : " · hidden from the agent"}",
       tooltip: "Watch the agent's browser",
       open: tab.open,

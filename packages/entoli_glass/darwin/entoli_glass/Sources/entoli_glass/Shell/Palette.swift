@@ -113,9 +113,9 @@ struct PaletteView: View {
                 .padding(24)
             }
             ForEach(Array(palette.sections.enumerated()), id: \.offset) { index, section in
-              if index > 0 && section.heading.isEmpty { Divider().padding(.vertical, 4) }
-              if !section.heading.isEmpty {
-                Text(section.heading)
+              if index > 0 && section.heading == nil { Divider().padding(.vertical, 4) }
+              if let heading = section.heading {
+                Text(heading)
                   .font(.caption.weight(.semibold))
                   .foregroundStyle(.secondary)
                   .padding(.horizontal, 12)
@@ -154,19 +154,21 @@ struct PaletteView: View {
           if item.busy {
             ProgressView().controlSize(.mini)
           } else if item.chat == nil {
-            Image(systemName: item.symbol.isEmpty ? "folder" : item.symbol)
+            Image(systemName: (item.glyph ?? .folder).systemImage)
           } else {
             Image(systemName: "bubble.left")
           }
         }
         .frame(width: 18)
         .foregroundStyle(.secondary)
-        Text(item.label).italic(item.omada).lineLimit(1)
+        Text(item.chat != nil ? item.label.orUntitled : item.label)
+          .italic(item.omada).lineLimit(1)
         if item.current {
           Image(systemName: "checkmark").font(.caption).foregroundStyle(.tint)
         }
         Spacer(minLength: 8)
-        Text(item.trailing).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+        Text(item.count.map { "\($0)" } ?? item.chatProject ?? "")
+          .font(.callout).foregroundStyle(.secondary).lineLimit(1)
       }
       .padding(.horizontal, 10)
       .frame(height: 32)
@@ -180,5 +182,17 @@ struct PaletteView: View {
     .buttonStyle(.plain)
     .id(item.id)
     .onHover { if $0 { active = item.id } }
+  }
+}
+
+extension PaletteSection {
+  /// The lists above the rule and below it run on without a heading.
+  var heading: String? {
+    switch list {
+    case .projects, .mine: nil
+    case .devices: "Other Devices"
+    case .found: "Projects"
+    case .chats: "Chats"
+    }
   }
 }

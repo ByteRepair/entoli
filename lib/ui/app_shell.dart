@@ -4,7 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "chat/chat_page.dart";
 import "app_command.dart";
-import "app_menu_bar.dart";
+import "app_menu.dart";
 import "command_intents.dart";
 import "commands.dart";
 import "sidebar/sidebar.dart";
@@ -42,20 +42,14 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   Commands _commands() => Commands.read(context, ref);
 
-  /// The [AppCommand]s' keys. A handler rather than a `Shortcuts` widget:
+  /// The [AppItem]s' keys. A handler rather than a `Shortcuts` widget:
   /// those hear a key only while focus is below them, and with nothing in the
-  /// shell focused it is the route's scope, which is above. Where a menu bar
-  /// holds the same keys, whichever hears one first runs it and the other
-  /// never does.
-  bool _key(KeyEvent event) {
-    if (event is! KeyDownEvent) return false;
-    final command = AppCommand.of(event);
-    if (command == null) return false;
-    return _commands().run(command).isAvailable;
-  }
+  /// shell focused it is the route's scope, which is above. Where the menu
+  /// bar holds the same keys, it alone runs them.
+  bool _key(KeyEvent event) => runKey(event, ref, _commands);
 
   @override
-  Widget build(BuildContext context) => AppMenuBar(
+  Widget build(BuildContext context) => AppMenuSync(
     child: SidePanelFrame(
       panel: const Sidebar(),
       panelWidth: sidebarWidth,

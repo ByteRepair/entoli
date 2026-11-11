@@ -36,8 +36,9 @@ struct NewChatView: View {
     if state.starting {
       ProgressView().controlSize(.large)
     } else {
-      VStack(spacing: 0) {
-        page
+      // Right above the composer, and like it padding the page rather than
+      // ending it: the page scrolls on beneath both, seen through the glass.
+      page.safeAreaInset(edge: .bottom, spacing: 0) {
         Text("Type / for commands, @ for agents.")
           .font(.caption)
           .foregroundStyle(.tertiary)
@@ -95,6 +96,10 @@ struct NewChatView: View {
       .frame(maxWidth: .infinity)
     }
     .scrollBounceBehavior(.basedOnSize)
+    // A drag through the page takes the keyboard down, as one back through
+    // the conversation does.
+    .scrollDismissesKeyboard(.immediately)
+    .clearUnderComposer()
     .animation(ComposerView.motion, value: state)
   }
 
@@ -124,8 +129,8 @@ struct NewChatView: View {
       HStack(spacing: 6) {
         if picked {
           Image(systemName: "checkmark")
-        } else if !choice.symbol.isEmpty {
-          Image(systemName: choice.symbol)
+        } else if let glyph = choice.glyph {
+          Image(systemName: glyph.systemImage)
         }
         Text(choice.label).italic(choice.omada)
       }

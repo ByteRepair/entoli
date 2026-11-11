@@ -1,3 +1,5 @@
+import "package:agent_chat/ui/shell/shell_overrides.dart";
+import "package:agent_chat/app/app_menus.dart";
 import "dart:async";
 import "dart:io";
 
@@ -48,7 +50,7 @@ import "package:agent_chat/ui/chat/activity/activity.dart"
 import "package:agent_chat/ui/widgets/resettable_field.dart" show LabelledField;
 import "package:agent_chat/ui/app_routes.dart";
 import "package:agent_chat/ui/routes.dart";
-import "package:agent_chat/ui/widgets/liquid_glass.dart";
+import "package:agent_chat/app/frontend.dart";
 import "package:agent_chat/ui/widgets/model_picker.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/trigger.dart";
@@ -59,9 +61,9 @@ import "package:agent_chat/domain/project.dart" show ProjectRef;
 import "package:agent_chat/data/builtin/llm/providers/presets.dart"
     show CliProvider;
 import "package:agent_chat/providers.dart";
-import "package:agent_chat/ui/chat/chat_controller.dart";
+import "package:agent_chat/app/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
-import "package:agent_chat/ui/chat/mirror_controller.dart";
+import "package:agent_chat/app/mirror_controller.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 import "package:agent_chat/ui/focus_follows_keyboard.dart";
@@ -174,6 +176,7 @@ class TestApp {
     PromptLibrary? library,
     bool launcherIcons = true,
     AppUpdateHost updateHost = const UnavailableAppUpdateHost(),
+    AppMenus menus = const NoAppMenus(),
     ChatStore? store,
     Shell? shell,
     FakeFileHandoff? handoff,
@@ -203,7 +206,7 @@ class TestApp {
     http.Client? marketplaceClient,
     Future<bool> Function(String apiKey)? acceptsKey,
     AgentBrowser Function(AppConfig config)? browser,
-    LiquidGlass liquidGlass = const LiquidGlass(),
+    FrontendChoice frontend = const FrontendChoice(),
     List<CliProvider>? clis,
   }) {
     final config = tempConfig();
@@ -288,8 +291,10 @@ class TestApp {
                 PromptLibraryNotifier(project, library ?? testLibrary()),
           ),
           launcherIconsProvider.overrideWithValue(launcher),
-          liquidGlassProvider.overrideWithValue(liquidGlass),
+          frontendProvider.overrideWithValue(frontend),
+          if (frontend.swiftUI) ...shellOverrides,
           appUpdateHostProvider.overrideWithValue(updateHost),
+          appMenusProvider.overrideWithValue(menus),
           systemAccentProvider.overrideWithValue(systemAccent),
           fileHandoffProvider.overrideWithValue(files),
           assistantLaunchProvider.overrideWithValue(assist),

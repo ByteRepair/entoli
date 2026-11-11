@@ -40,9 +40,10 @@ replaced a Material glyph in the middle of the orb, which is a thing to decode
 and was the only thing telling those two apart from listening. It is also the
 semantics label, so what a reader hears is what is on screen.
 
-**What a voice state looks like is the state's own business**, not each
-widget's: `hushed`, `word` and `voiceColour` sit on `VoiceViewState` in
-`voice_controller.dart`, because the orb, the dot beside the word and the Stop
+**What a voice state looks like is said once**, not by each widget: `hushed`
+sits on `VoiceViewState` in the core (`lib/app/voice_controller.dart`), and
+the Flutter frontend's `word` and `voiceColour` in `voice_look.dart` beside
+it, because the orb, the dot beside the word and the Stop
 button all have to agree, and the first version had the orb owning the four-arm
 colour switch while the button re-derived one arm of it.
 

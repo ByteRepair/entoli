@@ -8,7 +8,7 @@ import "package:agent_chat/domain/app_theme.dart";
 import "package:agent_chat/domain/corner_radius.dart";
 import "package:agent_chat/domain/theme_colour.dart";
 import "package:agent_chat/ui/theme.dart";
-import "package:agent_chat/ui/widgets/liquid_glass.dart";
+import "package:agent_chat/app/frontend.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 // Named, since the library's own `main` would otherwise be in scope beside the
 // test's.
@@ -309,7 +309,10 @@ void main() {
     group("on iOS and macOS", () {
       setUp(
         () => app = TestApp.create(
-          liquidGlass: const LiquidGlass(available: true, on: true),
+          frontend: const FrontendChoice(
+            current: Frontend.swiftUI,
+            native: true,
+          ),
         ),
       );
 

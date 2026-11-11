@@ -13,8 +13,8 @@ class ShortcutsSection extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       const SectionHeader("Keyboard shortcuts"),
-      for (final command in AppCommand.values.where((c) => c.key != null))
-        ListTile(title: Text(command.label), trailing: _Keys(command.keyCaps)),
+      for (final item in appItems.where((c) => c.key != null))
+        ListTile(title: Text(item.title), trailing: _Keys(item.keyCaps)),
     ],
   );
 }

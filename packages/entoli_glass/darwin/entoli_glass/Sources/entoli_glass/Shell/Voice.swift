@@ -2,8 +2,21 @@ import SwiftUI
 
 extension VoiceSnapshot {
   static let initial = VoiceSnapshot(
-    present: false, title: "Voice", status: .off, word: "", paused: false, hushed: false,
-    pushToTalk: false, on: false, lines: [], heard: 0xFF6C_63FF, spoken: 0xFF2D_D4BF)
+    present: false, status: .off, paused: false, hushed: false,
+    pushToTalk: false, on: false, lines: [])
+
+  /// What the screen says this is, in this frontend's words.
+  var word: String {
+    if hushed { return pushToTalk ? "Ready" : "Paused" }
+    switch status {
+    case .off: return "Off"
+    case .starting: return "Starting"
+    case .listening: return "Listening"
+    case .thinking: return "Thinking"
+    case .speaking: return "Speaking"
+    case .failed: return "Failed"
+    }
+  }
 
   var mode: GlowMode {
     if hushed { return .still }
@@ -29,8 +42,9 @@ struct VoiceView: View {
   @State private var holding = false
 
   private var voice: VoiceSnapshot { model.voice }
-  private var heard: Color { Color(argb: voice.heard) }
-  private var spoken: Color { Color(argb: voice.spoken) }
+  /// The two voices, in the system's colours: the user's and the reply's.
+  private let heard = Color.indigo
+  private let spoken = Color.teal
 
   /// The word's dot and the Stop button wear what is doing the talking.
   private var tint: Color {
@@ -49,7 +63,7 @@ struct VoiceView: View {
       VStack(spacing: 14) {
         // In the window's title bar, the toolbar being hidden for this: centred
         // between the window's buttons, as a title is.
-        Text(voice.title)
+        Text(voice.title.flatMap { $0.isEmpty ? nil : $0 } ?? "Voice")
           .font(.headline)
           .lineLimit(1)
           .frame(maxWidth: .infinity, alignment: .center)

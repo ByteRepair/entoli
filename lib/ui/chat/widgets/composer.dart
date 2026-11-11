@@ -11,12 +11,73 @@ import "../../fonts.dart";
 import "../../widgets/attachment_chip.dart";
 import "../../widgets/completion_field.dart";
 import "../../widgets/dialogs.dart";
+import "../../../app/composer.dart";
 import "code_block.dart";
 import "composer_controller.dart";
 import "composer_embed.dart";
-import "composer_logic.dart";
+import "composer_words.dart";
 
-export "composer_logic.dart" show ComposerHandle, SendCallback;
+export "../../../app/composer.dart" show SendCallback;
+
+/// What a page asks of whichever composer it has, the Flutter one or the
+/// native shell's: a steer taken back put back, and a passage replied to.
+abstract interface class ComposerHandle {
+  void restore(Draft said);
+  void embed(ComposerEmbed embed);
+}
+
+/// Where the Flutter composer puts a [ComposerAction]: a button of its own,
+/// laid out by hand, or an entry of the `+` menu, divided by [_Plus.group].
+sealed class _Place {
+  const _Place();
+}
+
+class _Button extends _Place {
+  const _Button();
+}
+
+class _Plus extends _Place {
+  const _Plus(this.label, {this.icon, this.hint, required this.group});
+
+  final String label;
+  final IconData? icon;
+  final String? hint;
+  final int group;
+}
+
+/// Exhaustive, with no default: a new action does not compile until it has a
+/// place here, or is left out on purpose.
+_Place _place(ComposerAction action) => switch (action) {
+  ComposerAction.send ||
+  ComposerAction.queue ||
+  ComposerAction.stop ||
+  ComposerAction.voice => const _Button(),
+  ComposerAction.attachImage => const _Plus(
+    "Image",
+    icon: Icons.image_outlined,
+    group: 0,
+  ),
+  ComposerAction.attachFile => const _Plus(
+    "File",
+    icon: Icons.attach_file,
+    group: 0,
+  ),
+  ComposerAction.insertSkill => _Plus(
+    CompletionKind.skill.label,
+    hint: CompletionKind.skill.trigger,
+    group: 1,
+  ),
+  ComposerAction.insertAgent => _Plus(
+    CompletionKind.agent.label,
+    hint: CompletionKind.agent.trigger,
+    group: 1,
+  ),
+  ComposerAction.newGoal => const _Plus(
+    "New Goal",
+    icon: Icons.track_changes,
+    group: 2,
+  ),
+};
 
 class _SendIntent extends Intent {
   const _SendIntent();
@@ -59,56 +120,22 @@ class Composer extends ConsumerStatefulWidget {
   const Composer({
     super.key,
     required this.controller,
-    required this.agentSpeaking,
-    required this.onSend,
-    required this.onAbort,
-    this.onQueue,
-    this.steers,
-    this.project,
-    this.device,
-    this.onVoice,
-    this.workspace,
-    this.workspaceHome,
+    required this.binding,
+    this.model,
   });
+
+  /// The page's composer model, which every frontend's composer for the page
+  /// runs on; null makes one of this widget's own.
+  final ComposerModel? model;
 
   /// The field, and the quotes and other embeds in it. What is sent is its
   /// `message`, never its `text`.
   final ComposerController controller;
 
-  /// A participant is speaking: Send becomes Stop and the voice button
-  /// stands down.
-  final bool agentSpeaking;
-  final SendCallback onSend;
-  final VoidCallback onAbort;
-
-  /// Send for after the running turn rather than into it. Null where the
-  /// composer has no turn to wait on.
-  final SendCallback? onQueue;
-
-  /// Whether what is typed would steer the running turn: the room's rule,
-  /// asked rather than copied, since only it knows who is speaking. Given
-  /// with [onQueue]; without it the queue button never shows.
-  final bool Function(String text)? steers;
-
-  /// The project the composer is in, so the `/` and `@` menus offer what it
-  /// offers. Null is the default, the way it is everywhere a project is named.
-  final String? project;
-
-  /// The paired device [project] is on, null for this one.
-  final String? device;
-
-  /// Opens voice mode. Null draws no voice button.
-  final VoidCallback? onVoice;
-
-  /// Where this chat's shell starts: its own workspace. Null where the chat
-  /// does not exist yet, which draws no bar at all. Drawn in shell mode, live
-  /// as a `cd` moves it, and copied whole on a tap.
-  final String? workspace;
-
-  /// The project workspace the shell's turns call home — what words the bar's
-  /// fallback in the guest's vocabulary where this shell has one. Null beside
-  /// a null [workspace] only: they travel together from the page.
-  final String? workspaceHome;
+  /// The turn this sends into and where it is. A null `workspace` draws no
+  /// shell bar at all; otherwise the bar is live as a `cd` moves it, and
+  /// copied whole on a tap.
+  final ComposerBinding binding;
 
   @override
   ConsumerState<Composer> createState() => ComposerState();
@@ -120,14 +147,20 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   /// Held only so [embed] can put the caret in the field.
   final FocusNode _focus = FocusNode();
 
-  /// The rules, which the native shell's composer shares. This build resolves
-  /// the field's decoration and the buttons either side of it, so it follows
-  /// the logic's shape and leaves Send's flips to the buttons' own builders.
-  late final ComposerLogic _logic = ComposerLogic(widget.controller)
-    ..addListener(_reshaped);
+  /// The core's model, which the native shell's composer runs on too. This
+  /// build resolves the field's decoration and the buttons either side of
+  /// it, so it follows the model's shape and leaves Send's flips to the
+  /// buttons' own builders.
+  late final ComposerModel _model =
+      (widget.model ??
+            ComposerModel(
+              widget.controller,
+              pick: (kind) => ref.read(attachmentPickerProvider).pick(kind),
+            ))
+        ..addListener(_reshaped);
   late final Listenable _sendState = Listenable.merge([
-    _logic.canSend,
-    _logic.queues,
+    _model.canSend,
+    _model.queues,
   ]);
 
   @override
@@ -139,30 +172,22 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   @override
   void didUpdateWidget(Composer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _logic.controller = widget.controller;
+    if (widget.model == null) _model.field = widget.controller;
     _configure();
   }
 
-  void _configure() => _logic.configure(
-    agentSpeaking: widget.agentSpeaking,
-    onSend: widget.onSend,
-    onQueue: widget.onQueue,
-    steers: widget.steers,
-  );
+  void _configure() => _model.bind(widget.binding);
 
   @override
   void dispose() {
-    _logic.dispose();
+    _model.removeListener(_reshaped);
+    if (widget.model == null) _model.dispose();
     _focus.dispose();
     super.dispose();
   }
 
   void _reshaped() {
     if (mounted) setState(() {});
-  }
-
-  Future<void> _attach(AttachmentKind kind) async {
-    _add(await ref.read(attachmentPickerProvider).pick(kind));
   }
 
   /// Attach what the clipboard holds other than text. False where it held
@@ -189,7 +214,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   }
 
   void _add(List<Attachment> files) {
-    if (mounted) _logic.attach(files);
+    if (mounted) _model.attach(files);
   }
 
   /// Add [embed] to the message and put the caret on the line under it, so
@@ -205,16 +230,73 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   /// Put back a message that was sent and taken back, ahead of whatever has
   /// been typed or attached since.
   @override
-  void restore(Draft said) => _logic.restore(said);
+  void restore(Draft said) => _model.restore(said);
 
-  void _submit({bool queue = false}) => _logic.submit(queue: queue);
+  void _submit({bool queue = false}) => _model.submit(queue: queue);
+
+  /// How many lines the field grows to before it scrolls: two more per embed,
+  /// each taller than a line, up to four of them.
+  int get _maxLines => 6 + 2 * _model.embeds.clamp(0, 4);
+
+  Future<void> _run(ComposerAction action) async {
+    await _model.run(action);
+    if (action == ComposerAction.insertSkill ||
+        action == ComposerAction.insertAgent) {
+      _field.currentState?.reopen();
+    }
+  }
+
+  List<PopupMenuEntry<ComposerAction>> _plusMenu(BuildContext context) {
+    final theme = Theme.of(context);
+    final entries = <PopupMenuEntry<ComposerAction>>[];
+    int? group;
+    for (final action in ComposerAction.values) {
+      if (_place(action) case final _Plus entry) {
+        if (group != null && entry.group != group) {
+          entries.add(const PopupMenuDivider());
+        }
+        group = entry.group;
+        entries.add(_plusItem(theme, action, entry));
+      }
+    }
+    return entries;
+  }
+
+  PopupMenuItem<ComposerAction> _plusItem(
+    ThemeData theme,
+    ComposerAction action,
+    _Plus entry,
+  ) => PopupMenuItem(
+    value: action,
+    child: Row(
+      mainAxisAlignment: entry.hint == null
+          ? MainAxisAlignment.start
+          : MainAxisAlignment.spaceBetween,
+      children: [
+        if (entry.icon case final icon?) ...[
+          Icon(icon, size: 18),
+          const SizedBox(width: 12),
+        ],
+        Text(entry.label),
+        if (entry.hint case final hint?) ...[
+          const SizedBox(width: 24),
+          Text(
+            hint,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final shell = _logic.mode == ComposerMode.shell;
-    final wired = _logic.mode == ComposerMode.callback;
-    final embeds = _logic.embeds;
+    final shell = _model.mode == ComposerMode.shell;
+    final wired = _model.mode == ComposerMode.callback;
+    final embeds = _model.embeds;
 
     return Container(
       decoration: BoxDecoration(
@@ -230,10 +312,10 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
           key: _field,
           focusNode: _focus,
           controller: widget.controller,
-          project: widget.project,
-          device: widget.device,
+          project: widget.binding.project,
+          device: widget.binding.device,
           minLines: 1,
-          maxLines: _logic.maxLines,
+          maxLines: _maxLines,
           // The command in the face a command is read in, so what is about to
           // run looks like what it is while it is still being typed.
           style: shell ? codeBlockStyle(theme) : null,
@@ -275,13 +357,13 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
             children: [
               menu,
               if (shell) _cwdBar(theme),
-              if (_logic.attachments.isNotEmpty)
+              if (_model.attachments.isNotEmpty)
                 AttachmentStrip(
                   children: [
-                    for (final (i, attachment) in _logic.attachments.indexed)
+                    for (final (i, attachment) in _model.attachments.indexed)
                       AttachmentChip.pending(
                         attachment,
-                        onRemove: () => _logic.unattach(i),
+                        onRemove: () => _model.unattach(i),
                       ),
                   ],
                 ),
@@ -289,35 +371,11 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
                 children: [
                   // Each entry carries its action as its value, so it runs once
                   // the menu has closed rather than under it.
-                  PopupMenuButton<VoidCallback>(
+                  PopupMenuButton<ComposerAction>(
                     icon: const Icon(Icons.add),
                     tooltip: "Attach or insert",
-                    onSelected: (action) => action(),
-                    itemBuilder: (context) => [
-                      _attachItem(
-                        Icons.image_outlined,
-                        "Image",
-                        AttachmentKind.image,
-                      ),
-                      _attachItem(
-                        Icons.attach_file,
-                        "File",
-                        AttachmentKind.file,
-                      ),
-                      const PopupMenuDivider(),
-                      ...completionInsertItems(context, _field),
-                      const PopupMenuDivider(),
-                      PopupMenuItem(
-                        value: () => startGoal(widget.controller),
-                        child: const Row(
-                          children: [
-                            Icon(Icons.track_changes, size: 18),
-                            SizedBox(width: 12),
-                            Text("New Goal"),
-                          ],
-                        ),
-                      ),
-                    ],
+                    onSelected: _run,
+                    itemBuilder: _plusMenu,
                   ),
                   Expanded(child: field),
                   // The voice button and the field share the row, so the field
@@ -327,13 +385,13 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
                   // laid out again on every frame of it, and `Expanded` above
                   // takes whatever this gives up.
                   ValueListenableBuilder<bool>(
-                    valueListenable: _logic.canSend,
+                    valueListenable: _model.canSend,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         const SizedBox(width: 4),
                         IconButton(
-                          onPressed: widget.onVoice,
+                          onPressed: () => _run(ComposerAction.voice),
                           icon: const Icon(Icons.circle_outlined),
                           tooltip: "Voice mode",
                         ),
@@ -343,8 +401,8 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
                       duration: const Duration(milliseconds: 180),
                       curve: Curves.easeOut,
                       child:
-                          widget.onVoice == null ||
-                              widget.agentSpeaking ||
+                          widget.binding.onVoice == null ||
+                              widget.binding.agentSpeaking ||
                               canSend
                           ? const SizedBox.shrink()
                           : child,
@@ -354,7 +412,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
                   // running turn, in the slot the voice button gives up:
                   // outlined beside the filled Send, which steers.
                   ValueListenableBuilder<bool>(
-                    valueListenable: _logic.queues,
+                    valueListenable: _model.queues,
                     builder: (context, queues, _) => AnimatedSize(
                       duration: const Duration(milliseconds: 180),
                       curve: Curves.easeOut,
@@ -362,7 +420,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
                           ? Padding(
                               padding: const EdgeInsets.only(left: 4),
                               child: IconButton.outlined(
-                                onPressed: () => _submit(queue: true),
+                                onPressed: () => _run(ComposerAction.queue),
                                 icon: const Icon(Icons.schedule_send),
                                 tooltip: "Send after this turn (Alt+Enter)",
                               ),
@@ -378,14 +436,16 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
                   ListenableBuilder(
                     listenable: _sendState,
                     builder: (context, _) =>
-                        widget.agentSpeaking && !_logic.canSend.value
+                        widget.binding.agentSpeaking && !_model.canSend.value
                         ? IconButton.filled(
-                            onPressed: widget.onAbort,
+                            onPressed: () => _run(ComposerAction.stop),
                             icon: const Icon(Icons.stop),
                             tooltip: "Stop",
                           )
                         : IconButton.filled(
-                            onPressed: _logic.canSend.value ? _submit : null,
+                            onPressed: _model.canSend.value
+                                ? () => _run(ComposerAction.send)
+                                : null,
                             icon: Icon(
                               shell
                                   ? Icons.play_arrow
@@ -393,9 +453,9 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
                                   ? Icons.auto_awesome
                                   : Icons.send,
                             ),
-                            tooltip: _logic.mode.sendLabel(
-                              queues: _logic.queues.value,
-                              callback: _logic.callbackLabel,
+                            tooltip: _model.mode.sendLabel(
+                              queues: _model.queues.value,
+                              callback: _model.callback,
                             ),
                           ),
                   ),
@@ -450,12 +510,12 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   /// since a `cd` in an earlier one moved it. The completion menu's dressing,
   /// one row of it, and a tap copies the whole path out.
   Widget _cwdBar(ThemeData theme) {
-    final workspace = widget.workspace;
+    final workspace = widget.binding.workspace;
     if (workspace == null) return const SizedBox.shrink();
     final notifier = ref.watch(
       chatShellCwdProvider((
         workspace: workspace,
-        workspaceHome: widget.workspaceHome,
+        workspaceHome: widget.binding.workspaceHome,
       )),
     );
     // What stands in for the shell having said nothing yet, in the row's own
@@ -465,7 +525,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
     final fallback = workingDirectoryFallback(
       workspace: workspace,
       guestRoot: ref.watch(shellProvider).guestRoot,
-      home: widget.workspaceHome,
+      home: widget.binding.workspaceHome,
     );
     Widget row(String? live) => Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -514,15 +574,4 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
       builder: (context, value, _) => row(value),
     );
   }
-
-  PopupMenuItem<VoidCallback> _attachItem(
-    IconData icon,
-    String label,
-    AttachmentKind kind,
-  ) => PopupMenuItem(
-    value: () => _attach(kind),
-    child: Row(
-      children: [Icon(icon, size: 18), const SizedBox(width: 12), Text(label)],
-    ),
-  );
 }

@@ -70,7 +70,9 @@ import "package:agent_chat/domain/voice_model_store.dart";
 import "package:agent_chat/domain/project.dart" show ProjectRef;
 import "package:agent_chat/providers.dart"
     show DeviceProjects, PairedDevices, RemoteChats, RemoteProjectNotifier;
-import "package:agent_chat/ui/chat/mirror_controller.dart";
+import "package:agent_chat/app/app_items.dart";
+import "package:agent_chat/app/app_menus.dart";
+import "package:agent_chat/app/mirror_controller.dart";
 import "package:uuid/uuid.dart";
 
 /// A [LinkOpener] that records what it was asked to open, for UI tests that
@@ -191,6 +193,33 @@ class FakeLauncherIcons implements LauncherIcons {
 
   @override
   Future<void> use(AppIcon icon) async => used.add(icon);
+}
+
+/// The menu bar, keeping what it was last shown: each item's title and
+/// whether it was enabled, in any menu. [pick] is the user choosing one.
+class FakeAppMenus implements AppMenus {
+  Map<String, ({AppItem item, bool enabled})> shown = {};
+  void Function(AppItem item)? _picked;
+
+  @override
+  bool get available => true;
+
+  @override
+  set onPicked(void Function(AppItem item)? picked) => _picked = picked;
+
+  @override
+  void show(
+    List<AppMenu> menus, {
+    required String Function(AppItem item) title,
+    required bool Function(AppItem item) enabled,
+  }) => shown = {
+    for (final menu in menus)
+      for (final group in menu.groups)
+        for (final item in group)
+          title(item): (item: item, enabled: enabled(item)),
+  };
+
+  void pick(String title) => _picked!(shown[title]!.item);
 }
 
 /// The automatic update's platform half, as a test sees it: whether the

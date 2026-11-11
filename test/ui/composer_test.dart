@@ -3,6 +3,7 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/app/composer.dart" show ComposerBinding;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/quote.dart";
@@ -49,16 +50,18 @@ void main() {
         body: Composer(
           key: key,
           controller: controller,
-          agentSpeaking: agentSpeaking,
-          onSend: (text, attachments) {
-            sent.add(text);
-            sentAttachments.add(attachments);
-          },
-          onQueue: (text, _) => queued.add(text),
-          steers: steers ?? (text) => !isCommand(text),
-          onAbort: () {},
-          workspace: workspace,
-          workspaceHome: workspaceHome,
+          binding: ComposerBinding(
+            agentSpeaking: agentSpeaking,
+            onSend: (text, attachments) {
+              sent.add(text);
+              sentAttachments.add(attachments);
+            },
+            onQueue: (text, _) => queued.add(text),
+            steers: steers ?? (text) => !isCommand(text),
+            onAbort: () {},
+            workspace: workspace,
+            workspaceHome: workspaceHome,
+          ),
         ),
       ),
     ),

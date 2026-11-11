@@ -7,11 +7,12 @@ import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/ui/app_shell.dart";
-import "package:agent_chat/ui/sidebar/chat_groups.dart";
+import "package:agent_chat/ui/sidebar/chat_headings.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/theme.dart";
 
+import "../fakes.dart";
 import "../harness.dart";
 
 void main() {
@@ -247,20 +248,17 @@ void main() {
     });
   });
 
-  // macOS, over a delegate that keeps what the platform would have been sent.
-  // The variant sets the platform and puts it back, which flutter_test checks
-  // before a tear-down would run.
+  // macOS, over a menu bar that keeps what it was shown. The variant sets the
+  // platform and puts it back, which flutter_test checks before a tear-down
+  // would run.
   group("the menu bar", () {
     final mac = TargetPlatformVariant.only(TargetPlatform.macOS);
-    late _Menus menus;
+    late FakeAppMenus menus;
 
     Future<void> pumpMac(WidgetTester tester) async {
-      final previous = WidgetsBinding.instance.platformMenuDelegate;
-      menus = _Menus();
-      WidgetsBinding.instance.platformMenuDelegate = menus;
-      addTearDown(
-        () => WidgetsBinding.instance.platformMenuDelegate = previous,
-      );
+      menus = FakeAppMenus();
+      app.dispose();
+      app = TestApp.create(menus: menus);
       await pumpAt(tester, const Size(1200, 800));
     }
 
@@ -269,9 +267,9 @@ void main() {
     ) async {
       await pumpMac(tester);
 
-      expect(menus.item("Settings…"), isNotNull);
-      expect(menus.item("Profile…"), isNotNull);
-      expect(menus.item("Marketplace…"), isNotNull);
+      expect(menus.shown, contains("Settings…"));
+      expect(menus.shown, contains("Profile…"));
+      expect(menus.shown, contains("Marketplace…"));
       expect(find.text("Marketplace"), findsNothing);
     }, variant: mac);
 
@@ -294,49 +292,55 @@ void main() {
       tester,
     ) async {
       await pumpMac(tester);
-      expect(menus.item("Pin Chat")!.onSelected, isNull);
+      expect(menus.shown["Pin Chat"]!.enabled, isFalse);
 
       await io(tester, () => app.openSomeChat());
       await settleIo(tester);
 
-      expect(menus.item("Pin Chat")!.onSelected, isNotNull);
+      expect(menus.shown["Pin Chat"]!.enabled, isTrue);
     }, variant: mac);
 
     testWidgets("an item runs its command", (tester) async {
       await pumpMac(tester);
 
-      menus.item("Hide Sidebar")!.onSelected!();
+      menus.pick("Hide Sidebar");
       await tester.pumpAndSettle();
 
       expect(find.byType(Sidebar), findsNothing);
-      expect(menus.item("Show Sidebar"), isNotNull);
+      expect(menus.shown, contains("Show Sidebar"));
+    }, variant: mac);
+
+    // The menu holds the keys of what it shows: Flutter's handler standing
+    // down for them is what keeps a key from running its item twice.
+    testWidgets("holds the keys, which Flutter's handler leaves to it", (
+      tester,
+    ) async {
+      await pumpMac(tester);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      final handled = await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await tester.pumpAndSettle();
+
+      expect(handled, isFalse, reason: "left to the menu bar");
+      expect(find.byType(Sidebar), findsOneWidget);
+    }, variant: mac);
+
+    testWidgets("with no menu bar, Flutter's handler runs the keys", (
+      tester,
+    ) async {
+      await pumpAt(tester, const Size(1200, 800));
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Sidebar), findsNothing);
     }, variant: mac);
   });
-}
-
-class _Menus extends PlatformMenuDelegate {
-  List<PlatformMenuItem> _menus = const [];
-
-  /// The item labelled [label], in any menu.
-  PlatformMenuItem? item(String label) {
-    // A group's members are not its descendants, so the walk is by hand.
-    Iterable<PlatformMenuItem> all(PlatformMenuItem item) => [
-      item,
-      if (item is PlatformMenu) ...item.menus.expand(all),
-      if (item is PlatformMenuItemGroup) ...item.members.expand(all),
-    ];
-    return _menus.expand(all).where((item) => item.label == label).firstOrNull;
-  }
-
-  @override
-  void setMenus(List<PlatformMenuItem> topLevelMenus) => _menus = topLevelMenus;
-
-  @override
-  void clearMenus() => _menus = const [];
-
-  @override
-  bool debugLockDelegate(BuildContext context) => true;
-
-  @override
-  bool debugUnlockDelegate(BuildContext context) => true;
 }

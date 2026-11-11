@@ -1,6 +1,8 @@
 import "dart:async";
 
 import "package:entoli_glass/entoli_glass.dart";
+
+import "../../app/chat_groups.dart" as app show ChatPeriod;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -9,16 +11,17 @@ import "../../domain/chat_search.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
 import "../../providers.dart";
-import "../chat_actions.dart";
+import "../../app/chat_edits.dart";
 import "../marketplace/marketplace_page.dart";
 import "../profile/profile_page.dart";
 import "../project_actions.dart";
 import "../selection.dart";
 import "../settings/settings_category.dart";
-import "../sidebar/chat_groups.dart";
+import "../../app/chat_groups.dart" show groupChatsByDate;
 import "../sidebar/project_palette.dart";
-import "../sidebar/remote_projects.dart";
+import "../../app/remote_projects.dart";
 import "../app_routes.dart";
+import "glyphs.dart";
 
 /// What the native sidebar's search field holds. Dart's rather than the
 /// field's, so the one rule the Flutter sidebar searches by is the one here,
@@ -38,18 +41,6 @@ class ShellSearch extends Notifier<String> {
 final shellSearchProvider = NotifierProvider<ShellSearch, String>(
   ShellSearch.new,
 );
-
-/// An SF Symbol for [project], the one [projectGlyph] draws in Material.
-String projectSymbol(String? project) {
-  final icon = projectIcon(project);
-  if (icon == Icons.visibility_off) return "eye.slash";
-  if (icon == Icons.groups) return "person.3";
-  if (icon == Icons.verified_user) return "checkmark.shield";
-  return project == null ? "house" : "folder";
-}
-
-/// A paired device's project, which has no symbol of its own.
-const remoteSymbol = "laptopcomputer.and.iphone";
 
 /// What `Sidebar` draws, read the same way, as the native sidebar's
 /// snapshot: `ShellPublisher` sends it.
@@ -75,7 +66,7 @@ SidebarSnapshot _sidebarSnapshot(Ref ref) {
   ProjectChoice local(String? p) => ProjectChoice(
     project: p,
     label: projectLabel(p),
-    symbol: projectSymbol(p),
+    glyph: projectShellGlyph(p),
     omada: ref.watch(omadaOnProvider(p)),
     count: counts[p] ?? 0,
   );
@@ -86,7 +77,7 @@ SidebarSnapshot _sidebarSnapshot(Ref ref) {
         device: e.scope.device,
         project: e.scope.project,
         label: e.label,
-        symbol: remoteSymbol,
+        glyph: Glyph.remote,
         omada: e.omada,
         count: e.count,
       ),
@@ -95,7 +86,7 @@ SidebarSnapshot _sidebarSnapshot(Ref ref) {
   final remote = selected.device != null;
   final ProjectChoice current;
   final List<SidebarGroup> groups;
-  final String? empty;
+  final SidebarEmpty? empty;
   if (remote) {
     current =
         mirrored
@@ -111,7 +102,7 @@ SidebarSnapshot _sidebarSnapshot(Ref ref) {
             peers[selected.device]?.name ?? selected.device!,
             selected.project,
           ),
-          symbol: remoteSymbol,
+          glyph: Glyph.remote,
         );
     final mine =
         remotes
@@ -128,18 +119,20 @@ SidebarSnapshot _sidebarSnapshot(Ref ref) {
         if (titleMatches(e.state, needle))
           SidebarRow(
             id: e.chatId,
-            title: e.state.title.orUntitled,
+            title: e.state.title,
             pinned: e.state.pinned,
             offline: !e.online,
             mutable: e.online,
             remote: true,
           ),
     ];
-    groups = [if (rows.isNotEmpty) SidebarGroup(heading: "", rows: rows)];
+    groups = [
+      if (rows.isNotEmpty) SidebarGroup(period: ChatPeriod.none, rows: rows),
+    ];
     empty = mine.isEmpty
-        ? "Nothing mirrored from this device yet."
+        ? SidebarEmpty.noMirrored
         : rows.isEmpty
-        ? "No chat's title matches that."
+        ? SidebarEmpty.noMatch
         : null;
   } else {
     current = local(selected.project);
@@ -148,12 +141,20 @@ SidebarSnapshot _sidebarSnapshot(Ref ref) {
     groups = [
       for (final group in groupChatsByDate(found, now: DateTime.now()))
         SidebarGroup(
-          heading: group.heading,
+          period: switch (group.period) {
+            app.ChatPeriod.pinned => ChatPeriod.pinned,
+            app.ChatPeriod.today => ChatPeriod.today,
+            app.ChatPeriod.yesterday => ChatPeriod.yesterday,
+            app.ChatPeriod.previousWeek => ChatPeriod.previousWeek,
+            app.ChatPeriod.previousMonth => ChatPeriod.previousMonth,
+            app.ChatPeriod.month => ChatPeriod.month,
+          },
+          month: group.month?.millisecondsSinceEpoch,
           rows: [
             for (final chat in group.chats)
               SidebarRow(
                 id: chat.id,
-                title: chat.title.orUntitled,
+                title: chat.title,
                 pinned: chat.pinned,
                 busy: busy.contains(chat.id),
                 temporary: chat.tempTtlExpiresAt != null,
@@ -162,9 +163,9 @@ SidebarSnapshot _sidebarSnapshot(Ref ref) {
         ),
     ];
     empty = mine.isEmpty
-        ? "No chats in this project yet."
+        ? SidebarEmpty.noChats
         : found.isEmpty
-        ? "No chat's title matches that."
+        ? SidebarEmpty.noMatch
         : null;
   }
 
@@ -187,8 +188,6 @@ SidebarSnapshot _sidebarSnapshot(Ref ref) {
   );
 }
 
-/// The app's own, under names [SidebarRunner]'s methods do not hide.
-const _selectProject = selectProject;
 const _createProject = createProject;
 
 /// Runs what the native sidebar sends, in [context] under the Navigator: the
@@ -238,8 +237,12 @@ class SidebarRunner implements SidebarIntents {
       _closing(() => ref.read(selectedChatIdProvider.notifier).select(null));
 
   @override
-  Future<void> selectProject(String? device, String? project) =>
-      _closing(() => _selectProject(ref, (device: device, project: project)));
+  Future<void> selectProject(String? device, String? project) => _closing(
+    () => ref.read(selectedProjectProvider.notifier).switchTo((
+      device: device,
+      project: project,
+    )),
+  );
 
   @override
   Future<void> pin(String id, bool pinned) =>
@@ -257,18 +260,20 @@ class SidebarRunner implements SidebarIntents {
     () => _edit(id, (chat) async {
       if (project == chat.project) return;
       await _edits.move(chat, project);
-      _selectProject(ref, localProject(project));
+      ref
+          .read(selectedProjectProvider.notifier)
+          .switchTo(localProject(project));
     }),
   );
 
   @override
-  Future<String?> createProject(
+  Future<ProjectError?> createProject(
     String name,
     String description,
     bool omada,
   ) async {
     final named = projectNameFrom(name);
-    if (named == null) return "That is not a name a project can have.";
+    if (named == null) return ProjectError.badName;
     try {
       await _createProject((
         name: named,
@@ -278,7 +283,7 @@ class SidebarRunner implements SidebarIntents {
       return null;
     } catch (e) {
       logFailure("shell", "createProject", e);
-      return "The project could not be created.";
+      return ProjectError.failed;
     }
   }
 

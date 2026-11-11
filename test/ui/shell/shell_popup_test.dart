@@ -2,9 +2,15 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/ui/app_chrome.dart" show appChromeProvider;
+import "package:agent_chat/ui/shell/shell_app_chrome.dart";
+import "package:agent_chat/ui/chat/chat_chrome.dart" show chatChromeProvider;
+import "package:agent_chat/ui/shell/shell_chat_chrome.dart";
+import "package:agent_chat/ui/shell/shell_page_bar.dart" show drawShellPageBar;
+import "package:agent_chat/ui/widgets/page_bar.dart" show pageBarDrawProvider;
 import "package:agent_chat/domain/reaction.dart";
 import "package:agent_chat/ui/chat/widgets/reaction_button.dart";
-import "package:agent_chat/ui/widgets/liquid_glass.dart";
+import "package:agent_chat/app/frontend.dart";
 
 import "fake_native_shell.dart";
 
@@ -25,8 +31,11 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          liquidGlassProvider.overrideWithValue(
-            const LiquidGlass(available: true, on: true),
+          pageBarDrawProvider.overrideWithValue(drawShellPageBar),
+          chatChromeProvider.overrideWithValue(const ShellChatChrome()),
+          appChromeProvider.overrideWithValue(const ShellAppChrome()),
+          frontendProvider.overrideWithValue(
+            const FrontendChoice(current: Frontend.swiftUI, native: true),
           ),
         ],
         child: MaterialApp(

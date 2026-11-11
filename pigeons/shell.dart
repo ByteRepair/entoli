@@ -20,6 +20,39 @@ import "package:pigeon/pigeon.dart";
         "packages/entoli_glass/darwin/entoli_glass/Sources/entoli_glass/Contract/ShellContract.g.swift",
   ),
 )
+/// What an icon stands for, never how it is drawn: the client picks its own
+/// picture for each, in an exhaustive switch.
+enum Glyph {
+  add,
+  check,
+  checklist,
+  close,
+  copy,
+  newFolder,
+  delete,
+  edit,
+  filter,
+  textSize,
+  openInBrowser,
+  openExternal,
+  restart,
+  save,
+  show,
+  hidden,
+  more,
+  terminal,
+  globe,
+  browse,
+  document,
+  shield,
+  home,
+  folder,
+  team,
+  remote,
+  info,
+  tune,
+}
+
 /// The window around everything: whether a Flutter page covers the
 /// conversation — the native chrome steps aside for it — whether the sidebar
 /// is shown, and which appearance the app wears, which may not be the
@@ -41,7 +74,7 @@ class ProjectChoice {
     this.device,
     this.project,
     required this.label,
-    required this.symbol,
+    this.glyph,
     this.omada = false,
     this.count = 0,
   });
@@ -50,8 +83,8 @@ class ProjectChoice {
   String? project;
   String label;
 
-  /// An SF Symbol's name; empty for none.
-  String symbol;
+  /// Null for none.
+  Glyph? glyph;
 
   /// Drawn italic, as the Flutter app draws an Omada project's name.
   bool omada;
@@ -72,6 +105,8 @@ class SidebarRow {
   });
 
   String id;
+
+  /// Empty for a chat not named yet.
   String title;
   bool pinned;
 
@@ -93,10 +128,31 @@ class SidebarRow {
 
 /// The rows under one heading; a paired device's list is one group with no
 /// heading, a mirror answering to no date this sidebar could place it under.
+/// How long ago a group's chats last changed, or that they are pinned; the
+/// client words the heading.
+enum ChatPeriod {
+  pinned,
+  today,
+  yesterday,
+  previousWeek,
+  previousMonth,
+  month,
+  none,
+}
+
 class SidebarGroup {
-  String heading;
+  SidebarGroup({required this.period, this.month, this.rows = const []});
+
+  /// [ChatPeriod.none] for a list with no headings: a paired device's.
+  ChatPeriod period;
+
+  /// For [ChatPeriod.month], its first day, in milliseconds since the epoch.
+  int? month;
   List<SidebarRow> rows;
 }
+
+/// Why the sidebar has no rows.
+enum SidebarEmpty { noChats, noMirrored, noMatch }
 
 /// A page the app opens over the conversation from the shell's chrome.
 enum ShellPage {
@@ -134,8 +190,8 @@ class SidebarSnapshot {
   /// What the search field holds: the app's, so switching project clears it.
   String query;
 
-  /// What to say where there are no rows, null where there are.
-  String? empty;
+  /// Why there are no rows, null where there are.
+  SidebarEmpty? empty;
 
   /// This device's projects, the default and the built-ins first: the
   /// switcher's, and where a local chat can be moved to.
@@ -158,7 +214,7 @@ class TitleBarMenuItem {
     required this.id,
     required this.label,
     this.hint,
-    this.symbol,
+    this.glyph,
     this.checked = false,
   });
 
@@ -169,8 +225,8 @@ class TitleBarMenuItem {
   /// Drawn after the label, quieter: a key or a trigger.
   String? hint;
 
-  /// An SF Symbol's name, drawn before the label.
-  String? symbol;
+  /// Drawn before the label.
+  Glyph? glyph;
 
   /// Ticked, as a setting the choice turns on and off.
   bool checked;
@@ -181,7 +237,7 @@ class TitleBarItem {
   TitleBarItem({
     required this.id,
     required this.label,
-    this.symbol,
+    this.glyph,
     this.spinner = false,
     this.style = TitleBarItemStyle.icon,
     this.enabled = true,
@@ -194,8 +250,8 @@ class TitleBarItem {
   /// Its tooltip and accessibility label, and the word a text one shows.
   String label;
 
-  /// An SF Symbol's name; none for the spinner.
-  String? symbol;
+  /// None for the spinner, and for an item the client words instead.
+  Glyph? glyph;
   bool spinner;
   TitleBarItemStyle style;
   bool enabled;
@@ -209,9 +265,9 @@ class TitleBarItem {
 enum TitleBarLeading { back, close }
 
 /// A title bar, whichever page it is for: one shape, so one view draws them
-/// all. The chat's is [NativeShell.chatBar]; the bar of the Flutter page over
-/// the conversation is [NativeShell.pageBar], not [present] where no page has
-/// one.
+/// all. The bar of the Flutter page over the conversation is
+/// [NativeShell.pageBar], not [present] where no page has one; the chat's own
+/// the client builds from [ChatBarSnapshot].
 class TitleBarSnapshot {
   TitleBarSnapshot({
     this.present = true,
@@ -234,6 +290,46 @@ class TitleBarSnapshot {
   List<TitleBarItem> items;
 }
 
+/// The chat's title bar, as the chat's state: the client draws its own bar
+/// from it, its own buttons and words.
+class ChatBarSnapshot {
+  ChatBarSnapshot({
+    this.title = "",
+    this.draft = false,
+    this.project,
+    this.pinned = false,
+    this.expiresAt,
+    this.running = false,
+    this.planDone,
+    this.planTotal,
+    this.settings = true,
+  });
+
+  /// Empty for a chat not named yet.
+  String title;
+
+  /// The new-chat screen's, there being no chat yet.
+  bool draft;
+
+  /// The project's label, null for the default project.
+  String? project;
+  bool pinned;
+
+  /// When a temporary chat expires, in milliseconds since the epoch.
+  int? expiresAt;
+  bool running;
+
+  /// The plan's sections done and in all, where the chat has a plan.
+  int? planDone;
+  int? planTotal;
+
+  /// Whether its settings can be opened: not a paired device's new chat.
+  bool settings;
+}
+
+/// Where the chat's bar can take the app.
+enum ChatBarDestination { plan, settings }
+
 /// A pending file.
 class ComposerAttachment {
   String name;
@@ -242,8 +338,8 @@ class ComposerAttachment {
 
 /// One entry of the composer's `/` or `@` menu.
 class ComposerMenuItem {
-  /// The trigger and the name, as they will be typed.
-  String label;
+  /// The skill's or the agent's name, without its trigger.
+  String name;
 
   /// Which menu it is in: an agent's row leads with its face.
   ComposerTrigger trigger;
@@ -268,34 +364,38 @@ enum InputMode { message, shell, callback }
 /// Everything the native composer draws apart from its text, which is
 /// [ComposerValueSnapshot]. Not [present] where no page has a composer: a
 /// question stands in its place, or the project needs setting up.
+/// Which callback the field holds, for the client to name: the core says
+/// what it is, never what to call it.
+enum CallbackKind {
+  compact,
+  setGoal,
+  resumeGoal,
+  pauseGoal,
+  clearGoal,
+  showGoal,
+}
+
 class ComposerSnapshot {
   ComposerSnapshot({
     required this.present,
     this.mode = InputMode.message,
-    this.hint = "",
-    this.sendLabel = "Send",
+    this.callback,
     this.canSend = false,
     this.queues = false,
     this.speaking = false,
     this.voice = false,
-    this.maxLines = 6,
     this.attachments = const [],
     this.menu = const [],
     this.cwd,
     this.cards = const {},
-    this.accent = 0xFF007AFF,
-    this.dark = false,
   });
 
   bool present;
 
   InputMode mode;
 
-  /// What an empty field says.
-  String hint;
-
-  /// What Send is called where it is not Stop.
-  String sendLabel;
+  /// In [InputMode.callback], which one.
+  CallbackKind? callback;
   bool canSend;
 
   /// What is typed would steer the running turn, so Queue is on offer.
@@ -306,7 +406,6 @@ class ComposerSnapshot {
 
   /// Voice mode can be opened from here.
   bool voice;
-  int maxLines;
   List<ComposerAttachment> attachments;
 
   /// The open completion menu, empty for none.
@@ -317,51 +416,51 @@ class ComposerSnapshot {
 
   /// The embeds in the field, by the UTF-16 code unit standing for each.
   Map<int, ComposerCard> cards;
-
-  /// The app's primary colour, as ARGB, which the app's controls wear.
-  int accent;
-
-  /// Which appearance the app is drawn in.
-  bool dark;
 }
 
 /// The composer's text and selection, in UTF-16 code units, sent when the app
 /// changed them: a completion taken, a message restored, the field cleared on
-/// send. What the user typed is never sent back to them.
+/// send. [revision] counts those, so a value the same as one the user typed
+/// is still a change; what the user typed is never sent back to them.
 class ComposerValueSnapshot {
   String text;
   int start;
   int end;
+  int revision;
 }
 
 /// One thing the chat has running: a pill, standing alone or in its group.
+/// What a chat has running beside the reply.
+enum RunningKind { browser, job, subAgent }
+
+/// One thing the chat has running: what it is and its name, the client
+/// wording the pill, its group and its tooltip.
 class RunningSnapshot {
   RunningSnapshot({
     required this.id,
-    required this.label,
-    required this.tooltip,
-    this.group,
-    this.symbol,
-    this.mono = false,
+    required this.kind,
+    required this.name,
+    this.hidden = false,
   });
 
   /// What [TurnIntents.running] names it by.
   int id;
-  String label;
-  String tooltip;
+  RunningKind kind;
 
-  /// The kind it is gathered under, as a singular noun; null standing alone.
-  String? group;
+  /// The browser page's host, the job's command, the sub-agent's name.
+  String name;
 
-  /// An SF Symbol in place of the spinner.
-  String? symbol;
-  bool mono;
+  /// The browser is hidden from the agent.
+  bool hidden;
 }
 
 /// A say the turn has not read yet: its id and its one line.
 class SteerSnapshot {
   String id;
-  String line;
+
+  /// What was said, and the files it carried.
+  String text;
+  List<String> files;
 }
 
 /// A call the turn stopped on, and which answers it offers.
@@ -369,7 +468,7 @@ class ApprovalSnapshot {
   ApprovalSnapshot({
     required this.id,
     required this.title,
-    required this.symbol,
+    required this.glyph,
     required this.tool,
     this.detail,
     this.allow = true,
@@ -379,7 +478,7 @@ class ApprovalSnapshot {
 
   String id;
   String title;
-  String symbol;
+  Glyph glyph;
   String tool;
 
   /// The call as the agent worded it, verbatim.
@@ -417,18 +516,26 @@ class QuestionRequest {
 /// Where a chat's goal stands: `GoalStatus` in the domain.
 enum GoalPhase { active, paused, met, blocked }
 
+/// Why a project could not be made: the name was not one, or the making
+/// failed.
+enum ProjectError { badName, failed }
+
 /// The chat's goal, the row above the composer while there is one.
 class GoalSnapshot {
   String objective;
   GoalPhase phase;
 
-  /// What a goal at [phase] is called — "Goal paused" — worded by Dart, so
-  /// the two rows read alike.
-  String label;
+  /// Why it stands where it does: the user's pause, the reviewer's verdict.
+  String? reason;
+}
 
-  /// The goal in full — where it stands and the reviewer's last word — for
-  /// the row's tooltip.
-  String summary;
+/// An unfinished turn the resume bar offers to carry on.
+class ResumeSnapshot {
+  /// When it started, in milliseconds since the epoch.
+  int startedAt;
+
+  /// What the backend said of it, where it said something.
+  String? notice;
 }
 
 /// What a running turn puts above the composer: the offer to carry on an
@@ -449,8 +556,8 @@ class TurnSnapshot {
   /// The chat's goal, null for none.
   GoalSnapshot? goal;
 
-  /// The resume bar's line, null for none.
-  String? resume;
+  /// The unfinished turn to carry on, null for none.
+  ResumeSnapshot? resume;
   List<RunningSnapshot> running;
   List<SteerSnapshot> steers;
 
@@ -547,26 +654,22 @@ enum VoicePhase { off, starting, listening, thinking, speaking, failed }
 class VoiceSnapshot {
   VoiceSnapshot({
     required this.present,
-    this.title = "Voice",
+    this.title,
     this.status = VoicePhase.off,
-    this.word = "",
     this.paused = false,
     this.hushed = false,
     this.pushToTalk = false,
     this.on = false,
     this.error,
     this.lines = const [],
-    this.heard = 0xFF6C63FF,
-    this.spoken = 0xFF2DD4BF,
   });
 
   bool present;
-  String title;
+
+  /// The chat's title; null for one not named yet.
+  String? title;
 
   VoicePhase status;
-
-  /// What the screen says this is.
-  String word;
   bool paused;
 
   /// Shut and silent: the one look that is the state's rather than the
@@ -580,10 +683,6 @@ class VoiceSnapshot {
 
   /// The transcript's last lines.
   List<VoiceLineSnapshot> lines;
-
-  /// The two voices' colours, as ARGB in this appearance.
-  int heard;
-  int spoken;
 }
 
 /// One row of the palette: a project to switch to, or a chat to open.
@@ -594,9 +693,10 @@ class PaletteItem {
     this.chat,
     this.device,
     this.project,
-    this.symbol = "",
+    this.glyph,
     this.omada = false,
-    this.trailing = "",
+    this.count,
+    this.chatProject,
     this.busy = false,
     this.current = false,
   });
@@ -611,11 +711,14 @@ class PaletteItem {
   /// A project's `ProjectRef`.
   String? device;
   String? project;
-  String symbol;
+  Glyph? glyph;
   bool omada;
 
-  /// A project's chat count, or a chat's project.
-  String trailing;
+  /// A project's chat count.
+  int? count;
+
+  /// A chat's project, as named.
+  String? chatProject;
 
   /// It, or one of its chats, is running.
   bool busy;
@@ -625,8 +728,13 @@ class PaletteItem {
 }
 
 /// A heading, empty for none, and its rows.
+/// Which of the palette's lists a section is: the default and built-in
+/// projects, the user's own below a rule, the paired devices', every match
+/// while searching, and the chats.
+enum PaletteList { projects, mine, devices, found, chats }
+
 class PaletteSection {
-  String heading;
+  PaletteList list;
   List<PaletteItem> items;
 }
 
@@ -673,13 +781,14 @@ class ChoiceStrip {
 /// changed.
 @HostApi(dartHostTestHandler: "TestNativeShell")
 abstract class NativeShell {
-  /// Whether the window is the shell's. The client decides at launch, from
-  /// `settings.json`, before Dart runs; the app draws for whichever it was.
-  bool hosting();
+  /// Which frontend draws in the window: this one's chrome, or the Flutter
+  /// one alone, which is what the window is until this is said. Said once,
+  /// at launch, before the first frame.
+  void shell(bool on);
 
   void window(WindowSnapshot snapshot);
   void sidebar(SidebarSnapshot snapshot);
-  void chatBar(TitleBarSnapshot snapshot);
+  void chatBar(ChatBarSnapshot snapshot);
   void pageBar(TitleBarSnapshot snapshot);
   void composer(ComposerSnapshot snapshot);
   void composerValue(ComposerValueSnapshot snapshot);
@@ -731,9 +840,9 @@ abstract class SidebarIntents {
   void move(String id, String? project);
   void delete(String id);
 
-  /// Answers an error to show, or null once the project is made.
+  /// Answers what went wrong, or null once the project is made.
   @async
-  String? createProject(String name, String description, bool omada);
+  ProjectError? createProject(String name, String description, bool omada);
   void openPage(ShellPage page);
 }
 
@@ -746,10 +855,21 @@ abstract class PaletteIntents {
   void pickChat(String chat);
 }
 
-/// Which files [ComposerIntents.attach] asks for.
-enum AttachKind { image, file }
+/// What a user can do in the composer: the core's `ComposerAction`, which
+/// the client places, each in a switch of its own with no default.
+enum ComposerAction {
+  send,
+  queue,
+  stop,
+  voice,
+  attachImage,
+  attachFile,
+  insertSkill,
+  insertAgent,
+  newGoal,
+}
 
-/// Which menu [ComposerIntents.trigger] opens: `/`'s skills or `@`'s agents.
+/// A completion menu: `/`'s skills or `@`'s agents.
 enum ComposerTrigger { skill, agent }
 
 /// The composer on screen.
@@ -760,15 +880,7 @@ abstract class ComposerIntents {
 
   /// The field took the keyboard, or gave it up.
   void focused(bool focused);
-  void send();
-  void queue();
-  void stop();
-  void voice();
-  void attach(AttachKind kind);
-  void trigger(ComposerTrigger kind);
-
-  /// The `+` menu's New Goal: `/goal ` at the head of the field.
-  void goal();
+  void run(ComposerAction action);
 
   /// A row of the menu as last sent.
   void pick(int index);
@@ -779,7 +891,6 @@ abstract class ComposerIntents {
   /// Take files off the clipboard: answers whether there were any.
   @async
   bool paste();
-  void copyCwd();
 }
 
 /// An answer to an approval.
@@ -822,8 +933,13 @@ abstract class VoiceIntents {
   void done();
 }
 
-/// A title bar: the chat's under the channel suffix `chatBar`, a page's under
-/// `pageBar`.
+/// The chat's title bar.
+@FlutterApi()
+abstract class ChatBarIntents {
+  void open(ChatBarDestination to);
+}
+
+/// The title bar of a Flutter page over the conversation.
 @FlutterApi()
 abstract class TitleBarIntents {
   void back();

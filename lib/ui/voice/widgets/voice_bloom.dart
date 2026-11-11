@@ -3,7 +3,8 @@ import "dart:math" as math;
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 
-import "../voice_controller.dart";
+import "../../../app/voice_controller.dart";
+import "../voice_look.dart";
 
 /// What voice mode is mostly made of: an orb of light under the word for what
 /// it is doing. It breathes while it listens and swells with the microphone on

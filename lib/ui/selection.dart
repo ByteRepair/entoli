@@ -1,140 +1,26 @@
-/// What the app has open — which project, which chat in it — and the
-/// actions that change either: app state, read and changed from several pages.
+/// The Flutter frontend's ways to change what is open, each closing the
+/// drawer it was pressed in. The state is the core's: `lib/app/selection.dart`.
 library;
-
-import "dart:async";
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../core/log.dart";
-import "../domain/chat_intents.dart" show ChatPresenter;
+import "../app/selection.dart";
 import "../domain/chat_meta.dart";
 import "../domain/models.dart";
 import "../domain/project.dart";
-import "../providers.dart";
-import "chat/chat_controller.dart";
 import "widgets/nav_drawer.dart";
 
-/// Which chat the pane is showing, or null for the new-chat screen. **Null is
-/// a screen rather than a chat to be made**: nothing is written until there is
-/// something to say — see "Nothing selected is a new chat".
-class SelectedChatId extends Notifier<String?> {
-  @override
-  String? build() => null;
-
-  void select(String? id) => state = id;
-
-  /// [chat] in the pane, into its project first: the sidebar lists one
-  /// project, and a chat it does not list would be open with nothing saying
-  /// so.
-  void reveal(ChatState chat) {
-    ref
-        .read(selectedProjectProvider.notifier)
-        .select(localProject(chat.project));
-    state = chat.id;
-  }
-
-  /// Make a chat in the project being shown and select it. **The one place a
-  /// chat is created from the UI** — a method here rather than a function
-  /// beside the widgets because not every caller has a `WidgetRef`.
-  ///
-  /// [meta] is the settings it should run its first turn under, for a screen
-  /// that offered them before there was a chat to write them on. Null is a
-  /// chat that could not be made, which is already logged.
-  Future<String?> create({ChatMeta? meta}) async {
-    try {
-      final at = ref.read(selectedProjectProvider);
-      // A paired device's project is not a directory here; [startChatWith]
-      // starts a chat there.
-      if (at.device != null) {
-        throw StateError("${at.project} is on ${at.device}");
-      }
-      final chat = await ref
-          .read(chatRepositoryProvider)
-          .createChat(project: at.project, meta: meta);
-      state = chat.state.id;
-      ref.invalidate(chatListProvider);
-      return chat.state.id;
-    } catch (e) {
-      logFailure("chat", "could not start a chat", e);
-      return null;
-    }
-  }
-}
-
-final selectedChatIdProvider = NotifierProvider<SelectedChatId, String?>(
-  SelectedChatId.new,
-);
-
-/// Text an `entoli://new` link put in the new-chat composer, unsent: the
-/// screen takes it and clears it. Null is nothing waiting.
-class NewChatPrompt extends Notifier<String?> {
-  @override
-  String? build() => null;
-
-  void set(String? prompt) => state = prompt;
-}
-
-final newChatPromptProvider = NotifierProvider<NewChatPrompt, String?>(
-  NewChatPrompt.new,
-);
-
-/// Which project the sidebar is showing, on whichever device, and where a new
-/// chat goes. This device's default project is what the app opens in.
-class SelectedProject extends Notifier<ProjectRef> {
-  @override
-  ProjectRef build() => localProject(null);
-
-  void select(ProjectRef project) => state = project;
-}
-
-final selectedProjectProvider = NotifierProvider<SelectedProject, ProjectRef>(
-  SelectedProject.new,
-);
-
-/// Whether the sidebar is docked beside the chat pane where the window is wide
-/// enough for it — the user's choice, which a narrow window does not change:
-/// there the sidebar is a drawer whichever this says. See `SidePanelFrame`.
-class SidebarShown extends Notifier<bool> {
-  @override
-  bool build() => true;
-
-  void set(bool shown) => state = shown;
-
-  void toggle() => state = !state;
-}
-
-final sidebarShownProvider = NotifierProvider<SidebarShown, bool>(
-  SidebarShown.new,
-);
-
-/// A chat put on screen from outside the window — Shortcuts — where there
-/// is no drawer to close: its project in the sidebar, and it in the pane.
-class SelectionChatPresenter implements ChatPresenter {
-  SelectionChatPresenter(this._ref);
-
-  final Ref _ref;
-
-  @override
-  void show(ChatState chat) =>
-      _ref.read(selectedChatIdProvider.notifier).reveal(chat);
-}
+export "../app/selection.dart";
 
 void openChat(BuildContext context, WidgetRef ref, String chatId) {
   ref.read(selectedChatIdProvider.notifier).select(chatId);
   closeNavDrawer(context);
 }
 
-/// Switch to a project. A chat of the one being left is not in the list any
-/// more, so keeping it selected would leave the pane showing something the
-/// sidebar denies — and dropping it is also what starts a chat in the project
-/// just picked. The switcher, the empty chat's badges and deleting a project
-/// are all this.
-void selectProject(WidgetRef ref, ProjectRef project) {
-  ref.read(selectedProjectProvider.notifier).select(project);
-  ref.read(selectedChatIdProvider.notifier).select(null);
-}
+/// Switch to a project: see [SelectedProject.switchTo].
+void selectProject(WidgetRef ref, ProjectRef project) =>
+    ref.read(selectedProjectProvider.notifier).switchTo(project);
 
 /// Go to the new-chat screen, with the drawer it was pressed in closed — the
 /// sidebar's button and the assistant gesture. Nothing is created: the screen
@@ -152,39 +38,12 @@ void openNewChatIn(BuildContext context, WidgetRef ref, String? project) {
   closeNavDrawer(context);
 }
 
-/// Start a chat and say the first thing in it. The new-chat screen's composer
-/// is the one caller: it holds the text, the files and the settings until
-/// there is a chat to put them in, and this is that moment. False is a chat
-/// that could not be made, so that the caller can put back what it cleared.
-///
-/// The turn is deliberately not awaited — it runs for as long as the model
-/// takes, and the page has to arrive on the message rather than after the
-/// reply. Nothing waits on the controller having read the chat back either:
-/// `send` waits on that itself, which is what [ChatController] owes anything
-/// that drives a turn it has only just built.
+/// Start a chat and say the first thing in it: see [SelectedChatId.start].
 Future<bool> startChatWith(
   WidgetRef ref,
   String text, {
   List<Attachment> attachments = const [],
   ChatMeta? meta,
-}) async {
-  final at = ref.read(selectedProjectProvider);
-  if (at.device != null) {
-    // Made there, which runs the turn: this device follows it, holding it.
-    final reply = await ref
-        .read(syncHubProvider)
-        .startRemoteChat(at, text, attachments: attachments);
-    final id = reply?.chatId;
-    if (id == null) return false;
-    ref.read(selectedChatIdProvider.notifier).select(id);
-    return true;
-  }
-  final id = await ref.read(selectedChatIdProvider.notifier).create(meta: meta);
-  if (id == null) return false;
-  unawaited(
-    ref
-        .read(chatControllerProvider(id).notifier)
-        .send(text, attachments: attachments),
-  );
-  return true;
-}
+}) => ref
+    .read(selectedChatIdProvider.notifier)
+    .start(text, attachments: attachments, meta: meta);

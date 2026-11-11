@@ -7,7 +7,7 @@ import "../../providers.dart";
 import "../widgets/agent_picture.dart";
 import "../widgets/empty_pane.dart";
 import "../widgets/section_header.dart" show mutedParagraph;
-import "mirror_controller.dart";
+import "../../app/mirror_controller.dart";
 import "../widgets/page_bar.dart";
 
 /// What fills each participant's context window, out of the model's whole,

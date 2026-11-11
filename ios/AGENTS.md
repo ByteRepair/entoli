@@ -609,24 +609,26 @@ github-cli installed.
 
 ## The native shell
 
-With Liquid Glass on (see "Liquid Glass" in `lib/ui/AGENTS.md`) the
-`entoli_glass` plugin makes a `UIHostingController` the scene window's root,
-with the `FlutterViewController` the storyboard made embedded in it as a
-child. The Runner is untouched: the implicit engine, its registrations and
-`SceneDelegate` are as they were. The plugin swaps the root on
-`UIScene.willConnectNotification`, which comes with the storyboard's window
-made and hidden and Flutter's view not yet loaded. Not `addSceneDelegate`:
-the implicit engine registers its plugins before the scene connects, and
-Flutter forwards a connection only to an engine whose view is already in
-the scene, so a plugin's scene delegate never hears this one.
+**The Runner is a SwiftUI app**, as Xcode's own template makes one:
+`EntoliApp` (`AppDelegate.swift`) is the `@main` `App`, its `WindowGroup`
+showing `FrontendView` from `entoli_glass` and its `.commands` the menu bar
+(`AppCommands`, see "The menu bar"). The delegate, through
+`@UIApplicationDelegateAdaptor`, is still a `FlutterAppDelegate` — `app_links`
+and `record` hear the app's events through it — and owns the one
+`FlutterEngine`, set up the first time anything asks for its view: the
+plugins, every channel of the Runner's, and the notification delegate before
+launch finishes. Scene URLs come to SwiftUI, so `.onOpenURL` and
+`.onContinueUserActivity` hand them to the delegate for the plugins. There is
+no storyboard and no scene delegate.
 
-**The swap is before the window shows, and that is load-bearing.** Swapped
-once Flutter's controller had appeared as the root — Dart's `start`, as it
-first was — UIKit sent it `viewDidDisappear` only as the new root appeared,
-after the `viewWillAppear` it had as the container's child, and Flutter, which
-tears its surface down on a disappearance, drew no frame again. Never having
-appeared, it has no disappearance to come, and the container takes it as it
-loads like any child.
+**The Flutter view goes in one place per launch.** `FrontendView` shows
+only the launch colour until Dart says which frontend the core picked
+(`shell(on:)`, before `runApp`), then Flutter's view alone or the shell around
+it. The shell keeps its sidebar, title bar and toolbar out of the way until
+the app proper is up — its first window snapshot, which `ShellBridge` sends
+past the welcome tour and first-run setup — so the tour stands alone and
+nothing bypasses it. The launch screen and the view's background are
+`systemBackground`, so a dark device never flashes white.
 
 The plugin's package is iOS 17 and macOS 14, the floor the app already has for
 MLX, and the Runner's targets say 17.0 outright rather than "the recommended
@@ -657,32 +659,14 @@ looking at than either.
 
 ## The menu bar
 
-Flutter's engine draws a menu bar on macOS alone, so iPadOS's is the app's
-own: `MenuChannel` in `AppDelegate.swift` answers `agent_chat/menu` with the
-macOS engine's protocol — `Menu.setMenus` with the tree, `Menu.selectedCallback`
-back with an item's id — and Dart points Flutter's own
-`DefaultPlatformMenuDelegate` at it, so `appMenus` reaches both Apples the same
-way. The Swift is the whole of what differs.
-
-Each `setMenus` stores the tree and asks UIKit to rebuild; `AppDelegate`'s
-`buildMenu(with:)` hands the builder over. The first menu's items go into the
-application menu, whose own Settings item is removed so the app's takes ⌘,; a
-menu titled File, Edit, View, Window or Help goes at the top of UIKit's of
-that name; the rest go before Window. An item with keys is a `UIKeyCommand`,
-its input the key's own character — Flutter's logical key id is its Unicode
-code point for every key a command uses — so an iPhone with a keyboard gets
-the same keys and the ⌘-hold sheet lists them. Every item's action is one
-selector on `AppDelegate`, the item saying which by its id. macOS's own items
-(Hide, Quit, Full Screen) never arrive: Dart drops them where
-`PlatformProvidedMenuItem.hasMenu` says this platform has none.
+`entoli_menu`'s SwiftUI commands are the app's menus here as on macOS (see
+"The menu bar" in `lib/ui/AGENTS.md`): iPadOS draws them in its menu bar, and
+each item's keys are a keyboard shortcut, so an iPhone with a keyboard gets
+the same keys, the ⌘-hold sheet lists them, and Flutter's key handler stands
+down for them.
 
 The sidebar keeps its Profile, Marketplace and Settings here: the menu bar
 hides until asked for, and is not there at all without a pointer.
-
-What has not been settled is the keys: a `UIKeyCommand` is expected to take
-its key before the press reaches Flutter, so `AppShell`'s handler never hears
-it. Were both to hear one, the command would run twice. A hardware keyboard on
-a device or the simulator is how to see which.
 
 ## Shortcuts
 

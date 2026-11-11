@@ -24,8 +24,8 @@ import "package:agent_chat/domain/prompt_library.dart"
 import "package:agent_chat/providers.dart"
     show appSettingsProvider, projectSettingsProvider, promptLibraryProvider;
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:agent_chat/ui/chat/chat_controller.dart";
-import "package:agent_chat/ui/chat/controller_turn_sender.dart";
+import "package:agent_chat/app/chat_controller.dart";
+import "package:agent_chat/app/controller_turn_sender.dart";
 import "package:agent_chat/ui/chat/chat_page.dart"
     show CompactionEntry, entriesOf, MessageEntry, SectionEntry;
 

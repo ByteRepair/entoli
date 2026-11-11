@@ -243,14 +243,26 @@ which is how a reply's selection would get dropped.
 ## The app's commands
 
 Everything the app can be told to do by name — a new chat, Settings, pin the
-open chat, hide the sidebar — is an `AppCommand` (`app_command.dart`): its
-label and its keys, nothing else. The enum's name is the command's id, which
-is why one is never renamed: a key, a menu item and whatever names one next (a
-Windows jump list, a Linux `.desktop` action, an argument the app is launched
-with) all say which command by it. Settings > Shortcuts lists the ones with
-keys, so the page cannot disagree with what answers them.
+open chat, hide the sidebar — is an `AppItem` (`lib/app/app_items.dart`), and
+there are two kinds, sorted by one rule: what changes what happens is the
+core's, what changes what is on screen or where is the frontend's. An
+`AppAction` (new chat, pin, rename, move, delete, stop) is run the same by
+every frontend, which asks first for what it needs — a name, a project, a
+yes — in its own way. A `Destination` (Settings, Profile, a chat's settings,
+the sidebar, voice mode) is where the frontend on screen takes the app, each
+frontend through its own `Navigate`: `flutterNavigate` in `commands.dart`,
+`shellNavigate` in `shell_bridge.dart`, both exhaustive switches with no
+default, so a new destination compiles in neither until both reach it. Each
+item's title and keys are plain data (`AppKey`), and its availability and
+title (`availabilityOf`, `titleOf`) are pure functions of a few facts, so the
+core decides them with no widget in sight. The enum's name is the item's id,
+which is why one is never renamed: a key, a menu item and Shortcuts all say
+which item by it. Settings > Shortcuts lists the ones with keys, so the page
+cannot disagree with what answers them; `app_command.dart` is how Flutter
+hears and prints those keys.
 
-What a command does is `Commands` (`commands.dart`), and it is one switch.
+What an item does is `Commands` (`commands.dart`): an action's switch, and the
+frontend's `Navigate` for a destination.
 `Commands.watch` is a snapshot of what the app has open taken in a build — so a
 menu greys and labels its items afresh as the app changes. It watches only the
 facts a menu draws — the open chat's id, whether it is pinned and whether a
@@ -284,21 +296,32 @@ held by that screen until there is a chat, for the same reason.
 
 ### The menu bar
 
-`appMenus` (`app_menu_bar.dart`) is the menu bar as data: menus of groups of
-commands, and the platform's own items after them (Hide, Quit, Full Screen —
-macOS's alone, dropped where `PlatformProvidedMenuItem.hasMenu` says no).
-`AppMenuBar` draws it as Flutter's `PlatformMenuBar` inside `AppShell` — or
-`ShellBridge`, under the native shell (see "Liquid Glass") — below the
-Navigator the commands open their pages on. A command's keys and its menu
-item both run it, and whichever hears the keys first does: Flutter's key
-handler where it gets them, the platform's menu where it does.
+**The menu bar is a module of its own, which both frontends use.** On Apple's
+platforms it belongs to the app rather than to a window, so neither frontend
+owns it. `appMenus` (`lib/app/app_items.dart`) is its layout as data: menus of
+groups of items, and the platform's own after them (Hide, Quit, Full Screen —
+macOS's alone). `packages/entoli_menu` draws it, one Swift source for macOS and
+iPadOS over its own Pigeon contract (`pigeons/menu.dart`): Dart sends the
+whole bar, titled and greyed, whenever that changed, and Swift sends back the
+id of the item picked. The bar is SwiftUI's — `AppCommands`, in each Runner's
+`.commands` — so the platform puts in what it always does (Hide, Quit, Full
+Screen, the Window menu) and the layout says only each menu's role: the app
+menu, File, View and Help take the app's items into the platform's own, and
+an `own` menu is one of the app's. It is a port, `AppMenus`
+(`lib/app/app_menus.dart`), bound in `main` as `NativeAppMenus`
+(`core/platform/app_menus.dart`) on the two Apples and absent everywhere
+else. Before the app is up nothing is sent, so the welcome tour has no app
+items to reach past it by.
 
-Flutter's engine has a menu bar on macOS alone. iPadOS gets the same menus
-over `agent_chat/menu`, which `installMenuChannel` points Flutter's own
-`DefaultPlatformMenuDelegate` at — the engine's protocol, so the Dart is the
-same on both and only the Swift answering it differs; see "The menu bar" in
-`ios/AGENTS.md`. Every other platform draws none. `platformHasMenus` says
-where there are menus, `menuBarAlwaysShown` where they are always on screen,
+`AppMenuSync` (`app_menu.dart`) is how a frontend uses it: mounted in
+`AppShell` and in `ShellBridge`, below the Navigator, it shows the layout as
+the app stands and runs a pick through that frontend's `Navigate`. **The
+menu holds the keys of every item in it**, as its own key equivalents, and
+`runKey` — the one key handler both frontends attach — stands down for those
+wherever there is a menu bar, so no key runs twice. Elsewhere Flutter's
+handler has every key. The two frontends show the same menus; an item one of
+them needs goes into the shared layout, which the other's `Navigate` then
+answers too. `menuBarAlwaysShown` says where the bar is always on screen,
 which is what takes the sidebar's Profile, Marketplace and Settings off it.
 
 The sidebar can be hidden (`sidebarShownProvider`, the View menu, Ctrl+Alt+S).
@@ -328,21 +351,17 @@ colours' place: while it is on the theme colours and the corners are not on
 the page, and `appLookProvider` hands `entoliTheme` the defaults — the iOS /
 macOS theme — whatever was picked, leaving what was picked where it was for
 the switch going off. Light, Dark and System stay, being the one appearance
-choice the native chrome follows too. **It is read once, at launch, by the
-Swift**: before Dart runs, `LaunchSettings.swift` reads `liquidGlass` out of
-`settings.json` and the shell takes the window before it is shown, so the
-Flutter view is never on screen outside it. Dart asks `hosting` and draws for
-the answer (`_glassAtLaunch` in `main`) rather than deciding again, so the two
-cannot disagree. That reader is a second copy of `dataDir()` — `$ENTOLI_CONFIG`,
-else `~/.config/<leaf>` on macOS, the debug leaf from the Runner's xcconfigs
-as `EntoliDataLeaf`, and `Documents/entoli` on iOS — and of the setting's
-default, and moving either means moving it too; it reads before the
-migrations run, so a migration that moves `settings.json` breaks it. Switching
-the setting away from what the launch started with asks, in a dialog, for the
-app to be quit and reopened rather than appearing to do nothing. The in-app restart a restore makes is not one: it is this process
-still running, its window already the shell's or not. `LiquidGlass` (`widgets/liquid_glass.dart`) is the
-launch's answer — `available` on the two Apples, and `on` as it started, the
-window then being the shell's.
+choice the native chrome follows too. **It is read once, at launch, by the core**: `chooseFrontend`
+(`lib/app/frontend.dart`) picks the frontend from the settings after the
+migrations have run, and `main` tells the host with `shell(on:)` before
+`runApp`. The host is the window's root from launch either way, with
+Flutter's controller as its child drawn alone until told otherwise, so
+Flutter's controller is never moved out of the root and a launch that never
+hears from Dart is simply the Flutter frontend. Switching the setting away from
+what the launch started with asks, in a dialog, for the app to be quit and
+reopened rather than appearing to do nothing. The in-app restart a restore makes is not one: it is this process
+still running, its window already the shell's or not. `frontendProvider` (`lib/app/frontend.dart`) is the
+launch's answer: `native` on the two Apples, and `current` as it started.
 
 ### The bridge
 
@@ -360,7 +379,7 @@ tests. `tool/prepare.sh` runs it, and its output is not committed. A field or
 an intent the two sides read differently does not compile. It is a protocol a
 client could implement anywhere: the app holds every rule and all the state,
 and the client holds only the last snapshot of each concern. `NativeShell` is
-what the app says — `hosting`, a snapshot per concern, the one-offs
+what the app says — `shell`, a snapshot per concern, the one-offs
 `voiceLevel` and `composerFocus`, and `strip`, answered later (below); each
 `*Intents` API is what a surface's client says the user did, a method per
 intent, the few the client waits on (a project's error, a paste's yes or no)
@@ -369,9 +388,16 @@ marked `@async`.
 **A snapshot is a concern's whole state, sent when it changed.** The
 contract's classes compare by value, and `ShellOutbox` sends one only when it
 differs from the last of its concern, since most are rebuilt on every frame
-a turn streams: `window`, `sidebar`, `chatBar` and `pageBar` (one
+a turn streams: `window`, `sidebar`, `chatBar` (the chat's state, which
+the Swift builds its own bar from), `pageBar` (a Flutter page's
 `TitleBarSnapshot`), `composer` and `composerValue`, `turn`, `newChat`,
-`voice`, `palette`. The microphone's level goes raw, many times a second, and
+`voice`, `palette`. **A snapshot is state, not presentation**: the composer's
+hint and send label, its height, voice mode's words and colours, the chat
+bar's buttons, the goal row's words, the resume line, the running pills and
+their groups, a steer's line, the sidebar's headings and empty states, the
+palette's sections and a new project's errors are the Swift's to write, in
+Apple's terms, and the contract carries what they are written from: a phase,
+a time, a kind, a name, a count. The microphone's level goes raw, many times a second, and
 the glow reads it per frame rather than redrawing the shell for it.
 `ShellModel` is the Swift's `NativeShell`, holding what the last snapshot
 said and nothing of its own.
@@ -393,38 +419,53 @@ of the window and the engine paused, so a rename, a pin or a delete made from
 the list never reached it until the user left it. A widget's own
 subscription would not do either, being paused under a page that covers the
 conversation. The surfaces' snapshots — the bars, the composer, the turn,
-the new-chat screen, voice mode — stay with the widget on top of their
-`ShellSlot`, are on screen only while the Flutter view is, and read what they
+the new-chat screen, voice mode — stay with the widget answering for
+them, are on screen only while the Flutter view is, and read what they
 send in their own build, since a provider watched from a builder beneath one
 can be missed. The running chats are a listenable, so the snapshots watch
 `busyChatIdsProvider`, its set as a value.
 
-**An intent goes to whoever is on screen.** The window's, the sidebar's and
-the palette's go to `ShellBridge`'s own runners. The composer's, the turn
-surface's, the new-chat screen's, voice mode's and the two title bars' (one
-API on the channels `chatBar` and `pageBar`) go to the widget on top of that
-surface's `ShellSlot`, which implements the `*Intents` itself: each claims the
-top when it mounts — or, where the last built is the one on screen, when it
-is built — and leaves when it goes, taking its snapshot back if it was on
-top, and the slot points the channel at whoever is on top now. Turn surfaces
-stack — voice mode's over the chat page's — and the one beneath sends again
-when the top one goes, nothing it watches having changed to rebuild it. A row's rename and a delete's confirmation are
+**An intent goes to whoever is on screen**, and what is on screen is the
+app's state rather than which widget mounted last. The window's, the
+sidebar's and the palette's go to `ShellBridge`'s own runners. The
+composer's, the turn surface's, the new-chat screen's, voice mode's and the
+two title bars' go to the one widget answering for that surface
+(`ShellAnswer` in `shell_answers.dart`), which implements the `*Intents`
+itself, takes the channel when it is the one drawn and lets go when it goes,
+taking its snapshot back. Voice mode's flag, `ShellAnswers.voiceOn`, decides
+which turn surface that is: voice mode's while it is up, the chat page's
+beneath it standing down and sending again once it goes. The page bars follow
+the Navigator, this frontend's own navigation (below). A row's rename and a delete's confirmation are
 native dialogs that send the edit itself, which `ChatEdits` makes as it does
 for the Flutter sidebar's dialogs.
 
-**The composer's rules are one copy.** `ComposerLogic` is what a composer
-decides apart from how it is drawn — what is attached, which mode the text
-puts it in, whether Send would do anything, whether Queue is on offer,
-sending — and the words and limits that follow from it: each mode's hint and
-send label, how far the field grows, where a `!` command runs before the
-shell has said. The Flutter `Composer` and `ShellComposer` both draw it, the
-shell's configured by a `Composer` it never mounts, the chat page choosing
-between them in one place. Both
+**The composer's rules are the core's.** `ComposerModel`
+(`lib/app/composer.dart`) is what a composer decides apart from how it is
+drawn — what is attached, which mode the text puts it in and which callback
+it holds, whether Send would do anything, whether Queue is on offer, where a
+`!` command runs before the shell has said — and runs every
+`ComposerAction` in one exhaustive switch. It reads the field through
+`ComposerText`, which `ComposerController` implements, so it imports no
+widget. What it says is each frontend's: the hint, the send label and how far
+the field grows are written in `composer_words.dart` and in `ComposerView.swift`
+separately, and differ where the platforms do. **Each frontend places every
+action**: the Flutter `Composer`'s `_place` and Swift's `ComposerAction.place`
+switch over the same list with no default, Pigeon generating it into Swift,
+so a new action compiles on neither side until both have put it somewhere or
+left it out on purpose. The chat page owns one model per chat and one
+`ComposerBinding` (the turn it sends into, where it is), and both composers
+render those, the completion menu's open and closed state included. Both
 answer `ComposerHandle`, so Reply and a steer taken back reach either. The
-text is Dart's `ComposerController`: what the native field types arrives as
-`edited` and is not sent back to it, which mid-composition would undo the
-input method's marked text, and what Dart changes — a completion taken, a
-message put back, the field cleared on send — goes as `composerValue`. A quote
+text is Dart's `ComposerController`, and a frontend draws the model's
+`ComposerState`: the value and its `revision` beside the mode, the callback
+and the attachments. What the native field types arrives
+as `edited`, which bumps no revision; what Dart sets — a completion taken, a
+message put back, the field cleared on send — bumps it and goes as
+`composerValue` with it, and the Swift applies a value only when the
+revision moved, so what was typed is never echoed back, which
+mid-composition would undo the input method's marked text. One clock serves
+every field, so two pages' composers never share a revision. Reply focuses
+the field through `ComposerHandle.embed`, each frontend its own. A quote
 card is an attachment character in the native field carrying its embed's code
 unit, so offsets mean the same on both sides. **The field's focus is a
 `FocusNode` in Dart's tree**: the field says when it takes the keyboard or
@@ -452,6 +493,28 @@ as view padding and the padding less the view insets, Flutter's own rule for
 the system's. Taken as padding whole, as it first was, the keyboard counted
 twice: a keyboard's height of empty conversation over the composer, which a
 simulator with a hardware keyboard never shows.
+
+**The chat page knows nothing of the shell.** What differs is a
+`ChatChrome` (`lib/ui/chat/chat_chrome.dart`): the composer, the turn
+surface, the question, the chat's and the new-chat screen's bars and the
+new-chat screen itself, and whether the frontend's bar and composer lie over
+the page. `FlutterChatChrome` leaves all of it to the page; `ShellChatChrome`
+(`lib/ui/shell/`) draws it natively, bound in `main` with the page bars'
+`pageBarDrawProvider`. The rest of the app's is an `AppChrome`
+(`lib/ui/app_chrome.dart`) — the `MaterialApp` builder, whether a drawer
+opens as a page, the reaction strip, voice mode's page — and the look the
+pages wear `appLookOverrideProvider`, the shell's `ShellAppChrome` and
+`shellLook` bound beside them. The window's root is `main`'s to pick. So nothing
+in `lib/ui` outside `lib/ui/shell/` imports the shell; `main` binds it.
+
+**The composer pads the layout and is clear glass.** The new-chat screen
+sits beside the Flutter view rather than over it, so it keeps to the
+keyboard's safe area and the composer rides up with it; its page scrolls on
+beneath the composer, seen through the glass, with the system's edge effect
+turned off there (`clearUnderComposer`), and a drag through it takes the
+keyboard down as one through the conversation does. Its "Type / for
+commands" line is the page's last, as in Flutter, not pinned over the
+composer.
 
 `FlutterCanvas` is the Flutter view and every layer drawn in its coordinates,
 in one container: the edges are said once, and a layer gets exactly the
@@ -485,19 +548,25 @@ Each action is a `PageAction` — `.icon`, `.confirm` (the tick), `.text`
 and draws itself both ways: as a button in an `AppBar`, which is what the
 bar is with the shell off or in a route that is not a page, and as an item
 of the window's title bar under it, the tick as the system's confirm and
-its Material icon looked up as an SF Symbol. That is the whole of the
+its Material icon sent as the `Glyph` it stands for (`shell/glyphs.dart`).
+**The contract names no picture**: a `Glyph` says what an icon means — add,
+delete, a project's folder, a paired device — and `Glyphs.swift` draws each
+as Apple's own symbol in one exhaustive switch, so a glyph added to the
+contract compiles in neither until both have it. That is the whole of the
 design: a page knows nothing of the shell, and neither bar is read back
 out of the other, so a new kind of action is a new `PageAction`, said once
 and drawn by both. An action that comes and goes is the page's `if`, the
 page rebuilding as it would for anything else it shows. What Flutter keeps
 under the shell is `bottom` — tabs, a search under the bar — drawn under
-the title bar, where the `AppBar` drew it. The bars stack as their pages
-do, `ShellPageBar` claiming the top as it mounts and giving it up as its
+the title bar, where the `AppBar` drew it. The bars follow their pages'
+order, `ShellPageBar` keeping the pages pushed over the conversation and the
+one in front answering, taking it as it mounts and giving it up as its
 page starts to leave, so the bar beneath is back for the whole of the way
 back; the back the title bar draws is the page's back key, so a page that
 asks before it goes is asked. The Swift is `TitleBar.swift`, one view for
-every bar the window has: the chat's is drawn by it too, its buttons sent
-under `toolbar` and a page's under `pageBar`. On an iPhone it hides the
+every bar the window has: the chat's is drawn by it too, built in Swift from
+`ChatBarSnapshot` with its presses sent back as a `ChatBarDestination`, and a
+page's under `pageBar`. On an iPhone it hides the
 split view's own back while a page leads, the page's being the one that
 pops it.
 
@@ -519,8 +588,8 @@ turn runs, beats in the reply's colour while speaking, and sits grey and still
 
 ### Where the platforms differ
 
-The menu bar is still Flutter's `PlatformMenuBar` on macOS, `AppMenuBar`
-inside `ShellBridge`, so `appMenus` stays the one definition. It has no Edit
+The menu bar is `entoli_menu`'s under either frontend (see "The menu bar"),
+`AppMenuSync` inside `ShellBridge`, so `appMenus` stays the one layout. It has no Edit
 menu, so the native field takes its own editing keys — cut, copy, paste,
 select all, undo, and Return's send and queue — in `performKeyEquivalent`,
 which the window offers a view before the menu bar; an Edit menu would have

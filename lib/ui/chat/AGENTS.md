@@ -331,8 +331,11 @@ routes the answer to them (see "The contract between direct and Omada chats"
 in `lib/domain/room/AGENTS.md`); the user's own message carries none. `Quote`
 (`domain/quote.dart`) is that blockquote both ways.
 
-**A card is one character of the field.** `ComposerController` hands each
-`ComposerEmbed` a private-use code point and draws it as a `WidgetSpan`, so
+**A card is one character of the field.** The encoding is the core's,
+`EmbedText` (`lib/app/embed_text.dart`), which knows an embed only as its
+markdown and whether it is a block; `ComposerController` is the Flutter field
+over it, handing each `ComposerEmbed` a private-use code point and drawing it
+as a `WidgetSpan`, so
 the composer is still one `TextField` and everything it does — the `/` and
 `@` menus, the shortcuts, paste, undo, the keyboard and its IME — carries on
 across a card without being told about one: the caret steps over it,
@@ -682,7 +685,8 @@ that string alone.
 
 `/goal` is dressed as the callback it is, the one dress every callback
 shares; what differs is the send button, which `callbackSendLabel` names
-from what is typed — "Set goal", "Pause goal", "Clear goal" — as it names
+from the callback the core says is typed (the native shell names it from
+`CallbackKind`, in its own words) — "Set goal", "Pause goal", "Clear goal" — as it names
 `/compact` "Compact". A label per callback, since a button saying "Compact"
 over `/goal pause` was the dress claiming more than was true.
 

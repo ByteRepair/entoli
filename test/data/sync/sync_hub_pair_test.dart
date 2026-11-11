@@ -22,7 +22,7 @@ import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/identity.dart";
 import "package:agent_chat/domain/sync/protocol.dart";
 import "package:agent_chat/providers.dart" show syncHubProvider;
-import "package:agent_chat/ui/chat/mirror_controller.dart";
+import "package:agent_chat/app/mirror_controller.dart";
 import "package:archive/archive.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";

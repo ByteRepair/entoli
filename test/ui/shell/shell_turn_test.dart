@@ -7,7 +7,8 @@ import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/goal.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/room/room_state.dart";
-import "package:agent_chat/ui/chat/chat_controller.dart";
+import "package:agent_chat/app/chat_controller.dart";
+import "package:agent_chat/ui/shell/shell_answers.dart";
 import "package:agent_chat/ui/shell/shell_turn.dart";
 
 import "fake_native_shell.dart";
@@ -139,7 +140,7 @@ void main() {
     )!;
     expect(goal.objective, "the tests pass");
     expect(goal.phase, GoalPhase.blocked);
-    expect(goal.summary, "Goal blocked: the tests pass · Needs a key.");
+    expect(goal.reason, "Needs a key.");
   });
 
   testWidgets("the goal row's buttons come back as /goal commands", (
@@ -149,5 +150,51 @@ void main() {
     await surface.goal(GoalAction.resume);
     await surface.goal(GoalAction.clear);
     expect(driver.sent, ["/goal resume", "/goal clear"]);
+  });
+
+  // What decides which turn surface the shell draws is voice mode's flag,
+  // not which widget mounted last: the chat page's stands down beneath voice
+  // mode's and sends again once it goes.
+  testWidgets("voice mode's turn surface is drawn while it is up", (
+    tester,
+  ) async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final answers = container.read(shellAnswersProvider);
+    final voice = _Driver();
+    Future<void> show({required bool voiceUp}) => tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Column(
+            children: [
+              ShellTurnSurface(view: ChatViewState(), notifier: driver),
+              if (voiceUp)
+                ShellTurnSurface(
+                  view: ChatViewState(),
+                  notifier: voice,
+                  voice: true,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    ShellTurnSurfaceState answering() =>
+        answers.turn.owner! as ShellTurnSurfaceState;
+
+    await show(voiceUp: false);
+    await answering().goal(GoalAction.clear);
+    expect(driver.sent, ["/goal clear"]);
+
+    answers.voiceOn.value = true;
+    await show(voiceUp: true);
+    await answering().goal(GoalAction.pause);
+    expect(voice.sent, ["/goal pause"]);
+
+    answers.voiceOn.value = false;
+    await show(voiceUp: false);
+    await answering().goal(GoalAction.resume);
+    expect(driver.sent, ["/goal clear", "/goal resume"]);
   });
 }

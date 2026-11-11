@@ -3,10 +3,8 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../core/brand.dart";
 import "../domain/app_theme.dart";
-import "../domain/corner_radius.dart";
 import "../domain/theme_colour.dart";
 import "fonts.dart";
-import "widgets/liquid_glass.dart";
 import "../providers.dart";
 
 /// The indigo the icon sits on, which is `ThemeColour.indigo` as a `Color`. The
@@ -35,20 +33,16 @@ Color spokenColour(Brightness brightness) => brightness == Brightness.dark
     ? const Color(0xFF2DD4BF)
     : const Color(0xFF0E9384);
 
+/// The look a frontend wears whatever the settings pick: the native shell's
+/// Apple look. Null is the settings'. Overridden in `main`.
+final appLookOverrideProvider = Provider<AppLook?>((ref) => null);
+
 /// What the app is drawn with: the settings resolved against the system's own
 /// palette, so `main` watches one thing and the rule that an accent replaces
 /// both colours is written once.
 final appLookProvider = Provider<AppLook>((ref) {
-  // Under Apple's own controls the app wears Apple's look, whatever was
-  // picked: the defaults, which are the iOS / macOS theme. What was picked is
-  // left where it was, so turning the switch off returns to it.
-  if (ref.watch(liquidGlassProvider).on) {
-    return (
-      primary: ThemeColour.apple.seed,
-      secondary: ThemeColour.apple.seed,
-      radius: CornerRadius.medium.radius,
-    );
-  }
+  // A frontend with a look of its own wears it whatever was picked.
+  if (ref.watch(appLookOverrideProvider) case final look?) return look;
   final accent = ref.watch(paletteAccentProvider);
   final settings = ref.watch(
     appSettingsProvider.select(

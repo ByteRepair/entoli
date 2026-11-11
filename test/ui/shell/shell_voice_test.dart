@@ -1,12 +1,19 @@
+import "package:entoli_glass/entoli_glass.dart" show VoicePhase;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/ui/app_chrome.dart" show appChromeProvider;
+import "package:agent_chat/ui/shell/shell_app_chrome.dart";
+import "package:agent_chat/ui/chat/chat_chrome.dart" show chatChromeProvider;
+import "package:agent_chat/ui/shell/shell_chat_chrome.dart";
+import "package:agent_chat/ui/shell/shell_page_bar.dart" show drawShellPageBar;
+import "package:agent_chat/ui/widgets/page_bar.dart" show pageBarDrawProvider;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/ui/shell/shell_voice.dart";
-import "package:agent_chat/ui/voice/voice_controller.dart";
+import "package:agent_chat/app/voice_controller.dart";
 import "package:agent_chat/ui/voice/voice_page.dart";
-import "package:agent_chat/ui/widgets/liquid_glass.dart";
+import "package:agent_chat/app/frontend.dart";
 
 import "../../harness.dart";
 import "fake_native_shell.dart";
@@ -25,8 +32,11 @@ void main() {
 
   Widget shell(Widget child) => ProviderScope(
     overrides: [
-      liquidGlassProvider.overrideWithValue(
-        const LiquidGlass(available: true, on: true),
+      pageBarDrawProvider.overrideWithValue(drawShellPageBar),
+      chatChromeProvider.overrideWithValue(const ShellChatChrome()),
+      appChromeProvider.overrideWithValue(const ShellAppChrome()),
+      frontendProvider.overrideWithValue(
+        const FrontendChoice(current: Frontend.swiftUI, native: true),
       ),
     ],
     child: child,
@@ -71,7 +81,7 @@ void main() {
     expect(voice.present, isTrue);
     expect(voice.title, "Walk");
     expect(voice.lines.map((l) => l.text), containsAll(["go on", "Half a"]));
-    expect(native.lastTurn?.resume, startsWith("Unfinished turn"));
+    expect(native.lastTurn?.resume?.startedAt, isPositive);
   });
 
   testWidgets("the microphone's level goes as it moves", (tester) async {
@@ -90,7 +100,7 @@ void main() {
       ),
       settle: false,
     );
-    expect(native.lastVoice?.word, "Listening");
+    expect(native.lastVoice?.status, VoicePhase.listening);
 
     level.value = 0.5;
     level.value = 0.9;

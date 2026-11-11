@@ -66,8 +66,8 @@ sudo; see "Byte Repair's environment, in four variables" in
 ## The menu bar
 
 The app's menus — `appMenus`, see "The menu bar" in `lib/ui/AGENTS.md` — are
-Flutter's `PlatformMenuBar`, which replaces `MainMenu.xib`'s at the first
-frame; the xib's stays as what shows before it. The first menu is the app's,
+`entoli_menu`'s SwiftUI commands, added to what macOS puts in the menu bar
+itself. The first menu is the app's,
 titled by macOS with the app's name. About opens Settings > About rather than
 the standard panel, so it is the page iPadOS's About opens as well.
 
@@ -75,24 +75,34 @@ Because the bar is always there, the sidebar does not draw Profile,
 Marketplace and Settings — `menuBarAlwaysShown` is true here alone.
 
 Window tabbing is off (`NSWindow.allowsAutomaticWindowTabbing`, in
-`MainFlutterWindow.awakeFromNib`): the app has one window, and AppKit would
+`applicationWillFinishLaunching`): the app has one window, and AppKit would
 otherwise add Show Tab Bar and Show All Tabs to the View menu.
+
+Two SwiftUI traps, both from Dart's menus arriving after launch. A `Window`
+app's File menu is made only if its group has something in it when the bar
+is first built, so a blank item holds the place until Dart sends. And SwiftUI
+fills a menu when it is opened, while a shortcut finds only what is filled,
+so a key-down monitor fills them all before every ⌘ chord; without it no
+shortcut fires until its menu has been opened once.
 
 ## The native shell
 
-With Liquid Glass on (see "Liquid Glass" in `lib/ui/AGENTS.md`) the window's
-content is SwiftUI's, and the Runner does not know: `MainFlutterWindow` makes
-the `FlutterViewController` and its channels exactly as it always has, and the
-`entoli_glass` plugin, as the Runner registers it in `awakeFromNib` and
-before the window shows, puts an `NSHostingController` in as
-the window's content with that same controller embedded in it — taken as a
-child of a container rather than handed to SwiftUI, since SwiftUI makes a
-representable's controller again whenever its identity changes and the
-Flutter one has one parent at a time. The frame is kept, `sizingOptions` is
-empty so nothing SwiftUI lays out resizes the window, and
-`sceneBridgingOptions` makes the split view's toolbar and title the window's
-own, unified, over full-size content. The wake and hide paths, the model host
-and every channel are untouched; only what fills the window changes.
+**The Runner is a SwiftUI app.** `Launch` (`AppDelegate.swift`) is `@main`
+so the model host can fork before anything of AppKit loads; everything else
+is `EntoliApp`, one `Window` showing `FrontendView` from `entoli_glass`, a
+unified toolbar and the menu bar as `.commands`. The delegate, through
+`@NSApplicationDelegateAdaptor`, is still a `FlutterAppDelegate` and owns the
+one `FlutterEngine`, set up the first time anything asks for its view — the
+window's content or `applicationWillFinishLaunching`, whichever comes first,
+so `app_links` has its URL handler in place — with the plugins and the
+channels in `Channels.swift`. The wake and quit rules stay the delegate's:
+a wake launch hides the app once launched, an activation unhides it, and
+SwiftUI reopens the window from the Dock. There is no `MainMenu.xib`.
+
+The window shows the launch colour until Dart says which frontend the core
+picked, then Flutter's view alone or the shell, whose toolbar and sidebar
+wait for the app proper to be up (see "The native shell" in
+`ios/AGENTS.md`).
 
 The sidebar is a `NavigationSplitView` column, which on 26 floats over the
 detail: the Flutter view runs under the toolbar and the composer and never
@@ -140,7 +150,7 @@ each is adapted to it:
   from the sidebar does), and `TurnControl` for a turn's status and stop,
   answered by the chat's controller where one exists and by the backend
   where none does — never by building one.
-- **Commands** are the app's `AppCommand`s, every one of them, as
+- **Commands** are the app's `AppItem`s, every one of them, as
   `command.<name>` — the enum's name being the id it already promises never
   to change. `CommandIntent` runs one through `Commands`, which needs the chat
   pane's context, so `AppShell` attaches a `CommandScope` while it is
@@ -173,7 +183,7 @@ share target's route, `safeRelativePath` included, since the name came
 from another app. Get Artifacts goes the other way: each artifact is packed
 whole by `readArtifactZip` into a temporary zip, its page and the files
 beside it together, and Swift hands Shortcuts the file. Voice mode is not an
-intent of its own underneath: it is `AppCommand.voiceMode`, which the Chat
+intent of its own underneath: it is `Destination.voiceMode`, which the Chat
 menu has too, and Start Voice Mode runs it.
 
 The Dart half is covered by `chat_intents_test.dart`; the Swift, like the

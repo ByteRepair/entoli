@@ -5,7 +5,7 @@ import "../../../data/sync/peers.dart" show PeerStatus;
 import "../../../domain/project.dart";
 import "../../../providers.dart";
 import "../../selection.dart";
-import "../../sidebar/remote_projects.dart";
+import "../../../app/remote_projects.dart";
 import "../../widgets/chip_row.dart";
 import "omada_separator.dart";
 

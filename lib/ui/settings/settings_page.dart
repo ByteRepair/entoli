@@ -27,7 +27,7 @@ import "../theme.dart";
 import "../widgets/choice.dart";
 import "../widgets/add_button_row.dart";
 import "../widgets/busy.dart";
-import "../widgets/liquid_glass.dart";
+import "../../app/frontend.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/editable_row.dart";
@@ -262,9 +262,9 @@ class _AppearanceSection extends ConsumerWidget {
     final notifier = ref.read(appSettingsProvider.notifier);
     final switchesLauncher = ref.watch(launcherIconsProvider).available;
     final hasSystemPalette = ref.watch(systemAccentProvider) != null;
-    final glass = ref.watch(liquidGlassProvider);
+    final glass = ref.watch(frontendProvider);
     // Apple's look, whose colours and corners are not the app's to pick.
-    final appleLook = glass.available && settings.liquidGlass;
+    final appleLook = glass.native && settings.liquidGlass;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -301,7 +301,7 @@ class _AppearanceSection extends ConsumerWidget {
           ),
         // In Material 3 Expressive's place on Apple's platforms, and like it
         // the switch takes the colours' place: the app wears Apple's look.
-        if (glass.available)
+        if (glass.native)
           SwitchListTile(
             title: const Text("Liquid Glass"),
             subtitle: const Text(
@@ -315,7 +315,7 @@ class _AppearanceSection extends ConsumerWidget {
             // nothing to restart for.
             onChanged: (on) async {
               await notifier.setLiquidGlass(on);
-              if (on == glass.on || !context.mounted) return;
+              if (on == glass.swiftUI || !context.mounted) return;
               await tell(
                 context,
                 title: "Restart Entoli",

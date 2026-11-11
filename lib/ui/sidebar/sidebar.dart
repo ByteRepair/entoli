@@ -18,9 +18,9 @@ import "../settings/settings_category.dart";
 import "../selection.dart";
 import "../widgets/nothing.dart";
 import "../widgets/search_field.dart";
-import "chat_groups.dart";
+import "chat_headings.dart";
 import "project_palette.dart";
-import "remote_projects.dart";
+import "../../app/remote_projects.dart";
 
 /// The sidebar's width where it is docked beside the chat pane.
 const sidebarWidth = 300.0;
@@ -332,17 +332,15 @@ class _ChatList extends ConsumerWidget {
       builder: (context, text, _) {
         final found = chatsMatching(chats, text);
         if (found.isEmpty) return const Nothing(_noMatch);
+        final now = DateTime.now();
         // A sliver per group rather than one list over headings and chats
         // flattened together: the flat form has to say which of the two each
         // row is, and there is no shape for that which is not two nullable
         // fields of which exactly one is ever set.
         return CustomScrollView(
           slivers: [
-            for (final group in groupChatsByDate(
-              found,
-              now: DateTime.now(),
-            )) ...[
-              SliverToBoxAdapter(child: ListHeading(group.heading)),
+            for (final group in groupChatsByDate(found, now: now)) ...[
+              SliverToBoxAdapter(child: ListHeading(group.headingAt(now))),
               SliverList.builder(
                 itemCount: group.chats.length,
                 itemBuilder: (context, i) => _ChatTile(
@@ -425,7 +423,7 @@ class _ChatTile extends ConsumerWidget {
                         size: 14,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
-                    PopupMenuButton<AppCommand>(
+                    PopupMenuButton<AppAction>(
                       icon: const Icon(Icons.more_vert),
                       onSelected: (command) =>
                           runOnChat(context, ref, chat, command),
@@ -441,15 +439,15 @@ class _ChatTile extends ConsumerWidget {
   /// The row's menu, the same from the button and from a right-click: the
   /// chat commands, in the row's own shorter words, less Move for a mirror,
   /// whose projects are its home device's.
-  List<PopupMenuEntry<AppCommand>> get _items => [
+  List<PopupMenuEntry<AppAction>> get _items => [
     for (final command in chatCommands)
-      if (!(remote && command == AppCommand.moveChat))
+      if (!(remote && command == AppAction.moveChat))
         PopupMenuItem(
           value: command,
           child: Text(switch (command) {
-            AppCommand.pinChat => chat.pinned ? "Unpin" : "Pin",
-            AppCommand.renameChat => "Rename",
-            AppCommand.moveChat => "Move to project…",
+            AppAction.pinChat => chat.pinned ? "Unpin" : "Pin",
+            AppAction.renameChat => "Rename",
+            AppAction.moveChat => "Move to project…",
             _ => "Delete",
           }),
         ),
@@ -460,7 +458,7 @@ class _ChatTile extends ConsumerWidget {
     WidgetRef ref,
     Offset at,
   ) async {
-    final command = await showMenu<AppCommand>(
+    final command = await showMenu<AppAction>(
       context: context,
       position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
       items: _items,
