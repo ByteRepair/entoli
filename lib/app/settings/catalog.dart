@@ -4,6 +4,7 @@ import "pages/data.dart";
 import "pages/general.dart";
 import "pages/llms.dart";
 import "pages/memory.dart";
+import "pages/providers.dart";
 import "pages/sync.dart";
 import "pages/terminal.dart";
 import "pages/voice.dart";
@@ -21,6 +22,7 @@ final entoliSettings = SettingsSchema(
     ...aboutSections,
     ...syncSections,
     ...dataSections,
+    ...providerSections,
   ],
   settings: [
     ...generalSettings,
@@ -32,5 +34,6 @@ final entoliSettings = SettingsSchema(
     ...aboutSettings,
     ...syncSettings,
     ...dataSettings,
+    ...providerSettings,
   ],
 );

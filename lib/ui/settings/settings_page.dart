@@ -1,22 +1,12 @@
-
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../data/builtin/llm/providers/presets.dart";
-import "../../domain/llm_provider.dart";
-import "../../providers.dart";
-import "../widgets/add_button_row.dart";
-import "../widgets/editable_row.dart";
 import "../widgets/side_panel_frame.dart";
-import "../widgets/section_header.dart";
 import "agents_settings.dart";
 import "byte_repair_settings.dart";
-import "connect_provider.dart";
 import "running_models.dart";
 import "local_model_settings.dart";
-import "provider_usage_view.dart";
 import "on_device_catalog.dart";
-import "provider_picker.dart";
 import "triggers.dart";
 import "skills_settings.dart";
 import "settings_category.dart";
@@ -139,7 +129,9 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
   ],
   SettingsCategory.byteRepair => const [ByteRepairSection()],
   SettingsCategory.sync => const [SchemaSections(SettingsPageId.sync)],
-  SettingsCategory.providers => const [_ProvidersEditor()],
+  SettingsCategory.providers => const [
+    SchemaSections(SettingsPageId.providers),
+  ],
   // The agent's own settings are under LLMs, beside the model it runs: the
   // classifier picker travels with the mode because auto mode is unusable
   // without one.
@@ -186,177 +178,4 @@ class _Categories extends ConsumerWidget {
       ),
     ),
   );
-}
-
-/// The nudge an empty Providers page stands in for: a recommended provider,
-/// the reason for it, and the two ways to act on it — signing up, or pasting
-/// a key already in hand. Gone the moment a provider of any kind is configured.
-class _RecommendedProvider extends ConsumerStatefulWidget {
-  const _RecommendedProvider();
-
-  @override
-  ConsumerState<_RecommendedProvider> createState() =>
-      _RecommendedProviderState();
-}
-
-class _RecommendedProviderState extends ConsumerState<_RecommendedProvider> {
-  static final _signUp = Uri.parse("https://signin.ollama.com/sign-up");
-
-  static const _ollamaCloud = OllamaCloudProvider();
-  static final _privacy = Uri.parse(_ollamaCloud.terms!.policy!);
-
-  final _apiKey = TextEditingController();
-
-  @override
-  void dispose() {
-    _apiKey.dispose();
-    super.dispose();
-  }
-
-  Future<void> _addWithKey() async {
-    final key = _apiKey.text.trim();
-    if (key.isEmpty) return;
-    // Notifier first: adding the provider unmounts this card on the next
-    // frame, and the save must outlive it rather than resume on a defunct
-    // ref. The key goes to the store (setKey), never onto the config.
-    final notifier = ref.read(appSettingsProvider.notifier);
-    await notifier.upsertProvider(_ollamaCloud.config, setKey: key);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final hasKey = _apiKey.text.trim().isNotEmpty;
-    return Card(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              "Entoli works with both privacy-respecting and other providers. "
-              "We recommend Ollama Cloud: it does not keep or train on your "
-              "prompts and outputs.",
-            ),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: () =>
-                  ref.read(linkOpenerProvider).open(context, _signUp),
-              child: const Text("Sign up"),
-            ),
-            const SizedBox(height: 4),
-            TextButton(
-              onPressed: () =>
-                  ref.read(linkOpenerProvider).open(context, _privacy),
-              child: const Text("Ollama Cloud privacy policy"),
-            ),
-            const Divider(height: 32),
-            const Text("Already have a key?"),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _apiKey,
-              obscureText: true,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(labelText: "Ollama API key"),
-            ),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: hasKey ? _addWithKey : null,
-              child: const Text("Add Ollama Cloud"),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ProvidersEditor extends ConsumerWidget {
-  const _ProvidersEditor();
-
-  Future<void> _remove(WidgetRef ref, LlmProviderConfig provider) async {
-    final providers = ref
-        .read(appSettingsProvider)
-        .llmProviders
-        .where((p) => p.id != provider.id)
-        .toList();
-    await ref.read(appSettingsProvider.notifier).setProviders(providers);
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final providers = ref.watch(appSettingsProvider).llmProviders;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (providers.isEmpty) const _RecommendedProvider(),
-        SectionHeader(
-          "Providers",
-          description: providers.isEmpty
-              ? "None yet. The agent cannot answer until one is added."
-              : "Where the models come from. Each is an endpoint, a key, and "
-                    "the models it offers.",
-        ),
-        for (final provider in providers)
-          EditableRow(
-            title: provider.displayName,
-            subtitle: _describe(ref, provider),
-            removeLabel: "Remove ${provider.displayName}",
-            onTap: () => editProvider(
-              context,
-              ref,
-              initial: provider,
-              title: "Edit ${provider.displayName}",
-            ),
-            onRemove: () => _remove(ref, provider),
-            detail: ProviderUsageView(provider.id),
-          ),
-        AddButtonRow(
-          child: OutlinedButton.icon(
-            icon: const Icon(Icons.add),
-            label: const Text("Add provider"),
-            onPressed: () => _add(context, ref),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _add(BuildContext context, WidgetRef ref) async {
-    final chosen = await pickProviderPreset(context);
-    if (chosen != null && context.mounted) {
-      final preset = chosen.preset;
-      await editProvider(
-        context,
-        ref,
-        initial: preset,
-        title: preset == null
-            ? "Add provider"
-            : "Connect ${preset.displayName}",
-      );
-    }
-  }
-
-  /// Whether it can answer, in plain words for a preset. An endpoint typed in
-  /// by hand is told apart by its address, which its owner knows.
-  String _describe(WidgetRef ref, LlmProviderConfig config) {
-    final provider = providerOf(config);
-    final environment = ref.read(appSettingsProvider).environment;
-    final processEnv = ref.read(processEnvProvider);
-    final stored = ref.read(appSecretsProvider).providerKey(config.id);
-    final hasKey =
-        (stored != null && stored.isNotEmpty) ||
-        config.resolveKeyWith(
-              (name) => environment[name] ?? processEnv(name),
-            ) !=
-            null;
-    final status = !provider.needsKey
-        ? "On this computer"
-        : hasKey
-        ? "Connected"
-        : "Needs a key";
-    if (provider is CliProvider) return "${provider.command} · $status";
-    return provider.terms == null ? "${config.baseUrl} · $status" : status;
-  }
 }

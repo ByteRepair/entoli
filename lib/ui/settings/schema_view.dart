@@ -16,7 +16,11 @@ import "../widgets/add_button_row.dart";
 import "../widgets/catalog.dart";
 import "../widgets/settings_warning_banner.dart";
 import "../widgets/page_bar.dart";
+import "../../domain/llm_provider.dart";
+import "connect_provider.dart";
 import "form_dialog.dart";
+import "provider_picker.dart";
+import "provider_usage_view.dart";
 import "paired_device_page.dart";
 import "sync_pairing.dart";
 import "../widgets/choice.dart";
@@ -115,6 +119,9 @@ class SettingRow extends StatelessWidget {
       final KeyValuesController c => _KeyValues(c),
       final ActionController c => _Action(c),
       final GroupController c when c.hint == UiHint.buttons => _Buttons(c),
+      final GroupController c when c.hint == UiHint.recommended => _Recommended(
+        c,
+      ),
       final GroupController c => _Group(c),
       final TextController c => _Text(c),
       final NoticeController c => switch (c.hint) {
@@ -127,6 +134,8 @@ class SettingRow extends StatelessWidget {
         _ => _Notice(c),
       },
       final CollectionController c when c.hint == UiHint.devices => _Devices(c),
+      final CollectionController c when c.hint == UiHint.providers =>
+        _Providers(c),
       final CollectionController c => c.typed(<V>(c) => _Collection<V>(c)),
       final PairingController c => PairingControls(hub: c.hub),
       final SubpageController c => ListTile(
@@ -228,6 +237,7 @@ IconData? _icon(SettingGlyph? glyph) => switch (glyph) {
   SettingGlyph.privacy => Icons.privacy_tip_outlined,
   SettingGlyph.licence => Icons.balance_outlined,
   // Drawn as the app's own mark, not an icon.
+  SettingGlyph.add => Icons.add,
   SettingGlyph.download => Icons.download,
   SettingGlyph.upload => Icons.upload_file,
   SettingGlyph.online => Icons.circle,
@@ -1315,4 +1325,129 @@ class _Buttons extends StatelessWidget {
       ),
     ],
   );
+}
+
+/// A recommended service while nothing answers: why it, a way to sign up and
+/// its policy, and the key to paste where one is already in hand.
+class _Recommended extends ConsumerStatefulWidget {
+  const _Recommended(this.c);
+
+  final GroupController c;
+
+  @override
+  ConsumerState<_Recommended> createState() => _RecommendedState();
+}
+
+class _RecommendedState extends ConsumerState<_Recommended> {
+  final _key = TextEditingController();
+
+  @override
+  void dispose() {
+    _key.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final why = widget.c.children.whereType<NoticeController>().first;
+    final key = widget.c.children.whereType<TextController>().first;
+    final text = why.lines.where((l) => l.url == null);
+    final links = why.lines.where((l) => l.url != null).toList();
+    final hasKey = _key.text.trim().isNotEmpty;
+    void open(NoticeLine link) =>
+        ref.read(linkOpenerProvider).open(context, link.url!);
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final line in text) Text(line.text),
+            const SizedBox(height: 12),
+            for (final (i, link) in links.indexed) ...[
+              if (i > 0) const SizedBox(height: 4),
+              i == 0
+                  ? FilledButton(
+                      onPressed: () => open(link),
+                      child: Text(link.text),
+                    )
+                  : TextButton(
+                      onPressed: () => open(link),
+                      child: Text(link.text),
+                    ),
+            ],
+            const Divider(height: 32),
+            Text(key.title),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _key,
+              obscureText: key.secret,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(labelText: key.prompt),
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: hasKey ? () => key.set(_key.text) : null,
+              child: Text(key.submitLabel ?? "Save"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The endpoints as rows, each with what it has spent under it, opened in
+/// the provider dialog; added through the preset picker first.
+class _Providers extends ConsumerWidget {
+  const _Providers(this.c);
+
+  final CollectionController c;
+
+  Future<void> _add(BuildContext context, WidgetRef ref) async {
+    final chosen = await pickProviderPreset(context);
+    if (chosen != null && context.mounted) {
+      final preset = chosen.preset;
+      await editProvider(
+        context,
+        ref,
+        initial: preset,
+        title: preset == null
+            ? "Add provider"
+            : "Connect ${preset.displayName}",
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final providers = c.items.cast<LlmProviderConfig>();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final (index, row) in c.rows.indexed)
+          EditableRow(
+            title: row.title,
+            subtitle: row.subtitle,
+            removeLabel: row.removeLabel ?? c.removeLabel,
+            onTap: () => editProvider(
+              context,
+              ref,
+              initial: providers[index],
+              title: "Edit ${row.title}",
+            ),
+            onRemove: () => c.remove(index),
+            detail: ProviderUsageView(row.id!),
+          ),
+        AddButtonRow(
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.add),
+            label: Text(c.addLabel),
+            onPressed: () => _add(context, ref),
+          ),
+        ),
+      ],
+    );
+  }
 }

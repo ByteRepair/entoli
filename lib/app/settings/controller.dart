@@ -519,6 +519,7 @@ final class TextController extends SettingController {
     this.prompt,
     this.lines = 1,
     this.allowBlank = false,
+    this.submitLabel,
     this.clearLabel,
     this.secret = false,
     super.title,
@@ -539,6 +540,10 @@ final class TextController extends SettingController {
 
   /// How many lines it is typed over: more than one for a list of patterns.
   final int lines;
+
+  /// What saving it is called where it is a button of its own beside the
+  /// field: "Add Ollama Cloud".
+  final String? submitLabel;
 
   /// Whether an empty answer is one: clearing it by typing nothing.
   final bool allowBlank;
@@ -599,6 +604,7 @@ final class CollectionController<T> extends SettingController {
     this.removable = true,
     this.emptyLabel,
     Future<SettingNotice?> Function(int index, String action)? act,
+    Future<void> Function(Map<String, String> answers, int? index)? submit,
     super.title,
     super.description,
     super.footnote,
@@ -606,7 +612,8 @@ final class CollectionController<T> extends SettingController {
     super.visible,
     super.accessory,
   }) : _write = onSet,
-       _onAct = act;
+       _onAct = act,
+       _onSubmit = submit;
 
   final List<T> items;
   final String addLabel;
@@ -619,6 +626,17 @@ final class CollectionController<T> extends SettingController {
   final String? emptyLabel;
 
   final Future<SettingNotice?> Function(int, String)? _onAct;
+
+  final Future<void> Function(Map<String, String>, int?)? _onSubmit;
+
+  /// Saves what a form for the item at [index], or a new one, was answered
+  /// with: the item the answers make, unless saving one does more than
+  /// keeping it, as a provider's key going to the secret store does.
+  Future<void> submit(Map<String, String> answers, {int? index}) {
+    if (_onSubmit case final submit?) return submit(answers, index);
+    final made = form!(index == null ? null : items[index]).build(answers);
+    return put(made, index: index);
+  }
 
   /// Runs the item action [action] on the item at [index].
   Future<SettingNotice?> act(int index, String action) async =>
@@ -660,6 +678,7 @@ class CollectionItem {
   const CollectionItem(
     this.title, {
     this.id,
+    this.removeLabel,
     this.subtitle,
     this.error,
     this.glyph,
@@ -668,6 +687,9 @@ class CollectionItem {
   });
 
   final String title;
+
+  /// What removing it is called, where the list's own word is not enough.
+  final String? removeLabel;
 
   /// What it is known by, where a frontend opens a page of its own for it.
   final String? id;

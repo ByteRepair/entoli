@@ -71,6 +71,12 @@ enum UiHint {
 
   /// Actions side by side in a row.
   buttons,
+
+  /// The service it would be best to start with, while nothing answers.
+  recommended,
+
+  /// The endpoints models come from, each with what it has spent.
+  providers,
 }
 
 /// The pages settings is filed under, in the order they are offered. A
@@ -196,6 +202,7 @@ enum SettingGlyph {
   licence,
   download,
   upload,
+  add,
   online,
   connecting,
   offline,
