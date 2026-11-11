@@ -1,7 +1,0 @@
-Target dependency graph (3 targets)
-Target 'AllExcludingTests' in project 'Aggregate'
-➜ Explicit dependency on target 'entoli-glass-product' in project 'entoli_glass'
-➜ Explicit dependency on target 'entoli_glass' in project 'entoli_glass'
-Target 'entoli-glass-product' in project 'entoli_glass'
-➜ Explicit dependency on target 'entoli_glass' in project 'entoli_glass'
-Target 'entoli_glass' in project 'entoli_glass' (no dependencies)
