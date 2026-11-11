@@ -1,3 +1,4 @@
+import "package:entoli_glass/entoli_glass.dart" show VoicePhase;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -90,7 +91,7 @@ void main() {
       ),
       settle: false,
     );
-    expect(native.lastVoice?.word, "Listening");
+    expect(native.lastVoice?.status, VoicePhase.listening);
 
     level.value = 0.5;
     level.value = 0.9;

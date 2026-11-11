@@ -13,7 +13,7 @@ import "../chat/widgets/running_strip.dart" show runningOf;
 import "../chat/widgets/steer_strip.dart";
 import "../chat/widgets/turn_surface.dart" show approvalAnswers;
 import "shell_outbox.dart";
-import "shell_slots.dart";
+import "shell_answers.dart";
 
 /// [TurnSurface] drawn by the native shell, wired the same way: the resume
 /// offer, the chat's goal, what is running, the says the turn has not read, and the calls
@@ -26,22 +26,27 @@ class ShellTurnSurface extends ConsumerStatefulWidget {
     required this.view,
     required this.notifier,
     this.onWithdrawn,
+    this.voice = false,
   });
 
   final ChatViewState view;
   final TurnDriver notifier;
   final ValueChanged<Draft>? onWithdrawn;
 
+  /// Voice mode's, over the chat page's: drawn while voice mode is up, and
+  /// the chat page's while it is not.
+  final bool voice;
+
   @override
   ConsumerState<ShellTurnSurface> createState() => ShellTurnSurfaceState();
 }
 
-/// One of a stack: voice mode's is over the chat page's, and when it goes the
-/// chat page's draws again.
+/// The chat page's or voice mode's, whichever voice mode's flag says is on
+/// screen.
 class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface>
     implements TurnIntents {
   late final ShellOutbox _outbox = ref.read(shellOutboxProvider);
-  late final ShellSlots _slots = ref.read(shellSlotsProvider);
+  late final ShellAnswers _answers = ref.read(shellAnswersProvider);
 
   /// The pills as last sent, which a `running` intent names one of by index.
   List<RunningThing> _running = const [];
@@ -49,23 +54,22 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface>
   @override
   void initState() {
     super.initState();
-    _slots.turn.claim(this);
+    _answers.voiceOn.addListener(_resend);
   }
 
   @override
   void dispose() {
-    if (_slots.turn.leave(this)) {
-      _outbox.turn(TurnSnapshot());
-      // The one underneath, sent again: nothing it watches has changed, so
-      // nothing else would rebuild it.
-      if (_slots.turn.top case final ShellTurnSurfaceState under) {
-        under._resend();
-      }
-    }
+    _answers.voiceOn.removeListener(_resend);
+    if (_answers.turn.release(this)) _outbox.turn(TurnSnapshot());
     super.dispose();
   }
 
+  bool get _drawn => widget.voice == _answers.voiceOn.value;
+
+  /// Voice mode came or went: the one now drawn sends, nothing it watches
+  /// having changed to rebuild it.
   void _resend() {
+    if (!_drawn) _answers.turn.release(this);
     if (mounted) setState(() {});
   }
 
@@ -129,8 +133,9 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface>
 
   @override
   Widget build(BuildContext context) {
-    // One underneath another sends nothing: the shell draws the top one.
-    if (_slots.turn.top != this) return const SizedBox.shrink();
+    // The one beneath voice mode sends nothing: the shell draws the other.
+    if (!_drawn) return const SizedBox.shrink();
+    _answers.turn.take(this);
     final view = widget.view;
     final notifier = widget.notifier;
     final chat = view.chat;

@@ -209,9 +209,9 @@ class TitleBarItem {
 enum TitleBarLeading { back, close }
 
 /// A title bar, whichever page it is for: one shape, so one view draws them
-/// all. The chat's is [NativeShell.chatBar]; the bar of the Flutter page over
-/// the conversation is [NativeShell.pageBar], not [present] where no page has
-/// one.
+/// all. The bar of the Flutter page over the conversation is
+/// [NativeShell.pageBar], not [present] where no page has one; the chat's own
+/// the client builds from [ChatBarSnapshot].
 class TitleBarSnapshot {
   TitleBarSnapshot({
     this.present = true,
@@ -233,6 +233,46 @@ class TitleBarSnapshot {
   TitleBarLeading? leading;
   List<TitleBarItem> items;
 }
+
+/// The chat's title bar, as the chat's state: the client draws its own bar
+/// from it, its own buttons and words.
+class ChatBarSnapshot {
+  ChatBarSnapshot({
+    this.title = "",
+    this.draft = false,
+    this.project,
+    this.pinned = false,
+    this.expiresAt,
+    this.running = false,
+    this.planDone,
+    this.planTotal,
+    this.settings = true,
+  });
+
+  /// Empty for a chat not named yet.
+  String title;
+
+  /// The new-chat screen's, there being no chat yet.
+  bool draft;
+
+  /// The project's label, null for the default project.
+  String? project;
+  bool pinned;
+
+  /// When a temporary chat expires, in milliseconds since the epoch.
+  int? expiresAt;
+  bool running;
+
+  /// The plan's sections done and in all, where the chat has a plan.
+  int? planDone;
+  int? planTotal;
+
+  /// Whether its settings can be opened: not a paired device's new chat.
+  bool settings;
+}
+
+/// Where the chat's bar can take the app.
+enum ChatBarDestination { plan, settings }
 
 /// A pending file.
 class ComposerAttachment {
@@ -537,26 +577,22 @@ enum VoicePhase { off, starting, listening, thinking, speaking, failed }
 class VoiceSnapshot {
   VoiceSnapshot({
     required this.present,
-    this.title = "Voice",
+    this.title,
     this.status = VoicePhase.off,
-    this.word = "",
     this.paused = false,
     this.hushed = false,
     this.pushToTalk = false,
     this.on = false,
     this.error,
     this.lines = const [],
-    this.heard = 0xFF6C63FF,
-    this.spoken = 0xFF2DD4BF,
   });
 
   bool present;
-  String title;
+
+  /// The chat's title; null for one not named yet.
+  String? title;
 
   VoicePhase status;
-
-  /// What the screen says this is.
-  String word;
   bool paused;
 
   /// Shut and silent: the one look that is the state's rather than the
@@ -570,10 +606,6 @@ class VoiceSnapshot {
 
   /// The transcript's last lines.
   List<VoiceLineSnapshot> lines;
-
-  /// The two voices' colours, as ARGB in this appearance.
-  int heard;
-  int spoken;
 }
 
 /// One row of the palette: a project to switch to, or a chat to open.
@@ -670,7 +702,7 @@ abstract class NativeShell {
 
   void window(WindowSnapshot snapshot);
   void sidebar(SidebarSnapshot snapshot);
-  void chatBar(TitleBarSnapshot snapshot);
+  void chatBar(ChatBarSnapshot snapshot);
   void pageBar(TitleBarSnapshot snapshot);
   void composer(ComposerSnapshot snapshot);
   void composerValue(ComposerValueSnapshot snapshot);
@@ -816,8 +848,13 @@ abstract class VoiceIntents {
   void done();
 }
 
-/// A title bar: the chat's under the channel suffix `chatBar`, a page's under
-/// `pageBar`.
+/// The chat's title bar.
+@FlutterApi()
+abstract class ChatBarIntents {
+  void open(ChatBarDestination to);
+}
+
+/// The title bar of a Flutter page over the conversation.
 @FlutterApi()
 abstract class TitleBarIntents {
   void back();

@@ -27,7 +27,7 @@ class FakeNativeShell implements TestNativeShell {
   T? _last<T>(String concern) => sent[concern]?.last as T?;
   WindowSnapshot? get lastWindow => _last("window");
   SidebarSnapshot? get lastSidebar => _last("sidebar");
-  TitleBarSnapshot? get lastChatBar => _last("chatBar");
+  ChatBarSnapshot? get lastChatBar => _last("chatBar");
   TitleBarSnapshot? get lastPageBar => _last("pageBar");
   ComposerSnapshot? get lastComposer => _last("composer");
   ComposerValueSnapshot? get lastComposerValue => _last("composerValue");
@@ -59,7 +59,7 @@ class FakeNativeShell implements TestNativeShell {
   @override
   void sidebar(SidebarSnapshot snapshot) => _add("sidebar", snapshot);
   @override
-  void chatBar(TitleBarSnapshot snapshot) => _add("chatBar", snapshot);
+  void chatBar(ChatBarSnapshot snapshot) => _add("chatBar", snapshot);
   @override
   void pageBar(TitleBarSnapshot snapshot) => _add("pageBar", snapshot);
   @override

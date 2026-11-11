@@ -10,7 +10,7 @@ import "package:agent_chat/providers.dart" show appSettingsProvider;
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/shell/shell_new_chat.dart";
-import "package:agent_chat/ui/shell/shell_slots.dart";
+import "package:agent_chat/ui/shell/shell_answers.dart";
 import "package:agent_chat/ui/shell/shell_window.dart";
 import "package:agent_chat/ui/widgets/liquid_glass.dart";
 import "package:agent_chat/ui/widgets/page_bar.dart";
@@ -53,7 +53,7 @@ void main() {
 
   /// The shell composer on top, as the Swift reaches it.
   ComposerIntents composer() =>
-      app.container.read(shellSlotsProvider).composer.top!;
+      app.container.read(shellAnswersProvider).composer.owner!;
 
   /// A chat with something said in it, open: [said] messages, enough past
   /// the window's height to scroll.
@@ -88,7 +88,7 @@ void main() {
     expect(find.byType(AppBar), findsNothing);
     expect(shell.lastNewChat?.present, isTrue);
     expect(shell.lastNewChat?.question, defaultEmptyChatQuestion);
-    expect(shell.lastChatBar?.title, "New Chat");
+    expect(shell.lastChatBar?.draft, isTrue);
     expect(shell.lastComposer?.present, isTrue);
   });
 

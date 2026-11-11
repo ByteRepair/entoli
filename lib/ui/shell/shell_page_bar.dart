@@ -3,7 +3,7 @@ import "package:flutter/widgets.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "shell_outbox.dart";
-import "shell_slots.dart";
+import "shell_answers.dart";
 
 /// A Flutter page's bar, as the window's title bar: `PageBar` under the
 /// shell. Draws nothing; sends [bar] while its page is the one in front, and
@@ -34,14 +34,25 @@ class ShellPageBar extends ConsumerStatefulWidget {
 
 class _ShellPageBarState extends ConsumerState<ShellPageBar>
     implements TitleBarIntents {
-  late final ShellSlots _slots = ref.read(shellSlotsProvider);
+  /// The pages pushed over the conversation, in the Navigator's order: this
+  /// frontend's own navigation, the one in front answering.
+  static final List<_ShellPageBarState> _pages = [];
+
+  late final ShellAnswers _answers = ref.read(shellAnswersProvider);
   late final ShellOutbox _outbox = ref.read(shellOutboxProvider);
   Animation<double>? _animation;
 
   @override
   void initState() {
     super.initState();
-    _slots.pageBar.claim(this);
+    _front();
+  }
+
+  void _front() {
+    _pages
+      ..remove(this)
+      ..add(this);
+    _answers.pageBar.take(this);
   }
 
   @override
@@ -67,20 +78,23 @@ class _ShellPageBarState extends ConsumerState<ShellPageBar>
         _leave();
       case AnimationStatus.forward || AnimationStatus.completed:
         if (_onTop) return;
-        _slots.pageBar.claim(this);
+        _front();
         _publish();
       case AnimationStatus.dismissed:
         break;
     }
   }
 
-  bool get _onTop => _slots.pageBar.top == this;
+  bool get _onTop => _pages.lastOrNull == this;
 
   /// Give the title bar to the page beneath, or back to the chat's.
   void _leave() {
-    if (!_slots.pageBar.leave(this)) return;
-    final under = _slots.pageBar.top;
-    if (under is _ShellPageBarState) {
+    final wasTop = _onTop;
+    _pages.remove(this);
+    if (!wasTop) return;
+    _answers.pageBar.release(this);
+    if (_pages.lastOrNull case final under?) {
+      _answers.pageBar.take(under);
       under._publish();
     } else {
       _outbox.pageBar(TitleBarSnapshot(present: false, title: ""));

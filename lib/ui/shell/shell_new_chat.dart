@@ -11,7 +11,7 @@ import "../sidebar/remote_projects.dart";
 import "../widgets/completion_field.dart";
 import "shell_composer.dart" show completionOf, triggerOf;
 import "shell_outbox.dart";
-import "shell_slots.dart";
+import "shell_answers.dart";
 import "shell_sidebar.dart" show projectSymbol;
 
 /// The asset the new-chat screen stands its figure on.
@@ -44,11 +44,11 @@ class ShellNewChat extends ConsumerStatefulWidget {
 class ShellNewChatState extends ConsumerState<ShellNewChat>
     implements NewChatIntents {
   late final ShellOutbox _outbox = ref.read(shellOutboxProvider);
-  late final ShellSlots _slots = ref.read(shellSlotsProvider);
+  late final ShellAnswers _answers = ref.read(shellAnswersProvider);
 
   @override
   void dispose() {
-    if (_slots.newChat.leave(this)) {
+    if (_answers.newChat.release(this)) {
       _outbox.newChat(NewChatSnapshot(present: false));
     }
     super.dispose();
@@ -71,7 +71,7 @@ class ShellNewChatState extends ConsumerState<ShellNewChat>
 
   @override
   Widget build(BuildContext context) {
-    _slots.newChat.claim(this);
+    _answers.newChat.take(this);
     final at = widget.at;
     final question = ref.watch(newChatQuestionProvider(at));
     final showStarters = ref.watch(showCommandChipsProvider);

@@ -386,9 +386,13 @@ marked `@async`.
 **A snapshot is a concern's whole state, sent when it changed.** The
 contract's classes compare by value, and `ShellOutbox` sends one only when it
 differs from the last of its concern, since most are rebuilt on every frame
-a turn streams: `window`, `sidebar`, `chatBar` and `pageBar` (one
+a turn streams: `window`, `sidebar`, `chatBar` (the chat's state, which
+the Swift builds its own bar from), `pageBar` (a Flutter page's
 `TitleBarSnapshot`), `composer` and `composerValue`, `turn`, `newChat`,
-`voice`, `palette`. The microphone's level goes raw, many times a second, and
+`voice`, `palette`. **A snapshot is state, not presentation**: the composer's
+hint and send label, its height, voice mode's words and colours, and the
+chat bar's buttons are the Swift's to write, in Apple's terms, and the
+contract carries what they are written from. The microphone's level goes raw, many times a second, and
 the glow reads it per frame rather than redrawing the shell for it.
 `ShellModel` is the Swift's `NativeShell`, holding what the last snapshot
 said and nothing of its own.
@@ -410,22 +414,23 @@ of the window and the engine paused, so a rename, a pin or a delete made from
 the list never reached it until the user left it. A widget's own
 subscription would not do either, being paused under a page that covers the
 conversation. The surfaces' snapshots — the bars, the composer, the turn,
-the new-chat screen, voice mode — stay with the widget on top of their
-`ShellSlot`, are on screen only while the Flutter view is, and read what they
+the new-chat screen, voice mode — stay with the widget answering for
+them, are on screen only while the Flutter view is, and read what they
 send in their own build, since a provider watched from a builder beneath one
 can be missed. The running chats are a listenable, so the snapshots watch
 `busyChatIdsProvider`, its set as a value.
 
-**An intent goes to whoever is on screen.** The window's, the sidebar's and
-the palette's go to `ShellBridge`'s own runners. The composer's, the turn
-surface's, the new-chat screen's, voice mode's and the two title bars' (one
-API on the channels `chatBar` and `pageBar`) go to the widget on top of that
-surface's `ShellSlot`, which implements the `*Intents` itself: each claims the
-top when it mounts — or, where the last built is the one on screen, when it
-is built — and leaves when it goes, taking its snapshot back if it was on
-top, and the slot points the channel at whoever is on top now. Turn surfaces
-stack — voice mode's over the chat page's — and the one beneath sends again
-when the top one goes, nothing it watches having changed to rebuild it. A row's rename and a delete's confirmation are
+**An intent goes to whoever is on screen**, and what is on screen is the
+app's state rather than which widget mounted last. The window's, the
+sidebar's and the palette's go to `ShellBridge`'s own runners. The
+composer's, the turn surface's, the new-chat screen's, voice mode's and the
+two title bars' go to the one widget answering for that surface
+(`ShellAnswer` in `shell_answers.dart`), which implements the `*Intents`
+itself, takes the channel when it is the one drawn and lets go when it goes,
+taking its snapshot back. Voice mode's flag, `ShellAnswers.voiceOn`, decides
+which turn surface that is: voice mode's while it is up, the chat page's
+beneath it standing down and sending again once it goes. The page bars follow
+the Navigator, this frontend's own navigation (below). A row's rename and a delete's confirmation are
 native dialogs that send the edit itself, which `ChatEdits` makes as it does
 for the Flutter sidebar's dialogs.
 
@@ -516,13 +521,15 @@ out of the other, so a new kind of action is a new `PageAction`, said once
 and drawn by both. An action that comes and goes is the page's `if`, the
 page rebuilding as it would for anything else it shows. What Flutter keeps
 under the shell is `bottom` — tabs, a search under the bar — drawn under
-the title bar, where the `AppBar` drew it. The bars stack as their pages
-do, `ShellPageBar` claiming the top as it mounts and giving it up as its
+the title bar, where the `AppBar` drew it. The bars follow their pages'
+order, `ShellPageBar` keeping the pages pushed over the conversation and the
+one in front answering, taking it as it mounts and giving it up as its
 page starts to leave, so the bar beneath is back for the whole of the way
 back; the back the title bar draws is the page's back key, so a page that
 asks before it goes is asked. The Swift is `TitleBar.swift`, one view for
-every bar the window has: the chat's is drawn by it too, its buttons sent
-under `toolbar` and a page's under `pageBar`. On an iPhone it hides the
+every bar the window has: the chat's is drawn by it too, built in Swift from
+`ChatBarSnapshot` with its presses sent back as a `ChatBarDestination`, and a
+page's under `pageBar`. On an iPhone it hides the
 split view's own back while a page leads, the page's being the one that
 pops it.
 

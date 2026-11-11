@@ -172,10 +172,12 @@ extension View {
   fileprivate func windowBar(_ model: ShellModel, toList: (() -> Void)?) -> some View {
     let page = model.window.covered
     let bar =
-      !page ? model.chatBar : model.pageBar.present ? model.pageBar : model.chatBar.bare
+      !page
+      ? model.chatBar.titleBar
+      : model.pageBar.present ? model.pageBar : model.chatBar.titleBar.bare
     return self
       .titleBar(
-        bar, intents: page ? model.say.pageBar : model.say.chatBar,
+        bar, intents: page ? model.say.pageBar as TitleBarIntentsProtocol : model.say.chatBar,
         sidebar: toList)
       #if os(iOS)
         // A page whose bar Flutter still draws has it alone: one on screen.

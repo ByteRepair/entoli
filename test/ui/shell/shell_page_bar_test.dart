@@ -3,7 +3,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/ui/shell/shell_slots.dart";
+import "package:agent_chat/ui/shell/shell_answers.dart";
 import "package:agent_chat/ui/widgets/liquid_glass.dart";
 import "package:agent_chat/ui/widgets/page_bar.dart";
 
@@ -44,7 +44,7 @@ void main() {
   }
 
   /// The bar the window's title bar is answering for.
-  TitleBarIntents bar() => container.read(shellSlotsProvider).pageBar.top!;
+  TitleBarIntents bar() => container.read(shellAnswersProvider).pageBar.owner!;
 
   TitleBarSnapshot sent() => shell.lastPageBar!;
   List<TitleBarItem> items() => sent().items;

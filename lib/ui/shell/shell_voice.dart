@@ -5,11 +5,10 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/models.dart";
 import "../../app/chat_controller.dart";
-import "../theme.dart";
 import "../voice/transcript.dart";
 import "../voice/voice_controller.dart";
 import "shell_outbox.dart";
-import "shell_slots.dart";
+import "shell_answers.dart";
 import "shell_turn.dart";
 
 /// How many of the transcript's lines go to the shell: more than its window
@@ -40,14 +39,15 @@ class ShellVoice extends ConsumerStatefulWidget {
 class ShellVoiceState extends ConsumerState<ShellVoice>
     implements VoiceIntents {
   late final ShellOutbox _outbox = ref.read(shellOutboxProvider);
-  late final ShellSlots _slots = ref.read(shellSlotsProvider);
+  late final ShellAnswers _answers = ref.read(shellAnswersProvider);
   final _transcript = Transcript();
   ValueListenable<double>? _level;
 
   @override
   void initState() {
     super.initState();
-    _slots.voice.claim(this);
+    _answers.voice.take(this);
+    _answers.voiceOn.value = true;
     _follow(widget.voice.level);
   }
 
@@ -60,8 +60,9 @@ class ShellVoiceState extends ConsumerState<ShellVoice>
   @override
   void dispose() {
     _level?.removeListener(_sendLevel);
-    if (_slots.voice.leave(this)) {
+    if (_answers.voice.release(this)) {
       _outbox.voice(VoiceSnapshot(present: false));
+      _answers.voiceOn.value = false;
     }
     super.dispose();
   }
@@ -99,11 +100,10 @@ class ShellVoiceState extends ConsumerState<ShellVoice>
         ? null
         : ref.read(chatControllerProvider(chatId).notifier);
     final lines = _transcript.of(chat?.chat?.messages ?? const <Message>[]);
-    final brightness = Theme.of(context).brightness;
     _outbox.voice(
       VoiceSnapshot(
         present: true,
-        title: chat?.chat?.state.title.orUntitled ?? "Voice",
+        title: chat?.chat?.state.title,
         status: switch (voice.status) {
           VoiceStatus.off => VoicePhase.off,
           VoiceStatus.starting => VoicePhase.starting,
@@ -112,7 +112,6 @@ class ShellVoiceState extends ConsumerState<ShellVoice>
           VoiceStatus.speaking => VoicePhase.speaking,
           VoiceStatus.failed => VoicePhase.failed,
         },
-        word: voice.word,
         paused: voice.paused,
         hushed: voice.hushed,
         pushToTalk: voice.pushToTalk,
@@ -131,13 +130,11 @@ class ShellVoiceState extends ConsumerState<ShellVoice>
               text: line.text,
             ),
         ],
-        heard: heardColour(brightness).toARGB32(),
-        spoken: spokenColour(brightness).toARGB32(),
       ),
     );
     // The turn's surface, the chat page's own: over voice mode while it is up,
     // a question in it too, since the chat page's is hidden beneath.
     if (chat == null || driver == null) return const SizedBox.shrink();
-    return ShellTurnSurface(view: chat, notifier: driver);
+    return ShellTurnSurface(view: chat, notifier: driver, voice: true);
   }
 }

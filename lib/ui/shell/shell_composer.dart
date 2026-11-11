@@ -16,7 +16,7 @@ import "../widgets/agent_picture.dart";
 import "../widgets/completion_field.dart";
 import "../widgets/dialogs.dart";
 import "shell_outbox.dart";
-import "shell_slots.dart";
+import "shell_answers.dart";
 
 /// A composer menu as the contract names it, and back.
 CompletionKind completionOf(ComposerTrigger trigger) => switch (trigger) {
@@ -77,7 +77,7 @@ class ShellComposer extends ConsumerStatefulWidget {
 class ShellComposerState extends ConsumerState<ShellComposer>
     implements ComposerHandle, ComposerIntents {
   late final ShellOutbox _outbox = ref.read(shellOutboxProvider);
-  late final ShellSlots _slots = ref.read(shellSlotsProvider);
+  late final ShellAnswers _answers = ref.read(shellAnswersProvider);
   late final ComposerModel _logic = ComposerModel(
     widget.config.controller,
     pick: (kind) => ref.read(attachmentPickerProvider).pick(kind),
@@ -115,7 +115,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   @override
   void initState() {
     super.initState();
-    _slots.composer.claim(this);
+    _answers.composer.take(this);
     _focus.addListener(_sendFocus);
     _configure();
     widget.config.controller.addListener(_pushValue);
@@ -137,7 +137,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   @override
   void dispose() {
     widget.config.controller.removeListener(_pushValue);
-    if (_slots.composer.leave(this)) {
+    if (_answers.composer.release(this)) {
       _outbox.composer(ComposerSnapshot(present: false));
     }
     _focus.dispose();
@@ -396,60 +396,45 @@ class ShellComposerState extends ConsumerState<ShellComposer>
 }
 
 /// The window's title and toolbar for the page that builds this: the
-/// chat's, or the new-chat screen's. A press on one of [items] runs its
-/// entry in [actions].
+/// chat's, or the new-chat screen's, sent as the chat's state for the shell
+/// to draw its own bar from. A press opens [onPlan] or [onSettings].
 class ShellChatBar extends ConsumerStatefulWidget {
   const ShellChatBar({
     super.key,
-    required this.title,
-    this.subtitle = "",
-    this.expiresAt,
-    this.items = const [],
-    this.actions = const {},
+    required this.bar,
+    this.onPlan,
+    this.onSettings,
   });
 
-  final String title;
-  final String subtitle;
-  final DateTime? expiresAt;
-  final List<TitleBarItem> items;
-  final Map<String, VoidCallback> actions;
+  final ChatBarSnapshot bar;
+  final VoidCallback? onPlan;
+  final VoidCallback? onSettings;
 
   @override
   ConsumerState<ShellChatBar> createState() => ShellChatBarState();
 }
 
 class ShellChatBarState extends ConsumerState<ShellChatBar>
-    implements TitleBarIntents {
-  late final ShellSlots _slots = ref.read(shellSlotsProvider);
+    implements ChatBarIntents {
+  late final ShellAnswers _answers = ref.read(shellAnswersProvider);
 
   @override
   void dispose() {
-    _slots.chatBar.leave(this);
+    _answers.chatBar.release(this);
     super.dispose();
   }
 
-  /// The chat's bar has no way back: the conversation is the first page.
   @override
-  Future<void> back() async {}
-
-  /// A press on one of the items.
-  @override
-  void press(String id) => widget.actions[id]?.call();
+  void open(ChatBarDestination to) => switch (to) {
+    ChatBarDestination.plan => widget.onPlan?.call(),
+    ChatBarDestination.settings => widget.onSettings?.call(),
+  };
 
   @override
   Widget build(BuildContext context) {
     // The last built is the one answering, as it is the one on screen.
-    _slots.chatBar.claim(this);
-    ref
-        .read(shellOutboxProvider)
-        .chatBar(
-          TitleBarSnapshot(
-            title: widget.title,
-            subtitle: widget.subtitle,
-            expiresAt: widget.expiresAt?.millisecondsSinceEpoch,
-            items: widget.items,
-          ),
-        );
+    _answers.chatBar.take(this);
+    ref.read(shellOutboxProvider).chatBar(widget.bar);
     return const SizedBox.shrink();
   }
 }

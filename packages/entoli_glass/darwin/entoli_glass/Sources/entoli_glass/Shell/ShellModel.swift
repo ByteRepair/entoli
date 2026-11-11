@@ -14,7 +14,7 @@ import SwiftUI
 final class ShellModel: ObservableObject {
   @Published var window = WindowSnapshot.initial
   @Published var sidebar = SidebarSnapshot.initial
-  @Published var chatBar = TitleBarSnapshot.initial
+  @Published var chatBar = ChatBarSnapshot.initial
   @Published var pageBar = TitleBarSnapshot.absent
   @Published var turn = TurnSnapshot.initial
   @Published var newChat = NewChatSnapshot.initial
@@ -94,7 +94,7 @@ extension ShellModel: NativeShell {
   }
 
   func sidebar(snapshot: SidebarSnapshot) throws { sidebar = snapshot }
-  func chatBar(snapshot: TitleBarSnapshot) throws { chatBar = snapshot }
+  func chatBar(snapshot: ChatBarSnapshot) throws { chatBar = snapshot }
   func pageBar(snapshot: TitleBarSnapshot) throws { pageBar = snapshot }
   func composer(snapshot: ComposerSnapshot) throws { composer.apply(snapshot) }
   func composerValue(snapshot: ComposerValueSnapshot) throws { composer.apply(snapshot) }
@@ -123,7 +123,7 @@ struct ShellIntents {
   let newChat: NewChatIntents
   let voice: VoiceIntents
   /// The chat's title bar, and a Flutter page's: one view draws both.
-  let chatBar: TitleBarIntents
+  let chatBar: ChatBarPresses
   let pageBar: TitleBarIntents
 
   init(messenger: FlutterBinaryMessenger) {
@@ -134,17 +134,8 @@ struct ShellIntents {
     turn = TurnIntents(binaryMessenger: messenger)
     newChat = NewChatIntents(binaryMessenger: messenger)
     voice = VoiceIntents(binaryMessenger: messenger)
-    chatBar = TitleBarIntents(binaryMessenger: messenger, messageChannelSuffix: "chatBar")
+    chatBar = ChatBarPresses(intents: ChatBarIntents(binaryMessenger: messenger))
     pageBar = TitleBarIntents(binaryMessenger: messenger, messageChannelSuffix: "pageBar")
-  }
-}
-
-extension Color {
-  /// An ARGB the way Dart's `toARGB32` gives one.
-  init(argb: Int64) {
-    self.init(
-      red: Double((argb >> 16) & 0xFF) / 255, green: Double((argb >> 8) & 0xFF) / 255,
-      blue: Double(argb & 0xFF) / 255, opacity: Double((argb >> 24) & 0xFF) / 255)
   }
 }
 

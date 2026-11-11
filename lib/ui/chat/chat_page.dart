@@ -3,7 +3,7 @@ import "dart:math" as math;
 
 import "package:flutter/foundation.dart" show listEquals;
 import "package:collection/collection.dart" show IterableExtension;
-import "package:entoli_glass/entoli_glass.dart" show TitleBarItem;
+import "package:entoli_glass/entoli_glass.dart" show ChatBarSnapshot;
 import "package:flutter/material.dart";
 import "package:flutter/rendering.dart"
     show RenderAbstractViewport, RenderProxyBox;
@@ -435,17 +435,12 @@ class _NewChatState extends ConsumerState<_NewChat> {
         bar: !shell
             ? null
             : ShellChatBar(
-                title: "New Chat",
-                subtitle: at.project == null ? "" : projectLabel(at.project),
-                items: [
-                  if (at.device == null)
-                    TitleBarItem(
-                      id: "settings",
-                      label: "Chat settings",
-                      symbol: "slider.horizontal.3",
-                    ),
-                ],
-                actions: {"settings": _openSettings},
+                bar: ChatBarSnapshot(
+                  draft: true,
+                  project: at.project == null ? null : projectLabel(at.project),
+                  settings: at.device == null,
+                ),
+                onSettings: _openSettings,
               ),
         bottom: _bottomBar(),
         // Under the native shell the shell draws the screen, spinner and all.
@@ -1786,31 +1781,17 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     final plan = ref.watch(planProvider(widget.chatId)).value;
     final progress = plan == null ? null : sectionsProgress(plan);
     return ShellChatBar(
-      title: state.title.orUntitled,
-      subtitle: [
-        if (state.project != null) projectLabel(state.project),
-        if (state.pinned) "Pinned",
-      ].join(" · "),
-      expiresAt: state.tempTtlExpiresAt,
-      items: [
-        if (view.isRunning)
-          TitleBarItem(id: "running", label: "Running", spinner: true),
-        if (progress != null)
-          TitleBarItem(
-            id: "plan",
-            label: "Plan, ${progress.$1} of ${progress.$2} done",
-            symbol: "checklist",
-          ),
-        TitleBarItem(
-          id: "settings",
-          label: "Chat settings",
-          symbol: "info.circle",
-        ),
-      ],
-      actions: {
-        "plan": () => openPlan(context, widget.chatId),
-        "settings": () => openChatSettings(context, widget.chatId),
-      },
+      bar: ChatBarSnapshot(
+        title: state.title,
+        project: state.project == null ? null : projectLabel(state.project),
+        pinned: state.pinned,
+        expiresAt: state.tempTtlExpiresAt?.millisecondsSinceEpoch,
+        running: view.isRunning,
+        planDone: progress?.$1,
+        planTotal: progress?.$2,
+      ),
+      onPlan: () => openPlan(context, widget.chatId),
+      onSettings: () => openChatSettings(context, widget.chatId),
     );
   }
 

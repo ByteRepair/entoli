@@ -66,7 +66,7 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
 
   /// What the shell sends under no surface's name — the window's own, the
   /// sidebar's, the palette's — to [bridge], or to nothing. The surfaces'
-  /// own go to the one on top of each, through `ShellSlots`.
+  /// own go to whichever answers for each, through `ShellAnswers`.
   static void _bind(_ShellBridgeState? bridge) {
     WindowEvents.setUp(bridge == null ? null : WindowRunner(bridge.ref));
     SidebarIntents.setUp(

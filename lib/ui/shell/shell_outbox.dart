@@ -17,7 +17,7 @@ class ShellOutbox {
       _post("window", snapshot, _shell.window);
   void sidebar(SidebarSnapshot snapshot) =>
       _post("sidebar", snapshot, _shell.sidebar);
-  void chatBar(TitleBarSnapshot snapshot) =>
+  void chatBar(ChatBarSnapshot snapshot) =>
       _post("chatBar", snapshot, _shell.chatBar);
   void pageBar(TitleBarSnapshot snapshot) =>
       _post("pageBar", snapshot, _shell.pageBar);
