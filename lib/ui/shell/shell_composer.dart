@@ -1,14 +1,17 @@
-import "package:entoli_glass/entoli_glass.dart";
+import "package:entoli_glass/entoli_glass.dart" hide ComposerAction;
+import "package:entoli_glass/entoli_glass.dart" as shell show ComposerAction;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../app/composer.dart";
+import "../../domain/goal.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart" show ProjectRef;
+import "../../domain/wired_skill.dart";
 import "../../providers.dart";
 import "../chat/widgets/composer.dart";
 import "../chat/widgets/composer_controller.dart";
 import "../chat/widgets/composer_embed.dart";
-import "../chat/widgets/composer_logic.dart";
 import "../widgets/agent_picture.dart";
 import "../widgets/completion_field.dart";
 import "../widgets/dialogs.dart";
@@ -30,9 +33,36 @@ ComposerTrigger triggerOf(CompletionKind kind) => switch (kind) {
 /// `menuFace`, which draws it at that size.
 const _menuFace = 22.0;
 
+/// The core's composer action for the contract's: the two are one list, and
+/// a new one on either side does not compile until it is here.
+ComposerAction composerActionOf(shell.ComposerAction action) =>
+    switch (action) {
+      shell.ComposerAction.send => ComposerAction.send,
+      shell.ComposerAction.queue => ComposerAction.queue,
+      shell.ComposerAction.stop => ComposerAction.stop,
+      shell.ComposerAction.voice => ComposerAction.voice,
+      shell.ComposerAction.attachImage => ComposerAction.attachImage,
+      shell.ComposerAction.attachFile => ComposerAction.attachFile,
+      shell.ComposerAction.insertSkill => ComposerAction.insertSkill,
+      shell.ComposerAction.insertAgent => ComposerAction.insertAgent,
+      shell.ComposerAction.newGoal => ComposerAction.newGoal,
+    };
+
+/// Which callback [wired] is, for the client to name.
+CallbackKind callbackKindOf(WiredCall wired) => switch (wired.skill) {
+  WiredSkill.compact => CallbackKind.compact,
+  WiredSkill.goal => switch (goalCommandOf(wired.arguments)) {
+    GoalSet() => CallbackKind.setGoal,
+    GoalResume() => CallbackKind.resumeGoal,
+    GoalPause() => CallbackKind.pauseGoal,
+    GoalClear() => CallbackKind.clearGoal,
+    GoalShow() => CallbackKind.showGoal,
+  },
+};
+
 /// The composer, drawn by the native shell: configured by a [Composer] that
-/// is never mounted, and its rules through the same [ComposerLogic], with no
-/// Flutter of its own on screen. It sends the shell what to draw and runs what
+/// is never mounted, and run by the core's [ComposerModel], with no Flutter
+/// of its own on screen. It sends the shell what to draw and runs what
 /// the user did there; the text is Dart's, in the config's controller, as it
 /// is for [Composer].
 class ShellComposer extends ConsumerStatefulWidget {
@@ -48,7 +78,10 @@ class ShellComposerState extends ConsumerState<ShellComposer>
     implements ComposerHandle, ComposerIntents {
   late final ShellOutbox _outbox = ref.read(shellOutboxProvider);
   late final ShellSlots _slots = ref.read(shellSlotsProvider);
-  late final ComposerLogic _logic = ComposerLogic(widget.config.controller);
+  late final ComposerModel _logic = ComposerModel(
+    widget.config.controller,
+    pick: (kind) => ref.read(attachmentPickerProvider).pick(kind),
+  );
   late final Listenable _shape = Listenable.merge([
     _logic,
     _logic.canSend,
@@ -95,7 +128,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
     if (oldWidget.config.controller != widget.config.controller) {
       oldWidget.config.controller.removeListener(_pushValue);
       widget.config.controller.addListener(_pushValue);
-      _logic.controller = widget.config.controller;
+      _logic.field = widget.config.controller;
       _pushValue();
     }
     _configure();
@@ -117,6 +150,8 @@ class ShellComposerState extends ConsumerState<ShellComposer>
     onSend: widget.config.onSend,
     onQueue: widget.config.onQueue,
     steers: widget.config.steers,
+    onAbort: widget.config.onAbort,
+    onVoice: widget.config.onVoice,
   );
 
   @override
@@ -178,36 +213,15 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   }
 
   @override
-  void send() => _logic.submit();
-
-  @override
-  void queue() => _logic.submit(queue: true);
-
-  @override
-  void stop() => widget.config.onAbort();
-
-  @override
-  void voice() => widget.config.onVoice?.call();
-
-  @override
-  Future<void> attach(AttachKind kind) async => _add(
-    await ref.read(attachmentPickerProvider).pick(switch (kind) {
-      AttachKind.image => AttachmentKind.image,
-      AttachKind.file => AttachmentKind.file,
-    }),
-  );
-
-  @override
-  Future<void> trigger(ComposerTrigger kind) async {
-    _dismissed = null;
-    openCompletion(_controller, completionOf(kind));
-    if (mounted) setState(() {});
-  }
-
-  @override
-  Future<void> goal() async {
-    _dismissed = null;
-    startGoal(_controller);
+  Future<void> run(shell.ComposerAction action) async {
+    final run = composerActionOf(action);
+    // A menu opened from the `+` is open again however it was dismissed.
+    if (run == ComposerAction.insertSkill ||
+        run == ComposerAction.insertAgent ||
+        run == ComposerAction.newGoal) {
+      _dismissed = null;
+    }
+    await _logic.run(run);
     if (mounted) setState(() {});
   }
 
@@ -336,16 +350,14 @@ class ShellComposerState extends ConsumerState<ShellComposer>
               ComposerMode.shell => InputMode.shell,
               ComposerMode.callback => InputMode.callback,
             },
-            hint: mode.hint ?? "Message",
-            sendLabel: mode.sendLabel(
-              queues: _logic.queues.value,
-              callback: _logic.callbackLabel,
-            ),
+            callback: switch (_logic.callback) {
+              final wired? => callbackKindOf(wired),
+              null => null,
+            },
             canSend: _logic.canSend.value,
             queues: _logic.queues.value,
-            speaking: widget.config.agentSpeaking,
-            voice: widget.config.onVoice != null,
-            maxLines: _logic.maxLines,
+            speaking: _logic.speaking,
+            voice: _logic.voice,
             attachments: [
               for (final a in _logic.attachments)
                 ComposerAttachment(
@@ -374,8 +386,6 @@ class ShellComposerState extends ConsumerState<ShellComposer>
                   body: value.card.body,
                 ),
             },
-            accent: theme.colorScheme.primary.toARGB32(),
-            dark: theme.brightness == Brightness.dark,
           ),
         );
         return const SizedBox.shrink();

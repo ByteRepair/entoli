@@ -409,14 +409,22 @@ when the top one goes, nothing it watches having changed to rebuild it. A row's 
 native dialogs that send the edit itself, which `ChatEdits` makes as it does
 for the Flutter sidebar's dialogs.
 
-**The composer's rules are one copy.** `ComposerLogic` is what a composer
-decides apart from how it is drawn — what is attached, which mode the text
-puts it in, whether Send would do anything, whether Queue is on offer,
-sending — and the words and limits that follow from it: each mode's hint and
-send label, how far the field grows, where a `!` command runs before the
-shell has said. The Flutter `Composer` and `ShellComposer` both draw it, the
-shell's configured by a `Composer` it never mounts, the chat page choosing
-between them in one place. Both
+**The composer's rules are the core's.** `ComposerModel`
+(`lib/app/composer.dart`) is what a composer decides apart from how it is
+drawn — what is attached, which mode the text puts it in and which callback
+it holds, whether Send would do anything, whether Queue is on offer, where a
+`!` command runs before the shell has said — and runs every
+`ComposerAction` in one exhaustive switch. It reads the field through
+`ComposerText`, which `ComposerController` implements, so it imports no
+widget. What it says is each frontend's: the hint, the send label and how far
+the field grows are written in `composer_words.dart` and in `ComposerView.swift`
+separately, and differ where the platforms do. **Each frontend places every
+action**: the Flutter `Composer`'s `_place` and Swift's `ComposerAction.place`
+switch over the same list with no default, Pigeon generating it into Swift,
+so a new action compiles on neither side until both have put it somewhere or
+left it out on purpose. The Flutter `Composer` and `ShellComposer` both run
+on the model, the shell's configured by a `Composer` it never mounts, the
+chat page choosing between them in one place. Both
 answer `ComposerHandle`, so Reply and a steer taken back reach either. The
 text is Dart's `ComposerController`: what the native field types arrives as
 `edited` and is not sent back to it, which mid-composition would undo the

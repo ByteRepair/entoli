@@ -11,9 +11,8 @@ import SwiftUI
 extension ComposerSnapshot {
   /// No page has a composer yet.
   static let initial = ComposerSnapshot(
-    present: false, mode: .message, hint: "", sendLabel: "Send", canSend: false, queues: false,
-    speaking: false, voice: false, maxLines: 6, attachments: [], menu: [], cards: [:],
-    accent: 0xFF00_7AFF, dark: false)
+    present: false, mode: .message, canSend: false, queues: false,
+    speaking: false, voice: false, attachments: [], menu: [], cards: [:])
 }
 
 /// What the text view is to the model: told a value Dart set, asked to take
@@ -26,9 +25,9 @@ protocol ComposerEditor: AnyObject {
 }
 
 /// The composer's state as Dart last said it, and the way back to Dart. Dart
-/// decides — `ShellComposer` over the same `ComposerLogic` the Flutter
-/// composer uses — and this draws what it was told and says what the user
-/// did. Its own object rather than a field of [ShellModel], so a keystroke
+/// decides — `ShellComposer` over the core's `ComposerModel`, which the
+/// Flutter composer runs on too — and this draws what it was told, in its own
+/// words, and says what the user did. Its own object rather than a field of [ShellModel], so a keystroke
 /// redraws the composer and nothing else.
 final class ComposerModel: ObservableObject {
   @Published private(set) var look = ComposerSnapshot.initial
@@ -63,18 +62,16 @@ final class ComposerModel: ObservableObject {
   var present: Bool { look.present }
   var mode: InputMode { look.mode }
   var menu: [ComposerMenuItem] { look.menu }
-  var hint: String { look.hint }
-  var sendLabel: String { look.sendLabel }
+  var callback: CallbackKind? { look.callback }
   var canSend: Bool { look.canSend }
   var queues: Bool { look.queues }
   var speaking: Bool { look.speaking }
   var voice: Bool { look.voice }
-  var maxLines: Int { Int(look.maxLines) }
-  var dark: Bool { look.dark }
+  /// How many lines the field grows to before it scrolls: two more per
+  /// card, each taller than a line, up to four of them.
+  var maxLines: Int { 6 + 2 * min(look.cards.count, 4) }
   var cwd: String? { look.cwd }
   var attachments: [ComposerAttachment] { look.attachments }
-
-  var accent: Color { Color(argb: look.accent) }
 
   /// The cards by their codes, as [look] last said them: made when they
   /// change rather than on every read, the field reading them once per
@@ -98,8 +95,7 @@ final class ComposerModel: ObservableObject {
 
   func apply(_ next: ComposerSnapshot) {
     guard next != look else { return }
-    let restyle = next.mode != look.mode || next.dark != look.dark || next.cards != look.cards
-      || next.accent != look.accent
+    let restyle = next.mode != look.mode || next.cards != look.cards
     // A different list starts again at its first row; the same one keeps the
     // row the arrows are on — a face arriving for a row is the same list.
     if next.menu.map(\.label) != look.menu.map(\.label) { highlighted = 0 }

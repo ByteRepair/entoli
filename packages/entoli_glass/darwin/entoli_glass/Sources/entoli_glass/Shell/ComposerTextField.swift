@@ -100,7 +100,9 @@ private func cardImage(
 /// Dart's text as the field draws it: typed runs in the mode's face, each
 /// embed's code as a card.
 @MainActor
-private func displayed(_ text: String, model: ComposerModel, width: CGFloat, scale: CGFloat)
+private func displayed(
+  _ text: String, model: ComposerModel, width: CGFloat, scale: CGFloat, dark: Bool
+)
   -> NSAttributedString
 {
   let attributes = fieldAttributes(model.mode)
@@ -121,7 +123,7 @@ private func displayed(_ text: String, model: ComposerModel, width: CGFloat, sca
     flush()
     let attachment = NSTextAttachment()
     if let image = cardImage(
-      card, width: width, accent: model.accent, dark: model.dark, scale: scale)
+      card, width: width, accent: .accentColor, dark: dark, scale: scale)
     {
       attachment.image = image
       attachment.bounds = CGRect(origin: .zero, size: image.size)
@@ -201,7 +203,9 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
       guard let model, markedTextRange == nil else { return }
       applying = true
       defer { applying = false }
-      attributedText = displayed(text, model: model, width: cardWidth, scale: traitCollection.displayScale)
+      attributedText = displayed(
+        text, model: model, width: cardWidth, scale: traitCollection.displayScale,
+        dark: traitCollection.userInterfaceStyle == .dark)
       typingAttributes = fieldAttributes(model.mode)
       let length = attributedText.length
       selectedRange = clamped(start: start, end: end, length: length)
@@ -228,6 +232,16 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
     }
 
     private var cardWidth: CGFloat { max(bounds.width - 4, 0) }
+
+    /// The cards are images, drawn in the appearance they were made in.
+    override func traitCollectionDidChange(_ previous: UITraitCollection?) {
+      super.traitCollectionDidChange(previous)
+      if traitCollection.userInterfaceStyle != previous?.userInterfaceStyle,
+        model?.cards.isEmpty == false
+      {
+        restyle()
+      }
+    }
 
     override func layoutSubviews() {
       super.layoutSubviews()
@@ -302,8 +316,8 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
       return commands
     }
 
-    @objc private func sendKey() { model?.say?.send { _ in } }
-    @objc private func queueKey() { model?.say?.queue { _ in } }
+    @objc private func sendKey() { model?.say?.run(action: .send) { _ in } }
+    @objc private func queueKey() { model?.say?.run(action: .queue) { _ in } }
     @objc private func upKey() { model?.move(-1) }
     @objc private func downKey() { model?.move(1) }
     @objc private func pickKey() { model?.pickHighlighted() }
@@ -388,7 +402,8 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
       storage.setAttributedString(
         displayed(
           text, model: model, width: cardWidth,
-          scale: window?.backingScaleFactor ?? 2))
+          scale: window?.backingScaleFactor ?? 2,
+          dark: effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua))
       typingAttributes = fieldAttributes(model.mode)
       let length = storage.length
       setSelectedRange(clamped(start: start, end: end, length: length))
@@ -424,6 +439,12 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
     }
 
     private var cardWidth: CGFloat { max(bounds.width - 4, 0) }
+
+    /// The cards are images, drawn in the appearance they were made in.
+    override func viewDidChangeEffectiveAppearance() {
+      super.viewDidChangeEffectiveAppearance()
+      if model?.cards.isEmpty == false { restyle() }
+    }
 
     /// A width change re-lays the text — a line that wrapped beside the voice
     /// button fits once it is gone — so the height is asked again, and the
@@ -522,11 +543,11 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
       // Return and the keypad's Enter.
       if event.keyCode == 36 || event.keyCode == 76 {
         if flags == .command {
-          model?.say?.send { _ in }
+          model?.say?.run(action: .send) { _ in }
           return true
         }
         if flags == .option {
-          model?.say?.queue { _ in }
+          model?.say?.run(action: .queue) { _ in }
           return true
         }
         return false

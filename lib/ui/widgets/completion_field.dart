@@ -2,6 +2,8 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../app/composer.dart"
+    show isCompletionSpace, triggerOpened, triggerPosition;
 import "../../domain/models.dart";
 import "../../domain/project.dart" show ProjectRef;
 import "../../domain/shell.dart";
@@ -38,7 +40,7 @@ CompletionToken? activeCompletionToken(TextEditingValue value) {
   if (caret > value.text.length) return null;
 
   var start = caret;
-  while (start > 0 && !_isSpace(value.text.codeUnitAt(start - 1))) {
+  while (start > 0 && !isCompletionSpace(value.text.codeUnitAt(start - 1))) {
     start--;
   }
   if (start == caret) return null;
@@ -55,19 +57,6 @@ CompletionToken? activeCompletionToken(TextEditingValue value) {
   };
 }
 
-/// Space, tab, newline — every break a typed message can hold.
-bool _isSpace(int codeUnit) =>
-    codeUnit == 0x20 || codeUnit == 0x09 || codeUnit == 0x0A;
-
-/// Where [kind]'s trigger goes: a skill's at the start of the message, since
-/// that is the only place `prompt_library.dart`'s `_skillReference` reads one
-/// from, and a mention's wherever the caret is.
-int _triggerAt(TextEditingValue value, CompletionKind kind) => switch (kind) {
-  CompletionKind.skill => 0,
-  CompletionKind.agent =>
-    value.selection.isValid ? value.selection.baseOffset : value.text.length,
-};
-
 /// Type a whole completion into [controller] — the trigger, the name, and the
 /// trailing space that makes what follows arguments rather than more name.
 ///
@@ -80,9 +69,11 @@ void insertCompletion(
   CompletionKind kind,
   String name,
 ) {
-  final value = controller.value;
-  final at = _triggerAt(value, kind);
-  final space = at > 0 && !_isSpace(value.text.codeUnitAt(at - 1)) ? " " : "";
+  final at = triggerPosition(controller.text, _caret(controller), kind);
+  final text = controller.text;
+  final space = at > 0 && !isCompletionSpace(text.codeUnitAt(at - 1))
+      ? " "
+      : "";
   replaceIn(controller, at, at, "$space${kind.trigger}$name ");
 }
 
@@ -91,15 +82,19 @@ void insertCompletion(
 /// wherever the caret happens to be. One already typed at the start is
 /// reused rather than doubled.
 void openCompletion(TextEditingController controller, CompletionKind kind) {
-  final value = controller.value;
-  if (kind == CompletionKind.skill && value.text.startsWith(kind.trigger)) {
-    controller.selection = const TextSelection.collapsed(offset: 1);
-    return;
-  }
-  final at = _triggerAt(value, kind);
-  final space = at > 0 && !_isSpace(value.text.codeUnitAt(at - 1)) ? " " : "";
-  replaceIn(controller, at, at, "$space${kind.trigger}");
+  final (:text, :caret) = triggerOpened(
+    controller.text,
+    _caret(controller),
+    kind,
+  );
+  controller.value = TextEditingValue(
+    text: text,
+    selection: TextSelection.collapsed(offset: caret),
+  );
 }
+
+int? _caret(TextEditingController controller) =>
+    controller.selection.isValid ? controller.selection.baseOffset : null;
 
 /// Take [option] for the [token] the caret is in: the token, up to the caret,
 /// becomes the whole name. The trailing space makes what follows arguments
@@ -126,54 +121,8 @@ List<CompletionOption> matchingCompletions(
   return options.where((o) => o.name.toLowerCase().contains(needle)).toList();
 }
 
-/// Start a goal in [controller]: `/goal ` at the head of the message, so what
-/// is already typed becomes the objective, and the caret at its end to go on
-/// writing it. A message already a goal is left as it is, caret aside. The
-/// `+` menus' New Goal, Flutter's and the native shell's, both land here.
-void startGoal(TextEditingController controller) {
-  const head = "/goal ";
-  final text = controller.text;
-  final already = text == "/goal" || text.startsWith(head);
-  final goal = already
-      ? (text == "/goal" ? head : text)
-      : "$head${text.trimLeft()}";
-  controller.value = TextEditingValue(
-    text: goal,
-    selection: TextSelection.collapsed(offset: goal.length),
-  );
-}
-
-/// The menu entries that open a completion menu by typing its trigger, for a
-/// button that offers other things too — the composer's `+` also attaches
-/// files. Each carries its action as its value, so it runs once the menu has
-/// closed rather than under it.
-List<PopupMenuItem<VoidCallback>> completionInsertItems(
-  BuildContext context,
-  GlobalKey<CompletionFieldState> field,
-) {
-  final theme = Theme.of(context);
-  return [
-    for (final kind in CompletionKind.values)
-      PopupMenuItem(
-        value: () => field.currentState?.openMenu(kind),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(kind.label),
-            const SizedBox(width: 24),
-            Text(
-              kind.trigger,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-  ];
-}
-
-/// The same entries as [completionInsertItems], for a page bar's menu.
+/// The entries that open a completion menu by typing its trigger, for a page
+/// bar's menu.
 List<PageMenuItem> completionInsertChoices(
   GlobalKey<CompletionFieldState> field,
 ) => [
@@ -303,6 +252,10 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
   /// message, the only place one is read from, and a mention's wherever the
   /// caret happens to be. The menu that opens is tapped rather than typed at,
   /// so the field is left unfocused.
+  /// Show the menu for a trigger typed from outside the field, which moved
+  /// no caret it would notice.
+  void reopen() => _syncToken();
+
   void openMenu(CompletionKind kind) {
     openCompletion(widget.controller, kind);
     // A caret already in place notifies nothing, so a menu that was dismissed

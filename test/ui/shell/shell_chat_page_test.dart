@@ -245,7 +245,7 @@ void main() {
     expect(position.pixels, lessThan(position.maxScrollExtent));
 
     composer().edited("hello", 5, 5);
-    composer().send();
+    composer().run(ComposerAction.send);
     await settleIo(tester);
     expect(position.pixels, position.maxScrollExtent);
   });

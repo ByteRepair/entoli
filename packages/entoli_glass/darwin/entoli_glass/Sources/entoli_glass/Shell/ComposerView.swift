@@ -1,5 +1,34 @@
 import SwiftUI
 
+/// Where this frontend puts a composer action: a button laid out by hand, or
+/// an entry of the `+` menu.
+enum ComposerPlace {
+  case button
+  case plus(label: String, symbol: String, group: Int)
+}
+
+extension ComposerAction {
+  /// Every action, in the contract's order: Pigeon's enums are not
+  /// `CaseIterable`.
+  static let all: [ComposerAction] = Array(
+    sequence(first: 0) { $0 + 1 }.lazy.map { ComposerAction(rawValue: $0) }
+      .prefix { $0 != nil }.compactMap { $0 })
+
+  /// Exhaustive, with no default: a new action does not compile until it has
+  /// a place here, or is left out on purpose. The Flutter composer has its
+  /// own, and the two differ where the platforms do.
+  var place: ComposerPlace {
+    switch self {
+    case .send, .queue, .stop, .voice: .button
+    case .attachImage: .plus(label: "Image", symbol: "photo", group: 0)
+    case .attachFile: .plus(label: "File", symbol: "paperclip", group: 0)
+    case .insertSkill: .plus(label: "Command", symbol: "slash.circle", group: 1)
+    case .insertAgent: .plus(label: "Agent", symbol: "at", group: 1)
+    case .newGoal: .plus(label: "New Goal", symbol: "scope", group: 2)
+    }
+  }
+}
+
 /// The composer: the menu, the working directory and the attachments over a
 /// row of the `+` menu, the field and its buttons. It sits in the shell's
 /// bottom safe-area inset, at its own height, which the conversation is told
@@ -64,42 +93,34 @@ struct ComposerView: View {
     }
     .padding(8)
     .fixedSize(horizontal: false, vertical: true)
-    .tint(model.accent)
-    .environment(\.colorScheme, model.dark ? .dark : .light)
     .animation(Self.motion, value: shape)
     .animation(Self.motion, value: model.highlighted)
   }
 
   // MARK: The row
 
+  /// The `+` menu's entries, grouped as [ComposerAction.place] says.
+  private static let plusGroups: [[(ComposerAction, String, String)]] = {
+    var groups: [Int: [(ComposerAction, String, String)]] = [:]
+    for action in ComposerAction.all {
+      if case .plus(let label, let symbol, let group) = action.place {
+        groups[group, default: []].append((action, label, symbol))
+      }
+    }
+    return groups.keys.sorted().map { groups[$0]! }
+  }()
+
   private var plus: some View {
     Menu {
-      Button {
-        model.say?.attach(kind: .image) { _ in }
-      } label: {
-        Label("Image", systemImage: "photo")
-      }
-      Button {
-        model.say?.attach(kind: .file) { _ in }
-      } label: {
-        Label("File", systemImage: "paperclip")
-      }
-      Divider()
-      Button {
-        model.say?.trigger(kind: .skill) { _ in }
-      } label: {
-        Label("Command", systemImage: "slash.circle")
-      }
-      Button {
-        model.say?.trigger(kind: .agent) { _ in }
-      } label: {
-        Label("Agent", systemImage: "at")
-      }
-      Divider()
-      Button {
-        model.say?.goal { _ in }
-      } label: {
-        Label("New Goal", systemImage: "scope")
+      ForEach(Array(Self.plusGroups.enumerated()), id: \.offset) { i, group in
+        if i > 0 { Divider() }
+        ForEach(group, id: \.0) { action, label, symbol in
+          Button {
+            model.say?.run(action: action) { _ in }
+          } label: {
+            Label(label, systemImage: symbol)
+          }
+        }
       }
     } label: {
       Image(systemName: "plus")
@@ -126,7 +147,7 @@ struct ComposerView: View {
         ComposerTextField(model: model)
           .frame(height: model.fieldHeight)
         if model.empty {
-          Text(model.hint)
+          Text(hint)
             .foregroundStyle(.secondary)
             .allowsHitTesting(false)
             .padding(.top, ComposerTextField.inset)
@@ -142,6 +163,32 @@ struct ComposerView: View {
       interactive: false)
   }
 
+  /// What an empty field says.
+  private var hint: String {
+    switch model.mode {
+    case .shell: "Shell command"
+    case .message, .callback: "Message"
+    }
+  }
+
+  /// What Send is called where it is not Stop.
+  private var sendLabel: String {
+    switch model.mode {
+    case .shell: return "Run"
+    case .message: return model.queues ? "Send now" : "Send"
+    case .callback:
+      switch model.callback {
+      case .compact: return "Compact"
+      case .setGoal: return "Set Goal"
+      case .resumeGoal: return "Resume Goal"
+      case .pauseGoal: return "Pause Goal"
+      case .clearGoal: return "Clear Goal"
+      case .showGoal: return "Show Goal"
+      case nil: return "Run"
+      }
+    }
+  }
+
   private var modeSymbol: String? {
     switch model.mode {
     case .shell: "terminal"
@@ -152,17 +199,17 @@ struct ComposerView: View {
 
   @ViewBuilder private var trailing: some View {
     if model.voice && !model.speaking && !model.canSend {
-      button("voice", "Voice mode", systemImage: "waveform") { model.say?.voice { _ in } }
+      button("voice", "Voice mode", systemImage: "waveform") { model.say?.run(action: .voice) { _ in } }
     }
     if model.queues {
-      button("queue", "Send after this turn", systemImage: "clock") { model.say?.queue { _ in } }
+      button("queue", "Send after this turn", systemImage: "clock") { model.say?.run(action: .queue) { _ in } }
     }
     if model.speaking && !model.canSend {
-      button("send", "Stop", systemImage: "stop.fill", prominent: true) { model.say?.stop { _ in } }
+      button("send", "Stop", systemImage: "stop.fill", prominent: true) { model.say?.run(action: .stop) { _ in } }
     } else {
       button(
-        "send", model.sendLabel, systemImage: sendSymbol, prominent: model.canSend
-      ) { model.say?.send { _ in } }
+        "send", sendLabel, systemImage: sendSymbol, prominent: model.canSend
+      ) { model.say?.run(action: .send) { _ in } }
       .disabled(!model.canSend)
     }
   }
@@ -189,7 +236,7 @@ struct ComposerView: View {
     .buttonStyle(.plain)
     .glassControl(
       id, in: glass, shape: Circle(),
-      tint: prominent ? model.accent.opacity(Self.prominence) : nil)
+      tint: prominent ? Color.accentColor.opacity(Self.prominence) : nil)
     .help(label)
     .accessibilityLabel(label)
   }

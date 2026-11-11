@@ -268,34 +268,31 @@ enum InputMode { message, shell, callback }
 /// Everything the native composer draws apart from its text, which is
 /// [ComposerValueSnapshot]. Not [present] where no page has a composer: a
 /// question stands in its place, or the project needs setting up.
+/// Which callback the field holds, for the client to name: the core says
+/// what it is, never what to call it.
+enum CallbackKind { compact, setGoal, resumeGoal, pauseGoal, clearGoal, showGoal }
+
 class ComposerSnapshot {
   ComposerSnapshot({
     required this.present,
     this.mode = InputMode.message,
-    this.hint = "",
-    this.sendLabel = "Send",
+    this.callback,
     this.canSend = false,
     this.queues = false,
     this.speaking = false,
     this.voice = false,
-    this.maxLines = 6,
     this.attachments = const [],
     this.menu = const [],
     this.cwd,
     this.cards = const {},
-    this.accent = 0xFF007AFF,
-    this.dark = false,
   });
 
   bool present;
 
   InputMode mode;
 
-  /// What an empty field says.
-  String hint;
-
-  /// What Send is called where it is not Stop.
-  String sendLabel;
+  /// In [InputMode.callback], which one.
+  CallbackKind? callback;
   bool canSend;
 
   /// What is typed would steer the running turn, so Queue is on offer.
@@ -306,7 +303,6 @@ class ComposerSnapshot {
 
   /// Voice mode can be opened from here.
   bool voice;
-  int maxLines;
   List<ComposerAttachment> attachments;
 
   /// The open completion menu, empty for none.
@@ -317,12 +313,6 @@ class ComposerSnapshot {
 
   /// The embeds in the field, by the UTF-16 code unit standing for each.
   Map<int, ComposerCard> cards;
-
-  /// The app's primary colour, as ARGB, which the app's controls wear.
-  int accent;
-
-  /// Which appearance the app is drawn in.
-  bool dark;
 }
 
 /// The composer's text and selection, in UTF-16 code units, sent when the app
@@ -747,10 +737,21 @@ abstract class PaletteIntents {
   void pickChat(String chat);
 }
 
-/// Which files [ComposerIntents.attach] asks for.
-enum AttachKind { image, file }
+/// What a user can do in the composer: the core's `ComposerAction`, which
+/// the client places, each in a switch of its own with no default.
+enum ComposerAction {
+  send,
+  queue,
+  stop,
+  voice,
+  attachImage,
+  attachFile,
+  insertSkill,
+  insertAgent,
+  newGoal,
+}
 
-/// Which menu [ComposerIntents.trigger] opens: `/`'s skills or `@`'s agents.
+/// A completion menu: `/`'s skills or `@`'s agents.
 enum ComposerTrigger { skill, agent }
 
 /// The composer on screen.
@@ -761,15 +762,7 @@ abstract class ComposerIntents {
 
   /// The field took the keyboard, or gave it up.
   void focused(bool focused);
-  void send();
-  void queue();
-  void stop();
-  void voice();
-  void attach(AttachKind kind);
-  void trigger(ComposerTrigger kind);
-
-  /// The `+` menu's New Goal: `/goal ` at the head of the field.
-  void goal();
+  void run(ComposerAction action);
 
   /// A row of the menu as last sent.
   void pick(int index);

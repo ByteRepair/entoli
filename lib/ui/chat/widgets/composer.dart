@@ -11,12 +11,73 @@ import "../../fonts.dart";
 import "../../widgets/attachment_chip.dart";
 import "../../widgets/completion_field.dart";
 import "../../widgets/dialogs.dart";
+import "../../../app/composer.dart";
 import "code_block.dart";
 import "composer_controller.dart";
 import "composer_embed.dart";
-import "composer_logic.dart";
+import "composer_words.dart";
 
-export "composer_logic.dart" show ComposerHandle, SendCallback;
+export "../../../app/composer.dart" show SendCallback;
+
+/// What a page asks of whichever composer it has, the Flutter one or the
+/// native shell's: a steer taken back put back, and a passage replied to.
+abstract interface class ComposerHandle {
+  void restore(Draft said);
+  void embed(ComposerEmbed embed);
+}
+
+/// Where the Flutter composer puts a [ComposerAction]: a button of its own,
+/// laid out by hand, or an entry of the `+` menu, divided by [_Plus.group].
+sealed class _Place {
+  const _Place();
+}
+
+class _Button extends _Place {
+  const _Button();
+}
+
+class _Plus extends _Place {
+  const _Plus(this.label, {this.icon, this.hint, required this.group});
+
+  final String label;
+  final IconData? icon;
+  final String? hint;
+  final int group;
+}
+
+/// Exhaustive, with no default: a new action does not compile until it has a
+/// place here, or is left out on purpose.
+_Place _place(ComposerAction action) => switch (action) {
+  ComposerAction.send ||
+  ComposerAction.queue ||
+  ComposerAction.stop ||
+  ComposerAction.voice => const _Button(),
+  ComposerAction.attachImage => const _Plus(
+    "Image",
+    icon: Icons.image_outlined,
+    group: 0,
+  ),
+  ComposerAction.attachFile => const _Plus(
+    "File",
+    icon: Icons.attach_file,
+    group: 0,
+  ),
+  ComposerAction.insertSkill => _Plus(
+    CompletionKind.skill.label,
+    hint: CompletionKind.skill.trigger,
+    group: 1,
+  ),
+  ComposerAction.insertAgent => _Plus(
+    CompletionKind.agent.label,
+    hint: CompletionKind.agent.trigger,
+    group: 1,
+  ),
+  ComposerAction.newGoal => const _Plus(
+    "New Goal",
+    icon: Icons.track_changes,
+    group: 2,
+  ),
+};
 
 class _SendIntent extends Intent {
   const _SendIntent();
@@ -120,11 +181,14 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   /// Held only so [embed] can put the caret in the field.
   final FocusNode _focus = FocusNode();
 
-  /// The rules, which the native shell's composer shares. This build resolves
-  /// the field's decoration and the buttons either side of it, so it follows
-  /// the logic's shape and leaves Send's flips to the buttons' own builders.
-  late final ComposerLogic _logic = ComposerLogic(widget.controller)
-    ..addListener(_reshaped);
+  /// The core's model, which the native shell's composer runs on too. This
+  /// build resolves the field's decoration and the buttons either side of
+  /// it, so it follows the model's shape and leaves Send's flips to the
+  /// buttons' own builders.
+  late final ComposerModel _logic = ComposerModel(
+    widget.controller,
+    pick: (kind) => ref.read(attachmentPickerProvider).pick(kind),
+  )..addListener(_reshaped);
   late final Listenable _sendState = Listenable.merge([
     _logic.canSend,
     _logic.queues,
@@ -139,7 +203,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   @override
   void didUpdateWidget(Composer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _logic.controller = widget.controller;
+    _logic.field = widget.controller;
     _configure();
   }
 
@@ -148,6 +212,8 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
     onSend: widget.onSend,
     onQueue: widget.onQueue,
     steers: widget.steers,
+    onAbort: widget.onAbort,
+    onVoice: widget.onVoice,
   );
 
   @override
@@ -159,10 +225,6 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
 
   void _reshaped() {
     if (mounted) setState(() {});
-  }
-
-  Future<void> _attach(AttachmentKind kind) async {
-    _add(await ref.read(attachmentPickerProvider).pick(kind));
   }
 
   /// Attach what the clipboard holds other than text. False where it held
@@ -209,6 +271,63 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
 
   void _submit({bool queue = false}) => _logic.submit(queue: queue);
 
+  /// How many lines the field grows to before it scrolls: two more per embed,
+  /// each taller than a line, up to four of them.
+  int get _maxLines => 6 + 2 * _logic.embeds.clamp(0, 4);
+
+  Future<void> _run(ComposerAction action) async {
+    await _logic.run(action);
+    if (action == ComposerAction.insertSkill ||
+        action == ComposerAction.insertAgent) {
+      _field.currentState?.reopen();
+    }
+  }
+
+  List<PopupMenuEntry<ComposerAction>> _plusMenu(BuildContext context) {
+    final theme = Theme.of(context);
+    final entries = <PopupMenuEntry<ComposerAction>>[];
+    int? group;
+    for (final action in ComposerAction.values) {
+      if (_place(action) case final _Plus entry) {
+        if (group != null && entry.group != group) {
+          entries.add(const PopupMenuDivider());
+        }
+        group = entry.group;
+        entries.add(_plusItem(theme, action, entry));
+      }
+    }
+    return entries;
+  }
+
+  PopupMenuItem<ComposerAction> _plusItem(
+    ThemeData theme,
+    ComposerAction action,
+    _Plus entry,
+  ) => PopupMenuItem(
+    value: action,
+    child: Row(
+      mainAxisAlignment: entry.hint == null
+          ? MainAxisAlignment.start
+          : MainAxisAlignment.spaceBetween,
+      children: [
+        if (entry.icon case final icon?) ...[
+          Icon(icon, size: 18),
+          const SizedBox(width: 12),
+        ],
+        Text(entry.label),
+        if (entry.hint case final hint?) ...[
+          const SizedBox(width: 24),
+          Text(
+            hint,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -233,7 +352,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
           project: widget.project,
           device: widget.device,
           minLines: 1,
-          maxLines: _logic.maxLines,
+          maxLines: _maxLines,
           // The command in the face a command is read in, so what is about to
           // run looks like what it is while it is still being typed.
           style: shell ? codeBlockStyle(theme) : null,
@@ -289,35 +408,11 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
                 children: [
                   // Each entry carries its action as its value, so it runs once
                   // the menu has closed rather than under it.
-                  PopupMenuButton<VoidCallback>(
+                  PopupMenuButton<ComposerAction>(
                     icon: const Icon(Icons.add),
                     tooltip: "Attach or insert",
-                    onSelected: (action) => action(),
-                    itemBuilder: (context) => [
-                      _attachItem(
-                        Icons.image_outlined,
-                        "Image",
-                        AttachmentKind.image,
-                      ),
-                      _attachItem(
-                        Icons.attach_file,
-                        "File",
-                        AttachmentKind.file,
-                      ),
-                      const PopupMenuDivider(),
-                      ...completionInsertItems(context, _field),
-                      const PopupMenuDivider(),
-                      PopupMenuItem(
-                        value: () => startGoal(widget.controller),
-                        child: const Row(
-                          children: [
-                            Icon(Icons.track_changes, size: 18),
-                            SizedBox(width: 12),
-                            Text("New Goal"),
-                          ],
-                        ),
-                      ),
-                    ],
+                    onSelected: _run,
+                    itemBuilder: _plusMenu,
                   ),
                   Expanded(child: field),
                   // The voice button and the field share the row, so the field
@@ -333,7 +428,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
                       children: [
                         const SizedBox(width: 4),
                         IconButton(
-                          onPressed: widget.onVoice,
+                          onPressed: () => _run(ComposerAction.voice),
                           icon: const Icon(Icons.circle_outlined),
                           tooltip: "Voice mode",
                         ),
@@ -362,7 +457,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
                           ? Padding(
                               padding: const EdgeInsets.only(left: 4),
                               child: IconButton.outlined(
-                                onPressed: () => _submit(queue: true),
+                                onPressed: () => _run(ComposerAction.queue),
                                 icon: const Icon(Icons.schedule_send),
                                 tooltip: "Send after this turn (Alt+Enter)",
                               ),
@@ -380,12 +475,14 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
                     builder: (context, _) =>
                         widget.agentSpeaking && !_logic.canSend.value
                         ? IconButton.filled(
-                            onPressed: widget.onAbort,
+                            onPressed: () => _run(ComposerAction.stop),
                             icon: const Icon(Icons.stop),
                             tooltip: "Stop",
                           )
                         : IconButton.filled(
-                            onPressed: _logic.canSend.value ? _submit : null,
+                            onPressed: _logic.canSend.value
+                                ? () => _run(ComposerAction.send)
+                                : null,
                             icon: Icon(
                               shell
                                   ? Icons.play_arrow
@@ -395,7 +492,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
                             ),
                             tooltip: _logic.mode.sendLabel(
                               queues: _logic.queues.value,
-                              callback: _logic.callbackLabel,
+                              callback: _logic.callback,
                             ),
                           ),
                   ),
@@ -514,15 +611,4 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
       builder: (context, value, _) => row(value),
     );
   }
-
-  PopupMenuItem<VoidCallback> _attachItem(
-    IconData icon,
-    String label,
-    AttachmentKind kind,
-  ) => PopupMenuItem(
-    value: () => _attach(kind),
-    child: Row(
-      children: [Icon(icon, size: 18), const SizedBox(width: 12), Text(label)],
-    ),
-  );
 }

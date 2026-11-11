@@ -682,7 +682,8 @@ that string alone.
 
 `/goal` is dressed as the callback it is, the one dress every callback
 shares; what differs is the send button, which `callbackSendLabel` names
-from what is typed — "Set goal", "Pause goal", "Clear goal" — as it names
+from the callback the core says is typed (the native shell names it from
+`CallbackKind`, in its own words) — "Set goal", "Pause goal", "Clear goal" — as it names
 `/compact` "Compact". A label per callback, since a button saying "Compact"
 over `/goal pause` was the dress claiming more than was true.
 

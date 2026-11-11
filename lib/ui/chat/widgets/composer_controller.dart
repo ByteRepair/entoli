@@ -3,6 +3,7 @@ import "dart:math" show max;
 import "package:flutter/material.dart";
 import "package:flutter/rendering.dart";
 
+import "../../../app/composer.dart" show ComposerText;
 import "composer_embed.dart";
 
 /// The composer's field, holding typed text and [ComposerEmbed]s together.
@@ -17,7 +18,7 @@ import "composer_embed.dart";
 /// [text] is the field's and has those characters in it; [message] is what is
 /// sent, each embed written out as its markdown. Read [message] wherever the
 /// question is what the user is saying.
-class ComposerController extends TextEditingController {
+class ComposerController extends TextEditingController implements ComposerText {
   ComposerController({this.readers = const [QuoteEmbed.read]});
 
   /// What turns a paragraph of a message set through [message] back into an
@@ -30,6 +31,18 @@ class ComposerController extends TextEditingController {
   final Map<int, ComposerEmbed> _embeds = {};
 
   static const _firstCode = 0xE000;
+
+  @override
+  int get embedCount => _embeds.isEmpty ? 0 : embeds.length;
+
+  @override
+  int? get caret => selection.isValid ? selection.baseOffset : null;
+
+  @override
+  void edit(String text, int caret) => value = TextEditingValue(
+    text: text,
+    selection: TextSelection.collapsed(offset: caret),
+  );
 
   /// The embeds in the field, in order.
   List<ComposerEmbed> get embeds => _embeds.isEmpty
@@ -63,6 +76,7 @@ class ComposerController extends TextEditingController {
   /// by a blank line, which is what keeps a quote from running on into the
   /// line typed under it — markdown reads a line straight after a `>` line as
   /// more of the quote. With no embed in it, it is [text] exactly.
+  @override
   String get message {
     final parts = _parts();
     if (parts.every((part) => part is String)) return text;
@@ -141,6 +155,7 @@ class ComposerController extends TextEditingController {
   /// what was typed since. An embed either side of the join is kept a
   /// paragraph of its own, or the line beside a quote would read as more of
   /// it and its card would not come back.
+  @override
   void prepend(String said) {
     final typed = message;
     if (said.isEmpty || typed.isEmpty) {

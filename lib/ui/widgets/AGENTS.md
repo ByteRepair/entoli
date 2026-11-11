@@ -98,8 +98,8 @@ library, so being offered them in a chat and not there was the tell. Where the
 menu goes is the caller's, through `layout`: the composer's spans the whole
 composer rather than the field, since the `+` and Send are either side of it,
 and the trigger's prompt page puts it under a box that is the whole page.
-`completionInsertItems` is the `+` button's two entries, for a menu that offers
-other things too — the composer's also attaches files. What a caller must not
+Where a trigger is typed from a menu is the core's (`triggerOpened` in
+`lib/app/composer.dart`), and `reopen` shows the menu for it. What a caller must not
 do is write its own trigger handling: `activeCompletionToken` has to keep
 agreeing with `prompt_library.dart`, and one copy of it can.
 
