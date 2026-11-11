@@ -673,9 +673,9 @@ class ChoiceStrip {
 /// changed.
 @HostApi(dartHostTestHandler: "TestNativeShell")
 abstract class NativeShell {
-  /// Take the window. Once per process; a second is answered with nothing to
-  /// do.
-  void start();
+  /// Whether the window is the shell's. The client decides at launch, from
+  /// `settings.json`, before Dart runs; the app draws for whichever it was.
+  bool hosting();
 
   void window(WindowSnapshot snapshot);
   void sidebar(SidebarSnapshot snapshot);

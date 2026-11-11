@@ -610,26 +610,23 @@ github-cli installed.
 ## The native shell
 
 With Liquid Glass on (see "Liquid Glass" in `lib/ui/AGENTS.md`) the
-`entoli_glass` plugin, on Dart's `start`, makes a `UIHostingController` the
-scene window's root, with the `FlutterViewController` the storyboard made
-embedded in it as a child. The Runner is untouched: the implicit engine, its
-registrations and `SceneDelegate` are as they were, and the plugin finds the
-window as the one whose root is Flutter's.
+`entoli_glass` plugin makes a `UIHostingController` the scene window's root,
+with the `FlutterViewController` the storyboard made embedded in it as a
+child. The Runner is untouched: the implicit engine, its registrations and
+`SceneDelegate` are as they were. The plugin swaps the root on
+`UIScene.willConnectNotification`, which comes with the storyboard's window
+made and hidden and Flutter's view not yet loaded. Not `addSceneDelegate`:
+the implicit engine registers its plugins before the scene connects, and
+Flutter forwards a connection only to an engine whose view is already in
+the scene, so a plugin's scene delegate never hears this one.
 
-**The container takes the Flutter controller once it has appeared**
-(`FlutterContainer.viewDidAppear`), not as it loads or is about to. Swapping
-the window's root sends the old root — Flutter's controller — its
-`viewDidDisappear` only as the new root appears, which is after the
-`viewWillAppear` it had as the container's child. Flutter sets its surface up
-on an appearance and tears it down on a disappearance, so in that order the
-Flutter view drew no frame again from the shell's start: the lifecycle stayed
-resumed and Dart built, laid out and painted every frame, and the screen kept
-the last one from before the swap. The native chrome hid it — the new-chat
-screen draws over a Flutter view with nothing on it — until a Flutter page was
-pushed and showed its header, the shell's, over a blank body. Opening the
-sidebar and closing it mended it, the view leaving the window and coming back.
-Taken in `viewDidAppear`, the controller's own disappearance has ended and it
-appears afresh inside a container already in the window.
+**The swap is before the window shows, and that is load-bearing.** Swapped
+once Flutter's controller had appeared as the root — Dart's `start`, as it
+first was — UIKit sent it `viewDidDisappear` only as the new root appeared,
+after the `viewWillAppear` it had as the container's child, and Flutter, which
+tears its surface down on a disappearance, drew no frame again. Never having
+appeared, it has no disappearance to come, and the container takes it as it
+loads like any child.
 
 The plugin's package is iOS 17 and macOS 14, the floor the app already has for
 MLX, and the Runner's targets say 17.0 outright rather than "the recommended
