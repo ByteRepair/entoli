@@ -77,6 +77,12 @@ enum UiHint {
 
   /// The endpoints models come from, each with what it has spent.
   providers,
+
+  /// The models loaded now, with what they take up.
+  running,
+
+  /// Models to download, each with its facts.
+  models,
 }
 
 /// The pages settings is filed under, in the order they are offered. A
@@ -103,7 +109,8 @@ enum SettingsPageId {
 
   // Opened from a row on another page rather than listed.
   syncRelay("Internet relay", listed: false),
-  syncTurn("TURN server", listed: false);
+  syncTurn("TURN server", listed: false),
+  onDeviceLlm("LLM settings", listed: false);
 
   const SettingsPageId(
     this.title, {

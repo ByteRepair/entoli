@@ -4,9 +4,6 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../widgets/side_panel_frame.dart";
 import "agents_settings.dart";
 import "byte_repair_settings.dart";
-import "running_models.dart";
-import "local_model_settings.dart";
-import "on_device_catalog.dart";
 import "triggers.dart";
 import "skills_settings.dart";
 import "settings_category.dart";
@@ -109,15 +106,7 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
   // by, and a model here appears there like any other.
   // Every download, text and speech: Voice and LLMs only pick, and offer
   // what is here beside the providers' models.
-  SettingsCategory.onDevice => const [
-    // What is loaded leads the page: it is what is most often come here for,
-    // and three taps deep under LLM settings was too far.
-    RunningModelsSection(),
-    LocalModelSection(),
-    // Draws its own dividers, since a kind nothing here can run has no
-    // catalog to put under one.
-    OnDeviceCatalog(),
-  ],
+  SettingsCategory.onDevice => const [SchemaSections(SettingsPageId.onDevice)],
   SettingsCategory.voice => const [SchemaSections(SettingsPageId.voice)],
   SettingsCategory.triggers => const [TriggersSection()],
   // Rendered by [_categoryBody] whole rather than filed here, for the

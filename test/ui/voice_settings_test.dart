@@ -7,7 +7,7 @@ import "package:agent_chat/domain/model_registry.dart";
 import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/domain/voice_model.dart";
 import "package:agent_chat/providers.dart";
-import "package:agent_chat/ui/settings/on_device_catalog.dart";
+import "package:agent_chat/ui/widgets/catalog.dart";
 import "package:agent_chat/ui/settings/schema_view.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
@@ -64,11 +64,11 @@ void main() {
 
       final whisper = find.ancestor(
         of: find.text("Whisper tiny"),
-        matching: find.byType(ModelDownloadTile),
+        matching: find.byType(CatalogTile),
       );
       final moonshine = find.ancestor(
         of: find.text("Moonshine tiny"),
-        matching: find.byType(ModelDownloadTile),
+        matching: find.byType(CatalogTile),
       );
       expect(
         find.descendant(of: whisper, matching: find.text("Multilingual")),
@@ -90,7 +90,7 @@ void main() {
 
     final row = find.ancestor(
       of: find.text("Whisper tiny"),
-      matching: find.byType(ModelDownloadTile),
+      matching: find.byType(CatalogTile),
     );
     await tester.tap(
       find.descendant(of: row, matching: find.byTooltip("Download")),
@@ -190,7 +190,7 @@ void main() {
 
     final row = find.ancestor(
       of: find.text("Whisper tiny"),
-      matching: find.byType(ModelDownloadTile),
+      matching: find.byType(CatalogTile),
     );
     await tester.tap(
       find.descendant(of: row, matching: find.byTooltip("Delete")),

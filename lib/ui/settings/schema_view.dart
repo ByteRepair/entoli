@@ -19,6 +19,8 @@ import "../widgets/page_bar.dart";
 import "../../domain/llm_provider.dart";
 import "connect_provider.dart";
 import "form_dialog.dart";
+import "local_model_settings.dart" show AddLocalModelPage;
+import "running_models.dart";
 import "provider_picker.dart";
 import "provider_usage_view.dart";
 import "paired_device_page.dart";
@@ -126,6 +128,10 @@ class SettingRow extends StatelessWidget {
       final TextController c => _Text(c),
       final NoticeController c => switch (c.hint) {
         UiHint.banner => _Banner(c),
+        UiHint.installed || UiHint.field => LabelledField(
+          label: c.title,
+          child: Text(c.lines.map((l) => l.text).join("\n")),
+        ),
         UiHint.paragraph => Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
           child: mutedParagraph(context, c.lines.map((l) => l.text).join("\n")),
@@ -136,6 +142,10 @@ class SettingRow extends StatelessWidget {
       final CollectionController c when c.hint == UiHint.devices => _Devices(c),
       final CollectionController c when c.hint == UiHint.providers =>
         _Providers(c),
+      // Its own header says what the models take up together, measured
+      // while it is on screen.
+      CollectionController(hint: UiHint.running) =>
+        const RunningModelsSection(),
       final CollectionController c => c.typed(<V>(c) => _Collection<V>(c)),
       final PairingController c => PairingControls(hub: c.hub),
       final SubpageController c => ListTile(
@@ -163,7 +173,14 @@ class SettingRow extends StatelessWidget {
         ),
       ),
     };
-    final footnote = controller.footnote;
+    // A group, a typed field and a slider that waits for the drag to end say
+    // their footnotes inside themselves.
+    final footnote = switch (controller) {
+      GroupController() => null,
+      TextController(hint: UiHint.input) => null,
+      RangeController(commitOnEnd: true) => null,
+      _ => controller.footnote,
+    };
     if (footnote == null) return field;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -624,6 +641,7 @@ class _Range extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (c.commitOnEnd) return _DragSlider(c);
     // A count with no stops and nothing to inherit is a plain slider over
     // every number from the least to the most.
     if (c.stops == null && !c.unsettable) {
@@ -965,8 +983,20 @@ class _Catalog extends StatelessWidget {
     children: [
       for (final item in c.items)
         CatalogTile(
-          title: Text(item.title),
+          title: item.badge == null
+              ? Text(item.title)
+              : Row(
+                  children: [
+                    Flexible(child: Text(item.title)),
+                    const SizedBox(width: 8),
+                    _Badge(
+                      label: item.badge!,
+                      tone: Theme.of(context).colorScheme.primary,
+                    ),
+                  ],
+                ),
           summary: item.summary,
+          tags: item.facts == null ? const [] : modelTags(item.facts!),
           note: item.note,
           failure: item.failure,
           progress: item.progress,
@@ -980,7 +1010,37 @@ class _Catalog extends StatelessWidget {
             onDownload: item.downloadable ? () => c.download(item.id) : null,
           ),
         ),
+      if (c.addLabel case final add?)
+        AddButtonRow(
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.add_link),
+            label: Text(add),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AddLocalModelPage()),
+            ),
+          ),
+        ),
     ],
+  );
+}
+
+class _Badge extends StatelessWidget {
+  const _Badge({required this.label, required this.tone});
+
+  final String label;
+  final Color tone;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: tone),
+    ),
+    child: Text(
+      label,
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: tone),
+    ),
   );
 }
 
@@ -1448,6 +1508,55 @@ class _Providers extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// A slider written once the drag ends rather than on every pixel, with a
+/// reset to what unset means and a line saying where it stands.
+class _DragSlider extends StatefulWidget {
+  const _DragSlider(this.c);
+
+  final RangeController c;
+
+  @override
+  State<_DragSlider> createState() => _DragSliderState();
+}
+
+class _DragSliderState extends State<_DragSlider> {
+  double? _dragging;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.c;
+    final min = c.min ?? 0;
+    final max = c.max ?? min;
+    final value = _dragging ?? c.effective.toDouble();
+    final footnote = c.footnote;
+    return LabelledField(
+      label: c.title,
+      child: ResettableField(
+        onReset: () => c.set(null),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Slider(
+              value: value.clamp(min.toDouble(), max.toDouble()),
+              min: min.toDouble(),
+              max: max.toDouble(),
+              divisions: max > min ? max - min : null,
+              label: "${value.round()}",
+              onChanged: (v) => setState(() => _dragging = v),
+              onChangeEnd: (v) {
+                setState(() => _dragging = null);
+                c.set(v.round());
+              },
+            ),
+            if (footnote != null)
+              Text(footnote, style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ),
+      ),
     );
   }
 }

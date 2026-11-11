@@ -2,6 +2,7 @@ import "../../data/sync/pairing.dart" show PairingActivity;
 import "../../data/sync/sync_hub.dart" show SyncHub;
 import "../../domain/app_icon.dart";
 import "../../domain/download.dart" show DownloadProgress;
+import "../../domain/installable.dart" show ModelFacts;
 import "../../domain/llm_provider.dart";
 import "../../domain/models.dart" show ModelChoice;
 import "../app_items.dart" show AppKey;
@@ -313,6 +314,7 @@ final class RangeController extends SettingController {
     this.min,
     this.max,
     this.unsettable = true,
+    this.commitOnEnd = false,
     super.title,
     super.description,
     super.footnote,
@@ -320,6 +322,10 @@ final class RangeController extends SettingController {
     super.visible,
     super.accessory,
   }) : _write = onSet;
+
+  /// Whether it is written once a drag ends rather than as it moves: each
+  /// write of the cores restarts the server.
+  final bool commitOnEnd;
 
   final int? value;
   final int inherited;
@@ -806,6 +812,7 @@ final class CatalogController extends SettingController {
     required Future<void> Function(String id) download,
     required Future<void> Function(String id) cancel,
     required Future<void> Function(String id) delete,
+    this.addLabel,
     super.title,
     super.description,
     super.footnote,
@@ -817,6 +824,10 @@ final class CatalogController extends SettingController {
        _onDelete = delete;
 
   final List<CatalogItem> items;
+
+  /// Where something not in the catalog can be added by its link.
+  final String? addLabel;
+
   final Future<void> Function(String) _onDownload;
   final Future<void> Function(String) _onCancel;
   final Future<void> Function(String) _onDelete;
@@ -837,6 +848,8 @@ class CatalogItem {
     this.deleteConfirm,
     this.summary,
     this.note,
+    this.badge,
+    this.facts,
     this.failure,
     this.progress,
     this.installed = false,
@@ -848,6 +861,12 @@ class CatalogItem {
   final String title;
   final String? summary;
   final String? note;
+
+  /// A word set beside its name: "Multilingual".
+  final String? badge;
+
+  /// What a model is, each fact a tag of its own.
+  final ModelFacts? facts;
 
   /// Why the last attempt stopped.
   final String? failure;
