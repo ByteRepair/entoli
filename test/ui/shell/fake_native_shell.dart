@@ -78,7 +78,7 @@ class FakeNativeShell implements TestNativeShell {
   @override
   void voiceLevel(double level) => _add("voiceLevel", level);
   @override
-  void focusComposer() => _add("focusComposer", true);
+  void composerFocus(bool focused) => _add("composerFocus", focused);
   @override
   Future<int?> strip(ChoiceStrip request) async {
     strips.add(request);

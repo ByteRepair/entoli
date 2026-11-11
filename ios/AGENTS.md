@@ -644,8 +644,13 @@ listener rather than a build (see "The bridge" in `lib/ui/AGENTS.md`). The app's
 Marketplace — are a menu on the list's bar, the menu bar being iPadOS's and
 not there without a pointer. A Flutter page over the chat hides the native
 navigation bar, the page having its own. The keyboard reaches the native
-composer through the safe area, which carries it above the keys, and is left
-out of the insets Dart is told: Flutter hears of it itself. The appearance is
+composer through the safe area, which carries it above the keys; the insets
+Dart is told reach over it with the composer, and Dart takes Flutter's own
+view insets out of them (see "The layout" in `lib/ui/AGENTS.md`). The
+simulator hides all of this behind a hardware keyboard: the on-screen one
+has to be shown to see it. The edge swipe to the list needs iOS 18's
+`UIGestureRecognizerRepresentable`, the Flutter view's touches being UIKit's;
+17 has the button alone. The appearance is
 the window's `overrideUserInterfaceStyle`, which a popover and a sheet
 presented from it take. iPad is the split view uncollapsed, and has had less
 looking at than either.

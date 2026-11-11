@@ -10,6 +10,8 @@ import "package:agent_chat/providers.dart" show appSettingsProvider;
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/shell/shell_new_chat.dart";
+import "package:agent_chat/ui/shell/shell_slots.dart";
+import "package:agent_chat/ui/shell/shell_window.dart";
 import "package:agent_chat/ui/widgets/liquid_glass.dart";
 import "package:agent_chat/ui/widgets/page_bar.dart";
 
@@ -49,28 +51,34 @@ void main() {
     ),
   );
 
-  /// A chat with something said in it, open.
-  Future<void> openChat(WidgetTester tester, {bool finished = true}) => io(
-    tester,
-    () async {
-      final chat = await app.repo.createChat(title: "old chat");
-      await app.writeChat(
-        chat.copyWith(
-          messages: [
-            for (var i = 0; i < 4; i++)
-              Message(
-                id: "m$i",
-                role: i.isEven ? MessageRole.user : MessageRole.assistant,
-                createdAt: DateTime(2026, 1, 1, 0, i),
-                parts: [TextPart(text: "line $i")],
-              ),
-          ],
-        ),
-        finished: finished,
-      );
-      app.container.read(selectedChatIdProvider.notifier).select(chat.state.id);
-    },
-  );
+  /// The shell composer on top, as the Swift reaches it.
+  ComposerIntents composer() =>
+      app.container.read(shellSlotsProvider).composer.top!;
+
+  /// A chat with something said in it, open: [said] messages, enough past
+  /// the window's height to scroll.
+  Future<void> openChat(
+    WidgetTester tester, {
+    bool finished = true,
+    int said = 4,
+  }) => io(tester, () async {
+    final chat = await app.repo.createChat(title: "old chat");
+    await app.writeChat(
+      chat.copyWith(
+        messages: [
+          for (var i = 0; i < said; i++)
+            Message(
+              id: "m$i",
+              role: i.isEven ? MessageRole.user : MessageRole.assistant,
+              createdAt: DateTime(2026, 1, 1, 0, i),
+              parts: [TextPart(text: "line $i")],
+            ),
+        ],
+      ),
+      finished: finished,
+    );
+    app.container.read(selectedChatIdProvider.notifier).select(chat.state.id);
+  });
 
   testWidgets("the new-chat screen goes to the shell, Flutter drawing none", (
     tester,
@@ -180,6 +188,66 @@ void main() {
     await settleIo(tester);
     final list = tester.element(find.byType(SuperListView));
     expect(TooltipTheme.of(list).preferBelow, isFalse);
+  });
+
+  group("the keyboard", () {
+    testWidgets("goes with a drag back through the conversation", (
+      tester,
+    ) async {
+      await openChat(tester, said: 40);
+      await pump(tester);
+      await settleIo(tester);
+
+      composer().focused(true);
+      await tester.pump();
+      expect(
+        shell.sent["composerFocus"],
+        isNull,
+        reason: "the field said so; nothing goes back",
+      );
+
+      await tester.drag(find.byType(SuperListView), const Offset(0, 200));
+      await tester.pump();
+      expect(shell.sent["composerFocus"], [false]);
+    });
+
+    testWidgets("is not counted twice in the padding", (tester) async {
+      addTearDown(() => shellInsets.value = EdgeInsets.zero);
+      shellInsets.value = const EdgeInsets.only(top: 116, bottom: 384);
+      late MediaQueryData seen;
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(viewInsets: EdgeInsets.only(bottom: 328)),
+          child: ShellInsets(
+            child: Builder(
+              builder: (context) {
+                seen = MediaQuery.of(context);
+                return const SizedBox();
+              },
+            ),
+          ),
+        ),
+      );
+      expect(seen.padding, const EdgeInsets.only(top: 116, bottom: 56));
+      expect(seen.viewPadding, const EdgeInsets.only(top: 116, bottom: 384));
+    });
+  });
+
+  testWidgets("sending goes back down to the latest", (tester) async {
+    await openChat(tester, said: 40);
+    await pump(tester);
+    await settleIo(tester);
+    final position = tester
+        .state<ScrollableState>(find.byType(Scrollable).first)
+        .position;
+    await tester.drag(find.byType(SuperListView), const Offset(0, 400));
+    await tester.pumpAndSettle();
+    expect(position.pixels, lessThan(position.maxScrollExtent));
+
+    composer().edited("hello", 5, 5);
+    composer().send();
+    await settleIo(tester);
+    expect(position.pixels, position.maxScrollExtent);
   });
 
   group("an activity's drawer", () {

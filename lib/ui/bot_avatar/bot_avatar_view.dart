@@ -11,27 +11,8 @@ import "../../domain/bot_avatar/frame.dart";
 import "../../domain/bot_avatar/pose.dart";
 import "../../domain/bot_avatar/spec.dart";
 import "../../domain/bot_avatar/volume.dart";
+import "../widgets/decorative_motion.dart";
 import "../widgets/picture_png.dart";
-
-/// Whether the Bot Avatars below may move at all; on where nothing says. Off,
-/// every avatar is a still with no ticker — what reduce-motion gives too,
-/// without reaching anything but avatars. The test harness turns it off.
-class BotAvatarMotion extends InheritedWidget {
-  const BotAvatarMotion({
-    super.key,
-    required this.enabled,
-    required super.child,
-  });
-
-  final bool enabled;
-
-  static bool of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<BotAvatarMotion>()?.enabled ??
-      true;
-
-  @override
-  bool updateShouldNotify(BotAvatarMotion old) => old.enabled != enabled;
-}
 
 /// How a thumbnail stands: turned a little right, tipped up, looking up and
 /// right, so a grid of them faces one way. The reference editor's pose.
@@ -225,9 +206,7 @@ class _BotAvatarViewState extends State<BotAvatarView>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _reduced =
-        (MediaQuery.maybeDisableAnimationsOf(context) ?? false) ||
-        !BotAvatarMotion.of(context);
+    _reduced = !DecorativeMotion.of(context);
     _sync();
   }
 

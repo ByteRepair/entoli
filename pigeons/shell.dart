@@ -692,8 +692,10 @@ abstract class NativeShell {
   /// to compare against.
   void voiceLevel(double level);
 
-  /// Put the caret in the composer's field.
-  void focusComposer();
+  /// Give the composer's field the keyboard, or take it away: the field's
+  /// focus as Dart's focus tree has it, which [ComposerIntents.focused] keeps
+  /// in step from the other side.
+  void composerFocus(bool focused);
 
   /// Show [request], answering the one already open as dismissed. Answers the
   /// index picked, or null for a strip dismissed.
@@ -704,8 +706,8 @@ abstract class NativeShell {
 /// The window's own state, which the client reports.
 @FlutterApi()
 abstract class WindowEvents {
-  /// How much of the Flutter view the client's bars cover, which the app
-  /// hands the conversation as padding so it scrolls under them.
+  /// How much of the Flutter view the client's bars cover from its edges, a
+  /// bar riding on the keyboard reaching over it; see `ShellInsets`.
   void insets(double left, double top, double right, double bottom);
 
   /// The sidebar shown or hidden by the client's own control.
@@ -755,6 +757,9 @@ enum ComposerTrigger { skill, agent }
 abstract class ComposerIntents {
   /// The field changed, or its caret moved.
   void edited(String text, int start, int end);
+
+  /// The field took the keyboard, or gave it up.
+  void focused(bool focused);
   void send();
   void queue();
   void stop();

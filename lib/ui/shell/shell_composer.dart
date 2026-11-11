@@ -66,6 +66,15 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   /// closed until the caret is in another.
   CompletionToken? _dismissed;
 
+  /// The native field's focus in Dart's focus tree, so what takes focus away
+  /// here — a drag back through the conversation, a page pushed — takes the
+  /// keyboard away there, as it would from a Flutter field.
+  final FocusNode _focus = FocusNode(debugLabel: "ShellComposer");
+
+  /// Whether the field has the keyboard, as it last said: a change of
+  /// [_focus] that agrees with it came from there and is not sent back.
+  bool _fieldFocused = false;
+
   /// The menu as last drawn, which a `pick` names a row of.
   List<CompletionOption> _matches = const [];
   CompletionToken? _token;
@@ -74,6 +83,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   void initState() {
     super.initState();
     _slots.composer.claim(this);
+    _focus.addListener(_sendFocus);
     _configure();
     widget.config.controller.addListener(_pushValue);
     _pushValue();
@@ -97,6 +107,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
     if (_slots.composer.leave(this)) {
       _outbox.composer(ComposerSnapshot(present: false));
     }
+    _focus.dispose();
     _logic.dispose();
     super.dispose();
   }
@@ -115,7 +126,19 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   @override
   void embed(ComposerEmbed embed) {
     widget.config.controller.append(embed);
-    _outbox.focusComposer();
+    _focus.requestFocus();
+  }
+
+  void _sendFocus() {
+    if (_focus.hasFocus != _fieldFocused) {
+      _outbox.composerFocus(_focus.hasFocus);
+    }
+  }
+
+  @override
+  void focused(bool focused) {
+    _fieldFocused = focused;
+    focused ? _focus.requestFocus() : _focus.unfocus();
   }
 
   void _pushValue() {
@@ -292,7 +315,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
               )
               .value,
     };
-    return ListenableBuilder(
+    final composer = ListenableBuilder(
       listenable: Listenable.merge([_shape, ?cwd]),
       builder: (context, _) {
         final controller = widget.config.controller;
@@ -358,6 +381,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
         return const SizedBox.shrink();
       },
     );
+    return Focus(focusNode: _focus, child: composer);
   }
 }
 

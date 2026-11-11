@@ -27,9 +27,17 @@ struct SidebarView: View {
 
   private var state: SidebarSnapshot { model.sidebar }
 
+  /// The split view is one column: an iPhone.
+  let collapsed: Bool
+
+  /// The chat that is open, highlighted — except where the split view is one
+  /// column, where a selection is what holds the detail in front: with one
+  /// standing, the split view would not go back to the list for its button
+  /// or a swipe. There the column is `compactColumn`'s alone, and a pick
+  /// only asks for the detail.
   private var selection: Binding<String?> {
     Binding(
-      get: { state.selected },
+      get: { collapsed ? nil : state.selected },
       set: { id in
         guard let id else { return }
         model.say.sidebar.openChat(id: id) { _ in }
@@ -113,6 +121,16 @@ struct SidebarView: View {
     }
     .sheet(isPresented: $creating) {
       NewProjectSheet(model: model, omada: state.omadaByDefault)
+    }
+    .simultaneousGesture(swipeToChat, including: collapsed ? .all : .subviews)
+  }
+
+  /// On an iPhone, a swipe toward the leading edge goes back to the chat, as
+  /// the Flutter drawer closed: a stack has no swipe forward of its own.
+  private var swipeToChat: some Gesture {
+    DragGesture(minimumDistance: 30).onEnded { drag in
+      let along = drag.translation.width
+      if -along > 80 && abs(along) > 2 * abs(drag.translation.height) { model.showDetail() }
     }
   }
 
