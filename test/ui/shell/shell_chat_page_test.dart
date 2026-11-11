@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:super_sliver_list/super_sliver_list.dart";
 
+import "package:agent_chat/ui/shell/shell_page_bar.dart" show drawShellPageBar;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/project.dart" show defaultEmptyChatQuestion;
 import "package:agent_chat/providers.dart" show appSettingsProvider;
@@ -36,6 +37,7 @@ void main() {
     tester,
     ProviderScope(
       overrides: [
+        pageBarDrawProvider.overrideWithValue(drawShellPageBar),
         frontendProvider.overrideWithValue(
           const FrontendChoice(current: Frontend.swiftUI, native: true),
         ),

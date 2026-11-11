@@ -2,8 +2,99 @@ import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/widgets.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../widgets/page_bar.dart";
+import "glyphs.dart";
 import "shell_outbox.dart";
 import "shell_answers.dart";
+
+/// [bar] as the window's title bar: this frontend's `pageBarDrawProvider`.
+/// Draws nothing of its own but what goes under the window's bar, which the
+/// shell reports as padding, and the page's [PageBar.bottom].
+Widget drawShellPageBar(BuildContext context, PageBar bar) {
+  final presses = _Presses();
+  final dismisses = ModalRoute.of(context)?.impliesAppBarDismissal ?? false;
+  return Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      ShellPageBar(
+        bar: TitleBarSnapshot(
+          title: bar.title,
+          subtitle: bar.subtitle ?? "",
+          leading: switch (bar.leading) {
+            PageLeading.close => TitleBarLeading.close,
+            PageLeading.back when bar.onBack != null || dismisses =>
+              TitleBarLeading.back,
+            PageLeading.back => null,
+          },
+          items: [for (final action in bar.actions) _item(action, presses)],
+        ),
+        onBack: bar.onBack ?? () => Navigator.of(context).maybePop(),
+        actions: presses.runs,
+      ),
+      SizedBox(height: MediaQuery.paddingOf(context).top),
+      ?bar.bottom,
+    ],
+  );
+}
+
+/// One of a page's actions as an item of the window's title bar, what a
+/// press runs kept in [presses] under the id the item is sent with.
+/// Exhaustive, so a new kind of action is drawn here as well as in Flutter.
+TitleBarItem _item(PageAction action, _Presses presses) => switch (action) {
+  PageIconAction(:final icon, :final label, :final onPressed) => TitleBarItem(
+    id: presses.add(onPressed),
+    label: label,
+    glyph: glyphOf(icon),
+    // An icon the shell has nothing to stand for says what it does instead.
+    style: glyphOf(icon) == null
+        ? TitleBarItemStyle.text
+        : TitleBarItemStyle.icon,
+    enabled: onPressed != null,
+  ),
+  PageConfirmAction(:final label, :final onPressed) => TitleBarItem(
+    id: presses.add(onPressed),
+    label: label,
+    glyph: Glyph.check,
+    style: TitleBarItemStyle.confirm,
+    enabled: onPressed != null,
+  ),
+  PageTextAction(:final label, :final onPressed, :final prominent) =>
+    TitleBarItem(
+      id: presses.add(onPressed),
+      label: label,
+      style: prominent ? TitleBarItemStyle.prominent : TitleBarItemStyle.text,
+      enabled: onPressed != null,
+    ),
+  PageMenuAction(:final icon, :final label, :final items) => TitleBarItem(
+    id: presses.add(null),
+    label: label,
+    glyph: glyphOf(icon) ?? Glyph.more,
+    menu: [
+      for (final item in items)
+        if (item.enabled)
+          TitleBarMenuItem(
+            id: presses.add(item.onSelected),
+            label: item.label,
+            hint: item.hint,
+            glyph: glyphOf(item.icon),
+            checked: item.checked ?? false,
+          ),
+    ],
+  ),
+};
+
+/// What each item of a title bar runs when pressed, by the id it was sent
+/// under.
+class _Presses {
+  final Map<String, VoidCallback> runs = {};
+  int _next = 0;
+
+  String add(VoidCallback? run) {
+    final id = "${_next++}";
+    if (run != null) runs[id] = run;
+    return id;
+  }
+}
 
 /// A Flutter page's bar, as the window's title bar: `PageBar` under the
 /// shell. Draws nothing; sends [bar] while its page is the one in front, and

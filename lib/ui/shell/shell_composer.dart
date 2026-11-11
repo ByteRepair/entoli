@@ -12,7 +12,7 @@ import "../../providers.dart";
 import "../chat/widgets/composer.dart";
 import "../chat/widgets/composer_controller.dart";
 import "../chat/widgets/composer_embed.dart";
-import "../widgets/agent_picture.dart";
+import "faces.dart";
 import "../widgets/completion_field.dart";
 import "../widgets/dialogs.dart";
 import "shell_outbox.dart";

@@ -2,6 +2,8 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/ui/shell/shell_page_bar.dart" show drawShellPageBar;
+import "package:agent_chat/ui/widgets/page_bar.dart" show pageBarDrawProvider;
 import "package:agent_chat/domain/reaction.dart";
 import "package:agent_chat/ui/chat/widgets/reaction_button.dart";
 import "package:agent_chat/app/frontend.dart";
@@ -25,6 +27,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          pageBarDrawProvider.overrideWithValue(drawShellPageBar),
           frontendProvider.overrideWithValue(
             const FrontendChoice(current: Frontend.swiftUI, native: true),
           ),

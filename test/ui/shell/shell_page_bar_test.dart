@@ -3,6 +3,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/ui/shell/shell_page_bar.dart" show drawShellPageBar;
 import "package:agent_chat/ui/shell/shell_answers.dart";
 import "package:agent_chat/app/frontend.dart";
 import "package:agent_chat/ui/widgets/page_bar.dart";
@@ -28,6 +29,7 @@ void main() {
             native: true,
           ),
         ),
+        if (glass) pageBarDrawProvider.overrideWithValue(drawShellPageBar),
       ],
     );
     await tester.pumpWidget(

@@ -3,6 +3,8 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/ui/shell/shell_page_bar.dart" show drawShellPageBar;
+import "package:agent_chat/ui/widgets/page_bar.dart" show pageBarDrawProvider;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/ui/shell/shell_voice.dart";
 import "package:agent_chat/ui/voice/voice_controller.dart";
@@ -26,6 +28,7 @@ void main() {
 
   Widget shell(Widget child) => ProviderScope(
     overrides: [
+      pageBarDrawProvider.overrideWithValue(drawShellPageBar),
       frontendProvider.overrideWithValue(
         const FrontendChoice(current: Frontend.swiftUI, native: true),
       ),

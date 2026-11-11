@@ -1,18 +1,21 @@
-import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../shell/glyphs.dart";
-import "../shell/shell_page_bar.dart";
 import "discard_guard.dart";
-import "../../app/frontend.dart";
+
+/// How a frontend draws a page's bar where it is not the [AppBar]: the
+/// native shell's window title bar. Null, the Flutter frontend's, is the
+/// [AppBar]. A seam rather than a branch here, so this file knows nothing of
+/// the shell.
+typedef PageBarDraw = Widget Function(BuildContext context, PageBar bar);
+
+/// Overridden in `main` by the frontend whose bars are not Flutter's.
+final pageBarDrawProvider = Provider<PageBarDraw?>((ref) => null);
 
 /// A pushed page's bar, said as what it holds rather than drawn: a [title],
-/// the line under it, how the page is left, and its [actions]. Without the
-/// native shell it is an [AppBar]; under Liquid Glass it is the window's own
-/// title bar, which the system draws. A page knows nothing of which, and each
-/// [PageAction] draws itself either way. See "Liquid Glass" in
-/// `lib/ui/AGENTS.md`.
+/// the line under it, how the page is left, and its [actions]. It is an
+/// [AppBar] unless the frontend draws bars its own way ([pageBarDrawProvider]);
+/// a page knows nothing of which.
 ///
 /// [bottom] — a page's tabs, a search under its bar — is Flutter's either
 /// way, drawn beneath whichever bar is above it.
@@ -44,12 +47,11 @@ class PageBar extends ConsumerWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // A page, not a dialog's: a dialog covers nothing, the window's bar
-    // staying the conversation's.
-    final native =
-        ref.watch(frontendProvider).swiftUI &&
-        ModalRoute.of(context) is PageRoute;
-    return native ? _native(context) : _flutter(context);
+    // A page, not a dialog's: a dialog's bar is always its own.
+    final draw = ref.watch(pageBarDrawProvider);
+    return draw != null && ModalRoute.of(context) is PageRoute
+        ? draw(context, this)
+        : _flutter(context);
   }
 
   Widget _flutter(BuildContext context) => AppBar(
@@ -75,34 +77,6 @@ class PageBar extends ConsumerWidget implements PreferredSizeWidget {
     actions: [for (final action in actions) action._button(context)],
     bottom: bottom,
   );
-
-  Widget _native(BuildContext context) {
-    final presses = _Presses();
-    final dismisses = ModalRoute.of(context)?.impliesAppBarDismissal ?? false;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        ShellPageBar(
-          bar: TitleBarSnapshot(
-            title: title,
-            subtitle: subtitle ?? "",
-            leading: switch (leading) {
-              PageLeading.close => TitleBarLeading.close,
-              PageLeading.back when onBack != null || dismisses =>
-                TitleBarLeading.back,
-              PageLeading.back => null,
-            },
-            items: [for (final action in actions) action._item(presses)],
-          ),
-          onBack: onBack ?? () => Navigator.of(context).maybePop(),
-          actions: presses.runs,
-        ),
-        // Under the window's title bar, which the shell reports as padding.
-        SizedBox(height: MediaQuery.paddingOf(context).top),
-        ?bottom,
-      ],
-    );
-  }
 }
 
 /// How a page is left: back to the one under it, or closed, discarding what
@@ -119,13 +93,13 @@ sealed class PageAction {
     required IconData icon,
     required String label,
     required VoidCallback? onPressed,
-  }) = _IconAction;
+  }) = PageIconAction;
 
   /// The page's tick: what keeps what was done on it.
   const factory PageAction.confirm({
     String label,
     required VoidCallback? onPressed,
-  }) = _ConfirmAction;
+  }) = PageConfirmAction;
 
   /// A button that says what it does; [prominent] is the page's one
   /// action, in the accent's fill.
@@ -133,21 +107,17 @@ sealed class PageAction {
     required String label,
     required VoidCallback? onPressed,
     bool prominent,
-  }) = _TextAction;
+  }) = PageTextAction;
 
   /// A button opening [items].
   const factory PageAction.menu({
     IconData? icon,
     required String label,
     required List<PageMenuItem> items,
-  }) = _MenuAction;
+  }) = PageMenuAction;
 
   /// As the [AppBar] draws it.
   Widget _button(BuildContext context);
-
-  /// As the window's title bar draws it, what a press runs kept in
-  /// [presses] under the id the item is sent with.
-  TitleBarItem _item(_Presses presses);
 }
 
 /// One choice of a [PageAction.menu].
@@ -174,8 +144,8 @@ class PageMenuItem {
   final bool enabled;
 }
 
-class _IconAction extends PageAction {
-  const _IconAction({
+class PageIconAction extends PageAction {
+  const PageIconAction({
     required this.icon,
     required this.label,
     required this.onPressed,
@@ -188,23 +158,10 @@ class _IconAction extends PageAction {
   @override
   Widget _button(BuildContext context) =>
       IconButton(icon: Icon(icon), tooltip: label, onPressed: onPressed);
-
-  @override
-  TitleBarItem _item(_Presses presses) {
-    final glyph = glyphOf(icon);
-    return TitleBarItem(
-      id: presses.add(onPressed),
-      label: label,
-      glyph: glyph,
-      // An icon the shell has nothing to stand for says what it does instead.
-      style: glyph == null ? TitleBarItemStyle.text : TitleBarItemStyle.icon,
-      enabled: onPressed != null,
-    );
-  }
 }
 
-class _ConfirmAction extends PageAction {
-  const _ConfirmAction({this.label = "Save", required this.onPressed});
+class PageConfirmAction extends PageAction {
+  const PageConfirmAction({this.label = "Save", required this.onPressed});
 
   final String label;
   final VoidCallback? onPressed;
@@ -215,19 +172,10 @@ class _ConfirmAction extends PageAction {
     tooltip: label,
     onPressed: onPressed,
   );
-
-  @override
-  TitleBarItem _item(_Presses presses) => TitleBarItem(
-    id: presses.add(onPressed),
-    label: label,
-    glyph: Glyph.check,
-    style: TitleBarItemStyle.confirm,
-    enabled: onPressed != null,
-  );
 }
 
-class _TextAction extends PageAction {
-  const _TextAction({
+class PageTextAction extends PageAction {
+  const PageTextAction({
     required this.label,
     required this.onPressed,
     this.prominent = false,
@@ -244,18 +192,10 @@ class _TextAction extends PageAction {
           child: FilledButton(onPressed: onPressed, child: Text(label)),
         )
       : TextButton(onPressed: onPressed, child: Text(label));
-
-  @override
-  TitleBarItem _item(_Presses presses) => TitleBarItem(
-    id: presses.add(onPressed),
-    label: label,
-    style: prominent ? TitleBarItemStyle.prominent : TitleBarItemStyle.text,
-    enabled: onPressed != null,
-  );
 }
 
-class _MenuAction extends PageAction {
-  const _MenuAction({this.icon, required this.label, required this.items});
+class PageMenuAction extends PageAction {
+  const PageMenuAction({this.icon, required this.label, required this.items});
 
   final IconData? icon;
   final String label;
@@ -288,24 +228,6 @@ class _MenuAction extends PageAction {
           ),
     ],
   );
-
-  @override
-  TitleBarItem _item(_Presses presses) => TitleBarItem(
-    id: presses.add(null),
-    label: label,
-    glyph: glyphOf(icon) ?? Glyph.more,
-    menu: [
-      for (final item in items)
-        if (item.enabled)
-          TitleBarMenuItem(
-            id: presses.add(item.onSelected),
-            label: item.label,
-            hint: item.hint,
-            glyph: glyphOf(item.icon),
-            checked: item.checked ?? false,
-          ),
-    ],
-  );
 }
 
 class _Hint extends StatelessWidget {
@@ -322,18 +244,5 @@ class _Hint extends StatelessWidget {
         color: theme.colorScheme.onSurfaceVariant,
       ),
     );
-  }
-}
-
-/// What each item of a title bar runs when pressed, by the id it was sent
-/// under.
-class _Presses {
-  final Map<String, VoidCallback> runs = {};
-  int _next = 0;
-
-  String add(VoidCallback? run) {
-    final id = "${_next++}";
-    if (run != null) runs[id] = run;
-    return id;
   }
 }

@@ -12,7 +12,6 @@ import "../../domain/bot_avatar/pose.dart";
 import "../../domain/bot_avatar/spec.dart";
 import "../../domain/bot_avatar/volume.dart";
 import "../widgets/decorative_motion.dart";
-import "../widgets/picture_png.dart";
 
 /// How a thumbnail stands: turned a little right, tipped up, looking up and
 /// right, so a grid of them faces one way. The reference editor's pose.
@@ -78,8 +77,8 @@ class _PointerWatch {
   }
 }
 
-/// A native shell can report pointer positions while its own chrome covers
-/// Flutter, where Flutter's pointer router cannot see the mouse.
+/// The pointer where Flutter's own router cannot see it: over a frontend's
+/// chrome around the Flutter view.
 void setNativePointerPosition(Offset position) {
   final watch = _PointerWatch.instance;
   watch.position = position;
@@ -414,34 +413,6 @@ class _BotAvatarViewState extends State<BotAvatarView>
       );
     }
     return child;
-  }
-}
-
-/// One still of [spec] as PNG bytes, [size] logical pixels square at
-/// [pixelRatio], in the pose [BotAvatarView] holds as a still: for a surface
-/// Flutter does not draw, the native shell's composer menu.
-Future<Uint8List?> botAvatarPng(
-  BotAvatarSpec spec, {
-  required double size,
-  required double pixelRatio,
-  required Color outline,
-}) async {
-  final frame = ValueNotifier(
-    PreparedBotAvatar.of(
-      spec.definition,
-    ).frame(reducedMotion: true, gaze: stillGaze),
-  );
-  try {
-    return await pngOf(
-      (size * pixelRatio).ceil(),
-      (canvas) => BotAvatarPainter(
-        frame: frame,
-        colour: Color(0xff000000 | spec.colour),
-        outline: outline,
-      ).paint(canvas..scale(pixelRatio), Size.square(size)),
-    );
-  } finally {
-    frame.dispose();
   }
 }
 

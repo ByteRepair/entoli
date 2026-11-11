@@ -53,6 +53,8 @@ import "ui/routes.dart";
 import "ui/welcome_gate.dart";
 import "app/chat_controller.dart";
 import "app/frontend.dart";
+import "ui/shell/shell_page_bar.dart" show drawShellPageBar;
+import "ui/widgets/page_bar.dart" show pageBarDrawProvider;
 import "ui/chat/controller_turn_sender.dart";
 import "ui/assistant/incoming_assistant.dart";
 import "ui/focus_follows_keyboard.dart";
@@ -392,6 +394,8 @@ class AppSession {
         appUpdateHostProvider.overrideWithValue(
           platform.createAppUpdateHost(cache),
         ),
+        if (_glassAtLaunch!)
+          pageBarDrawProvider.overrideWithValue(drawShellPageBar),
         appMenusProvider.overrideWithValue(
           glassAvailable ? _menus ??= NativeAppMenus() : const NoAppMenus(),
         ),
