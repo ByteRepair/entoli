@@ -65,6 +65,13 @@ closed — goes through SwiftUI's `openSettings`, which `SettingsWindowOpener`
 in the main window hands the model. The menu's Settings item is the scene's
 own there, and Dart leaves its item out of the app menu.
 
+A Mac's settings draw their own page stack (`PageStack`) rather than a
+`NavigationStack`: in a split view's detail column a Mac's stack shows a
+pushed page with no animation (macOS 27, a plain `NavigationLink` too),
+though a pop animates. Only the top page is drawn, pushed in by SwiftUI's
+`.push` transition from the side the move went, with Back and Forward the
+model's own. iOS keeps its `NavigationStack`.
+
 A model picker is the catalog page in both: the native one is sent the
 quick picks and every model's card whole (`ModelPickerData`), and adding or
 editing a model is the core's `ModelForm`, asked as any form is.
