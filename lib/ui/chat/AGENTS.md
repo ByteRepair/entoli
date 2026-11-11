@@ -1001,7 +1001,8 @@ first character and the change front moves progressively towards the end,
 over 400ms at constant speed, starting from whatever is on screen so picking
 another badge mid-sweep retargets rather than jumps — where two strings
 agree nothing visibly changes, so what moves is the divergence toward the
-end.
+end. The Liquid Glass shell's lifts instead: the old question blurs, grows
+and fades as if rising off the glass, over the new one fading in.
 
 **The screen opens settled.** It used to be that the rows animated their
 first build too — the screen was grown into, not shown settled — and what

@@ -1,0 +1,4 @@
+module entoli_glass {
+header "entoli_glass-Swift.h"
+export *
+}

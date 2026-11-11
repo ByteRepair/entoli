@@ -1,0 +1,23 @@
+{
+  "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/Sources/entoli_glass/Settings/SettingsTriggers.swift" : {
+    "const-values" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/SettingsTriggers.swiftconstvalues",
+    "dependencies" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/SettingsTriggers.d",
+    "diagnostics" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/SettingsTriggers.dia",
+    "object" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/SettingsTriggers.o",
+    "swift-dependencies" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/SettingsTriggers.swiftdeps"
+  },
+  "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/Sources/entoli_glass/Settings/SettingsView.swift" : {
+    "const-values" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/SettingsView.swiftconstvalues",
+    "dependencies" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/SettingsView.d",
+    "diagnostics" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/SettingsView.dia",
+    "object" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/SettingsView.o",
+    "swift-dependencies" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/SettingsView.swiftdeps"
+  },
+  "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/Sources/entoli_glass/Settings/ThinkingBar.swift" : {
+    "const-values" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/ThinkingBar.swiftconstvalues",
+    "dependencies" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/ThinkingBar.d",
+    "diagnostics" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/ThinkingBar.dia",
+    "object" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/ThinkingBar.o",
+    "swift-dependencies" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/ThinkingBar.swiftdeps"
+  }
+}

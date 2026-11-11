@@ -1,0 +1,23 @@
+{
+  "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/Sources/entoli_glass/Shell/Palette.swift" : {
+    "const-values" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/Palette.swiftconstvalues",
+    "dependencies" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/Palette.d",
+    "diagnostics" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/Palette.dia",
+    "object" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/Palette.o",
+    "swift-dependencies" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/Palette.swiftdeps"
+  },
+  "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/Sources/entoli_glass/Shell/QuestionPanel.swift" : {
+    "const-values" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/QuestionPanel.swiftconstvalues",
+    "dependencies" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/QuestionPanel.d",
+    "diagnostics" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/QuestionPanel.dia",
+    "object" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/QuestionPanel.o",
+    "swift-dependencies" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/QuestionPanel.swiftdeps"
+  },
+  "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/Sources/entoli_glass/Shell/ShellModel.swift" : {
+    "const-values" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/ShellModel.swiftconstvalues",
+    "dependencies" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/ShellModel.d",
+    "diagnostics" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/ShellModel.dia",
+    "object" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/ShellModel.o",
+    "swift-dependencies" : "/Users/user/Projects/entoli/.claude/worktrees/settings-schema/packages/entoli_glass/darwin/entoli_glass/.build/out/Intermediates.noindex/entoli_glass.build/Debug/entoli_glass-t.build/Objects-normal/arm64/ShellModel.swiftdeps"
+  }
+}

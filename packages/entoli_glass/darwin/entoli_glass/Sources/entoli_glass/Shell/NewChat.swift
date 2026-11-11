@@ -65,12 +65,18 @@ struct NewChatView: View {
                 startPoint: .top, endPoint: .bottom))
             .accessibilityLabel("Athena")
         }
-        if !state.question.isEmpty {
-          Text(state.question)
-            .font(.title3.weight(.semibold))
-            .multilineTextAlignment(.center)
-            .contentTransition(.interpolate)
+        // One slot for both questions, so the old one lifts away over the
+        // new one arriving rather than the two stacking for the length of it.
+        ZStack {
+          if !state.question.isEmpty {
+            Text(state.question)
+              .font(.title3.weight(.semibold))
+              .multilineTextAlignment(.center)
+              .id(state.question)
+              .transition(.asymmetric(insertion: .opacity, removal: .lift))
+          }
         }
+        .animation(.easeOut(duration: 0.35), value: state.question)
         FlowLayout(spacing: 8) {
           ForEach(state.projects, id: \.self) { badge($0) }
         }
@@ -207,5 +213,24 @@ struct FlowLayout: Layout {
       }
       y += height + spacing
     }
+  }
+}
+
+/// The old question going: blurring and growing as it fades, so it reads as
+/// lifting off the glass rather than dissolving into it.
+private struct Lift: ViewModifier {
+  let gone: Bool
+
+  func body(content: Content) -> some View {
+    content
+      .blur(radius: gone ? 10 : 0)
+      .scaleEffect(gone ? 1.2 : 1)
+      .opacity(gone ? 0 : 1)
+  }
+}
+
+extension AnyTransition {
+  fileprivate static var lift: AnyTransition {
+    .modifier(active: Lift(gone: true), identity: Lift(gone: false))
   }
 }
