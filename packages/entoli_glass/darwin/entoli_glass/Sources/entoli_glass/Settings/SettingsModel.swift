@@ -83,10 +83,12 @@ public final class SettingsModel: ObservableObject, NativeSettings {
     return nil
   }
 
-  /// Pushes [route]'s page over the one shown, clearing Forward. Animated:
-  /// a Mac's stack slides a page in only for a change made in an animation.
+  /// Which way the last move went, for the side a Mac's page comes in from.
+  @Published private(set) var forwards = true
+
+  /// Pushes [route]'s page over the one shown, clearing Forward.
   func push(_ route: SettingsRoute) {
-    move {
+    move(forward: true) {
       ahead = []
       path.append(route)
     }
@@ -94,19 +96,12 @@ public final class SettingsModel: ObservableObject, NativeSettings {
 
   /// [change] to the stack, animated even from inside a form row, whose tap
   /// otherwise carries a transaction with animations turned off.
-  private func move(_ change: () -> Void) {
+  private func move(forward: Bool, _ change: () -> Void) {
     var transaction = Transaction(animation: .smooth(duration: 0.3))
     transaction.disablesAnimations = false
-    withTransaction(transaction, change)
-  }
-
-  /// What [route]'s page is called, for its header.
-  func title(of route: SettingsRoute) -> String {
-    switch route {
-    case .page(let key): page(key)?.title ?? ""
-    case .text(let opened): opened.title
-    case .avatars(let opened): opened.agent == nil ? "Bot Avatars" : "Bot Avatar"
-    case .models(let opened): row(opened.row)?.title ?? ""
+    withTransaction(transaction) {
+      forwards = forward
+      change()
     }
   }
 
@@ -114,13 +109,13 @@ public final class SettingsModel: ObservableObject, NativeSettings {
   func back() {
     guard let last = path.last else { return }
     ahead.append(last)
-    move { _ = path.removeLast() }
+    move(forward: false) { _ = path.removeLast() }
   }
 
   /// The page Back left.
   func forward() {
     guard let next = ahead.popLast() else { return }
-    move { path.append(next) }
+    move(forward: true) { path.append(next) }
   }
 
   /// [row]'s own rows: a group's children, and an accessory drawn at its end.

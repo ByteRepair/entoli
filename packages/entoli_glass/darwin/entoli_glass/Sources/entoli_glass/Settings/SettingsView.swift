@@ -49,17 +49,19 @@ public struct SettingsRoot: View {
         .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 260)
       #endif
     } detail: {
-      NavigationStack(path: $model.path) {
-        Group {
-          if let key = model.page, let page = model.page(key) {
-            SettingsPageView(model: model, page: page).pageNavigation(model, title: page.title)
+      Group {
+        #if os(macOS)
+          PageStack(model: model)
+        #else
+          NavigationStack(path: $model.path) {
+            if let key = model.page, let page = model.page(key) {
+              SettingsPageView(model: model, page: page)
+                .navigationDestination(for: SettingsRoute.self) { route in
+                  SettingsDestination(model: model, route: route)
+                }
+            }
           }
-        }
-        // Declared once, on the stack's root: declared on each page, every
-        // push re-registered it and the stack showed the page unanimated.
-        .navigationDestination(for: SettingsRoute.self) { route in
-          SettingsDestination(model: model, route: route)
-        }
+        #endif
       }
       .onChange(of: model.page) {
         model.path = []
@@ -265,26 +267,38 @@ extension View {
   }
 }
 
-extension View {
-  /// On a Mac, Back and Forward at the leading edge of the window's one
-  /// toolbar row, beside the page's title, as the system's Settings has them:
-  /// two plain toolbar buttons, which the system draws as its own pair.
-  @ViewBuilder func pageNavigation(_ model: SettingsModel, title: String) -> some View {
-    #if os(macOS)
-      navigationBarBackButtonHidden(true)
-        .navigationTitle(title)
-        .toolbar {
-          ToolbarItemGroup(placement: .navigation) {
-            PageArrows(model: model)
+#if os(macOS)
+  /// The detail pane's pages, drawn here rather than by a NavigationStack: in
+  /// a split view's detail column a Mac's stack shows a pushed page with no
+  /// animation (macOS 27, a plain NavigationLink included), though it
+  /// animates a pop. Only the top page is drawn, pushed in from the side it
+  /// comes from.
+  private struct PageStack: View {
+    @ObservedObject var model: SettingsModel
+
+    private struct Place: Hashable {
+      let page: SettingsPageKey?
+      let depth: Int
+    }
+
+    var body: some View {
+      ZStack {
+        Group {
+          if let route = model.path.last {
+            SettingsDestination(model: model, route: route)
+          } else if let key = model.page, let page = model.page(key) {
+            SettingsPageView(model: model, page: page)
           }
         }
-    #else
-      self
-    #endif
+        .id(Place(page: model.page, depth: model.path.count))
+        .transition(.push(from: model.forwards ? .trailing : .leading))
+      }
+      .toolbar {
+        ToolbarItemGroup(placement: .navigation) { PageArrows(model: model) }
+      }
+    }
   }
-}
 
-#if os(macOS)
   /// Back and Forward through the pages pushed in this pane.
   private struct PageArrows: View {
     @ObservedObject var model: SettingsModel
@@ -346,6 +360,5 @@ private struct SettingsDestination: View {
         if let row = model.row(opened.row) { ModelList(model: model, row: row) }
       }
     }
-    .pageNavigation(model, title: model.title(of: route))
   }
 }

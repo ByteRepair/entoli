@@ -30,7 +30,6 @@ struct BotAvatarsPage: View {
   @State private var paste = ""
   @State private var imported: BotImportData?
   @State private var notice: String?
-  @Environment(\.dismiss) private var dismiss
 
   private var entries: [BotAvatarEntryData] { data?.entries.compactMap { $0 } ?? [] }
 
@@ -285,7 +284,7 @@ struct BotAvatarsPage: View {
       {
         self.notice = notice.message
       } else {
-        dismiss()
+        model.back()
       }
     }
   }

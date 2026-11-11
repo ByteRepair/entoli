@@ -17,7 +17,6 @@ struct ModelList: View {
   @State private var provider: String?
   @State private var editing: Editing?
   @State private var deleting: ModelCardData?
-  @Environment(\.dismiss) private var dismiss
 
   /// The model a form is open for: a new one where [modelId] is nil, on
   /// [providerId] where the picker is narrowed to one.
@@ -52,7 +51,7 @@ struct ModelList: View {
     }
     .formStyle(.grouped)
     .searchable(text: $search, prompt: "Search \(cards.count) models")
-    .safeAreaInset(edge: .top, spacing: 0) { filters }
+    .topBar { filters }
     .navigationTitle(data?.title ?? "")
     .toolbar {
       if data?.canAdd == true {
@@ -259,7 +258,7 @@ struct ModelList: View {
 
   private func pick(_ providerId: String?, _ modelId: String?) {
     model.say.setModel(id: row.id, providerId: providerId, modelId: modelId, completion: ignore)
-    dismiss()
+    model.back()
   }
 
   private func reload() {
@@ -321,4 +320,16 @@ private struct Monogram: View {
 extension ModelCardData {
   /// Which model it is, through which provider.
   var key: String { "\(providerId)/\(modelId)" }
+}
+
+extension View {
+  /// [bar] over the top of a scrolling page, with the system's scroll edge
+  /// under it where there is one, so the page scrolls away beneath it.
+  @ViewBuilder func topBar(@ViewBuilder _ bar: () -> some View) -> some View {
+    if #available(macOS 26, iOS 26, *) {
+      safeAreaBar(edge: .top, spacing: 0, content: bar)
+    } else {
+      safeAreaInset(edge: .top, spacing: 0) { bar().background(.bar) }
+    }
+  }
 }
