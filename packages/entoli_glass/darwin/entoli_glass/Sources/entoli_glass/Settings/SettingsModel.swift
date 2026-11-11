@@ -90,6 +90,16 @@ public final class SettingsModel: ObservableObject, NativeSettings {
     withAnimation(.smooth(duration: 0.3)) { path.append(route) }
   }
 
+  /// What [route]'s page is called, for its header.
+  func title(of route: SettingsRoute) -> String {
+    switch route {
+    case .page(let key): page(key)?.title ?? ""
+    case .text(let opened): opened.title
+    case .avatars(let opened): opened.agent == nil ? "Bot Avatars" : "Bot Avatar"
+    case .models(let opened): row(opened.row)?.title ?? ""
+    }
+  }
+
   /// Back one page, kept for Forward.
   func back() {
     guard let last = path.last else { return }

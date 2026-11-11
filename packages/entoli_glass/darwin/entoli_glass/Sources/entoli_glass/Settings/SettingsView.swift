@@ -51,7 +51,7 @@ public struct SettingsRoot: View {
     } detail: {
       NavigationStack(path: $model.path) {
         if let key = model.page, let page = model.page(key) {
-          SettingsPageView(model: model, page: page).pageNavigation(model)
+          SettingsPageView(model: model, page: page).pageNavigation(model, title: page.title)
         }
       }
       .onChange(of: model.page) {
@@ -106,7 +106,7 @@ struct SettingsPageView: View {
           if let row = model.row(opened.row) { ModelList(model: model, row: row) }
         }
       }
-      .pageNavigation(model)
+      .pageNavigation(model, title: model.title(of: route))
     }
   }
 }
@@ -273,33 +273,55 @@ extension View {
 }
 
 extension View {
-  /// On a Mac, Back and Forward at the leading edge of the toolbar, as the
-  /// system's Settings has them, in place of the stack's own back button.
-  @ViewBuilder func pageNavigation(_ model: SettingsModel) -> some View {
+  /// On a Mac, a page's own header row at the top of the page pane: Back and
+  /// Forward, then its title, as the system's Settings has them. The window
+  /// hides its title bar, whose toolbar drew neither, and stood a row taller.
+  @ViewBuilder func pageNavigation(_ model: SettingsModel, title: String) -> some View {
     #if os(macOS)
       navigationBarBackButtonHidden(true)
-        .toolbar {
-          ToolbarItemGroup(placement: .navigation) {
-            ControlGroup {
-              Button {
-                model.back()
-              } label: {
-                Label("Back", systemImage: "chevron.left")
-              }
-              .disabled(model.path.isEmpty)
-              .keyboardShortcut("[", modifiers: .command)
-              Button {
-                model.forward()
-              } label: {
-                Label("Forward", systemImage: "chevron.right")
-              }
-              .disabled(model.ahead.isEmpty)
-              .keyboardShortcut("]", modifiers: .command)
-            }
-          }
+        .safeAreaInset(edge: .top, spacing: 0) {
+          PageHeader(model: model, title: title)
         }
     #else
       self
     #endif
   }
 }
+
+#if os(macOS)
+  /// Back, Forward and the page's title, in one row.
+  private struct PageHeader: View {
+    @ObservedObject var model: SettingsModel
+    let title: String
+
+    var body: some View {
+      HStack(spacing: 10) {
+        ControlGroup {
+          Button {
+            model.back()
+          } label: {
+            Image(systemName: "chevron.left")
+          }
+          .disabled(model.path.isEmpty)
+          .keyboardShortcut("[", modifiers: .command)
+          .help("Back")
+          Button {
+            model.forward()
+          } label: {
+            Image(systemName: "chevron.right")
+          }
+          .disabled(model.ahead.isEmpty)
+          .keyboardShortcut("]", modifiers: .command)
+          .help("Forward")
+        }
+        .controlGroupStyle(.navigation)
+        .fixedSize()
+        Text(title).font(.headline).lineLimit(1)
+        Spacer()
+      }
+      .padding(.horizontal, 16)
+      .frame(height: 44)
+      .background(.bar)
+    }
+  }
+#endif

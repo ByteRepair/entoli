@@ -72,7 +72,7 @@ struct CollectionRow: View {
             ).labelsHidden()
           }
           let actions = item.actions.compactMap { $0 }
-          if actions.count > 2 || row.takesImages {
+          if actions.count >= 2 || row.takesImages {
             // One control for the lot, Edit and Remove included, so a row
             // never ends in a strip of buttons.
             Menu {
@@ -128,7 +128,9 @@ struct CollectionRow: View {
       // Borderless, as every control here: a default button in a list row
       // answers a tap anywhere in the row.
       if row.editable, let add = row.addLabel {
-        Button(add) { editing = Editing(index: nil) }.buttonStyle(.borderless)
+        Button(add) { editing = Editing(index: nil) }
+          .buttonStyle(.borderless)
+          .foregroundStyle(Color.accentColor)
       }
       if row.hint == .agents {
         OpenAvatars(model: model, row: row.id)
