@@ -175,9 +175,26 @@ struct CollectionRow: View {
 /// A form Dart makes for an item: asked again after every answer, since a
 /// question may come and go with another.
 struct FormSheet: View {
-  let model: SettingsModel
-  let id: String
-  let index: Int?
+  /// The form as [answers] stand, its first for nil.
+  let load: ([String?: String?]?) async -> SettingFormData?
+
+  /// Saves it, or says why it could not.
+  let save: ([String?: String?]) async -> SettingNoticeData?
+
+  /// A collection item's form: the item at [index], or a new one.
+  init(model: SettingsModel, id: String, index: Int?) {
+    load = { await model.form(id, index, $0) }
+    save = { await model.submit(id, index, $0) }
+  }
+
+  init(
+    load: @escaping ([String?: String?]?) async -> SettingFormData?,
+    save: @escaping ([String?: String?]) async -> SettingNoticeData?
+  ) {
+    self.load = load
+    self.save = save
+  }
+
   @State private var form: SettingFormData?
   @State private var answers: [String?: String?] = [:]
   @State private var failed: String?
@@ -205,7 +222,7 @@ struct FormSheet: View {
         ToolbarItem(placement: .confirmationAction) {
           Button("Save") {
             Task { @MainActor in
-              if let notice = await model.submit(id, index, answers) {
+              if let notice = await save(answers) {
                 failed = notice.message
               } else {
                 dismiss()
@@ -218,7 +235,7 @@ struct FormSheet: View {
     }
     .frame(minWidth: 460, minHeight: 420)
     .task {
-      form = await model.form(id, index, nil)
+      form = await load(nil)
       answers = form?.answers ?? [:]
     }
   }
@@ -228,7 +245,7 @@ struct FormSheet: View {
       get: { (answers[key] ?? nil) ?? "" },
       set: { text in
         answers[key] = text
-        Task { @MainActor in form = await model.form(id, index, answers) }
+        Task { @MainActor in form = await load(answers) }
       })
   }
 
@@ -327,6 +344,7 @@ struct FormSheet: View {
                 .padding(.horizontal, 10).padding(.vertical, 5)
             }
             .glassButton(prominent: on)
+            .fixedSize()
           }
         }
         if let error = part.error { Text(error).font(.caption).foregroundStyle(.red) }
@@ -679,7 +697,7 @@ struct Flow: Layout {
     for row in arrange(subviews, width: bounds.width) {
       var x = bounds.minX
       for index in row.indices {
-        let size = subviews[index].sizeThatFits(.unspecified)
+        let size = subviews[index].sizeThatFits(ProposedViewSize(width: bounds.width, height: nil))
         subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
         x += size.width + spacing
       }
@@ -696,7 +714,7 @@ struct Flow: Layout {
   private func arrange(_ subviews: Subviews, width: CGFloat) -> [Row] {
     var rows = [Row()]
     for index in subviews.indices {
-      let size = subviews[index].sizeThatFits(.unspecified)
+      let size = subviews[index].sizeThatFits(ProposedViewSize(width: width, height: nil))
       let needed = rows[rows.count - 1].indices.isEmpty ? size.width : size.width + spacing
       if rows[rows.count - 1].width + needed > width, !rows[rows.count - 1].indices.isEmpty {
         rows.append(Row())

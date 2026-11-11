@@ -27,6 +27,19 @@ String tokenCount(int n) {
   return n >= 1000 ? "${(n / 1000).round()}K" : "$n";
 }
 
+/// What a model costs per million tokens, in and out, the way providers quote
+/// it; null where nothing is known.
+String? modelPrice(double? input, double? output) {
+  if (input == null && output == null) return null;
+  if ((input ?? 0) == 0 && (output ?? 0) == 0) return "Free";
+  String dollars(double v) {
+    final text = v.toStringAsFixed(v < 0.1 ? 3 : 2);
+    return text.contains(".") ? text.replaceFirst(RegExp(r"\.?0+$"), "") : text;
+  }
+
+  return "\$${dollars(input ?? 0)} in · \$${dollars(output ?? 0)} out /M";
+}
+
 /// The first [end] UTF-16 code units of [text], one fewer where [end] would
 /// split a surrogate pair: a cut that never leaves half a character.
 String safeCut(String text, int end) {

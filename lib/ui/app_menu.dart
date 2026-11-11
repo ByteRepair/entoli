@@ -3,6 +3,8 @@ import "package:flutter/widgets.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../app/app_menus.dart";
+import "../app/frontend.dart";
+import "../core/platform/form_factor.dart";
 import "../providers.dart";
 import "app_command.dart";
 import "commands.dart";
@@ -57,7 +59,11 @@ class _AppMenuSyncState extends ConsumerState<AppMenuSync> {
     if (menus.available && identical(_answering, this)) {
       final commands = Commands.watch(context, ref, widget.navigate);
       menus.show(
-        appMenus,
+        // A Mac's SwiftUI frontend has the platform's own Settings item, the
+        // Settings scene's, in this one's place.
+        isMac && ref.watch(frontendProvider).swiftUI
+            ? _without(Destination.settings)
+            : appMenus,
         title: commands.label,
         enabled: (item) => commands.availability(item).isAvailable,
       );
@@ -65,6 +71,14 @@ class _AppMenuSyncState extends ConsumerState<AppMenuSync> {
     return widget.child;
   }
 }
+
+/// [appMenus] with [item] left out.
+List<AppMenu> _without(AppItem item) => [
+  for (final menu in appMenus)
+    AppMenu(menu.title, menu.role, [
+      for (final group in menu.groups) [...group.where((i) => i != item)],
+    ]),
+];
 
 /// Run the item [event]'s keys make, unless the menu bar holds them. True
 /// where it ran, so the key goes no further.

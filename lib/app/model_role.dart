@@ -47,4 +47,21 @@ enum ModelRole {
     speech => "speech model",
     _ => "model",
   };
+
+  /// What a picker with no models at all says, for a role that is most often
+  /// a provider without such models rather than a model missing from a list.
+  String? get emptyNote => switch (this) {
+    image =>
+      "None of your providers makes images. OpenAI and OpenRouter do: add "
+          "one in Settings > Providers.",
+    transcription =>
+      "Nothing here can listen yet. Download a model in Settings > "
+          "On-device, or add a provider with one: Groq has Whisper, and "
+          "OpenAI's whisper-1 can be added by hand.",
+    speech =>
+      "Nothing here can speak yet. Download a model in Settings > "
+          "On-device, or add a provider with one: Groq and Google have them, "
+          "and OpenAI's tts-1 can be added by hand.",
+    _ => null,
+  };
 }

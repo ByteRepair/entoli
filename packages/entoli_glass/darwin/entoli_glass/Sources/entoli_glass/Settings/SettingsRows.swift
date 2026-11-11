@@ -66,6 +66,14 @@ struct ChoiceRow: View {
 
   var body: some View {
     switch row.hint {
+    case .levels where row.picked != nil:
+      VStack(alignment: .leading, spacing: 8) {
+        Text(row.title)
+        ThinkingBar(labels: options.map(\.label), picked: Int(row.picked ?? 0)) { i in
+          picked.wrappedValue = i
+        }
+        if let detail = row.detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
+      }
     case .segmented, .levels:
       VStack(alignment: .leading) {
         Text(row.title)
@@ -668,37 +676,6 @@ struct ModelPickRow: View {
         if let detail = row.detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
       }
     }
-  }
-}
-
-struct ModelList: View {
-  let model: SettingsModel
-  let row: SettingRowData
-  @State private var entries: [ModelEntry] = []
-  @State private var search = ""
-  @Environment(\.dismiss) private var dismiss
-
-  var body: some View {
-    let shown = search.isEmpty
-      ? entries : entries.filter { $0.label.localizedCaseInsensitiveContains(search) }
-    let sections = Dictionary(grouping: shown, by: \.section)
-    List {
-      ForEach(sections.keys.sorted(), id: \.self) { name in
-        Section(name) {
-          ForEach(sections[name] ?? []) { entry in
-            Button(entry.label) {
-              model.say.setModel(
-                id: row.id, providerId: entry.providerId, modelId: entry.modelId,
-                completion: ignore)
-              dismiss()
-            }
-          }
-        }
-      }
-    }
-    .searchable(text: $search)
-    .navigationTitle(row.title)
-    .task { entries = await model.models(row.id) }
   }
 }
 

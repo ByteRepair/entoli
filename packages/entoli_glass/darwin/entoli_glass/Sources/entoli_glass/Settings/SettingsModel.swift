@@ -37,11 +37,17 @@ public final class SettingsModel: ObservableObject, NativeSettings {
     pages = snapshot.pages.compactMap { $0 }
   }
 
+  #if os(macOS)
+    /// SwiftUI's way to the Settings scene, which only a view can read: set
+    /// by `SettingsWindowOpener` in the app's window. AppKit's own
+    /// `showSettingsWindow:` action opens nothing from macOS 14.
+    static var openWindow: (() -> Void)?
+  #endif
+
   func show(page: SettingsPageKey?) throws {
     #if os(macOS)
       if let page { self.page = page }
-      // The app's Settings scene: AppKit's own action opens its window.
-      NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+      Self.openWindow?()
       NSApp.activate()
     #else
       self.page = page
@@ -118,11 +124,28 @@ extension SettingsModel {
     }
   }
 
-  func models(_ id: String) async -> [ModelEntry] {
+  func models(_ id: String) async -> ModelPickerData? {
     await withCheckedContinuation { done in
-      say.models(id: id) {
-        let entries = ((try? $0.get()) ?? []).compactMap(ModelEntry.init)
-        done.resume(returning: entries)
+      say.models(id: id) { done.resume(returning: try? $0.get()) }
+    }
+  }
+
+  func modelForm(
+    _ id: String, _ providerId: String?, _ modelId: String?, _ answers: [String?: String?]?
+  ) async -> SettingFormData? {
+    await withCheckedContinuation { done in
+      say.modelForm(id: id, providerId: providerId, modelId: modelId, answers: answers) {
+        done.resume(returning: try? $0.get())
+      }
+    }
+  }
+
+  func submitModelForm(
+    _ id: String, _ providerId: String?, _ modelId: String?, _ answers: [String?: String?]
+  ) async -> SettingNoticeData? {
+    await withCheckedContinuation { done in
+      say.submitModelForm(id: id, providerId: providerId, modelId: modelId, answers: answers) {
+        done.resume(returning: (try? $0.get()) ?? nil)
       }
     }
   }
@@ -148,23 +171,22 @@ extension SettingsModel {
 
 /// One entry of a model picker: the pair it stores, what it is called, and
 /// the provider it is listed under.
-struct ModelEntry: Identifiable, Hashable {
-  let providerId: String?
-  let modelId: String?
-  let label: String
-  let section: String
-
-  var id: String { "\(providerId ?? "")/\(modelId ?? "")" }
-
-  init?(_ wire: String) {
-    let parts = wire.components(separatedBy: "\u{0}")
-    guard parts.count == 4 else { return nil }
-    providerId = parts[0].isEmpty ? nil : parts[0]
-    modelId = parts[1].isEmpty ? nil : parts[1]
-    label = parts[2]
-    section = parts[3]
-  }
-}
-
 /// A no-op answer for the intents that wait on nothing.
 func ignore(_: Result<Void, PigeonError>) {}
+
+#if os(macOS)
+  /// Hands SwiftUI's `openSettings` to the model, for a page Dart asks to
+  /// open — About from the menu, a setup row — with the window closed. Sits
+  /// in the app's main window, the one view that is always there.
+  public struct SettingsWindowOpener: View {
+    @Environment(\.openSettings) private var openSettings
+
+    public init() {}
+
+    public var body: some View {
+      Color.clear
+        .frame(width: 0, height: 0)
+        .onAppear { SettingsModel.openWindow = { openSettings() } }
+    }
+  }
+#endif

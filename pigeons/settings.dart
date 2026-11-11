@@ -617,6 +617,112 @@ class SettingFormData {
   bool savable;
 }
 
+/// One of a model picker's quick picks: the entry storing nothing, or a
+/// provider's Default.
+class ModelQuickData {
+  ModelQuickData({
+    required this.title,
+    this.providerId,
+    this.subtitle,
+    this.selected = false,
+  });
+
+  String title;
+  String? providerId;
+  String? subtitle;
+  bool selected;
+}
+
+/// One model a picker offers, with what it costs and can do.
+class ModelCardData {
+  ModelCardData({
+    required this.providerId,
+    required this.providerName,
+    required this.modelId,
+    required this.name,
+    this.context,
+    this.price,
+    this.toolCall = false,
+    this.reasoning = false,
+    this.readsImages = false,
+    this.makesImages = false,
+    this.transcribes = false,
+    this.speaks = false,
+    this.custom = false,
+    this.selected = false,
+    this.favourite = false,
+  });
+
+  String providerId;
+  String providerName;
+  String modelId;
+  String name;
+
+  /// The context window in words: "200K".
+  String? context;
+
+  /// Per million tokens, in and out: "\$3 in · \$15 out /M", or "Free".
+  String? price;
+  bool toolCall;
+  bool reasoning;
+  bool readsImages;
+  bool makesImages;
+  bool transcribes;
+  bool speaks;
+
+  /// Added by hand: the user's to edit and delete.
+  bool custom;
+  bool selected;
+  bool favourite;
+}
+
+/// A provider the picker can be narrowed to.
+class ModelProviderData {
+  ModelProviderData({required this.id, required this.name});
+
+  String id;
+  String name;
+}
+
+/// Everything a model picker shows: its quick picks, every model the role
+/// can use with the favourites among them in the order they were starred,
+/// and what to say where there are none.
+class ModelPickerData {
+  ModelPickerData({
+    required this.noun,
+    required this.quick,
+    required this.models,
+    required this.favourites,
+    required this.providers,
+    this.fetched = true,
+    this.canAdd = false,
+    this.chat = false,
+    this.emptyNote,
+  });
+
+  /// What one of its models is called: "chat model".
+  String noun;
+  List<ModelQuickData?> quick;
+  List<ModelCardData?> models;
+
+  /// Places in [models], in the order they were starred.
+  List<int?> favourites;
+  List<ModelProviderData?> providers;
+
+  /// Whether the full catalog has arrived, rather than the built-in defaults.
+  bool fetched;
+
+  /// Whether a model can be added: there is a provider to add it to.
+  bool canAdd;
+
+  /// Whether it picks a chat model, which can be narrowed to those that see
+  /// images.
+  bool chat;
+
+  /// What to say where the role has no models at all.
+  String? emptyNote;
+}
+
 /// What the app says to the client.
 @HostApi(dartHostTestHandler: "TestNativeSettings")
 abstract class NativeSettings {
@@ -693,10 +799,34 @@ abstract class SettingsIntents {
   /// [op] is "setUp", "import" or "delete".
   void setup(String id, String op);
 
-  /// A model picker's entries, every one the role can use: each "providerId
-  /// \u0000modelId\u0000label\u0000section".
+  /// A model picker's quick picks and every model the role can use.
   @async
-  List<String> models(String id);
+  ModelPickerData models(String id);
+
+  /// Stars or unstars a model, for every picker.
+  void toggleFavourite(String providerId, String modelId);
+
+  /// The form adding a model to the picker [id] — on [providerId] where the
+  /// picker is narrowed to one — or editing [modelId] on it, as [answers]
+  /// stand; null answers are its first.
+  @async
+  SettingFormData modelForm(
+    String id,
+    String? providerId,
+    String? modelId,
+    Map<String?, String?>? answers,
+  );
+
+  @async
+  SettingNoticeData? submitModelForm(
+    String id,
+    String? providerId,
+    String? modelId,
+    Map<String?, String?> answers,
+  );
+
+  /// Deletes a model added by hand.
+  void deleteModel(String providerId, String modelId);
 
   /// The text of a page the app holds: the privacy policy, the licences.
   @async

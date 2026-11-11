@@ -30,7 +30,8 @@ public struct SettingsRoot: View {
   }
 
   public var body: some View {
-    NavigationSplitView {
+    // The pages always beside the page, with no button to hide them.
+    NavigationSplitView(columnVisibility: .constant(.all)) {
       List(selection: $model.page) {
         ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
           Section {
@@ -43,6 +44,7 @@ public struct SettingsRoot: View {
         }
       }
       .navigationTitle("Settings")
+      .toolbar(removing: .sidebarToggle)
       #if os(macOS)
         .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 260)
       #endif

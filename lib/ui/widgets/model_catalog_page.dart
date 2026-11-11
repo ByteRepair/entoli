@@ -513,7 +513,7 @@ class _ModelCard extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final info = entry.info;
-    final price = _price(info);
+    final price = modelPrice(info.inputCost, info.outputCost);
     // The theme's corners with an outline of our own: the app's card shape
     // replaces the outlined card's, border and all.
     final base = theme.cardTheme.shape is OutlinedBorder
@@ -622,19 +622,6 @@ class _ModelCard extends StatelessWidget {
       ),
     );
   }
-
-  /// Per million tokens, in and out, the way providers quote it.
-  static String? _price(ModelInfo info) {
-    final (input, output) = (info.inputCost, info.outputCost);
-    if (input == null && output == null) return null;
-    if ((input ?? 0) == 0 && (output ?? 0) == 0) return "Free";
-    return "\$${_dollars(input ?? 0)} in · \$${_dollars(output ?? 0)} out /M";
-  }
-
-  static String _dollars(double v) {
-    final text = v.toStringAsFixed(v < 0.1 ? 3 : 2);
-    return text.contains(".") ? text.replaceFirst(RegExp(r"\.?0+$"), "") : text;
-  }
 }
 
 /// The provider's initial on a colour of its own, so a long list reads by
@@ -672,20 +659,7 @@ class _Empty extends StatelessWidget {
   final ModelRole? role;
   final VoidCallback? onAdd;
 
-  String? get _media => switch (role) {
-    ModelRole.image =>
-      "None of your providers makes images. OpenAI and "
-          "OpenRouter do: add one in Settings > Providers.",
-    ModelRole.transcription =>
-      "Nothing here can listen yet. Download a "
-          "model in Settings > On-device, or add a provider with one: Groq "
-          "has Whisper, and OpenAI's whisper-1 can be added by hand.",
-    ModelRole.speech =>
-      "Nothing here can speak yet. Download a model in "
-          "Settings > On-device, or add a provider with one: Groq and Google "
-          "have them, and OpenAI's tts-1 can be added by hand.",
-    _ => null,
-  };
+  String? get _media => role?.emptyNote;
 
   @override
   Widget build(BuildContext context) {

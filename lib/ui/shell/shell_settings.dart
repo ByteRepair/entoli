@@ -5,6 +5,8 @@ import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/settings/controller.dart";
+import "../../app/model_role.dart";
+import "../../app/settings/forms/model.dart";
 import "../../app/settings/scope.dart";
 import "../../app/settings/settings.dart";
 import "../../app/settings/spec.dart";
@@ -17,7 +19,7 @@ import "../../domain/model_registry.dart" show ModelCatalog, modelInfoOf;
 import "../../providers.dart";
 import "../../app/prompts/skill_files.dart";
 import "../bot_avatar/face_png.dart";
-import "../widgets/model_catalog_page.dart" show catalogEntries;
+import "../widgets/model_catalog_page.dart" show CatalogEntry, catalogEntries;
 
 /// Every page the native settings offer, as rows, and the controller each
 /// row was sent from, by its id: what an intent naming a row acts on.
@@ -552,6 +554,14 @@ class SettingsBridge implements SettingsIntents {
     if (form == null) {
       return SettingFormData(title: "", answers: const {}, parts: const []);
     }
+    return _formData(form, answers);
+  }
+
+  /// [form] as it stands for [answers], its first where they are null.
+  static SettingFormData _formData(
+    SettingForm<Object?> form,
+    Map<String?, String?>? answers,
+  ) {
     final now = answers == null
         ? {...form.initial}
         : {
@@ -709,40 +719,179 @@ class SettingsBridge implements SettingsIntents {
     }
   }
 
-  @override
-  Future<List<String>> models(String id) async {
-    final c = _at<ModelPickController>(id);
-    if (c == null) return const [];
-    final listed = _container.read(sortedModelsProvider).value ?? const [];
-    final serving = _container.read(modelProvidersProvider);
+  /// The providers a picker of [c]'s role offers anything through: none for
+  /// transcription where the device cannot cut the microphone into
+  /// utterances, as the Flutter catalog does.
+  List<LlmProviderConfig> _pickerProviders(ModelPickController c) {
     final cuts = _container.read(voiceProvider).hasModelCatalog;
-    final entries = catalogEntries(
-      ModelCatalog.notifier.value,
-      serving,
-      listed,
-      role: c.role,
-      host: ModelHost.resolving(cutsUtterances: cuts),
-    );
-    String entry(
-      String? providerId,
-      String? modelId,
-      String label,
-      String in_,
-    ) => "${providerId ?? ""}\u0000${modelId ?? ""}\u0000$label\u0000$in_";
-    return [
-      entry(null, null, c.nullLabel, ""),
-      for (final provider in _container.read(appSettingsProvider).llmProviders)
-        if (c.defaultOf(provider) case final model?)
-          entry(
-            provider.id,
-            null,
-            "${provider.displayName} - Default ($model)",
-            "",
-          ),
-      for (final e in entries)
-        entry(e.providerId, e.info.id, e.info.displayName, e.providerName),
-    ];
+    return c.role == ModelRole.transcription && !cuts
+        ? const []
+        : _container.read(appSettingsProvider).llmProviders;
   }
+
+  List<CatalogEntry> _catalogOf(ModelPickController c) => catalogEntries(
+    ModelCatalog.notifier.value,
+    _container.read(modelProvidersProvider),
+    _container.read(sortedModelsProvider).value ?? const [],
+    role: c.role,
+    host: ModelHost.resolving(
+      cutsUtterances: _container.read(voiceProvider).hasModelCatalog,
+    ),
+  );
+
+  @override
+  Future<ModelPickerData> models(String id) async {
+    final c = _at<ModelPickController>(id);
+    if (c == null) {
+      return ModelPickerData(
+        noun: "model",
+        quick: const [],
+        models: const [],
+        favourites: const [],
+        providers: const [],
+      );
+    }
+    final providers = _pickerProviders(c);
+    final entries = _catalogOf(c);
+    final favourites = _container.read(appSettingsProvider).favouriteModels;
+    bool picked(String? providerId, String? modelId) =>
+        c.choice.providerId == providerId && c.choice.modelId == modelId;
+    final names = {
+      for (final p in providers) p.id: p.displayName,
+      for (final e in entries) e.providerId: e.providerName,
+    }..removeWhere((id, _) => !entries.any((e) => e.providerId == id));
+    return ModelPickerData(
+      noun: c.role.noun,
+      fetched: ModelCatalog.notifier.value.fetched != null,
+      canAdd: providers.isNotEmpty,
+      chat: c.role.chat,
+      emptyNote: providers.isEmpty && !c.role.voice
+          ? "Add a provider in Settings > Providers to see its models."
+          : c.role.emptyNote,
+      quick: [
+        ModelQuickData(title: c.nullLabel, selected: picked(null, null)),
+        for (final p in providers)
+          if (c.defaultOf(p) case final model?)
+            ModelQuickData(
+              providerId: p.id,
+              title: "${p.displayName} - Default",
+              subtitle: modelInfoOf(p, model)?.displayName ?? model,
+              selected: picked(p.id, null),
+            ),
+      ],
+      models: [
+        for (final e in entries)
+          ModelCardData(
+            providerId: e.providerId,
+            providerName: e.providerName,
+            modelId: e.info.id,
+            name: e.info.displayName,
+            context: e.info.context == null
+                ? null
+                : tokenCount(e.info.context!),
+            price: modelPrice(e.info.inputCost, e.info.outputCost),
+            toolCall: e.info.toolCall,
+            reasoning: e.info.reasoning,
+            readsImages: e.info.readsImages,
+            makesImages: e.info.makesImages,
+            transcribes: e.info.transcribes,
+            speaks: e.info.speaks,
+            custom: e.custom,
+            selected: picked(e.providerId, e.info.id),
+            favourite: favourites.contains(e.ref),
+          ),
+      ],
+      // In the order they were starred, which is the order they were wanted.
+      favourites: [
+        for (final f in favourites)
+          if (entries.indexWhere((e) => e.ref == f) case final i when i >= 0) i,
+      ],
+      providers: [
+        for (final MapEntry(key: id, value: name) in names.entries)
+          ModelProviderData(id: id, name: name),
+      ],
+    );
+  }
+
+  @override
+  void toggleFavourite(String providerId, String modelId) => unawaited(
+    _container.read(appSettingsProvider.notifier).toggleFavourite((
+      providerId: providerId,
+      modelId: modelId,
+    )),
+  );
+
+  /// The form adding a model to [c]'s picker, or editing [modelId] on
+  /// [providerId].
+  ModelForm? _modelForm(
+    ModelPickController c,
+    String? providerId,
+    String? modelId,
+  ) {
+    final providers = _pickerProviders(c);
+    final model = modelId == null
+        ? null
+        : _catalogOf(c)
+              .where((e) => e.providerId == providerId && e.info.id == modelId)
+              .firstOrNull
+              ?.info;
+    if (modelId != null && model == null) return null;
+    return ModelForm(
+      role: c.role,
+      providers: [for (final p in providers) (p.id, p.displayName)],
+      providerId: providerId,
+      model: model,
+    );
+  }
+
+  @override
+  Future<SettingFormData> modelForm(
+    String id,
+    String? providerId,
+    String? modelId,
+    Map<String?, String?>? answers,
+  ) async {
+    final c = _at<ModelPickController>(id);
+    final form = c == null ? null : _modelForm(c, providerId, modelId);
+    if (form == null) {
+      return SettingFormData(title: "", answers: const {}, parts: const []);
+    }
+    return _formData(form, answers);
+  }
+
+  @override
+  Future<SettingNoticeData?> submitModelForm(
+    String id,
+    String? providerId,
+    String? modelId,
+    Map<String?, String?> answers,
+  ) async {
+    final c = _at<ModelPickController>(id);
+    final form = c == null ? null : _modelForm(c, providerId, modelId);
+    if (form == null) return null;
+    final draft = form.build({
+      for (final MapEntry(:key, :value) in answers.entries) ?key: value ?? "",
+    });
+    try {
+      await _container
+          .read(appSettingsProvider.notifier)
+          .putCustomModel(
+            draft.providerId,
+            draft.info,
+            replacing: draft.replacing,
+          );
+      return null;
+    } catch (e) {
+      return SettingNoticeData(message: "$e");
+    }
+  }
+
+  @override
+  void deleteModel(String providerId, String modelId) => unawaited(
+    _container
+        .read(appSettingsProvider.notifier)
+        .removeCustomModel(providerId, modelId),
+  );
 
   @override
   Future<String> page(String opens) async => switch (opens) {

@@ -33,8 +33,7 @@ what keeps every sync-unaware caller on the local paths unchanged.
 ## Links into Entoli
 
 Entoli registers the `entoli://` scheme on every platform — Android's
-`VIEW` filter (on `MainActivity` and the `PromptIcon` alias, for the reason
-the share filter is on both), `CFBundleURLTypes` in both Apple `Info.plist`s,
+`VIEW` filter on `MainActivity`, `CFBundleURLTypes` in both Apple `Info.plist`s,
 `x-scheme-handler/entoli` in the Linux desktop entry, and
 `HKLM\Software\Classes\entoli` in the MSI. `app_links` delivers them, the
 launching one and every one after, on one stream that `IncomingLinks` (wrapped
@@ -81,8 +80,8 @@ One palette, seeded by default from the iOS / macOS theme (Apple's systemBlue
 as both seeds, on grey surfaces; see below) and built in each brightness by `entoliTheme`. `MaterialApp` gets both as `theme` and
 `darkTheme` whichever is in use, so a system that turns dark at sunset turns the
 app with it without anything being told. `AppTheme` — `system`, `light`, `dark`
-— says which, and is app-level with no per-chat override for the same reason the
-icon is.
+— says which, and is app-level with no per-chat override: a palette is the
+app's, not a conversation's.
 
 **The faces are the artifact stylesheet's.** Source Serif 4 on every tier of
 the text theme, and Playfair Display on the display and headline tiers plus

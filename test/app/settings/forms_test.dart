@@ -1,6 +1,9 @@
+import "package:agent_chat/app/model_role.dart";
+import "package:agent_chat/app/settings/forms/model.dart";
 import "package:agent_chat/app/settings/forms/provider.dart";
 import "package:agent_chat/app/settings/forms/trigger.dart";
 import "package:agent_chat/domain/llm_provider.dart";
+import "package:agent_chat/domain/model_info.dart";
 import "package:agent_chat/domain/trigger.dart";
 import "package:flutter_test/flutter_test.dart";
 
@@ -95,6 +98,53 @@ void main() {
         f.problem({...f.initial, "name": "Box", "baseUrl": "http://box/v1"}),
         isNull,
       );
+    });
+  });
+
+  group("the model form", () {
+    ModelForm form({ModelRole role = ModelRole.agent, ModelInfo? model}) =>
+        ModelForm(
+          role: role,
+          providers: const [("p1", "Box"), ("p2", "Cloud")],
+          providerId: model == null ? null : "p2",
+          model: model,
+        );
+
+    test("a chat model keeps what it can do, a speech model none of it", () {
+      final f = form();
+      final chat = f.build({
+        ...f.initial,
+        "id": "tuned-1",
+        "caps": "toolCall,readsImages",
+      });
+      expect(chat.providerId, "p1");
+      expect(chat.info.toolCall, isTrue);
+      expect(chat.info.readsImages, isTrue);
+      expect(chat.info.reasoning, isFalse);
+      final speech = f.build({
+        ...f.initial,
+        "id": "tts",
+        "kind": ModelRole.speech.name,
+        "caps": "toolCall",
+      });
+      expect(speech.info.speaks, isTrue);
+      expect(speech.info.toolCall, isFalse);
+    });
+
+    test("needs an id and numbers where numbers go", () {
+      final f = form();
+      expect(f.problem(f.initial), "");
+      final named = {...f.initial, "id": "tuned-1"};
+      expect(f.problem(named), isNull);
+      expect(f.problem({...named, "context": "lots"}), "");
+    });
+
+    test("an edit replaces the model it started from", () {
+      final f = form(model: const ModelInfo(id: "old", reasoning: true));
+      expect(f.initial["caps"], contains("reasoning"));
+      final draft = f.build({...f.initial, "id": "new"});
+      expect(draft.replacing, ("p2", "old"));
+      expect(draft.info.id, "new");
     });
   });
 }

@@ -58,7 +58,16 @@ iOS). The layers, each knowing only the one below it:
 While the SwiftUI frontend is up, `openSettings` opens the native settings
 rather than the Flutter page — its bridge sets `nativeSettingsOpener` — and
 the Flutter settings page is not shown over the native UI. The welcome tour
-is not settings, and stays Flutter's own page everywhere.
+is not settings, and stays Flutter's own page everywhere. On a Mac the
+window is the Settings scene's: AppKit's `showSettingsWindow:` opens nothing
+from macOS 14, so a page Dart asks for — About from the menu with the window
+closed — goes through SwiftUI's `openSettings`, which `SettingsWindowOpener`
+in the main window hands the model. The menu's Settings item is the scene's
+own there, and Dart leaves its item out of the app menu.
+
+A model picker is the catalog page in both: the native one is sent the
+quick picks and every model's card whole (`ModelPickerData`), and adding or
+editing a model is the core's `ModelForm`, asked as any form is.
 
 The chat and project settings pages are still Flutter on every platform and
 still built by hand: their fields read and write through a `ChatScope` or a
