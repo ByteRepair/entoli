@@ -313,10 +313,21 @@ final generalSettings = [
     weight: 0,
     title: "Delete chats after",
     hint: UiHint.dropdown,
-    build: (c) => c.choice(SettingKeys.tempChatTtl, [
-      for (final MapEntry(key: ttl, value: label) in tempChatTtlLabels.entries)
-        SettingOption(ttl, label),
-    ]),
+    // The setter re-anchors every chat to now, so the badges appear at once.
+    build: (c) {
+      final notifier = c.ref.read(appSettingsProvider.notifier);
+      return c.choice(
+        SettingKeys.tempChatTtl,
+        [
+          for (final MapEntry(key: ttl, value: label)
+              in tempChatTtlLabels.entries)
+            SettingOption(ttl, label),
+        ],
+        write: (ttl) async {
+          if (ttl != null) await notifier.setTempChatTtl(ttl);
+        },
+      );
+    },
   ),
   SettingSpec(
     id: "environment",

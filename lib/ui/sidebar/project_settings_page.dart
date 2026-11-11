@@ -23,7 +23,9 @@ import "../settings/agents_settings.dart";
 import "../settings/permissions_section.dart";
 import "../settings/skills_settings.dart";
 import "../../app/settings/pages/terminal.dart" show pickedConfinement;
+import "../../app/settings/scope.dart";
 import "../../app/settings/spec.dart" show WidgetReader;
+import "../../domain/settings/keys.dart";
 import "../settings/work_folders_section.dart";
 import "../widgets/destructive_button.dart";
 import "../widgets/dialogs.dart" show confirm, promptForText;
@@ -467,10 +469,9 @@ class _OmadaOrderingRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final value = ref.watch(
-      projectSettingsOf(at).select((s) => s.omadaOrdering),
-    );
-    final app = ref.watch(appSettingsOf(at)).omadaOrdering;
+    final scope = _scopeOf(ref, at);
+    final value = scope.own(SettingKeys.omadaOrdering);
+    final app = scope.inherited(SettingKeys.omadaOrdering);
     final effective = value ?? app ?? defaultOmadaOrdering;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -481,8 +482,7 @@ class _OmadaOrderingRow extends ConsumerWidget {
           // Null here resolves to the app's default, not the enum's own.
           inherited: omadaOrderingLabels[app ?? defaultOmadaOrdering],
           options: omadaOrderingLabels,
-          onChanged: (v) =>
-              ref.read(projectSettingsOf(at).notifier).setOmadaOrdering(v),
+          onChanged: (v) => scope.write(SettingKeys.omadaOrdering, v),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -506,15 +506,13 @@ class _OmadaMaxGenerationsRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final scope = _scopeOf(ref, at);
     return InheritableSlider(
       label: "Max generations per round",
-      value: ref.watch(
-        projectSettingsOf(at).select((s) => s.omadaMaxGenerations),
-      ),
+      value: scope.own(SettingKeys.omadaMaxGenerations),
       stops: AppSettings.omadaGenerationStops,
-      inherited: ref.watch(appSettingsOf(at)).omadaMaxGenerations,
-      onChanged: (v) =>
-          ref.read(projectSettingsOf(at).notifier).setOmadaMaxGenerations(v),
+      inherited: scope.inherited(SettingKeys.omadaMaxGenerations)!,
+      onChanged: (v) => scope.write(SettingKeys.omadaMaxGenerations, v),
     );
   }
 }
@@ -529,15 +527,15 @@ class _TurnMaxStepsRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final scope = _scopeOf(ref, at);
     return InheritableSlider(
       label: "Max steps per turn",
-      value: ref.watch(projectSettingsOf(at).select((s) => s.turnMaxSteps)),
+      value: scope.own(SettingKeys.turnMaxSteps),
       stops: AppSettings.turnStepStops,
       inherited:
-          ref.watch(appSettingsOf(at)).turnMaxSteps ??
+          scope.inherited(SettingKeys.turnMaxSteps) ??
           AppSettings.defaultTurnMaxSteps,
-      onChanged: (v) =>
-          ref.read(projectSettingsOf(at).notifier).setTurnMaxSteps(v),
+      onChanged: (v) => scope.write(SettingKeys.turnMaxSteps, v),
     );
   }
 }
@@ -600,14 +598,15 @@ class _TempChatTtlRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(projectSettingsOf(at));
-    final appTtl = ref.watch(appSettingsOf(at)).tempChatTtl;
+    final scope = _scopeOf(ref, at);
+    final appTtl = scope.inherited(SettingKeys.tempChatTtl)!;
     return InheritableDropdown<TempChatTtl>(
       label: "Temporary chats",
-      value: settings.tempChatTtl,
+      value: scope.own(SettingKeys.tempChatTtl),
       // What `ChatRepository._resolveTempTtl` falls to below this level.
       inherited: (builtinProjectOf(at.project)?.tempChatTtl ?? appTtl).label,
       options: tempChatTtlLabels,
+      // The notifier's setter, which a remote project's sends to its device.
       onChanged: (v) =>
           ref.read(projectSettingsOf(at).notifier).setTempChatTtl(v),
     );
@@ -693,12 +692,11 @@ class _ProjectPermissionsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(projectSettingsOf(at));
-    final app = ref.watch(
-      projectSettingsOf((device: at.device, project: null)),
-    );
-    final notifier = ref.read(projectSettingsOf(at).notifier);
-    final sandboxed = settings.sandbox ?? app.sandbox ?? true;
+    final scope = _scopeOf(ref, at);
+    final own = scope.own(SettingKeys.sandbox);
+    // The default project's answer, the tier this one builds on.
+    final inherited = scope.inherited(SettingKeys.sandbox) ?? true;
+    final sandboxed = own ?? inherited;
     return Scaffold(
       appBar: PageBar(title: "Permissions"),
       body: ListView(
@@ -713,14 +711,12 @@ class _ProjectPermissionsPage extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           PermissionsSection(
-            rules: settings.permissions,
+            rules: scope.own(SettingKeys.permissions) ?? const [],
             description:
                 "Standing rules for this project's chats: whether a "
                 "matching command is asked about, and what it may touch once "
                 "it runs.",
-            onSaved: (rules) => ref
-                .read(projectSettingsOf(at).notifier)
-                .setProjectPermissions(rules),
+            onSaved: (rules) => scope.write(SettingKeys.permissions, rules),
           ),
           const Divider(),
           // Each overrides the app's answer for this project's chats.
@@ -729,12 +725,19 @@ class _ProjectPermissionsPage extends ConsumerWidget {
             subtitle: sandboxed
                 ? null
                 : "Off: commands write wherever you can.",
-            value: settings.sandbox,
-            inherited: app.sandbox ?? true,
-            onChanged: notifier.setProjectSandbox,
+            value: own,
+            inherited: inherited,
+            onChanged: (v) => scope.write(SettingKeys.sandbox, v),
           ),
         ],
       ),
     );
   }
 }
+
+/// [at]'s settings as a scope, the level above it the app's on its device:
+/// what a row reads its own and inherited values from.
+ProjectScope _scopeOf(WidgetRef ref, ProjectRef at) => projectScopeAt(
+  WidgetReader(ref),
+  ProjectAddress(at.project, device: at.device),
+);
