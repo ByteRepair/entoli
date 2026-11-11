@@ -3,6 +3,7 @@ import "../../app/settings/forms/model.dart"
 import "../../app/settings/spec.dart" show WidgetReader;
 import "../settings/form_dialog.dart";
 import "../../app/model_facts.dart" show providerHue;
+import "../../app/model_picker.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -10,7 +11,6 @@ import "../../data/builtin/llm/hosted_models.dart";
 import "../../data/builtin/llm/providers/provider.dart" show LlmProvider;
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/llm_provider.dart";
-import "../../domain/local_model.dart" show isTitleOnlyModel;
 import "../../domain/model_capability.dart";
 import "../../domain/model_registry.dart";
 import "../../app/model_role.dart";
@@ -22,89 +22,8 @@ import "catalog.dart" show InfoTag;
 import "dialogs.dart" show confirm;
 import "page_bar.dart";
 
+export "../../app/model_picker.dart" show CatalogEntry, catalogEntries;
 export "../../app/model_role.dart";
-
-/// One model a picker can offer, with the provider it is reached through.
-class CatalogEntry {
-  const CatalogEntry(
-    this.providerId,
-    this.providerName,
-    this.info, {
-    this.custom = false,
-  });
-
-  final String providerId;
-  final String providerName;
-  final ModelInfo info;
-
-  /// Added by hand rather than listed by models.dev.
-  final bool custom;
-
-  ModelRef get ref => (providerId: providerId, modelId: info.id);
-}
-
-/// What a picker offers: each provider's models that [role] can use — the
-/// on-device one's, then the configured ones' from the catalog — then whatever
-/// the endpoints list that the catalog does not know, a self-hosted server's
-/// models.
-List<CatalogEntry> catalogEntries(
-  ModelCatalog catalog,
-  List<LlmProvider> providers,
-  List<ModelOption> listed, {
-  required ModelRole role,
-  ModelHost? host,
-}) {
-  host ??= ModelHost.resolving();
-  // Same-named models — one model through two providers — keep the order the
-  // providers are configured in.
-  final order = {for (final (i, p) in providers.indexed) p.id: i};
-  final described = [
-    for (final p in providers)
-      for (final m in p.offered(catalog, host)) (provider: p, model: m),
-  ];
-  // Every model a provider describes, whatever this role makes of it: what
-  // the catalog says of one wins over the endpoint naming it.
-  final known = {for (final d in described) (d.provider.id, d.model.info.id)};
-  final shown = <(String, String)>{};
-  return [
-    for (final (:provider, :model) in described)
-      if (role.offers(model) && shown.add((provider.id, model.info.id)))
-        CatalogEntry(
-          provider.id,
-          provider.displayName,
-          model.info,
-          custom: provider.config.customModels.any(
-            (c) => c.id == model.info.id,
-          ),
-        ),
-    // Named by their own listing — `<endpoint> · <model>` — and taken to be
-    // chat models, since nothing says otherwise: no image model is guessed.
-    if (role.chat)
-      for (final o in listed)
-        if (!known.contains((o.providerId, o.modelId)) &&
-            (role == ModelRole.title ||
-                !isTitleOnlyModel(o.providerId, o.modelId)))
-          _listedEntry(o),
-  ]..sort((a, b) {
-    final byName = a.info.displayName.toLowerCase().compareTo(
-      b.info.displayName.toLowerCase(),
-    );
-    return byName != 0
-        ? byName
-        : (order[a.providerId] ?? order.length).compareTo(
-            order[b.providerId] ?? order.length,
-          );
-  });
-}
-
-CatalogEntry _listedEntry(ModelOption o) {
-  final parts = (o.label ?? o.modelId).split(" · ");
-  return CatalogEntry(
-    o.providerId,
-    parts.length > 1 ? parts.first : o.providerId,
-    ModelInfo(id: o.modelId, name: parts.last, toolCall: true),
-  );
-}
 
 /// Where a picker field goes when tapped: every model the role can use, to
 /// search and compare, above the entries that store less than a model — the
@@ -239,18 +158,22 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
         final words = _search.text.toLowerCase().split(RegExp(r"\s+"))
           ..removeWhere((w) => w.isEmpty);
         final shown = all.where((e) => _matches(e, words)).toList();
-        final names = {
-          for (final p in providers) p.id: p.displayName,
-          for (final e in all) e.providerId: e.providerName,
-        }..removeWhere((id, _) => !all.any((e) => e.providerId == id));
         final searching = _search.text.isNotEmpty;
         final favourites = ref.watch(
           appSettingsProvider.select((s) => s.favouriteModels),
         );
-        // In the order they were starred, which is the order they were wanted.
-        final starred = [
-          for (final f in favourites) ?all.where((e) => e.ref == f).firstOrNull,
-        ];
+        final view = pickerView(
+          entries: all,
+          providers: providers,
+          favourites: favourites,
+          choice: widget.choice,
+          role: widget.role,
+          nullLabel: widget.nullEntry,
+          defaultOf: widget.defaultOf,
+          searching: searching,
+        );
+        final names = view.providers;
+        final starred = view.starred;
         return Scaffold(
           appBar: PageBar(
             title: "Choose ${widget.role.article} ${widget.role.noun}",
@@ -346,21 +269,16 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
                   _header(theme, "Quick picks"),
                   SliverList.list(
                     children: [
-                      _QuickPick(
-                        icon: Icons.block,
-                        title: widget.nullEntry,
-                        selected: _picked(null, null),
-                        onTap: () => _pick(null, null),
-                      ),
-                      for (final p in providers)
-                        if (widget.defaultOf(p) case final id?)
-                          _QuickPick(
-                            icon: Icons.auto_awesome,
-                            title: "${p.displayName} - Default",
-                            subtitle: modelInfoOf(p, id)?.displayName ?? id,
-                            selected: _picked(p.id, null),
-                            onTap: () => _pick(p.id, null),
-                          ),
+                      for (final q in view.quick)
+                        _QuickPick(
+                          icon: q.providerId == null
+                              ? Icons.block
+                              : Icons.auto_awesome,
+                          title: q.title,
+                          subtitle: q.subtitle,
+                          selected: q.selected,
+                          onTap: () => _pick(q.providerId, null),
+                        ),
                     ],
                   ),
                 ],
@@ -381,7 +299,8 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
                   SliverFillRemaining(
                     hasScrollBody: false,
                     child: _Empty(
-                      role: searching ? null : widget.role,
+                      title: view.noneTitle,
+                      note: view.emptyNote,
                       onAdd: providers.isEmpty ? null : _addModel,
                     ),
                   )
@@ -655,15 +574,11 @@ class _Monogram extends StatelessWidget {
 }
 
 class _Empty extends StatelessWidget {
-  const _Empty({required this.role, required this.onAdd});
+  const _Empty({required this.title, required this.note, required this.onAdd});
 
-  /// The picker with nothing to offer at all, null while searching. For a
-  /// media role that is most often a provider without such models rather than
-  /// a model missing from the list.
-  final ModelRole? role;
+  final String title;
+  final String note;
   final VoidCallback? onAdd;
-
-  String? get _media => role?.emptyNote;
 
   @override
   Widget build(BuildContext context) {
@@ -679,17 +594,10 @@ class _Empty extends StatelessWidget {
             color: theme.colorScheme.onSurfaceVariant,
           ),
           const SizedBox(height: 12),
-          Text(
-            _media != null ? "No ${role!.noun}s" : "No model matches",
-            style: theme.textTheme.titleMedium,
-          ),
+          Text(title, style: theme.textTheme.titleMedium),
           const SizedBox(height: 4),
           Text(
-            onAdd == null && role?.voice != true
-                ? "Add a provider in Settings > Providers to see its models."
-                : _media ??
-                      "Not every model is in the catalog. A fine-tune or a "
-                          "private deployment can be added by hand.",
+            note,
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,

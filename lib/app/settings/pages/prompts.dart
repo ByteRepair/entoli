@@ -8,13 +8,11 @@ import "../../../data/prompts/prompt_export.dart";
 import "../../../data/prompts/skill_import.dart";
 import "../../../domain/agent_definition.dart";
 import "../../../domain/agent_face.dart";
-import "../../../domain/bot_avatar/spec.dart";
 import "../../../domain/models.dart";
 import "../../../domain/app_link.dart" show appLinkMaxLength;
 import "../../../domain/project.dart" show projectLabel, promptsDirUserWritable;
 import "../../../domain/prompt_library.dart";
 import "../../../providers.dart";
-import "../../bot_avatar/stage.dart";
 import "../../prompts/agent_files.dart";
 import "../../prompts/skill_files.dart";
 import "../controller.dart";
@@ -271,7 +269,6 @@ final promptSettings = [
       final config = c.ref.read(appConfigProvider);
       final handoff = c.ref.read(backupHandoffProvider);
       final files = AgentFiles(config, project: project);
-      final handOff = c.ref.read(settingsHandOffProvider);
       bool owned(PromptDocument agent) =>
           writable && (own?.contains(agent.name) ?? false);
       return CollectionController<PromptDocument>(
@@ -287,6 +284,12 @@ final promptSettings = [
                   "installed yet."
             : "System prompts a message can address as @name. The bundled "
                   "ones ship with the app; the rest are yours.",
+        botAvatar: writable
+            ? (index, spec) async {
+                await files.setFace(agents[index].name, AgentBot(spec));
+                await _reload(c.ref, project);
+              }
+            : null,
         // A picture is saved as a .png beside the agent's `.md`.
         image: writable
             ? (index, png) async {
@@ -311,8 +314,6 @@ final promptSettings = [
               const ItemAction("export", "Export"),
             ],
             if (owned(agent)) ...[
-              if (handOff.editBotAvatar != null)
-                const ItemAction("botAvatar", "Bot Avatar…", handsOff: true),
               const ItemAction("removeFace", "Remove picture"),
               ItemAction(
                 "remove",
@@ -369,41 +370,8 @@ final promptSettings = [
                 project: project,
               );
               return null;
-            case "botAvatar":
-              final face = await c.ref.read(
-                agentPictureProvider((
-                  project: project,
-                  name: agent.name,
-                )).future,
-              );
-              final spec = await handOff.editBotAvatar?.call(switch (face) {
-                AgentBot(:final spec) => spec,
-                _ => null,
-              });
-              if (spec == null) return null;
-              await files.setFace(agent.name, AgentBot(spec));
-              await _reload(c.ref, project);
-              return null;
             case "removeFace":
               await files.setFace(agent.name, null);
-              await _reload(c.ref, project);
-              return null;
-            // A Bot Avatar chosen in the native editor: the stage's key for
-            // its shape, and its colour as hex.
-            case final use when use.startsWith("useBot:"):
-              final [_, key, colour] = use.split(":");
-              final definition = c.ref.read(botStageProvider).definition(key);
-              final rgb = int.tryParse(colour, radix: 16);
-              if (definition == null || rgb == null) return null;
-              if (!owned(agent)) {
-                return const SettingNotice(
-                  "Only an agent of your own can wear a Bot Avatar.",
-                );
-              }
-              await files.setFace(
-                agent.name,
-                AgentBot(BotAvatarSpec(definition: definition, colour: rgb)),
-              );
               await _reload(c.ref, project);
               return null;
             case "remove":

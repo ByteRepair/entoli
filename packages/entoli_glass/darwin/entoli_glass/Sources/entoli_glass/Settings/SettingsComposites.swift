@@ -89,7 +89,8 @@ struct CollectionRow: View {
           }
           let editable = row.editable && item.editable
           let pictured = row.takesImages && item.takesImage
-          if actions.count >= 2 || pictured {
+          let botted = row.takesBotAvatars && item.takesImage
+          if actions.count >= 2 || pictured || botted {
             // One control for the lot, Edit and Remove included, so a row
             // never ends in a strip of buttons.
             Menu {
@@ -98,6 +99,11 @@ struct CollectionRow: View {
               }
               if pictured {
                 Button("Choose photo…") { picking = index }
+              }
+              if botted {
+                Button("Bot Avatar…") {
+                  model.push(.avatars(OpenedAvatars(agent: item.title, row: row.id, index: index)))
+                }
               }
               ForEach(actions, id: \.id) { action in
                 Button(action.label, role: action.destructive ? .destructive : nil) {
@@ -177,14 +183,6 @@ struct CollectionRow: View {
   }
 
   private func act(_ index: Int, _ action: SettingItemActionData) {
-    // The Bot Avatar editor is this frontend's own page, not Flutter's.
-    if row.hint == .agents, action.id == "botAvatar" {
-      let items = row.items.compactMap { $0 }
-      if items.indices.contains(index) {
-        model.push(.avatars(OpenedAvatars(agent: items[index].title, row: row.id, index: index)))
-      }
-      return
-    }
     if let ask = action.confirm {
       pending = (index, action.id)
       confirm = ask
@@ -669,20 +667,20 @@ struct CatalogRow: View {
     if let add = row.addLabel {
       Button {
         model.stepAside()
-        model.say.catalog(id: row.id, item: "", op: "add", completion: ignore)
+        model.say.catalog(id: row.id, item: "", op: .add, completion: ignore)
       } label: {
         Label(add, systemImage: "link.badge.plus")
       }
     }
     }
     .asking($confirm, $notice) {
-      if let deleting { op(deleting, "delete") }
+      if let deleting { op(deleting, .delete) }
     }
   }
 
   @ViewBuilder private func action(_ item: SettingCatalogData) -> some View {
     if item.received != nil {
-      Button("Cancel") { op(item, "cancel") }.buttonStyle(.borderless)
+      Button("Cancel") { op(item, .cancel) }.buttonStyle(.borderless)
     } else {
       HStack {
         if item.installed {
@@ -691,7 +689,7 @@ struct CatalogRow: View {
               deleting = item
               confirm = ask
             } else {
-              op(item, "delete")
+              op(item, .delete)
             }
           } label: {
             Image(systemName: "trash")
@@ -700,7 +698,7 @@ struct CatalogRow: View {
           .help("Delete")
         }
         if !item.installed || item.updatable {
-          Button(item.installed ? "Update" : "Download") { op(item, "download") }
+          Button(item.installed ? "Update" : "Download") { op(item, .download) }
             .buttonStyle(.borderless)
             .disabled(!item.downloadable)
         }
@@ -708,7 +706,7 @@ struct CatalogRow: View {
     }
   }
 
-  private func op(_ item: SettingCatalogData, _ op: String) {
+  private func op(_ item: SettingCatalogData, _ op: CatalogOp) {
     model.say.catalog(id: row.id, item: item.id, op: op, completion: ignore)
   }
 }
@@ -726,7 +724,7 @@ struct PairingRow: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
       HStack {
-        Button("Open pairing window") { op("openWindow") }
+        Button("Open pairing window") { op(.openWindow) }
           .buttonStyle(.borderedProminent)
         Button("Manual invite") {
           Task { @MainActor in invite = await model.invite(row.id) }
@@ -735,7 +733,7 @@ struct PairingRow: View {
       if row.canScan {
         Button {
           model.stepAside()
-          op("scan")
+          op(.scan)
         } label: {
           Label("Scan QR code", systemImage: "qrcode.viewfinder")
         }
@@ -746,7 +744,7 @@ struct PairingRow: View {
       }
       if let problem { Text(problem).font(.caption).foregroundStyle(.red) }
     }
-    .sheet(isPresented: Binding(get: { row.pairing != nil }, set: { if !$0 { op("cancel") } })) {
+    .sheet(isPresented: Binding(get: { row.pairing != nil }, set: { if !$0 { op(.cancel) } })) {
       if let pairing = row.pairing { PairingSheet(pairing: pairing, op: op) }
     }
     .sheet(isPresented: Binding(get: { invite != nil }, set: { if !$0 { invite = nil } })) {
@@ -762,7 +760,7 @@ struct PairingRow: View {
           ToolbarItem(placement: .cancellationAction) {
             Button("Cancel") {
               invite = nil
-              op("cancel")
+              op(.cancel)
             }
           }
           ToolbarItem(placement: .confirmationAction) {
@@ -777,7 +775,7 @@ struct PairingRow: View {
     }
   }
 
-  private func op(_ op: String) {
+  private func op(_ op: PairingOp) {
     model.say.pairing(id: row.id, op: op, completion: ignore)
   }
 
@@ -791,30 +789,30 @@ struct PairingRow: View {
 
 struct PairingSheet: View {
   let pairing: SettingPairingData
-  let op: (String) -> Void
+  let op: (PairingOp) -> Void
 
   var body: some View {
     VStack(spacing: 16) {
       switch pairing.stage {
-      case "confirming":
+      case .confirming:
         Text("Do both screens show these codes?").font(.headline)
         Text(pairing.sas ?? "").font(.title.monospaced())
         HStack {
-          Button("They don't match", role: .destructive) { op("mismatch") }
-          Button("They match") { op("match") }.buttonStyle(.borderedProminent)
+          Button("They don't match", role: .destructive) { op(.mismatch) }
+          Button("They match") { op(.match) }.buttonStyle(.borderedProminent)
         }
-      case "done":
+      case .done:
         Image(systemName: "checkmark.circle").font(.largeTitle).foregroundStyle(.green)
         Text(
           pairing.peerName.map { "Device \($0) has been paired." } ?? "The device has been paired."
         )
         .font(.title3)
-        Button("Done") { op("cancel") }
-      case "failed":
+        Button("Done") { op(.cancel) }
+      case .failed:
         Image(systemName: "xmark.octagon").font(.largeTitle).foregroundStyle(.red)
         Text(pairing.error ?? "Pairing failed.").multilineTextAlignment(.center)
-        Button("Close") { op("cancel") }
-      default:
+        Button("Close") { op(.cancel) }
+      case .connecting:
         if let qr = pairing.qr, let image = QRCode.image(qr) {
           image.interpolation(.none).resizable().scaledToFit().frame(width: 220, height: 220)
         }
@@ -822,7 +820,7 @@ struct PairingSheet: View {
           Text(code).font(.caption.monospaced()).textSelection(.enabled)
         }
         ProgressView("Waiting for the other device…")
-        Button("Cancel") { op("closeWindow") }
+        Button("Cancel") { op(.closeWindow) }
       }
     }
     .padding(32)
@@ -871,8 +869,8 @@ struct SetupRow: View {
             .padding(8).background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
         }
         HStack {
-          Button("Run Setup") { op("setUp") }.buttonStyle(.borderedProminent)
-          Button("Import ESBMC") { op("import") }
+          Button(row.setUpLabel ?? "") { op(.setUp) }.buttonStyle(.borderedProminent)
+          Button(row.importLabel ?? "") { op(.importTool) }
           if row.running { ProgressView().controlSize(.small) }
         }
         .disabled(row.running)
@@ -886,12 +884,12 @@ struct SetupRow: View {
         }
       }
       if let error = row.error { Text(error).font(.caption).foregroundStyle(.red) }
-      Button("Delete Byte Repair Data", role: .destructive) { confirm = row.deleteConfirm }
+      Button(row.deleteLabel ?? "", role: .destructive) { confirm = row.deleteConfirm }
     }
-    .asking($confirm, $notice) { op("delete") }
+    .asking($confirm, $notice) { op(.delete) }
   }
 
-  private func op(_ op: String) {
+  private func op(_ op: SetupOp) {
     model.say.setup(id: row.id, op: op, completion: ignore)
   }
 }

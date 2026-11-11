@@ -315,6 +315,17 @@ class SettingInfoData {
 }
 
 /// A pairing in flight.
+/// What is done to one thing of a catalog, or to the catalog itself.
+enum CatalogOp { download, cancel, delete, add }
+
+/// A step of pairing the client took.
+enum PairingOp { openWindow, closeWindow, match, mismatch, scan, cancel }
+
+enum SetupOp { setUp, importTool, delete }
+
+/// Where a pairing stands: the core's `PairingStage`, name for name.
+enum SettingPairingStage { connecting, confirming, done, failed }
+
 class SettingPairingData {
   SettingPairingData({
     required this.stage,
@@ -325,8 +336,7 @@ class SettingPairingData {
     this.error,
   });
 
-  /// "connecting", "confirming", "done", "failed".
-  String stage;
+  SettingPairingStage stage;
   String? qr;
   String? code;
   String? sas;
@@ -392,6 +402,7 @@ class SettingRowData {
     this.removable = true,
     this.editable = false,
     this.takesImages = false,
+    this.takesBotAvatars = false,
     this.emptyItems,
     this.catalog = const [],
     this.info = const [],
@@ -406,6 +417,9 @@ class SettingRowData {
     this.tools,
     this.running = false,
     this.deleteConfirm,
+    this.setUpLabel,
+    this.importLabel,
+    this.deleteLabel,
   });
 
   String id;
@@ -488,6 +502,9 @@ class SettingRowData {
 
   /// Whether an item's picture can be set from one the user picks.
   bool takesImages;
+
+  /// Whether an item can wear a Bot Avatar the user picks.
+  bool takesBotAvatars;
   String? emptyItems;
 
   // catalog
@@ -512,6 +529,11 @@ class SettingRowData {
   List<SettingToolData?>? tools;
   bool running;
   SettingConfirmData? deleteConfirm;
+
+  /// A setup row's three buttons.
+  String? setUpLabel;
+  String? importLabel;
+  String? deleteLabel;
 }
 
 class SettingsSectionData {
@@ -822,6 +844,7 @@ class ModelPickerData {
     this.canAdd = false,
     this.chat = false,
     this.emptyNote,
+    this.emptyTitle,
   });
 
   /// The page's title: "Choose an image model".
@@ -848,6 +871,9 @@ class ModelPickerData {
 
   /// What to say where the role has no models at all.
   String? emptyNote;
+
+  /// What the empty list is headed: "No models", "No image models".
+  String? emptyTitle;
 }
 
 /// One Bot Avatar the editor offers: its key, and its own colour as
@@ -964,6 +990,10 @@ abstract class SettingsIntents {
   /// Sets the item at [index]'s picture to [png].
   void itemImage(String id, int index, Uint8List png);
 
+  /// The item at [index] wearing the Bot Avatar [key] — the stage's — in
+  /// [colour], 0xRRGGBB.
+  void itemBotAvatar(String id, int index, String key, int colour);
+
   /// The form for the item at [index], or a new one, as [answers] stand;
   /// null answers are its first.
   @async
@@ -988,11 +1018,10 @@ abstract class SettingsIntents {
   /// The form left unsaved, as [answers] stood.
   void formDismissed(String id, int? index, Map<String?, String?> answers);
 
-  /// [op] is "download", "cancel" or "delete".
-  void catalog(String id, String item, String op);
+  /// [item] is "" for [CatalogOp.add].
+  void catalog(String id, String item, CatalogOp op);
 
-  /// [op] is "openWindow", "closeWindow", "cancel", "match" or "mismatch".
-  void pairing(String id, String op);
+  void pairing(String id, PairingOp op);
 
   /// Pairs with [code], a code or an invite's answer.
   @async
@@ -1001,8 +1030,7 @@ abstract class SettingsIntents {
   @async
   String createInvite(String id);
 
-  /// [op] is "setUp", "import" or "delete".
-  void setup(String id, String op);
+  void setup(String id, SetupOp op);
 
   /// A model picker's quick picks and every model the role can use.
   @async

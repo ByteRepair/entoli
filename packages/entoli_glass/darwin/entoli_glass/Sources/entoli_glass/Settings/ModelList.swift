@@ -238,16 +238,16 @@ struct ModelList: View {
   }
 
   @ViewBuilder private func empty(_ data: ModelPickerData) -> some View {
+    // Nothing at all to offer is the role's to say; nothing matching, the
+    // search's.
     let none = cards.isEmpty
     VStack(spacing: 10) {
       Image(systemName: "binoculars").font(.largeTitle).foregroundStyle(.secondary)
-      Text(none && data.emptyNote != nil ? "No \(data.noun)s" : "No model matches")
+      Text(none ? data.emptyTitle ?? "No model matches" : "No model matches")
         .font(.headline)
       Text(
         none
-          ? data.emptyNote
-            ?? "Not every model is in the catalog. A fine-tune or a private deployment can be "
-            + "added by hand."
+          ? data.emptyNote ?? ""
           : "Not every model is in the catalog. A fine-tune or a private deployment can be "
             + "added by hand."
       )

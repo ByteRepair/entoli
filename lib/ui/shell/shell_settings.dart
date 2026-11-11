@@ -11,6 +11,7 @@ import "../../app/settings/controller.dart";
 import "../../app/bot_avatar/library.dart";
 import "../../app/bot_avatar/stage.dart";
 import "../../app/model_facts.dart";
+import "../../app/model_picker.dart";
 import "../../app/settings/forms/model.dart";
 import "../../app/settings/hand_off.dart";
 import "../../app/settings/scope.dart";
@@ -24,11 +25,9 @@ import "../../domain/agent_face.dart";
 import "../../domain/bot_avatar/import.dart";
 import "../../domain/bot_avatar/pose.dart";
 import "../../domain/bot_avatar/spec.dart";
-import "../../domain/llm_provider.dart";
-import "../../domain/model_registry.dart" show ModelCatalog, modelInfoOf;
+import "../../domain/model_registry.dart" show ModelCatalog;
 import "../../providers.dart";
 import "../../app/prompts/skill_files.dart";
-import "../widgets/model_catalog_page.dart" show CatalogEntry, catalogEntries;
 
 /// Every page the native settings offer, as rows, and the controller each
 /// row was sent from, by its id: what an intent naming a row acts on.
@@ -45,6 +44,17 @@ final nativeSettingsProvider = Provider<NativeSettingsPages>((ref) {
   final schema = ref.watch(settingsSchemaProvider);
   final controllers = <String, SettingController>{};
   final providers = ref.watch(appSettingsProvider).llmProviders;
+  final listed = ref.watch(sortedModelsProvider).value ?? const [];
+  final serving = ref.watch(modelProvidersProvider);
+  String label(ModelPickController c) => modelFieldLabel(
+    choice: c.choice,
+    role: c.role,
+    nullLabel: c.nullLabel,
+    defaultOf: c.defaultOf,
+    providers: providers,
+    listed: listed,
+    serving: serving,
+  );
   final stage = ref.watch(botStageProvider);
   // A Bot Avatar is drawn live by the client from its rig; a photo is sent.
   _Face face(({String? project, String name}) agent) =>
@@ -79,7 +89,7 @@ final nativeSettingsProvider = Provider<NativeSettingsPages>((ref) {
                 detail: section.description,
                 rows: [
                   for (final setting in section.settings)
-                    ..._rows(setting, controllers, providers, face),
+                    ..._rows(setting, controllers, label, face),
                 ],
               ),
           ],
@@ -97,27 +107,20 @@ typedef _Face = ({Uint8List? photo, String? bot, int? colour});
 List<SettingRowData> _rows(
   SettingController c,
   Map<String, SettingController> controllers,
-  List<LlmProviderConfig> providers,
+  String Function(ModelPickController c) label,
   _Face Function(({String? project, String name}) agent) face, {
   String? parent,
   bool accessory = false,
 }) {
   controllers[c.id] = c;
   return [
-    _row(c, providers, face, parent: parent, accessory: accessory),
+    _row(c, label, face, parent: parent, accessory: accessory),
     if (c case GroupController(:final children))
       for (final child in children)
         if (child.visible)
-          ..._rows(child, controllers, providers, face, parent: c.id),
+          ..._rows(child, controllers, label, face, parent: c.id),
     if (c.accessory case final action?)
-      ..._rows(
-        action,
-        controllers,
-        providers,
-        face,
-        parent: c.id,
-        accessory: true,
-      ),
+      ..._rows(action, controllers, label, face, parent: c.id, accessory: true),
   ];
 }
 
@@ -163,24 +166,9 @@ SettingOptionData _option(SettingOption option) => SettingOptionData(
   },
 );
 
-/// What a model pick's field reads as: the null entry, a provider's Default
-/// and the model it resolves to, or the model by the catalog's name for it.
-String _modelLabel(ModelPickController c, List<LlmProviderConfig> providers) {
-  final (:providerId, :modelId) = c.choice;
-  if (providerId == null && modelId == null) return c.nullLabel;
-  final provider = providers.where((p) => p.id == providerId).firstOrNull;
-  if (modelId == null) {
-    final model = provider == null ? null : c.defaultOf(provider);
-    return model == null
-        ? c.nullLabel
-        : "${provider!.displayName} - Default ($model)";
-  }
-  return modelInfoOf(provider, modelId)?.name ?? modelId;
-}
-
 SettingRowData _row(
   SettingController c,
-  List<LlmProviderConfig> providers,
+  String Function(ModelPickController c) label,
   _Face Function(({String? project, String name}) agent) face, {
   String? parent,
   bool accessory = false,
@@ -266,7 +254,7 @@ SettingRowData _row(
     case ModelPickController():
       row
         ..kind = SettingKind.modelPick
-        ..modelLabel = _modelLabel(c, providers)
+        ..modelLabel = label(c)
         ..noneLabel = c.nullLabel;
     case TextController():
       row
@@ -330,6 +318,7 @@ SettingRowData _row(
         ..removable = c.removable
         ..editable = c.editable
         ..takesImages = c.takesImages
+        ..takesBotAvatars = c.takesBotAvatars
         ..emptyItems = c.emptyLabel;
     case CatalogController():
       row
@@ -386,7 +375,7 @@ SettingRowData _row(
         ..pairing = activity == null
             ? null
             : SettingPairingData(
-                stage: activity.stage.name,
+                stage: SettingPairingStage.values.byName(activity.stage.name),
                 qr: activity.qr,
                 code: activity.code,
                 sas: activity.sas,
@@ -409,7 +398,10 @@ SettingRowData _row(
               ]
         ..running = c.running
         ..error = c.error
-        ..deleteConfirm = _confirm(c.deleteConfirm);
+        ..deleteConfirm = _confirm(c.deleteConfirm)
+        ..setUpLabel = c.setUpLabel
+        ..importLabel = c.importLabel
+        ..deleteLabel = c.deleteLabel;
   }
   return row;
 }
@@ -598,6 +590,18 @@ class SettingsBridge implements SettingsIntents {
       _at<CollectionController>(id)?.setImage(index, png);
 
   @override
+  void itemBotAvatar(String id, int index, String key, int colour) {
+    final definition = _stage.definition(key);
+    if (definition == null) return;
+    unawaited(
+      _at<CollectionController>(id)?.setBotAvatar(
+        index,
+        BotAvatarSpec(definition: definition, colour: colour),
+      ),
+    );
+  }
+
+  @override
   Future<SettingFormData> form(
     String id,
     int? index,
@@ -773,45 +777,45 @@ class SettingsBridge implements SettingsIntents {
       unawaited(_formOf(id, index)?.dismissed(_answersOf(answers)));
 
   @override
-  void catalog(String id, String item, String op) {
+  void catalog(String id, String item, CatalogOp op) {
     final c = _at<CatalogController>(id);
     if (c == null) return;
     switch (op) {
-      case "download":
+      case CatalogOp.download:
         c.download(item);
-      case "cancel":
+      case CatalogOp.cancel:
         c.cancel(item);
-      case "delete":
+      case CatalogOp.delete:
         c.delete(item);
-      case "add":
+      case CatalogOp.add:
         c.add();
     }
   }
 
   @override
-  void pairing(String id, String op) {
+  void pairing(String id, PairingOp op) {
     final c = _at<PairingController>(id);
     if (c == null) return;
     switch (op) {
-      case "openWindow":
-        unawaited(c.openWindow());
-      case "closeWindow":
-        c.closeWindow();
-      case "match":
-        c.confirm(true);
-      case "mismatch":
-        c.confirm(false);
-      case "scan":
+      case PairingOp.openWindow:
+        unawaited(c.flow.openWindow());
+      case PairingOp.closeWindow:
+        c.flow.closeWindow();
+      case PairingOp.match:
+        c.flow.confirm(true);
+      case PairingOp.mismatch:
+        c.flow.confirm(false);
+      case PairingOp.scan:
         unawaited(c.scan());
-      default:
-        c.cancel();
+      case PairingOp.cancel:
+        c.flow.cancel();
     }
   }
 
   @override
   Future<String?> pairWith(String id, String code) async {
     try {
-      await _at<PairingController>(id)?.join(code);
+      await _at<PairingController>(id)?.flow.join(code);
       return null;
     } catch (e) {
       return "$e";
@@ -820,18 +824,18 @@ class SettingsBridge implements SettingsIntents {
 
   @override
   Future<String> createInvite(String id) async =>
-      await _at<PairingController>(id)?.createInvite() ?? "";
+      await _at<PairingController>(id)?.flow.createInvite() ?? "";
 
   @override
-  void setup(String id, String op) {
+  void setup(String id, SetupOp op) {
     final c = _at<SetupController>(id);
     if (c == null) return;
     switch (op) {
-      case "setUp":
+      case SetupOp.setUp:
         unawaited(c.setUp());
-      case "import":
+      case SetupOp.importTool:
         unawaited(c.import());
-      case "delete":
+      case SetupOp.delete:
         unawaited(c.delete());
     }
   }
@@ -863,32 +867,32 @@ class SettingsBridge implements SettingsIntents {
     final entries = _catalogOf(c);
     final favourites = _container.read(appSettingsProvider).favouriteModels;
     final starred = favourites.toSet();
-    bool picked(String? providerId, String? modelId) =>
-        c.choice.providerId == providerId && c.choice.modelId == modelId;
+    final view = pickerView(
+      entries: entries,
+      providers: providers,
+      favourites: favourites,
+      choice: c.choice,
+      role: c.role,
+      nullLabel: c.nullLabel,
+      defaultOf: c.defaultOf,
+    );
     final index = {for (final (i, e) in entries.indexed) e.ref: i};
-    final names = {
-      for (final p in providers) p.id: p.displayName,
-      for (final e in entries) e.providerId: e.providerName,
-    }..removeWhere((id, _) => !entries.any((e) => e.providerId == id));
     return ModelPickerData(
       title: "Choose ${c.role.article} ${c.role.noun}",
       noun: c.role.noun,
       fetched: ModelCatalog.notifier.value.fetched != null,
       canAdd: providers.isNotEmpty,
       chat: c.role.chat,
-      emptyNote: providers.isEmpty && !c.role.voice
-          ? "Add a provider in Settings > Providers to see its models."
-          : c.role.emptyNote,
+      emptyNote: view.emptyNote,
+      emptyTitle: view.noneTitle,
       quick: [
-        ModelQuickData(title: c.nullLabel, selected: picked(null, null)),
-        for (final p in providers)
-          if (c.defaultOf(p) case final model?)
-            ModelQuickData(
-              providerId: p.id,
-              title: "${p.displayName} - Default",
-              subtitle: modelInfoOf(p, model)?.displayName ?? model,
-              selected: picked(p.id, null),
-            ),
+        for (final q in view.quick)
+          ModelQuickData(
+            providerId: q.providerId,
+            title: q.title,
+            subtitle: q.subtitle,
+            selected: q.selected,
+          ),
       ],
       models: [
         for (final e in entries)
@@ -909,14 +913,15 @@ class SettingsBridge implements SettingsIntents {
             transcribes: e.info.transcribes,
             speaks: e.info.speaks,
             custom: e.custom,
-            selected: picked(e.providerId, e.info.id),
+            selected:
+                c.choice.providerId == e.providerId &&
+                c.choice.modelId == e.info.id,
             favourite: starred.contains(e.ref),
           ),
       ],
-      // In the order they were starred, which is the order they were wanted.
-      favourites: [for (final f in favourites) ?index[f]],
+      favourites: [for (final e in view.starred) index[e.ref]!],
       providers: [
-        for (final MapEntry(key: id, value: name) in names.entries)
+        for (final MapEntry(key: id, value: name) in view.providers.entries)
           ModelProviderData(id: id, name: name),
       ],
     );

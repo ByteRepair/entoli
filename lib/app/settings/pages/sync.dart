@@ -2,7 +2,6 @@ import "package:flutter/foundation.dart" show ValueListenable;
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../core/platform/form_factor.dart";
-import "../../../data/sync/pairing.dart";
 import "../../../data/sync/peers.dart";
 import "../../../data/sync/sync_hub.dart" show SyncHub;
 import "../../../domain/settings/keys.dart";
@@ -11,6 +10,7 @@ import "../../../providers.dart";
 import "../bind.dart";
 import "../controller.dart";
 import "../hand_off.dart";
+import "../pairing.dart";
 import "../spec.dart";
 
 const _page = SettingsPageId.sync;
@@ -132,7 +132,7 @@ final syncSettings = [
       final scanner = c.ref.read(settingsHandOffProvider).scanCode;
       return PairingController(
         c.spec,
-        hub: c.ref.watch(syncHubProvider),
+        flow: c.ref.watch(pairingFlowProvider),
         activity: c.ref.watch(pairingActivityProvider),
         scanner: isPhone ? scanner : null,
       );

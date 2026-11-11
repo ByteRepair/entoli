@@ -81,6 +81,9 @@ final byteRepairSettings = [
                   {for (final tool in ByteRepairStore.tools.keys) tool: null},
         running: run.running,
         error: run.error,
+        setUpLabel: "Run Setup",
+        importLabel: "Import ESBMC",
+        deleteLabel: "Delete Byte Repair Data",
         deleteConfirm: SettingConfirm(
           title: "Delete Byte Repair environment?",
           message: store.deleteConfirmMessage,

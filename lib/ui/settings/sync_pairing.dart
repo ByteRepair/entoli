@@ -9,7 +9,7 @@ import "package:url_launcher/url_launcher.dart";
 
 import "../../core/log.dart";
 import "../../core/platform/form_factor.dart";
-import "../../data/sync/sync_hub.dart";
+import "../../app/settings/pairing.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
@@ -25,9 +25,9 @@ bool get _canScan => isPhone;
 /// joiner's — where the wait, the codes and the end are shown. Nothing
 /// renders inline here, and the section keeps these controls the whole time.
 class PairingControls extends ConsumerStatefulWidget {
-  const PairingControls({super.key, required this.hub});
+  const PairingControls({super.key, required this.flow});
 
-  final SyncHub hub;
+  final PairingFlow flow;
 
   @override
   ConsumerState<PairingControls> createState() => _PairingControlsState();
@@ -55,7 +55,7 @@ class _PairingControlsState extends ConsumerState<PairingControls> {
             children: [
               FilledButton(
                 onPressed: () =>
-                    PairingWindowPage.openAnother(context, widget.hub),
+                    PairingWindowPage.openAnother(context, widget.flow),
                 child: const Text("Open pairing window"),
               ),
               FilledButton.tonal(
@@ -98,11 +98,11 @@ class _PairingControlsState extends ConsumerState<PairingControls> {
 
   Future<void> _createInvite() async {
     try {
-      final blob = await widget.hub.createManualInvite();
+      final blob = await widget.flow.createInvite();
       if (mounted) {
         await Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => ManualInvitePage(hub: widget.hub, offer: blob),
+            builder: (_) => ManualInvitePage(flow: widget.flow, offer: blob),
           ),
         );
       }
@@ -119,7 +119,7 @@ class _PairingControlsState extends ConsumerState<PairingControls> {
     // failed end. Nothing here is hidden while any of it goes on.
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => PairingJoinPage(hub: widget.hub, code: text),
+        builder: (_) => PairingJoinPage(flow: widget.flow, code: text),
       ),
     );
     _joinController.clear();
@@ -136,7 +136,7 @@ class _PairingControlsState extends ConsumerState<PairingControls> {
 /// Back on a pairing screen is giving up: the route pops through this scope,
 /// whose cancel runs before dispose — while the tree is unlocked, so the
 /// activity notifier's listeners hear it — and then the pop completes. The
-/// cancel verb is the screen's: the joiner's is `cancelPairing`, the window's
+/// cancel verb is the screen's: the joiner's is `cancel`, the window's
 /// adds its teardown, the invite's drops the held link with it.
 PopScope _cancelOnBack(
   BuildContext context,
@@ -158,9 +158,9 @@ PopScope _cancelOnBack(
 /// answers a pending codes-matched gate "no", so the pair does not hang on a
 /// human who has left.
 class PairingJoinPage extends StatefulWidget {
-  const PairingJoinPage({super.key, required this.hub, required this.code});
+  const PairingJoinPage({super.key, required this.flow, required this.code});
 
-  final SyncHub hub;
+  final PairingFlow flow;
 
   /// The code the joiner pasted or scanned; the pairing starts from here.
   final String code;
@@ -180,12 +180,12 @@ class _PairingJoinPageState extends State<PairingJoinPage> {
 
   Future<void> _begin() async {
     try {
-      await widget.hub.pairWith(widget.code);
+      await widget.flow.join(widget.code);
     } catch (e) {
       // A throw with no pairing under it — usually a code that is not one —
       // has no failed arm to render: said here, and this screen leaves.
       // Otherwise `_fail` already moved the activity to failed.
-      if (mounted && widget.hub.pairing.value == null) {
+      if (mounted && widget.flow.activity.value == null) {
         say(context, e);
         Navigator.of(context).pop();
       }
@@ -194,15 +194,15 @@ class _PairingJoinPageState extends State<PairingJoinPage> {
 
   @override
   Widget build(BuildContext context) {
-    final hub = widget.hub;
+    final flow = widget.flow;
     return _cancelOnBack(
       context,
-      hub.cancelPairing,
+      flow.cancel,
       child: Scaffold(
         appBar: PageBar(title: "Pairing"),
         body: _PairingStageView.watching(
           context,
-          hub,
+          flow,
           "Waiting for the other device…",
         ),
       ),
@@ -215,14 +215,14 @@ class _PairingJoinPageState extends State<PairingJoinPage> {
 /// before those is the hosting page's own — the window's QR, a wait elsewhere.
 class _PairingStageView extends StatelessWidget {
   const _PairingStageView({
-    required this.hub,
+    required this.flow,
     required this.activity,
     required this.connecting,
     required this.onPairAnother,
     required this.onDone,
   });
 
-  final SyncHub hub;
+  final PairingFlow flow;
   final PairingActivity activity;
   final Widget connecting;
   final VoidCallback onPairAnother;
@@ -234,7 +234,7 @@ class _PairingStageView extends StatelessWidget {
       PairingStage.connecting => connecting,
       PairingStage.confirming => Padding(
         padding: const EdgeInsets.all(24),
-        child: _SasConfirm(pairing: activity, hub: hub),
+        child: _SasConfirm(pairing: activity, flow: flow),
       ),
       PairingStage.done => _PairedView(
         pairing: activity,
@@ -251,20 +251,24 @@ class _PairingStageView extends StatelessWidget {
   /// here — "Pair another device" is a fresh window pushed over this screen,
   /// and Done cancels what is left of the pairing on the way back to the
   /// Sync page.
-  static Widget watching(BuildContext context, SyncHub hub, String waitLabel) {
+  static Widget watching(
+    BuildContext context,
+    PairingFlow flow,
+    String waitLabel,
+  ) {
     return ValueListenableBuilder<PairingActivity?>(
-      valueListenable: hub.pairing,
+      valueListenable: flow.activity,
       builder: (context, pairing, _) {
         if (pairing == null) {
           return const Center(child: CircularProgressIndicator());
         }
         return _PairingStageView(
-          hub: hub,
+          flow: flow,
           activity: pairing,
           connecting: _PairingWait(waitLabel),
-          onPairAnother: () => PairingWindowPage.openAnother(context, hub),
+          onPairAnother: () => PairingWindowPage.openAnother(context, flow),
           onDone: () {
-            hub.cancelPairing();
+            flow.cancel();
             Navigator.of(context).pop();
           },
         );
@@ -360,20 +364,23 @@ class _PairedView extends StatelessWidget {
 /// the SAS confirm once a device connects, and the paired screen once the
 /// pair completes. Going back cancels the window.
 class PairingWindowPage extends StatefulWidget {
-  const PairingWindowPage({super.key, required this.hub});
+  const PairingWindowPage({super.key, required this.flow});
 
-  final SyncHub hub;
+  final PairingFlow flow;
 
   /// "Pair another device" from any pairing screen that is not the window's
   /// one: a fresh window opens and its page pushes over the screen saying it.
   /// The window's own paired screen reopens in place instead.
-  static Future<void> openAnother(BuildContext context, SyncHub hub) async {
+  static Future<void> openAnother(
+    BuildContext context,
+    PairingFlow flow,
+  ) async {
     try {
-      await hub.startPairingWindow();
+      await flow.openWindow();
       if (context.mounted) {
-        await Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => PairingWindowPage(hub: hub)));
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => PairingWindowPage(flow: flow)),
+        );
       }
     } catch (e) {
       if (context.mounted) say(context, e);
@@ -394,7 +401,7 @@ class _PairingWindowPageState extends State<PairingWindowPage> {
   Future<void> _openWindow(BuildContext context) async {
     setState(() => _busy = true);
     try {
-      await widget.hub.startPairingWindow();
+      await widget.flow.openWindow();
     } catch (e) {
       if (context.mounted) say(context, e);
     } finally {
@@ -404,14 +411,14 @@ class _PairingWindowPageState extends State<PairingWindowPage> {
 
   @override
   Widget build(BuildContext context) {
-    final hub = widget.hub;
+    final flow = widget.flow;
     return _cancelOnBack(
       context,
-      hub.cancelPairingWindow,
+      flow.closeWindow,
       child: Scaffold(
         appBar: PageBar(title: "Pairing window"),
         body: ValueListenableBuilder<PairingActivity?>(
-          valueListenable: hub.pairing,
+          valueListenable: flow.activity,
           builder: (context, pairing, _) {
             if (pairing == null) {
               return _busy
@@ -419,7 +426,7 @@ class _PairingWindowPageState extends State<PairingWindowPage> {
                   : const Center(child: Text("Pairing cancelled."));
             }
             return _PairingStageView(
-              hub: hub,
+              flow: flow,
               activity: pairing,
               // The window's own connecting arm: the thing to do while
               // waiting is show the code.
@@ -428,7 +435,7 @@ class _PairingWindowPageState extends State<PairingWindowPage> {
               // activity notifier moves it back to the QR.
               onPairAnother: () => unawaited(_openWindow(context)),
               onDone: () {
-                hub.cancelPairingWindow();
+                flow.closeWindow();
                 Navigator.of(context).pop();
               },
             );
@@ -500,9 +507,9 @@ class _PairingCodeBody extends StatelessWidget {
 /// device pastes our offer on its end, answers, and pastes the reply back here.
 /// Going back cancels the pending invite.
 class ManualInvitePage extends StatefulWidget {
-  const ManualInvitePage({super.key, required this.hub, required this.offer});
+  const ManualInvitePage({super.key, required this.flow, required this.offer});
 
-  final SyncHub hub;
+  final PairingFlow flow;
   final String offer;
 
   @override
@@ -528,10 +535,10 @@ class _ManualInvitePageState extends State<ManualInvitePage> {
   Widget build(BuildContext context) {
     // One verb: a pending invite loses its held link, and, once the reply is
     // in, the completing pair's gate is answered no. See
-    // [SyncPairing.cancelManualInvite].
+    // [SyncPairing.cancelInvite].
     return _cancelOnBack(
       context,
-      widget.hub.cancelManualInvite,
+      widget.flow.cancelInvite,
       child: Scaffold(
         appBar: PageBar(title: "Manual invite"),
         body: _watching ? _watchingBody() : _inviteBody(),
@@ -584,7 +591,7 @@ class _ManualInvitePageState extends State<ManualInvitePage> {
   /// page, drawn by the same stages every pairing screen ends on.
   Widget _watchingBody() => _PairingStageView.watching(
     context,
-    widget.hub,
+    widget.flow,
     "Completing the pairing…",
   );
 
@@ -593,12 +600,12 @@ class _ManualInvitePageState extends State<ManualInvitePage> {
     if (text.isEmpty) return;
     setState(() => _watching = true);
     try {
-      await widget.hub.pairWith(text);
+      await widget.flow.join(text);
     } catch (e) {
       // A refusal before any pairing existed — usually the reply for another
       // invite — has no failed arm to render. The form is back.
       // Otherwise `_fail` already moved the activity to failed.
-      if (mounted && widget.hub.pairing.value == null) {
+      if (mounted && widget.flow.activity.value == null) {
         setState(() => _watching = false);
         say(context, e);
       }
@@ -690,10 +697,10 @@ class ScanQrPageState extends State<ScanQrPage> {
 }
 
 class _SasConfirm extends StatelessWidget {
-  const _SasConfirm({required this.pairing, required this.hub});
+  const _SasConfirm({required this.pairing, required this.flow});
 
   final PairingActivity pairing;
-  final SyncHub hub;
+  final PairingFlow flow;
 
   @override
   Widget build(BuildContext context) {
@@ -721,12 +728,12 @@ class _SasConfirm extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             FilledButton(
-              onPressed: () => hub.confirmPairing(true),
+              onPressed: () => flow.confirm(true),
               child: const Text("Match"),
             ),
             const SizedBox(width: 8),
             TextButton(
-              onPressed: () => hub.confirmPairing(false),
+              onPressed: () => flow.confirm(false),
               style: TextButton.styleFrom(
                 foregroundColor: Theme.of(context).colorScheme.error,
               ),

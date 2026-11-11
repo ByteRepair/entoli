@@ -5,6 +5,9 @@ import "package:flutter/services.dart";
 
 import "../../app/settings/controller.dart";
 import "../skills/skill_view.dart";
+import "../../domain/agent_face.dart";
+import "../../domain/bot_avatar/spec.dart";
+import "../bot_avatar/bot_avatar_editor.dart";
 import "../widgets/agent_picture.dart";
 import "../../core/formatting.dart";
 import "../../app/settings/scope.dart";
@@ -24,7 +27,6 @@ import "../widgets/page_bar.dart";
 import "byte_repair_settings.dart";
 import "../../app/settings/pages/triggers.dart" show triggerPermissionsProvider;
 import "form_dialog.dart";
-import "running_models.dart";
 import "provider_usage_view.dart";
 import "sync_pairing.dart";
 import "../widgets/choice.dart";
@@ -123,7 +125,6 @@ class SettingRow extends StatelessWidget {
       final RangeController c => _Range(c),
       final KeyValuesController c => _KeyValues(c),
       // The loaded models' view draws its own Unload all.
-      ActionController(hint: UiHint.running) => const SizedBox.shrink(),
       final ActionController c => _Action(c),
       final GroupController c when c.hint == UiHint.buttons => _Buttons(c),
       final GroupController c when c.hint == UiHint.recommended => _Recommended(
@@ -156,12 +157,8 @@ class SettingRow extends StatelessWidget {
         ).invalidate(triggerPermissionsProvider),
         child: c.typed(<V>(c) => _Collection<V>(c)),
       ),
-      // Its own header says what the models take up together, measured
-      // while it is on screen.
-      CollectionController(hint: UiHint.running) =>
-        const RunningModelsSection(),
       final CollectionController c => c.typed(<V>(c) => _Collection<V>(c)),
-      final PairingController c => PairingControls(hub: c.hub),
+      final PairingController c => PairingControls(flow: c.flow),
       final SubpageController c => ListTile(
         title: Text(c.title),
         subtitle: c.summary == null ? null : Text(c.summary!),
@@ -1376,6 +1373,9 @@ class _DragSliderState extends State<_DragSlider> {
 /// The action a list taking pictures offers on each row that takes one.
 const _photo = "\u0000photo";
 
+/// The action a list taking Bot Avatars offers on each row that takes one.
+const _bot = "\u0000bot";
+
 /// The items as rows, each with what [CollectionItem] says of it: its state
 /// at a glance, its words and what went wrong, the switch that arms it, what
 /// can be done to it, and a tap that edits it through its form; and the
@@ -1390,6 +1390,7 @@ class _Collection<T> extends StatelessWidget {
 
   Future<void> _act(BuildContext context, int index, ItemAction action) async {
     if (action.id == _photo) return _picture(context, index);
+    if (action.id == _bot) return _botAvatar(context, index, c.rows[index]);
     if (action.confirm case final ask?) {
       final yes = await confirm(
         context,
@@ -1420,6 +1421,8 @@ class _Collection<T> extends StatelessWidget {
           if ([
                 if (c.takesImages && row.takesImage)
                   const ItemAction(_photo, "Upload photo"),
+                if (c.takesBotAvatars && row.takesImage)
+                  const ItemAction(_bot, "Bot Avatar…"),
                 ...row.actions,
               ]
               case final actions)
@@ -1522,6 +1525,33 @@ class _Collection<T> extends StatelessWidget {
       return say(context, "The picture is saved as a .png — pick a PNG image.");
     }
     await c.setImage(index, pick.bytes);
+  }
+
+  /// The avatar editor, opened on the Bot Avatar the item wears where it
+  /// wears one, and what was made there put on it.
+  Future<void> _botAvatar(
+    BuildContext context,
+    int index,
+    CollectionItem row,
+  ) async {
+    final face = row.face;
+    final worn = face == null
+        ? null
+        : await ProviderScope.containerOf(
+            context,
+          ).read(agentPictureProvider(face).future);
+    if (!context.mounted) return;
+    final spec = await Navigator.of(context).push<BotAvatarSpec>(
+      MaterialPageRoute(
+        builder: (_) => BotAvatarEditorPage(
+          initial: switch (worn) {
+            AgentBot(:final spec) => spec,
+            _ => null,
+          },
+        ),
+      ),
+    );
+    if (spec != null) await c.setBotAvatar(index, spec);
   }
 
   /// What a tap on the row does: edits it through its form, opens its page,

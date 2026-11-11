@@ -1,7 +1,10 @@
+import "dart:async";
+
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../core/formatting.dart";
-import "../../../data/local/local_engine.dart" show LocalControl;
+import "../../../data/local/local_engine.dart" show LocalControl, LocalEngine;
+import "../../../data/local/local_instance.dart" show LocalUsage;
 import "../../../domain/installable.dart";
 import "../../../domain/local_llm.dart";
 import "../../../domain/local_model.dart";
@@ -27,13 +30,19 @@ final localDevicesProvider = FutureProvider<List<LocalDevice>?>(
 
 final onDeviceSections = [
   // What is loaded leads the page: it is what is most often come here for.
-  // Its header is its own, saying what the models take up together.
+  // What the models take up together: the model host's whole footprint on
+  // a Mac, where several models share it and the rows cannot say what is
+  // between them, and elsewhere the rows added up.
   SectionSpec(
     page: _page,
     id: "running",
-    title: "",
+    title: "Running models",
     weight: 0,
     shown: (ref) => ref.watch(localEngineProvider).available,
+    describe: (ref) => switch (ref.watch(runningUsageProvider)?.total) {
+      final total? => "${formatSize(total)} in memory",
+      null => null,
+    },
   ),
   // What a build that should have carried a server says, where it did not:
   // what to run to fill it, and the presets meanwhile.
@@ -141,7 +150,100 @@ CatalogController _catalog(
   );
 }
 
+/// What the loaded models take up: [total] is the model host's whole
+/// footprint where it knows it, the models added up where not.
+typedef RunningUsage = ({int? total, Map<String, LocalUsage> each});
+
+/// [RunningUsage], asked again every few seconds while something shows it: a
+/// model's cache grows as a chat goes on, and the running list is a place to
+/// watch that happen. The clock stops the moment nothing listens, rather
+/// than when the provider is let go.
+final runningUsageProvider = NotifierProvider<RunningUsageWatch, RunningUsage?>(
+  RunningUsageWatch.new,
+);
+
+class RunningUsageWatch extends Notifier<RunningUsage?> {
+  Timer? _timer;
+
+  // Held from the build: a lifecycle callback, which restarts the clock,
+  // may not read the ref.
+  late LocalEngine _engine;
+
+  @override
+  RunningUsage? build() {
+    _engine = ref.watch(localEngineProvider);
+    ref.onCancel(_stop);
+    ref.onResume(_start);
+    ref.onDispose(_stop);
+    _start();
+    return null;
+  }
+
+  void _start() {
+    _stop();
+    unawaited(_measure());
+    _timer = Timer.periodic(_usageRefresh, (_) => unawaited(_measure()));
+  }
+
+  void _stop() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  Future<void> _measure() async {
+    final engine = _engine;
+    final ids = [for (final state in engine.running.value) state.modelId];
+    final (usages, footprint) = await (
+      Future.wait(ids.map(engine.usage)),
+      engine.footprint(),
+    ).wait;
+    final each = {for (final (i, one) in usages.indexed) ids[i]: ?one};
+    final sum = each.isEmpty
+        ? null
+        : each.values.fold(0, (total, one) => total + one.bytes);
+    if (ref.mounted) state = (total: footprint ?? sum, each: each);
+  }
+}
+
+const _usageRefresh = Duration(seconds: 3);
+
+/// Where a model actually ended up, which is the one thing the picker cannot
+/// say: Auto is resolved when the model loads, and a phone whose accelerator
+/// this build cannot reach answers on the CPU whatever was picked.
+String? _where(String? device) => switch (device) {
+  null => null,
+  LocalDevice.cpu => "the CPU",
+  final name => "the ${LocalDevice.computeOf(name).label} ($name)",
+};
+
 final onDeviceSettings = [
+  // The warm-up in progress, drawn only while there is one. Its own row
+  // rather than a line on a model's, because a model can be warming before
+  // any chat has loaded one.
+  SettingSpec(
+    id: "prefilling",
+    path: (page: _page, section: "running"),
+    weight: -1,
+    title: "Prefilling",
+    hint: UiHint.notice,
+    build: (c) {
+      final state = c.ref.watch(localPrefillStateProvider);
+      final pct = switch (state?.fraction) {
+        final fraction? => " · ${(fraction * 100).round()}%",
+        null => "",
+      };
+      return NoticeController(
+        c.spec,
+        visible: state != null,
+        lines: [
+          if (state != null) NoticeLine("Prefilling ${state.name}…"),
+          NoticeLine(
+            "Warming its system prompt so the first chat starts sooner$pct",
+          ),
+        ],
+      );
+    },
+  ),
   SettingSpec(
     id: "runningModels",
     path: (page: _page, section: "running"),
@@ -151,27 +253,54 @@ final onDeviceSettings = [
     build: (c) {
       final running = c.ref.watch(localLlmStateProvider);
       final engine = c.ref.read(localEngineProvider);
+      final usage = c.ref.watch(runningUsageProvider)?.each ?? const {};
       return CollectionController<LocalLlmState>(
         c.spec,
         items: running,
-        addLabel: "Unload all",
+        addLabel: "",
         removable: false,
-        emptyLabel: "Nothing loaded",
-        describe: (state) => CollectionItem(
-          engine.nameOf(state.modelId),
-          id: state.modelId,
-          subtitle: switch (state.phase) {
-            LocalLlmPhase.starting =>
-              "A chat sent before this finishes waits for it.",
-            LocalLlmPhase.ready => state.device,
-            LocalLlmPhase.failed => null,
-          },
-          tone: state.phase == LocalLlmPhase.failed
-              ? NoticeTone.warning
-              : NoticeTone.plain,
-          actions: const [ItemAction("unload", "Unload")],
-        ),
-        onSet: (_) => engine.stopAll(),
+        emptyLabel: "Nothing loaded. The first chat to ask for one loads it.",
+        describe: (state) {
+          final name = engine.nameOf(state.modelId);
+          final where = _where(state.device);
+          final used = usage[state.modelId];
+          return CollectionItem(
+            switch (state.phase) {
+              LocalLlmPhase.starting => "Loading $name…",
+              LocalLlmPhase.ready => name,
+              LocalLlmPhase.failed => "$name would not load",
+            },
+            id: state.modelId,
+            subtitle: switch (state.phase) {
+              LocalLlmPhase.starting =>
+                "A chat sent before this finishes waits for it.",
+              LocalLlmPhase.ready => [
+                where == null ? "Answering" : "Answering on $where",
+                if (state.contextLength case final context?)
+                  "${tokenCount(context)} tokens of context",
+                if (used != null) "${formatSize(used.bytes)} in memory",
+                if (used?.tokens case final tokens? when tokens > 0)
+                  "${tokenCount(tokens)} tokens cached",
+              ].join(" · "),
+              LocalLlmPhase.failed => null,
+            },
+            error: state.phase == LocalLlmPhase.failed ? state.failure : null,
+            glyph: switch (state.phase) {
+              LocalLlmPhase.starting => SettingGlyph.connecting,
+              LocalLlmPhase.ready => SettingGlyph.online,
+              LocalLlmPhase.failed => SettingGlyph.failed,
+            },
+            tone: switch (state.phase) {
+              LocalLlmPhase.ready => NoticeTone.good,
+              LocalLlmPhase.failed => NoticeTone.warning,
+              LocalLlmPhase.starting => NoticeTone.plain,
+            },
+            // One model let go of, the rest left loaded — and a load still
+            // under way or one that failed cleared the same way, so no row
+            // is stuck.
+            actions: [ItemAction("unload", "Unload $name")],
+          );
+        },
         act: (index, _) async {
           await engine.stop(running[index].modelId);
           return null;
@@ -184,14 +313,14 @@ final onDeviceSettings = [
     path: (page: _page, section: "running"),
     weight: 5,
     title: "Unload all",
-    // Part of the loaded models' own view where a frontend draws that whole.
-    hint: UiHint.running,
+    hint: UiHint.button,
     build: (c) {
       final engine = c.ref.read(localEngineProvider);
       final running = c.ref.watch(localLlmStateProvider);
       return ActionController(
         c.spec,
         label: "Unload all",
+        secondary: true,
         description: "Frees what every loaded model holds.",
         visible: running.isNotEmpty,
         run: () async {

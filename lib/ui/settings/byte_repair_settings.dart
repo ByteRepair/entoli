@@ -66,12 +66,12 @@ class SetupView extends StatelessWidget {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.download_outlined),
-                  label: const Text("Run Setup"),
+                  label: Text(c.setUpLabel),
                 ),
                 OutlinedButton.icon(
                   onPressed: c.running ? null : c.import,
                   icon: const Icon(Icons.file_upload_outlined),
-                  label: const Text("Import ESBMC"),
+                  label: Text(c.importLabel),
                 ),
               ],
             ),
@@ -101,7 +101,7 @@ class SetupView extends StatelessWidget {
         const SizedBox(height: 8),
         DestructiveButton(
           icon: Icons.delete_outline,
-          label: "Delete Byte Repair Data",
+          label: c.deleteLabel,
           confirmTitle: c.deleteConfirm.title,
           confirmMessage: c.deleteConfirm.message,
           onConfirmed: c.delete,

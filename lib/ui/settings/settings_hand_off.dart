@@ -3,7 +3,6 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/settings/hand_off.dart";
 import "../../core/log.dart";
-import "../../domain/bot_avatar/spec.dart";
 import "../bot_avatar/bot_avatar_editor.dart";
 import "cli_sign_in_dialog.dart";
 import "local_model_settings.dart" show AddLocalModelPage;
@@ -22,8 +21,6 @@ void bindSettingsHandOff(
   Future<T?> push<T>(Widget page) =>
       Navigator.of(context).push<T>(MaterialPageRoute(builder: (_) => page));
   handOff
-    ..editBotAvatar = ((initial) =>
-        push<BotAvatarSpec>(BotAvatarEditorPage(initial: initial)))
     ..signIn = (config, {again = false}) async {
       final cli = programFor(ref, config);
       if (again) {

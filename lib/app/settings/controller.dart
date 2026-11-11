@@ -1,13 +1,13 @@
 import "dart:typed_data";
 
-import "../../data/sync/pairing.dart" show PairingActivity;
-import "../../data/sync/sync_hub.dart" show SyncHub;
+import "../../domain/bot_avatar/spec.dart" show BotAvatarSpec;
 import "../../domain/download.dart" show DownloadProgress;
 import "../../domain/installable.dart" show ModelFacts;
 import "../../domain/llm_provider.dart";
 import "../../domain/models.dart" show ModelChoice;
 import "../app_items.dart" show AppKey;
 import "../model_role.dart";
+import "pairing.dart";
 import "scope.dart";
 import "spec.dart";
 
@@ -619,6 +619,7 @@ final class CollectionController<T> extends SettingController {
     Future<SettingNotice?> Function(int index, String action)? act,
     Future<void> Function(Map<String, String> answers, int? index)? submit,
     Future<void> Function(int index, Uint8List png)? image,
+    Future<void> Function(int index, BotAvatarSpec spec)? botAvatar,
     super.title,
     super.description,
     super.footnote,
@@ -628,7 +629,8 @@ final class CollectionController<T> extends SettingController {
   }) : _write = onSet ?? _keep,
        _onAct = act,
        _onSubmit = submit,
-       _onImage = image;
+       _onImage = image,
+       _onBotAvatar = botAvatar;
 
   final List<T> items;
   final String addLabel;
@@ -644,6 +646,15 @@ final class CollectionController<T> extends SettingController {
 
   final Future<void> Function(Map<String, String>, int?)? _onSubmit;
   final Future<void> Function(int, Uint8List)? _onImage;
+  final Future<void> Function(int, BotAvatarSpec)? _onBotAvatar;
+
+  /// Whether an item can wear a Bot Avatar, which a frontend picks with its
+  /// own page of them.
+  bool get takesBotAvatars => _onBotAvatar != null;
+
+  /// Sets the item at [index]'s face to [spec].
+  Future<void> setBotAvatar(int index, BotAvatarSpec spec) async =>
+      _onBotAvatar?.call(index, spec);
 
   /// Whether an item's picture can be set from a PNG the user picked.
   bool get takesImages => _onImage != null;
@@ -1280,13 +1291,13 @@ class InfoRow {
 /// app holds: the policy's text, the libraries' licences.
 enum InfoPage { privacyPolicy, licences }
 
-/// Pairing another device: a window this device shows a code in, an invite
-/// pasted across by hand, or a code from the other device; then the codes
-/// both screens show, confirmed matching, and paired or failed.
+/// Pairing another device, through [flow], which a frontend's own screens
+/// drive step by step; [activity] is the pairing in flight as it stood when
+/// this was built.
 final class PairingController extends SettingController {
   PairingController(
     super.spec, {
-    required this.hub,
+    required this.flow,
     required this.activity,
     this.scanner,
     super.title,
@@ -1297,8 +1308,7 @@ final class PairingController extends SettingController {
     super.accessory,
   });
 
-  /// For a frontend whose own screens drive the pairing step by step.
-  final SyncHub hub;
+  final PairingFlow flow;
 
   /// The pairing in flight, or null.
   final PairingActivity? activity;
@@ -1313,23 +1323,8 @@ final class PairingController extends SettingController {
   Future<String?> scan() async {
     final code = await scanner?.call();
     if (code == null || code.isEmpty) return null;
-    return join(code);
+    return flow.join(code);
   }
-
-  Future<void> openWindow() => hub.startPairingWindow();
-
-  void closeWindow() => hub.cancelPairingWindow();
-
-  /// The invite to send the other device by hand.
-  Future<String> createInvite() => hub.createManualInvite();
-
-  /// Pairs with the code or the answer the other device gave.
-  Future<String?> join(String code) => hub.pairWith(code.trim());
-
-  /// Whether the codes both devices show match.
-  void confirm(bool match) => hub.confirmPairing(match);
-
-  void cancel() => hub.cancelPairing();
 }
 
 /// Another page of settings, opened from a row on this one.
@@ -1364,6 +1359,9 @@ final class SetupController extends SettingController {
     required Future<void> Function() import,
     required Future<void> Function() delete,
     required this.deleteConfirm,
+    required this.setUpLabel,
+    required this.importLabel,
+    required this.deleteLabel,
     this.blocked,
     this.notice,
     this.prerequisite,
@@ -1397,6 +1395,12 @@ final class SetupController extends SettingController {
   final String? error;
 
   final SettingConfirm deleteConfirm;
+
+  /// What its three buttons are called: "Run Setup", "Import ESBMC", "Delete
+  /// Byte Repair Data".
+  final String setUpLabel;
+  final String importLabel;
+  final String deleteLabel;
 
   final Future<void> Function() _onSetUp;
   final Future<void> Function() _onImport;

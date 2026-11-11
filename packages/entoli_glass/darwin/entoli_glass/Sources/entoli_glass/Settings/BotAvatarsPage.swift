@@ -271,16 +271,10 @@ struct BotAvatarsPage: View {
 
   private func use() {
     guard let current else { return }
-    let hex = String(colour(of: current), radix: 16)
-    Task { @MainActor in
-      if let notice = await model.itemAction(
-        opened.row, opened.index, "useBot:\(current.key):\(hex)")
-      {
-        self.notice = notice.message
-      } else {
-        model.back()
-      }
-    }
+    model.say.itemBotAvatar(
+      id: opened.row, index: Int64(opened.index), key: current.key,
+      colour: Int64(colour(of: current)), completion: ignore)
+    model.back()
   }
 }
 
