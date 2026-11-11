@@ -273,14 +273,17 @@ extension View {
 }
 
 extension View {
-  /// On a Mac, a page's own header row at the top of the page pane: Back and
-  /// Forward, then its title, as the system's Settings has them. The window
-  /// hides its title bar, whose toolbar drew neither, and stood a row taller.
+  /// On a Mac, Back and Forward at the leading edge of the window's one
+  /// toolbar row, beside the page's title, as the system's Settings has them:
+  /// two plain toolbar buttons, which the system draws as its own pair.
   @ViewBuilder func pageNavigation(_ model: SettingsModel, title: String) -> some View {
     #if os(macOS)
       navigationBarBackButtonHidden(true)
-        .safeAreaInset(edge: .top, spacing: 0) {
-          PageHeader(model: model, title: title)
+        .navigationTitle(title)
+        .toolbar {
+          ToolbarItemGroup(placement: .navigation) {
+            PageArrows(model: model)
+          }
         }
     #else
       self
@@ -289,39 +292,27 @@ extension View {
 }
 
 #if os(macOS)
-  /// Back, Forward and the page's title, in one row.
-  private struct PageHeader: View {
+  /// Back and Forward through the pages pushed in this pane.
+  private struct PageArrows: View {
     @ObservedObject var model: SettingsModel
-    let title: String
 
     var body: some View {
-      HStack(spacing: 10) {
-        ControlGroup {
-          Button {
-            model.back()
-          } label: {
-            Image(systemName: "chevron.left")
-          }
-          .disabled(model.path.isEmpty)
-          .keyboardShortcut("[", modifiers: .command)
-          .help("Back")
-          Button {
-            model.forward()
-          } label: {
-            Image(systemName: "chevron.right")
-          }
-          .disabled(model.ahead.isEmpty)
-          .keyboardShortcut("]", modifiers: .command)
-          .help("Forward")
-        }
-        .controlGroupStyle(.navigation)
-        .fixedSize()
-        Text(title).font(.headline).lineLimit(1)
-        Spacer()
+      Button {
+        model.back()
+      } label: {
+        Label("Back", systemImage: "chevron.left")
       }
-      .padding(.horizontal, 16)
-      .frame(height: 44)
-      .background(.bar)
+      .disabled(model.path.isEmpty)
+      .keyboardShortcut("[", modifiers: .command)
+      .help("Back")
+      Button {
+        model.forward()
+      } label: {
+        Label("Forward", systemImage: "chevron.right")
+      }
+      .disabled(model.ahead.isEmpty)
+      .keyboardShortcut("]", modifiers: .command)
+      .help("Forward")
     }
   }
 #endif
