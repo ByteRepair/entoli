@@ -660,6 +660,8 @@ class SettingsBridge implements SettingsIntents {
         c.cancel(item);
       case "delete":
         c.delete(item);
+      case "add":
+        c.add();
     }
   }
 
@@ -676,6 +678,8 @@ class SettingsBridge implements SettingsIntents {
         c.confirm(true);
       case "mismatch":
         c.confirm(false);
+      case "scan":
+        unawaited(c.scan());
       default:
         c.cancel();
     }

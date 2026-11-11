@@ -1367,18 +1367,20 @@ class _Devices extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       Expanded(child: Text(row.title)),
+                      // A page of its own is the row's tap here.
                       for (final action in row.actions)
-                        TextButton(
-                          onPressed: action.enabled
-                              ? () => _act(context, index, action)
-                              : null,
-                          style: action.destructive
-                              ? TextButton.styleFrom(
-                                  foregroundColor: theme.colorScheme.error,
-                                )
-                              : null,
-                          child: Text(action.label),
-                        ),
+                        if (!action.handsOff)
+                          TextButton(
+                            onPressed: action.enabled
+                                ? () => _act(context, index, action)
+                                : null,
+                            style: action.destructive
+                                ? TextButton.styleFrom(
+                                    foregroundColor: theme.colorScheme.error,
+                                  )
+                                : null,
+                            child: Text(action.label),
+                          ),
                     ],
                   ),
                   if (row.error case final error?)

@@ -12,6 +12,7 @@ import "../../../domain/voice_model_store.dart";
 import "../../../providers.dart";
 import "../../downloads/model_downloads.dart";
 import "../controller.dart";
+import "../hand_off.dart";
 import "../spec.dart";
 
 const _page = SettingsPageId.onDevice;
@@ -132,6 +133,7 @@ CatalogController _catalog(
         ),
     ],
     addLabel: addLabel,
+    add: c.ref.read(settingsHandOffProvider).addModelByLink,
     download: (id) async => downloads.install(byId[id]!),
     cancel: (id) async => downloads.cancel(id),
     delete: (id) => downloads.delete(byId[id]!),

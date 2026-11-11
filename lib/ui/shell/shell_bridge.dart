@@ -13,7 +13,12 @@ import "shell_publisher.dart";
 import "../settings/settings_category.dart" show nativeSettingsOpener;
 import "../../app/settings/hand_off.dart";
 import "../../domain/bot_avatar/spec.dart";
+import "../../core/log.dart";
 import "../bot_avatar/bot_avatar_editor.dart";
+import "../settings/cli_sign_in_dialog.dart";
+import "../settings/local_model_settings.dart" show AddLocalModelPage;
+import "../settings/paired_device_page.dart";
+import "../settings/sync_pairing.dart" show ScanQrPage;
 import "shell_settings.dart";
 import "shell_sidebar.dart";
 import "shell_window.dart";
@@ -61,12 +66,38 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     nativeSettingsOpener = _settings.show;
     // The avatar editor is Flutter's on every frontend: opened over the
     // conversation, the native settings stepping aside for it.
-    container.read(settingsHandOffProvider).editBotAvatar = (initial) =>
+    final handOff = container.read(settingsHandOffProvider);
+    handOff.editBotAvatar = (initial) =>
         Navigator.of(context).push<BotAvatarSpec>(
           MaterialPageRoute(
             builder: (_) => BotAvatarEditorPage(initial: initial),
           ),
         );
+    handOff.signIn = (config, {again = false}) async {
+      final cli = programFor(ref, config);
+      if (again) {
+        try {
+          await cli.signOut();
+        } catch (e) {
+          logFailure("cli", "signing ${cli.config.displayName} out", e);
+        }
+      }
+      if (!mounted) return;
+      await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => CliSignInDialog(cli: cli),
+      );
+    };
+    handOff.addModelByLink = () => Navigator.of(
+      context,
+    ).push<void>(MaterialPageRoute(builder: (_) => const AddLocalModelPage()));
+    handOff.pairedDevice = (id) => Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => PairedDevicePage(deviceId: id)),
+    );
+    handOff.scanCode = () => Navigator.of(
+      context,
+    ).push<String>(MaterialPageRoute(builder: (_) => const ScanQrPage()));
   }
 
   @override

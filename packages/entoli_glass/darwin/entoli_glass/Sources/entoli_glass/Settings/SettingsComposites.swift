@@ -358,6 +358,7 @@ struct CatalogRow: View {
   @State private var deleting: SettingCatalogData?
 
   var body: some View {
+    Group {
     ForEach(row.catalog.compactMap { $0 }, id: \.id) { item in
       HStack(alignment: .top) {
         VStack(alignment: .leading, spacing: 3) {
@@ -392,6 +393,15 @@ struct CatalogRow: View {
         Spacer()
         action(item)
       }
+    }
+    if let add = row.addLabel {
+      Button {
+        model.stepAside()
+        model.say.catalog(id: row.id, item: "", op: "add", completion: ignore)
+      } label: {
+        Label(add, systemImage: "link.badge.plus")
+      }
+    }
     }
     .alert(
       deleting?.deleteConfirm?.title ?? "Delete \(deleting?.title ?? "")?",
@@ -450,6 +460,14 @@ struct PairingRow: View {
           .buttonStyle(.borderedProminent)
         Button("Manual invite") {
           Task { @MainActor in invite = await model.invite(row.id) }
+        }
+      }
+      if row.canScan {
+        Button {
+          model.stepAside()
+          op("scan")
+        } label: {
+          Label("Scan QR code", systemImage: "qrcode.viewfinder")
         }
       }
       HStack {

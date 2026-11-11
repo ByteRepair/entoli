@@ -8,6 +8,7 @@ import "../../../domain/settings/setting.dart";
 import "../../../providers.dart";
 import "../bind.dart";
 import "../controller.dart";
+import "../hand_off.dart";
 import "../spec.dart";
 
 const _page = SettingsPageId.sync;
@@ -131,12 +132,16 @@ final syncSettings = [
     weight: 0,
     title: "Pair a new device",
     hint: UiHint.row,
-    build: (c) => PairingController(
-      c.spec,
-      hub: c.ref.watch(syncHubProvider),
-      activity: c.ref.watch(pairingActivityProvider),
-      canScan: isPhone,
-    ),
+    build: (c) {
+      final scanner = c.ref.read(settingsHandOffProvider).scanCode;
+      return PairingController(
+        c.spec,
+        hub: c.ref.watch(syncHubProvider),
+        activity: c.ref.watch(pairingActivityProvider),
+        canScan: isPhone && scanner != null,
+        scanner: scanner,
+      );
+    },
   ),
   SettingSpec(
     id: "pairedDevices",
@@ -150,6 +155,7 @@ final syncSettings = [
       final peers = c.ref.watch(syncPeersProvider).values.toList()
         ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
       final hub = c.ref.read(syncHubProvider);
+      final handOff = c.ref.read(settingsHandOffProvider);
       return CollectionController<PeerState>(
         c.spec,
         items: peers,
@@ -167,6 +173,8 @@ final syncSettings = [
             _ => NoticeTone.plain,
           },
           actions: [
+            if (handOff.pairedDevice != null)
+              const ItemAction("open", "Details…", handsOff: true),
             if (peer.status == PeerStatus.online)
               const ItemAction("disconnect", "Disconnect")
             else
@@ -195,6 +203,7 @@ final syncSettings = [
           final id = peers[index].deviceId;
           try {
             await switch (action) {
+              "open" => handOff.pairedDevice!(id),
               "connect" => hub.connect(id),
               "disconnect" => hub.disconnect(id),
               _ => hub.revoke(id),

@@ -921,6 +921,7 @@ final class CatalogController extends SettingController {
     required Future<void> Function(String id) cancel,
     required Future<void> Function(String id) delete,
     this.addLabel,
+    Future<void> Function()? add,
     super.title,
     super.description,
     super.footnote,
@@ -929,7 +930,8 @@ final class CatalogController extends SettingController {
     super.accessory,
   }) : _onDownload = download,
        _onCancel = cancel,
-       _onDelete = delete;
+       _onDelete = delete,
+       _onAdd = add;
 
   final List<CatalogItem> items;
 
@@ -939,6 +941,10 @@ final class CatalogController extends SettingController {
   final Future<void> Function(String) _onDownload;
   final Future<void> Function(String) _onCancel;
   final Future<void> Function(String) _onDelete;
+  final Future<void> Function()? _onAdd;
+
+  /// Adds one by its link, through the page that asks for it.
+  Future<void> add() async => _onAdd?.call();
 
   Future<void> download(String id) => _onDownload(id);
 
@@ -1048,6 +1054,7 @@ final class PairingController extends SettingController {
     required this.hub,
     required this.activity,
     this.canScan = false,
+    this.scanner,
     super.title,
     super.description,
     super.footnote,
@@ -1062,8 +1069,19 @@ final class PairingController extends SettingController {
   /// The pairing in flight, or null.
   final PairingActivity? activity;
 
-  /// Whether this device is one that is pointed at a code: a phone.
+  /// Whether this device is one that is pointed at a code: a phone, with a
+  /// camera page to point.
   final bool canScan;
+
+  /// The camera page, answering the code it read.
+  final Future<String?> Function()? scanner;
+
+  /// Reads a code another screen shows and pairs with it.
+  Future<String?> scan() async {
+    final code = await scanner?.call();
+    if (code == null || code.isEmpty) return null;
+    return join(code);
+  }
 
   Future<void> openWindow() => hub.startPairingWindow();
 

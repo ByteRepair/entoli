@@ -1,7 +1,11 @@
 import "../../../data/builtin/llm/providers/presets.dart";
 import "../../../domain/llm_provider.dart";
 import "../../../providers.dart";
+import "package:uuid/uuid.dart";
+
+import "../../provider_usage_words.dart";
 import "../controller.dart";
+import "../hand_off.dart";
 import "../forms/provider.dart";
 import "../spec.dart";
 
@@ -130,6 +134,17 @@ final providerSettings = [
       final providers = c.ref.watch(appSettingsProvider).llmProviders;
       final notifier = c.ref.read(appSettingsProvider.notifier);
       final settings = c.ref.read(appSettingsProvider);
+      final secrets = c.ref.read(appSecretsProvider);
+      final check = c.ref.read(keyCheckProvider);
+      final handOff = c.ref.read(settingsHandOffProvider);
+      final now = DateTime.now();
+      ProviderForm form(LlmProviderConfig? provider) => ProviderForm(
+        provider,
+        nameTaken: (name) =>
+            settings.providerNameTaken(name, exceptId: provider?.id),
+        storedKey: provider == null ? null : secrets.providerKey(provider.id),
+        encrypted: secrets.encrypted,
+      );
       return CollectionController<LlmProviderConfig>(
         c.spec,
         items: providers,
@@ -137,37 +152,73 @@ final providerSettings = [
         describe: (provider) => CollectionItem(
           provider.displayName,
           id: provider.id,
-          subtitle: _status(c, provider),
+          // What it has spent of its allowance, where it says.
+          subtitle: [
+            _status(c, provider),
+            for (final usage
+                in c.ref.watch(providerUsageProvider(provider.id)).value ??
+                    const [])
+              describeUsage(usage, now),
+          ].join("\n"),
           removeLabel: "Remove ${provider.displayName}",
+          actions: [
+            if (provider.api.isCli && handOff.signIn != null) ...[
+              const ItemAction("signIn", "Sign in", handsOff: true),
+              const ItemAction("signInAgain", "Sign in again", handsOff: true),
+            ],
+          ],
         ),
-        form: (provider) => _ProviderItemForm(
-          provider,
-          nameTaken: (name) =>
-              settings.providerNameTaken(name, exceptId: provider?.id),
-        ),
+        form: (provider) => _ConfigForm(form(provider)),
         onSet: notifier.setProviders,
-        submit: (answers, index) {
-          final draft = ProviderForm(
-            index == null ? null : providers[index],
-            nameTaken: (name) => settings.providerNameTaken(
-              name,
-              exceptId: index == null ? null : providers[index].id,
-            ),
-          ).build(answers);
-          return notifier.upsertProvider(draft.config, setKey: draft.key);
+        // A key the provider refuses is said, and saving the same one again
+        // keeps it anyway.
+        submit: (answers, index) async {
+          final editing = index == null ? null : providers[index];
+          final draft = form(editing).build(answers);
+          final key = draft.setKey;
+          if (key != null && key.isNotEmpty && !_refused.remove(key)) {
+            bool? accepted;
+            try {
+              accepted = await check(draft.config, key);
+            } catch (_) {}
+            if (accepted == false) {
+              _refused.add(key);
+              throw const _Refused();
+            }
+          }
+          await notifier.upsertProvider(
+            draft.config.copyWith(id: editing?.id ?? const Uuid().v4()),
+            setKey: key,
+          );
+        },
+        act: (index, action) async {
+          await handOff.signIn?.call(
+            providers[index],
+            again: action == "signInAgain",
+          );
+          return null;
         },
       );
     },
   ),
 ];
 
-/// [ProviderForm] as a form over the configs themselves: what the list's own
-/// add and edit would build, where a frontend does not submit the answers.
-class _ProviderItemForm implements SettingForm<LlmProviderConfig> {
-  _ProviderItemForm(
-    LlmProviderConfig? provider, {
-    required bool Function(String) nameTaken,
-  }) : _form = ProviderForm(provider, nameTaken: nameTaken);
+/// Keys a provider refused once: the next save of the same one keeps it.
+final _refused = <String>{};
+
+class _Refused implements Exception {
+  const _Refused();
+
+  @override
+  String toString() =>
+      "The provider did not accept this key. Check it was copied whole, or "
+      "save again to keep it anyway.";
+}
+
+/// [ProviderForm] as a form over the configs themselves, what the list
+/// edits; what a submit saves is the whole draft, the key with it.
+class _ConfigForm implements SettingForm<LlmProviderConfig> {
+  _ConfigForm(this._form);
 
   final ProviderForm _form;
 

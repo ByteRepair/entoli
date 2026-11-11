@@ -128,7 +128,7 @@ class _PairingControlsState extends ConsumerState<PairingControls> {
   Future<void> _scan() async {
     final scanned = await Navigator.of(
       context,
-    ).push<String>(MaterialPageRoute(builder: (_) => const _ScanQrPage()));
+    ).push<String>(MaterialPageRoute(builder: (_) => const ScanQrPage()));
     if (mounted && scanned != null && scanned.isNotEmpty) _join(scanned);
   }
 }
@@ -642,14 +642,14 @@ Widget _pairingFailed(BuildContext context, String? error) => Padding(
 /// until a second refusal, after which it is as silent as iOS; the page names
 /// the path to its permission screen instead, since url_launcher has no URL
 /// that opens one.
-class _ScanQrPage extends StatefulWidget {
-  const _ScanQrPage();
+class ScanQrPage extends StatefulWidget {
+  const ScanQrPage({super.key});
 
   @override
-  State<_ScanQrPage> createState() => _ScanQrPageState();
+  State<ScanQrPage> createState() => ScanQrPageState();
 }
 
-class _ScanQrPageState extends State<_ScanQrPage> {
+class ScanQrPageState extends State<ScanQrPage> {
   final _controller = MobileScannerController();
   bool _done = false;
 
