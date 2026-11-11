@@ -13,7 +13,7 @@ import "../widgets/dialogs.dart";
 import "../../app/frontend.dart";
 import "../widgets/nav_drawer.dart";
 import "transcript.dart";
-import "voice_controller.dart";
+import "../../app/voice_controller.dart";
 import "widgets/transcript_window.dart";
 import "widgets/voice_bloom.dart";
 import "widgets/voice_controls.dart";

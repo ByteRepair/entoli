@@ -7,7 +7,7 @@ import "package:agent_chat/ui/shell/shell_page_bar.dart" show drawShellPageBar;
 import "package:agent_chat/ui/widgets/page_bar.dart" show pageBarDrawProvider;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/ui/shell/shell_voice.dart";
-import "package:agent_chat/ui/voice/voice_controller.dart";
+import "package:agent_chat/app/voice_controller.dart";
 import "package:agent_chat/ui/voice/voice_page.dart";
 import "package:agent_chat/app/frontend.dart";
 

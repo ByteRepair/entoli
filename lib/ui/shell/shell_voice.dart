@@ -6,7 +6,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/models.dart";
 import "../../app/chat_controller.dart";
 import "../voice/transcript.dart";
-import "../voice/voice_controller.dart";
+import "../../app/voice_controller.dart";
 import "shell_outbox.dart";
 import "shell_answers.dart";
 import "shell_turn.dart";
