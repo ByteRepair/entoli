@@ -1,3 +1,4 @@
+import "package:agent_chat/app/app_menus.dart";
 import "dart:async";
 import "dart:io";
 
@@ -174,6 +175,7 @@ class TestApp {
     PromptLibrary? library,
     bool launcherIcons = true,
     AppUpdateHost updateHost = const UnavailableAppUpdateHost(),
+    AppMenus menus = const NoAppMenus(),
     ChatStore? store,
     Shell? shell,
     FakeFileHandoff? handoff,
@@ -290,6 +292,7 @@ class TestApp {
           launcherIconsProvider.overrideWithValue(launcher),
           liquidGlassProvider.overrideWithValue(liquidGlass),
           appUpdateHostProvider.overrideWithValue(updateHost),
+          appMenusProvider.overrideWithValue(menus),
           systemAccentProvider.overrideWithValue(systemAccent),
           fileHandoffProvider.overrideWithValue(files),
           assistantLaunchProvider.overrideWithValue(assist),

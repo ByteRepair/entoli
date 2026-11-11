@@ -117,7 +117,7 @@ A pick is returned to the opener rather than run in the palette: the palette's
 ref is disposed by then, and the drawer a picked chat closes is the opener's.
 The shortcut is a `HardwareKeyboard` handler in `AppShell` rather than a
 `Shortcuts` widget, which hears nothing once focus has fallen back to the
-route's scope above it. It is `AppCommand.switchProject` — see "The app's
+route's scope above it. It is `Destination.switchProject` — see "The app's
 commands" in `lib/ui/AGENTS.md`. Deleting a project is on its settings page alone.
 
 New Project makes the project on the device the sidebar is showing, a paired

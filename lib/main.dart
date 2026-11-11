@@ -9,7 +9,9 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "core/config.dart";
 import "core/log.dart";
+import "app/app_menus.dart";
 import "core/platform/app_icon.dart";
+import "core/platform/app_menus.dart";
 import "core/platform/background_work.dart";
 import "core/platform/clipboard_files.dart";
 import "core/platform/platform.dart" as platform;
@@ -43,7 +45,6 @@ import "ui/chat/activity/activities.dart" show ChatActivities;
 import "ui/chat/activity/activity.dart" show activityCatalogProvider;
 import "ui/chat/remote_turns.dart";
 import "ui/app_licence.dart" show registerAppLicence, registerBlinkLicence;
-import "ui/app_menu_bar.dart";
 import "ui/app_shell.dart";
 import "ui/chat_actions.dart" show chatEditsProvider;
 import "ui/command_intents.dart";
@@ -81,7 +82,6 @@ void modelHostMain(List<String> arguments) => ModelHostServer.run(
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  installMenuChannel();
   registerBundledFontLicences();
   registerBotAvatarLicence();
   registerBundledSkillLicences();
@@ -108,6 +108,9 @@ var _updateChecked = false;
 /// restore's restart is this process still running, its window already set
 /// up one way or the other.
 bool? _glassAtLaunch;
+
+/// The menu bar's, once per process: it answers the platform's channel.
+NativeAppMenus? _menus;
 
 /// Everything the app reads out of the data directory, and the container it is
 /// all reached through. One per run of the app — and a second one when a backup
@@ -389,6 +392,9 @@ class AppSession {
         hostConfinementProvider.overrideWithValue(platform.hostConfinement()),
         appUpdateHostProvider.overrideWithValue(
           platform.createAppUpdateHost(cache),
+        ),
+        appMenusProvider.overrideWithValue(
+          glassAvailable ? _menus ??= NativeAppMenus() : const NoAppMenus(),
         ),
         liquidGlassProvider.overrideWithValue(
           LiquidGlass(available: glassAvailable, on: _glassAtLaunch!),

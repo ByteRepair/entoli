@@ -70,6 +70,8 @@ import "package:agent_chat/domain/voice_model_store.dart";
 import "package:agent_chat/domain/project.dart" show ProjectRef;
 import "package:agent_chat/providers.dart"
     show DeviceProjects, PairedDevices, RemoteChats, RemoteProjectNotifier;
+import "package:agent_chat/app/app_items.dart";
+import "package:agent_chat/app/app_menus.dart";
 import "package:agent_chat/app/mirror_controller.dart";
 import "package:uuid/uuid.dart";
 
@@ -194,6 +196,33 @@ class FakeLauncherIcons implements LauncherIcons {
 }
 
 /// The automatic update's platform half, as a test sees it: whether the
+/// The menu bar, keeping what it was last shown: each item's title and
+/// whether it was enabled, in any menu. [pick] is the user choosing one.
+class FakeAppMenus implements AppMenus {
+  Map<String, ({AppItem item, bool enabled})> shown = {};
+  void Function(AppItem item)? _picked;
+
+  @override
+  bool get available => true;
+
+  @override
+  set onPicked(void Function(AppItem item)? picked) => _picked = picked;
+
+  @override
+  void show(
+    List<AppMenu> menus, {
+    required String Function(AppItem item) title,
+    required bool Function(AppItem item) enabled,
+  }) => shown = {
+    for (final menu in menus)
+      for (final group in menu.groups)
+        for (final item in group)
+          title(item): (item: item, enabled: enabled(item)),
+  };
+
+  void pick(String title) => _picked!(shown[title]!.item);
+}
+
 /// settings page draws its row. The harness default is the unavailable one,
 /// which is every non-desktop answer.
 class FakeAppUpdateHost implements AppUpdateHost {

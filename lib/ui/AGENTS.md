@@ -243,14 +243,26 @@ which is how a reply's selection would get dropped.
 ## The app's commands
 
 Everything the app can be told to do by name — a new chat, Settings, pin the
-open chat, hide the sidebar — is an `AppCommand` (`app_command.dart`): its
-label and its keys, nothing else. The enum's name is the command's id, which
-is why one is never renamed: a key, a menu item and whatever names one next (a
-Windows jump list, a Linux `.desktop` action, an argument the app is launched
-with) all say which command by it. Settings > Shortcuts lists the ones with
-keys, so the page cannot disagree with what answers them.
+open chat, hide the sidebar — is an `AppItem` (`lib/app/app_items.dart`), and
+there are two kinds, sorted by one rule: what changes what happens is the
+core's, what changes what is on screen or where is the frontend's. An
+`AppAction` (new chat, pin, rename, move, delete, stop) is run the same by
+every frontend, which asks first for what it needs — a name, a project, a
+yes — in its own way. A `Destination` (Settings, Profile, a chat's settings,
+the sidebar, voice mode) is where the frontend on screen takes the app, each
+frontend through its own `Navigate`: `flutterNavigate` in `commands.dart`,
+`shellNavigate` in `shell_bridge.dart`, both exhaustive switches with no
+default, so a new destination compiles in neither until both reach it. Each
+item's title and keys are plain data (`AppKey`), and its availability and
+title (`availabilityOf`, `titleOf`) are pure functions of a few facts, so the
+core decides them with no widget in sight. The enum's name is the item's id,
+which is why one is never renamed: a key, a menu item and Shortcuts all say
+which item by it. Settings > Shortcuts lists the ones with keys, so the page
+cannot disagree with what answers them; `app_command.dart` is how Flutter
+hears and prints those keys.
 
-What a command does is `Commands` (`commands.dart`), and it is one switch.
+What an item does is `Commands` (`commands.dart`): an action's switch, and the
+frontend's `Navigate` for a destination.
 `Commands.watch` is a snapshot of what the app has open taken in a build — so a
 menu greys and labels its items afresh as the app changes. It watches only the
 facts a menu draws — the open chat's id, whether it is pinned and whether a
@@ -284,21 +296,29 @@ held by that screen until there is a chat, for the same reason.
 
 ### The menu bar
 
-`appMenus` (`app_menu_bar.dart`) is the menu bar as data: menus of groups of
-commands, and the platform's own items after them (Hide, Quit, Full Screen —
-macOS's alone, dropped where `PlatformProvidedMenuItem.hasMenu` says no).
-`AppMenuBar` draws it as Flutter's `PlatformMenuBar` inside `AppShell` — or
-`ShellBridge`, under the native shell (see "Liquid Glass") — below the
-Navigator the commands open their pages on. A command's keys and its menu
-item both run it, and whichever hears the keys first does: Flutter's key
-handler where it gets them, the platform's menu where it does.
+**The menu bar is a module of its own, which both frontends use.** On Apple's
+platforms it belongs to the app rather than to a window, so neither frontend
+owns it. `appMenus` (`lib/app/app_items.dart`) is its layout as data: menus of
+groups of items, and the platform's own after them (Hide, Quit, Full Screen —
+macOS's alone). `packages/entoli_menu` draws it, one Swift source for macOS and
+iPadOS over its own Pigeon contract (`pigeons/menu.dart`): Dart sends the
+whole bar, titled and greyed, whenever that changed, and Swift sends back the
+id of the item picked. macOS sets `NSApp.mainMenu`; iPadOS builds through
+`UIMenuBuilder`, the Runner's `AppDelegate` forwarding its `buildMenu(with:)`
+and the one selector every item runs, since UIKit asks only the app's own
+responders. It is a port, `AppMenus` (`lib/app/app_menus.dart`), bound in
+`main` as `NativeAppMenus` (`core/platform/app_menus.dart`) on the two Apples
+and absent everywhere else.
 
-Flutter's engine has a menu bar on macOS alone. iPadOS gets the same menus
-over `agent_chat/menu`, which `installMenuChannel` points Flutter's own
-`DefaultPlatformMenuDelegate` at — the engine's protocol, so the Dart is the
-same on both and only the Swift answering it differs; see "The menu bar" in
-`ios/AGENTS.md`. Every other platform draws none. `platformHasMenus` says
-where there are menus, `menuBarAlwaysShown` where they are always on screen,
+`AppMenuSync` (`app_menu.dart`) is how a frontend uses it: mounted in
+`AppShell` and in `ShellBridge`, below the Navigator, it shows the layout as
+the app stands and runs a pick through that frontend's `Navigate`. **The
+menu holds the keys of every item in it**, as its own key equivalents, and
+`runKey` — the one key handler both frontends attach — stands down for those
+wherever there is a menu bar, so no key runs twice. Elsewhere Flutter's
+handler has every key. The two frontends show the same menus; an item one of
+them needs goes into the shared layout, which the other's `Navigate` then
+answers too. `menuBarAlwaysShown` says where the bar is always on screen,
 which is what takes the sidebar's Profile, Marketplace and Settings off it.
 
 The sidebar can be hidden (`sidebarShownProvider`, the View menu, Ctrl+Alt+S).
@@ -524,8 +544,8 @@ turn runs, beats in the reply's colour while speaking, and sits grey and still
 
 ### Where the platforms differ
 
-The menu bar is still Flutter's `PlatformMenuBar` on macOS, `AppMenuBar`
-inside `ShellBridge`, so `appMenus` stays the one definition. It has no Edit
+The menu bar is `entoli_menu`'s under either frontend (see "The menu bar"),
+`AppMenuSync` inside `ShellBridge`, so `appMenus` stays the one layout. It has no Edit
 menu, so the native field takes its own editing keys — cut, copy, paste,
 select all, undo, and Return's send and queue — in `performKeyEquivalent`,
 which the window offers a view before the menu bar; an Edit menu would have

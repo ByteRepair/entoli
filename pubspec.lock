@@ -320,6 +320,13 @@ packages:
       relative: true
     source: path
     version: "0.1.0"
+  entoli_menu:
+    dependency: "direct main"
+    description:
+      path: "packages/entoli_menu"
+      relative: true
+    source: path
+    version: "0.1.0"
   fake_async:
     dependency: "direct dev"
     description:

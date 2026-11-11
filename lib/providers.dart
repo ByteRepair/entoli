@@ -10,6 +10,7 @@ import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 import "package:http/http.dart" as http;
 import "package:uuid/uuid.dart";
 
+import "app/app_menus.dart";
 import "../core/config.dart";
 import "domain/chat_intents.dart";
 import "domain/file_tools.dart" show resolveWorkspacePath;
@@ -412,6 +413,10 @@ final hostConfinementProvider = Provider<Confinement>(
 final appUpdateHostProvider = Provider<AppUpdateHost>(
   (ref) => const UnavailableAppUpdateHost(),
 );
+
+/// The menu bar, where the platform has one. Overridden in `main` beside the
+/// rest of the platform ports.
+final appMenusProvider = Provider<AppMenus>((ref) => const NoAppMenus());
 
 /// The browser the agent drives, the same instance the backend holds: the
 /// settings page closes it before replacing the embedded one under it.

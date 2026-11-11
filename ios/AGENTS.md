@@ -658,32 +658,19 @@ looking at than either.
 
 ## The menu bar
 
-Flutter's engine draws a menu bar on macOS alone, so iPadOS's is the app's
-own: `MenuChannel` in `AppDelegate.swift` answers `agent_chat/menu` with the
-macOS engine's protocol — `Menu.setMenus` with the tree, `Menu.selectedCallback`
-back with an item's id — and Dart points Flutter's own
-`DefaultPlatformMenuDelegate` at it, so `appMenus` reaches both Apples the same
-way. The Swift is the whole of what differs.
-
-Each `setMenus` stores the tree and asks UIKit to rebuild; `AppDelegate`'s
-`buildMenu(with:)` hands the builder over. The first menu's items go into the
-application menu, whose own Settings item is removed so the app's takes ⌘,; a
-menu titled File, Edit, View, Window or Help goes at the top of UIKit's of
-that name; the rest go before Window. An item with keys is a `UIKeyCommand`,
-its input the key's own character — Flutter's logical key id is its Unicode
-code point for every key a command uses — so an iPhone with a keyboard gets
-the same keys and the ⌘-hold sheet lists them. Every item's action is one
-selector on `AppDelegate`, the item saying which by its id. macOS's own items
-(Hide, Quit, Full Screen) never arrive: Dart drops them where
-`PlatformProvidedMenuItem.hasMenu` says this platform has none.
+`entoli_menu` builds it (see "The menu bar" in `lib/ui/AGENTS.md`). Each
+`show` stores the menus and asks UIKit to rebuild; `AppDelegate`'s
+`buildMenu(with:)` hands the builder to the plugin, and its `entoliMenuItem:`
+is the one selector every item runs, the item saying which by its id — UIKit
+asks only the app's own responders for either. The first menu's items go into
+the application menu, whose own Settings item is removed so the app's takes
+⌘,; a menu titled File, Edit, View, Window or Help goes at the top of UIKit's
+of that name; the rest go before Window. An item with keys is a
+`UIKeyCommand`, so an iPhone with a keyboard gets the same keys and the
+⌘-hold sheet lists them, and Flutter's key handler stands down for them.
 
 The sidebar keeps its Profile, Marketplace and Settings here: the menu bar
 hides until asked for, and is not there at all without a pointer.
-
-What has not been settled is the keys: a `UIKeyCommand` is expected to take
-its key before the press reaches Flutter, so `AppShell`'s handler never hears
-it. Were both to hear one, the command would run twice. A hardware keyboard on
-a device or the simulator is how to see which.
 
 ## Shortcuts
 

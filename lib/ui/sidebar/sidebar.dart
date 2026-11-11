@@ -425,7 +425,7 @@ class _ChatTile extends ConsumerWidget {
                         size: 14,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
-                    PopupMenuButton<AppCommand>(
+                    PopupMenuButton<AppAction>(
                       icon: const Icon(Icons.more_vert),
                       onSelected: (command) =>
                           runOnChat(context, ref, chat, command),
@@ -441,15 +441,15 @@ class _ChatTile extends ConsumerWidget {
   /// The row's menu, the same from the button and from a right-click: the
   /// chat commands, in the row's own shorter words, less Move for a mirror,
   /// whose projects are its home device's.
-  List<PopupMenuEntry<AppCommand>> get _items => [
+  List<PopupMenuEntry<AppAction>> get _items => [
     for (final command in chatCommands)
-      if (!(remote && command == AppCommand.moveChat))
+      if (!(remote && command == AppAction.moveChat))
         PopupMenuItem(
           value: command,
           child: Text(switch (command) {
-            AppCommand.pinChat => chat.pinned ? "Unpin" : "Pin",
-            AppCommand.renameChat => "Rename",
-            AppCommand.moveChat => "Move to project…",
+            AppAction.pinChat => chat.pinned ? "Unpin" : "Pin",
+            AppAction.renameChat => "Rename",
+            AppAction.moveChat => "Move to project…",
             _ => "Delete",
           }),
         ),
@@ -460,7 +460,7 @@ class _ChatTile extends ConsumerWidget {
     WidgetRef ref,
     Offset at,
   ) async {
-    final command = await showMenu<AppCommand>(
+    final command = await showMenu<AppAction>(
       context: context,
       position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
       items: _items,

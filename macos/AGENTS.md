@@ -66,8 +66,8 @@ sudo; see "Byte Repair's environment, in four variables" in
 ## The menu bar
 
 The app's menus — `appMenus`, see "The menu bar" in `lib/ui/AGENTS.md` — are
-Flutter's `PlatformMenuBar`, which replaces `MainMenu.xib`'s at the first
-frame; the xib's stays as what shows before it. The first menu is the app's,
+`entoli_menu`'s `NSApp.mainMenu`, which replaces `MainMenu.xib`'s when Dart
+first sends it; the xib's stays as what shows before it. The first menu is the app's,
 titled by macOS with the app's name. About opens Settings > About rather than
 the standard panel, so it is the page iPadOS's About opens as well.
 
@@ -141,7 +141,7 @@ each is adapted to it:
   from the sidebar does), and `TurnControl` for a turn's status and stop,
   answered by the chat's controller where one exists and by the backend
   where none does — never by building one.
-- **Commands** are the app's `AppCommand`s, every one of them, as
+- **Commands** are the app's `AppItem`s, every one of them, as
   `command.<name>` — the enum's name being the id it already promises never
   to change. `CommandIntent` runs one through `Commands`, which needs the chat
   pane's context, so `AppShell` attaches a `CommandScope` while it is
@@ -174,7 +174,7 @@ share target's route, `safeRelativePath` included, since the name came
 from another app. Get Artifacts goes the other way: each artifact is packed
 whole by `readArtifactZip` into a temporary zip, its page and the files
 beside it together, and Swift hands Shortcuts the file. Voice mode is not an
-intent of its own underneath: it is `AppCommand.voiceMode`, which the Chat
+intent of its own underneath: it is `Destination.voiceMode`, which the Chat
 menu has too, and Start Voice Mode runs it.
 
 The Dart half is covered by `chat_intents_test.dart`; the Swift, like the

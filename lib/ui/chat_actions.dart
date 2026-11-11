@@ -19,10 +19,10 @@ import "widgets/dialogs.dart";
 
 /// The commands that act on one chat, in the order a menu offers them.
 const chatCommands = [
-  AppCommand.pinChat,
-  AppCommand.renameChat,
-  AppCommand.moveChat,
-  AppCommand.deleteChat,
+  AppAction.pinChat,
+  AppAction.renameChat,
+  AppAction.moveChat,
+  AppAction.deleteChat,
 ];
 
 /// Run one of [chatCommands] on [chat].
@@ -30,12 +30,12 @@ Future<void> runOnChat(
   BuildContext context,
   WidgetRef ref,
   ChatState chat,
-  AppCommand command,
+  AppAction command,
 ) => switch (command) {
-  AppCommand.pinChat => setChatPinned(ref, chat, !chat.pinned),
-  AppCommand.renameChat => renameChat(context, ref, chat),
-  AppCommand.moveChat => moveChat(context, ref, chat),
-  AppCommand.deleteChat => deleteChat(context, ref, chat),
+  AppAction.pinChat => setChatPinned(ref, chat, !chat.pinned),
+  AppAction.renameChat => renameChat(context, ref, chat),
+  AppAction.moveChat => moveChat(context, ref, chat),
+  AppAction.deleteChat => deleteChat(context, ref, chat),
   _ => throw ArgumentError.value(command, "command", "not a chat command"),
 };
 

@@ -4,7 +4,7 @@ import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../app_command.dart";
-import "../app_menu_bar.dart";
+import "../app_menu.dart";
 import "../command_intents.dart";
 import "../commands.dart";
 import "../chat/chat_page.dart";
@@ -18,8 +18,9 @@ import "shell_window.dart";
 /// snapshots it draws, runs what it sends back, and draws the open
 /// conversation, [ChatPage]. The shell's bars reach it, and every page over
 /// it, as padding, so it scrolls under them: see [ShellInsets]. The pages it
-/// pushes draw over it inside the same view. The commands and their keys attach here as they do to
-/// `AppShell`, and the menu bar is still `AppMenuBar`.
+/// pushes draw over it inside the same view. The commands and their keys
+/// attach here as they do to `AppShell`, and the menu bar is the same
+/// `AppMenuSync`, going where this frontend goes through [shellNavigate].
 class ShellBridge extends ConsumerStatefulWidget {
   const ShellBridge({super.key});
 
@@ -76,17 +77,37 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     );
   }
 
-  Commands _commands() => Commands.read(context, ref);
+  Commands _commands() => Commands.read(context, ref, shellNavigate);
 
-  /// The commands' keys, while the Flutter view has them; with the shell's
-  /// own field focused they reach the menu bar instead. See `AppShell`.
-  bool _key(KeyEvent event) {
-    if (event is! KeyDownEvent) return false;
-    final command = AppCommand.of(event);
-    if (command == null) return false;
-    return _commands().run(command).isAvailable;
-  }
+  /// The items' keys where no menu bar holds them. See `AppShell`.
+  bool _key(KeyEvent event) => runKey(event, ref, _commands);
 
   @override
-  Widget build(BuildContext context) => const AppMenuBar(child: ChatPage());
+  Widget build(BuildContext context) =>
+      const AppMenuSync(navigate: shellNavigate, child: ChatPage());
+}
+
+/// This frontend's way to every [Destination]: the native palette for a
+/// project, and the Flutter pages it draws over the conversation for the
+/// rest. Exhaustive, so a new one is decided here as well as in Flutter's.
+Future<void> shellNavigate(Commands c, Destination to) async {
+  switch (to) {
+    case Destination.switchProject:
+      c.ref.read(shellPaletteProvider.notifier).open();
+    case Destination.about ||
+        Destination.settings ||
+        Destination.profile ||
+        Destination.marketplace ||
+        Destination.backUp ||
+        Destination.welcome ||
+        Destination.keyboardShortcuts ||
+        Destination.toggleSidebar ||
+        Destination.chatSettings ||
+        Destination.showPlan ||
+        Destination.voiceMode ||
+        Destination.projectWorkspace ||
+        Destination.projectMemories ||
+        Destination.projectSettings:
+      await flutterNavigate(c, to);
+  }
 }
