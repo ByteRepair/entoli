@@ -8,10 +8,12 @@ import SwiftUI
   import FlutterMacOS
 #endif
 
-/// The shell's host: on `start`, the window's content becomes SwiftUI's, with
-/// the Flutter view controller the runner made embedded in it. The runner's
-/// window, its channels and its wake paths are untouched; only what fills the
-/// window changes. One per process: there is one window, and the shell is its.
+/// The shell's host: at launch, with Liquid Glass on, the window's content
+/// becomes SwiftUI's, with the Flutter view controller the runner made
+/// embedded in it — before the window is shown, so the Flutter controller is
+/// never on screen anywhere else. The runner's window, its channels and its
+/// wake paths are untouched; only what fills the window changes. One per
+/// process: there is one window, and the shell is its.
 final class ShellHost {
   static var shared: ShellHost?
 
@@ -36,15 +38,15 @@ final class ShellHost {
     }
   #endif
 
-  /// What Dart says, to the model; and `start`, to this.
   private func listen(_ messenger: FlutterBinaryMessenger) {
-    model.onStart = { [weak self] in self?.start() }
     NativeShellSetup.setUp(binaryMessenger: messenger, api: model)
   }
 
   #if os(macOS)
-    private func start() {
-      guard host == nil, let window = view?.window,
+    /// From the plugin's registration, inside the runner's `awakeFromNib`:
+    /// the Flutter controller is the window's content and nothing is shown.
+    func start() {
+      guard host == nil, LaunchSettings.liquidGlass, let window = view?.window,
         let flutter = window.contentViewController
       else { return }
       let frame = window.frame
@@ -59,6 +61,7 @@ final class ShellHost {
       window.contentViewController = host
       window.setFrame(frame, display: true)
       self.host = host
+      model.hosted = true
       window.acceptsMouseMovedEvents = true
       pointerMonitor = NSEvent.addLocalMonitorForEvents(
         matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
@@ -87,21 +90,18 @@ final class ShellHost {
       model.onWindow?(model.window)
     }
   #else
-    /// The scene's window, whose root the runner's storyboard made the
-    /// Flutter view controller.
-    private var window: UIWindow? {
-      UIApplication.shared.connectedScenes
-        .compactMap { $0 as? UIWindowScene }
-        .flatMap(\.windows)
-        .first { $0.rootViewController is FlutterViewController }
-    }
-
-    private func start() {
-      guard host == nil, let window, let flutter = window.rootViewController
+    /// From the scene's connection: the storyboard has made the window, its
+    /// root the Flutter view controller, and not yet shown it.
+    func start(in scene: UIScene) {
+      guard host == nil, LaunchSettings.liquidGlass,
+        let window = (scene as? UIWindowScene)?.windows
+          .first(where: { $0.rootViewController is FlutterViewController }),
+        let flutter = window.rootViewController
       else { return }
       let host = UIHostingController(rootView: ShellView(model: model, flutter: flutter))
       window.rootViewController = host
       self.host = host
+      model.hosted = true
       // The window's, which is the app's here: a popover and a sheet are
       // presented from it and take its style.
       model.onWindow = { [weak window] state in

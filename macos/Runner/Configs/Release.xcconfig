@@ -1,3 +1,6 @@
 #include "../../Flutter/Flutter-Release.xcconfig"
 #include "Warnings.xcconfig"
 #include "FoundationModels.xcconfig"
+
+// See Debug.xcconfig.
+ENTOLI_DATA_LEAF = entoli

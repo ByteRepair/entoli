@@ -328,11 +328,18 @@ colours' place: while it is on the theme colours and the corners are not on
 the page, and `appLookProvider` hands `entoliTheme` the defaults — the iOS /
 macOS theme — whatever was picked, leaving what was picked where it was for
 the switch going off. Light, Dark and System stay, being the one appearance
-choice the native chrome follows too. **It is read once, at launch**
-(`_glassAtLaunch` in `main`): the shell takes the window before any page is
-built, so switching it away from what the launch started with asks, in a
-dialog, for the app to be quit and reopened rather than appearing to do
-nothing. The in-app restart a restore makes is not one: it is this process
+choice the native chrome follows too. **It is read once, at launch, by the
+Swift**: before Dart runs, `LaunchSettings.swift` reads `liquidGlass` out of
+`settings.json` and the shell takes the window before it is shown, so the
+Flutter view is never on screen outside it. Dart asks `hosting` and draws for
+the answer (`_glassAtLaunch` in `main`) rather than deciding again, so the two
+cannot disagree. That reader is a second copy of `dataDir()` — `$ENTOLI_CONFIG`,
+else `~/.config/<leaf>` on macOS, the debug leaf from the Runner's xcconfigs
+as `EntoliDataLeaf`, and `Documents/entoli` on iOS — and of the setting's
+default, and moving either means moving it too; it reads before the
+migrations run, so a migration that moves `settings.json` breaks it. Switching
+the setting away from what the launch started with asks, in a dialog, for the
+app to be quit and reopened rather than appearing to do nothing. The in-app restart a restore makes is not one: it is this process
 still running, its window already the shell's or not. `LiquidGlass` (`widgets/liquid_glass.dart`) is the
 launch's answer — `available` on the two Apples, and `on` as it started, the
 window then being the shell's.
@@ -342,7 +349,7 @@ window then being the shell's.
 `lib/ui/shell/` is the only Dart that knows the shell exists, and Swift is its
 one client: the Flutter app on every other platform, and on these with the
 switch off, reads its providers as it always has. With the shell, `main` puts
-`ShellBridge` where `AppShell` would be. It asks the Swift to `start`, sends
+`ShellBridge` where `AppShell` would be. It sends
 it what to draw, runs what it sends back, and draws `ChatPage`, with no bar
 and no composer of its own.
 
@@ -353,7 +360,7 @@ tests. `tool/prepare.sh` runs it, and its output is not committed. A field or
 an intent the two sides read differently does not compile. It is a protocol a
 client could implement anywhere: the app holds every rule and all the state,
 and the client holds only the last snapshot of each concern. `NativeShell` is
-what the app says — `start`, a snapshot per concern, the one-offs
+what the app says — `hosting`, a snapshot per concern, the one-offs
 `voiceLevel` and `focusComposer`, and `strip`, answered later (below); each
 `*Intents` API is what a surface's client says the user did, a method per
 intent, the few the client waits on (a project's error, a paste's yes or no)
