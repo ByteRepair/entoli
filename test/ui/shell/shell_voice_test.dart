@@ -7,7 +7,7 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/ui/shell/shell_voice.dart";
 import "package:agent_chat/ui/voice/voice_controller.dart";
 import "package:agent_chat/ui/voice/voice_page.dart";
-import "package:agent_chat/ui/widgets/liquid_glass.dart";
+import "package:agent_chat/app/frontend.dart";
 
 import "../../harness.dart";
 import "fake_native_shell.dart";
@@ -26,8 +26,8 @@ void main() {
 
   Widget shell(Widget child) => ProviderScope(
     overrides: [
-      liquidGlassProvider.overrideWithValue(
-        const LiquidGlass(available: true, on: true),
+      frontendProvider.overrideWithValue(
+        const FrontendChoice(current: Frontend.swiftUI, native: true),
       ),
     ],
     child: child,

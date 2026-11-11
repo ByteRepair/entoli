@@ -5,7 +5,7 @@ import "../../../domain/reaction.dart";
 import "../../shell/shell_popup.dart";
 import "../../widgets/action_icon.dart";
 import "../../widgets/anchored_menu.dart";
-import "../../widgets/liquid_glass.dart";
+import "../../../app/frontend.dart";
 
 /// The smiley under a message, and the strip of reactions it opens just above
 /// itself, centred on it. What the message already has is shown chosen, and
@@ -50,7 +50,7 @@ class ReactionButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final shell = ref.watch(liquidGlassProvider).on;
+    final shell = ref.watch(frontendProvider).swiftUI;
     return ActionIcon(
       icon: Icons.add_reaction_outlined,
       tooltip: "React",

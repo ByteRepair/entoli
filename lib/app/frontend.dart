@@ -1,4 +1,5 @@
 import "package:flutter/foundation.dart" show TargetPlatform;
+import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../domain/app_settings.dart";
 
@@ -14,3 +15,22 @@ Frontend chooseFrontend(AppSettings settings, TargetPlatform platform) =>
       TargetPlatform.macOS when settings.liquidGlass => Frontend.swiftUI,
       _ => Frontend.flutter,
     };
+
+/// What this launch draws with, and whether the platform has a frontend of
+/// its own to offer — the setting shows only where it does. Settled at
+/// launch: a change to the setting waits for a relaunch.
+class FrontendChoice {
+  const FrontendChoice({this.current = Frontend.flutter, this.native = false});
+
+  final Frontend current;
+
+  /// iOS and macOS, whose SwiftUI frontend the setting picks.
+  final bool native;
+
+  bool get swiftUI => current == Frontend.swiftUI;
+}
+
+/// Overridden in `main` with the launch's choice.
+final frontendProvider = Provider<FrontendChoice>(
+  (ref) => const FrontendChoice(),
+);

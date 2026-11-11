@@ -4,7 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/ui/shell/shell_answers.dart";
-import "package:agent_chat/ui/widgets/liquid_glass.dart";
+import "package:agent_chat/app/frontend.dart";
 import "package:agent_chat/ui/widgets/page_bar.dart";
 
 import "fake_native_shell.dart";
@@ -22,8 +22,11 @@ void main() {
     shell = FakeNativeShell.install();
     container = ProviderContainer(
       overrides: [
-        liquidGlassProvider.overrideWithValue(
-          LiquidGlass(available: true, on: glass),
+        frontendProvider.overrideWithValue(
+          FrontendChoice(
+            current: glass ? Frontend.swiftUI : Frontend.flutter,
+            native: true,
+          ),
         ),
       ],
     );

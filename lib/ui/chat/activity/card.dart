@@ -4,7 +4,7 @@ import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
 import "../../../domain/models.dart";
 import "../../../domain/room/room_state.dart" show ChatViewState;
-import "../../widgets/liquid_glass.dart" show liquidGlassProvider;
+import "../../../app/frontend.dart";
 import "../../widgets/page_bar.dart";
 import "../../widgets/scrolling.dart" show ScrollFollow;
 import "../widgets/code_block.dart" show codeBlockDecoration, codeBlockStyle;
@@ -70,7 +70,7 @@ Future<void> openActivityCard(
   final page = ProviderScope.containerOf(
     context,
     listen: false,
-  ).read(liquidGlassProvider).on;
+  ).read(frontendProvider).swiftUI;
   Widget build(BuildContext _) => card(page);
   if (page) {
     return Navigator.of(context).push(MaterialPageRoute<void>(builder: build));

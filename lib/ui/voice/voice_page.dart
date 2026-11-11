@@ -10,7 +10,7 @@ import "../chat/widgets/turn_surface.dart";
 import "../settings/settings_category.dart";
 import "../shell/shell_voice.dart";
 import "../widgets/dialogs.dart";
-import "../widgets/liquid_glass.dart";
+import "../../app/frontend.dart";
 import "../widgets/nav_drawer.dart";
 import "transcript.dart";
 import "voice_controller.dart";
@@ -116,7 +116,7 @@ class _VoicePageState extends ConsumerState<VoicePage> {
     // The native shell draws voice mode over the whole window; this route
     // stays, so leaving is still popping it and the session still lives as
     // long as the page.
-    if (ref.watch(liquidGlassProvider).on) {
+    if (ref.watch(frontendProvider).swiftUI) {
       return ShellVoice(
         voice: voice,
         controller: _voice,

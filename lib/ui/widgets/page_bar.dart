@@ -5,7 +5,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../shell/glyphs.dart";
 import "../shell/shell_page_bar.dart";
 import "discard_guard.dart";
-import "liquid_glass.dart";
+import "../../app/frontend.dart";
 
 /// A pushed page's bar, said as what it holds rather than drawn: a [title],
 /// the line under it, how the page is left, and its [actions]. Without the
@@ -47,7 +47,7 @@ class PageBar extends ConsumerWidget implements PreferredSizeWidget {
     // A page, not a dialog's: a dialog covers nothing, the window's bar
     // staying the conversation's.
     final native =
-        ref.watch(liquidGlassProvider).on &&
+        ref.watch(frontendProvider).swiftUI &&
         ModalRoute.of(context) is PageRoute;
     return native ? _native(context) : _flutter(context);
   }

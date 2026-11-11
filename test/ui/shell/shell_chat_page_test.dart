@@ -12,7 +12,7 @@ import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/shell/shell_new_chat.dart";
 import "package:agent_chat/ui/shell/shell_answers.dart";
 import "package:agent_chat/ui/shell/shell_window.dart";
-import "package:agent_chat/ui/widgets/liquid_glass.dart";
+import "package:agent_chat/app/frontend.dart";
 import "package:agent_chat/ui/widgets/page_bar.dart";
 
 import "../../harness.dart";
@@ -36,8 +36,8 @@ void main() {
     tester,
     ProviderScope(
       overrides: [
-        liquidGlassProvider.overrideWithValue(
-          const LiquidGlass(available: true, on: true),
+        frontendProvider.overrideWithValue(
+          const FrontendChoice(current: Frontend.swiftUI, native: true),
         ),
       ],
       child: Builder(

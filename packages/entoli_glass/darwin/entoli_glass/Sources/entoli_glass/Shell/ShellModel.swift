@@ -26,8 +26,8 @@ final class ShellModel: ObservableObject {
   @Published var palette = PaletteSnapshot.initial
 
   /// What the user did, for Dart to run: one object per surface, each a
-  /// method per intent it can send. A surface's go to the one on top of its
-  /// stack in Dart's `ShellSlots`.
+  /// method per intent it can send, answered by whichever widget draws that
+  /// surface in Dart (`ShellAnswers`).
   let say: ShellIntents
 
   /// A strip of choices over the Flutter view, and who waits on its answer:

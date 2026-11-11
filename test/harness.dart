@@ -49,7 +49,7 @@ import "package:agent_chat/ui/chat/activity/activity.dart"
 import "package:agent_chat/ui/widgets/resettable_field.dart" show LabelledField;
 import "package:agent_chat/ui/app_routes.dart";
 import "package:agent_chat/ui/routes.dart";
-import "package:agent_chat/ui/widgets/liquid_glass.dart";
+import "package:agent_chat/app/frontend.dart";
 import "package:agent_chat/ui/widgets/model_picker.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/trigger.dart";
@@ -205,7 +205,7 @@ class TestApp {
     http.Client? marketplaceClient,
     Future<bool> Function(String apiKey)? acceptsKey,
     AgentBrowser Function(AppConfig config)? browser,
-    LiquidGlass liquidGlass = const LiquidGlass(),
+    FrontendChoice frontend = const FrontendChoice(),
     List<CliProvider>? clis,
   }) {
     final config = tempConfig();
@@ -290,7 +290,7 @@ class TestApp {
                 PromptLibraryNotifier(project, library ?? testLibrary()),
           ),
           launcherIconsProvider.overrideWithValue(launcher),
-          liquidGlassProvider.overrideWithValue(liquidGlass),
+          frontendProvider.overrideWithValue(frontend),
           appUpdateHostProvider.overrideWithValue(updateHost),
           appMenusProvider.overrideWithValue(menus),
           systemAccentProvider.overrideWithValue(systemAccent),

@@ -6,7 +6,7 @@ import "../domain/app_theme.dart";
 import "../domain/corner_radius.dart";
 import "../domain/theme_colour.dart";
 import "fonts.dart";
-import "widgets/liquid_glass.dart";
+import "../app/frontend.dart";
 import "../providers.dart";
 
 /// The indigo the icon sits on, which is `ThemeColour.indigo` as a `Color`. The
@@ -42,7 +42,7 @@ final appLookProvider = Provider<AppLook>((ref) {
   // Under Apple's own controls the app wears Apple's look, whatever was
   // picked: the defaults, which are the iOS / macOS theme. What was picked is
   // left where it was, so turning the switch off returns to it.
-  if (ref.watch(liquidGlassProvider).on) {
+  if (ref.watch(frontendProvider).swiftUI) {
     return (
       primary: ThemeColour.apple.seed,
       secondary: ThemeColour.apple.seed,

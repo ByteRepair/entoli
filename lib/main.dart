@@ -66,7 +66,6 @@ import "ui/theme.dart";
 import "ui/shell/shell_bridge.dart";
 import "ui/shell/shell_window.dart";
 import "ui/app_routes.dart";
-import "ui/widgets/liquid_glass.dart";
 
 /// The model host's entry point: Entoli's own executable launched again as
 /// `entoli-models`, running the on-device models for the app that started it
@@ -396,8 +395,11 @@ class AppSession {
         appMenusProvider.overrideWithValue(
           glassAvailable ? _menus ??= NativeAppMenus() : const NoAppMenus(),
         ),
-        liquidGlassProvider.overrideWithValue(
-          LiquidGlass(available: glassAvailable, on: _glassAtLaunch!),
+        frontendProvider.overrideWithValue(
+          FrontendChoice(
+            current: _glassAtLaunch! ? Frontend.swiftUI : Frontend.flutter,
+            native: glassAvailable,
+          ),
         ),
         agentBrowserProvider.overrideWithValue(browser),
         localEngineProvider.overrideWithValue(engine),
@@ -655,7 +657,7 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       themeMode: mode,
       onGenerateRoute: appRoute,
       navigatorObservers: [ref.read(appRoutesProvider)],
-      builder: ref.watch(liquidGlassProvider).on
+      builder: ref.watch(frontendProvider).swiftUI
           ? (context, child) => ShellInsets(child: child!)
           : null,
       // All wrapped rather than folded into the shell: what another app
@@ -688,7 +690,7 @@ class _Shell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) =>
-      ref.watch(liquidGlassProvider).on
+      ref.watch(frontendProvider).swiftUI
       ? const ShellBridge()
       : const AppShell();
 }

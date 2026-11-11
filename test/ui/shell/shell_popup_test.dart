@@ -4,7 +4,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/reaction.dart";
 import "package:agent_chat/ui/chat/widgets/reaction_button.dart";
-import "package:agent_chat/ui/widgets/liquid_glass.dart";
+import "package:agent_chat/app/frontend.dart";
 
 import "fake_native_shell.dart";
 
@@ -25,8 +25,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          liquidGlassProvider.overrideWithValue(
-            const LiquidGlass(available: true, on: true),
+          frontendProvider.overrideWithValue(
+            const FrontendChoice(current: Frontend.swiftUI, native: true),
           ),
         ],
         child: MaterialApp(

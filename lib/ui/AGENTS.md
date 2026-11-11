@@ -357,9 +357,8 @@ Flutter's controller is never moved out of the root and a launch that never
 hears from Dart is simply the Flutter frontend. Switching the setting away from
 what the launch started with asks, in a dialog, for the app to be quit and
 reopened rather than appearing to do nothing. The in-app restart a restore makes is not one: it is this process
-still running, its window already the shell's or not. `LiquidGlass` (`widgets/liquid_glass.dart`) is the
-launch's answer — `available` on the two Apples, and `on` as it started, the
-window then being the shell's.
+still running, its window already the shell's or not. `frontendProvider` (`lib/app/frontend.dart`) is the
+launch's answer: `native` on the two Apples, and `current` as it started.
 
 ### The bridge
 

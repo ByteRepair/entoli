@@ -11,7 +11,7 @@ import "../chat/widgets/resume_bar.dart";
 import "../chat/widgets/running_pill.dart";
 import "../chat/widgets/running_strip.dart" show runningOf;
 import "../chat/widgets/steer_strip.dart";
-import "../chat/widgets/turn_surface.dart" show approvalAnswers;
+import "../../app/approvals.dart";
 import "shell_outbox.dart";
 import "glyphs.dart";
 import "shell_answers.dart";
@@ -110,21 +110,12 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface>
         .where((a) => a.id == id)
         .firstOrNull;
     if (approval == null) return;
-    final response = switch (answer) {
+    await widget.notifier.answer(approval, switch (answer) {
       ApprovalAnswer.allow => ApprovalResponse.allow,
       ApprovalAnswer.chat => ApprovalResponse.alwaysAllowChat,
       ApprovalAnswer.project => ApprovalResponse.alwaysAllowProject,
       ApprovalAnswer.deny => ApprovalResponse.deny,
-    };
-    await widget.notifier.respondApproval(
-      approval.id,
-      response,
-      approval:
-          response == ApprovalResponse.alwaysAllowChat ||
-              response == ApprovalResponse.alwaysAllowProject
-          ? approval
-          : null,
-    );
+    });
   }
 
   /// One answer per question, null for each left unanswered.

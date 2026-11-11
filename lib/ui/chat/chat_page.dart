@@ -33,7 +33,7 @@ import "../shell/shell_composer.dart";
 import "../shell/shell_new_chat.dart";
 import "../shell/shell_turn.dart";
 import "../widgets/completion_field.dart";
-import "../widgets/liquid_glass.dart";
+import "../../app/frontend.dart";
 import "../widgets/side_panel_frame.dart";
 import "../widgets/scrolling.dart";
 import "chat_settings_page.dart";
@@ -61,7 +61,7 @@ import "widgets/view_only_bar.dart";
 /// it draws, configured by it and keyed as it is. The configuration is never
 /// mounted there, so its key is the shell composer's alone.
 Widget _composerOf(WidgetRef ref, Composer composer) =>
-    ref.watch(liquidGlassProvider).on
+    ref.watch(frontendProvider).swiftUI
     ? ShellComposer(key: composer.key, config: composer)
     : composer;
 
@@ -373,7 +373,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
       mainAxisSize: MainAxisSize.min,
       children: [
         // The native shell's new-chat screen says it itself.
-        if (!ref.watch(liquidGlassProvider).on) const _CommandHint(),
+        if (!ref.watch(frontendProvider).swiftUI) const _CommandHint(),
         if (at.device != null)
           // A paired device's project: its setup and its voice are that
           // device's.
@@ -413,7 +413,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
   @override
   Widget build(BuildContext context) {
     final at = ref.watch(selectedProjectProvider);
-    final shell = ref.watch(liquidGlassProvider).on;
+    final shell = ref.watch(frontendProvider).swiftUI;
     return Scaffold(
       appBar: shell
           ? null
@@ -956,7 +956,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   static const _slack = 200.0;
 
   /// Inside the native shell: settled at launch, so read once.
-  late final bool _shell = ref.read(liquidGlassProvider).on;
+  late final bool _shell = ref.read(frontendProvider).swiftUI;
 
   final ComposerController _controller = ComposerController();
 
