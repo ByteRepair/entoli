@@ -50,8 +50,15 @@ public struct SettingsRoot: View {
       #endif
     } detail: {
       NavigationStack(path: $model.path) {
-        if let key = model.page, let page = model.page(key) {
-          SettingsPageView(model: model, page: page).pageNavigation(model, title: page.title)
+        Group {
+          if let key = model.page, let page = model.page(key) {
+            SettingsPageView(model: model, page: page).pageNavigation(model, title: page.title)
+          }
+        }
+        // Declared once, on the stack's root: declared on each page, every
+        // push re-registered it and the stack showed the page unanimated.
+        .navigationDestination(for: SettingsRoute.self) { route in
+          SettingsDestination(model: model, route: route)
         }
       }
       .onChange(of: model.page) {
@@ -94,21 +101,6 @@ struct SettingsPageView: View {
     }
     .formStyle(.grouped)
     .navigationTitle(page.title)
-    .navigationDestination(for: SettingsRoute.self) { route in
-      Group {
-        switch route {
-        case .page(let key):
-          if let sub = model.page(key) { SettingsPageView(model: model, page: sub) }
-        case .text(let opened):
-          TextPage(model: model, title: opened.title, opens: opened.opens)
-        case .avatars(let opened):
-          BotAvatarsPage(model: model, opened: opened)
-        case .models(let opened):
-          if let row = model.row(opened.row) { ModelList(model: model, row: row) }
-        }
-      }
-      .pageNavigation(model, title: model.title(of: route))
-    }
   }
 }
 
@@ -335,3 +327,25 @@ extension View {
     }
   }
 #endif
+
+/// The page a pushed [route] opens.
+private struct SettingsDestination: View {
+  @ObservedObject var model: SettingsModel
+  let route: SettingsRoute
+
+  var body: some View {
+    Group {
+      switch route {
+      case .page(let key):
+        if let sub = model.page(key) { SettingsPageView(model: model, page: sub) }
+      case .text(let opened):
+        TextPage(model: model, title: opened.title, opens: opened.opens)
+      case .avatars(let opened):
+        BotAvatarsPage(model: model, opened: opened)
+      case .models(let opened):
+        if let row = model.row(opened.row) { ModelList(model: model, row: row) }
+      }
+    }
+    .pageNavigation(model, title: model.title(of: route))
+  }
+}

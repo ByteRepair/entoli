@@ -28,9 +28,7 @@ struct BotFaceView: View {
   private var moving: Bool { !reduceMotion && !thumbnail && (live || driver.reacting) }
 
   var body: some View {
-    // Thirty a second: each frame is a round trip to the core, and the
-    // faces share the main thread with everything else on screen.
-    TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !moving)) { timeline in
+    TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !moving)) { timeline in
       Canvas { context, canvas in
         guard let geometry = driver.geometry, let frame = driver.frame else { return }
         BotFacePainter.draw(

@@ -86,8 +86,10 @@ public final class SettingsModel: ObservableObject, NativeSettings {
   /// Pushes [route]'s page over the one shown, clearing Forward. Animated:
   /// a Mac's stack slides a page in only for a change made in an animation.
   func push(_ route: SettingsRoute) {
-    ahead = []
-    move { path.append(route) }
+    move {
+      ahead = []
+      path.append(route)
+    }
   }
 
   /// [change] to the stack, animated even from inside a form row, whose tap
