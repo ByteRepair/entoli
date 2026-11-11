@@ -21,6 +21,9 @@ final class ShellHost {
   #if os(macOS)
     private weak var view: NSView?
     private var host: NSHostingController<ShellRoot>?
+    /// The window installed into: the host's view is not in it yet when
+    /// Dart answers, which can be before the window shows.
+    private weak var window: NSWindow?
     private var pointerMonitor: Any?
 
     init(messenger: FlutterBinaryMessenger, view: NSView?) {
@@ -30,6 +33,8 @@ final class ShellHost {
     }
   #else
     private var host: UIHostingController<ShellRoot>?
+    /// The scene's window, kept from install: see macOS's.
+    private weak var window: UIWindow?
 
     init(messenger: FlutterBinaryMessenger) {
       model = ShellModel(messenger: messenger)
@@ -58,11 +63,12 @@ final class ShellHost {
       window.contentViewController = host
       window.setFrame(frame, display: true)
       self.host = host
+      self.window = window
     }
 
     /// What the chrome needs of the window, set when Dart turns it on.
     private func chrome() {
-      guard let host, let window = host.view.window else { return }
+      guard let host, let window else { return }
       let flutter = host.rootView.flutter
       // The split view's toolbar and title are the window's own.
       host.sceneBridgingOptions = [.toolbars, .title]
@@ -107,10 +113,11 @@ final class ShellHost {
       let host = UIHostingController(rootView: ShellRoot(model: model, flutter: flutter))
       window.rootViewController = host
       self.host = host
+      self.window = window
     }
 
     private func chrome() {
-      guard let window = host?.view.window else { return }
+      guard let window else { return }
       // The window's, which is the app's here: a popover and a sheet are
       // presented from it and take its style.
       model.onWindow = { [weak window] state in
