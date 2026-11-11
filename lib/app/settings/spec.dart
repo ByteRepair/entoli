@@ -20,9 +20,6 @@ enum UiHint {
   /// The options as corners at their own radius.
   corners,
 
-  /// The options as the app's icons.
-  icons,
-
   /// The reasoning effort's slider, its stops named.
   levels,
 

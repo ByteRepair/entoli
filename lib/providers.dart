@@ -32,7 +32,6 @@ import "data/prompts/agent_pictures.dart";
 import "domain/agent_face.dart";
 import "domain/bot_avatar/definition.dart";
 import "domain/bot_avatar/spec.dart";
-import "domain/app_icon.dart";
 import "domain/agent_backend.dart";
 import "domain/app_restart.dart";
 import "domain/app_secrets.dart";
@@ -854,13 +853,6 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
           ..citations = citations ?? s.citations,
       );
 
-  /// Setting first, launcher second: a launcher that refuses still leaves the
-  /// app showing what was picked.
-  Future<void> setAppIcon(AppIcon icon) async {
-    await _update((s) => s.appIcon = icon);
-    await ref.read(launcherIconsProvider).use(icon);
-  }
-
   Future<void> setAppTheme(AppTheme theme) =>
       _update((s) => s.appTheme = theme);
 
@@ -1159,10 +1151,6 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
 
 final appSettingsProvider = NotifierProvider<AppSettingsNotifier, AppSettings>(
   AppSettingsNotifier.new,
-);
-
-final launcherIconsProvider = Provider<LauncherIcons>(
-  (ref) => throw UnimplementedError(),
 );
 
 /// The system's own accent, read once in `main` and overridden with what it

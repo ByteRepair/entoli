@@ -101,7 +101,6 @@ class TestApp {
     required this.picker,
     required this.folders,
     required this.clipboard,
-    required this.launcher,
     required this.handoff,
     required this.assistant,
     required this.reminderAlarms,
@@ -174,7 +173,6 @@ class TestApp {
   /// nothing here builds. [mirrors] is what one of those chats reads as.
   factory TestApp.create({
     PromptLibrary? library,
-    bool launcherIcons = true,
     AppUpdateHost updateHost = const UnavailableAppUpdateHost(),
     AppMenus menus = const NoAppMenus(),
     ChatStore? store,
@@ -215,7 +213,6 @@ class TestApp {
     final picker = FakeAttachmentPicker();
     final folders = FakeFolderPicker();
     final clipboard = FakeClipboardFiles();
-    final launcher = FakeLauncherIcons(available: launcherIcons);
     final files = handoff ?? FakeFileHandoff();
     final assist = FakeAssistantLaunch(hasGesture: assistantGesture);
     final alarms = reminderAlarms ?? FakeReminderAlarms(available: false);
@@ -253,7 +250,6 @@ class TestApp {
       picker: picker,
       folders: folders,
       clipboard: clipboard,
-      launcher: launcher,
       handoff: files,
       assistant: assist,
       reminderAlarms: alarms,
@@ -290,7 +286,6 @@ class TestApp {
             (project) =>
                 PromptLibraryNotifier(project, library ?? testLibrary()),
           ),
-          launcherIconsProvider.overrideWithValue(launcher),
           frontendProvider.overrideWithValue(frontend),
           if (frontend.swiftUI) ...shellOverrides,
           appUpdateHostProvider.overrideWithValue(updateHost),
@@ -400,7 +395,6 @@ class TestApp {
   final FakeAttachmentPicker picker;
   final FakeFolderPicker folders;
   final FakeClipboardFiles clipboard;
-  final FakeLauncherIcons launcher;
   final FakeFileHandoff handoff;
   final FakeAssistantLaunch assistant;
 

@@ -1,5 +1,4 @@
 import "../agent_browser.dart" show BrowserApproval, BrowserUploadPolicy;
-import "../app_icon.dart";
 import "../app_theme.dart";
 import "../assistant_view.dart";
 import "../corner_radius.dart";
@@ -330,15 +329,8 @@ abstract final class SettingKeys {
     fallback: false,
   );
 
-  /// Which icon the app wears, in the app and on the Android home screen.
-  /// App-level only: an icon is the app's, not a chat's.
-  static const appIcon = DefaultedSetting<AppIcon>(
-    "appIcon",
-    EnumCodec(AppIcon.values),
-    fallback: AppIcon.cookie,
-  );
-
-  /// Which palette the app draws. App-level only, for the same reason.
+  /// Which palette the app draws. App-level only: a palette is the app's,
+  /// not a chat's.
   static const appTheme = DefaultedSetting<AppTheme>(
     "appTheme",
     EnumCodec(AppTheme.values),

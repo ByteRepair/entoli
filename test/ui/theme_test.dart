@@ -2,7 +2,6 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/app_icon.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/app_theme.dart";
 import "package:agent_chat/domain/corner_radius.dart";
@@ -83,20 +82,6 @@ void main() {
       await pumpAppearance(tester, app);
 
       expect(shown(tester), AppTheme.light);
-    });
-
-    // The settings are one mutable object copied on every write, so a field
-    // left out of `copy` is silently reset by the next save of any other.
-    testWidgets("it survives the icon being changed beside it", (tester) async {
-      await pumpAppearance(tester, app);
-      await tester.tap(find.text(AppTheme.dark.label));
-      await settleIo(tester);
-
-      await tester.tap(find.text(AppIcon.prompt.label));
-      await settleIo(tester);
-
-      expect(AppSettings.load(app.config).appTheme, AppTheme.dark);
-      expect(shown(tester), AppTheme.dark);
     });
   });
 

@@ -76,7 +76,7 @@ struct ChoiceRow: View {
         .labelsHidden()
         if let detail = row.detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
       }
-    case .swatches, .corners, .icons:
+    case .swatches, .corners:
       VStack(alignment: .leading) {
         Text(row.title)
         Looks(options: options, picked: row.picked.map(Int.init)) { i in picked.wrappedValue = i }
@@ -103,7 +103,7 @@ struct ChoiceRow: View {
   }
 }
 
-/// Options drawn as what they are: swatches, corners, icons.
+/// Options drawn as what they are: swatches and corners.
 struct Looks: View {
   let options: [SettingOptionData]
   let picked: Int?

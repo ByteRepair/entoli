@@ -9,7 +9,6 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "core/config.dart";
 import "core/log.dart";
 import "app/app_menus.dart";
-import "core/platform/app_icon.dart";
 import "core/platform/app_menus.dart";
 import "core/platform/background_work.dart";
 import "core/platform/form_factor.dart" show isApple;
@@ -357,7 +356,6 @@ class AppSession {
         promptLibraryProvider.overrideWith2(
           (project) => PromptLibraryNotifier(project, libraries[project]),
         ),
-        launcherIconsProvider.overrideWithValue(const LauncherAliases()),
         systemAccentProvider.overrideWithValue(await accent),
         linkOpenerProvider.overrideWithValue(
           PlatformLinkOpener(store, syncHub),

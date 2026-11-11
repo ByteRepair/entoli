@@ -32,7 +32,7 @@ iOS). The layers, each knowing only the one below it:
   read-only rows. A one-off quirk is a parameter of a kind, so a frontend's
   switch over the kinds stays short and a new kind is a compile error in
   every frontend until it draws it. What a change sets off — a restart to
-  say, a re-anchor of every chat's TTL, a launcher icon — is the controller's,
+  say, a re-anchor of every chat's TTL — is the controller's,
   through the notifier setter that does it.
 - **The schema** (`pages/`, `catalog.dart`). A `SettingSpec` per setting: an
   id, its path (page and section), its weight there, title and description,
@@ -182,7 +182,7 @@ project and leaves settings for it: its log is seeded with a
 skill's instructions ride every later turn without a system record, and the
 skill's greeting as a finished assistant turn under it. **General** is the app itself:
 **Appearance** — the theme, the two colours the palette is seeded from, how
-round a corner is, the app icon, and the switch that puts the new-chat screen's
+round a corner is, and the switch that puts the new-chat screen's
 command chips on it, which are what the app looks like; where
 the system has a palette of its own a Material 3 Expressive switch takes the
 place of the colours, on iOS and macOS a Liquid Glass switch in the same

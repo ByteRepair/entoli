@@ -49,7 +49,6 @@ enum SettingHint {
   segmented,
   swatches,
   corners,
-  icons,
   levels,
   slider,
   keyValues,
@@ -140,7 +139,6 @@ class SettingOptionData {
     this.argb,
     this.argb2,
     this.radius,
-    this.appIcon,
   });
 
   String label;
@@ -153,9 +151,6 @@ class SettingOptionData {
 
   /// A corner drawn at its own radius.
   double? radius;
-
-  /// One of the app's icons, by name.
-  String? appIcon;
 }
 
 class SettingGroupData {

@@ -5,7 +5,6 @@ import "../../app/settings/controller.dart";
 import "../../app/settings/scope.dart";
 import "../../app/settings/settings.dart";
 import "../../app/settings/spec.dart";
-import "../../domain/app_icon.dart";
 import "../../app/settings/pages/about.dart" show madeBy;
 import "../app_command.dart";
 import "../theme.dart" show appTitle;
@@ -241,7 +240,7 @@ class SettingRow extends StatelessWidget {
   /// options with looks; one without falls back to a dropdown.
   static Widget _choice<T>(ChoiceController<T> c) => switch (c.hint) {
     UiHint.segmented => _Segmented<T>(c),
-    UiHint.swatches || UiHint.corners || UiHint.icons => _Looks<T>(c),
+    UiHint.swatches || UiHint.corners => _Looks<T>(c),
     UiHint.levels when c.value != null => LabelledField(
       label: c.title,
       child: ThinkingSlider<T>(
@@ -498,12 +497,6 @@ class _LookChoice extends StatelessWidget {
       width: 44,
       height: 44,
     ),
-    AppIconLook(:final icon) => _IconChoice(
-      icon: icon,
-      tooltip: option.detail ?? option.label,
-      selected: selected,
-      onTap: onTap,
-    ),
     null => Choice(
       tooltip: option.label,
       label: option.label,
@@ -567,37 +560,6 @@ class _Swatch extends StatelessWidget {
           : null,
     );
   }
-}
-
-class _IconChoice extends StatelessWidget {
-  const _IconChoice({
-    required this.icon,
-    required this.tooltip,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final AppIcon icon;
-  final String tooltip;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => Choice(
-    tooltip: tooltip,
-    selected: selected,
-    onTap: onTap,
-    corners: BorderRadius.circular(16),
-    width: 104,
-    padding: const EdgeInsets.symmetric(vertical: 14),
-    child: Column(
-      children: [
-        AppIconImage(icon, size: 48),
-        const SizedBox(height: 10),
-        Text(icon.label, style: Theme.of(context).textTheme.labelLarge),
-      ],
-    ),
-  );
 }
 
 /// The slots picked one at a time from one set of options: a switch says

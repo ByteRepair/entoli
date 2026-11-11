@@ -2,7 +2,6 @@ import "dart:convert";
 
 import "../core/config.dart";
 import "agent_browser.dart" show BrowserApproval, BrowserUploadPolicy;
-import "app_icon.dart";
 import "app_theme.dart";
 import "assistant_view.dart";
 import "corner_radius.dart";
@@ -51,7 +50,6 @@ class AppSettings {
     Profile? profile,
     Tone? tone,
     bool? citations,
-    AppIcon? appIcon,
     AppTheme? appTheme,
     ThemeColour? primaryColour,
     ThemeColour? secondaryColour,
@@ -126,7 +124,6 @@ class AppSettings {
       ..set(SettingKeys.profile, profile)
       ..set(SettingKeys.tone, tone)
       ..set(SettingKeys.citations, citations)
-      ..set(SettingKeys.appIcon, appIcon)
       ..set(SettingKeys.appTheme, appTheme)
       ..set(SettingKeys.primaryColour, primaryColour)
       ..set(SettingKeys.secondaryColour, secondaryColour)
@@ -275,9 +272,6 @@ class AppSettings {
 
   bool get citations => doc.of(SettingKeys.citations);
   set citations(bool value) => doc.set(SettingKeys.citations, value);
-
-  AppIcon get appIcon => doc.of(SettingKeys.appIcon);
-  set appIcon(AppIcon value) => doc.set(SettingKeys.appIcon, value);
 
   AppTheme get appTheme => doc.of(SettingKeys.appTheme);
   set appTheme(AppTheme value) => doc.set(SettingKeys.appTheme, value);

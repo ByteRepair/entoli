@@ -192,7 +192,7 @@ is about the framework's UI half rather than about Flutter at all — and the na
 in `settings.json` should not be pinned to a framework enum's, which would make
 the file unreadable if that enum were ever renamed. `ui/theme.dart` is the one
 place that maps between them, and the label the settings page draws is on the
-enum, the arrangement `AppIcon` and `ApproveMode` already have.
+enum, the arrangement `ApproveMode` already has.
 
 The one other thing in it is `inputDecorationTheme`, and it is there because
 every field and every dropdown in the app is outlined. Spelled at each of them

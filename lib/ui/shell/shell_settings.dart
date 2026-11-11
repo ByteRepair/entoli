@@ -144,10 +144,6 @@ SettingOptionData _option(SettingOption option) => SettingOptionData(
     CornerLook(:final radius) => radius,
     _ => null,
   },
-  appIcon: switch (option.look) {
-    AppIconLook(:final icon) => icon.name,
-    _ => null,
-  },
 );
 
 /// What a model pick's field reads as: the null entry, a provider's Default

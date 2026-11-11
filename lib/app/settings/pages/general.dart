@@ -1,5 +1,4 @@
 import "../../../core/formatting.dart" show plural;
-import "../../../domain/app_icon.dart";
 import "../../../domain/app_theme.dart";
 import "../../../domain/corner_radius.dart";
 import "../../../domain/omada_ordering.dart";
@@ -21,12 +20,7 @@ final generalSections = [
     id: "appearance",
     title: "Appearance",
     weight: 0,
-    describe: (ref) => ref.watch(launcherIconsProvider).available
-        ? "How the app looks, and the icon it wears here and on the home "
-              "screen."
-        : "How the app looks, and the icon it wears. The launcher's own "
-              "icon is set when the app is installed, so it does not "
-              "follow this.",
+    describe: (_) => "How the app looks.",
   ),
   const SectionSpec(
     page: _page,
@@ -218,32 +212,6 @@ final generalSettings = [
           look: CornerLook(corner.radius),
         ),
     ], visible: !_appleLook(c)),
-  ),
-  SettingSpec(
-    id: "appIcon",
-    path: (page: _page, section: "appearance"),
-    weight: 60,
-    title: "Icon",
-    hint: UiHint.icons,
-    build: (c) {
-      final notifier = c.ref.read(appSettingsProvider.notifier);
-      return c.choice(
-        SettingKeys.appIcon,
-        [
-          for (final icon in AppIcon.values)
-            SettingOption(
-              icon,
-              icon.label,
-              detail: icon.description,
-              look: AppIconLook(icon),
-            ),
-        ],
-        // The launcher's icon moves with it, where the platform lets it.
-        write: (icon) async {
-          if (icon != null) await notifier.setAppIcon(icon);
-        },
-      );
-    },
   ),
   SettingSpec(
     id: "showCommandChips",

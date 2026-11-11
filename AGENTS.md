@@ -187,7 +187,7 @@ embedded data at startup — a file that drifted is re-written by checksum, and
 a stray the embedded data does not name is deleted. It is beside `skills/`
 rather than in it, so deleting one's own skill does not reach the presets.
 `settings.json` holds the app-level model default, the
-title model, the classifier model, `approveMode`, `environment`, `appIcon`,
+title model, the classifier model, `approveMode`, `environment`,
 `appTheme`, what the palette is built from — `primaryColour`, `secondaryColour`,
  `cornerRadius` and `systemPalette` — and `llmProviders`, whose entries carry
 no key: the provider API keys and the TURN password live in the secret store

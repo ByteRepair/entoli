@@ -2,7 +2,6 @@ import "dart:typed_data";
 
 import "../../data/sync/pairing.dart" show PairingActivity;
 import "../../data/sync/sync_hub.dart" show SyncHub;
-import "../../domain/app_icon.dart";
 import "../../domain/download.dart" show DownloadProgress;
 import "../../domain/installable.dart" show ModelFacts;
 import "../../domain/llm_provider.dart";
@@ -122,12 +121,6 @@ final class CornerLook extends OptionLook {
   const CornerLook(this.radius);
 
   final double radius;
-}
-
-final class AppIconLook extends OptionLook {
-  const AppIconLook(this.icon);
-
-  final AppIcon icon;
 }
 
 class SettingOption<T> {
