@@ -1,3 +1,9 @@
+import "package:agent_chat/ui/app_chrome.dart" show appChromeProvider;
+import "package:agent_chat/ui/chat/chat_chrome.dart" show chatChromeProvider;
+import "package:agent_chat/ui/shell/shell_app_chrome.dart";
+import "package:agent_chat/ui/shell/shell_chat_chrome.dart";
+import "package:agent_chat/ui/shell/shell_page_bar.dart" show drawShellPageBar;
+import "package:agent_chat/ui/widgets/page_bar.dart" show pageBarDrawProvider;
 import "package:agent_chat/app/app_menus.dart";
 import "dart:async";
 import "dart:io";
@@ -291,6 +297,12 @@ class TestApp {
           ),
           launcherIconsProvider.overrideWithValue(launcher),
           frontendProvider.overrideWithValue(frontend),
+          // As `main` binds the native shell's seams.
+          if (frontend.swiftUI) ...[
+            pageBarDrawProvider.overrideWithValue(drawShellPageBar),
+            chatChromeProvider.overrideWithValue(const ShellChatChrome()),
+            appChromeProvider.overrideWithValue(const ShellAppChrome()),
+          ],
           appUpdateHostProvider.overrideWithValue(updateHost),
           appMenusProvider.overrideWithValue(menus),
           systemAccentProvider.overrideWithValue(systemAccent),

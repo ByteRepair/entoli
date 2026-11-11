@@ -8,9 +8,8 @@ import "../../providers.dart";
 import "../../app/chat_controller.dart";
 import "../chat/widgets/turn_surface.dart";
 import "../settings/settings_category.dart";
-import "../shell/shell_voice.dart";
+import "../app_chrome.dart";
 import "../widgets/dialogs.dart";
-import "../../app/frontend.dart";
 import "../widgets/nav_drawer.dart";
 import "transcript.dart";
 import "../../app/voice_controller.dart";
@@ -113,15 +112,18 @@ class _VoicePageState extends ConsumerState<VoicePage> {
     // a second while a reply streams, and none of it reaches this page.
     final voice = ref.watch(voiceControllerProvider(widget.chatId));
 
-    // The native shell draws voice mode over the whole window; this route
-    // stays, so leaving is still popping it and the session still lives as
-    // long as the page.
-    if (ref.watch(frontendProvider).swiftUI) {
-      return ShellVoice(
-        voice: voice,
-        controller: _voice,
-        onDone: () => Navigator.of(context).maybePop(),
-      );
+    // Where the frontend draws voice mode itself, this route stays, so
+    // leaving is still popping it and the session still lives as long as
+    // the page.
+    if (ref
+            .watch(appChromeProvider)
+            .voice(
+              voice: voice,
+              controller: _voice,
+              onDone: () => Navigator.of(context).maybePop(),
+            )
+        case final drawn?) {
+      return drawn;
     }
 
     return Scaffold(

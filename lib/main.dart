@@ -45,7 +45,6 @@ import "ui/chat/activity/activities.dart" show ChatActivities;
 import "ui/chat/activity/activity.dart" show activityCatalogProvider;
 import "app/remote_turns.dart";
 import "ui/app_licence.dart" show registerAppLicence, registerBlinkLicence;
-import "ui/app_shell.dart";
 import "app/chat_edits.dart" show chatEditsProvider;
 import "ui/command_intents.dart";
 import "ui/initial_setup_gate.dart";
@@ -54,6 +53,8 @@ import "ui/welcome_gate.dart";
 import "app/chat_controller.dart";
 import "app/frontend.dart";
 import "ui/chat/chat_chrome.dart" show chatChromeProvider;
+import "ui/app_chrome.dart" show appChromeProvider;
+import "ui/shell/shell_app_chrome.dart";
 import "ui/shell/shell_chat_chrome.dart";
 import "ui/shell/shell_page_bar.dart" show drawShellPageBar;
 import "ui/widgets/page_bar.dart" show pageBarDrawProvider;
@@ -67,8 +68,6 @@ import "ui/share/incoming_shares.dart";
 import "ui/triggers/incoming_open.dart";
 import "ui/selection.dart";
 import "ui/theme.dart";
-import "ui/shell/shell_bridge.dart";
-import "ui/shell/shell_window.dart";
 import "ui/app_routes.dart";
 
 /// The model host's entry point: Entoli's own executable launched again as
@@ -399,6 +398,7 @@ class AppSession {
         if (_glassAtLaunch!) ...[
           pageBarDrawProvider.overrideWithValue(drawShellPageBar),
           chatChromeProvider.overrideWithValue(const ShellChatChrome()),
+          appChromeProvider.overrideWithValue(const ShellAppChrome()),
         ],
         appMenusProvider.overrideWithValue(
           glassAvailable ? _menus ??= NativeAppMenus() : const NoAppMenus(),
@@ -665,9 +665,7 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       themeMode: mode,
       onGenerateRoute: appRoute,
       navigatorObservers: [ref.read(appRoutesProvider)],
-      builder: ref.watch(frontendProvider).swiftUI
-          ? (context, child) => ShellInsets(child: child!)
-          : null,
+      builder: ref.watch(appChromeProvider).builder,
       // All wrapped rather than folded into the shell: what another app
       // shared has to be offered a workspace over whatever is on screen, an
       // entoli:// link has to open what it names over it and the assistant
@@ -691,14 +689,12 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
   }
 }
 
-/// The Flutter app's own shell, or the Flutter half of the native one: which
-/// is the launch's, and never moves.
+/// The frontend's root: the Flutter app's own shell, or the Flutter half of
+/// the native one, which is the launch's and never moves.
 class _Shell extends ConsumerWidget {
   const _Shell();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) =>
-      ref.watch(frontendProvider).swiftUI
-      ? const ShellBridge()
-      : const AppShell();
+      ref.watch(appChromeProvider).root;
 }

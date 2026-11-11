@@ -2,15 +2,13 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../domain/reaction.dart";
-import "../../shell/shell_popup.dart";
+import "../../app_chrome.dart";
 import "../../widgets/action_icon.dart";
 import "../../widgets/anchored_menu.dart";
-import "../../../app/frontend.dart";
 
 /// The smiley under a message, and the strip of reactions it opens just above
 /// itself, centred on it. What the message already has is shown chosen, and
-/// picking it again takes it back. Under the native shell the strip is the
-/// shell's, in the system's glass.
+/// picking it again takes it back. A frontend may draw the strip itself.
 class ReactionButton extends ConsumerWidget {
   const ReactionButton({
     super.key,
@@ -24,37 +22,23 @@ class ReactionButton extends ConsumerWidget {
   /// The emoji already reacted with.
   final List<String> chosen;
 
-  Future<void> _pick(BuildContext context, bool shell) async {
-    final anchor = shell ? anchorOf(context) : null;
-    final Reaction? picked;
-    if (anchor != null) {
-      final at = await showShellStrip(
-        anchor: anchor,
-        choices: [
-          for (final r in Reaction.values) (glyph: r.emoji, name: r.name),
-        ],
-        chosen: {
-          for (final (i, r) in Reaction.values.indexed)
-            if (chosen.contains(r.emoji)) i,
-        },
-      );
-      picked = at == null ? null : Reaction.values.elementAtOrNull(at);
-    } else {
-      picked = await showAnchoredPopup<Reaction>(
-        context,
-        (_) => _Strip(chosen: chosen),
-      );
-    }
+  Future<void> _pick(BuildContext context, AppChrome chrome) async {
+    final picked =
+        await (chrome.pickReaction(context, chosen) ??
+            showAnchoredPopup<Reaction>(
+              context,
+              (_) => _Strip(chosen: chosen),
+            ));
     if (picked != null && context.mounted) onReact(picked);
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final shell = ref.watch(frontendProvider).swiftUI;
+    final chrome = ref.watch(appChromeProvider);
     return ActionIcon(
       icon: Icons.add_reaction_outlined,
       tooltip: "React",
-      onPressed: () => _pick(context, shell),
+      onPressed: () => _pick(context, chrome),
     );
   }
 }
