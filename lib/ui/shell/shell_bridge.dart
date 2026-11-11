@@ -11,6 +11,9 @@ import "../chat/chat_page.dart";
 import "shell_palette.dart";
 import "shell_publisher.dart";
 import "../settings/settings_category.dart" show nativeSettingsOpener;
+import "../../app/settings/hand_off.dart";
+import "../../domain/bot_avatar/spec.dart";
+import "../bot_avatar/bot_avatar_editor.dart";
 import "shell_settings.dart";
 import "shell_sidebar.dart";
 import "shell_window.dart";
@@ -56,6 +59,14 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     _publisher = ShellPublisher(container);
     _settings = SettingsBridge(container);
     nativeSettingsOpener = _settings.show;
+    // The avatar editor is Flutter's on every frontend: opened over the
+    // conversation, the native settings stepping aside for it.
+    container.read(settingsHandOffProvider).editBotAvatar = (initial) =>
+        Navigator.of(context).push<BotAvatarSpec>(
+          MaterialPageRoute(
+            builder: (_) => BotAvatarEditorPage(initial: initial),
+          ),
+        );
   }
 
   @override

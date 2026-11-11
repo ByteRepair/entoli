@@ -15,6 +15,7 @@ import "../../data/privacy_policy_data.dart";
 import "../../domain/llm_provider.dart";
 import "../../domain/model_registry.dart" show ModelCatalog, modelInfoOf;
 import "../../providers.dart";
+import "../bot_avatar/face_png.dart";
 import "../widgets/model_catalog_page.dart" show catalogEntries;
 
 /// Every page the native settings offer, as rows, and the controller each
@@ -24,6 +25,16 @@ typedef NativeSettingsPages = ({
   Map<String, SettingController> controllers,
 });
 
+/// An agent of the default project's face as a PNG, painted once its face
+/// is read: what the native agents list shows beside each name.
+final agentFacePngProvider = FutureProvider.autoDispose
+    .family<Uint8List?, String>((ref, name) async {
+      final face = await ref.watch(
+        agentPictureProvider((project: null, name: name)).future,
+      );
+      return agentFacePng(face);
+    });
+
 /// The pages this platform offers, built through the provider's ref and
 /// rebuilt whenever anything one reads changes. Welcome is the tour, not
 /// settings, and stays the app's own page.
@@ -32,6 +43,7 @@ final nativeSettingsProvider = Provider<NativeSettingsPages>((ref) {
   final schema = ref.watch(settingsSchemaProvider);
   final controllers = <String, SettingController>{};
   final providers = ref.watch(appSettingsProvider).llmProviders;
+  Uint8List? face(String name) => ref.watch(agentFacePngProvider(name)).value;
   final pages = [
     for (final page in SettingsPageId.values)
       if (page != SettingsPageId.welcome &&
@@ -54,7 +66,7 @@ final nativeSettingsProvider = Provider<NativeSettingsPages>((ref) {
                 detail: section.description,
                 rows: [
                   for (final setting in section.settings)
-                    ..._rows(setting, controllers, providers),
+                    ..._rows(setting, controllers, providers, face),
                 ],
               ),
           ],
@@ -65,22 +77,33 @@ final nativeSettingsProvider = Provider<NativeSettingsPages>((ref) {
 
 /// [c] as the rows that carry it: its own, then a group's children and an
 /// accessory, each naming it their parent.
+/// Each agent's face, by its name; null for none, or not painted yet.
+typedef _Faces = Uint8List? Function(String name);
+
 List<SettingRowData> _rows(
   SettingController c,
   Map<String, SettingController> controllers,
-  List<LlmProviderConfig> providers, {
+  List<LlmProviderConfig> providers,
+  _Faces faces, {
   String? parent,
   bool accessory = false,
 }) {
   controllers[c.id] = c;
   return [
-    _row(c, providers, parent: parent, accessory: accessory),
+    _row(c, providers, faces, parent: parent, accessory: accessory),
     if (c case GroupController(:final children))
       for (final child in children)
         if (child.visible)
-          ..._rows(child, controllers, providers, parent: c.id),
+          ..._rows(child, controllers, providers, faces, parent: c.id),
     if (c.accessory case final action?)
-      ..._rows(action, controllers, providers, parent: c.id, accessory: true),
+      ..._rows(
+        action,
+        controllers,
+        providers,
+        faces,
+        parent: c.id,
+        accessory: true,
+      ),
   ];
 }
 
@@ -143,7 +166,8 @@ String _modelLabel(ModelPickController c, List<LlmProviderConfig> providers) {
 
 SettingRowData _row(
   SettingController c,
-  List<LlmProviderConfig> providers, {
+  List<LlmProviderConfig> providers,
+  _Faces faces, {
   String? parent,
   bool accessory = false,
 }) {
@@ -261,6 +285,9 @@ SettingRowData _row(
               icon: _icon(item.glyph),
               tone: _tone(item.tone),
               on: item.on,
+              image: c.hint == UiHint.agents && item.id != null
+                  ? faces(item.id!)
+                  : null,
               actions: [
                 for (final action in item.actions)
                   SettingItemActionData(
@@ -269,6 +296,7 @@ SettingRowData _row(
                     enabled: action.enabled,
                     destructive: action.destructive,
                     confirm: _confirm(action.confirm),
+                    handsOff: action.handsOff,
                   ),
               ],
             ),
@@ -277,6 +305,7 @@ SettingRowData _row(
         ..removeLabel = c.removeLabel
         ..removable = c.removable
         ..editable = c.editable
+        ..takesImages = c.takesImages
         ..emptyItems = c.emptyLabel;
     case CatalogController():
       row
@@ -507,6 +536,10 @@ class SettingsBridge implements SettingsIntents {
   @override
   void removeItem(String id, int index) =>
       _at<CollectionController>(id)?.remove(index);
+
+  @override
+  void itemImage(String id, int index, Uint8List png) =>
+      _at<CollectionController>(id)?.setImage(index, png);
 
   @override
   Future<SettingFormData> form(

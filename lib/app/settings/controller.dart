@@ -1,3 +1,5 @@
+import "dart:typed_data";
+
 import "../../data/sync/pairing.dart" show PairingActivity;
 import "../../data/sync/sync_hub.dart" show SyncHub;
 import "../../domain/app_icon.dart";
@@ -611,6 +613,7 @@ final class CollectionController<T> extends SettingController {
     this.emptyLabel,
     Future<SettingNotice?> Function(int index, String action)? act,
     Future<void> Function(Map<String, String> answers, int? index)? submit,
+    Future<void> Function(int index, Uint8List png)? image,
     super.title,
     super.description,
     super.footnote,
@@ -619,7 +622,8 @@ final class CollectionController<T> extends SettingController {
     super.accessory,
   }) : _write = onSet,
        _onAct = act,
-       _onSubmit = submit;
+       _onSubmit = submit,
+       _onImage = image;
 
   final List<T> items;
   final String addLabel;
@@ -634,6 +638,14 @@ final class CollectionController<T> extends SettingController {
   final Future<SettingNotice?> Function(int, String)? _onAct;
 
   final Future<void> Function(Map<String, String>, int?)? _onSubmit;
+  final Future<void> Function(int, Uint8List)? _onImage;
+
+  /// Whether an item's picture can be set from a PNG the user picked.
+  bool get takesImages => _onImage != null;
+
+  /// Sets the item at [index]'s picture to [png].
+  Future<void> setImage(int index, Uint8List png) async =>
+      _onImage?.call(index, png);
 
   /// Saves what a form for the item at [index], or a new one, was answered
   /// with: the item the answers make, unless saving one does more than
@@ -729,12 +741,17 @@ class ItemAction {
     this.enabled = true,
     this.destructive = false,
     this.confirm,
+    this.handsOff = false,
   });
 
   final String id;
   final String label;
   final bool enabled;
   final bool destructive;
+
+  /// Whether it opens a page of the Flutter app's, which a frontend drawing
+  /// the settings itself steps aside for.
+  final bool handsOff;
 
   /// What it asks first; null runs it straight away.
   final SettingConfirm? confirm;

@@ -44,6 +44,16 @@ public final class SettingsModel: ObservableObject, NativeSettings {
     #endif
   }
 
+  /// Out of the way of a page the Flutter app opens over the conversation:
+  /// the sheet down on iOS, the Settings window closed on a Mac.
+  func stepAside() {
+    #if os(macOS)
+      NSApp.keyWindow?.close()
+    #else
+      presented = false
+    #endif
+  }
+
   /// The pages offered among the others, rather than opened from a row.
   var listed: [SettingsPageData] { pages.filter(\.listed) }
 

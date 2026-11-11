@@ -7,6 +7,7 @@
 
 // ignore_for_file: not_initialized_non_nullable_instance_field
 
+
 import "package:pigeon/pigeon.dart";
 
 @ConfigurePigeon(
@@ -180,6 +181,7 @@ class SettingItemActionData {
     this.enabled = true,
     this.destructive = false,
     this.confirm,
+    this.handsOff = false,
   });
 
   String id;
@@ -187,6 +189,10 @@ class SettingItemActionData {
   bool enabled;
   bool destructive;
   SettingConfirmData? confirm;
+
+  /// Whether it opens a page of the Flutter app's, which the settings step
+  /// aside for.
+  bool handsOff;
 }
 
 /// One item of a collection, by its place in the list.
@@ -199,6 +205,7 @@ class SettingItemData {
     this.tone = SettingTone.plain,
     this.on,
     this.actions = const [],
+    this.image,
   });
 
   String title;
@@ -206,6 +213,9 @@ class SettingItemData {
   String? error;
   SettingIcon? icon;
   SettingTone tone;
+
+  /// Its picture, as a PNG: an agent's face.
+  Uint8List? image;
 
   /// Whether it is armed, where its row carries a switch.
   bool? on;
@@ -355,6 +365,7 @@ class SettingRowData {
     this.removeLabel,
     this.removable = true,
     this.editable = false,
+    this.takesImages = false,
     this.emptyItems,
     this.catalog = const [],
     this.info = const [],
@@ -448,6 +459,9 @@ class SettingRowData {
 
   /// Whether items are added and edited through a form.
   bool editable;
+
+  /// Whether an item's picture can be set from one the user picks.
+  bool takesImages;
   String? emptyItems;
 
   // catalog
@@ -649,6 +663,9 @@ abstract class SettingsIntents {
   SettingNoticeData? itemAction(String id, int index, String action);
 
   void removeItem(String id, int index);
+
+  /// Sets the item at [index]'s picture to [png].
+  void itemImage(String id, int index, Uint8List png);
 
   /// The form for the item at [index], or a new one, as [answers] stand;
   /// null answers are its first.

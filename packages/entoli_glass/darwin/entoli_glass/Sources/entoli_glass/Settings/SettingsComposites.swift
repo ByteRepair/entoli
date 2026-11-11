@@ -1,5 +1,12 @@
 import CoreImage.CIFilterBuiltins
+import PhotosUI
 import SwiftUI
+
+#if os(iOS)
+  import Flutter
+#else
+  import FlutterMacOS
+#endif
 
 /// Items of one kind, each with its own actions, opened in its form and
 /// removed on its own; added through the same form.
@@ -9,6 +16,8 @@ struct CollectionRow: View {
   @State private var editing: Editing?
   @State private var confirm: (SettingConfirmData, Int, String)?
   @State private var notice: SettingNoticeData?
+  @State private var picking: Int?
+  @State private var photo: PhotosPickerItem?
 
   /// The item a form is open for; nil index for a new one.
   struct Editing: Identifiable {
@@ -23,7 +32,13 @@ struct CollectionRow: View {
         Text(empty).foregroundStyle(.secondary)
       }
       ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-        HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .center) {
+          if let data = item.image?.data, let image = PlatformImage(data: data) {
+            Image(platformImage: image).resizable().scaledToFill()
+              .frame(width: 32, height: 32).clipShape(Circle())
+          } else if row.hint == .agents {
+            Image(systemName: "person.crop.circle").font(.title2).foregroundStyle(.secondary)
+          }
           if let icon = item.icon {
             Image(systemName: icon.symbol).foregroundStyle(item.tone.colour).font(.caption)
           }
@@ -39,15 +54,34 @@ struct CollectionRow: View {
           Spacer()
           if let on = item.on {
             Toggle(
-              "", isOn: Binding(get: { on }, set: { _ in act(index, "toggle", nil) })
+              "", isOn: Binding(get: { on }, set: { _ in run(index, "toggle") })
             ).labelsHidden()
           }
-          ForEach(item.actions.compactMap { $0 }, id: \.id) { action in
-            Button(action.label, role: action.destructive ? .destructive : nil) {
-              act(index, action.id, action.confirm)
+          let actions = item.actions.compactMap { $0 }
+          if actions.count > 2 || row.takesImages {
+            Menu {
+              if row.takesImages {
+                Button("Choose photo…") { picking = index }
+              }
+              ForEach(actions, id: \.id) { action in
+                Button(action.label, role: action.destructive ? .destructive : nil) {
+                  act(index, action)
+                }
+                .disabled(!action.enabled)
+              }
+            } label: {
+              Image(systemName: "ellipsis.circle")
             }
-            .buttonStyle(.borderless)
-            .disabled(!action.enabled)
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+          } else {
+            ForEach(actions, id: \.id) { action in
+              Button(action.label, role: action.destructive ? .destructive : nil) {
+                act(index, action)
+              }
+              .buttonStyle(.borderless)
+              .disabled(!action.enabled)
+            }
           }
           if row.editable {
             Button("Edit") { editing = Editing(index: index) }.buttonStyle(.borderless)
@@ -70,6 +104,24 @@ struct CollectionRow: View {
     .sheet(item: $editing) { editing in
       FormSheet(model: model, id: row.id, index: editing.index)
     }
+    .photosPicker(
+      isPresented: Binding(get: { picking != nil }, set: { if !$0 && photo == nil { picking = nil } }),
+      selection: $photo, matching: .images
+    )
+    .onChange(of: photo) { _, picked in
+      guard let picked, let index = picking else { return }
+      Task { @MainActor in
+        if let data = try? await picked.loadTransferable(type: Data.self),
+          let png = PlatformImage(data: data)?.png
+        {
+          model.say.itemImage(
+            id: row.id, index: Int64(index), png: FlutterStandardTypedData(bytes: png),
+            completion: ignore)
+        }
+        photo = nil
+        picking = nil
+      }
+    }
     .alert(
       confirm?.0.title ?? "",
       isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }),
@@ -90,8 +142,14 @@ struct CollectionRow: View {
     }
   }
 
-  private func act(_ index: Int, _ action: String, _ ask: SettingConfirmData?) {
-    if let ask { confirm = (ask, index, action) } else { run(index, action) }
+  private func act(_ index: Int, _ action: SettingItemActionData) {
+    if let ask = action.confirm {
+      confirm = (ask, index, action.id)
+    } else {
+      // A page the Flutter app opens over the conversation: out of its way.
+      if action.handsOff { model.stepAside() }
+      run(index, action.id)
+    }
   }
 
   private func run(_ index: Int, _ action: String) {
@@ -537,3 +595,31 @@ struct SetupRow: View {
     model.say.setup(id: row.id, op: op, completion: ignore)
   }
 }
+
+#if os(macOS)
+  typealias PlatformImage = NSImage
+
+  extension NSImage {
+    /// As a PNG, the format an agent's picture is kept in.
+    var png: Data? {
+      guard let tiff = tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff) else {
+        return nil
+      }
+      return bitmap.representation(using: .png, properties: [:])
+    }
+  }
+
+  extension Image {
+    init(platformImage: NSImage) { self.init(nsImage: platformImage) }
+  }
+#else
+  typealias PlatformImage = UIImage
+
+  extension UIImage {
+    var png: Data? { pngData() }
+  }
+
+  extension Image {
+    init(platformImage: UIImage) { self.init(uiImage: platformImage) }
+  }
+#endif

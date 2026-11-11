@@ -66,6 +66,11 @@ class AgentFiles {
     });
   }
 
+  /// What [name] looks like now, null for none, leaving its `.md` alone.
+  Future<void> setFace(String name, AgentFace? face) => platform.readOnlyDirs
+      .of(_dir)
+      .write(() => writeAgentFace(config, name, face, project: project));
+
   Future<void> delete(String name) =>
       platform.readOnlyDirs.of(_dir).write(() async {
         await File(agentFilePath(config, name, project: project)).delete();

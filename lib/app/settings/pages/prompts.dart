@@ -1,9 +1,12 @@
 import "package:file_selector/file_selector.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../../data/builtin/tools/agent_tool.dart";
+import "../../../data/builtin/tools/registry.dart";
 import "../../../data/prompts/prompt_export.dart";
 import "../../../data/prompts/skill_import.dart";
 import "../../../domain/agent_definition.dart";
+import "../../../domain/agent_face.dart";
 import "../../../domain/models.dart";
 import "../../../domain/project.dart" show everyProject;
 import "../../../domain/prompt_library.dart";
@@ -11,6 +14,7 @@ import "../../../providers.dart";
 import "../../prompts/agent_files.dart";
 import "../../prompts/skill_files.dart";
 import "../controller.dart";
+import "../hand_off.dart";
 import "../spec.dart";
 
 /// The default project's own agents and skills, by name: which entries of
@@ -52,8 +56,15 @@ const promptSections = [
   ),
 ];
 
+/// What an agent may be granted, listed whatever this device can run: the
+/// file means the same on every device it reaches.
+final _grantable = [
+  for (final tool in agentTools(const ToolOffer()))
+    if (tool.group != null) tool,
+];
+
 /// An agent written by hand: its name, which is its file's, what it is for,
-/// and the system prompt.
+/// the system prompt, and the tools it is granted, group by group.
 class AgentForm implements SettingForm<PromptDocument> {
   AgentForm(this.agent, {required this.taken});
 
@@ -61,6 +72,15 @@ class AgentForm implements SettingForm<PromptDocument> {
 
   /// Whether a name is another agent's already.
   final bool Function(String name) taken;
+
+  Set<String> get _defaults => {
+    for (final tool in _grantable)
+      if (tool.onByDefault) tool.id,
+  };
+
+  /// The ids switched on to begin with. Ids this build does not know stay,
+  /// so a save keeps what a newer build's list named.
+  Set<String> get _initialTools => AgentDefinition.of(agent).tools ?? _defaults;
 
   @override
   String get title => agent == null ? "Add agent" : "Edit ${agent!.name}";
@@ -70,7 +90,26 @@ class AgentForm implements SettingForm<PromptDocument> {
     "name": agent?.name ?? "",
     "description": agent?.description ?? "",
     "instructions": agent?.body ?? "",
+    for (final group in ToolGroup.values)
+      "tools.${group.name}": [
+        for (final tool in _grantable)
+          if (tool.group == group && _initialTools.contains(tool.id)) tool.id,
+      ].join(","),
   };
+
+  Set<String> _tools(Map<String, String> a) {
+    final picked = <String>{};
+    final names = <String>{};
+    for (final group in ToolGroup.values) {
+      for (final id in (a["tools.${group.name}"] ?? "").split(",")) {
+        final tool = _grantable.where((t) => t.id == id).firstOrNull;
+        // Two tools of one name are one tool worded two ways: the first
+        // picked stands.
+        if (tool != null && names.add(tool.name)) picked.add(id);
+      }
+    }
+    return picked;
+  }
 
   String? _nameProblem(String name) {
     if (name.isEmpty) return null;
@@ -93,6 +132,14 @@ class AgentForm implements SettingForm<PromptDocument> {
     ),
     const FormText("description", "Description"),
     const FormText("instructions", "System prompt", lines: 8),
+    const FormQuestion("Tools"),
+    for (final group in ToolGroup.values)
+      if (_grantable.any((t) => t.group == group))
+        FormMulti("tools.${group.name}", group.label, [
+          for (final tool in _grantable)
+            if (tool.group == group)
+              FormOption(tool.id, tool.id, help: tool.description),
+        ]),
   ];
 
   @override
@@ -102,15 +149,27 @@ class AgentForm implements SettingForm<PromptDocument> {
     return _nameProblem(name) == null ? null : "";
   }
 
+  /// An agent left at the defaults writes no list, so a default added later
+  /// reaches it.
   @override
-  PromptDocument build(Map<String, String> a) => AgentDefinition.of(agent)
-      .edited(
-        name: a["name"]!.trim(),
-        description: a["description"]!,
-        instructions: a["instructions"]!,
-        tools: AgentDefinition.of(agent).tools,
-      )
-      .document!;
+  PromptDocument build(Map<String, String> a) {
+    final tools = _tools(a);
+    final known = {for (final tool in _grantable) tool.id};
+    final unchanged =
+        AgentDefinition.of(agent).tools == null &&
+        tools.length == _defaults.length &&
+        tools.containsAll(_defaults);
+    return AgentDefinition.of(agent)
+        .edited(
+          name: a["name"]!.trim(),
+          description: a["description"]!,
+          instructions: a["instructions"]!,
+          tools: unchanged
+              ? null
+              : {...tools, ..._initialTools.difference(known)},
+        )
+        .document!;
+  }
 }
 
 final promptSettings = [
@@ -130,10 +189,16 @@ final promptSettings = [
       final config = c.ref.read(appConfigProvider);
       final handoff = c.ref.read(backupHandoffProvider);
       final files = AgentFiles(config);
+      final handOff = c.ref.read(settingsHandOffProvider);
       return CollectionController<PromptDocument>(
         c.spec,
         items: agents,
         addLabel: "Add agent",
+        // A picture is saved as a .png beside the agent's `.md`.
+        image: (index, png) async {
+          await files.setFace(agents[index].name, AgentPhoto(png));
+          await _reload(c.ref);
+        },
         emptyLabel:
             "System prompts a message can address as @name. None are "
             "installed yet.",
@@ -144,6 +209,10 @@ final promptSettings = [
           removeLabel: "Remove ${agent.name}",
           actions: [
             const ItemAction("export", "Export"),
+            if (own.contains(agent.name) && handOff.editBotAvatar != null)
+              const ItemAction("botAvatar", "Bot Avatar…", handsOff: true),
+            if (own.contains(agent.name))
+              const ItemAction("removeFace", "Remove picture"),
             if (own.contains(agent.name))
               ItemAction(
                 "remove",
@@ -183,6 +252,22 @@ final promptSettings = [
                 CompletionKind.agent,
                 agent.name,
               );
+              return null;
+            case "botAvatar":
+              final face = await c.ref.read(
+                agentPictureProvider((project: null, name: agent.name)).future,
+              );
+              final spec = await handOff.editBotAvatar?.call(switch (face) {
+                AgentBot(:final spec) => spec,
+                _ => null,
+              });
+              if (spec == null) return null;
+              await files.setFace(agent.name, AgentBot(spec));
+              await _reload(c.ref);
+              return null;
+            case "removeFace":
+              await files.setFace(agent.name, null);
+              await _reload(c.ref);
               return null;
             default:
               await files.delete(agent.name);
