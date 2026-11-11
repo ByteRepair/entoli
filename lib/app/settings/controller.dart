@@ -655,6 +655,10 @@ final class CollectionController<T> extends SettingController {
   /// for a new one; null where items are not edited here.
   final SettingForm<T> Function(T? item)? form;
 
+  /// Whether items are added and edited through [form]: asked of the
+  /// controller itself, where its own item type is known.
+  bool get editable => form != null;
+
   final Future<void> Function(List<T>) _write;
 
   List<CollectionItem> get rows => [for (final item in items) describe(item)];

@@ -62,11 +62,23 @@ const settingsRoute = "/settings";
 /// setup row or a bar points at one thing to set.
 typedef SettingsArgs = ({SettingsCategory? category, bool focus});
 
-/// Open Settings, at [category] where there is one.
+/// The native settings' way in, while the SwiftUI frontend is up: set by its
+/// bridge, which sends them every page. Null under the Flutter frontend.
+Future<void> Function(SettingsPageId? page)? nativeSettingsOpener;
+
+/// Open Settings, at [category] where there is one: the native settings
+/// where the frontend has its own, Flutter's page otherwise. The welcome tour
+/// is not settings, and is Flutter's on every frontend.
 Future<void> openSettings(
   BuildContext context, {
   SettingsCategory? category,
   bool focus = false,
-}) => Navigator.of(
-  context,
-).pushNamed(settingsRoute, arguments: (category: category, focus: focus));
+}) {
+  final native = nativeSettingsOpener;
+  if (native != null && category != SettingsCategory.welcome) {
+    return native(category?.page);
+  }
+  return Navigator.of(
+    context,
+  ).pushNamed(settingsRoute, arguments: (category: category, focus: focus));
+}
