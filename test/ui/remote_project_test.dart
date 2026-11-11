@@ -12,7 +12,7 @@ import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/ui/chat/widgets/view_only_bar.dart" show MirrorStrip;
 import "package:agent_chat/ui/memory/memory_page.dart" show MemoryTile;
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
-import "package:agent_chat/ui/sidebar/remote_projects.dart";
+import "package:agent_chat/app/remote_projects.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/selection.dart";
 

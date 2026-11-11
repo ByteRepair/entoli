@@ -7,7 +7,7 @@ import "../../domain/models.dart";
 import "../../domain/project.dart";
 import "../../providers.dart";
 import "../selection.dart";
-import "../sidebar/remote_projects.dart";
+import "../../app/remote_projects.dart";
 import "../widgets/completion_field.dart";
 import "shell_composer.dart" show completionOf, triggerOf;
 import "shell_outbox.dart";

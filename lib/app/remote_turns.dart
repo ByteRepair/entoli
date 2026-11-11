@@ -1,20 +1,20 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../data/builtin/memory/store.dart";
-import "../../data/sync/sync_hub.dart";
-import "../../domain/app_settings.dart";
-import "../../domain/chat_meta.dart";
-import "../../domain/chat_repository.dart";
-import "../../domain/models.dart";
-import "../../domain/reaction.dart";
-import "../../domain/room/room_state.dart";
-import "../../domain/project.dart" show localProject;
-import "../../domain/project_settings.dart";
-import "../../domain/prompt_library.dart";
-import "../../domain/sync/protocol.dart";
-import "../../providers.dart";
-import "../selection.dart";
-import "../../app/chat_controller.dart";
+import "../data/builtin/memory/store.dart";
+import "../data/sync/sync_hub.dart";
+import "../domain/app_settings.dart";
+import "../domain/chat_meta.dart";
+import "../domain/chat_repository.dart";
+import "../domain/models.dart";
+import "../domain/reaction.dart";
+import "../domain/room/room_state.dart";
+import "../domain/project.dart" show localProject;
+import "../domain/project_settings.dart";
+import "../domain/prompt_library.dart";
+import "../domain/sync/protocol.dart";
+import "../providers.dart";
+import "selection.dart";
+import "chat_controller.dart";
 
 /// This device's end of a chat somebody else is watching or driving.
 ///

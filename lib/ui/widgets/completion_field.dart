@@ -4,9 +4,11 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/composer.dart"
     show isCompletionSpace, triggerOpened, triggerPosition;
+import "../../app/completion.dart";
+
+export "../../app/completion.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart" show ProjectRef;
-import "../../domain/shell.dart";
 import "../../providers.dart";
 import "agent_picture.dart";
 import "page_bar.dart";
@@ -25,37 +27,14 @@ class _DismissIntent extends Intent {
   const _DismissIntent();
 }
 
-typedef CompletionToken = ({CompletionKind kind, int start, String query});
-
-/// The word the caret sits in, when it is a trigger token. `/` only counts at
-/// the very start of a message; `@` counts wherever a word begins. Anything
-/// offered here has to dispatch, so this matches `prompt_library.dart`'s
-/// patterns — and, before them, that a `!` message goes to the shell, where
-/// neither a skill of Entoli's nor an agent means anything.
-CompletionToken? activeCompletionToken(TextEditingValue value) {
-  if (shellBypassCommand(value.text) != null) return null;
-  final selection = value.selection;
-  if (!selection.isValid || !selection.isCollapsed) return null;
-  final caret = selection.baseOffset;
-  if (caret > value.text.length) return null;
-
-  var start = caret;
-  while (start > 0 && !isCompletionSpace(value.text.codeUnitAt(start - 1))) {
-    start--;
-  }
-  if (start == caret) return null;
-
-  final query = value.text.substring(start + 1, caret);
-  return switch (value.text[start]) {
-    "/" when start == 0 => (
-      kind: CompletionKind.skill,
-      start: start,
-      query: query,
-    ),
-    "@" => (kind: CompletionKind.agent, start: start, query: query),
-    _ => null,
-  };
-}
+/// [value]'s completion token: see [completionTokenIn].
+CompletionToken? activeCompletionToken(TextEditingValue value) =>
+    completionTokenIn(
+      value.text,
+      value.selection.isValid && value.selection.isCollapsed
+          ? value.selection.baseOffset
+          : null,
+    );
 
 /// Type a whole completion into [controller] — the trigger, the name, and the
 /// trailing space that makes what follows arguments rather than more name.
@@ -109,17 +88,6 @@ void acceptCompletion(
   controller.selection.baseOffset,
   "${token.kind.trigger}${option.name} ",
 );
-
-/// What of [options] the typed [query] matches: its letters anywhere in the
-/// name, case aside.
-List<CompletionOption> matchingCompletions(
-  List<CompletionOption> options,
-  String query,
-) {
-  if (query.isEmpty) return options;
-  final needle = query.toLowerCase();
-  return options.where((o) => o.name.toLowerCase().contains(needle)).toList();
-}
 
 /// The entries that open a completion menu by typing its trigger, for a page
 /// bar's menu.

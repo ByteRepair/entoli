@@ -1,4 +1,4 @@
-import "../../domain/models.dart";
+import "../domain/models.dart";
 
 /// The chats under one of the sidebar's headings.
 class ChatGroup {

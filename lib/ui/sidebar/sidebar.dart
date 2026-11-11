@@ -18,9 +18,9 @@ import "../settings/settings_category.dart";
 import "../selection.dart";
 import "../widgets/nothing.dart";
 import "../widgets/search_field.dart";
-import "chat_groups.dart";
+import "../../app/chat_groups.dart";
 import "project_palette.dart";
-import "remote_projects.dart";
+import "../../app/remote_projects.dart";
 
 /// The sidebar's width where it is docked beside the chat pane.
 const sidebarWidth = 300.0;

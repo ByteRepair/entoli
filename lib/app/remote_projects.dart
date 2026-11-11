@@ -1,7 +1,7 @@
-import "../../data/sync/peers.dart" show PeerState;
-import "../../data/sync/sync_hub.dart" show RemoteChatEntry;
-import "../../domain/models.dart" show ChatState;
-import "../../domain/project.dart";
+import "../data/sync/peers.dart" show PeerState;
+import "../data/sync/sync_hub.dart" show RemoteChatEntry;
+import "../domain/models.dart" show ChatState;
+import "../domain/project.dart";
 
 /// How a project on a paired device is read out. Its default project is the
 /// device's name alone — the local default has no name either, and inventing

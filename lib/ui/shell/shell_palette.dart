@@ -7,7 +7,7 @@ import "../../domain/project.dart";
 import "../../providers.dart";
 import "../selection.dart";
 import "../sidebar/project_palette.dart" show paletteListing;
-import "../sidebar/remote_projects.dart";
+import "../../app/remote_projects.dart";
 import "../app_routes.dart";
 import "glyphs.dart";
 
@@ -133,9 +133,6 @@ PaletteSnapshot _paletteSnapshot(Ref ref, PaletteState palette) {
   );
 }
 
-/// The app's own, under a name [PaletteRunner]'s methods do not hide.
-const _selectProject = selectProject;
-
 /// Runs what the native palette sends, in [context] under the Navigator. A
 /// project made from the palette is the sidebar's `createProject`.
 class PaletteRunner implements PaletteIntents {
@@ -156,7 +153,10 @@ class PaletteRunner implements PaletteIntents {
   Future<void> pickProject(String? device, String? project) async {
     _palette.close();
     if (!await toConversation(context, ref.read(appRoutesProvider))) return;
-    _selectProject(ref, (device: device, project: project));
+    ref.read(selectedProjectProvider.notifier).switchTo((
+      device: device,
+      project: project,
+    ));
   }
 
   @override

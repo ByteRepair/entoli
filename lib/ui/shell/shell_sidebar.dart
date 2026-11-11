@@ -9,15 +9,15 @@ import "../../domain/chat_search.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
 import "../../providers.dart";
-import "../chat_actions.dart";
+import "../../app/chat_edits.dart";
 import "../marketplace/marketplace_page.dart";
 import "../profile/profile_page.dart";
 import "../project_actions.dart";
 import "../selection.dart";
 import "../settings/settings_category.dart";
-import "../sidebar/chat_groups.dart";
+import "../../app/chat_groups.dart";
 import "../sidebar/project_palette.dart";
-import "../sidebar/remote_projects.dart";
+import "../../app/remote_projects.dart";
 import "../app_routes.dart";
 import "glyphs.dart";
 
@@ -176,8 +176,6 @@ SidebarSnapshot _sidebarSnapshot(Ref ref) {
   );
 }
 
-/// The app's own, under names [SidebarRunner]'s methods do not hide.
-const _selectProject = selectProject;
 const _createProject = createProject;
 
 /// Runs what the native sidebar sends, in [context] under the Navigator: the
@@ -227,8 +225,12 @@ class SidebarRunner implements SidebarIntents {
       _closing(() => ref.read(selectedChatIdProvider.notifier).select(null));
 
   @override
-  Future<void> selectProject(String? device, String? project) =>
-      _closing(() => _selectProject(ref, (device: device, project: project)));
+  Future<void> selectProject(String? device, String? project) => _closing(
+    () => ref.read(selectedProjectProvider.notifier).switchTo((
+      device: device,
+      project: project,
+    )),
+  );
 
   @override
   Future<void> pin(String id, bool pinned) =>
@@ -246,7 +248,9 @@ class SidebarRunner implements SidebarIntents {
     () => _edit(id, (chat) async {
       if (project == chat.project) return;
       await _edits.move(chat, project);
-      _selectProject(ref, localProject(project));
+      ref
+          .read(selectedProjectProvider.notifier)
+          .switchTo(localProject(project));
     }),
   );
 
