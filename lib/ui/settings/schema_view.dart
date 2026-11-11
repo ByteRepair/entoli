@@ -21,7 +21,9 @@ import "connect_provider.dart";
 import "byte_repair_settings.dart";
 import "../../app/settings/pages/triggers.dart" show triggerPermissionsProvider;
 import "../../domain/trigger.dart";
+import "agents_settings.dart" show AgentsSection;
 import "form_dialog.dart";
+import "skills_settings.dart" show SkillsSection;
 import "triggers.dart" show TriggerEditorPage;
 import "local_model_settings.dart" show AddLocalModelPage;
 import "running_models.dart";
@@ -65,6 +67,37 @@ class SchemaSections extends ConsumerWidget {
         ],
       ],
     );
+  }
+}
+
+/// A page whose one setting is the whole of it, its own list and its own
+/// footer: Agents and Skills. Drawn alone, under no list of the page's.
+class SchemaWhole extends ConsumerWidget {
+  const SchemaWhole(this.page, {super.key});
+
+  final SettingsPageId page;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = [
+      for (final section in buildPage(
+        WidgetReader(ref),
+        ref.watch(settingsSchemaProvider),
+        page,
+        const AppAddress(),
+      ))
+        ...section.settings,
+    ];
+    for (final setting in settings) {
+      switch (setting.hint) {
+        case UiHint.agents:
+          return const AgentsSection();
+        case UiHint.skills:
+          return const SkillsSection();
+        default:
+      }
+    }
+    return const SizedBox.shrink();
   }
 }
 

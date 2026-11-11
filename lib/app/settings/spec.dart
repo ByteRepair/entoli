@@ -93,6 +93,12 @@ enum UiHint {
 
   /// Triggers, each with what and when, and the switch that arms it.
   triggers,
+
+  /// Agents, each with its face, the whole of its page.
+  agents,
+
+  /// Skills, each with what its folder is wrong about, the whole of its page.
+  skills,
 }
 
 /// The pages settings is filed under, in the order they are offered. A

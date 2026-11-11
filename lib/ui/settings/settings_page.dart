@@ -2,8 +2,6 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../widgets/side_panel_frame.dart";
-import "agents_settings.dart";
-import "skills_settings.dart";
 import "settings_category.dart";
 import "schema_view.dart";
 import "../../app/settings/spec.dart";
@@ -84,8 +82,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 Widget _categoryBody(SettingsCategory category, {Key? key}) =>
     switch (category) {
       SettingsCategory.welcome => const WelcomeTour(),
-      SettingsCategory.skills => const SkillsSection(),
-      SettingsCategory.agents => const AgentsSection(),
+      SettingsCategory.skills => const SchemaWhole(SettingsPageId.skills),
+      SettingsCategory.agents => const SchemaWhole(SettingsPageId.agents),
       _ => ListView(key: key, children: _sectionsOf(category)),
     };
 

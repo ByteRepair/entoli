@@ -1,16 +1,10 @@
-import "dart:io";
-
 import "package:file_selector/file_selector.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:path/path.dart" as p;
 
-import "../../core/platform/platform.dart" as platform;
-import "../../core/config.dart" show AppConfig;
+import "../../app/prompts/skill_files.dart";
 import "../../data/prompts/prompt_export.dart";
 import "../../data/prompts/skill_import.dart";
-import "../../data/prompts/skill_validate.dart";
-import "../../domain/frontmatter.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart" show promptsDirUserWritable;
 import "../../domain/prompt_library.dart";
@@ -93,50 +87,12 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     super.dispose();
   }
 
-  Future<void> _scan() async {
-    final config = ref.read(appConfigProvider);
-    final problems = <String, List<String>>{};
-    final dir = Directory(
-      config.promptsDir(CompletionKind.skill, project: widget.project),
-    );
-    if (dir.existsSync()) {
-      final folders = <(String, String)>[];
-      await for (final entity in dir.list()) {
-        if (entity is! Directory) continue;
-        final folderName = p.basename(entity.path);
-        folders.add((folderName, entity.path));
-      }
-      // The reads are independent, so they go out together.
-      final answers = await Future.wait([
-        for (final (folderName, path) in folders)
-          _folderProblems(config, path, folderName),
-      ]);
-      for (var i = 0; i < folders.length; i++) {
-        problems[folders[i].$1] = answers[i];
-      }
-    }
-    if (mounted) setState(() => _userSkills = problems);
-  }
+  SkillFiles get _files =>
+      SkillFiles(ref.read(appConfigProvider), project: widget.project);
 
-  /// What a folder in the user's own directory is wrong about — the same
-  /// rules the loader skips on, computed here so the row and the view page
-  /// say them without a reload. A folder with no SKILL.md in it is a problem
-  /// of its own; the loader skips it silently, this makes it a row.
-  Future<List<String>> _folderProblems(
-    AppConfig config,
-    String path,
-    String folderName,
-  ) async {
-    final file = File(p.join(path, "SKILL.md"));
-    if (!file.existsSync()) return ["no SKILL.md in it"];
-    try {
-      return skillFrontmatterProblems(
-        Frontmatter.parse(await file.readAsString()),
-        folderName,
-      );
-    } catch (e) {
-      return ["SKILL.md could not be read: $e"];
-    }
+  Future<void> _scan() async {
+    final problems = await _files.own();
+    if (mounted) setState(() => _userSkills = problems);
   }
 
   Future<void> _import() async {
@@ -159,10 +115,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     // default project's directory, so what lands elsewhere is visible in the
     // snack bar, not in the list.
     final target = widget.project ?? _destination;
-    final config = ref.read(appConfigProvider);
-    final replacing = Directory(
-      skillDirectory(config, package.name, project: target),
-    ).existsSync();
+    final replacing = _files.has(package.name, target: target);
     if (!mounted) return;
     if (replacing) {
       final confirmed = await confirm(
@@ -177,12 +130,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     }
 
     await _guard(() async {
-      final config = ref.read(appConfigProvider);
-      await platform.readOnlyDirs
-          .skills(config.promptsDir(CompletionKind.skill, project: target))
-          .write(() async {
-            await installSkillPackage(config, package, project: target);
-          });
+      await _files.install(package, target: target);
       await _reload(target);
       await _scan();
       _say(installedSnack("Imported", package.name, target));
@@ -203,16 +151,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     if (!confirmed) return;
 
     await _guard(() async {
-      final config = ref.read(appConfigProvider);
-      await platform.readOnlyDirs
-          .skills(
-            config.promptsDir(CompletionKind.skill, project: widget.project),
-          )
-          .write(() async {
-            await Directory(
-              skillDirectory(config, name, project: widget.project),
-            ).delete(recursive: true);
-          });
+      await _files.delete(name);
       await _reload(widget.project);
       await _scan();
       _say("Removed $name.");

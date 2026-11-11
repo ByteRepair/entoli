@@ -778,6 +778,7 @@ final class FormText extends FormFieldSpec {
     this.helper,
     this.error,
     this.focused = false,
+    this.lines = 1,
   });
 
   final String id;
@@ -785,6 +786,9 @@ final class FormText extends FormFieldSpec {
   final String? hint;
   final String? helper;
   final String? error;
+
+  /// How many lines it is typed over.
+  final int lines;
 
   /// Whether the caret starts here.
   final bool focused;

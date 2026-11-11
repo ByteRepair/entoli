@@ -1,13 +1,11 @@
-import "dart:convert";
 import "dart:io";
 
 import "package:file_selector/file_selector.dart";
 import "package:flutter/foundation.dart" show setEquals;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:path/path.dart" as p;
 
-import "../../core/platform/platform.dart" as platform;
+import "../../app/prompts/agent_files.dart";
 import "../../data/builtin/tools/agent_tool.dart";
 import "../../data/builtin/tools/registry.dart";
 import "../../data/prompts/agent_pictures.dart";
@@ -93,19 +91,11 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
     super.dispose();
   }
 
+  AgentFiles get _files =>
+      AgentFiles(ref.read(appConfigProvider), project: widget.project);
+
   Future<void> _scan() async {
-    final config = ref.read(appConfigProvider);
-    final names = <String>{};
-    final dir = Directory(
-      config.promptsDir(CompletionKind.agent, project: widget.project),
-    );
-    if (dir.existsSync()) {
-      await for (final entity in dir.list()) {
-        if (entity is File && p.extension(entity.path) == ".md") {
-          names.add(p.basenameWithoutExtension(entity.path));
-        }
-      }
-    }
+    final names = await _files.own();
     if (mounted) setState(() => _userAgents = names);
   }
 
@@ -189,31 +179,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
     String? removes,
     AgentFace? face,
   }) => _guard(() async {
-    final config = ref.read(appConfigProvider);
-    final renames = removes != null && removes != name;
-    await platform.readOnlyDirs
-        .of(config.promptsDir(CompletionKind.agent, project: widget.project))
-        .write(() async {
-          final file = File(
-            agentFilePath(config, name, project: widget.project),
-          );
-          await file.create(recursive: true);
-          await file.writeAsString(source);
-          if (renames) {
-            await File(
-              agentFilePath(config, removes, project: widget.project),
-            ).delete();
-          }
-          if (renames) {
-            await writeAgentFace(
-              config,
-              removes,
-              null,
-              project: widget.project,
-            );
-          }
-          await writeAgentFace(config, name, face, project: widget.project);
-        });
+    await _files.write(name, source, removes: removes, face: face);
     await _reload(widget.project);
     await _scan();
     _say(said);
@@ -232,20 +198,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
     if (!confirmed) return;
 
     await _guard(() async {
-      final config = ref.read(appConfigProvider);
-      await platform.readOnlyDirs
-          .of(config.promptsDir(CompletionKind.agent, project: widget.project))
-          .write(() async {
-            await File(
-              agentFilePath(config, agent.name, project: widget.project),
-            ).delete();
-            await writeAgentFace(
-              config,
-              agent.name,
-              null,
-              project: widget.project,
-            );
-          });
+      await _files.delete(agent.name);
       await _reload(widget.project);
       await _scan();
       _say("Removed ${agent.name}.");
@@ -263,17 +216,9 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
     final bytes = await file.readAsBytes();
     if (!mounted) return;
 
-    final source = utf8.decode(bytes, allowMalformed: true);
-    final document = PromptDocument.parse(CompletionKind.agent, "", source);
-    if (document.body.isEmpty) {
-      _say("That file cannot be imported: there is no prompt in it.");
-      return;
-    }
-    final name = p.basenameWithoutExtension(file.name);
-    if (!isFolderName(name)) {
-      _say("That file cannot be imported: its name cannot be a file name.");
-      return;
-    }
+    final read = AgentFiles.import(file.name, bytes, refuse: _say);
+    if (read == null) return;
+    final (:name, :source) = read;
     if (!await _mayReplace(name, "Importing")) return;
     await _write(name, source, "Imported $name.");
   }
@@ -281,10 +226,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
   /// False where [name] is already in this project's directory and the user
   /// would rather keep it, or the page went away while asking.
   Future<bool> _mayReplace(String name, String doing) async {
-    final config = ref.read(appConfigProvider);
-    final exists = File(
-      agentFilePath(config, name, project: widget.project),
-    ).existsSync();
+    final exists = _files.has(name);
     if (!mounted) return false;
     return !exists ||
         await confirm(

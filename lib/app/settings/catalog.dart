@@ -6,6 +6,7 @@ import "pages/general.dart";
 import "pages/llms.dart";
 import "pages/memory.dart";
 import "pages/on_device.dart";
+import "pages/prompts.dart";
 import "pages/providers.dart";
 import "pages/sync.dart";
 import "pages/triggers.dart";
@@ -29,6 +30,7 @@ final entoliSettings = SettingsSchema(
     ...onDeviceSections,
     ...byteRepairSections,
     ...triggerSections,
+    ...promptSections,
   ],
   settings: [
     ...generalSettings,
@@ -44,5 +46,6 @@ final entoliSettings = SettingsSchema(
     ...onDeviceSettings,
     ...byteRepairSettings,
     ...triggerSettings,
+    ...promptSettings,
   ],
 );

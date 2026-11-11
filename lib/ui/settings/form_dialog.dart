@@ -92,6 +92,8 @@ class _FormDialogState<T> extends State<_FormDialog<T>> {
     FormText() => TextField(
       controller: _text(field.id),
       autofocus: field.focused,
+      minLines: field.lines > 1 ? field.lines : null,
+      maxLines: field.lines > 1 ? null : 1,
       decoration: InputDecoration(
         labelText: field.label,
         hintText: field.hint,
