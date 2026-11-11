@@ -74,9 +74,9 @@ void main() {
     expect(find.byType(AppBar), findsNothing);
     expect(sent().title, "Chat settings");
     expect(sent().leading, TitleBarLeading.back);
-    expect(items().map((i) => (i.symbol, i.style, i.enabled)), [
-      ("plus", TitleBarItemStyle.icon, false),
-      ("checkmark", TitleBarItemStyle.confirm, true),
+    expect(items().map((i) => (i.glyph, i.style, i.enabled)), [
+      (Glyph.add, TitleBarItemStyle.icon, false),
+      (Glyph.check, TitleBarItemStyle.confirm, true),
     ]);
 
     bar().press(items()[1].id);

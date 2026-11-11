@@ -124,8 +124,8 @@ struct NewChatView: View {
       HStack(spacing: 6) {
         if picked {
           Image(systemName: "checkmark")
-        } else if !choice.symbol.isEmpty {
-          Image(systemName: choice.symbol)
+        } else if let glyph = choice.glyph {
+          Image(systemName: glyph.systemImage)
         }
         Text(choice.label).italic(choice.omada)
       }

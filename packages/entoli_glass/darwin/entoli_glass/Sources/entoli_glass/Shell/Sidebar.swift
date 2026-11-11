@@ -2,7 +2,7 @@ import SwiftUI
 
 extension SidebarSnapshot {
   static let initial = SidebarSnapshot(
-    project: ProjectChoice(label: "", symbol: "house", omada: false, count: 0), pages: [],
+    project: ProjectChoice(label: "", glyph: .home, omada: false, count: 0), pages: [],
     groups: [], query: "", projects: [], devices: [], omadaByDefault: false)
 }
 
@@ -223,7 +223,7 @@ private struct ProjectHeader: View {
         Button("New Project…") { creating = true }
       } label: {
         HStack(spacing: 8) {
-          Image(systemName: state.project.symbol)
+          Image(systemName: (state.project.glyph ?? .folder).systemImage)
           Text(state.project.label)
             .font(.headline)
             .italic(state.project.omada)
@@ -266,7 +266,7 @@ private struct ProjectHeader: View {
         Text(choice.count > 0 ? "\(choice.label)  \(choice.count)" : choice.label)
           .italic(choice.omada)
       } icon: {
-        Image(systemName: choice.symbol)
+        Image(systemName: (choice.glyph ?? .folder).systemImage)
       }
       .labelStyle(.titleAndIcon)
     }

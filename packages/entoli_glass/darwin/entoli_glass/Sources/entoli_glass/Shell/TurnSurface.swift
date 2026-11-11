@@ -165,8 +165,8 @@ struct TurnSurfaceView: View {
       say.running(id: thing.id) { _ in }
     } label: {
       HStack(spacing: 6) {
-        if let symbol = thing.symbol {
-          Image(systemName: symbol)
+        if let glyph = thing.glyph {
+          Image(systemName: glyph.systemImage)
         } else {
           ProgressView().controlSize(.mini)
         }
@@ -225,7 +225,7 @@ struct TurnSurfaceView: View {
   private func approvalCard(_ approval: ApprovalSnapshot) -> some View {
     VStack(alignment: .leading, spacing: 10) {
       HStack(spacing: 10) {
-        Image(systemName: approval.symbol)
+        Image(systemName: approval.glyph.systemImage)
           .font(.callout)
           .frame(width: 28, height: 28)
           .background(.tint.opacity(0.2), in: Circle())

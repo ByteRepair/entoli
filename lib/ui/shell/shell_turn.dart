@@ -13,6 +13,7 @@ import "../chat/widgets/running_strip.dart" show runningOf;
 import "../chat/widgets/steer_strip.dart";
 import "../chat/widgets/turn_surface.dart" show approvalAnswers;
 import "shell_outbox.dart";
+import "glyphs.dart";
 import "shell_answers.dart";
 
 /// [TurnSurface] drawn by the native shell, wired the same way: the resume
@@ -167,7 +168,7 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface>
               label: thing.label,
               tooltip: thing.tooltip,
               group: thing.group,
-              symbol: _symbolOf(thing.icon),
+              glyph: glyphOf(thing.icon),
               mono: thing.mono,
             ),
         ],
@@ -212,7 +213,7 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface>
     return ApprovalSnapshot(
       id: approval.id,
       title: title,
-      symbol: _symbolOf(icon) ?? "checkmark.shield",
+      glyph: glyphOf(icon) ?? Glyph.shield,
       tool: approval.toolName,
       detail: approval.argumentsText ?? approval.argumentsJson,
       allow: offers.allow,
@@ -220,21 +221,6 @@ class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface>
       project: offers.always,
     );
   }
-}
-
-/// The SF Symbol for one of the Material icons the turn surface draws, or
-/// null where there is none to stand for it.
-String? _symbolOf(IconData? icon) {
-  if (icon == null) return null;
-  if (icon == Icons.terminal) return "terminal";
-  if (icon == Icons.public) return "globe";
-  if (icon == Icons.travel_explore) return "safari";
-  if (icon == Icons.visibility_off) return "eye.slash";
-  if (icon == Icons.edit_outlined) return "pencil";
-  if (icon == Icons.description_outlined) return "doc.text";
-  if (icon == Icons.create_new_folder_outlined) return "folder.badge.plus";
-  if (icon == Icons.shield_outlined) return "checkmark.shield";
-  return null;
 }
 
 /// [goal] as the shell's goal row draws it, or null for none.

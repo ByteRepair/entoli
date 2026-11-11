@@ -12,7 +12,7 @@ import "../widgets/completion_field.dart";
 import "shell_composer.dart" show completionOf, triggerOf;
 import "shell_outbox.dart";
 import "shell_answers.dart";
-import "shell_sidebar.dart" show projectSymbol;
+import "glyphs.dart";
 
 /// The asset the new-chat screen stands its figure on.
 const _athena = "assets/images/athena.png";
@@ -94,9 +94,9 @@ class ShellNewChatState extends ConsumerState<ShellNewChat>
               project: project,
               label: projectLabel(project),
               // Only a built-in ships an icon; a user's badge is its name.
-              symbol: projectIcon(project) == null
-                  ? ""
-                  : projectSymbol(project),
+              glyph: projectIcon(project) == null
+                  ? null
+                  : projectShellGlyph(project),
               omada: ref.watch(omadaOnProvider(project)),
             ),
         ],
@@ -112,7 +112,6 @@ class ShellNewChatState extends ConsumerState<ShellNewChat>
                       device: device,
                       project: entry.scope.project,
                       label: projectLabel(entry.scope.project),
-                      symbol: "",
                       omada: entry.omada,
                     ),
               ],

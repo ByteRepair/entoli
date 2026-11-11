@@ -9,7 +9,7 @@ import "../selection.dart";
 import "../sidebar/project_palette.dart" show paletteListing;
 import "../sidebar/remote_projects.dart";
 import "../app_routes.dart";
-import "shell_sidebar.dart" show projectSymbol, remoteSymbol;
+import "glyphs.dart";
 
 /// Whether the native palette is open, what is typed in it, and which opening
 /// this is.
@@ -57,7 +57,7 @@ PaletteSnapshot _paletteSnapshot(Ref ref, PaletteState palette) {
     id: "p::${p ?? ""}",
     label: projectLabel(p),
     project: p,
-    symbol: projectSymbol(p),
+    glyph: projectShellGlyph(p),
     omada: ref.watch(omadaOnProvider(p)),
     trailing: "${counts[p] ?? 0}",
     busy: busy.contains(p),
@@ -68,7 +68,7 @@ PaletteSnapshot _paletteSnapshot(Ref ref, PaletteState palette) {
     label: e.label,
     device: e.scope.device,
     project: e.scope.project,
-    symbol: remoteSymbol,
+    glyph: Glyph.remote,
     omada: e.omada,
     trailing: "${e.count}",
     current: e.scope == selected,

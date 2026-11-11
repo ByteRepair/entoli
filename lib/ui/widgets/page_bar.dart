@@ -2,6 +2,7 @@ import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../shell/glyphs.dart";
 import "../shell/shell_page_bar.dart";
 import "discard_guard.dart";
 import "liquid_glass.dart";
@@ -190,13 +191,13 @@ class _IconAction extends PageAction {
 
   @override
   TitleBarItem _item(_Presses presses) {
-    final symbol = _symbolOf(icon);
+    final glyph = glyphOf(icon);
     return TitleBarItem(
       id: presses.add(onPressed),
       label: label,
-      symbol: symbol,
-      // An icon the system has no symbol for says what it does instead.
-      style: symbol == null ? TitleBarItemStyle.text : TitleBarItemStyle.icon,
+      glyph: glyph,
+      // An icon the shell has nothing to stand for says what it does instead.
+      style: glyph == null ? TitleBarItemStyle.text : TitleBarItemStyle.icon,
       enabled: onPressed != null,
     );
   }
@@ -219,7 +220,7 @@ class _ConfirmAction extends PageAction {
   TitleBarItem _item(_Presses presses) => TitleBarItem(
     id: presses.add(onPressed),
     label: label,
-    symbol: "checkmark",
+    glyph: Glyph.check,
     style: TitleBarItemStyle.confirm,
     enabled: onPressed != null,
   );
@@ -292,7 +293,7 @@ class _MenuAction extends PageAction {
   TitleBarItem _item(_Presses presses) => TitleBarItem(
     id: presses.add(null),
     label: label,
-    symbol: (icon == null ? null : _symbolOf(icon!)) ?? "ellipsis.circle",
+    glyph: glyphOf(icon) ?? Glyph.more,
     menu: [
       for (final item in items)
         if (item.enabled)
@@ -300,7 +301,7 @@ class _MenuAction extends PageAction {
             id: presses.add(item.onSelected),
             label: item.label,
             hint: item.hint,
-            symbol: item.icon == null ? null : _symbolOf(item.icon!),
+            glyph: glyphOf(item.icon),
             checked: item.checked ?? false,
           ),
     ],
@@ -336,26 +337,3 @@ class _Presses {
     return id;
   }
 }
-
-/// The SF Symbol the system draws for one of the app's Material icons, or
-/// null where it has none named here.
-String? _symbolOf(IconData icon) => _symbols[icon];
-
-final Map<IconData, String> _symbols = {
-  Icons.add: "plus",
-  Icons.check: "checkmark",
-  Icons.checklist: "checklist",
-  Icons.close: "xmark",
-  Icons.copy: "doc.on.doc",
-  Icons.copy_all_outlined: "doc.on.doc",
-  Icons.create_new_folder_outlined: "folder.badge.plus",
-  Icons.delete_outline: "trash",
-  Icons.edit_outlined: "pencil",
-  Icons.filter_list: "line.3.horizontal.decrease",
-  Icons.format_size: "textformat.size",
-  Icons.open_in_browser: "safari",
-  Icons.open_in_new: "arrow.up.forward.square",
-  Icons.restart_alt: "arrow.counterclockwise",
-  Icons.save_outlined: "square.and.arrow.down",
-  Icons.visibility_outlined: "eye",
-};

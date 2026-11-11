@@ -522,7 +522,11 @@ Each action is a `PageAction` — `.icon`, `.confirm` (the tick), `.text`
 and draws itself both ways: as a button in an `AppBar`, which is what the
 bar is with the shell off or in a route that is not a page, and as an item
 of the window's title bar under it, the tick as the system's confirm and
-its Material icon looked up as an SF Symbol. That is the whole of the
+its Material icon sent as the `Glyph` it stands for (`shell/glyphs.dart`).
+**The contract names no picture**: a `Glyph` says what an icon means — add,
+delete, a project's folder, a paired device — and `Glyphs.swift` draws each
+as Apple's own symbol in one exhaustive switch, so a glyph added to the
+contract compiles in neither until both have it. That is the whole of the
 design: a page knows nothing of the shell, and neither bar is read back
 out of the other, so a new kind of action is a new `PageAction`, said once
 and drawn by both. An action that comes and goes is the page's `if`, the

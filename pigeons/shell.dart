@@ -20,6 +20,39 @@ import "package:pigeon/pigeon.dart";
         "packages/entoli_glass/darwin/entoli_glass/Sources/entoli_glass/Contract/ShellContract.g.swift",
   ),
 )
+/// What an icon stands for, never how it is drawn: the client picks its own
+/// picture for each, in an exhaustive switch.
+enum Glyph {
+  add,
+  check,
+  checklist,
+  close,
+  copy,
+  newFolder,
+  delete,
+  edit,
+  filter,
+  textSize,
+  openInBrowser,
+  openExternal,
+  restart,
+  save,
+  show,
+  hidden,
+  more,
+  terminal,
+  globe,
+  browse,
+  document,
+  shield,
+  home,
+  folder,
+  team,
+  remote,
+  info,
+  tune,
+}
+
 /// The window around everything: whether a Flutter page covers the
 /// conversation — the native chrome steps aside for it — whether the sidebar
 /// is shown, and which appearance the app wears, which may not be the
@@ -41,7 +74,7 @@ class ProjectChoice {
     this.device,
     this.project,
     required this.label,
-    required this.symbol,
+    this.glyph,
     this.omada = false,
     this.count = 0,
   });
@@ -50,8 +83,8 @@ class ProjectChoice {
   String? project;
   String label;
 
-  /// An SF Symbol's name; empty for none.
-  String symbol;
+  /// Null for none.
+  Glyph? glyph;
 
   /// Drawn italic, as the Flutter app draws an Omada project's name.
   bool omada;
@@ -158,7 +191,7 @@ class TitleBarMenuItem {
     required this.id,
     required this.label,
     this.hint,
-    this.symbol,
+    this.glyph,
     this.checked = false,
   });
 
@@ -169,8 +202,8 @@ class TitleBarMenuItem {
   /// Drawn after the label, quieter: a key or a trigger.
   String? hint;
 
-  /// An SF Symbol's name, drawn before the label.
-  String? symbol;
+  /// Drawn before the label.
+  Glyph? glyph;
 
   /// Ticked, as a setting the choice turns on and off.
   bool checked;
@@ -181,7 +214,7 @@ class TitleBarItem {
   TitleBarItem({
     required this.id,
     required this.label,
-    this.symbol,
+    this.glyph,
     this.spinner = false,
     this.style = TitleBarItemStyle.icon,
     this.enabled = true,
@@ -194,8 +227,8 @@ class TitleBarItem {
   /// Its tooltip and accessibility label, and the word a text one shows.
   String label;
 
-  /// An SF Symbol's name; none for the spinner.
-  String? symbol;
+  /// None for the spinner, and for an item the client words instead.
+  Glyph? glyph;
   bool spinner;
   TitleBarItemStyle style;
   bool enabled;
@@ -380,7 +413,7 @@ class RunningSnapshot {
     required this.label,
     required this.tooltip,
     this.group,
-    this.symbol,
+    this.glyph,
     this.mono = false,
   });
 
@@ -392,8 +425,8 @@ class RunningSnapshot {
   /// The kind it is gathered under, as a singular noun; null standing alone.
   String? group;
 
-  /// An SF Symbol in place of the spinner.
-  String? symbol;
+  /// In place of the spinner.
+  Glyph? glyph;
   bool mono;
 }
 
@@ -408,7 +441,7 @@ class ApprovalSnapshot {
   ApprovalSnapshot({
     required this.id,
     required this.title,
-    required this.symbol,
+    required this.glyph,
     required this.tool,
     this.detail,
     this.allow = true,
@@ -418,7 +451,7 @@ class ApprovalSnapshot {
 
   String id;
   String title;
-  String symbol;
+  Glyph glyph;
   String tool;
 
   /// The call as the agent worded it, verbatim.
@@ -625,7 +658,7 @@ class PaletteItem {
     this.chat,
     this.device,
     this.project,
-    this.symbol = "",
+    this.glyph,
     this.omada = false,
     this.trailing = "",
     this.busy = false,
@@ -642,7 +675,7 @@ class PaletteItem {
   /// A project's `ProjectRef`.
   String? device;
   String? project;
-  String symbol;
+  Glyph? glyph;
   bool omada;
 
   /// A project's chat count, or a chat's project.

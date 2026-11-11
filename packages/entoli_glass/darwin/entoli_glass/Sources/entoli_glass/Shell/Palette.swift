@@ -154,7 +154,7 @@ struct PaletteView: View {
           if item.busy {
             ProgressView().controlSize(.mini)
           } else if item.chat == nil {
-            Image(systemName: item.symbol.isEmpty ? "folder" : item.symbol)
+            Image(systemName: (item.glyph ?? .folder).systemImage)
           } else {
             Image(systemName: "bubble.left")
           }

@@ -129,7 +129,7 @@ private struct TitleBarButton: View {
   private func press(_ id: String) { intents.press(id: id) { _ in } }
 
   private var icon: some View {
-    Label(item.label, systemImage: item.symbol ?? "circle")
+    Label(item.label, systemImage: item.glyph?.systemImage ?? "circle")
   }
 
   var body: some View {
@@ -141,7 +141,7 @@ private struct TitleBarButton: View {
             Button {
               press(choice.id)
             } label: {
-              if let symbol = choice.checked ? "checkmark" : choice.symbol {
+              if let symbol = choice.checked ? "checkmark" : choice.glyph?.systemImage {
                 Label(choice.label, systemImage: symbol)
               } else {
                 Text(choice.label)
@@ -224,14 +224,14 @@ extension ChatBarSnapshot {
     if let done = planDone, let total = planTotal {
       items.append(
         TitleBarItem(
-          id: Self.plan, label: "Plan, \(done) of \(total) done", symbol: "checklist",
+          id: Self.plan, label: "Plan, \(done) of \(total) done", glyph: .checklist,
           spinner: false, style: .icon, enabled: true, menu: []))
     }
     if settings {
       items.append(
         TitleBarItem(
           id: Self.settings, label: "Chat Settings",
-          symbol: draft ? "slider.horizontal.3" : "info.circle",
+          glyph: draft ? .tune : .info,
           spinner: false, style: .icon, enabled: true, menu: []))
     }
     return TitleBarSnapshot(

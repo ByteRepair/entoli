@@ -19,6 +19,7 @@ import "../sidebar/chat_groups.dart";
 import "../sidebar/project_palette.dart";
 import "../sidebar/remote_projects.dart";
 import "../app_routes.dart";
+import "glyphs.dart";
 
 /// What the native sidebar's search field holds. Dart's rather than the
 /// field's, so the one rule the Flutter sidebar searches by is the one here,
@@ -38,18 +39,6 @@ class ShellSearch extends Notifier<String> {
 final shellSearchProvider = NotifierProvider<ShellSearch, String>(
   ShellSearch.new,
 );
-
-/// An SF Symbol for [project], the one [projectGlyph] draws in Material.
-String projectSymbol(String? project) {
-  final icon = projectIcon(project);
-  if (icon == Icons.visibility_off) return "eye.slash";
-  if (icon == Icons.groups) return "person.3";
-  if (icon == Icons.verified_user) return "checkmark.shield";
-  return project == null ? "house" : "folder";
-}
-
-/// A paired device's project, which has no symbol of its own.
-const remoteSymbol = "laptopcomputer.and.iphone";
 
 /// What `Sidebar` draws, read the same way, as the native sidebar's
 /// snapshot: `ShellPublisher` sends it.
@@ -75,7 +64,7 @@ SidebarSnapshot _sidebarSnapshot(Ref ref) {
   ProjectChoice local(String? p) => ProjectChoice(
     project: p,
     label: projectLabel(p),
-    symbol: projectSymbol(p),
+    glyph: projectShellGlyph(p),
     omada: ref.watch(omadaOnProvider(p)),
     count: counts[p] ?? 0,
   );
@@ -86,7 +75,7 @@ SidebarSnapshot _sidebarSnapshot(Ref ref) {
         device: e.scope.device,
         project: e.scope.project,
         label: e.label,
-        symbol: remoteSymbol,
+        glyph: Glyph.remote,
         omada: e.omada,
         count: e.count,
       ),
@@ -111,7 +100,7 @@ SidebarSnapshot _sidebarSnapshot(Ref ref) {
             peers[selected.device]?.name ?? selected.device!,
             selected.project,
           ),
-          symbol: remoteSymbol,
+          glyph: Glyph.remote,
         );
     final mine =
         remotes
