@@ -92,9 +92,8 @@ class ShellComposerState extends ConsumerState<ShellComposer>
     widget.controller,
   ]);
 
-  /// The last revision and focus request of the model's state acted on.
+  /// The last revision of the model's state sent.
   int? _sentRevision;
-  int? _seenFocus;
 
   /// The native field's focus in Dart's focus tree, so what takes focus away
   /// here — a drag back through the conversation, a page pushed — takes the
@@ -115,7 +114,6 @@ class ShellComposerState extends ConsumerState<ShellComposer>
     _focus.addListener(_sendFocus);
     _configure();
     _model.state.addListener(_follow);
-    _seenFocus = _model.state.value.focusRequest;
     _follow();
   }
 
@@ -149,7 +147,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   @override
   void embed(ComposerEmbed embed) {
     widget.controller.append(embed);
-    _model.requestFocus();
+    _focus.requestFocus();
   }
 
   void _sendFocus() {
@@ -164,8 +162,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
     focused ? _focus.requestFocus() : _focus.unfocus();
   }
 
-  /// What the core set goes to the shell's field, once per revision, and a
-  /// focus asked for takes the keyboard.
+  /// What the core set goes to the shell's field, once per revision.
   void _follow() {
     final state = _model.state.value;
     if (state.revision != _sentRevision) {
@@ -179,10 +176,6 @@ class ShellComposerState extends ConsumerState<ShellComposer>
           revision: state.revision,
         ),
       );
-    }
-    if (state.focusRequest != _seenFocus) {
-      _seenFocus = state.focusRequest;
-      _focus.requestFocus();
     }
   }
 

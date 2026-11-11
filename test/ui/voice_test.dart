@@ -12,6 +12,7 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/project.dart" show localProject;
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/app/chat_controller.dart";
+import "package:agent_chat/app/composer.dart" show ComposerBinding;
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/composer_controller.dart";
 import "package:agent_chat/ui/selection.dart";
@@ -987,10 +988,12 @@ void main() {
           Scaffold(
             body: Composer(
               controller: text,
-              agentSpeaking: false,
-              onSend: (_, _) {},
-              onAbort: () {},
-              onVoice: () {},
+              binding: ComposerBinding(
+                agentSpeaking: false,
+                onSend: (_, _) {},
+                onAbort: () {},
+                onVoice: () {},
+              ),
             ),
           ),
         );

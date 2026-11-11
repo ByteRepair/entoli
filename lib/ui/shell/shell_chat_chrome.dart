@@ -29,9 +29,6 @@ class ShellChatChrome extends ChatChrome {
   bool get overPage => true;
 
   @override
-  bool get commandHint => false;
-
-  @override
   Widget composer({
     Key? key,
     required ComposerController controller,

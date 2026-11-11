@@ -161,7 +161,7 @@ struct PaletteView: View {
         }
         .frame(width: 18)
         .foregroundStyle(.secondary)
-        Text(item.chat != nil && item.label.isEmpty ? "Untitled" : item.label)
+        Text(item.chat != nil ? item.label.orUntitled : item.label)
           .italic(item.omada).lineLimit(1)
         if item.current {
           Image(systemName: "checkmark").font(.caption).foregroundStyle(.tint)

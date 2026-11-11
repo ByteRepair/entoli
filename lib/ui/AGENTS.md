@@ -457,16 +457,15 @@ left it out on purpose. The chat page owns one model per chat and one
 render those, the completion menu's open and closed state included. Both
 answer `ComposerHandle`, so Reply and a steer taken back reach either. The
 text is Dart's `ComposerController`, and a frontend draws the model's
-`ComposerState`: the value, its `revision` and a `focusRequest` beside the
-mode, the callback and the attachments. What the native field types arrives
+`ComposerState`: the value and its `revision` beside the mode, the callback
+and the attachments. What the native field types arrives
 as `edited`, which bumps no revision; what Dart sets — a completion taken, a
 message put back, the field cleared on send — bumps it and goes as
 `composerValue` with it, and the Swift applies a value only when the
 revision moved, so what was typed is never echoed back, which
 mid-composition would undo the input method's marked text. One clock serves
-every field, so two pages' composers never share a revision. Reply asks for
-focus with `requestFocus`, and each frontend focuses its field when
-`focusRequest` goes up. A quote
+every field, so two pages' composers never share a revision. Reply focuses
+the field through `ComposerHandle.embed`, each frontend its own. A quote
 card is an attachment character in the native field carrying its embed's code
 unit, so offsets mean the same on both sides. **The field's focus is a
 `FocusNode` in Dart's tree**: the field says when it takes the keyboard or

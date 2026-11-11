@@ -23,10 +23,6 @@ abstract class ChatChrome {
   /// above the composer.
   bool get overPage;
 
-  /// The `/` and `@` hint over the new-chat composer, where the frontend
-  /// does not say it itself.
-  bool get commandHint;
-
   Widget composer({
     Key? key,
     required ComposerController controller,
@@ -70,15 +66,12 @@ class FlutterChatChrome extends ChatChrome {
   bool get overPage => false;
 
   @override
-  bool get commandHint => true;
-
-  @override
   Widget composer({
     Key? key,
     required ComposerController controller,
     required ComposerModel model,
     required ComposerBinding binding,
-  }) => Composer.bound(
+  }) => Composer(
     key: key,
     controller: controller,
     model: model,

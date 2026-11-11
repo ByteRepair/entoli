@@ -125,7 +125,6 @@ class ComposerState {
   const ComposerState({
     required this.value,
     required this.revision,
-    required this.focusRequest,
     required this.mode,
     required this.callback,
     required this.speaking,
@@ -137,9 +136,6 @@ class ComposerState {
   /// What the field holds, and [revision] counting the times the core set it.
   final TextValue value;
   final int revision;
-
-  /// Bumped when something wants the field focused: Reply on a passage.
-  final int focusRequest;
   final ComposerMode mode;
 
   /// Which callback is typed, not what to call it.
@@ -174,19 +170,9 @@ class ComposerModel extends ChangeNotifier {
   ValueListenable<ComposerState> get state => _state;
   late final ValueNotifier<ComposerState> _state = ValueNotifier(_snapshot());
 
-  var _focusRequest = 0;
-
-  /// Ask the frontend for the field's focus: choosing Reply is asking to
-  /// write.
-  void requestFocus() {
-    _focusRequest++;
-    _publish();
-  }
-
   ComposerState _snapshot() => ComposerState(
     value: _field.textValue,
     revision: _field.revision,
-    focusRequest: _focusRequest,
     mode: _mode,
     callback: _callback,
     speaking: _turn.agentSpeaking,
@@ -210,7 +196,6 @@ class ComposerModel extends ChangeNotifier {
     _field.removeListener(_sync);
     _field = value..addListener(_sync);
     _sync();
-    _publish();
   }
 
   var _turn = (
@@ -286,11 +271,13 @@ class ComposerModel extends ChangeNotifier {
     final token = completion;
     final caret = _field.caret;
     if (token == null || caret == null) return;
-    final typed = "${token.kind.trigger}$name ";
-    _field.edit(
-      _field.text.replaceRange(token.start, caret, typed),
-      token.start + typed.length,
+    final (:text, caret: at) = completionAccepted(
+      _field.text,
+      token,
+      caret,
+      name,
     );
+    _field.edit(text, at);
   }
 
   /// A participant is speaking: an empty field's button is Stop.
@@ -465,12 +452,40 @@ int triggerPosition(String text, int? caret, CompletionKind kind) =>
   if (kind == CompletionKind.skill && text.startsWith(kind.trigger)) {
     return (text: text, caret: 1);
   }
-  final at = triggerPosition(text, caret, kind);
-  final space = at > 0 && !isCompletionSpace(text.codeUnitAt(at - 1))
-      ? " "
-      : "";
-  final typed = "$space${kind.trigger}";
-  return (text: text.replaceRange(at, at, typed), caret: at + typed.length);
+  return _typedAt(text, triggerPosition(text, caret, kind), kind.trigger);
+}
+
+/// [text] with a whole completion typed where [kind]'s trigger goes: the
+/// trigger, [name], and the trailing space that makes what follows arguments
+/// rather than more name.
+({String text, int caret}) completionInserted(
+  String text,
+  int? caret,
+  CompletionKind kind,
+  String name,
+) =>
+    _typedAt(text, triggerPosition(text, caret, kind), "${kind.trigger}$name ");
+
+/// [text] with [token], up to [caret], replaced by [name] as its whole name.
+({String text, int caret}) completionAccepted(
+  String text,
+  CompletionToken token,
+  int caret,
+  String name,
+) {
+  final typed = "${token.kind.trigger}$name ";
+  return (
+    text: text.replaceRange(token.start, caret, typed),
+    caret: token.start + typed.length,
+  );
+}
+
+/// [typed] inserted at [at], spaced off a word it would otherwise run into.
+({String text, int caret}) _typedAt(String text, int at, String typed) {
+  final spaced = at > 0 && !isCompletionSpace(text.codeUnitAt(at - 1))
+      ? " $typed"
+      : typed;
+  return (text: text.replaceRange(at, at, spaced), caret: at + spaced.length);
 }
 
 /// [text] as a goal: `/goal ` at its head, so what is already typed becomes

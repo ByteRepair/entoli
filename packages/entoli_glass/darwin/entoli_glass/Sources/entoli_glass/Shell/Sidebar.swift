@@ -393,5 +393,10 @@ extension ProjectError {
 }
 
 extension SidebarRow {
-  var shownTitle: String { title.isEmpty ? "Untitled" : title }
+  var shownTitle: String { title.orUntitled }
+}
+
+extension String {
+  /// A chat's title as shown, which a chat not named yet has none of.
+  var orUntitled: String { isEmpty ? "Untitled" : self }
 }

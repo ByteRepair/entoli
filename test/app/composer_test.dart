@@ -198,13 +198,6 @@ void main() {
       addTearDown(other.dispose);
       expect(other.revision, isNot(controller.revision));
     });
-
-    test("a focus asked for is a new request each time", () {
-      final first = logic.state.value.focusRequest;
-      logic.requestFocus();
-      logic.requestFocus();
-      expect(logic.state.value.focusRequest, first + 2);
-    });
   });
 
   group("the completion menu", () {

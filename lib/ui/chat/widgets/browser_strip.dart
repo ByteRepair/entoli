@@ -160,14 +160,15 @@ List<RunningThing> browserRunning(
   final tab = ref.watch(_browserTabProvider(chatId));
   if (tab == null) return const [];
   final hold = tab.hold;
+  final where = _where(tab.page);
   return [
     RunningThing(
       kind: RunningKind.browser,
-      name: _where(tab.page),
+      name: where,
       hidden: hold != null,
       icon: hold == null ? Icons.travel_explore : Icons.visibility_off,
       label:
-          "Browser · ${_where(tab.page)}"
+          "Browser · $where"
           "${hold == null ? "" : " · hidden from the agent"}",
       tooltip: "Watch the agent's browser",
       open: tab.open,

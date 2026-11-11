@@ -2,7 +2,8 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../app/composer.dart" show triggerOpened, triggerPosition;
+import "../../app/composer.dart"
+    show completionAccepted, completionInserted, triggerOpened;
 import "../../app/completion.dart";
 
 export "../../app/completion.dart";
@@ -47,32 +48,29 @@ void insertCompletion(
   CompletionKind kind,
   String name,
 ) {
-  final at = triggerPosition(controller.text, _caret(controller), kind);
-  final text = controller.text;
-  final space = at > 0 && !isCompletionSpace(text.codeUnitAt(at - 1))
-      ? " "
-      : "";
-  replaceIn(controller, at, at, "$space${kind.trigger}$name ");
+  _set(
+    controller,
+    completionInserted(controller.text, _caret(controller), kind, name),
+  );
 }
 
 /// Open [kind]'s menu in [controller] by typing its trigger — a skill's at the
 /// start of the message, the only place one is read from, and a mention's
 /// wherever the caret happens to be. One already typed at the start is
 /// reused rather than doubled.
-void openCompletion(TextEditingController controller, CompletionKind kind) {
-  final (:text, :caret) = triggerOpened(
-    controller.text,
-    _caret(controller),
-    kind,
-  );
-  controller.value = TextEditingValue(
-    text: text,
-    selection: TextSelection.collapsed(offset: caret),
-  );
-}
+void openCompletion(TextEditingController controller, CompletionKind kind) =>
+    _set(controller, triggerOpened(controller.text, _caret(controller), kind));
 
 int? _caret(TextEditingController controller) =>
     controller.selection.isValid ? controller.selection.baseOffset : null;
+
+void _set(
+  TextEditingController controller,
+  ({String text, int caret}) edited,
+) => controller.value = TextEditingValue(
+  text: edited.text,
+  selection: TextSelection.collapsed(offset: edited.caret),
+);
 
 /// Take [option] for the [token] the caret is in: the token, up to the caret,
 /// becomes the whole name. The trailing space makes what follows arguments
@@ -81,11 +79,14 @@ void acceptCompletion(
   TextEditingController controller,
   CompletionToken token,
   CompletionOption option,
-) => replaceIn(
+) => _set(
   controller,
-  token.start,
-  controller.selection.baseOffset,
-  "${token.kind.trigger}${option.name} ",
+  completionAccepted(
+    controller.text,
+    token,
+    controller.selection.baseOffset,
+    option.name,
+  ),
 );
 
 /// The entries that open a completion menu by typing its trigger, for a page
@@ -215,14 +216,14 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
     });
   }
 
-  /// Open [kind]'s menu by typing one — a skill's trigger at the start of the
-  /// message, the only place one is read from, and a mention's wherever the
-  /// caret happens to be. The menu that opens is tapped rather than typed at,
-  /// so the field is left unfocused.
   /// Show the menu for a trigger typed from outside the field, which moved
   /// no caret it would notice.
   void reopen() => _syncToken();
 
+  /// Open [kind]'s menu by typing one — a skill's trigger at the start of the
+  /// message, the only place one is read from, and a mention's wherever the
+  /// caret happens to be. The menu that opens is tapped rather than typed at,
+  /// so the field is left unfocused.
   void openMenu(CompletionKind kind) {
     openCompletion(widget.controller, kind);
     // A caret already in place notifies nothing, so a menu that was dismissed

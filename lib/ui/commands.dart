@@ -39,12 +39,9 @@ class Commands {
     this.context,
     this.ref,
     this._navigate, {
-    required this.front,
     required this.project,
     required this.chatId,
-    required this.pinned,
-    required this.running,
-    required this.sidebarShown,
+    required this.facts,
   });
 
   factory Commands.watch(
@@ -78,16 +75,23 @@ class Commands {
                   : (pinned: s.chat!.state.pinned, running: s.isRunning),
             ),
           );
+    final project = get(selectedProjectProvider);
     return Commands._(
       context,
       ref,
       navigate,
-      front: ModalRoute.isCurrentOf(context) ?? true,
-      project: get(selectedProjectProvider),
+      project: project,
       chatId: open == null ? null : id,
-      pinned: open?.pinned ?? false,
-      running: open?.running ?? false,
-      sidebarShown: get(sidebarShownProvider),
+      facts: (
+        front: ModalRoute.isCurrentOf(context) ?? true,
+        chatOpen: open != null,
+        pinned: open?.pinned ?? false,
+        running: open?.running ?? false,
+        sidebarShown: get(sidebarShownProvider),
+        hasWorkspace: projectHasWorkspace(project),
+        hasMemories: projectHasMemories(project),
+        hasSettings: projectHasSettings(project),
+      ),
     );
   }
 
@@ -95,26 +99,13 @@ class Commands {
   final WidgetRef ref;
   final Navigate _navigate;
 
-  /// Whether the chat pane is the page on top.
-  final bool front;
   final ProjectRef project;
 
   /// The open chat, where it is one of this device's and has been read.
   final String? chatId;
-  final bool pinned;
-  final bool running;
-  final bool sidebarShown;
 
-  AppFacts get facts => (
-    front: front,
-    chatOpen: chatId != null,
-    pinned: pinned,
-    running: running,
-    sidebarShown: sidebarShown,
-    hasWorkspace: projectHasWorkspace(project),
-    hasMemories: projectHasMemories(project),
-    hasSettings: projectHasSettings(project),
-  );
+  /// What the menus are greyed and labelled by.
+  final AppFacts facts;
 
   /// Whether [item] can run now, and why not where it cannot.
   Availability availability(AppItem item) => availabilityOf(item, facts);

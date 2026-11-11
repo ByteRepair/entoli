@@ -2,7 +2,6 @@ import "dart:async";
 import "dart:ui" show AppExitResponse;
 
 import "package:entoli_glass/entoli_glass.dart" show NativeShell;
-import "package:flutter/foundation.dart" show defaultTargetPlatform;
 import "package:flutter/material.dart";
 import "package:flutter/scheduler.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -13,6 +12,7 @@ import "app/app_menus.dart";
 import "core/platform/app_icon.dart";
 import "core/platform/app_menus.dart";
 import "core/platform/background_work.dart";
+import "core/platform/form_factor.dart" show isApple;
 import "core/platform/clipboard_files.dart";
 import "core/platform/platform.dart" as platform;
 import "core/platform/system_palette.dart";
@@ -54,12 +54,8 @@ import "app/chat_controller.dart";
 import "app/frontend.dart";
 import "ui/app_shell.dart";
 import "ui/shell/shell_bridge.dart";
-import "ui/chat/chat_chrome.dart" show chatChromeProvider;
+import "ui/shell/shell_overrides.dart";
 import "ui/app_chrome.dart" show appChromeProvider;
-import "ui/shell/shell_app_chrome.dart";
-import "ui/shell/shell_chat_chrome.dart";
-import "ui/shell/shell_page_bar.dart" show drawShellPageBar;
-import "ui/widgets/page_bar.dart" show pageBarDrawProvider;
 import "app/controller_turn_sender.dart";
 import "ui/assistant/incoming_assistant.dart";
 import "ui/focus_follows_keyboard.dart";
@@ -111,7 +107,7 @@ var _updateChecked = false;
 /// session's settings. The process's for the reason [_updateChecked] is: a
 /// restore's restart is this process still running, its window already set
 /// up one way or the other.
-bool? _glassAtLaunch;
+Frontend? _frontendAtLaunch;
 
 /// The menu bar's, once per process: it answers the platform's channel.
 NativeAppMenus? _menus;
@@ -152,24 +148,28 @@ class AppSession {
     // last step to the launch after it.
     await recoverRestore(dataDir, deleteTree: platform.deleteTree);
     final config = await AppConfig.load(dataDir);
-    final glassAvailable =
-        defaultTargetPlatform == TargetPlatform.iOS ||
-        defaultTargetPlatform == TargetPlatform.macOS;
+    final glassAvailable = isApple;
     // Once per process: a restore's restart is this process, its window
     // already the frontend's. The host draws Flutter's until it is told.
-    if (_glassAtLaunch == null) {
-      final frontend = chooseFrontend(
+    if (_frontendAtLaunch == null) {
+      final chosen = chooseFrontend(
         AppSettings.load(config),
-        defaultTargetPlatform,
+        native: glassAvailable,
       );
-      _glassAtLaunch = frontend == Frontend.swiftUI;
+      _frontendAtLaunch = chosen;
       if (glassAvailable) {
-        await NativeShell().shell(_glassAtLaunch!).catchError((Object e) {
+        await NativeShell().shell(chosen == Frontend.swiftUI).catchError((
+          Object e,
+        ) {
           logFailure("shell", "shell: $e");
-          _glassAtLaunch = false;
+          _frontendAtLaunch = Frontend.flutter;
         });
       }
     }
+    final frontend = FrontendChoice(
+      current: _frontendAtLaunch!,
+      native: glassAvailable,
+    );
     // Started here and awaited before the identity load below: the keyring
     // probe is decided once, so the identity's own first read must not race
     // this one, and the mirror the registry reads keys through is filled by
@@ -397,21 +397,11 @@ class AppSession {
         appUpdateHostProvider.overrideWithValue(
           platform.createAppUpdateHost(cache),
         ),
-        if (_glassAtLaunch!) ...[
-          pageBarDrawProvider.overrideWithValue(drawShellPageBar),
-          chatChromeProvider.overrideWithValue(const ShellChatChrome()),
-          appChromeProvider.overrideWithValue(const ShellAppChrome()),
-          appLookOverrideProvider.overrideWithValue(shellLook),
-        ],
+        if (frontend.swiftUI) ...shellOverrides,
         appMenusProvider.overrideWithValue(
           glassAvailable ? _menus ??= NativeAppMenus() : const NoAppMenus(),
         ),
-        frontendProvider.overrideWithValue(
-          FrontendChoice(
-            current: _glassAtLaunch! ? Frontend.swiftUI : Frontend.flutter,
-            native: glassAvailable,
-          ),
-        ),
+        frontendProvider.overrideWithValue(frontend),
         agentBrowserProvider.overrideWithValue(browser),
         localEngineProvider.overrideWithValue(engine),
         appleFmProvider.overrideWithValue(apple),

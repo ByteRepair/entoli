@@ -368,7 +368,8 @@ class _NewChatState extends ConsumerState<_NewChat> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (chrome.commandHint) const _CommandHint(),
+        // The shell's own composer says it.
+        if (!chrome.overPage) const _CommandHint(),
         if (at.device != null)
           // A paired device's project: its setup and its voice are that
           // device's.

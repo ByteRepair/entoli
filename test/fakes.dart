@@ -195,7 +195,6 @@ class FakeLauncherIcons implements LauncherIcons {
   Future<void> use(AppIcon icon) async => used.add(icon);
 }
 
-/// The automatic update's platform half, as a test sees it: whether the
 /// The menu bar, keeping what it was last shown: each item's title and
 /// whether it was enabled, in any menu. [pick] is the user choosing one.
 class FakeAppMenus implements AppMenus {
@@ -223,6 +222,7 @@ class FakeAppMenus implements AppMenus {
   void pick(String title) => _picked!(shown[title]!.item);
 }
 
+/// The automatic update's platform half, as a test sees it: whether the
 /// settings page draws its row. The harness default is the unavailable one,
 /// which is every non-desktop answer.
 class FakeAppUpdateHost implements AppUpdateHost {

@@ -120,35 +120,9 @@ class Composer extends ConsumerStatefulWidget {
   const Composer({
     super.key,
     required this.controller,
-    required this.agentSpeaking,
-    required this.onSend,
-    required this.onAbort,
-    this.onQueue,
-    this.steers,
-    this.project,
-    this.device,
-    this.onVoice,
-    this.workspace,
-    this.workspaceHome,
+    required this.binding,
     this.model,
   });
-
-  /// [binding]'s composer, over the page's [model].
-  Composer.bound({
-    super.key,
-    required this.controller,
-    required ComposerModel this.model,
-    required ComposerBinding binding,
-  }) : agentSpeaking = binding.agentSpeaking,
-       onSend = binding.onSend,
-       onAbort = binding.onAbort,
-       onQueue = binding.onQueue,
-       steers = binding.steers,
-       project = binding.project,
-       device = binding.device,
-       onVoice = binding.onVoice,
-       workspace = binding.workspace,
-       workspaceHome = binding.workspaceHome;
 
   /// The page's composer model, which every frontend's composer for the page
   /// runs on; null makes one of this widget's own.
@@ -158,40 +132,10 @@ class Composer extends ConsumerStatefulWidget {
   /// `message`, never its `text`.
   final ComposerController controller;
 
-  /// A participant is speaking: Send becomes Stop and the voice button
-  /// stands down.
-  final bool agentSpeaking;
-  final SendCallback onSend;
-  final VoidCallback onAbort;
-
-  /// Send for after the running turn rather than into it. Null where the
-  /// composer has no turn to wait on.
-  final SendCallback? onQueue;
-
-  /// Whether what is typed would steer the running turn: the room's rule,
-  /// asked rather than copied, since only it knows who is speaking. Given
-  /// with [onQueue]; without it the queue button never shows.
-  final bool Function(String text)? steers;
-
-  /// The project the composer is in, so the `/` and `@` menus offer what it
-  /// offers. Null is the default, the way it is everywhere a project is named.
-  final String? project;
-
-  /// The paired device [project] is on, null for this one.
-  final String? device;
-
-  /// Opens voice mode. Null draws no voice button.
-  final VoidCallback? onVoice;
-
-  /// Where this chat's shell starts: its own workspace. Null where the chat
-  /// does not exist yet, which draws no bar at all. Drawn in shell mode, live
-  /// as a `cd` moves it, and copied whole on a tap.
-  final String? workspace;
-
-  /// The project workspace the shell's turns call home — what words the bar's
-  /// fallback in the guest's vocabulary where this shell has one. Null beside
-  /// a null [workspace] only: they travel together from the page.
-  final String? workspaceHome;
+  /// The turn this sends into and where it is. A null `workspace` draws no
+  /// shell bar at all; otherwise the bar is live as a `cd` moves it, and
+  /// copied whole on a tap.
+  final ComposerBinding binding;
 
   @override
   ConsumerState<Composer> createState() => ComposerState();
@@ -223,7 +167,6 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   void initState() {
     super.initState();
     _configure();
-    _model.state.addListener(_followFocus);
   }
 
   @override
@@ -233,20 +176,11 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
     _configure();
   }
 
-  void _configure() => _model.configure(
-    agentSpeaking: widget.agentSpeaking,
-    onSend: widget.onSend,
-    onQueue: widget.onQueue,
-    steers: widget.steers,
-    onAbort: widget.onAbort,
-    onVoice: widget.onVoice,
-  );
+  void _configure() => _model.bind(widget.binding);
 
   @override
   void dispose() {
-    _model
-      ..removeListener(_reshaped)
-      ..state.removeListener(_followFocus);
+    _model.removeListener(_reshaped);
     if (widget.model == null) _model.dispose();
     _focus.dispose();
     super.dispose();
@@ -290,15 +224,6 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   @override
   void embed(ComposerEmbed embed) {
     widget.controller.append(embed);
-    _model.requestFocus();
-  }
-
-  late int _seenFocus = _model.state.value.focusRequest;
-
-  void _followFocus() {
-    final asked = _model.state.value.focusRequest;
-    if (asked == _seenFocus) return;
-    _seenFocus = asked;
     _focus.requestFocus();
   }
 
@@ -387,8 +312,8 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
           key: _field,
           focusNode: _focus,
           controller: widget.controller,
-          project: widget.project,
-          device: widget.device,
+          project: widget.binding.project,
+          device: widget.binding.device,
           minLines: 1,
           maxLines: _maxLines,
           // The command in the face a command is read in, so what is about to
@@ -476,8 +401,8 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
                       duration: const Duration(milliseconds: 180),
                       curve: Curves.easeOut,
                       child:
-                          widget.onVoice == null ||
-                              widget.agentSpeaking ||
+                          widget.binding.onVoice == null ||
+                              widget.binding.agentSpeaking ||
                               canSend
                           ? const SizedBox.shrink()
                           : child,
@@ -511,7 +436,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
                   ListenableBuilder(
                     listenable: _sendState,
                     builder: (context, _) =>
-                        widget.agentSpeaking && !_model.canSend.value
+                        widget.binding.agentSpeaking && !_model.canSend.value
                         ? IconButton.filled(
                             onPressed: () => _run(ComposerAction.stop),
                             icon: const Icon(Icons.stop),
@@ -585,12 +510,12 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   /// since a `cd` in an earlier one moved it. The completion menu's dressing,
   /// one row of it, and a tap copies the whole path out.
   Widget _cwdBar(ThemeData theme) {
-    final workspace = widget.workspace;
+    final workspace = widget.binding.workspace;
     if (workspace == null) return const SizedBox.shrink();
     final notifier = ref.watch(
       chatShellCwdProvider((
         workspace: workspace,
-        workspaceHome: widget.workspaceHome,
+        workspaceHome: widget.binding.workspaceHome,
       )),
     );
     // What stands in for the shell having said nothing yet, in the row's own
@@ -600,7 +525,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
     final fallback = workingDirectoryFallback(
       workspace: workspace,
       guestRoot: ref.watch(shellProvider).guestRoot,
-      home: widget.workspaceHome,
+      home: widget.binding.workspaceHome,
     );
     Widget row(String? live) => Container(
       margin: const EdgeInsets.only(bottom: 8),

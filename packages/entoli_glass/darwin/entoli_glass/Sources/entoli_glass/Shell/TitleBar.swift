@@ -235,7 +235,7 @@ extension ChatBarSnapshot {
           spinner: false, style: .icon, enabled: true, menu: []))
     }
     return TitleBarSnapshot(
-      present: true, title: draft ? "New Chat" : title.isEmpty ? "Untitled" : title,
+      present: true, title: draft ? "New Chat" : title.orUntitled,
       subtitle: [project, pinned ? "Pinned" : nil].compactMap { $0 }.joined(separator: " · "),
       expiresAt: expiresAt, items: items)
   }

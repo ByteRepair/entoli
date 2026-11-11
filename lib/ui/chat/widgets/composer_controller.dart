@@ -95,10 +95,7 @@ class ComposerController extends TextEditingController implements ComposerText {
   /// embed, and the caret at the end.
   set message(String message) {
     final text = _text.textOf(message);
-    value = TextEditingValue(
-      text: text,
-      selection: TextSelection.collapsed(offset: text.length),
-    );
+    edit(text, text.length);
   }
 
   /// Put [said] ahead of what the field holds: a message taken back, above
@@ -106,20 +103,14 @@ class ComposerController extends TextEditingController implements ComposerText {
   @override
   void prepend(String said) {
     final next = _text.prepended(text, said);
-    value = TextEditingValue(
-      text: next,
-      selection: TextSelection.collapsed(offset: next.length),
-    );
+    edit(next, next.length);
   }
 
   /// Add [embed] at the end, on a line of its own, and put the caret on the
   /// line under it.
   void append(ComposerEmbed embed) {
     final next = _text.appended(text, embed);
-    value = TextEditingValue(
-      text: next,
-      selection: TextSelection.collapsed(offset: next.length),
-    );
+    edit(next, next.length);
   }
 
   /// Take [embed] out, with the line break it sat on.

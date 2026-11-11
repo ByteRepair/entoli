@@ -1,4 +1,3 @@
-import "package:flutter/foundation.dart" show TargetPlatform;
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../domain/app_settings.dart";
@@ -9,12 +8,9 @@ enum Frontend { flutter, swiftUI }
 
 /// Chosen once, at launch, before the first frame: switching asks for a
 /// relaunch, the window being the frontend's from then on.
-Frontend chooseFrontend(AppSettings settings, TargetPlatform platform) =>
-    switch (platform) {
-      TargetPlatform.iOS ||
-      TargetPlatform.macOS when settings.liquidGlass => Frontend.swiftUI,
-      _ => Frontend.flutter,
-    };
+/// [native] is whether the platform has a frontend of its own.
+Frontend chooseFrontend(AppSettings settings, {required bool native}) =>
+    native && settings.liquidGlass ? Frontend.swiftUI : Frontend.flutter;
 
 /// What this launch draws with, and whether the platform has a frontend of
 /// its own to offer — the setting shows only where it does. Settled at

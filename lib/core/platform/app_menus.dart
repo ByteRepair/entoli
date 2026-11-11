@@ -1,3 +1,4 @@
+import "package:flutter/foundation.dart" show listEquals;
 import "package:entoli_menu/entoli_menu.dart";
 
 import "../../app/app_items.dart";
@@ -59,13 +60,8 @@ class NativeAppMenus implements AppMenus, NativeMenuPicks {
           },
         ),
     ];
-    if (_same(native, _shown)) return;
+    if (listEquals(native, _shown)) return;
     _shown = native;
     _bar.show(native).catchError((Object e) => logFailure("menu", "show: $e"));
   }
-
-  static bool _same(List<NativeMenu> a, List<NativeMenu>? b) =>
-      b != null &&
-      a.length == b.length &&
-      [for (var i = 0; i < a.length; i++) a[i] == b[i]].every((same) => same);
 }
