@@ -38,6 +38,14 @@ struct ShellView: View {
   }
 
   /// Before the app is up — the welcome tour, first-run setup — the
+  /// conversation's column alone, whatever the split view is asked.
+  private var shownColumns: Binding<NavigationSplitViewVisibility> {
+    Binding(
+      get: { model.ready ? columns : .detailOnly },
+      set: { if model.ready { columns = $0 } })
+  }
+
+  /// Before the app is up — the welcome tour, first-run setup — the
   /// conversation's column alone.
   private func visibility(_ shown: Bool) -> NavigationSplitViewVisibility {
     shown && model.ready ? .all : .detailOnly
@@ -45,10 +53,14 @@ struct ShellView: View {
 
   var body: some View {
     NavigationSplitView(
-      columnVisibility: $columns, preferredCompactColumn: $model.compactColumn
+      columnVisibility: shownColumns,
+      preferredCompactColumn: model.ready ? $model.compactColumn : .constant(.detail)
     ) {
-      SidebarView(model: model, collapsed: collapsed)
-        .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 400)
+      // Nothing to swipe in before the app is up.
+      if model.ready {
+        SidebarView(model: model, collapsed: collapsed)
+          .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 400)
+      }
     } detail: {
       ZStack {
         GeometryReader { proxy in
@@ -88,10 +100,12 @@ struct ShellView: View {
         .animation(ComposerView.motion, value: model.turn.isEmpty)
       }
       .windowBar(model, toList: toList)
+      .welcome(!model.ready)
       #if os(iOS)
         .edgeSwipe(toList)
       #endif
     }
+    .toolbar(removing: model.ready ? nil : .sidebarToggle)
     // Voice mode over everything: the sidebar too, as the Flutter page was
     // pushed over the whole window.
     .overlay {
@@ -125,7 +139,6 @@ struct ShellView: View {
       }
       .reportsPointer(over: flutter, to: model)
     #endif
-    .welcome(!model.ready)
     .onChange(of: model.window.sidebarShown, initial: true) { _, shown in
       guard visibility(shown) != columns else { return }
       withAnimation(.smooth(duration: 0.3)) { columns = visibility(shown) }
@@ -206,19 +219,14 @@ extension View {
 }
 
 extension View {
-  /// The welcome tour and first-run setup stand alone: no toolbar to leave
-  /// by, no way to the sidebar.
-  @ViewBuilder fileprivate func welcome(_ on: Bool) -> some View {
-    if on {
-      self.toolbar(removing: .sidebarToggle)
-        #if os(macOS)
-          .toolbar(.hidden, for: .windowToolbar)
-        #else
-          .toolbar(.hidden, for: .navigationBar)
-        #endif
-    } else {
-      self
-    }
+  /// The welcome tour and first-run setup stand alone, with no bar to
+  /// leave by: set on the column, whose bar it is.
+  fileprivate func welcome(_ on: Bool) -> some View {
+    #if os(macOS)
+      toolbar(on ? .hidden : .automatic, for: .windowToolbar)
+    #else
+      toolbar(on ? .hidden : .automatic, for: .navigationBar)
+    #endif
   }
 }
 
