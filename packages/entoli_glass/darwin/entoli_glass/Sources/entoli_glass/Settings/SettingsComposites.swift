@@ -14,7 +14,9 @@ struct CollectionRow: View {
   let model: SettingsModel
   let row: SettingRowData
   @State private var editing: Editing?
-  @State private var confirm: (SettingConfirmData, Int, String)?
+  @State private var confirm: SettingConfirmData?
+  /// The item and action [confirm] asks about.
+  @State private var pending: (index: Int, action: String)?
   @State private var notice: SettingNoticeData?
   @State private var picking: Int?
   @State private var photo: PhotosPickerItem?
@@ -59,7 +61,10 @@ struct CollectionRow: View {
           // An item with a page of its own opens it from its words; the
           // chevron ends the row, after its actions.
           if let opens = item.opens {
-            OpenLink(model: model, title: item.title, opens: opens, chevron: false) {
+            PushRow(
+              model: model, to: .text(OpenedText(title: item.title, opens: opens)),
+              chevron: false
+            ) {
               words.frame(maxWidth: .infinity, alignment: .leading)
             }
           } else {
@@ -133,7 +138,10 @@ struct CollectionRow: View {
           .foregroundStyle(Color.accentColor)
       }
       if row.hint == .agents {
-        OpenAvatars(model: model, row: row.id)
+        PushRow(model: model, to: .avatars(OpenedAvatars(agent: nil, row: row.id, index: -1))) {
+          Label("View Bot Avatars", systemImage: "face.smiling")
+        }
+        .foregroundStyle(Color.accentColor)
       }
     }
     .sheet(item: $editing) { editing in
@@ -157,23 +165,8 @@ struct CollectionRow: View {
         picking = nil
       }
     }
-    .alert(
-      confirm?.0.title ?? "",
-      isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }),
-      presenting: confirm
-    ) { ask in
-      Button(ask.0.confirmLabel ?? "OK", role: ask.0.destructive ? .destructive : nil) {
-        run(ask.1, ask.2)
-      }
-      Button("Cancel", role: .cancel) {}
-    } message: { ask in
-      Text(ask.0.message)
-    }
-    .alert(
-      notice?.message ?? "",
-      isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })
-    ) {
-      Button("OK", role: .cancel) {}
+    .asking($confirm, $notice) {
+      if let pending { run(pending.index, pending.action) }
     }
   }
 
@@ -187,7 +180,8 @@ struct CollectionRow: View {
       return
     }
     if let ask = action.confirm {
-      confirm = (ask, index, action.id)
+      pending = (index, action.id)
+      confirm = ask
     } else {
       // A page the Flutter app opens over the conversation: out of its way.
       if action.handsOff { model.stepAside() }
@@ -369,7 +363,7 @@ struct FormSheet: View {
       let picked = Set(((answers[key] ?? nil) ?? "").split(separator: ",").map(String.init))
       VStack(alignment: .leading, spacing: 6) {
         Text(part.label ?? "").font(.caption).foregroundStyle(.secondary)
-        Flow(spacing: 8) {
+        FlowLayout(spacing: 8, centred: false) {
           ForEach(part.options.compactMap { $0 }, id: \.answer) { option in
             let on = picked.contains(option.answer)
             // A plain capsule rather than a glass button: switching a glass
@@ -431,6 +425,8 @@ struct CatalogRow: View {
   let model: SettingsModel
   let row: SettingRowData
   @State private var deleting: SettingCatalogData?
+  @State private var confirm: SettingConfirmData?
+  @State private var notice: SettingNoticeData?
 
   var body: some View {
     Group {
@@ -478,15 +474,8 @@ struct CatalogRow: View {
       }
     }
     }
-    .alert(
-      deleting?.deleteConfirm?.title ?? "Delete \(deleting?.title ?? "")?",
-      isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
-      presenting: deleting
-    ) { item in
-      Button("Delete", role: .destructive) { op(item, "delete") }
-      Button("Cancel", role: .cancel) {}
-    } message: { item in
-      Text(item.deleteConfirm?.message ?? "")
+    .asking($confirm, $notice) {
+      if let deleting { op(deleting, "delete") }
     }
   }
 
@@ -497,7 +486,12 @@ struct CatalogRow: View {
       HStack {
         if item.installed {
           Button(role: .destructive) {
-            if item.deleteConfirm == nil { op(item, "delete") } else { deleting = item }
+            if let ask = item.deleteConfirm {
+              deleting = item
+              confirm = ask
+            } else {
+              op(item, "delete")
+            }
           } label: {
             Image(systemName: "trash")
           }
@@ -635,14 +629,22 @@ struct PairingSheet: View {
   }
 }
 
-enum QRCode {
+@MainActor enum QRCode {
+  private static let context = CIContext()
+  /// The last code drawn: the same one is drawn again on every redraw while
+  /// a pairing window is open.
+  private static var last: (text: String, image: Image)?
+
   static func image(_ text: String) -> Image? {
+    if let last, last.text == text { return last.image }
     let filter = CIFilter.qrCodeGenerator()
     filter.message = Data(text.utf8)
     guard let output = filter.outputImage,
-      let cg = CIContext().createCGImage(output, from: output.extent)
+      let cg = context.createCGImage(output, from: output.extent)
     else { return nil }
-    return Image(decorative: cg, scale: 1)
+    let image = Image(decorative: cg, scale: 1)
+    last = (text, image)
+    return image
   }
 }
 
@@ -651,7 +653,8 @@ enum QRCode {
 struct SetupRow: View {
   let model: SettingsModel
   let row: SettingRowData
-  @State private var deleting = false
+  @State private var confirm: SettingConfirmData?
+  @State private var notice: SettingNoticeData?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
@@ -682,14 +685,9 @@ struct SetupRow: View {
         }
       }
       if let error = row.error { Text(error).font(.caption).foregroundStyle(.red) }
-      Button("Delete Byte Repair Data", role: .destructive) { deleting = true }
+      Button("Delete Byte Repair Data", role: .destructive) { confirm = row.deleteConfirm }
     }
-    .alert(row.label ?? "", isPresented: $deleting) {
-      Button("Delete", role: .destructive) { op("delete") }
-      Button("Cancel", role: .cancel) {}
-    } message: {
-      Text(row.summary ?? "")
-    }
+    .asking($confirm, $notice) { op("delete") }
   }
 
   private func op(_ op: String) {
@@ -722,73 +720,3 @@ struct SetupRow: View {
     init(platformImage: UIImage) { self.init(uiImage: platformImage) }
   }
 #endif
-
-/// Its views in rows, a row wrapping where the next would not fit.
-struct Flow: Layout {
-  var spacing: CGFloat = 8
-
-  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-    let rows = arrange(subviews, width: proposal.width ?? .infinity)
-    let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(rows.count - 1, 0))
-    return CGSize(width: proposal.width ?? rows.map(\.width).max() ?? 0, height: height)
-  }
-
-  func placeSubviews(
-    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
-  ) {
-    var y = bounds.minY
-    for row in arrange(subviews, width: bounds.width) {
-      var x = bounds.minX
-      for index in row.indices {
-        let size = subviews[index].sizeThatFits(ProposedViewSize(width: bounds.width, height: nil))
-        subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-        x += size.width + spacing
-      }
-      y += row.height + spacing
-    }
-  }
-
-  private struct Row {
-    var indices: [Int] = []
-    var width: CGFloat = 0
-    var height: CGFloat = 0
-  }
-
-  private func arrange(_ subviews: Subviews, width: CGFloat) -> [Row] {
-    var rows = [Row()]
-    for index in subviews.indices {
-      let size = subviews[index].sizeThatFits(ProposedViewSize(width: width, height: nil))
-      let needed = rows[rows.count - 1].indices.isEmpty ? size.width : size.width + spacing
-      if rows[rows.count - 1].width + needed > width, !rows[rows.count - 1].indices.isEmpty {
-        rows.append(Row())
-      }
-      let added = rows[rows.count - 1].indices.isEmpty ? size.width : size.width + spacing
-      rows[rows.count - 1].indices.append(index)
-      rows[rows.count - 1].width += added
-      rows[rows.count - 1].height = max(rows[rows.count - 1].height, size.height)
-    }
-    return rows
-  }
-}
-
-/// The agents list's way to every Bot Avatar, to look through, import and
-/// delete them.
-private struct OpenAvatars: View {
-  let model: SettingsModel
-  let row: String
-
-  var body: some View {
-    Button {
-      model.push(.avatars(OpenedAvatars(agent: nil, row: row, index: -1)))
-    } label: {
-      HStack {
-        Label("View Bot Avatars", systemImage: "face.smiling")
-        Spacer()
-        Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
-      }
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .foregroundStyle(Color.accentColor)
-  }
-}

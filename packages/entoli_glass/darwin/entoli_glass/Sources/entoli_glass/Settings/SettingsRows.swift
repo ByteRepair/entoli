@@ -217,15 +217,25 @@ struct RangeRow: View {
   let row: SettingRowData
   @State private var dragging: Double?
 
-  private var stops: [Int64] { row.stops.compactMap { $0 } }
+  /// Every value it can take: its stops, or each whole number between its
+  /// bounds, so one slider steps through either.
+  private var stops: [Int64] {
+    let given = row.stops.compactMap { $0 }
+    if !given.isEmpty { return given }
+    let low = row.min ?? 0
+    return Array(low...max(row.max ?? low, low))
+  }
+
   private var shown: Int64 { row.value ?? row.inherited ?? 0 }
 
   var body: some View {
+    let stops = stops
+    let at = { (index: Double) in stops[min(Int(index.rounded()), stops.count - 1)] }
     VStack(alignment: .leading) {
       HStack {
         Text(row.title)
         Spacer()
-        Text("\(dragging.map { Int64($0.rounded()) }.map(label) ?? label(shown))")
+        Text("\(dragging.map(at) ?? shown)")
           .monospacedDigit().foregroundStyle(.secondary)
         if row.unsettable && row.value != nil {
           ResetMenu(label: row.inherited.map { "\($0)" }) {
@@ -233,38 +243,20 @@ struct RangeRow: View {
           }
         }
       }
-      if stops.isEmpty {
-        let low = Double(row.min ?? 0)
-        let high = Double(max(row.max ?? 0, row.min ?? 0) )
-        Slider(
-          value: Binding(get: { dragging ?? Double(shown) }, set: { dragging = $0 }),
-          in: low...max(high, low + 1), step: 1
-        ) { editing in
-          if !editing, let value = dragging {
-            model.say.setNumber(id: row.id, value: Int64(value.rounded()), completion: ignore)
-            dragging = nil
-          }
-        }
-      } else {
-        Slider(
-          value: Binding(
-            get: { dragging ?? Double(nearest(shown)) }, set: { dragging = $0 }),
-          in: 0...Double(max(stops.count - 1, 1)), step: 1
-        ) { editing in
-          if !editing, let value = dragging {
-            model.say.setNumber(id: row.id, value: stops[Int(value.rounded())], completion: ignore)
-            dragging = nil
-          }
+      Slider(
+        value: Binding(
+          get: { dragging ?? Double(nearest(shown, in: stops)) }, set: { dragging = $0 }),
+        in: 0...Double(max(stops.count - 1, 1)), step: 1
+      ) { editing in
+        if !editing, let value = dragging {
+          model.say.setNumber(id: row.id, value: at(value), completion: ignore)
+          dragging = nil
         }
       }
     }
   }
 
-  private func label(_ value: Int64) -> String {
-    stops.isEmpty || dragging == nil ? "\(value)" : "\(stops[Int(value)])"
-  }
-
-  private func nearest(_ value: Int64) -> Int {
+  private func nearest(_ value: Int64, in stops: [Int64]) -> Int {
     stops.indices.min(by: { abs(stops[$0] - value) < abs(stops[$1] - value) }) ?? 0
   }
 }
@@ -426,12 +418,11 @@ struct AccessoryButton: View {
 /// Settings under one label: a switch and the count it turns on, or actions
 /// side by side.
 struct GroupRow: View {
-  @ObservedObject var model: SettingsModel
+  let model: SettingsModel
   let row: SettingRowData
-  let section: SettingsSectionData
 
   var body: some View {
-    let children = model.children(of: row, in: section)
+    let children = model.children(of: row)
     VStack(alignment: .leading, spacing: 8) {
       if row.hint == .buttons {
         HStack {
@@ -441,7 +432,7 @@ struct GroupRow: View {
       } else {
         if row.hint != .recommended { Text(row.title).font(.headline) }
         ForEach(children, id: \.id) { child in
-          SettingRowView(model: model, row: child, section: section)
+          SettingRowView(model: model, row: child)
         }
         if let footnote = row.footnote {
           Text(footnote).font(.caption).foregroundStyle(.secondary)
@@ -589,7 +580,9 @@ struct InfoRow: View {
       } else if let link = info.link.flatMap(URL.init(string:)) {
         Link(destination: link) { infoLabel(info) }
       } else if let opens = info.opens {
-        OpenLink(model: model, title: info.title, opens: opens) { infoLabel(info) }
+        PushRow(model: model, to: .text(OpenedText(title: info.title, opens: opens))) {
+          infoLabel(info)
+        }
       } else {
         infoLabel(info)
       }
@@ -605,11 +598,7 @@ struct InfoRow: View {
   }
 
   private func chord(_ key: String, shift: Bool, alt: Bool) -> String {
-    #if os(macOS)
-      "⌘\(alt ? "⌥" : "")\(shift ? "⇧" : "")\(key.uppercased())"
-    #else
-      "⌘\(alt ? "⌥" : "")\(shift ? "⇧" : "")\(key.uppercased())"
-    #endif
+    "⌘\(alt ? "⌥" : "")\(shift ? "⇧" : "")\(key.uppercased())"
   }
 }
 
@@ -617,33 +606,6 @@ struct InfoRow: View {
 struct OpenedText: Hashable {
   let title: String
   let opens: String
-}
-
-/// A link to a page of text that answers only for itself. NavigationLinks
-/// sharing a list row all fire on a tap anywhere in it, the last one winning.
-struct OpenLink<Label: View>: View {
-  let model: SettingsModel
-  let title: String
-  let opens: String
-  /// Drawn by the row instead, where something sits between them.
-  var chevron = true
-  @ViewBuilder let label: Label
-
-  var body: some View {
-    Button {
-      model.push(.text(OpenedText(title: title, opens: opens)))
-    } label: {
-      HStack {
-        label
-        if chevron {
-          Spacer(minLength: 4)
-          Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
-        }
-      }
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-  }
 }
 
 extension Color {
@@ -701,15 +663,22 @@ struct OpenedModels: Hashable {
 }
 
 /// A row that opens a page, drawn as a link: pushed through the model, so it
-/// is animated on every platform.
+/// is animated on every platform. A button rather than a NavigationLink:
+/// links sharing a list row all fire on a tap anywhere in it.
 struct PushRow<Label: View>: View {
   let model: SettingsModel
   let to: SettingsRoute
+  /// Drawn by the row instead, where something sits between them.
+  var chevron = true
   @ViewBuilder let label: Label
 
-  init(model: SettingsModel, to: SettingsRoute, @ViewBuilder label: () -> Label) {
+  init(
+    model: SettingsModel, to: SettingsRoute, chevron: Bool = true,
+    @ViewBuilder label: () -> Label
+  ) {
     self.model = model
     self.to = to
+    self.chevron = chevron
     self.label = label()
   }
 
@@ -719,7 +688,11 @@ struct PushRow<Label: View>: View {
     } label: {
       HStack {
         label
-        Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+        if chevron {
+          Spacer(minLength: 4)
+          Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+            .foregroundStyle(.tertiary)
+        }
       }
       .contentShape(Rectangle())
     }

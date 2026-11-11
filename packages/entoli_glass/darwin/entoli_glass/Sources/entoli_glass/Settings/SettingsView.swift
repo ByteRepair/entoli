@@ -92,7 +92,7 @@ struct SettingsPageView: View {
         Section {
           ForEach(section.rows.compactMap { $0 }.filter { $0.parent == nil }, id: \.id) {
             row in
-            SettingRowView(model: model, row: row, section: section)
+            SettingRowView(model: model, row: row)
           }
         } header: {
           if !section.title.isEmpty { Text(section.title) }
@@ -107,10 +107,10 @@ struct SettingsPageView: View {
 }
 
 /// One row, drawn by its kind, its hint where this frontend has that way.
+/// Redrawn with the page that holds it, as a snapshot changes its row.
 struct SettingRowView: View {
-  @ObservedObject var model: SettingsModel
+  let model: SettingsModel
   let row: SettingRowData
-  let section: SettingsSectionData
 
   var body: some View {
     VStack(alignment: .leading, spacing: 4) {
@@ -130,7 +130,7 @@ struct SettingRowView: View {
     case .range: RangeRow(model: model, row: row)
     case .keyValues: KeyValuesRow(model: model, row: row)
     case .action: ActionRow(model: model, row: row)
-    case .group: GroupRow(model: model, row: row, section: section)
+    case .group: GroupRow(model: model, row: row)
     case .number: NumberRow(model: model, row: row)
     case .modelPick: ModelPickRow(model: model, row: row)
     case .text: TextRow(model: model, row: row, accessory: accessory)
@@ -154,7 +154,7 @@ struct SettingRowView: View {
     }
   }
 
-  private var accessory: SettingRowData? { model.accessory(of: row, in: section) }
+  private var accessory: SettingRowData? { model.accessory(of: row) }
 }
 
 extension SettingsPageKey {

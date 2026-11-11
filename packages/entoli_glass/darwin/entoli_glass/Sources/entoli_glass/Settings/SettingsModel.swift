@@ -34,8 +34,23 @@ public final class SettingsModel: ObservableObject, NativeSettings {
     say = SettingsIntents(binaryMessenger: messenger)
   }
 
+  /// Every row by its id, and each row's own beneath it, looked up once per
+  /// snapshot rather than by every row as it draws.
+  private var rows: [String: SettingRowData] = [:]
+  private var parts: [String: [SettingRowData]] = [:]
+  private var accessories: [String: SettingRowData] = [:]
+
   func settings(snapshot: SettingsSnapshot) throws {
-    pages = snapshot.pages.compactMap { $0 }
+    let next = snapshot.pages.compactMap { $0 }
+    rows = [:]
+    parts = [:]
+    accessories = [:]
+    for row in next.flatMap({ $0.sections.compactMap { $0 } }).flatMap({ $0.rows.compactMap { $0 } }) {
+      rows[row.id] = row
+      guard let parent = row.parent else { continue }
+      if row.accessory { accessories[parent] = row } else { parts[parent, default: []].append(row) }
+    }
+    pages = next
   }
 
   #if os(macOS)
@@ -74,14 +89,7 @@ public final class SettingsModel: ObservableObject, NativeSettings {
   }
 
   /// The row [id] names, on whichever page it is.
-  func row(_ id: String) -> SettingRowData? {
-    for page in pages {
-      for section in page.sections.compactMap({ $0 }) {
-        if let row = section.rows.compactMap({ $0 }).first(where: { $0.id == id }) { return row }
-      }
-    }
-    return nil
-  }
+  func row(_ id: String) -> SettingRowData? { rows[id] }
 
   /// Which way the last move went, for the side a Mac's page comes in from.
   @Published private(set) var forwards = true
@@ -119,104 +127,88 @@ public final class SettingsModel: ObservableObject, NativeSettings {
   }
 
   /// [row]'s own rows: a group's children, and an accessory drawn at its end.
-  func children(of row: SettingRowData, in section: SettingsSectionData) -> [SettingRowData] {
-    section.rows.compactMap { $0 }.filter { $0.parent == row.id && !$0.accessory }
-  }
+  func children(of row: SettingRowData) -> [SettingRowData] { parts[row.id] ?? [] }
 
-  func accessory(of row: SettingRowData, in section: SettingsSectionData) -> SettingRowData? {
-    section.rows.compactMap { $0 }.first { $0.parent == row.id && $0.accessory }
-  }
+  func accessory(of row: SettingRowData) -> SettingRowData? { accessories[row.id] }
 }
 
 /// What an intent answers, on the main thread: what the view shows next.
 extension SettingsModel {
   func ask(_ id: String) async -> SettingConfirmData? {
-    await withCheckedContinuation { done in
-      say.ask(id: id) { done.resume(returning: (try? $0.get()) ?? nil) }
-    }
+    await reply(or: nil) { say.ask(id: id, completion: $0) }
   }
 
   func run(_ id: String) async -> SettingNoticeData? {
-    await withCheckedContinuation { done in
-      say.run(id: id) { done.resume(returning: (try? $0.get()) ?? nil) }
-    }
+    await reply(or: nil) { say.run(id: id, completion: $0) }
   }
 
   func itemAction(_ id: String, _ index: Int, _ action: String) async -> SettingNoticeData? {
-    await withCheckedContinuation { done in
-      say.itemAction(id: id, index: Int64(index), action: action) {
-        done.resume(returning: (try? $0.get()) ?? nil)
-      }
+    await reply(or: nil) {
+      say.itemAction(id: id, index: Int64(index), action: action, completion: $0)
     }
   }
 
   func form(_ id: String, _ index: Int?, _ answers: [String?: String?]?) async
     -> SettingFormData?
   {
-    await withCheckedContinuation { done in
-      say.form(id: id, index: index.map(Int64.init), answers: answers) {
-        done.resume(returning: try? $0.get())
-      }
-    }
+    await reply { say.form(id: id, index: index.map(Int64.init), answers: answers, completion: $0) }
   }
 
   func submit(_ id: String, _ index: Int?, _ answers: [String?: String?]) async
     -> SettingNoticeData?
   {
-    await withCheckedContinuation { done in
-      say.submitForm(id: id, index: index.map(Int64.init), answers: answers) {
-        done.resume(returning: (try? $0.get()) ?? nil)
-      }
+    await reply(or: nil) {
+      say.submitForm(id: id, index: index.map(Int64.init), answers: answers, completion: $0)
     }
   }
 
   func models(_ id: String) async -> ModelPickerData? {
-    await withCheckedContinuation { done in
-      say.models(id: id) { done.resume(returning: try? $0.get()) }
-    }
+    await reply { say.models(id: id, completion: $0) }
   }
 
   func modelForm(
     _ id: String, _ providerId: String?, _ modelId: String?, _ answers: [String?: String?]?
   ) async -> SettingFormData? {
-    await withCheckedContinuation { done in
-      say.modelForm(id: id, providerId: providerId, modelId: modelId, answers: answers) {
-        done.resume(returning: try? $0.get())
-      }
+    await reply {
+      say.modelForm(
+        id: id, providerId: providerId, modelId: modelId, answers: answers, completion: $0)
     }
   }
 
   func submitModelForm(
     _ id: String, _ providerId: String?, _ modelId: String?, _ answers: [String?: String?]
   ) async -> SettingNoticeData? {
-    await withCheckedContinuation { done in
-      say.submitModelForm(id: id, providerId: providerId, modelId: modelId, answers: answers) {
-        done.resume(returning: (try? $0.get()) ?? nil)
-      }
+    await reply(or: nil) {
+      say.submitModelForm(
+        id: id, providerId: providerId, modelId: modelId, answers: answers, completion: $0)
     }
   }
 
   func text(of opens: String) async -> String {
-    await withCheckedContinuation { done in
-      say.page(opens: opens) { done.resume(returning: (try? $0.get()) ?? "") }
-    }
+    await reply(or: "") { say.page(opens: opens, completion: $0) }
   }
 
   func pairWith(_ id: String, _ code: String) async -> String? {
-    await withCheckedContinuation { done in
-      say.pairWith(id: id, code: code) { done.resume(returning: (try? $0.get()) ?? nil) }
-    }
+    await reply(or: nil) { say.pairWith(id: id, code: code, completion: $0) }
   }
 
   func invite(_ id: String) async -> String {
-    await withCheckedContinuation { done in
-      say.createInvite(id: id) { done.resume(returning: (try? $0.get()) ?? "") }
-    }
+    await reply(or: "") { say.createInvite(id: id, completion: $0) }
   }
 }
 
-/// One entry of a model picker: the pair it stores, what it is called, and
-/// the provider it is listed under.
+/// What an intent [call] answers, or nil where it failed.
+func reply<T>(_ call: (@escaping (Result<T, PigeonError>) -> Void) -> Void) async -> T? {
+  await withCheckedContinuation { done in call { done.resume(returning: try? $0.get()) } }
+}
+
+/// What an intent [call] answers, or [fallback] where it failed.
+func reply<T>(or fallback: T, _ call: (@escaping (Result<T, PigeonError>) -> Void) -> Void)
+  async -> T
+{
+  await reply(call) ?? fallback
+}
+
 /// A no-op answer for the intents that wait on nothing.
 func ignore(_: Result<Void, PigeonError>) {}
 

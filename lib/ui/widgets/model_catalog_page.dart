@@ -1,3 +1,4 @@
+import "../../app/model_facts.dart" show providerHue;
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -634,9 +635,7 @@ class _Monogram extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    // A hue of its own per provider, from its name's characters rather than
-    // `hashCode`, which is not the same from one run to the next.
-    final hue = (name.codeUnits.fold(0, (a, c) => a * 31 + c) % 360).toDouble();
+    final hue = providerHue(name).toDouble();
     final bg = HSLColor.fromAHSL(1, hue, 0.45, dark ? 0.28 : 0.86).toColor();
     final fg = HSLColor.fromAHSL(1, hue, 0.5, dark ? 0.86 : 0.28).toColor();
     return CircleAvatar(

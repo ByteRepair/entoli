@@ -7,7 +7,9 @@ struct TriggersView: View {
   let model: SettingsModel
   let row: SettingRowData
   @State private var editing: CollectionRow.Editing?
-  @State private var deleting: (Int, SettingItemActionData)?
+  @State private var confirm: SettingConfirmData?
+  /// The trigger and action [confirm] asks about.
+  @State private var pending: (index: Int, action: String)?
   @State private var notice: SettingNoticeData?
 
   var body: some View {
@@ -33,23 +35,8 @@ struct TriggersView: View {
     .sheet(item: $editing) { editing in
       FormSheet(model: model, id: row.id, index: editing.index)
     }
-    .alert(
-      deleting?.1.confirm?.title ?? "",
-      isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
-      presenting: deleting
-    ) { pending in
-      Button(pending.1.confirm?.confirmLabel ?? "Delete", role: .destructive) {
-        act(pending.0, pending.1.id)
-      }
-      Button("Cancel", role: .cancel) {}
-    } message: { pending in
-      Text(pending.1.confirm?.message ?? "")
-    }
-    .alert(
-      notice?.message ?? "",
-      isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })
-    ) {
-      Button("OK", role: .cancel) {}
+    .asking($confirm, $notice) {
+      if let pending { act(pending.index, pending.action) }
     }
   }
 
@@ -81,7 +68,12 @@ struct TriggersView: View {
     .contextMenu {
       ForEach(item.actions.compactMap { $0 }, id: \.id) { action in
         Button(action.label, role: action.destructive ? .destructive : nil) {
-          if action.confirm != nil { deleting = (index, action) } else { act(index, action.id) }
+          if let ask = action.confirm {
+            pending = (index, action.id)
+            confirm = ask
+          } else {
+            act(index, action.id)
+          }
         }
       }
     }

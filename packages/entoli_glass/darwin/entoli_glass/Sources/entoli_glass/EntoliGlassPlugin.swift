@@ -31,12 +31,10 @@ public final class EntoliGlassPlugin: NSObject, FlutterPlugin {
 /// it.
 public struct FrontendView: View {
   @ObservedObject private var model: ShellModel
-  @ObservedObject private var settings: SettingsModel
   private let flutter: PlatformViewController
 
   public init(flutter: PlatformViewController) {
     model = ShellModel.shared!
-    settings = SettingsModel.shared!
     self.flutter = flutter
   }
 
@@ -45,7 +43,7 @@ public struct FrontendView: View {
       #if os(iOS)
         // The settings are the platform's own over the app, where a Mac has
         // a Settings window of its own.
-        .sheet(isPresented: $settings.presented) { SettingsRoot(model: settings) }
+        .modifier(SettingsSheet(settings: SettingsModel.shared!))
       #endif
   }
 
@@ -57,3 +55,15 @@ public struct FrontendView: View {
     }
   }
 }
+
+#if os(iOS)
+  /// The settings sheet, observing the settings apart from the window's
+  /// content, so a change to them redraws the sheet and not the app.
+  private struct SettingsSheet: ViewModifier {
+    @ObservedObject var settings: SettingsModel
+
+    func body(content: Content) -> some View {
+      content.sheet(isPresented: $settings.presented) { SettingsRoot(model: settings) }
+    }
+  }
+#endif

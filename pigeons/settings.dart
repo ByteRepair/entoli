@@ -349,7 +349,6 @@ class SettingRowData {
     this.min,
     this.max,
     this.unit,
-    this.commitOnEnd = false,
     this.entries = const {},
     this.masked = true,
     this.label,
@@ -385,6 +384,7 @@ class SettingRowData {
     this.prerequisiteCommand,
     this.tools,
     this.running = false,
+    this.deleteConfirm,
   });
 
   String id;
@@ -427,7 +427,6 @@ class SettingRowData {
   int? min;
   int? max;
   String? unit;
-  bool commitOnEnd;
 
   // keyValues
   Map<String?, String?> entries;
@@ -491,6 +490,7 @@ class SettingRowData {
   String? prerequisiteCommand;
   List<SettingToolData?>? tools;
   bool running;
+  SettingConfirmData? deleteConfirm;
 }
 
 class SettingsSectionData {
@@ -648,6 +648,7 @@ class ModelCardData {
     required this.providerName,
     required this.modelId,
     required this.name,
+    this.hue = 0,
     this.context,
     this.price,
     this.toolCall = false,
@@ -665,6 +666,9 @@ class ModelCardData {
   String providerName;
   String modelId;
   String name;
+
+  /// The hue of the provider's monogram, 0 to 359.
+  int hue;
 
   /// The context window in words: "200K".
   String? context;

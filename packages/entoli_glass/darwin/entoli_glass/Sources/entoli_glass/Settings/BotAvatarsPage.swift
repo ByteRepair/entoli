@@ -137,7 +137,7 @@ struct BotAvatarsPage: View {
     let own = Int(entry.colour)
     let swatches = data?.palette.compactMap { $0 } ?? []
     let custom = !swatches.contains { Int($0.rgb) == picked }
-    return Flow(spacing: 8) {
+    return FlowLayout(spacing: 8, centred: false) {
       ForEach(swatches, id: \.rgb) { swatch in
         let rgb = Int(swatch.rgb)
         Button {
@@ -234,9 +234,7 @@ struct BotAvatarsPage: View {
   }
 
   private func load() async {
-    let next: BotAvatarsData? = await withCheckedContinuation { done in
-      model.say.botAvatars(agent: opened.agent) { done.resume(returning: try? $0.get()) }
-    }
+    let next = await reply { model.say.botAvatars(agent: opened.agent, completion: $0) }
     data = next
     if selected == nil, let next {
       selected = next.selected
@@ -249,9 +247,7 @@ struct BotAvatarsPage: View {
   private func runImport() {
     let text = paste
     Task { @MainActor in
-      let result: BotImportData? = await withCheckedContinuation { done in
-        model.say.importBotAvatars(text: text) { done.resume(returning: try? $0.get()) }
-      }
+      let result = await reply { model.say.importBotAvatars(text: text, completion: $0) }
       imported = result
       guard let result, let added = result.added else { return }
       await load()
@@ -268,9 +264,7 @@ struct BotAvatarsPage: View {
     if selected == entry.key { selected = nil }
     colours[entry.key] = nil
     Task { @MainActor in
-      await withCheckedContinuation { done in
-        model.say.deleteBotAvatar(key: entry.key) { _ in done.resume() }
-      }
+      _ = await reply { model.say.deleteBotAvatar(key: entry.key, completion: $0) }
       await load()
     }
   }

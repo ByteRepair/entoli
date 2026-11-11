@@ -11,6 +11,10 @@ struct ModelList: View {
   let row: SettingRowData
 
   @State private var data: ModelPickerData?
+  /// [data]'s models, and what a search matches each by, kept apart from the
+  /// body: a search redraws it on every key.
+  @State private var cards: [ModelCardData] = []
+  @State private var haystacks: [String] = []
   @State private var search = ""
   @State private var reasoning = false
   @State private var seesImages = false
@@ -26,17 +30,20 @@ struct ModelList: View {
     var id: String { "\(providerId ?? "")/\(modelId ?? "")" }
   }
 
-  private var cards: [ModelCardData] { data?.models.compactMap { $0 } ?? [] }
-
   private var shown: [ModelCardData] {
     let words = search.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
-    return cards.filter { card in
-      let hay = "\(card.name) \(card.modelId) \(card.providerName)".lowercased()
-      return words.allSatisfy(hay.contains)
+    return zip(cards, haystacks).filter { card, hay in
+      words.allSatisfy(hay.contains)
         && (!reasoning || card.reasoning)
         && (!seesImages || card.readsImages)
         && (provider == nil || card.providerId == provider)
-    }
+    }.map(\.0)
+  }
+
+  private func show(_ next: ModelPickerData?) {
+    data = next
+    cards = next?.models.compactMap { $0 } ?? []
+    haystacks = cards.map { "\($0.name) \($0.modelId) \($0.providerName)".lowercased() }
   }
 
   // A grouped Form rather than a List: a Mac's List sizes rows of varying
@@ -84,7 +91,7 @@ struct ModelList: View {
         "It is no longer offered for \(card.providerName). A model already picked keeps its id "
           + "until another is picked.")
     }
-    .task { data = await model.models(row.id) }
+    .task { show(await model.models(row.id)) }
   }
 
   @ViewBuilder private func content(_ data: ModelPickerData) -> some View {
@@ -177,7 +184,7 @@ struct ModelList: View {
     } label: {
       VStack(alignment: .leading, spacing: 8) {
         HStack(spacing: 12) {
-          Monogram(name: card.providerName)
+          Monogram(name: card.providerName, hue: card.hue)
           VStack(alignment: .leading, spacing: 2) {
             Text(card.name).font(.headline).lineLimit(1)
             Text("\(card.providerName) · \(card.modelId)")
@@ -200,7 +207,7 @@ struct ModelList: View {
           .buttonStyle(.borderless)
           .help(card.favourite ? "Remove from favourites" : "Add to favourites")
         }
-        Flow(spacing: 6) {
+        FlowLayout(spacing: 6, centred: false) {
           if let context = card.context { Tag(symbol: "chart.pie", text: "\(context) context") }
           if let price = card.price { Tag(symbol: "dollarsign.circle", text: price) }
           if card.toolCall { Tag(symbol: "wrench.and.screwdriver", text: "Tools") }
@@ -262,7 +269,7 @@ struct ModelList: View {
   }
 
   private func reload() {
-    Task { @MainActor in data = await model.models(row.id) }
+    Task { @MainActor in show(await model.models(row.id)) }
   }
 }
 
@@ -287,28 +294,21 @@ private struct Tag: View {
 }
 
 /// The provider's initial on a colour of its own, so a long list reads by
-/// provider at a glance: the hue from its name's characters, as the Flutter
-/// card takes it, so a provider wears the same colour in both.
+/// provider at a glance: the hue Dart gives it, so a provider wears the same
+/// colour on both frontends.
 private struct Monogram: View {
   let name: String
+  let hue: Int64
   @Environment(\.colorScheme) private var scheme
 
   var body: some View {
     let dark = scheme == .dark
-    let hue = Double(Self.hue(of: name)) / 360
+    let hue = Double(hue) / 360
     Text(name.first.map { String($0).uppercased() } ?? "?")
       .font(.callout.weight(.semibold))
       .foregroundStyle(Self.hsl(hue, 0.5, dark ? 0.86 : 0.28))
       .frame(width: 36, height: 36)
       .background(Self.hsl(hue, 0.45, dark ? 0.28 : 0.86), in: Circle())
-  }
-
-  /// Dart's `codeUnits.fold(0, (a, c) => a * 31 + c) % 360`, its 64-bit
-  /// wrap and non-negative remainder included.
-  static func hue(of name: String) -> Int {
-    let folded = name.utf16.reduce(Int64(0)) { $0 &* 31 &+ Int64($1) }
-    let r = folded % 360
-    return Int(r < 0 ? r + 360 : r)
   }
 
   static func hsl(_ h: Double, _ s: Double, _ l: Double) -> Color {

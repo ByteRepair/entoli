@@ -28,14 +28,18 @@ struct BotFaceView: View {
   private var moving: Bool { !reduceMotion && !thumbnail && (live || driver.reacting) }
 
   var body: some View {
-    TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !moving)) { timeline in
-      Canvas { context, canvas in
-        guard let geometry = driver.geometry, let frame = driver.frame else { return }
-        BotFacePainter.draw(
-          frame, geometry, in: &context, size: canvas,
-          colour: Color(rgb: colour), outline: Color.secondary.opacity(0.55))
+    // Drawn when a frame lands; the timeline only asks for the next, so the
+    // canvas is not drawn a second time on the tick with the frame it has.
+    Canvas { context, canvas in
+      guard let geometry = driver.geometry, let frame = driver.frame else { return }
+      BotFacePainter.draw(
+        frame, geometry, in: &context, size: canvas,
+        colour: Color(rgb: colour), outline: Color.secondary.opacity(0.55))
+    }
+    .background {
+      TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !moving)) { timeline in
+        Color.clear.onChange(of: timeline.date) { _, date in ask(at: date) }
       }
-      .onChange(of: timeline.date) { _, date in ask(at: date) }
     }
     .frame(width: size, height: size)
     .background {
@@ -102,7 +106,7 @@ struct BotFaceView: View {
         guard let numbers = try? result.get() else { return }
         let frame = BotFrame(numbers.doubles)
         driver.frame = frame
-        driver.reacting = frame.reacting
+        if driver.reacting != frame.reacting { driver.reacting = frame.reacting }
       }
     }
   }
@@ -155,9 +159,8 @@ enum BotGeometry {
 
   static func of(_ key: String, model: SettingsModel) async -> [BotSlice]? {
     if let hit = cache[key] { return hit }
-    let numbers: [Double]? = await withCheckedContinuation { done in
-      model.say.botGeometry(key: key) { done.resume(returning: ((try? $0.get()) ?? nil)?.doubles) }
-    }
+    let numbers = await reply(or: nil) { model.say.botGeometry(key: key, completion: $0) }?
+      .doubles
     guard let numbers else { return nil }
     let slices = decode(numbers)
     cache[key] = slices
@@ -276,11 +279,7 @@ enum BotFacePainter {
 
 extension Color {
   /// A colour from 0xRRGGBB.
-  init(rgb: Int) {
-    self.init(
-      red: Double((rgb >> 16) & 0xff) / 255, green: Double((rgb >> 8) & 0xff) / 255,
-      blue: Double(rgb & 0xff) / 255)
-  }
+  init(rgb: Int) { self.init(argb: 0xFF00_0000 | Int64(rgb & 0xFF_FFFF)) }
 }
 
 extension FlutterStandardTypedData {

@@ -160,15 +160,17 @@ private func flutterAsset(_ key: String) -> Image? {
 
 @MainActor private var flutterAssets: [String: Image] = [:]
 
-/// Rows of whatever fits, centred, wrapping to the next as a chip row does.
+/// Rows of whatever fits, wrapping to the next as a chip row does: centred,
+/// or from the leading edge where [centred] is false.
 struct FlowLayout: Layout {
   var spacing: CGFloat = 8
+  var centred = true
 
   private func rows(_ subviews: Subviews, width: CGFloat) -> [[(Int, CGSize)]] {
     var rows: [[(Int, CGSize)]] = [[]]
     var x: CGFloat = 0
     for (i, view) in subviews.enumerated() {
-      let size = view.sizeThatFits(.unspecified)
+      let size = view.sizeThatFits(ProposedViewSize(width: width, height: nil))
       if x > 0 && x + size.width > width {
         rows.append([])
         x = 0
@@ -197,7 +199,7 @@ struct FlowLayout: Layout {
     for row in rows(subviews, width: bounds.width) {
       let width = row.map(\.1.width).reduce(0, +) + spacing * CGFloat(max(row.count - 1, 0))
       let height = row.map(\.1.height).max() ?? 0
-      var x = bounds.minX + (bounds.width - width) / 2
+      var x = bounds.minX + (centred ? (bounds.width - width) / 2 : 0)
       for (i, size) in row {
         subviews[i].place(
           at: CGPoint(x: x, y: y + (height - size.height) / 2), proposal: ProposedViewSize(size))

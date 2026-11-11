@@ -23,3 +23,9 @@ List<(ModelFact, String)> modelFactTags(ModelFacts facts) => [
   if (facts.voices case final v?) (ModelFact.voices, plural(v, "voice")),
   if (facts.licence case final l?) (ModelFact.licence, l),
 ];
+
+/// The hue a provider's monogram wears, 0 to 359, from its name's characters
+/// rather than `hashCode`, which is not the same from one run to the next:
+/// so a provider wears one colour on every frontend.
+int providerHue(String name) =>
+    name.codeUnits.fold(0, (a, c) => a * 31 + c) % 360;

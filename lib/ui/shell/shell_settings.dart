@@ -232,8 +232,7 @@ SettingRowData _row(
         ..stops = c.stops ?? const []
         ..min = c.min
         ..max = c.max
-        ..unsettable = c.unsettable
-        ..commitOnEnd = c.commitOnEnd;
+        ..unsettable = c.unsettable;
     case KeyValuesController():
       row
         ..kind = SettingKind.keyValues
@@ -397,8 +396,7 @@ SettingRowData _row(
               ]
         ..running = c.running
         ..error = c.error
-        ..label = c.deleteConfirm.title
-        ..summary = c.deleteConfirm.message;
+        ..deleteConfirm = _confirm(c.deleteConfirm);
   }
   return row;
 }
@@ -794,6 +792,7 @@ class SettingsBridge implements SettingsIntents {
             providerName: e.providerName,
             modelId: e.info.id,
             name: e.info.displayName,
+            hue: providerHue(e.providerName),
             context: e.info.context == null
                 ? null
                 : tokenCount(e.info.context!),
