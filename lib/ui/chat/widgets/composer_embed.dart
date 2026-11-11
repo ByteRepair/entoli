@@ -1,5 +1,7 @@
 import "package:flutter/material.dart";
 
+import "../../../app/embed_text.dart";
+
 import "../../../domain/formatted_text.dart";
 import "../../../domain/quote.dart";
 import "../../widgets/action_icon.dart";
@@ -13,16 +15,12 @@ import "../../widgets/action_icon.dart";
 /// A new kind of thing to put in a message is a subclass, and a reader in
 /// `ComposerController.readers` where a message taken back should come back
 /// as one.
-abstract class ComposerEmbed {
+abstract class ComposerEmbed implements Embed {
   const ComposerEmbed();
 
-  /// A block is drawn as wide as its line and sends as a paragraph of its
-  /// own, with a blank line either side whatever was typed around it. An
-  /// inline one sends exactly where it is.
+  /// A block is drawn as wide as its line.
+  @override
   bool get block => true;
-
-  /// What this is in the message sent.
-  String get markdown;
 
   /// Drawn where its character is. [remove] takes it out of the field.
   Widget build(BuildContext context, VoidCallback remove);
