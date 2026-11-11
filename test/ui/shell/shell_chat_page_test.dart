@@ -4,6 +4,8 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:super_sliver_list/super_sliver_list.dart";
 
+import "package:agent_chat/ui/chat/chat_chrome.dart" show chatChromeProvider;
+import "package:agent_chat/ui/shell/shell_chat_chrome.dart";
 import "package:agent_chat/ui/shell/shell_page_bar.dart" show drawShellPageBar;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/project.dart" show defaultEmptyChatQuestion;
@@ -38,6 +40,7 @@ void main() {
     ProviderScope(
       overrides: [
         pageBarDrawProvider.overrideWithValue(drawShellPageBar),
+        chatChromeProvider.overrideWithValue(const ShellChatChrome()),
         frontendProvider.overrideWithValue(
           const FrontendChoice(current: Frontend.swiftUI, native: true),
         ),

@@ -2,8 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../app/composer.dart"
-    show isCompletionSpace, triggerOpened, triggerPosition;
+import "../../app/composer.dart" show triggerOpened, triggerPosition;
 import "../../app/completion.dart";
 
 export "../../app/completion.dart";

@@ -60,15 +60,21 @@ CallbackKind callbackKindOf(WiredCall wired) => switch (wired.skill) {
   },
 };
 
-/// The composer, drawn by the native shell: configured by a [Composer] that
-/// is never mounted, and run by the core's [ComposerModel], with no Flutter
-/// of its own on screen. It sends the shell what to draw and runs what
-/// the user did there; the text is Dart's, in the config's controller, as it
-/// is for [Composer].
+/// The composer, drawn by the native shell: the page's [model], bound to
+/// its turn by [binding], with no Flutter of its own on screen. It sends the
+/// shell what to draw and runs what the user did there; the text is Dart's,
+/// in [controller], as it is for the Flutter [Composer].
 class ShellComposer extends ConsumerStatefulWidget {
-  const ShellComposer({super.key, required this.config});
+  const ShellComposer({
+    super.key,
+    required this.controller,
+    required this.model,
+    required this.binding,
+  });
 
-  final Composer config;
+  final ComposerController controller;
+  final ComposerModel model;
+  final ComposerBinding binding;
 
   @override
   ConsumerState<ShellComposer> createState() => ShellComposerState();
@@ -78,24 +84,18 @@ class ShellComposerState extends ConsumerState<ShellComposer>
     implements ComposerHandle, ComposerIntents {
   late final ShellOutbox _outbox = ref.read(shellOutboxProvider);
   late final ShellAnswers _answers = ref.read(shellAnswersProvider);
-  late final ComposerModel _model = ComposerModel(
-    widget.config.controller,
-    pick: (kind) => ref.read(attachmentPickerProvider).pick(kind),
-  );
+  ComposerModel get _model => widget.model;
+  ComposerBinding get _binding => widget.binding;
   late final Listenable _shape = Listenable.merge([
     _model,
     _model.canSend,
     _model.queues,
-    widget.config.controller,
+    widget.controller,
   ]);
 
   /// The last revision and focus request of the model's state acted on.
   int? _sentRevision;
   int? _seenFocus;
-
-  /// The completion token a press of Escape closed the menu on; it stays
-  /// closed until the caret is in another.
-  CompletionToken? _dismissed;
 
   /// The native field's focus in Dart's focus tree, so what takes focus away
   /// here — a drag back through the conversation, a page pushed — takes the
@@ -108,7 +108,6 @@ class ShellComposerState extends ConsumerState<ShellComposer>
 
   /// The menu as last drawn, which a `pick` names a row of.
   List<CompletionOption> _matches = const [];
-  CompletionToken? _token;
 
   @override
   void initState() {
@@ -124,9 +123,10 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   @override
   void didUpdateWidget(ShellComposer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.config.controller != widget.config.controller) {
+    if (oldWidget.model != widget.model) {
+      oldWidget.model.state.removeListener(_follow);
+      widget.model.state.addListener(_follow);
       _sentRevision = null;
-      _model.field = widget.config.controller;
     }
     _configure();
   }
@@ -138,18 +138,10 @@ class ShellComposerState extends ConsumerState<ShellComposer>
       _outbox.composer(ComposerSnapshot(present: false));
     }
     _focus.dispose();
-    _model.dispose();
     super.dispose();
   }
 
-  void _configure() => _model.configure(
-    agentSpeaking: widget.config.agentSpeaking,
-    onSend: widget.config.onSend,
-    onQueue: widget.config.onQueue,
-    steers: widget.config.steers,
-    onAbort: widget.config.onAbort,
-    onVoice: widget.config.onVoice,
-  );
+  void _configure() => _model.bind(_binding);
 
   @override
   void restore(Draft said) => _model.restore(said);
@@ -157,7 +149,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   /// Add [embed] and put the caret in the field, as [Composer.embed] does.
   @override
   void embed(ComposerEmbed embed) {
-    widget.config.controller.append(embed);
+    widget.controller.append(embed);
     _model.requestFocus();
   }
 
@@ -199,7 +191,7 @@ class ShellComposerState extends ConsumerState<ShellComposer>
     if (mounted) _model.attach(files);
   }
 
-  ComposerController get _controller => widget.config.controller;
+  ComposerController get _controller => widget.controller;
 
   @override
   Future<void> edited(String text, int start, int end) async =>
@@ -207,30 +199,19 @@ class ShellComposerState extends ConsumerState<ShellComposer>
 
   @override
   Future<void> run(shell.ComposerAction action) async {
-    final run = composerActionOf(action);
-    // A menu opened from the `+` is open again however it was dismissed.
-    if (run == ComposerAction.insertSkill ||
-        run == ComposerAction.insertAgent ||
-        run == ComposerAction.newGoal) {
-      _dismissed = null;
-    }
-    await _model.run(run);
-    if (mounted) setState(() {});
+    await _model.run(composerActionOf(action));
   }
 
   /// A row of the menu as last drawn.
   @override
   Future<void> pick(int index) async {
-    final token = _token;
-    if (token != null && index >= 0 && index < _matches.length) {
-      acceptCompletion(_controller, token, _matches[index]);
+    if (index >= 0 && index < _matches.length) {
+      _model.acceptCompletion(_matches[index].name);
     }
   }
 
   @override
-  Future<void> dismiss() async {
-    if (mounted) setState(() => _dismissed = _token);
-  }
+  Future<void> dismiss() async => _model.dismissCompletion();
 
   @override
   void unattach(int index) => _model.unattach(index);
@@ -261,13 +242,13 @@ class ShellComposerState extends ConsumerState<ShellComposer>
   /// made one, else the workspace in the guest's own words. See
   /// `Composer._cwdBar`.
   String? _cwd() {
-    final workspace = widget.config.workspace;
+    final workspace = _binding.workspace;
     if (workspace == null) return null;
     final live = ref
         .read(
           chatShellCwdProvider((
             workspace: workspace,
-            workspaceHome: widget.config.workspaceHome,
+            workspaceHome: _binding.workspaceHome,
           )),
         )
         ?.value;
@@ -275,25 +256,25 @@ class ShellComposerState extends ConsumerState<ShellComposer>
         workingDirectoryFallback(
           workspace: workspace,
           guestRoot: ref.read(shellProvider).guestRoot,
-          home: widget.config.workspaceHome,
+          home: _binding.workspaceHome,
         );
   }
 
   @override
   Widget build(BuildContext context) {
     final ProjectRef project = (
-      device: widget.config.device,
-      project: widget.config.project,
+      device: _binding.device,
+      project: _binding.project,
     );
     // Held while the composer is up, so a paired device's menu is there by
     // the time a `/` is typed.
-    if (widget.config.device != null) ref.watch(promptLibraryOf(project));
-    final cwd = widget.config.workspace == null
+    if (_binding.device != null) ref.watch(promptLibraryOf(project));
+    final cwd = _binding.workspace == null
         ? null
         : ref.watch(
             chatShellCwdProvider((
-              workspace: widget.config.workspace,
-              workspaceHome: widget.config.workspaceHome,
+              workspace: _binding.workspace,
+              workspaceHome: _binding.workspaceHome,
             )),
           );
     final theme = Theme.of(context);
@@ -308,12 +289,12 @@ class ShellComposerState extends ConsumerState<ShellComposer>
     final pixelRatio = MediaQuery.devicePixelRatioOf(context);
     final outline = theme.colorScheme.outline;
     final faces = {
-      if (widget.config.device == null)
+      if (_binding.device == null)
         for (final agent in offered[CompletionKind.agent]!)
           agent.name: ref
               .watch(
                 agentFacePngProvider((
-                  project: widget.config.project,
+                  project: _binding.project,
                   name: agent.name,
                   size: _menuFace,
                   pixelRatio: pixelRatio,
@@ -325,15 +306,11 @@ class ShellComposerState extends ConsumerState<ShellComposer>
     final composer = ListenableBuilder(
       listenable: Listenable.merge([_shape, ?cwd]),
       builder: (context, _) {
-        final controller = widget.config.controller;
-        final token = activeCompletionToken(controller.value);
-        if (token != _dismissed) _dismissed = null;
-        final open = token != null && token != _dismissed;
-        final options = open
-            ? offered[token.kind]!
-            : const <CompletionOption>[];
-        _token = token;
-        _matches = open ? matchingCompletions(options, token.query) : const [];
+        final controller = widget.controller;
+        final token = _model.completion;
+        _matches = token == null
+            ? const []
+            : matchingCompletions(offered[token.kind]!, token.query);
         final mode = _model.mode;
         _outbox.composer(
           ComposerSnapshot(

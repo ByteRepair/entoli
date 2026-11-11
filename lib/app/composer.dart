@@ -4,6 +4,7 @@ import "../domain/file_tools.dart" show guestWorkspacePath;
 import "../domain/models.dart";
 import "../domain/shell.dart";
 import "../domain/wired_skill.dart";
+import "completion.dart";
 
 typedef SendCallback = void Function(String text, List<Attachment> attachments);
 
@@ -74,6 +75,48 @@ abstract interface class ComposerText implements Listenable {
   /// Put [said] ahead of what the field holds.
   void prepend(String said);
   void clear();
+}
+
+/// What a page binds its composer to: the turn it sends into and where it
+/// is. One per page, which every frontend's composer is given.
+class ComposerBinding {
+  const ComposerBinding({
+    required this.agentSpeaking,
+    required this.onSend,
+    required this.onAbort,
+    this.onQueue,
+    this.steers,
+    this.onVoice,
+    this.project,
+    this.device,
+    this.workspace,
+    this.workspaceHome,
+  });
+
+  /// A participant is speaking: Send becomes Stop.
+  final bool agentSpeaking;
+  final SendCallback onSend;
+  final VoidCallback onAbort;
+
+  /// Send for after the running turn rather than into it; null where there
+  /// is no turn to wait on.
+  final SendCallback? onQueue;
+
+  /// The room's rule for whether what is typed would steer the running turn.
+  final bool Function(String text)? steers;
+
+  /// Opens voice mode; null is none from here.
+  final VoidCallback? onVoice;
+
+  /// The project the composer is in, null the default, on [device], null
+  /// this one: what the `/` and `@` menus offer.
+  final String? project;
+  final String? device;
+
+  /// Where this chat's shell starts, and the project workspace its turns
+  /// call home; null where the chat does not exist yet.
+  final String? workspace;
+  final String? workspaceHome;
 }
 
 /// The composer as a frontend draws it: the business state, and nothing of
@@ -208,6 +251,48 @@ class ComposerModel extends ChangeNotifier {
     if (changed) _changed();
   }
 
+  /// [binding]'s turn, as [configure] takes it.
+  void bind(ComposerBinding binding) => configure(
+    agentSpeaking: binding.agentSpeaking,
+    onSend: binding.onSend,
+    onQueue: binding.onQueue,
+    steers: binding.steers,
+    onAbort: binding.onAbort,
+    onVoice: binding.onVoice,
+  );
+
+  /// The completion menu's token, where the caret is in one and the menu was
+  /// not closed on it: the `/` or `@` word being typed.
+  CompletionToken? get completion {
+    final token = completionTokenIn(_field.text, _field.caret);
+    return token == _dismissed ? null : token;
+  }
+
+  /// The token the menu was closed on; it stays closed until the caret is in
+  /// another.
+  CompletionToken? _dismissed;
+
+  /// Close the menu on the token the caret is in.
+  void dismissCompletion() {
+    _dismissed = completionTokenIn(_field.text, _field.caret);
+    _publish();
+    notifyListeners();
+  }
+
+  /// Take [name] for the open token: the token, up to the caret, becomes the
+  /// whole name, and the trailing space makes what follows arguments rather
+  /// than more name.
+  void acceptCompletion(String name) {
+    final token = completion;
+    final caret = _field.caret;
+    if (token == null || caret == null) return;
+    final typed = "${token.kind.trigger}$name ";
+    _field.edit(
+      _field.text.replaceRange(token.start, caret, typed),
+      token.start + typed.length,
+    );
+  }
+
   /// A participant is speaking: an empty field's button is Stop.
   bool get speaking => _turn.agentSpeaking;
 
@@ -260,10 +345,13 @@ class ComposerModel extends ChangeNotifier {
       case ComposerAction.attachFile:
         attach(await pick(AttachmentKind.file));
       case ComposerAction.insertSkill:
+        _dismissed = null;
         _openTrigger(CompletionKind.skill);
       case ComposerAction.insertAgent:
+        _dismissed = null;
         _openTrigger(CompletionKind.agent);
       case ComposerAction.newGoal:
+        _dismissed = null;
         final goal = goalStarted(_field.text);
         _field.edit(goal, goal.length);
     }
@@ -287,6 +375,11 @@ class ComposerModel extends ChangeNotifier {
         ? ComposerMode.callback
         : ComposerMode.message;
     final embeds = _field.embedCount;
+    // A menu closed on one token opens again on the next.
+    if (_dismissed != null &&
+        completionTokenIn(text, _field.caret) != _dismissed) {
+      _dismissed = null;
+    }
     final reshaped = mode != _mode || embeds != _embeds || wired != _callback;
     _mode = mode;
     _callback = wired;
@@ -352,10 +445,6 @@ class ComposerModel extends ChangeNotifier {
     notifyListeners();
   }
 }
-
-/// Space, tab, newline — every break a typed message can hold.
-bool isCompletionSpace(int codeUnit) =>
-    codeUnit == 0x20 || codeUnit == 0x09 || codeUnit == 0x0A;
 
 /// Where [kind]'s trigger goes: a skill's at the start of the message, since
 /// that is the only place `prompt_library.dart`'s `_skillReference` reads one

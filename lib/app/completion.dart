@@ -1,6 +1,9 @@
 import "../domain/models.dart";
 import "../domain/shell.dart";
-import "composer.dart" show isCompletionSpace;
+
+/// Space, tab, newline — every break a typed message can hold.
+bool isCompletionSpace(int codeUnit) =>
+    codeUnit == 0x20 || codeUnit == 0x09 || codeUnit == 0x0A;
 
 typedef CompletionToken = ({CompletionKind kind, int start, String query});
 

@@ -206,4 +206,22 @@ void main() {
       expect(logic.state.value.focusRequest, first + 2);
     });
   });
+
+  group("the completion menu", () {
+    test("opens on a trigger word and closes on Escape until the next", () {
+      controller.edit("@sc", 3);
+      expect(logic.completion?.query, "sc");
+      logic.dismissCompletion();
+      expect(logic.completion, isNull);
+      controller.edit("@sc and @ma", 11);
+      expect(logic.completion?.query, "ma", reason: "another token reopens");
+    });
+
+    test("taking a name makes the token it, with a space after", () {
+      controller.edit("ask @sc", 7);
+      logic.acceptCompletion("scout");
+      expect(controller.text, "ask @scout ");
+      expect(controller.selection.baseOffset, controller.text.length);
+    });
+  });
 }

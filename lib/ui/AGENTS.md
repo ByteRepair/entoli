@@ -449,9 +449,9 @@ separately, and differ where the platforms do. **Each frontend places every
 action**: the Flutter `Composer`'s `_place` and Swift's `ComposerAction.place`
 switch over the same list with no default, Pigeon generating it into Swift,
 so a new action compiles on neither side until both have put it somewhere or
-left it out on purpose. The Flutter `Composer` and `ShellComposer` both run
-on the model, the shell's configured by a `Composer` it never mounts, the
-chat page choosing between them in one place. Both
+left it out on purpose. The chat page owns one model per chat and one
+`ComposerBinding` (the turn it sends into, where it is), and both composers
+render those, the completion menu's open and closed state included. Both
 answer `ComposerHandle`, so Reply and a steer taken back reach either. The
 text is Dart's `ComposerController`, and a frontend draws the model's
 `ComposerState`: the value, its `revision` and a `focusRequest` beside the
@@ -491,6 +491,15 @@ as view padding and the padding less the view insets, Flutter's own rule for
 the system's. Taken as padding whole, as it first was, the keyboard counted
 twice: a keyboard's height of empty conversation over the composer, which a
 simulator with a hardware keyboard never shows.
+
+**The chat page knows nothing of the shell.** What differs is a
+`ChatChrome` (`lib/ui/chat/chat_chrome.dart`): the composer, the turn
+surface, the question, the chat's and the new-chat screen's bars and the
+new-chat screen itself, and whether the frontend's bar and composer lie over
+the page. `FlutterChatChrome` leaves all of it to the page; `ShellChatChrome`
+(`lib/ui/shell/`) draws it natively, bound in `main` with the page bars'
+`pageBarDrawProvider`, so `chat_page.dart` and `page_bar.dart` import nothing
+of `lib/ui/shell/`.
 
 **The composer pads the layout and is clear glass.** The new-chat screen
 sits beside the Flutter view rather than over it, so it keeps to the

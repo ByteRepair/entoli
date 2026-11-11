@@ -130,7 +130,29 @@ class Composer extends ConsumerStatefulWidget {
     this.onVoice,
     this.workspace,
     this.workspaceHome,
+    this.model,
   });
+
+  /// [binding]'s composer, over the page's [model].
+  Composer.bound({
+    super.key,
+    required this.controller,
+    required ComposerModel this.model,
+    required ComposerBinding binding,
+  }) : agentSpeaking = binding.agentSpeaking,
+       onSend = binding.onSend,
+       onAbort = binding.onAbort,
+       onQueue = binding.onQueue,
+       steers = binding.steers,
+       project = binding.project,
+       device = binding.device,
+       onVoice = binding.onVoice,
+       workspace = binding.workspace,
+       workspaceHome = binding.workspaceHome;
+
+  /// The page's composer model, which every frontend's composer for the page
+  /// runs on; null makes one of this widget's own.
+  final ComposerModel? model;
 
   /// The field, and the quotes and other embeds in it. What is sent is its
   /// `message`, never its `text`.
@@ -185,10 +207,13 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   /// build resolves the field's decoration and the buttons either side of
   /// it, so it follows the model's shape and leaves Send's flips to the
   /// buttons' own builders.
-  late final ComposerModel _model = ComposerModel(
-    widget.controller,
-    pick: (kind) => ref.read(attachmentPickerProvider).pick(kind),
-  )..addListener(_reshaped);
+  late final ComposerModel _model =
+      (widget.model ??
+            ComposerModel(
+              widget.controller,
+              pick: (kind) => ref.read(attachmentPickerProvider).pick(kind),
+            ))
+        ..addListener(_reshaped);
   late final Listenable _sendState = Listenable.merge([
     _model.canSend,
     _model.queues,
@@ -204,7 +229,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   @override
   void didUpdateWidget(Composer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _model.field = widget.controller;
+    if (widget.model == null) _model.field = widget.controller;
     _configure();
   }
 
@@ -219,7 +244,10 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
 
   @override
   void dispose() {
-    _model.dispose();
+    _model
+      ..removeListener(_reshaped)
+      ..state.removeListener(_followFocus);
+    if (widget.model == null) _model.dispose();
     _focus.dispose();
     super.dispose();
   }

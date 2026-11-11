@@ -3,7 +3,6 @@ import "dart:math" as math;
 
 import "package:flutter/foundation.dart" show listEquals;
 import "package:collection/collection.dart" show IterableExtension;
-import "package:entoli_glass/entoli_glass.dart" show ChatBarSnapshot;
 import "package:flutter/material.dart";
 import "package:flutter/rendering.dart"
     show RenderAbstractViewport, RenderProxyBox;
@@ -16,7 +15,6 @@ import "../../domain/agent_face.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/end_turn.dart";
 import "../../domain/models.dart";
-import "../../domain/plan.dart" show sectionsProgress;
 import "../../domain/reaction.dart" show Reactions, reactionsOn;
 import "../../domain/room/room_state.dart";
 import "../../domain/project.dart";
@@ -29,17 +27,15 @@ import "../voice/read_aloud.dart";
 import "../voice/voice_page.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/chip_row.dart";
-import "../shell/shell_composer.dart";
-import "../shell/shell_new_chat.dart";
-import "../shell/shell_turn.dart";
 import "../widgets/completion_field.dart";
-import "../../app/frontend.dart";
 import "../widgets/side_panel_frame.dart";
 import "../widgets/scrolling.dart";
+import "chat_chrome.dart";
 import "chat_settings_page.dart";
 import "../../app/chat_controller.dart";
+import "../../app/composer.dart" show ComposerBinding, ComposerModel;
 import "../../app/mirror_controller.dart";
-import "plan_page.dart" show PlanButton, openPlan;
+import "plan_page.dart" show PlanButton;
 import "activity/card.dart" show ActivitySource, liveMessageOf;
 import "activity/format.dart" show formatRemaining;
 import "widgets/chapter_rail.dart";
@@ -52,18 +48,7 @@ import "widgets/message_bubble.dart";
 import "widgets/message_text.dart";
 import "widgets/omada_separator.dart" show ConversationSeparator;
 import "widgets/needs_setup_bar.dart";
-import "widgets/plan_view.dart" show planProvider;
-import "widgets/browser_strip.dart" show BrowserPrompts;
-import "widgets/turn_surface.dart";
 import "widgets/view_only_bar.dart";
-
-/// The page's composer: [composer] itself, or with the native shell the one
-/// it draws, configured by it and keyed as it is. The configuration is never
-/// mounted there, so its key is the shell composer's alone.
-Widget _composerOf(WidgetRef ref, Composer composer) =>
-    ref.watch(frontendProvider).swiftUI
-    ? ShellComposer(key: composer.key, config: composer)
-    : composer;
 
 class ChatPage extends ConsumerWidget {
   const ChatPage({super.key});
@@ -299,6 +284,10 @@ class _NewChat extends ConsumerStatefulWidget {
 
 class _NewChatState extends ConsumerState<_NewChat> {
   final ComposerController _controller = ComposerController();
+  late final ComposerModel _model = ComposerModel(
+    _controller,
+    pick: (kind) => ref.read(attachmentPickerProvider).pick(kind),
+  );
 
   /// What the chat this screen makes will run its first turn under. Held here
   /// rather than in a provider so that it dies with the screen: armed
@@ -324,6 +313,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
 
   @override
   void dispose() {
+    _model.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -368,40 +358,39 @@ class _NewChatState extends ConsumerState<_NewChat> {
   Widget _bottomBar() {
     final at = ref.watch(selectedProjectProvider);
     final project = at.project;
+    final chrome = ref.watch(chatChromeProvider);
     if (_starting) return const SizedBox.shrink();
+    Widget composer(ComposerBinding binding) => chrome.composer(
+      controller: _controller,
+      model: _model,
+      binding: binding,
+    );
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // The native shell's new-chat screen says it itself.
-        if (!ref.watch(frontendProvider).swiftUI) const _CommandHint(),
+        if (chrome.commandHint) const _CommandHint(),
         if (at.device != null)
           // A paired device's project: its setup and its voice are that
           // device's.
           ref.watch(projectFrozenProvider(at))
               ? const ViewOnlyBar()
-              : _composerOf(
-                  ref,
-                  Composer(
-                    controller: _controller,
+              : composer(
+                  ComposerBinding(
                     agentSpeaking: false,
                     onSend: _send,
                     onAbort: () {},
                     project: project,
                     device: at.device,
-                    workspace: null,
                   ),
                 )
         else if (ref.watch(setupCompleteProvider(project)))
-          _composerOf(
-            ref,
-            Composer(
-              controller: _controller,
+          composer(
+            ComposerBinding(
               agentSpeaking: false,
               onSend: _send,
               onAbort: () {},
               project: project,
               onVoice: () => startVoiceChat(context, ref, meta: _meta),
-              workspace: null,
             ),
           )
         else
@@ -413,9 +402,9 @@ class _NewChatState extends ConsumerState<_NewChat> {
   @override
   Widget build(BuildContext context) {
     final at = ref.watch(selectedProjectProvider);
-    final shell = ref.watch(frontendProvider).swiftUI;
+    final chrome = ref.watch(chatChromeProvider);
     return Scaffold(
-      appBar: shell
+      appBar: chrome.overPage
           ? null
           : AppBar(
               leading: SidePanelButton.leadingOf(context),
@@ -432,32 +421,27 @@ class _NewChatState extends ConsumerState<_NewChat> {
               ],
             ),
       body: _ReadableColumn(
-        bar: !shell
-            ? null
-            : ShellChatBar(
-                bar: ChatBarSnapshot(
-                  draft: true,
-                  project: at.project == null ? null : projectLabel(at.project),
-                  settings: at.device == null,
-                ),
-                onSettings: _openSettings,
-              ),
+        bar: chrome.newChatBar(at: at, onSettings: _openSettings),
         bottom: _bottomBar(),
-        // Under the native shell the shell draws the screen, spinner and all.
-        child: shell
-            ? ShellNewChat(at: at, controller: _controller, starting: _starting)
-            : _starting
-            ? const Center(child: CircularProgressIndicator())
-            : _EmptyChat(
-                project: at.project,
-                device: at.device,
-                controller: _controller,
-                // The paired devices' badges are the new-chat screen's own — a
-                // chat that exists with nothing said in it yet is mid-turn at
-                // worst, and a list of other devices under its question would
-                // say nothing true about it.
-                showSyncedCards: true,
-              ),
+        // Where the frontend draws the screen itself, spinner and all.
+        child:
+            chrome.newChat(
+              at: at,
+              controller: _controller,
+              starting: _starting,
+            ) ??
+            (_starting
+                ? const Center(child: CircularProgressIndicator())
+                : _EmptyChat(
+                    project: at.project,
+                    device: at.device,
+                    controller: _controller,
+                    // The paired devices' badges are the new-chat screen's own — a
+                    // chat that exists with nothing said in it yet is mid-turn at
+                    // worst, and a list of other devices under its question would
+                    // say nothing true about it.
+                    showSyncedCards: true,
+                  )),
       ),
     );
   }
@@ -956,9 +940,13 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   static const _slack = 200.0;
 
   /// Inside the native shell: settled at launch, so read once.
-  late final bool _shell = ref.read(frontendProvider).swiftUI;
+  late final ChatChrome _chrome = ref.read(chatChromeProvider);
 
   final ComposerController _controller = ComposerController();
+  late final ComposerModel _model = ComposerModel(
+    _controller,
+    pick: (kind) => ref.read(attachmentPickerProvider).pick(kind),
+  );
 
   /// What a steer taken back is put back into, attachments and all.
   final GlobalKey _composer = GlobalKey();
@@ -1081,6 +1069,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     _outline.dispose();
     _memoryNotes?.cancel();
     _scroll.removeListener(_readPosition);
+    _model.dispose();
     _controller.dispose();
     _glide.dispose();
     _list.dispose();
@@ -1468,7 +1457,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       ),
     );
     return Scaffold(
-      appBar: _shell
+      appBar: _chrome.overPage
           ? null
           : AppBar(
               leading: SidePanelButton.leadingOf(context),
@@ -1501,7 +1490,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
               ],
             ),
       body: _ReadableColumn(
-        bar: !_shell ? null : _shellBar(chat.state, view),
+        bar: _chrome.chatBar(state: chat.state, view: view),
         banner: banner,
         bottom: bottom,
         side: ValueListenableBuilder<_Outline>(
@@ -1566,33 +1555,21 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Under the native shell the shell draws it, all but the browser's
-        // prompts, which are fields and a picker and stay Flutter's.
-        if (_shell) ...[
-          ShellTurnSurface(
-            view: view,
-            notifier: driver,
-            onWithdrawn: (said) => _handle?.restore(said),
-          ),
-          if (view.chat case final chat?) BrowserPrompts(chatId: chat.state.id),
-        ] else
-          TurnSurface(
-            view: view,
-            notifier: driver,
-            onWithdrawn: (said) => _handle?.restore(said),
-          ),
+        _chrome.turnSurface(
+          view: view,
+          driver: driver,
+          onWithdrawn: (said) => _handle?.restore(said),
+        ),
         switch (view.roomPhase) {
-          // The shell draws the question with the rest of the turn surface,
-          // in the composer's place.
-          RoomPhase.waitingOnYou =>
-            _shell
-                ? const SizedBox.shrink()
-                : TurnQuestions(view: view, notifier: driver),
-          _ => _composerOf(
-            ref,
-            Composer(
-              key: _composer,
-              controller: _controller,
+          RoomPhase.waitingOnYou => _chrome.questions(
+            view: view,
+            driver: driver,
+          ),
+          _ => _chrome.composer(
+            key: _composer,
+            controller: _controller,
+            model: _model,
+            binding: ComposerBinding(
               agentSpeaking: view.roomPhase == RoomPhase.agentSpeaking,
               onSend: send,
               onQueue: (text, attachments) =>
@@ -1755,7 +1732,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
         // composer, which the list runs under.
         Positioned(
           right: 16,
-          bottom: 12 + (_shell ? MediaQuery.paddingOf(context).bottom : 0),
+          bottom:
+              12 +
+              (_chrome.overPage ? MediaQuery.paddingOf(context).bottom : 0),
           child: ValueListenableBuilder<bool>(
             valueListenable: _atBottom,
             builder: (context, atBottom, child) =>
@@ -1772,26 +1751,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
           ),
         ),
       ],
-    );
-  }
-
-  /// The shell's toolbar for this chat: its title, what [_details] says
-  /// under it as one line, the running spinner, the plan and the settings.
-  Widget _shellBar(ChatState state, ChatViewState view) {
-    final plan = ref.watch(planProvider(widget.chatId)).value;
-    final progress = plan == null ? null : sectionsProgress(plan);
-    return ShellChatBar(
-      bar: ChatBarSnapshot(
-        title: state.title,
-        project: state.project == null ? null : projectLabel(state.project),
-        pinned: state.pinned,
-        expiresAt: state.tempTtlExpiresAt?.millisecondsSinceEpoch,
-        running: view.isRunning,
-        planDone: progress?.$1,
-        planTotal: progress?.$2,
-      ),
-      onPlan: () => openPlan(context, widget.chatId),
-      onSettings: () => openChatSettings(context, widget.chatId),
     );
   }
 

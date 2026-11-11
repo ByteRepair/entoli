@@ -53,6 +53,8 @@ import "ui/routes.dart";
 import "ui/welcome_gate.dart";
 import "app/chat_controller.dart";
 import "app/frontend.dart";
+import "ui/chat/chat_chrome.dart" show chatChromeProvider;
+import "ui/shell/shell_chat_chrome.dart";
 import "ui/shell/shell_page_bar.dart" show drawShellPageBar;
 import "ui/widgets/page_bar.dart" show pageBarDrawProvider;
 import "app/controller_turn_sender.dart";
@@ -394,8 +396,10 @@ class AppSession {
         appUpdateHostProvider.overrideWithValue(
           platform.createAppUpdateHost(cache),
         ),
-        if (_glassAtLaunch!)
+        if (_glassAtLaunch!) ...[
           pageBarDrawProvider.overrideWithValue(drawShellPageBar),
+          chatChromeProvider.overrideWithValue(const ShellChatChrome()),
+        ],
         appMenusProvider.overrideWithValue(
           glassAvailable ? _menus ??= NativeAppMenus() : const NoAppMenus(),
         ),
