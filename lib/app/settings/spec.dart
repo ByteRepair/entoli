@@ -56,6 +56,9 @@ enum UiHint {
 
   /// One thing to download, kept current with an Update beside Delete.
   single,
+
+  /// Rows to read: the default for an info controller.
+  info,
 }
 
 /// The pages settings is filed under, in the order they are offered. A
@@ -157,4 +160,15 @@ class SectionSpec {
 
 /// What an icon beside a setting stands for, never how it is drawn: each
 /// frontend picks its own picture in an exhaustive switch.
-enum SettingGlyph { deleteForever, play, stop, warning, shield }
+enum SettingGlyph {
+  deleteForever,
+  play,
+  stop,
+  warning,
+  shield,
+  appMark,
+  person,
+  code,
+  privacy,
+  licence,
+}

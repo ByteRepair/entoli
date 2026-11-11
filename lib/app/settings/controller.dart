@@ -2,6 +2,7 @@ import "../../domain/app_icon.dart";
 import "../../domain/download.dart" show DownloadProgress;
 import "../../domain/llm_provider.dart";
 import "../../domain/models.dart" show ModelChoice;
+import "../app_items.dart" show AppKey;
 import "../model_role.dart";
 import "scope.dart";
 import "spec.dart";
@@ -754,3 +755,47 @@ class CatalogItem {
   /// What deleting it asks first; null deletes it straight away.
   final SettingConfirm? deleteConfirm;
 }
+
+/// Rows to read: what the app is, the keys that do what.
+final class InfoController extends SettingController {
+  InfoController(
+    super.spec, {
+    required this.rows,
+    super.title,
+    super.description,
+    super.footnote,
+    super.enabled,
+    super.visible,
+    super.accessory,
+  });
+
+  final List<InfoRow> rows;
+}
+
+class InfoRow {
+  const InfoRow(
+    this.title, {
+    this.subtitle,
+    this.glyph,
+    this.keys,
+    this.link,
+    this.opens,
+  });
+
+  final String title;
+  final String? subtitle;
+  final SettingGlyph? glyph;
+
+  /// The chord that does it, drawn as each keyboard prints it.
+  final AppKey? keys;
+
+  /// A page out of the app it opens.
+  final Uri? link;
+
+  /// A page of the app's own it opens.
+  final InfoPage? opens;
+}
+
+/// The pages an info row can open, each drawn by the frontend from what the
+/// app holds: the policy's text, the libraries' licences.
+enum InfoPage { privacyPolicy, licences }

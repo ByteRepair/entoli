@@ -1,3 +1,4 @@
+import "pages/about.dart";
 import "pages/browser.dart";
 import "pages/general.dart";
 import "pages/llms.dart";
@@ -15,6 +16,7 @@ final entoliSettings = SettingsSchema(
     ...voiceSections,
     ...terminalSections,
     ...browserSections,
+    ...aboutSections,
   ],
   settings: [
     ...generalSettings,
@@ -23,5 +25,6 @@ final entoliSettings = SettingsSchema(
     ...voiceSettings,
     ...terminalSettings,
     ...browserSettings,
+    ...aboutSettings,
   ],
 );

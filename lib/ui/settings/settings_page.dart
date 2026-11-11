@@ -9,10 +9,8 @@ import "../../core/platform/platform.dart" as platform;
 import "../../domain/llm_provider.dart";
 import "../../providers.dart";
 import "../chat/activity/format.dart";
-import "../theme.dart";
 import "../widgets/add_button_row.dart";
 import "../widgets/busy.dart";
-import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/editable_row.dart";
 import "../../core/formatting.dart";
@@ -25,9 +23,7 @@ import "running_models.dart";
 import "local_model_settings.dart";
 import "provider_usage_view.dart";
 import "on_device_catalog.dart";
-import "privacy_policy_page.dart";
 import "provider_picker.dart";
-import "shortcuts_settings.dart";
 import "triggers.dart";
 import "skills_settings.dart";
 import "sync_settings.dart";
@@ -161,8 +157,10 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
   // user writes (instructions) and the ones it writes (memories).
   SettingsCategory.memory => const [SchemaSections(SettingsPageId.memory)],
   SettingsCategory.data => const [_BackupSection()],
-  SettingsCategory.shortcuts => const [ShortcutsSection()],
-  SettingsCategory.about => const [_AboutSection()],
+  SettingsCategory.shortcuts => const [
+    SchemaSections(SettingsPageId.shortcuts),
+  ],
+  SettingsCategory.about => const [SchemaSections(SettingsPageId.about)],
   // Rendered by [_categoryBody] rather than filed here: the tour is a
   // pager with its own bar, not a list of sections.
   SettingsCategory.welcome => const [],
@@ -196,69 +194,6 @@ class _Categories extends ConsumerWidget {
       ),
     ),
   );
-}
-
-/// What this build is, who made it, and where the source is. The libraries are
-/// Flutter's own licence page rather than a list kept here — see "What the app
-/// is".
-class _AboutSection extends ConsumerWidget {
-  const _AboutSection();
-
-  static final _repository = Uri.parse("https://github.com/ByteRepair/entoli");
-  static const _madeBy = "Made by Yiannis Charalambous";
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final version = ref.watch(appVersionProvider);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SectionHeader("About"),
-        ListTile(
-          leading: const AppMark(size: 40),
-          title: const Text(appTitle),
-          subtitle: version == null ? null : Text("Version $version"),
-        ),
-        const ListTile(
-          leading: Icon(Icons.person_outline),
-          title: Text(_madeBy),
-        ),
-        ListTile(
-          leading: const Icon(Icons.code),
-          title: const Text("Source on GitHub"),
-          subtitle: Text("$_repository"),
-          trailing: const Icon(Icons.open_in_new, size: 18),
-          onTap: () => ref.read(linkOpenerProvider).open(context, _repository),
-        ),
-        ListTile(
-          leading: const Icon(Icons.privacy_tip_outlined),
-          title: const Text("Privacy policy"),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const PrivacyPolicyPage())),
-        ),
-        ListTile(
-          leading: const Icon(Icons.balance_outlined),
-          title: const Text("Open source libraries"),
-          subtitle: const Text(
-            "Everything Entoli is built on, and its licence.",
-          ),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => showLicensePage(
-            context: context,
-            applicationName: appTitle,
-            applicationVersion: version,
-            applicationIcon: const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: AppMark(size: 48),
-            ),
-            applicationLegalese: _madeBy,
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 /// The nudge an empty Providers page stands in for: a recommended provider,

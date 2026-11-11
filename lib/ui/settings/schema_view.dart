@@ -6,7 +6,11 @@ import "../../app/settings/scope.dart";
 import "../../app/settings/settings.dart";
 import "../../app/settings/spec.dart";
 import "../../domain/app_icon.dart";
-import "../widgets/app_mark.dart" show AppIconImage;
+import "../../app/settings/pages/about.dart" show madeBy;
+import "../app_command.dart";
+import "../theme.dart" show appTitle;
+import "../widgets/app_mark.dart";
+import "privacy_policy_page.dart";
 import "../../providers.dart";
 import "../widgets/add_button_row.dart";
 import "../widgets/catalog.dart";
@@ -116,6 +120,7 @@ class SettingRow extends StatelessWidget {
       final CollectionController c => c.typed(<V>(c) => _Collection<V>(c)),
       final CatalogController c when c.hint == UiHint.single => _Single(c),
       final CatalogController c => _Catalog(c),
+      final InfoController c => _Info(c),
       final NumberController c => _Number(c, labelled: !nested),
       final ModelPickController c => LabelledField(
         label: c.title,
@@ -179,7 +184,12 @@ IconData? _icon(SettingGlyph? glyph) => switch (glyph) {
   SettingGlyph.stop => Icons.stop_circle_outlined,
   SettingGlyph.warning => Icons.warning_amber_rounded,
   SettingGlyph.shield => Icons.shield_outlined,
-  null => null,
+  SettingGlyph.person => Icons.person_outline,
+  SettingGlyph.code => Icons.code,
+  SettingGlyph.privacy => Icons.privacy_tip_outlined,
+  SettingGlyph.licence => Icons.balance_outlined,
+  // Drawn as the app's own mark, not an icon.
+  SettingGlyph.appMark || null => null,
 };
 
 /// A setting's accessory, as the icon button at its end.
@@ -989,6 +999,99 @@ class _Single extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// Rows to read: each with its icon, or its keys, and where it leads.
+class _Info extends ConsumerWidget {
+  const _Info(this.c);
+
+  final InfoController c;
+
+  void _open(BuildContext context, WidgetRef ref, InfoRow row) {
+    if (row.link case final link?) {
+      ref.read(linkOpenerProvider).open(context, link);
+      return;
+    }
+    switch (row.opens) {
+      case InfoPage.privacyPolicy:
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const PrivacyPolicyPage()));
+      case InfoPage.licences:
+        showLicensePage(
+          context: context,
+          applicationName: appTitle,
+          applicationVersion: ref.read(appVersionProvider),
+          applicationIcon: const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: AppMark(size: 48),
+          ),
+          applicationLegalese: madeBy,
+        );
+      case null:
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      for (final row in c.rows)
+        if (row.keys case final keys?)
+          ListTile(title: Text(row.title), trailing: _Keys(keys.caps))
+        else
+          ListTile(
+            leading: row.glyph == SettingGlyph.appMark
+                ? const AppMark(size: 40)
+                : _icon(row.glyph) == null
+                ? null
+                : Icon(_icon(row.glyph)),
+            title: Text(row.title),
+            subtitle: row.subtitle == null ? null : Text(row.subtitle!),
+            trailing: row.link != null
+                ? const Icon(Icons.open_in_new, size: 18)
+                : row.opens != null
+                ? const Icon(Icons.chevron_right)
+                : null,
+            onTap: row.link == null && row.opens == null
+                ? null
+                : () => _open(context, ref, row),
+          ),
+    ],
+  );
+}
+
+/// A chord's keys, each on a cap of its own.
+class _Keys extends StatelessWidget {
+  const _Keys(this.caps);
+
+  final List<String> caps;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      spacing: 4,
+      children: [
+        for (final cap in caps)
+          Container(
+            constraints: const BoxConstraints(minWidth: 28),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              cap,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.labelMedium,
+            ),
+          ),
+      ],
     );
   }
 }
