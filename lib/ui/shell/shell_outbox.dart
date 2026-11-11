@@ -42,8 +42,9 @@ class ShellOutbox {
   void voiceLevel(double level) =>
       _watch("voiceLevel", _shell.voiceLevel(level));
 
-  /// Put the caret in the composer's field.
-  void focusComposer() => _watch("focusComposer", _shell.focusComposer());
+  /// Give the composer's field the keyboard, or take it away.
+  void composerFocus(bool focused) =>
+      _watch("composerFocus", _shell.composerFocus(focused));
 
   void _post<T extends Object>(
     String concern,

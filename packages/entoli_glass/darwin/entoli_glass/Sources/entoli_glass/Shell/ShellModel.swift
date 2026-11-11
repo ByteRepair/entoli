@@ -97,7 +97,7 @@ extension ShellModel: NativeShell {
 
   func voiceLevel(level: Double) throws { voiceLevel.set(level) }
 
-  func focusComposer() throws { composer.focus() }
+  func composerFocus(focused: Bool) throws { composer.focus(focused) }
 
   func strip(request: ChoiceStrip, completion: @escaping (Result<Int64?, Error>) -> Void) {
     showStrip(request) { completion(.success($0)) }

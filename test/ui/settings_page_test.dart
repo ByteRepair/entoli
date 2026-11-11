@@ -170,6 +170,26 @@ void main() {
       expect(find.text("Appearance"), findsNothing);
     });
 
+    testWidgets(
+      "on iOS a swipe from the edge goes back to the list, a short one stays",
+      (tester) async {
+        await app.pump(tester, const SettingsPage());
+        await tester.tap(tile("General"));
+        await settleIo(tester);
+        final edge = Offset(5, tester.getCenter(find.text("Appearance")).dy);
+
+        await tester.dragFrom(edge, const Offset(40, 0));
+        await settleIo(tester);
+        expect(tile("General"), findsNothing);
+
+        await tester.dragFrom(edge, const Offset(500, 0));
+        await settleIo(tester);
+        expect(tile("General"), findsOneWidget);
+        expect(find.text("Appearance"), findsNothing);
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+    );
+
     testWidgets("a wide window switches category with no transition", (
       tester,
     ) async {

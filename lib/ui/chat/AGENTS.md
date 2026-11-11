@@ -1180,3 +1180,10 @@ back through a turn is undisturbed — and a button appears to go back down.
 Its own `_slack` decides only the button: it turns up once the view is past
 200px off the end. Both edges are `ValueNotifier`s, since a `setState`
 mid-drag would rebuild every visible bubble to swap a title or a button.
+
+Sending attaches, wherever the reader had scrolled to: what they said is the
+latest. The viewport shrinking — the keyboard coming up — keeps a following
+list at its end rather than leaving the end under the keys. And a touch drag
+toward the older messages drops focus, which takes a soft keyboard down
+(`KeyboardDismissOnScrollBack`); a wheel or a trackpad does not, so a
+desktop's composer keeps its caret.

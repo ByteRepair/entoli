@@ -209,9 +209,16 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
       measure()
     }
 
-    func focus() {
-      becomeFirstResponder()
+    func focus(_ focused: Bool) {
+      if focused {
+        becomeFirstResponder()
+      } else {
+        resignFirstResponder()
+      }
     }
+
+    func textViewDidBeginEditing(_ textView: UITextView) { model?.focused(true) }
+    func textViewDidEndEditing(_ textView: UITextView) { model?.focused(false) }
 
     func restyle() {
       guard model != nil else { return }
@@ -389,8 +396,24 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
       measure()
     }
 
-    func focus() {
-      window?.makeFirstResponder(self)
+    func focus(_ focused: Bool) {
+      if focused {
+        window?.makeFirstResponder(self)
+      } else if window?.firstResponder === self {
+        window?.makeFirstResponder(nil)
+      }
+    }
+
+    override func becomeFirstResponder() -> Bool {
+      let became = super.becomeFirstResponder()
+      if became { model?.focused(true) }
+      return became
+    }
+
+    override func resignFirstResponder() -> Bool {
+      let resigned = super.resignFirstResponder()
+      if resigned { model?.focused(false) }
+      return resigned
     }
 
     func restyle() {

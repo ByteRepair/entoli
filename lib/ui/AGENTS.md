@@ -354,7 +354,7 @@ an intent the two sides read differently does not compile. It is a protocol a
 client could implement anywhere: the app holds every rule and all the state,
 and the client holds only the last snapshot of each concern. `NativeShell` is
 what the app says — `start`, a snapshot per concern, the one-offs
-`voiceLevel` and `focusComposer`, and `strip`, answered later (below); each
+`voiceLevel` and `composerFocus`, and `strip`, answered later (below); each
 `*Intents` API is what a surface's client says the user did, a method per
 intent, the few the client waits on (a project's error, a paste's yes or no)
 marked `@async`.
@@ -419,7 +419,13 @@ text is Dart's `ComposerController`: what the native field types arrives as
 input method's marked text, and what Dart changes — a completion taken, a
 message put back, the field cleared on send — goes as `composerValue`. A quote
 card is an attachment character in the native field carrying its embed's code
-unit, so offsets mean the same on both sides.
+unit, so offsets mean the same on both sides. **The field's focus is a
+`FocusNode` in Dart's tree**: the field says when it takes the keyboard or
+gives it up (`focused`), `ShellComposer` holds the node to match, and a
+change of the node's own — a drag back through the conversation, a reply
+quoted into the field — goes back as `composerFocus`. So whatever takes focus
+from a Flutter field takes the keyboard from the native one, with no rule of
+its own for the shell.
 
 ### The layout
 
@@ -432,8 +438,13 @@ height and pads it by the composer and by whatever Flutter still draws above
 it — the browser's prompts, a setup or offline bar — measured, so the last
 message clears both; and tooltips there open above what they are about,
 since a tooltip knows only the Flutter view's room and below is behind the
-composer. On iOS the keyboard is left out of the insets: Flutter hears of it
-itself, and counted twice the conversation went up under the toolbar.
+composer. **The keyboard is in the insets once.** The composer rides on it,
+so the bottom inset reaches over it, and Flutter also hears of it as view
+insets and shrinks the page by them; `ShellInsets` gives the shell's insets
+as view padding and the padding less the view insets, Flutter's own rule for
+the system's. Taken as padding whole, as it first was, the keyboard counted
+twice: a keyboard's height of empty conversation over the composer, which a
+simulator with a hardware keyboard never shows.
 
 `FlutterCanvas` is the Flutter view and every layer drawn in its coordinates,
 in one container: the edges are said once, and a layer gets exactly the
@@ -513,6 +524,14 @@ leads with a sidebar button in place of the split view's chevron, the Flutter
 app's menu button drawn the system's way, and picking a chat, a new one, a
 page or a project from the list goes back to the detail as the Flutter drawer
 closes on each; `ShellModel.compactColumn` is the one state for all of it.
+The list keeps no selection there, as an iPhone's lists do not: a selection
+standing is what holds a collapsed split view on its detail, and the sidebar
+button did nothing from a chat while one did. The drawer's swipes are the
+shell's own (`EdgeSwipe.swift`, and a drag on the list): in from the leading
+edge to the list, which the split view's back swipe would have been had the
+bar not hidden its back button for the sidebar button, and toward it on the
+list back to the chat. A Flutter page over the chat keeps the edge, for its
+own back swipe.
 Only the behaviour follows Flutter's: the layout stays the native split
 view. The app's pages are a menu on the list's bar, there being no menu bar
 to hold them. The hosting is each Runner's own story — see "The native shell" in

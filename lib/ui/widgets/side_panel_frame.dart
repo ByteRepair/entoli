@@ -1,3 +1,6 @@
+import "dart:math" as math;
+
+import "package:flutter/cupertino.dart" show CupertinoPageTransitionsBuilder;
 import "package:flutter/material.dart";
 
 import "nav_drawer.dart";
@@ -149,6 +152,7 @@ class _SidePanelFrameState extends State<SidePanelFrame> {
                       : _Pages(
                           paged: !wide,
                           contentShown: widget.contentShown,
+                          onBack: widget.onHideContent,
                           panel: widget.panel,
                           content: content,
                         ),
@@ -169,17 +173,22 @@ class _SidePanelFrameState extends State<SidePanelFrame> {
 /// [contentShown] lands at once. The content is wrapped the same in every
 /// mode, so it is at one place in the tree whatever the width, and each page
 /// is kept, hidden, while the other is in front, so neither is rebuilt from
-/// nothing by the way back.
+/// nothing by the way back. Where that transition is iOS's, the content is
+/// also left the way an iOS route is, by a swipe from the leading edge that
+/// the slide follows: the content's `PopScope` keeps the route's own swipe
+/// from taking the whole page instead.
 class _Pages extends StatefulWidget {
   const _Pages({
     required this.paged,
     required this.contentShown,
+    required this.onBack,
     required this.panel,
     required this.content,
   });
 
   final bool paged;
   final bool contentShown;
+  final VoidCallback? onBack;
   final Widget panel;
   final Widget content;
 
@@ -227,6 +236,47 @@ class _PagesState extends State<_Pages> with SingleTickerProviderStateMixin {
   void dispose() {
     _page.dispose();
     super.dispose();
+  }
+
+  bool get _swipesBack {
+    final theme = Theme.of(context);
+    return _route != null &&
+        widget.paged &&
+        widget.contentShown &&
+        widget.onBack != null &&
+        theme.pageTransitionsTheme.builders[theme.platform]
+            is CupertinoPageTransitionsBuilder;
+  }
+
+  double get _leadingPadding {
+    final padding = MediaQuery.paddingOf(context);
+    return Directionality.of(context) == TextDirection.ltr
+        ? padding.left
+        : padding.right;
+  }
+
+  /// The share of the width a drag of [delta] is, leading edge to trailing.
+  double _share(double delta) {
+    final width = context.size?.width ?? 1;
+    return switch (Directionality.of(context)) {
+          TextDirection.ltr => delta,
+          TextDirection.rtl => -delta,
+        } /
+        width;
+  }
+
+  void _swipe(DragUpdateDetails details) =>
+      _page.value -= _share(details.primaryDelta ?? 0);
+
+  /// Back past halfway or on a fling toward the trailing edge, as a route's
+  /// swipe decides.
+  void _swiped(DragEndDetails details) {
+    final fling = _share(details.primaryVelocity ?? 0);
+    if (fling > 1 || (fling > -1 && _page.value < 0.5)) {
+      widget.onBack!();
+    } else {
+      _page.forward();
+    }
   }
 
   Widget _transition(
@@ -283,6 +333,19 @@ class _PagesState extends State<_Pages> with SingleTickerProviderStateMixin {
               ),
             ),
           ),
+          if (_swipesBack)
+            PositionedDirectional(
+              start: 0,
+              top: 0,
+              bottom: 0,
+              // iOS's own edge, or the safe area where that is wider.
+              width: math.max(20, _leadingPadding),
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onHorizontalDragUpdate: _swipe,
+                onHorizontalDragEnd: _swiped,
+              ),
+            ),
         ],
       ),
     );

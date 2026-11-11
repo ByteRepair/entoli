@@ -1556,6 +1556,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
               why: "The user sent a message instead of choosing a file.",
             );
       }
+      _follow.attach();
       try {
         await driver.send(text, attachments: attachments, queue: queue);
       } on Undelivered catch (e) {
@@ -1659,92 +1660,112 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
         Listener(
           onPointerDown: (_) => _stopGlide(),
           onPointerSignal: (_) => _stopGlide(),
-          child: NotificationListener<ScrollNotification>(
-            onNotification: _follow.onNotification,
-            child: SuperListView.builder(
-              controller: _scroll,
-              listController: _list,
-              extentPrecalculationPolicy: _measureAll,
-              itemCount: entries.length,
-              itemBuilder: (context, i) => switch (entries[i]) {
-                SectionEntry(:final omada) => ConversationSeparator(
-                  text: omada ? "Omada is turned on" : "Omada is turned off",
-                ),
-                GoalEntry(:final mark) => GoalMarkRow(mark: mark),
-                CompactionEntry(:final summary) => ConversationSeparator(
-                  text: "Compact Conversation",
-                  body: MessageText(
-                    text: summary,
-                    isError: false,
-                    isWaiting: false,
-                    caret: false,
-                    onTapLink: (href) => _openLink(context, href),
-                  ),
-                ),
-                CompactionFailedEntry(:final reason) => ConversationSeparator(
-                  text: "Could not compact the conversation",
-                  body: MessageText(
-                    text: reason,
-                    isError: true,
-                    isWaiting: false,
-                    caret: false,
-                    onTapLink: (href) => _openLink(context, href),
-                  ),
-                ),
-                MessageEntry(:final message, :final last, :final reactions) =>
-                  KeyedSubtree(
-                    key: message.role == MessageRole.user
-                        ? _chapterKeys.putIfAbsent(message.id, GlobalKey.new)
-                        : null,
-                    child: ActivitySource(
-                      live: source.select((v) => liveMessageOf(v, message.id)),
-                      child: MessageBubble(
-                        chatId: widget.chatId,
-                        message: message,
-                        avatar: _avatarOf(chat, message),
-                        isWaiting: view.isRunning && last,
-                        latest: last,
-                        waitingNotice: view.retry,
-                        waitingStatus: view.status,
-                        shellOutput: view.shellOutput[message.id],
+          child: NotificationListener<ScrollMetricsNotification>(
+            onNotification: _follow.onMetrics,
+            child: NotificationListener<ScrollNotification>(
+              onNotification: _follow.onNotification,
+              child: KeyboardDismissOnScrollBack(
+                child: SuperListView.builder(
+                  controller: _scroll,
+                  listController: _list,
+                  extentPrecalculationPolicy: _measureAll,
+                  itemCount: entries.length,
+                  itemBuilder: (context, i) => switch (entries[i]) {
+                    SectionEntry(:final omada) => ConversationSeparator(
+                      text: omada
+                          ? "Omada is turned on"
+                          : "Omada is turned off",
+                    ),
+                    GoalEntry(:final mark) => GoalMarkRow(mark: mark),
+                    CompactionEntry(:final summary) => ConversationSeparator(
+                      text: "Compact Conversation",
+                      body: MessageText(
+                        text: summary,
+                        isError: false,
+                        isWaiting: false,
+                        caret: false,
                         onTapLink: (href) => _openLink(context, href),
-                        onReply: (quote) => _reply(QuoteEmbed(quote)),
-                        reactions: reactions,
-                        // Any message, the user's own included; not the reply
-                        // still being written. While a turn runs it waits.
-                        onReact: editing != null && !(view.isRunning && last)
-                            ? (reaction) => editing.react(message.id, reaction)
-                            : null,
-                        threads: editing == null
-                            ? null
-                            : chat.branches[message.id],
-                        onThreadStep: mutable
-                            ? (step) => editing.stepThread(message.id, step)
-                            : null,
-                        onDelete: mutable
-                            ? () => editing.deleteThread(message.id)
-                            : null,
-                        onEdit: mutable && message.role == MessageRole.user
-                            ? (text) => editing.editAndResend(message.id, text)
-                            : null,
-                        onRegenerate: mutable
-                            ? () => editing.regenerate(message.id)
-                            : null,
-                        onSpeak: speechReady && message.hasText
-                            ? () => readAloud(
-                                context,
-                                ref,
-                                message.id,
-                                message.plainText,
-                              )
-                            : null,
-                        isSpeaking: reading == message.id,
-                        steerKey: (id) =>
-                            _chapterKeys.putIfAbsent(id, GlobalKey.new),
                       ),
                     ),
-                  ),
-              },
+                    CompactionFailedEntry(:final reason) =>
+                      ConversationSeparator(
+                        text: "Could not compact the conversation",
+                        body: MessageText(
+                          text: reason,
+                          isError: true,
+                          isWaiting: false,
+                          caret: false,
+                          onTapLink: (href) => _openLink(context, href),
+                        ),
+                      ),
+                    MessageEntry(
+                      :final message,
+                      :final last,
+                      :final reactions,
+                    ) =>
+                      KeyedSubtree(
+                        key: message.role == MessageRole.user
+                            ? _chapterKeys.putIfAbsent(
+                                message.id,
+                                GlobalKey.new,
+                              )
+                            : null,
+                        child: ActivitySource(
+                          live: source.select(
+                            (v) => liveMessageOf(v, message.id),
+                          ),
+                          child: MessageBubble(
+                            chatId: widget.chatId,
+                            message: message,
+                            avatar: _avatarOf(chat, message),
+                            isWaiting: view.isRunning && last,
+                            latest: last,
+                            waitingNotice: view.retry,
+                            waitingStatus: view.status,
+                            shellOutput: view.shellOutput[message.id],
+                            onTapLink: (href) => _openLink(context, href),
+                            onReply: (quote) => _reply(QuoteEmbed(quote)),
+                            reactions: reactions,
+                            // Any message, the user's own included; not the reply
+                            // still being written. While a turn runs it waits.
+                            onReact:
+                                editing != null && !(view.isRunning && last)
+                                ? (reaction) =>
+                                      editing.react(message.id, reaction)
+                                : null,
+                            threads: editing == null
+                                ? null
+                                : chat.branches[message.id],
+                            onThreadStep: mutable
+                                ? (step) => editing.stepThread(message.id, step)
+                                : null,
+                            onDelete: mutable
+                                ? () => editing.deleteThread(message.id)
+                                : null,
+                            onEdit: mutable && message.role == MessageRole.user
+                                ? (text) =>
+                                      editing.editAndResend(message.id, text)
+                                : null,
+                            onRegenerate: mutable
+                                ? () => editing.regenerate(message.id)
+                                : null,
+                            onSpeak: speechReady && message.hasText
+                                ? () => readAloud(
+                                    context,
+                                    ref,
+                                    message.id,
+                                    message.plainText,
+                                  )
+                                : null,
+                            isSpeaking: reading == message.id,
+                            steerKey: (id) =>
+                                _chapterKeys.putIfAbsent(id, GlobalKey.new),
+                          ),
+                        ),
+                      ),
+                  },
+                ),
+              ),
             ),
           ),
         ),

@@ -17,10 +17,11 @@ extension ComposerSnapshot {
 }
 
 /// What the text view is to the model: told a value Dart set, asked to take
-/// the caret, and to draw its cards again when what they look like changed.
+/// the keyboard or give it up, and to draw its cards again when what they
+/// look like changed.
 protocol ComposerEditor: AnyObject {
   func apply(text: String, start: Int, end: Int)
-  func focus()
+  func focus(_ focused: Bool)
   func restyle()
 }
 
@@ -137,8 +138,13 @@ final class ComposerModel: ObservableObject {
     }
   }
 
-  func focus() {
-    editor?.focus()
+  func focus(_ focused: Bool) {
+    editor?.focus(focused)
+  }
+
+  /// The field took the keyboard, or gave it up.
+  func focused(_ focused: Bool) {
+    say?.focused(focused: focused) { _ in }
   }
 
   /// What the user did, to the composer on top in Dart.

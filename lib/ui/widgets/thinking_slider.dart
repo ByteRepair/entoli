@@ -7,13 +7,13 @@ import "package:flutter/scheduler.dart";
 import "package:flutter/services.dart";
 
 import "../../core/noise.dart";
+import "decorative_motion.dart";
 
 /// A choice of how hard something thinks, as a bar of points: the left is the
 /// least thought and the right the most. The bar is a field of dots drawn from
 /// [ValueNoise], sparse and slow on the left and dense with detail on the
-/// right, lit up to the point picked. It moves while the pointer is over it and
-/// for a moment after a pick, and is still otherwise, so it costs nothing at
-/// rest.
+/// right, lit up to the point picked. It moves for as long as it is on screen,
+/// unless [DecorativeMotion] says not to.
 ///
 /// [stops] are the points left to right, each with the label shown under it;
 /// what they mean is the caller's. [help] is the line under the labels.
@@ -41,16 +41,20 @@ class _ThinkingSliderState<T> extends State<ThinkingSlider<T>>
   final _phase = ValueNotifier<double>(0);
   late final Ticker _ticker = createTicker(_tick);
   var _last = Duration.zero;
-  var _until = Duration.zero;
-  var _hovered = false;
 
   List<T> get _keys => widget.stops.keys.toList();
   int get _index => math.max(0, _keys.indexOf(widget.value));
 
   @override
-  void didUpdateWidget(ThinkingSlider<T> old) {
-    super.didUpdateWidget(old);
-    if (old.value != widget.value) _think();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final still = !DecorativeMotion.of(context);
+    if (still && _ticker.isActive) {
+      _ticker.stop();
+    } else if (!still && !_ticker.isActive) {
+      _last = Duration.zero;
+      _ticker.start();
+    }
   }
 
   @override
@@ -63,22 +67,6 @@ class _ThinkingSliderState<T> extends State<ThinkingSlider<T>>
   void _tick(Duration elapsed) {
     _phase.value += (elapsed - _last).inMicroseconds / 1e6;
     _last = elapsed;
-    if (!_hovered && elapsed >= _until) _ticker.stop();
-  }
-
-  /// Moves the pattern for [time] more, or for as long as it is hovered.
-  void _think([Duration time = const Duration(milliseconds: 1600)]) {
-    if (MediaQuery.disableAnimationsOf(context)) return;
-    if (!_ticker.isActive) {
-      _last = Duration.zero;
-      _ticker.start();
-    }
-    _until = _last + time;
-  }
-
-  void _hover(bool on) {
-    _hovered = on;
-    if (on) _think();
   }
 
   void _pick(int index) {
@@ -124,8 +112,6 @@ class _ThinkingSliderState<T> extends State<ThinkingSlider<T>>
         child: LayoutBuilder(
           builder: (context, constraints) => MouseRegion(
             cursor: SystemMouseCursors.click,
-            onEnter: (_) => _hover(true),
-            onExit: (_) => _hover(false),
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTapDown: (d) =>

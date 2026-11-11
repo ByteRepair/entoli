@@ -28,6 +28,15 @@ struct ShellView: View {
     private let collapsed = false
   #endif
 
+  /// The swipe in from the edge to the list where the split view is one
+  /// column and the chat is in front: the Flutter app's drawer swipe, and
+  /// the split view's own back swipe, which went with the back button the
+  /// bar hides for the sidebar button. A Flutter page keeps the edge for
+  /// its own back swipe.
+  private var edgeSwipe: (() -> Void)? {
+    collapsed && !model.window.covered && !model.voice.present ? model.showSidebar : nil
+  }
+
   private func visibility(_ shown: Bool) -> NavigationSplitViewVisibility {
     shown ? .all : .detailOnly
   }
@@ -48,9 +57,10 @@ struct ShellView: View {
         }
       }
       #if os(iOS)
-        // The insets Dart is told are the bars', not the keyboard's: Flutter
-        // hears of the keyboard itself, and counted here too it would be
-        // twice, the conversation pushed up under the toolbar.
+        // The Flutter view keeps the whole height: Flutter hears of the
+        // keyboard itself and shrinks its page by it. The bottom inset still
+        // reaches over the keyboard, under the composer that rides on it,
+        // and Dart takes Flutter's view insets out of it (`ShellInsets`).
         .ignoresSafeArea(.keyboard)
       #endif
       // Over the Flutter view, which draws nothing there: the new-chat
@@ -74,6 +84,9 @@ struct ShellView: View {
         .animation(ComposerView.motion, value: model.turn.isEmpty)
       }
       .windowBar(model, collapsed: collapsed)
+      #if os(iOS)
+        .edgeSwipe(edgeSwipe)
+      #endif
     }
     // Voice mode over everything: the sidebar too, as the Flutter page was
     // pushed over the whole window.

@@ -68,7 +68,12 @@ As pages, the content is pushed over the panel and popped off it by the
 theme's own page transition — `pageTransitionsTheme.buildTransitions`, handed
 the route the frame is on and run for that route's durations — so it moves as
 any page pushed on this platform does, Cupertino's slide on the Apples and the
-fade forwards or zoom elsewhere. Not a nested Navigator: a category pushes its
+fade forwards or zoom elsewhere. Where that slide is Cupertino's, the content
+is left by iOS's swipe from the leading edge too, the slide following the
+finger and deciding at the end as a route's swipe does (past halfway, or a
+fling back). The route's own swipe cannot be it: the content's `PopScope`
+turns it off while the content is in front, and on it would pop settings
+whole rather than the category. Not a nested Navigator: a category pushes its
 editors with `Navigator.of`, and they belong over the whole window, not inside
 the frame. Docked, a pick switches the content at once, and a resize across
 the breakpoint jumps to where the pages are rather than sliding there.
@@ -131,10 +136,12 @@ the caller's (`stops`, in order). The bar is a halftone of contour lines
 through a noise field warped by itself — `ValueNoise` in `core/noise.dart` —
 with more layers of noise and more lines the further right a dot is, so the
 left is a few slow curves and the right a dense web; it is lit up to the point
-picked. It moves only while hovered and for a moment after a pick, because a
-ticker that never stops would keep every page holding one from settling, in a
-test and on a battery alike, and not at all where the platform asks for no
-animation. A tap or a drag anywhere over the bar or the labels picks the
+picked. It moves for as long as it is on screen — it was once only while
+hovered and for a moment after a pick, which on a phone, with no hover, left it
+still nearly always — and not at all where the platform asks for no animation.
+Its ticker is muted with its route's `TickerMode`, so a page covered by another
+costs nothing; a page showing one never settles, so a test of it pumps rather
+than `pumpAndSettle`s, as a page with a spinner does. A tap or a drag anywhere over the bar or the labels picks the
 nearest point, the arrow keys step through them, and it is a slider to
 assistive technology.
 

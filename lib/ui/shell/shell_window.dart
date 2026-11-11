@@ -1,3 +1,5 @@
+import "dart:math" as math;
+
 import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -29,16 +31,21 @@ final windowSnapshotProvider = Provider<WindowSnapshot>((ref) {
 });
 
 /// How much of the Flutter view the shell's own bars cover: the toolbar above,
-/// the composer below. Zero with no shell. The process's rather than a
+/// the composer below, and below that the keyboard the composer rides on.
+/// Zero with no shell. The process's rather than a
 /// session's, as the window is: the Swift says it only when it changes, so a
 /// restart's session would otherwise start at zero and stay there, the
 /// conversation under the bars.
 final shellInsets = ValueNotifier(EdgeInsets.zero);
 
-/// [shellInsets] as the padding of everything under [child]. Above
-/// the Navigator, from `MaterialApp.builder`: a page pushed over the
-/// conversation is the Navigator's, not the bridge's, and its bar has to
-/// clear the toolbar as the conversation does.
+/// [shellInsets] as the view padding of everything under [child], and the
+/// padding Flutter derives from it as it does from the system's: less the
+/// view insets, the keyboard Flutter hears of itself and shrinks a page by.
+/// Taken as padding whole, the keyboard was counted twice, the conversation
+/// held a keyboard's height above the composer. Above the Navigator, from
+/// `MaterialApp.builder`: a page pushed over the conversation is the
+/// Navigator's, not the bridge's, and its bar has to clear the toolbar as
+/// the conversation does.
 class ShellInsets extends StatelessWidget {
   const ShellInsets({super.key, required this.child});
 
@@ -50,8 +57,17 @@ class ShellInsets extends StatelessWidget {
     child: child,
     builder: (context, insets, child) {
       final media = MediaQuery.of(context);
+      final keyboard = media.viewInsets;
       return MediaQuery(
-        data: media.copyWith(padding: insets, viewPadding: insets),
+        data: media.copyWith(
+          viewPadding: insets,
+          padding: EdgeInsets.fromLTRB(
+            math.max(0, insets.left - keyboard.left),
+            math.max(0, insets.top - keyboard.top),
+            math.max(0, insets.right - keyboard.right),
+            math.max(0, insets.bottom - keyboard.bottom),
+          ),
+        ),
         child: child!,
       );
     },

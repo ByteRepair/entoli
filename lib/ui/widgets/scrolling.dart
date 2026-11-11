@@ -1,3 +1,4 @@
+import "package:flutter/gestures.dart" show PointerDeviceKind;
 import "package:flutter/rendering.dart" show ScrollDirection;
 import "package:flutter/widgets.dart";
 
@@ -48,6 +49,21 @@ class ScrollFollow {
   /// which no gesture announces. Arriving at the end attaches again, as ever.
   void detach() => _following = false;
 
+  /// Follow again and go to the end, for the user saying something: what they
+  /// sent is the latest, wherever they had scrolled to.
+  void attach() {
+    _following = true;
+    jumpIfFollowing();
+  }
+
+  /// What the caller's `NotificationListener<ScrollMetricsNotification>`
+  /// forwards. The viewport shrinking — the keyboard coming up — would
+  /// otherwise leave the end it was following under the keyboard.
+  bool onMetrics(ScrollMetricsNotification notification) {
+    jumpIfFollowing();
+    return false;
+  }
+
   /// What the caller's `NotificationListener<ScrollNotification>` forwards.
   bool onNotification(ScrollNotification notification) {
     if (notification is UserScrollNotification) {
@@ -66,4 +82,43 @@ class ScrollFollow {
 
   bool get _atEnd =>
       controller.hasClients && controller.position.nearBottom(0.0);
+}
+
+/// Drops focus on a touch drag toward the older messages, which takes a soft
+/// keyboard down with it, as a phone's own conversations do. A drag back
+/// down leaves it, and so do a wheel and a trackpad, so a desktop's composer
+/// keeps its caret. The drag's kind rather than the keyboard's insets, which
+/// a `Scaffold` above takes out of what it hands its body.
+class KeyboardDismissOnScrollBack extends StatefulWidget {
+  const KeyboardDismissOnScrollBack({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<KeyboardDismissOnScrollBack> createState() =>
+      _KeyboardDismissOnScrollBackState();
+}
+
+class _KeyboardDismissOnScrollBackState
+    extends State<KeyboardDismissOnScrollBack> {
+  var _touch = false;
+
+  bool _scrolled(ScrollNotification notification) {
+    if (notification is ScrollStartNotification) {
+      _touch = notification.dragDetails?.kind == PointerDeviceKind.touch;
+    } else if (notification is ScrollUpdateNotification &&
+        _touch &&
+        notification.dragDetails != null &&
+        (notification.scrollDelta ?? 0) < 0) {
+      FocusManager.instance.primaryFocus?.unfocus();
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      NotificationListener<ScrollNotification>(
+        onNotification: _scrolled,
+        child: widget.child,
+      );
 }

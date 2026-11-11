@@ -247,6 +247,12 @@ the subject is the parent carrying it on.
 
 ## Widget tests and the fake clock
 
+`TestApp.pump` turns `DecorativeMotion` off: a live Bot Avatar and the
+thinking slider's field move for as long as they are on screen, and a page
+that never comes to rest is one `settleIo` spins on until its real-time limit
+and `pumpAndSettle` times out on. A widget's own test pumps it with motion on
+and waits on what it does — a pick lands on the tap — rather than on rest.
+
 A `testWidgets` body runs on a fake clock, and real file I/O only advances
 inside `runAsync`. Since the store became asynchronous, awaiting it directly in
 a widget test waits forever rather than failing — so anything that reads or
