@@ -52,6 +52,8 @@ import "ui/routes.dart";
 import "ui/welcome_gate.dart";
 import "app/chat_controller.dart";
 import "app/frontend.dart";
+import "ui/app_shell.dart";
+import "ui/shell/shell_bridge.dart";
 import "ui/chat/chat_chrome.dart" show chatChromeProvider;
 import "ui/app_chrome.dart" show appChromeProvider;
 import "ui/shell/shell_app_chrome.dart";
@@ -399,6 +401,7 @@ class AppSession {
           pageBarDrawProvider.overrideWithValue(drawShellPageBar),
           chatChromeProvider.overrideWithValue(const ShellChatChrome()),
           appChromeProvider.overrideWithValue(const ShellAppChrome()),
+          appLookOverrideProvider.overrideWithValue(shellLook),
         ],
         appMenusProvider.overrideWithValue(
           glassAvailable ? _menus ??= NativeAppMenus() : const NoAppMenus(),
@@ -696,5 +699,7 @@ class _Shell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) =>
-      ref.watch(appChromeProvider).root;
+      ref.watch(frontendProvider).swiftUI
+      ? const ShellBridge()
+      : const AppShell();
 }

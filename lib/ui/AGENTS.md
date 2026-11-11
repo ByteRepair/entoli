@@ -502,9 +502,10 @@ new-chat screen itself, and whether the frontend's bar and composer lie over
 the page. `FlutterChatChrome` leaves all of it to the page; `ShellChatChrome`
 (`lib/ui/shell/`) draws it natively, bound in `main` with the page bars'
 `pageBarDrawProvider`. The rest of the app's is an `AppChrome`
-(`lib/ui/app_chrome.dart`) — the window's root, the `MaterialApp` builder,
-the look the pages wear, whether a drawer opens as a page, the reaction strip,
-voice mode's page — the shell's `ShellAppChrome` bound beside it. So nothing
+(`lib/ui/app_chrome.dart`) — the `MaterialApp` builder, whether a drawer
+opens as a page, the reaction strip, voice mode's page — and the look the
+pages wear `appLookOverrideProvider`, the shell's `ShellAppChrome` and
+`shellLook` bound beside them. The window's root is `main`'s to pick. So nothing
 in `lib/ui` outside `lib/ui/shell/` imports the shell; `main` binds it.
 
 **The composer pads the layout and is clear glass.** The new-chat screen

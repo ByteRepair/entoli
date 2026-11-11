@@ -302,6 +302,7 @@ class TestApp {
             pageBarDrawProvider.overrideWithValue(drawShellPageBar),
             chatChromeProvider.overrideWithValue(const ShellChatChrome()),
             appChromeProvider.overrideWithValue(const ShellAppChrome()),
+            appLookOverrideProvider.overrideWithValue(shellLook),
           ],
           appUpdateHostProvider.overrideWithValue(updateHost),
           appMenusProvider.overrideWithValue(menus),

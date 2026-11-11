@@ -1,12 +1,11 @@
 import "package:flutter/widgets.dart";
 
 import "../../app/voice_controller.dart" show VoiceController, VoiceViewState;
+import "../../domain/reaction.dart";
 import "../../domain/corner_radius.dart";
 import "../../domain/theme_colour.dart";
-import "../../domain/reaction.dart";
 import "../app_chrome.dart";
 import "../theme.dart";
-import "shell_bridge.dart";
 import "shell_popup.dart";
 import "shell_voice.dart";
 import "shell_window.dart" show ShellInsets;
@@ -17,21 +16,8 @@ class ShellAppChrome extends AppChrome {
   const ShellAppChrome();
 
   @override
-  Widget get root => const ShellBridge();
-
-  @override
   TransitionBuilder? get builder =>
       (context, child) => ShellInsets(child: child!);
-
-  /// Apple's look, whatever was picked: the defaults, which are the iOS /
-  /// macOS theme. What was picked is left where it was, for the Flutter
-  /// frontend.
-  @override
-  AppLook? get look => (
-    primary: ThemeColour.apple.seed,
-    secondary: ThemeColour.apple.seed,
-    radius: CornerRadius.medium.radius,
-  );
 
   /// The composer is the shell's, over the Flutter view a sheet is drawn in;
   /// a page is what it steps aside for, its bar then the window's.
@@ -64,3 +50,12 @@ class ShellAppChrome extends AppChrome {
     required VoidCallback onDone,
   }) => ShellVoice(voice: voice, controller: controller, onDone: onDone);
 }
+
+/// Apple's look, whatever was picked: the defaults, which are the iOS /
+/// macOS theme. What was picked is left where it was, for the Flutter
+/// frontend. `appLookOverrideProvider` under this shell.
+final AppLook shellLook = (
+  primary: ThemeColour.apple.seed,
+  secondary: ThemeColour.apple.seed,
+  radius: CornerRadius.medium.radius,
+);
