@@ -3,7 +3,6 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../widgets/side_panel_frame.dart";
 import "agents_settings.dart";
-import "triggers.dart";
 import "skills_settings.dart";
 import "settings_category.dart";
 import "schema_view.dart";
@@ -107,7 +106,7 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
   // what is here beside the providers' models.
   SettingsCategory.onDevice => const [SchemaSections(SettingsPageId.onDevice)],
   SettingsCategory.voice => const [SchemaSections(SettingsPageId.voice)],
-  SettingsCategory.triggers => const [TriggersSection()],
+  SettingsCategory.triggers => const [SchemaSections(SettingsPageId.triggers)],
   // Rendered by [_categoryBody] whole rather than filed here, for the
   // footers pinned to their bottoms.
   SettingsCategory.skills => const [],

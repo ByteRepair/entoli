@@ -690,6 +690,7 @@ class CollectionItem {
     this.glyph,
     this.tone = NoticeTone.plain,
     this.actions = const [],
+    this.on,
   });
 
   final String title;
@@ -710,6 +711,10 @@ class CollectionItem {
   final NoticeTone tone;
 
   final List<ItemAction> actions;
+
+  /// Whether it is armed, where its row carries a switch: flipped through the
+  /// item action "toggle".
+  final bool? on;
 }
 
 /// Something done to one item from its row: connect, disconnect, revoke.

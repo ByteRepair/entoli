@@ -19,7 +19,10 @@ import "../widgets/page_bar.dart";
 import "../../domain/llm_provider.dart";
 import "connect_provider.dart";
 import "byte_repair_settings.dart";
+import "../../app/settings/pages/triggers.dart" show triggerPermissionsProvider;
+import "../../domain/trigger.dart";
 import "form_dialog.dart";
+import "triggers.dart" show TriggerEditorPage;
 import "local_model_settings.dart" show AddLocalModelPage;
 import "running_models.dart";
 import "provider_picker.dart";
@@ -143,6 +146,9 @@ class SettingRow extends StatelessWidget {
       final CollectionController c when c.hint == UiHint.devices => _Devices(c),
       final CollectionController c when c.hint == UiHint.providers =>
         _Providers(c),
+      final CollectionController c when c.hint == UiHint.triggers => _Triggers(
+        c,
+      ),
       // Its own header says what the models take up together, measured
       // while it is on screen.
       CollectionController(hint: UiHint.running) =>
@@ -259,6 +265,8 @@ IconData? _icon(SettingGlyph? glyph) => switch (glyph) {
   SettingGlyph.add => Icons.add,
   SettingGlyph.download => Icons.download,
   SettingGlyph.upload => Icons.upload_file,
+  SettingGlyph.notificationsOff => Icons.notifications_off_outlined,
+  SettingGlyph.alarmOff => Icons.alarm_off_outlined,
   SettingGlyph.online => Icons.circle,
   SettingGlyph.connecting || SettingGlyph.offline => Icons.circle_outlined,
   SettingGlyph.failed => Icons.error_outline,
@@ -691,6 +699,16 @@ class _Action extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (c.hint == UiHint.permission) {
+      final description = c.description;
+      return ListTile(
+        leading: Icon(_icon(c.glyph)),
+        title: Text(c.title),
+        subtitle: description == null ? null : Text(description),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => _press(context),
+      );
+    }
     if (c.hint == UiHint.row) {
       final description = c.description;
       return ListTile(
@@ -1559,6 +1577,70 @@ class _DragSliderState extends State<_DragSlider> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Triggers as rows, each with the switch that arms it and opened in the
+/// editor; the editor again for a new one. The permissions above them are
+/// asked again each time the app comes back from the system's settings.
+class _Triggers extends ConsumerStatefulWidget {
+  const _Triggers(this.c);
+
+  final CollectionController c;
+
+  @override
+  ConsumerState<_Triggers> createState() => _TriggersState();
+}
+
+class _TriggersState extends ConsumerState<_Triggers> {
+  late final _lifecycle = AppLifecycleListener(
+    onResume: () => ref.invalidate(triggerPermissionsProvider),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle;
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    super.dispose();
+  }
+
+  Future<void> _open([Trigger? trigger]) => Navigator.of(context).push(
+    MaterialPageRoute(builder: (_) => TriggerEditorPage(trigger: trigger)),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.c;
+    final triggers = c.items.cast<Trigger>();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final (index, row) in c.rows.indexed)
+          ListTile(
+            title: Text(row.title),
+            subtitle: Text(
+              row.subtitle ?? "",
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: Switch(
+              value: row.on ?? false,
+              onChanged: (_) => c.act(index, "toggle"),
+            ),
+            onTap: () => _open(triggers[index]),
+          ),
+        ListTile(
+          leading: const Icon(Icons.add_circle_outline),
+          title: Text(c.addLabel),
+          onTap: _open,
+        ),
+      ],
     );
   }
 }

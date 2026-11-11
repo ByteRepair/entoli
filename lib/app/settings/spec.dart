@@ -87,6 +87,12 @@ enum UiHint {
 
   /// Tooling to set up: the default for a setup controller.
   setup,
+
+  /// A permission the system holds, and the way to its settings.
+  permission,
+
+  /// Triggers, each with what and when, and the switch that arms it.
+  triggers,
 }
 
 /// The pages settings is filed under, in the order they are offered. A
@@ -229,6 +235,8 @@ enum SettingGlyph {
   download,
   upload,
   add,
+  notificationsOff,
+  alarmOff,
   online,
   connecting,
   offline,
