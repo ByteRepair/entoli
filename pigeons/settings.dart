@@ -7,7 +7,6 @@
 
 // ignore_for_file: not_initialized_non_nullable_instance_field
 
-
 import "package:pigeon/pigeon.dart";
 
 @ConfigurePigeon(
