@@ -155,9 +155,7 @@ struct SettingsPageView: View {
   /// The row a search opened, if it is on this page: brought into sight,
   /// then lit and let fade.
   private func reveal(_ proxy: ScrollViewProxy) async {
-    guard let id = model.revealed, model.row(id) != nil,
-      page.sections.contains(where: { $0?.rows.contains { $0?.id == id } == true })
-    else { return }
+    guard let id = model.revealed, model.home(of: id) == page.key else { return }
     model.revealed = nil
     // After the push lands, or the scroll is lost to it.
     try? await Task.sleep(for: .milliseconds(350))
@@ -174,13 +172,13 @@ private struct SearchResults: View {
   let model: SettingsModel
 
   var body: some View {
-    ForEach(model.found, id: \.page.key) { page, titled, rows in
-      Section(page.title) {
-        if titled {
-          result(page.title, page: page.key, row: nil)
+    ForEach(model.found) { hit in
+      Section(hit.page.title) {
+        if hit.titled {
+          result(hit.page.title, page: hit.page.key, row: nil)
         }
-        ForEach(rows, id: \.id) { row in
-          result(row.title, detail: row.detail, page: page.key, row: row.id)
+        ForEach(hit.rows, id: \.id) { row in
+          result(row.title, detail: row.detail, page: hit.page.key, row: row.id)
         }
       }
     }
@@ -226,7 +224,8 @@ struct PageIcon: View {
       .frame(width: Self.side, height: Self.side)
       .background(
         key.tint.gradient,
-        in: RoundedRectangle(cornerRadius: Self.side * 0.23, style: .continuous))
+        in: RoundedRectangle(cornerRadius: Self.side * 0.23, style: .continuous)
+      )
       .accessibilityHidden(true)
   }
 }
@@ -447,30 +446,54 @@ extension View {
   /// The detail pane's pages, drawn here rather than by a NavigationStack: in
   /// a split view's detail column a Mac's stack shows a pushed page with no
   /// animation (macOS 27, a plain NavigationLink included), though it
-  /// animates a pop. Only the top page is drawn, pushed in from the side it
-  /// comes from.
+  /// animates a pop. Every page of the stack is drawn, each over the one
+  /// beneath, as a Mac app's pages stack: a page pushed slides in from the
+  /// trailing edge over the one shown, which stays where it is, and slides
+  /// back out the same way.
   private struct PageStack: View {
     var model: SettingsModel
 
-    private struct Place: Hashable {
-      let page: SettingsPageKey?
+    /// One page of the stack: the page picked at the bottom, and each one
+    /// pushed over it. The picked page is in every level, so picking another
+    /// is a new stack rather than a push.
+    private struct Level: Hashable {
+      let root: SettingsPageKey?
       let depth: Int
+      let route: SettingsRoute?
+    }
+
+    private var levels: [Level] {
+      [Level(root: model.page, depth: 0, route: nil)]
+        + model.path.enumerated().map {
+          Level(root: model.page, depth: $0.offset + 1, route: $0.element)
+        }
     }
 
     var body: some View {
+      let top = model.path.count
       ZStack {
-        Group {
-          if let route = model.path.last {
-            SettingsDestination(model: model, route: route)
-          } else if let key = model.page, let page = model.page(key) {
-            SettingsPageView(model: model, page: page)
-          }
+        ForEach(levels, id: \.self) { level in
+          page(level)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Opaque, or the page beneath shows through a form's gaps.
+            .background(.background)
+            .zIndex(Double(level.depth))
+            .allowsHitTesting(level.depth == top)
+            .accessibilityHidden(level.depth != top)
+            .transition(level.depth == 0 ? .identity : .move(edge: .trailing))
         }
-        .id(Place(page: model.page, depth: model.path.count))
-        .transition(.push(from: model.forwards ? .trailing : .leading))
       }
+      .clipped()
       .toolbar {
         ToolbarItemGroup(placement: .navigation) { PageArrows(model: model) }
+      }
+    }
+
+    @ViewBuilder private func page(_ level: Level) -> some View {
+      if let route = level.route {
+        SettingsDestination(model: model, route: route)
+      } else if let key = level.root, let page = model.page(key) {
+        SettingsPageView(model: model, page: page)
       }
     }
   }
@@ -534,6 +557,8 @@ private struct SettingsDestination: View {
         BotAvatarsPage(model: model, opened: opened)
       case .models(let opened):
         if let row = model.row(opened.row) { ModelList(model: model, row: row) }
+      case .device(let id):
+        PairedDevicePage(model: model, id: id)
       }
     }
   }

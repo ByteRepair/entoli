@@ -43,9 +43,15 @@ import SwiftUI
   var compactColumn = NavigationSplitViewColumn.detail
 
   /// Set only where it changes: an observed write tells every view that
-  /// reads it, equal or not.
-  func showDetail() { if compactColumn != .detail { compactColumn = .detail } }
-  func showSidebar() { if compactColumn != .sidebar { compactColumn = .sidebar } }
+  /// reads it, equal or not. Animated, so the drawer slides for a button as
+  /// it does for a swipe.
+  func showDetail() { show(.detail) }
+  func showSidebar() { show(.sidebar) }
+
+  private func show(_ column: NavigationSplitViewColumn) {
+    guard compactColumn != column else { return }
+    withAnimation(.smooth(duration: 0.35)) { compactColumn = column }
+  }
 
   /// The microphone's level: not observed, being many times a second and
   /// read by the glow on each of its frames.

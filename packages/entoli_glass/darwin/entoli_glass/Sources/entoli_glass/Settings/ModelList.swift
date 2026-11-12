@@ -30,9 +30,9 @@ struct ModelList: View {
   }
 
   private var shown: [ModelCardData] {
-    let words = search.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
+    let words = SearchWords(search)
     return cards.filter { card in
-      words.allSatisfy(card.searched.contains)
+      words.found(in: card.searched)
         && (!reasoning || card.reasoning)
         && (!seesImages || card.readsImages)
         && (provider == nil || card.providerId == provider)
@@ -69,7 +69,11 @@ struct ModelList: View {
       if let data {
         content(data)
       } else {
-        HStack { Spacer(); ProgressView(); Spacer() }
+        HStack {
+          Spacer()
+          ProgressView()
+          Spacer()
+        }
       }
     }
     .formStyle(.grouped)
@@ -98,7 +102,8 @@ struct ModelList: View {
       presenting: deleting
     ) { card in
       Button("Delete", role: .destructive) {
-        model.say.deleteModel(providerId: card.providerId, modelId: card.modelId, completion: ignore)
+        model.say.deleteModel(
+          providerId: card.providerId, modelId: card.modelId, completion: ignore)
         reload()
       }
       Button("Cancel", role: .cancel) {}
@@ -296,12 +301,12 @@ private struct Tag: View {
       Image(systemName: symbol)
       Text(text)
     }
-      .font(.caption)
-      .foregroundStyle(.secondary)
-      .padding(.horizontal, 8)
-      .padding(.vertical, 3)
-      .background(.quaternary.opacity(0.6), in: Capsule())
-      .fixedSize()
+    .font(.caption)
+    .foregroundStyle(.secondary)
+    .padding(.horizontal, 8)
+    .padding(.vertical, 3)
+    .background(.quaternary.opacity(0.6), in: Capsule())
+    .fixedSize()
   }
 }
 

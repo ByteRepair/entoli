@@ -47,7 +47,10 @@ void bindSettingsHandOff(
 /// as long as it is up: what the frontend at the window's root wraps itself
 /// in.
 class SettingsHandOffs extends ConsumerStatefulWidget {
-  const SettingsHandOffs({super.key, required this.child});
+  const SettingsHandOffs({super.key, this.own, required this.child});
+
+  /// The hand-offs a frontend draws itself, bound over the Flutter pages.
+  final void Function(SettingsHandOff)? own;
 
   final Widget child;
 
@@ -62,6 +65,7 @@ class _SettingsHandOffsState extends ConsumerState<SettingsHandOffs> {
   void initState() {
     super.initState();
     bindSettingsHandOff(_handOff, context, ref);
+    widget.own?.call(_handOff);
   }
 
   @override

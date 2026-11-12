@@ -47,9 +47,11 @@ struct BotFaceView: View {
       }
     }
     .frame(width: size, height: size)
-    .modifier(ScrolledIntoView(seen: $seen))
+    .onScrollVisibilityChange(threshold: 0.01) { seen = $0 }
     // Where the face is in its window, for the pointer it follows.
-    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
+    .onGeometryChange(for: CGRect.self) {
+      $0.frame(in: .global)
+    } action: {
       driver.frameInWindow = $0
     }
     .contentShape(Rectangle())
@@ -288,14 +290,5 @@ extension FlutterStandardTypedData {
   /// A Float64List's numbers.
   var doubles: [Double] {
     data.withUnsafeBytes { Array($0.bindMemory(to: Double.self)) }
-  }
-}
-
-/// [seen] kept to whether the view is scrolled into sight.
-private struct ScrolledIntoView: ViewModifier {
-  @Binding var seen: Bool
-
-  func body(content: Content) -> some View {
-    content.onScrollVisibilityChange(threshold: 0.01) { seen = $0 }
   }
 }

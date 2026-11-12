@@ -92,8 +92,10 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
   bool _key(KeyEvent event) => runKey(event, ref, _commands);
 
   @override
-  Widget build(BuildContext context) => const SettingsHandOffs(
-    child: AppMenuSync(navigate: shellNavigate, child: ChatPage()),
+  Widget build(BuildContext context) => SettingsHandOffs(
+    // A paired device's page is the native settings' own.
+    own: _settings.bindDevicePage,
+    child: const AppMenuSync(navigate: shellNavigate, child: ChatPage()),
   );
 }
 

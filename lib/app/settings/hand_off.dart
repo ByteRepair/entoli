@@ -18,6 +18,10 @@ class SettingsHandOff {
   /// pair exists to compare.
   Future<void> Function(String deviceId)? pairedDevice;
 
+  /// Whether [pairedDevice] opens over the settings, where a frontend has
+  /// a page of its own for it, rather than over the conversation.
+  bool pairedDeviceInSettings = false;
+
   /// The camera, pointed at a pairing code another screen shows, answering
   /// the code read.
   Future<String?> Function()? scanCode;
@@ -30,6 +34,7 @@ class SettingsHandOff {
     signIn = null;
     addModelByLink = null;
     pairedDevice = null;
+    pairedDeviceInSettings = false;
     scanCode = null;
     browseBotAvatars = null;
   }

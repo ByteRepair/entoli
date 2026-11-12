@@ -7,7 +7,7 @@
   /// The split view shows one column at a time with nothing between, so a
   /// swipe there could only fire once it ended; this is the one-column
   /// layout instead. [column] is `compactColumn`, written when a swipe
-  /// settles, and a button's write of it slides the same way.
+  /// settles; a button's write slides it as `ShellModel` animates it.
   struct Drawer<List: View, Detail: View>: View {
     @Binding var column: NavigationSplitViewColumn
     /// Whether a swipe in from the leading edge opens it: not under a Flutter
@@ -17,15 +17,18 @@
     @ViewBuilder var detail: Detail
 
     @State private var width: CGFloat = 0
-    @State private var shown = false
     /// The finger's travel across, while a swipe is under way.
     @State private var pull: CGFloat?
 
-    private var offset: CGFloat {
-      min(max((shown ? width : 0) + (pull ?? 0), 0), width)
+    private var shown: Bool { column == .sidebar }
+
+    /// Where the chat stands, [travel] from where it rests.
+    private func offset(_ travel: CGFloat) -> CGFloat {
+      min(max((shown ? width : 0) + travel, 0), width)
     }
 
     var body: some View {
+      let offset = offset(pull ?? 0)
       let progress = width > 0 ? offset / width : (shown ? 1 : 0)
       ZStack {
         list
@@ -50,45 +53,33 @@
           .offset(x: offset)
           .accessibilityHidden(shown)
       }
-      .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-      .drawerPan(shown: shown, opens: opens, moved: { pull = $0 }, ended: settle)
-      .onAppear { shown = column == .sidebar }
-      .onChange(of: column) { _, column in
-        let open = column == .sidebar
-        guard open != shown else { return }
-        withAnimation(.smooth(duration: 0.35)) { shown = open }
+      .onGeometryChange(for: CGFloat.self) {
+        $0.size.width
+      } action: {
+        width = $0
       }
+      // A UIKit recognizer, which sees the Flutter view's touches as a
+      // SwiftUI gesture does not.
+      .gesture(DrawerPan(shown: shown, opens: opens, moved: { pull = $0 }, ended: settle))
     }
 
     /// A flick goes the way it was flicked, as a stack's back swipe does; a
     /// slow drag goes where it was let go. The spring starts at its speed.
     private func settle(travel: CGFloat, velocity: CGFloat) {
-      let from = min(max((shown ? width : 0) + travel, 0), width)
+      let from = offset(travel)
       let open = abs(velocity) > 300 ? velocity > 0 : from > width / 2
       let remaining = (open ? width : 0) - from
       let relative = abs(remaining) > 1 ? velocity / remaining : 0
       withAnimation(.interpolatingSpring(duration: 0.4, bounce: 0, initialVelocity: relative)) {
-        shown = open
         pull = nil
+        let wanted: NavigationSplitViewColumn = open ? .sidebar : .detail
+        if column != wanted { column = wanted }
       }
-      let wanted: NavigationSplitViewColumn = open ? .sidebar : .detail
-      if column != wanted { column = wanted }
     }
   }
 
   /// How far the list lags the chat, as a stack's page beneath does.
   private let drawerParallax: CGFloat = 0.3
-
-  extension View {
-    /// The drawer's swipe, over whatever is drawn here — the Flutter view's
-    /// touches included, which a SwiftUI gesture does not see.
-    fileprivate func drawerPan(
-      shown: Bool, opens: Bool, moved: @escaping (CGFloat) -> Void,
-      ended: @escaping (CGFloat, CGFloat) -> Void
-    ) -> some View {
-      gesture(DrawerPan(shown: shown, opens: opens, moved: moved, ended: ended))
-    }
-  }
 
   /// Its own class, so a control's stretch can tell it from the rest.
   final class DrawerRecognizer: UIPanGestureRecognizer {}

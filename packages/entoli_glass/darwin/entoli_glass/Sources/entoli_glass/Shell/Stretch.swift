@@ -28,9 +28,12 @@ struct Stretchy: ViewModifier {
     let along = (x: abs(x) / Self.reach, y: abs(y) / Self.reach)
     content
       .scaleEffect(
-        x: 1 + 0.16 * along.x - 0.07 * along.y, y: 1 + 0.16 * along.y - 0.07 * along.x)
+        x: 1 + 0.16 * along.x - 0.07 * along.y, y: 1 + 0.16 * along.y - 0.07 * along.x
+      )
       .offset(x: x, y: y)
-      .stretchPan(on: on) { pull = $0 } ended: {
+      .stretchPan(on: on) {
+        pull = $0
+      } ended: {
         withAnimation(.spring(duration: 0.5, bounce: 0.5)) { pull = .zero }
       }
   }
@@ -45,11 +48,7 @@ extension View {
     on: Bool, moved: @escaping (CGSize) -> Void, ended: @escaping () -> Void
   ) -> some View {
     #if os(iOS)
-      if on {
-        gesture(StretchGesture(moved: moved, ended: ended))
-      } else {
-        self
-      }
+      gesture(StretchGesture(on: on, moved: moved, ended: ended))
     #else
       self
     #endif
@@ -61,6 +60,7 @@ extension View {
   final class StretchPan: UIPanGestureRecognizer {}
 
   private struct StretchGesture: UIGestureRecognizerRepresentable {
+    let on: Bool
     let moved: (CGSize) -> Void
     let ended: () -> Void
 
@@ -72,7 +72,7 @@ extension View {
       return pan
     }
 
-    func updateUIGestureRecognizer(_ pan: StretchPan, context: Context) {}
+    func updateUIGestureRecognizer(_ pan: StretchPan, context: Context) { pan.isEnabled = on }
 
     /// In the window's coordinates: the control moves under the finger, and
     /// its own would move with it.
@@ -89,11 +89,14 @@ extension View {
     func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-      private var down: TimeInterval = 0
       private weak var touched: UIView?
 
+      private var down: TimeInterval = 0
+
       /// A drag after a press held is the field's selection or the menu's
-      /// long press, not a pull.
+      /// long press, not a pull. A timer rather than waiting on those long
+      /// presses to fail: one of the text view's never does as the finger
+      /// moves, and the field would never pull.
       private static let held: TimeInterval = 0.35
 
       func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch)

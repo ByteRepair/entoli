@@ -1,21 +1,58 @@
+import "package:agent_chat/app/settings/hand_off.dart";
 import "package:agent_chat/app/settings/spec.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/app_theme.dart";
+import "package:agent_chat/domain/sync/devices.dart";
+import "package:agent_chat/domain/sync/identity.dart";
 import "package:agent_chat/ui/shell/shell_settings.dart";
 import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "../../fakes.dart";
 import "../../harness.dart";
+import "native_settings.g.dart";
+
+/// The Swift's settings, as far as these tests need them: what it was told
+/// to open, and every device sent, over the real channels and codec.
+class _FakeNativeSettings implements TestNativeSettings {
+  final opened = <String>[];
+  final devices = <(String, PairedDeviceData?, String?)>[];
+
+  @override
+  void settings(SettingsSnapshot snapshot) {}
+
+  @override
+  void show(SettingsPageKey? page) {}
+
+  @override
+  void openDevice(String id) => opened.add(id);
+
+  @override
+  void device(String id, PairedDeviceData? device, String? readError) =>
+      devices.add((id, device, readError));
+}
 
 void main() {
   late TestApp app;
   // Held, so the pages are built once a test rather than on every read.
   late ProviderSubscription<NativeSettingsPages> pages;
+  late FakeDeviceRegistry devices;
+  late SyncIdentity peer;
 
   // Sync's rows read the hub, which a default test app has none of.
   setUp(() async {
-    app = TestApp.create(hub: await testSyncHub());
+    peer = await SyncIdentity.load(FakeSecretStore());
+    devices = FakeDeviceRegistry([
+      PairedDevice(
+        id: "peer",
+        name: "Laptop",
+        publicKey: peer.publicKeyB64,
+        addedAt: DateTime.utc(2026, 1, 2),
+        addresses: const ["192.168.1.4:7420"],
+      ),
+    ]);
+    app = TestApp.create(hub: await testSyncHub(devices: devices));
     app.container
         .read(nativeShownPagesProvider.notifier)
         .show(SettingsPageId.values.toSet());
@@ -97,5 +134,71 @@ void main() {
     await settleIo(tester);
 
     expect(AppSettings.load(app.config).showCommandChips, isTrue);
+  });
+
+  testWidgets("a sub-page says the page that opens it, a listed one none", (
+    tester,
+  ) async {
+    final from = {
+      for (final page in pages.read().snapshot.pages)
+        page!.key: page.openedFrom,
+    };
+    expect(from[SettingsPageKey.syncRelay], SettingsPageKey.sync);
+    expect(from[SettingsPageKey.onDeviceLlm], SettingsPageKey.onDevice);
+    expect(from[SettingsPageKey.general], isNull);
+  });
+
+  group("a paired device's page", () {
+    late _FakeNativeSettings native;
+    late SettingsBridge bridge;
+
+    setUp(() {
+      native = _FakeNativeSettings();
+      TestNativeSettings.setUp(native);
+      addTearDown(() => TestNativeSettings.setUp(null));
+      bridge = SettingsBridge(app.container);
+      addTearDown(bridge.close);
+    });
+
+    testWidgets("opens on the client once the shell binds it", (tester) async {
+      final handOff = app.container.read(settingsHandOffProvider);
+      bridge.bindDevicePage(handOff);
+      await handOff.pairedDevice!("peer");
+      await settleIo(tester);
+      expect(native.opened, ["peer"]);
+    });
+
+    testWidgets("sends the record while it is shown", (tester) async {
+      bridge.deviceShown("peer");
+      await settleIo(tester);
+
+      final (id, device, readError) = native.devices.last;
+      expect(id, "peer");
+      expect(readError, isNull);
+      expect(device!.name, "Laptop");
+      expect(device.status, DeviceStatus.offline);
+      expect(device.addresses, ["192.168.1.4:7420"]);
+      expect(device.fingerprint, peer.fingerprint);
+      expect(device.addedMs, DateTime.utc(2026, 1, 2).millisecondsSinceEpoch);
+    });
+
+    testWidgets("sends none for a device no longer paired", (tester) async {
+      bridge.deviceShown("gone");
+      await settleIo(tester);
+
+      final (id, device, readError) = native.devices.last;
+      expect(id, "gone");
+      expect(device, isNull);
+      expect(readError, isNull);
+    });
+
+    testWidgets("renames the record by its intent", (tester) async {
+      final notice = await io(
+        tester,
+        () => bridge.deviceAction("peer", DeviceOp.rename, "Desk"),
+      );
+      expect(notice, isNull);
+      expect((await io(tester, () => devices.byId("peer")))!.name, "Desk");
+    });
   });
 }

@@ -13,6 +13,7 @@ import "package:pigeon/pigeon.dart";
   PigeonOptions(
     dartPackageName: "entoli_glass",
     dartOut: "packages/entoli_glass/lib/src/settings_contract.g.dart",
+    dartTestOut: "test/ui/shell/native_settings.g.dart",
     swiftOut:
         "packages/entoli_glass/darwin/entoli_glass/Sources/entoli_glass/Contract/SettingsContract.g.swift",
     // The shell's contract, in the same Swift module, declares the one.
@@ -572,14 +573,17 @@ class SettingsPageData {
     required this.key,
     required this.title,
     this.groupStart = false,
-    this.listed = true,
+    this.openedFrom,
     this.sections = const [],
   });
 
   SettingsPageKey key;
   String title;
   bool groupStart;
-  bool listed;
+
+  /// The page whose row opens this one; none for a page offered among the
+  /// others.
+  SettingsPageKey? openedFrom;
   List<SettingsSectionData?> sections;
 }
 
@@ -972,6 +976,47 @@ class BotImportData {
   int count;
 }
 
+/// A paired device's connection, as the sync hub's `PeerStatus`.
+enum DeviceStatus { connecting, online, offline, error }
+
+/// What a paired device's page can have done to it.
+enum DeviceOp { connect, disconnect, rename, revoke }
+
+/// A paired device as this device holds it: the record, its connection, and
+/// the two fingerprints a pair exists to compare.
+class PairedDeviceData {
+  PairedDeviceData({
+    required this.id,
+    required this.name,
+    required this.status,
+    this.error,
+    required this.lastSeenMs,
+    required this.addedMs,
+    this.addresses = const [],
+    this.fingerprint,
+    required this.ownFingerprint,
+  });
+
+  String id;
+  String name;
+  DeviceStatus status;
+  String? error;
+
+  /// Milliseconds since the epoch.
+  int lastSeenMs;
+  int addedMs;
+
+  /// Where its LAN server was last heard, host:port each.
+  List<String> addresses;
+
+  /// Over the key this device stored at the pair; none where it will not
+  /// decode.
+  String? fingerprint;
+
+  /// This device's own.
+  String ownFingerprint;
+}
+
 /// What the app says to the client.
 @HostApi(dartHostTestHandler: "TestNativeSettings")
 abstract class NativeSettings {
@@ -980,6 +1025,14 @@ abstract class NativeSettings {
 
   /// Show the settings, at [page] where it names one.
   void show(SettingsPageKey? page);
+
+  /// Open paired device [id]'s page over the one shown.
+  void openDevice(String id);
+
+  /// Device [id] as it now stands, while its page is shown; none once it is
+  /// no longer paired, or with [readError] where the record could not be
+  /// read.
+  void device(String id, PairedDeviceData? device, String? readError);
 }
 
 /// What the client says the user did, by row id. A row inside a group is
@@ -1060,6 +1113,15 @@ abstract class SettingsIntents {
   void catalog(String id, String item, CatalogOp op);
 
   void pairing(String id, PairingOp op);
+
+  /// Which paired device's page is on screen, none once it goes: the device
+  /// is sent while one is.
+  void deviceShown(String? id);
+
+  /// [op] on paired device [id], [name] its new one for a rename; what went
+  /// wrong, where something did.
+  @async
+  SettingNoticeData? deviceAction(String id, DeviceOp op, String? name);
 
   /// Pairs with [code], a code or an invite's answer.
   @async
