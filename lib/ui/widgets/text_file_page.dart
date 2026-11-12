@@ -138,9 +138,7 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
       _saved = text;
       _dirty = _controller!.text != text;
     });
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text("Saved ${widget.name}")));
+    notify(context, "Saved ${widget.name}");
   });
 
   bool get _canEdit => _content != null && !_tooLarge;

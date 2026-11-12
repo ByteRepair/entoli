@@ -37,6 +37,10 @@ class ShellOutbox {
   void voiceLevel(double level) =>
       _watch("voiceLevel", _shell.voiceLevel(level));
 
+  /// A line said to the user in passing: nothing to compare against, each one
+  /// said.
+  void notice(String message) => _watch("notice", _shell.notice(message));
+
   /// Give the composer's field the keyboard, or take it away.
   void composerFocus(bool focused) =>
       _watch("composerFocus", _shell.composerFocus(focused));

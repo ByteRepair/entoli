@@ -1,5 +1,6 @@
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
+import "dialogs.dart" show notify;
 
 /// A page's work in progress, as the two logical pixels under whatever started
 /// it. A bar rather than a spinner over the page: the work here is a file being
@@ -37,9 +38,7 @@ Future<void> whileBusy(
     await work();
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("That did not work: $e")));
+      notify(context, "That did not work: $e");
     }
   } finally {
     if (context.mounted) busy.value = false;

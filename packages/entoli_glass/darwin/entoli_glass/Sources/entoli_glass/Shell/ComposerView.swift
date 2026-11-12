@@ -46,6 +46,13 @@ struct ComposerView: View {
   private static let rowHeight: CGFloat = 36
   private static let visibleRows = 5
 
+  /// How much higher the composer stands while its menu of [rows] is up:
+  /// the menu and the gap under it. The native conversation discounts it,
+  /// so the menu lies over the chat rather than lifting it.
+  static func menuLift(rows: Int) -> CGFloat {
+    rows == 0 ? 0 : rowHeight * CGFloat(min(rows, visibleRows)) + 8 + 8
+  }
+
   /// An agent's face in a menu row: the size Dart draws it at, `_menuFace`
   /// in `shell_composer.dart`.
   private static let menuFace: CGFloat = 22
@@ -80,6 +87,7 @@ struct ComposerView: View {
 
   var body: some View {
     VStack(spacing: 8) {
+      if !model.menu.isEmpty { menu }
       if let cwd = model.cwd { cwdRow(cwd) }
       if !model.attachments.isEmpty { attachmentRow }
       GlassGroup {
@@ -92,15 +100,6 @@ struct ComposerView: View {
     }
     .padding(8)
     .fixedSize(horizontal: false, vertical: true)
-    // Over what is above the composer rather than part of it: the composer
-    // keeps its height, so the conversation it pads does not move for it.
-    .overlay(alignment: .top) {
-      if !model.menu.isEmpty {
-        menu
-          .padding(.horizontal, 8)
-          .alignmentGuide(.top) { $0[.bottom] }
-      }
-    }
     .animation(Self.motion, value: shape)
     .animation(Self.motion, value: model.highlighted)
   }

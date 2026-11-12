@@ -102,9 +102,7 @@ class _SkillInstallPreviewPageState
     await reloadAllPromptLibraries(ref.read);
     if (mounted) {
       setState(() => _installing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(installedSnack("Installed", pkg.name, target))),
-      );
+      notify(context, installedSnack("Installed", pkg.name, target));
       Navigator.of(context).pop();
     }
   }

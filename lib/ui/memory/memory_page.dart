@@ -131,9 +131,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
       await _store.add(text);
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("The memory could not be saved.")),
-      );
+      notify(context, "The memory could not be saved.");
       return;
     }
     _reload();
@@ -150,20 +148,14 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
         final pinned = (await store.entries()).where((e) => e.pinned).length;
         if (pinned >= pinnedLimit) {
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Four is the most that can be pinned."),
-            ),
-          );
+          notify(context, "Four is the most that can be pinned.");
           return;
         }
         await store.pin(entry.id);
       }
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("The pin could not be changed.")),
-      );
+      notify(context, "The pin could not be changed.");
       return;
     }
     _reload();
@@ -186,9 +178,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
       await _store.delete(entry.id);
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("The memory could not be deleted.")),
-      );
+      notify(context, "The memory could not be deleted.");
       return;
     }
     _reload();

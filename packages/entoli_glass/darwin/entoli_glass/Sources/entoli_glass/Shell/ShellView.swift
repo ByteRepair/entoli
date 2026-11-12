@@ -69,6 +69,10 @@ struct ShellView: View {
         }
       }
       .animation(.snappy(duration: 0.2), value: model.palette.open)
+      // A line said in passing, over everything but voice mode.
+      .overlay(alignment: .top) {
+        if !model.voice.present { NoticeView(model: model) }
+      }
       // Voice mode is the whole window: nothing of the toolbar's — the title,
       // the new chat and sidebar buttons — stands over it.
       #if os(macOS)
@@ -166,10 +170,19 @@ struct ShellView: View {
         .ignoresSafeArea(.keyboard)
       #endif
       if conversing {
-        ConversationView(model: transcript)
-          .safeAreaInset(edge: .top, spacing: 0) { DeviceBanner(foot: model.foot) }
-          .background(.background)
-          .transition(.opacity)
+        GeometryReader { proxy in
+          ConversationView(
+            model: transcript,
+            bottom: max(
+              0,
+              proxy.safeAreaInsets.bottom
+                - ComposerView.menuLift(rows: model.composer.menu.count))
+          )
+          .ignoresSafeArea(.container, edges: .bottom)
+        }
+        .safeAreaInset(edge: .top, spacing: 0) { DeviceBanner(foot: model.foot) }
+        .background(.background)
+        .transition(.opacity)
       }
       // Beside the Flutter view rather than over it, so it keeps to the
       // keyboard's safe area: the composer rides on the keyboard and pads

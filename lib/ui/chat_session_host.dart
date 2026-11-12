@@ -5,6 +5,7 @@ import "../app/chat_session.dart";
 import "../app/composer.dart" show ComposerText;
 import "chat/widgets/composer_controller.dart";
 import "voice/voice_page.dart" as voice;
+import "widgets/dialogs.dart" show notify;
 
 /// The chat sessions' host for either frontend: the Flutter field's text,
 /// and what is said or opened, over the context of the window's root page —
@@ -26,9 +27,7 @@ class RootChatSessionHost implements ChatSessionHost {
   void say(String message) {
     final context = _root?.context;
     if (context == null || !context.mounted) return;
-    ScaffoldMessenger.maybeOf(
-      context,
-    )?.showSnackBar(SnackBar(content: Text(message)));
+    notify(context, message);
   }
 
   @override

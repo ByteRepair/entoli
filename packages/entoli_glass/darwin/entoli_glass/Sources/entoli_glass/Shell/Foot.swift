@@ -188,3 +188,32 @@ private struct CredentialPanel: View {
     values = values.map { _ in "" }
   }
 }
+
+/// A line said to the user in passing — where Flutter shows a snack bar — as
+/// a glass capsule under the title bar, gone after a few seconds or at a
+/// tap.
+struct Notice: Identifiable, Equatable {
+  let id = UUID()
+  let message: String
+}
+
+struct NoticeView: View {
+  @Bindable var model: ShellModel
+
+  var body: some View {
+    if let notice = model.notice {
+      Text(notice.message)
+        .font(.callout)
+        .multilineTextAlignment(.center)
+        .textSelection(.enabled)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .glassSurface(Capsule())
+        .padding(.horizontal, 24)
+        .padding(.top, 12)
+        .onTapGesture { withAnimation(.snappy) { model.notice = nil } }
+        .transition(.move(edge: .top).combined(with: .opacity))
+        .id(notice.id)
+    }
+  }
+}

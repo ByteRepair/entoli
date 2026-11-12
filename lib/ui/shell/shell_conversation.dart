@@ -30,6 +30,7 @@ import "../chat/activity/hand_off.dart";
 import "../chat/plan_page.dart" as plan_page;
 import "faces.dart";
 import "transcript_encoder.dart";
+import "../widgets/dialogs.dart" show notify;
 
 /// The conversation drawn by the native shell, apart from any widget: the
 /// core's [Transcript], sent row by row over `pigeons/transcript.dart`, a row
@@ -366,9 +367,7 @@ class ConversationSurface implements wire.TranscriptIntents {
             .toggle(actions.message.id, markdown);
         final at = context();
         if (failed != null && at.mounted) {
-          ScaffoldMessenger.maybeOf(
-            at,
-          )?.showSnackBar(SnackBar(content: Text(failed)));
+          notify(at, failed);
         }
     }
   }

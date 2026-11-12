@@ -17,15 +17,33 @@ Future<void> copyToClipboard(
 }) async {
   await writeClipboard(ClipboardContent(plain: text, html: html));
   if (!context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(said)));
+  notify(context, said);
+}
+
+/// Where a line said to the user goes in place of a snack bar: the native
+/// shell's own notice, which its bridge binds, there being no Flutter view on
+/// screen under a native chat to show one in.
+void Function(String message)? nativeNotice;
+
+/// Says [message] in passing: a snack bar, or the native shell's notice.
+void notify(BuildContext context, String message) {
+  final native = nativeNotice;
+  if (native != null) return native(message);
+  ScaffoldMessenger.maybeOf(
+    context,
+  )?.showSnackBar(SnackBar(content: Text(message)));
 }
 
 /// Report [error] in a snack bar. The one-line form several pages spell out
 /// for a caught failure, hoisted so they stop duplicating it. Selectable, so
 /// it can be copied into an issue.
-void say(BuildContext context, Object error) => ScaffoldMessenger.of(
-  context,
-).showSnackBar(SnackBar(content: SelectableText("$error")));
+void say(BuildContext context, Object error) {
+  final native = nativeNotice;
+  if (native != null) return native("$error");
+  ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: SelectableText("$error")));
+}
 
 /// Run a [work] whose future nobody would await — a sync verb handed to an
 /// `onPressed` — and catch its failure with [say], where dropping it left a

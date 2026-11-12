@@ -27,7 +27,7 @@ import "../../app/settings/spec.dart" show SettingsPageId, WidgetReader;
 import "../../domain/settings/keys.dart";
 import "../settings/work_folders_section.dart";
 import "../widgets/destructive_button.dart";
-import "../widgets/dialogs.dart" show confirm, promptForText;
+import "../widgets/dialogs.dart" show confirm, notify, promptForText;
 import "../widgets/environment_section.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart" show mutedParagraph;
@@ -295,9 +295,7 @@ class ProjectSettingsPage extends ConsumerWidget {
         .read(syncHubProvider)
         .deleteRemoteProject(at.device!, at.project!)) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("The project was not deleted there.")),
-        );
+        notify(context, "The project was not deleted there.");
       }
       return;
     }

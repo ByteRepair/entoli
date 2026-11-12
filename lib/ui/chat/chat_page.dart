@@ -49,6 +49,7 @@ import "widgets/message_text.dart";
 import "widgets/omada_separator.dart" show ConversationSeparator;
 import "widgets/needs_setup_bar.dart";
 import "widgets/view_only_bar.dart";
+import "../widgets/dialogs.dart" show notify;
 
 class ChatPage extends ConsumerWidget {
   const ChatPage({super.key});
@@ -346,9 +347,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
     setState(() => _starting = false);
     if (!made) {
       _controller.message = text;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Could not start a chat.")));
+      notify(context, "Could not start a chat.");
     }
   }
 
@@ -921,9 +920,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
         .where((note) => note.chatId == widget.chatId)
         .listen((note) {
           if (!mounted) return;
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(note.text)));
+          notify(context, note.text);
         });
   }
 

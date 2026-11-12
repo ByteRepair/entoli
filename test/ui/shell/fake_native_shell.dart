@@ -58,6 +58,8 @@ class FakeNativeShell implements TestNativeShell {
   @override
   void foot(ChatFootSnapshot snapshot) => _add("foot", snapshot);
   @override
+  void notice(String message) => _add("notice", message);
+  @override
   void window(WindowSnapshot snapshot) => _add("window", snapshot);
   @override
   void sidebar(SidebarSnapshot snapshot) => _add("sidebar", snapshot);

@@ -864,6 +864,10 @@ abstract class NativeShell {
   void palette(PaletteSnapshot snapshot);
   void foot(ChatFootSnapshot snapshot);
 
+  /// A line said to the user in passing, where Flutter would show a snack
+  /// bar: a failure caught, a thing copied.
+  void notice(String message);
+
   /// The microphone's level, from 0 to 1: many times a second, with nothing
   /// to compare against.
   void voiceLevel(double level);

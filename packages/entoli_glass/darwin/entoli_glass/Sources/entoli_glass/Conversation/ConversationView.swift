@@ -7,6 +7,12 @@ import SwiftUI
 struct ConversationView: View {
   @Bindable var model: TranscriptModel
 
+  /// How far up from the bottom edge the conversation keeps clear: what
+  /// covers it there, less what only lies over it — the composer's menu. It
+  /// runs under the bottom edge and pads by this instead of following the
+  /// safe area, which a menu opening would move.
+  var bottom: CGFloat = 0
+
   @State private var atEnd = true
 
   private var detailShown: Binding<Bool> {
@@ -35,6 +41,8 @@ struct ConversationView: View {
           Text("No messages yet").foregroundStyle(.secondary)
         }
       }
+      .contentMargins(.bottom, bottom, for: .scrollContent)
+      .contentMargins(.bottom, bottom, for: .scrollIndicators)
       .defaultScrollAnchor(.bottom)
       .onScrollGeometryChange(for: Bool.self) { geometry in
         geometry.contentOffset.y + geometry.containerSize.height
@@ -56,6 +64,7 @@ struct ConversationView: View {
           .glassCircle()
           .help("Jump to latest")
           .padding(16)
+          .padding(.bottom, bottom)
           .transition(.opacity)
         }
       }

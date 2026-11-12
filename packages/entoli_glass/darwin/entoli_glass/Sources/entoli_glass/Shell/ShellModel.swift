@@ -26,6 +26,10 @@ import SwiftUI
   var palette = PaletteSnapshot.initial
   var foot = ChatFootSnapshot(deviceOffline: false, bar: .none)
 
+  /// The line said to the user now, if any: up for a few seconds, then gone,
+  /// a newer one taking its place.
+  var notice: Notice?
+
   /// What the user did, for Dart to run: one object per surface, each a
   /// method per intent it can send, answered by whichever widget draws that
   /// surface in Dart (`ShellAnswers`).
@@ -110,6 +114,16 @@ extension ShellModel: NativeShell {
   func voice(snapshot: VoiceSnapshot) throws { voice = snapshot }
   func palette(snapshot: PaletteSnapshot) throws { palette = snapshot }
   func foot(snapshot: ChatFootSnapshot) throws { foot = snapshot }
+
+  func notice(message: String) throws {
+    let said = Notice(message: message)
+    withAnimation(.snappy) { notice = said }
+    Task { @MainActor [weak self] in
+      try? await Task.sleep(for: .seconds(4))
+      guard self?.notice?.id == said.id else { return }
+      withAnimation(.snappy) { self?.notice = nil }
+    }
+  }
 
   func voiceLevel(level: Double) throws { voiceLevel.set(level) }
 

@@ -944,8 +944,14 @@ a project still to be set up, a home device gone away; and what the agent's
 browser waits on, over the turn surface — the button that opens the page, a
 file to upload, a sign-in. The file is picked with the system's own chooser
 and the sign-in typed into native fields, each sent once, by
-`ChatFootIntents`, and kept nowhere else. Flutter's snackbars raised from a
-chat are not seen while its view is out of the window.
+`ChatFootIntents`, and kept nowhere else. A line said in passing — what
+Flutter shows as a snack bar — goes through `notify` (`widgets/dialogs.dart`),
+which under the shell is the window's own notice (`NativeShell.notice`, a
+glass capsule under the title bar), the Flutter view not being there to show
+one. **The composer's menu lies over the chat**: the composer is master's,
+its menu in its own stack, and the conversation runs under the bottom edge,
+padding by what covers it less the menu's height (`ComposerView.menuLift`),
+so the menu opening does not lift the chat.
 
 A message's reactions open the strip master drew under the shell, `GlassChoices`
 (`Strip.swift`), now a popover from the action row's smiley.

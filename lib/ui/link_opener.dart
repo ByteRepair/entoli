@@ -140,13 +140,10 @@ class PlatformLinkOpener implements LinkOpener {
     final dir = await remote.fetch(chatId, artifactId, entryFile: entryFile);
     if (dir == null) {
       if (!context.mounted) return true;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            "Could not open the artifact — the device it was "
-            "made on is away, or it is no longer there.",
-          ),
-        ),
+      notify(
+        context,
+        "Could not open the artifact — the device it was "
+        "made on is away, or it is no longer there.",
       );
       return true;
     }

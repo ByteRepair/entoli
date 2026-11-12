@@ -4,6 +4,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/read_aloud.dart";
+import "../widgets/dialogs.dart" show notify;
 
 export "../../app/read_aloud.dart";
 
@@ -20,5 +21,5 @@ Future<void> readAloud(
 ) async {
   final failed = await ref.read(readAloudProvider.notifier).toggle(id, said);
   if (failed == null || !context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failed)));
+  notify(context, failed);
 }
