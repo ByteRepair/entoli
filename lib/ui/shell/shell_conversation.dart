@@ -14,13 +14,13 @@ import "../../app/settings/spec.dart" show SettingReader;
 import "../../app/transcript/activity.dart";
 import "../../app/transcript/chapters.dart";
 import "../../app/transcript/code.dart";
+import "../../app/transcript/copy.dart";
 import "../../app/transcript/formula.dart";
 import "../../app/transcript/message.dart";
 import "../../app/transcript/transcript.dart";
 import "../../core/log.dart";
 import "../../core/platform/rich_clipboard.dart";
 import "../../domain/agent_face.dart";
-import "../../domain/formatted_text.dart";
 import "../../domain/models.dart";
 import "../../domain/quote.dart";
 import "../../domain/reaction.dart";
@@ -375,10 +375,13 @@ class ConversationSurface implements wire.TranscriptIntents {
     final markdown = actions.markdown;
     switch (action) {
       case wire.MessageAction.copy:
+        final renderer = _reader?.read(formulaRendererProvider);
         await writeClipboard(
-          ClipboardContent(
-            plain: formattedTextOf(markdown),
-            html: formattedHtmlOf(markdown),
+          replyClipboard(
+            markdown,
+            renderer == null
+                ? const {}
+                : await formulaPicturesOf(markdown, renderer),
           ),
         );
       case wire.MessageAction.copyRaw:

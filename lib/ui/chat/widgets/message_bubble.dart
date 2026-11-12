@@ -8,10 +8,11 @@ import "../../../domain/agent_face.dart";
 import "../../../domain/bot_avatar/pose.dart" show BotMood;
 import "../../../domain/models.dart";
 import "../../../domain/quote.dart";
-import "../../../domain/reaction.dart" show Reaction;
 import "../../../app/settings/spec.dart" show WidgetReader;
 import "../../../app/transcript/activity.dart" show activityCatalogProvider;
 import "../../../app/transcript/message.dart";
+import "../../../app/transcript/transcript.dart"
+    show DeleteQuestion, MessageActions;
 import "../../widgets/action_icon.dart";
 import "../../widgets/agent_picture.dart" show AgentPictureImage;
 import "../../widgets/attachment_chip.dart";
@@ -40,16 +41,11 @@ class MessageBubble extends ConsumerStatefulWidget {
     this.waitingNotice,
     this.waitingStatus,
     this.shellOutput,
-    this.threads,
-    this.onThreadStep,
-    this.onDelete,
-    this.onEdit,
-    this.onRegenerate,
+    this.actions,
     this.onSpeak,
     this.isSpeaking = false,
     this.onTapLink,
     this.onReply,
-    this.onReact,
     this.reactions = const [],
     this.steerKey,
   });
@@ -93,23 +89,9 @@ class MessageBubble extends ConsumerStatefulWidget {
   /// drawer, or the `!` bubble.
   final String? shellOutput;
 
-  /// The threads written where this message is, oldest first and including it.
-  /// Null where nothing was branched here, which shows no counter and no
-  /// arrows: one thread is nothing to say and nowhere to go. One value rather
-  /// than a position and a count, which could disagree.
-  final List<String>? threads;
-
-  /// Read the thread this many along, -1 or 1.
-  final ValueChanged<int>? onThreadStep;
-
-  /// Delete this message and everything below it — the thread it heads.
-  final VoidCallback? onDelete;
-
-  /// Resend this message with different text. User messages only.
-  final ValueChanged<String>? onEdit;
-
-  /// Run the turn this message belongs to again, unchanged.
-  final VoidCallback? onRegenerate;
+  /// What can be done to the message, and when: threads, delete, edit,
+  /// regenerate, react. Null is a transcript shown read-only.
+  final MessageActions? actions;
 
   /// Read this message out, or stop reading it. Null where there is no speech
   /// model to read it with.
@@ -127,10 +109,6 @@ class MessageBubble extends ConsumerStatefulWidget {
   /// A reply's quote carries its author's handle, so the answer is
   /// addressed to them.
   final ValueChanged<Quote>? onReply;
-
-  /// React to this message with an emoji — said to whoever wrote it — or
-  /// take back one of [reactions].
-  final ValueChanged<Reaction>? onReact;
 
   /// The emoji this message has been reacted with, drawn at the end of its
   /// action row whether or not the actions are showing.
@@ -187,24 +165,19 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     );
     final text = edited?.trim() ?? "";
     // A blank message says nothing, so sending one is not what was meant.
-    if (text.isNotEmpty) widget.onEdit!(text);
+    await _can.edit(text);
   }
 
   Future<void> _delete() async {
-    final others = _threads - 1;
+    final actions = _can;
     final ok = await confirm(
       context,
-      title: "Delete thread",
-      // The last thread at a branch takes the rest of the conversation with it,
-      // which is a different thing to be agreeing to.
-      message: others > 0
-          ? "This thread and everything below it will be removed. The other "
-                "${others == 1 ? "one stays" : "$others stay"}."
-          : "This message and everything below it will be removed.",
-      confirmLabel: "Delete",
+      title: DeleteQuestion.title,
+      message: actions.deleteQuestion.message,
+      confirmLabel: DeleteQuestion.confirmLabel,
       destructive: true,
     );
-    if (ok) widget.onDelete!();
+    if (ok) await actions.delete();
   }
 
   /// What the message reads, not what conv.jsonl keeps: the formatted
@@ -348,11 +321,11 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (_threads > 1) ...[
+        if (_can.showsThreads) ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Text(
-              "${_thread + 1}/$_threads",
+              _can.threadLabel,
               style: theme.textTheme.labelSmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -373,8 +346,8 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             onPressed: _copyRaw,
           ),
         ],
-        if (widget.onReact != null)
-          ReactionButton(onReact: widget.onReact!, chosen: widget.reactions),
+        if (_can.canReact)
+          ReactionButton(onReact: _can.react, chosen: widget.reactions),
         if (widget.onSpeak != null)
           ActionIcon(
             icon: widget.isSpeaking
@@ -383,23 +356,23 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             tooltip: widget.isSpeaking ? "Stop reading" : "Read aloud",
             onPressed: widget.onSpeak!,
           ),
-        if (widget.onDelete != null)
+        if (_can.canDelete)
           ActionIcon(
             icon: Icons.delete_outline,
             tooltip: "Delete thread",
             onPressed: _delete,
           ),
-        if (widget.onEdit != null)
+        if (_can.canEdit)
           ActionIcon(
             icon: Icons.edit_outlined,
             tooltip: "Edit",
             onPressed: _edit,
           ),
-        if (widget.onRegenerate != null)
+        if (_can.canRegenerate)
           ActionIcon(
             icon: Icons.refresh,
             tooltip: "Regenerate",
-            onPressed: widget.onRegenerate!,
+            onPressed: _can.regenerate,
           ),
       ],
     ),
@@ -451,25 +424,16 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     },
   );
 
-  /// How many threads were written where this message is, and which of them it
-  /// is. A message with none is a thread of one, and the only one.
-  int get _threads => widget.threads?.length ?? 1;
-  int get _thread => widget.threads?.indexOf(widget.message.id) ?? 0;
+  MessageActions get _can =>
+      widget.actions ?? MessageActions.none(widget.message);
 
-  /// An arrow to the thread [step] along, dead at either end of the list and
-  /// while nothing is listening — the row is uncovered during a turn, when
-  /// moving between threads is refused.
-  Widget _step(IconData icon, String tooltip, int step) {
-    final onStep = widget.onThreadStep;
-    final to = _thread + step;
-    return ActionIcon(
-      icon: icon,
-      tooltip: tooltip,
-      onPressed: onStep == null || to < 0 || to >= _threads
-          ? null
-          : () => onStep(step),
-    );
-  }
+  /// An arrow to the thread [step] along, dead at either end and during a
+  /// turn.
+  Widget _step(IconData icon, String tooltip, int step) => ActionIcon(
+    icon: icon,
+    tooltip: tooltip,
+    onPressed: _can.canStep(step) ? () => _can.step(step) : null,
+  );
 
   /// The message as the core lays it out, each block drawn its own way.
   List<Widget> _rows(BuildContext context, Color? bg) {
@@ -481,7 +445,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         status: widget.waitingStatus,
         notice: widget.waitingNotice,
         shellOutput: widget.shellOutput,
-        canRetry: widget.onRegenerate != null,
+        canRetry: _can.canRegenerate,
       ),
     );
     return [
@@ -568,7 +532,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       RetryTrailing() => Align(
         alignment: Alignment.centerLeft,
         child: TextButton.icon(
-          onPressed: widget.onRegenerate,
+          onPressed: _can.canRegenerate ? _can.regenerate : null,
           icon: const Icon(Icons.refresh, size: 16),
           label: const Text("Retry"),
           style: TextButton.styleFrom(

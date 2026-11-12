@@ -1445,8 +1445,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     final speechReady = ref.watch(speechReadyProvider);
     final reading = ref.watch(readAloudProvider);
     if (chat.messages.isEmpty) return whenEmpty;
-    // While a turn runs, the controller refuses every edit.
-    final mutable = editing != null && !view.isRunning;
     return Stack(
       children: [
         Listener(
@@ -1504,28 +1502,15 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                           onTapLink: (href) => _openLink(context, href),
                           onReply: (quote) => _reply(QuoteEmbed(quote)),
                           reactions: reactions,
-                          // Any message, the user's own included; not the reply
-                          // still being written. While a turn runs it waits.
-                          onReact: editing != null && !(view.isRunning && last)
-                              ? (reaction) =>
-                                    editing.react(message.id, reaction)
-                              : null,
-                          threads: editing == null
-                              ? null
-                              : chat.branches[message.id],
-                          onThreadStep: mutable
-                              ? (step) => editing.stepThread(message.id, step)
-                              : null,
-                          onDelete: mutable
-                              ? () => editing.deleteThread(message.id)
-                              : null,
-                          onEdit: mutable && message.role == MessageRole.user
-                              ? (text) =>
-                                    editing.editAndResend(message.id, text)
-                              : null,
-                          onRegenerate: mutable
-                              ? () => editing.regenerate(message.id)
-                              : null,
+                          actions: MessageActions(
+                            message: message,
+                            driver: editing,
+                            running: view.isRunning,
+                            last: last,
+                            threads: editing == null
+                                ? null
+                                : chat.branches[message.id],
+                          ),
                           onSpeak: speechReady && message.hasText
                               ? () => readAloud(
                                   context,

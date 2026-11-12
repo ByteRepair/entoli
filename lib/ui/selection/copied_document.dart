@@ -7,6 +7,7 @@ library;
 
 import "dart:typed_data";
 
+import "../../app/transcript/copy.dart" show PastedFormula;
 import "../../domain/formatted_text.dart" show BlockKind;
 
 export "../../domain/formatted_text.dart" show BlockKind;
@@ -162,6 +163,8 @@ class FormulaPicture {
   final Uint8List png;
   final double width;
   final double height;
+
+  PastedFormula get pasted => (png: png, width: width, height: height);
 }
 
 /// What a run's style said, as the formats name it.

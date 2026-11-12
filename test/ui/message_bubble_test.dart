@@ -9,6 +9,8 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
+import "package:agent_chat/app/chat_controller.dart" show TurnDriver;
+import "package:agent_chat/app/transcript/transcript.dart" show MessageActions;
 import "package:agent_chat/domain/agent_face.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/chat_log.dart";
@@ -34,6 +36,44 @@ Message _message(MessageRole role, List<MessagePart> parts, {String? author}) =>
       parts: parts,
       author: author,
     );
+
+/// A chat's driver that tells the test what the actions asked of it.
+class _Driver implements TurnDriver {
+  _Driver({
+    this.onStep,
+    this.onDelete,
+    this.onEdit,
+    this.onRegenerate,
+    this.onReact,
+  });
+
+  final ValueChanged<int>? onStep;
+  final VoidCallback? onDelete;
+  final ValueChanged<String>? onEdit;
+  final VoidCallback? onRegenerate;
+  final ValueChanged<Reaction>? onReact;
+
+  @override
+  Future<void> stepThread(String messageId, int step) async =>
+      onStep?.call(step);
+
+  @override
+  Future<void> deleteThread(String messageId) async => onDelete?.call();
+
+  @override
+  Future<void> editAndResend(String messageId, String text) async =>
+      onEdit?.call(text);
+
+  @override
+  Future<void> regenerate(String messageId) async => onRegenerate?.call();
+
+  @override
+  Future<void> react(String messageId, Reaction reaction) async =>
+      onReact?.call(reaction);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 void main() {
   late TestApp app;
@@ -61,6 +101,7 @@ void main() {
     AgentFace? avatar,
     ValueChanged<Reaction>? onReact,
     List<String> reactions = const [],
+    bool running = false,
   }) => app.pump(
     tester,
     Scaffold(
@@ -72,16 +113,33 @@ void main() {
         waitingNotice: waitingNotice,
         waitingStatus: waitingStatus,
         shellOutput: shellOutput,
-        threads: threads,
-        onThreadStep: onThreadStep,
-        onDelete: onDelete,
-        onEdit: onEdit,
-        onRegenerate: onRegenerate,
+        actions:
+            [
+                  onThreadStep,
+                  onDelete,
+                  onEdit,
+                  onRegenerate,
+                  onReact,
+                ].any((c) => c != null) ||
+                running
+            ? MessageActions(
+                message: message,
+                driver: _Driver(
+                  onStep: onThreadStep,
+                  onDelete: onDelete,
+                  onEdit: onEdit,
+                  onRegenerate: onRegenerate,
+                  onReact: onReact,
+                ),
+                running: running,
+                last: true,
+                threads: threads,
+              )
+            : null,
         onSpeak: onSpeak,
         isSpeaking: isSpeaking,
         onTapLink: onTapLink,
         onReply: onReply,
-        onReact: onReact,
         reactions: reactions,
       ),
     ),
@@ -1190,8 +1248,9 @@ void main() {
         threads: count == 1
             ? null
             : [for (var i = 0; i < count; i++) i == index ? "m1" : "other$i"],
-        onThreadStep: stepping ? (onThreadStep ?? (_) {}) : null,
+        onThreadStep: onThreadStep ?? (_) {},
         onDelete: onDelete,
+        running: !stepping,
       );
       await reveal(tester, find.text("an answer"));
     }
