@@ -4,7 +4,8 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/shell_job.dart";
-import "package:agent_chat/ui/chat/tool_ui/command_ui.dart";
+import "package:agent_chat/app/transcript/activities/command.dart";
+import "package:agent_chat/app/transcript/activity.dart" show Run;
 import "package:agent_chat/ui/chat/activity/activity.dart";
 
 import "../harness.dart";
@@ -53,8 +54,8 @@ void main() {
     await app.pump(
       tester,
       Scaffold(
-        body: RunLabel(
-          activity: const BashUI(),
+        body: ActivityRunView(
+          activity: const BashActivity(),
           run: Run(chatId: chatId, callId: "c1", call: call, result: result),
         ),
       ),
@@ -107,8 +108,8 @@ void main() {
     await app.pump(
       tester,
       Scaffold(
-        body: RunLabel(
-          activity: const BashUI(),
+        body: ActivityRunView(
+          activity: const BashActivity(),
           run: const Run(
             chatId: "chat-1",
             callId: "c1",

@@ -9,9 +9,9 @@ import "../../../domain/bot_avatar/pose.dart" show BotMood;
 import "../../../domain/models.dart";
 import "../../../domain/quote.dart";
 import "../../../domain/reaction.dart" show Reaction;
-import "../../../domain/shell.dart";
-import "../../../domain/system_notification.dart";
-import "../../../domain/wired_skill.dart";
+import "../../../app/settings/spec.dart" show WidgetReader;
+import "../../../app/transcript/activity.dart" show activityCatalogProvider;
+import "../../../app/transcript/message.dart";
 import "../../widgets/action_icon.dart";
 import "../../widgets/agent_picture.dart" show AgentPictureImage;
 import "../../widgets/attachment_chip.dart";
@@ -19,7 +19,7 @@ import "../../theme.dart" show onFillTheme;
 import "../../widgets/dialogs.dart";
 import "../../widgets/prompt_field.dart";
 import "../../selection.dart" show selectedProjectProvider;
-import "../activity/activity.dart" show Run, activityCatalogProvider;
+import "../activity/activity.dart" show ActivityNodeView;
 import "../activity/label.dart" show ActivityGroup;
 import "../../selection/copy_format.dart" show replyContentOf;
 import "../../selection/rich_selection_area.dart";
@@ -27,7 +27,7 @@ import "message_text.dart";
 import "reaction_button.dart";
 import "shell_run.dart";
 
-/// Renders a single message. The bubble holds what the model said; thinking
+/// Renders a single message as the core lays it out (`MessageLayout`). The bubble holds what the model said; thinking
 /// and tool runs sit above it as labels, in the order they happened.
 class MessageBubble extends ConsumerStatefulWidget {
   const MessageBubble({
@@ -161,15 +161,9 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   }
 
   @override
-  void initState() {
-    super.initState();
-    _readCommand();
-  }
-
-  @override
   void didUpdateWidget(MessageBubble old) {
     super.didUpdateWidget(old);
-    if (old.message.id != widget.message.id) _readCommand();
+    if (!identical(old.message, widget.message)) _layout = _layoutOf();
   }
 
   @override
@@ -236,36 +230,16 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     said: "Markdown copied",
   );
 
-  /// The turn's last round failed, which is what Retry answers: within a round
-  /// nothing follows an error, so a turn that ended on one has it trailing,
-  /// and a carried-on round has appended past it.
-  bool get _hasError => widget.message.parts.lastOrNull is ErrorPart;
+  /// The core's layout of the message, read again when it is another
+  /// message: what a prompt says does not change under a delta — an edit is
+  /// a new message, with a new id — so its command is parsed once.
+  late MessageLayout _layout = _layoutOf();
 
-  /// The command a `!` message runs, or null where it is prose. Read off the
-  /// text rather than stored: `conv.jsonl` keeps the message as typed, so the
-  /// bubble and the backend answer this from the same string.
-  ///
-  /// Parsed once and kept, the way an asked question's are: every visible
-  /// message is rebuilt on every streamed delta, and what a prompt says does not
-  /// change under one — an edit is a new message, with a new id.
-  String? _command;
-
-  /// Whether this prompt runs a callback (`/compact`) rather than asking for
-  /// anything said. Read beside [_command], for the same reasons.
-  bool _wired = false;
-
-  /// Whether this prompt is the app's notification rather than the user's
-  /// words — a background job's end that woke the agent. Read beside
-  /// [_command], for the same reasons.
-  bool _notice = false;
-
-  void _readCommand() {
-    final user = widget.message.role == MessageRole.user;
-    final text = widget.message.plainText;
-    _command = user ? shellBypassCommand(text) : null;
-    _wired = user && wiredSkillFromText(text) != null;
-    _notice = user && isSystemNotification(text);
-  }
+  MessageLayout _layoutOf() => MessageLayout(
+    widget.message,
+    chatId: widget.chatId,
+    catalog: ref.read(activityCatalogProvider),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -277,24 +251,9 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     // conversation is drawn full width and unbubbled — so both were the layout
     // said a second time. The other three keep a name, which is what makes the
     // prompt something said and a tool run something reported.
-    final (name, bg) = switch (widget.message.role) {
-      // A command the user ran is not something they said, so it does not get
-      // the colour the things they said are in.
-      // The app spoke, not the user: drawn as the system notes are.
-      MessageRole.user when _notice => (
-        _noticeLabel,
-        theme.colorScheme.tertiaryContainer,
-      ),
-      MessageRole.user => (
-        "You",
-        _command == null && !_wired
-            ? theme.colorScheme.primaryContainer
-            : theme.colorScheme.surfaceContainerHighest,
-      ),
-      MessageRole.assistant => (widget.message.author, null),
-      MessageRole.tool => ("Tool", theme.colorScheme.tertiaryContainer),
-      MessageRole.system => ("System", theme.colorScheme.tertiaryContainer),
-    };
+    final speaker = _layout.speaker;
+    final name = speaker.name;
+    final bg = _fillOf(theme, speaker.tint);
 
     return MouseRegion(
       onEnter: (_) => _show(hovered: true),
@@ -512,293 +471,137 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     );
   }
 
-  /// The message split the way it reads: everything the model did on labels of
-  /// its own, everything it said in a bubble, in the order it happened.
+  /// The message as the core lays it out, each block drawn its own way.
   List<Widget> _rows(BuildContext context, Color? bg) {
     final theme = Theme.of(context);
-    final rows = <Widget>[];
-    final spoken = <Widget>[];
-    // A prompt's files head its bubble; a reply's are drawn where they were
-    // made, below the call that made them.
-    final isUser = widget.message.role == MessageRole.user;
-    var files = isUser ? widget.message.files.toList() : <FilePart>[];
-
-    final parts = widget.message.parts;
-    // The part a running turn is working on. A turn is always working on its
-    // last one, so this is what "live" means for anything drawn from the loop
-    // below — the thinking block that has not closed, and the text still being
-    // written.
-    final liveAt = widget.isWaiting && parts.isNotEmpty
-        ? parts.length - 1
-        : null;
-    // A running turn shows one of two things and never both: a caret at the end
-    // of the text being written, or a spinner when there is no such text to put
-    // one on. `hasText` was not that decision on its own — it ignores
-    // whitespace, so a first flush of it drew a spinner beside a caret.
-    final carets = liveAt != null && parts[liveAt] is TextPart;
-
-    Widget said(String text, {bool isError = false, bool caret = false}) =>
-        Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: MessageText(
-            text: text,
-            isError: isError,
-            isWaiting: widget.isWaiting,
-            caret: caret,
-            onTapLink: widget.onTapLink,
+    final blocks = _layout.blocks(
+      WidgetReader(ref),
+      MessageMoment(
+        waiting: widget.isWaiting,
+        status: widget.waitingStatus,
+        notice: widget.waitingNotice,
+        shellOutput: widget.shellOutput,
+        canRetry: widget.onRegenerate != null,
+      ),
+    );
+    return [
+      for (final block in blocks)
+        switch (block) {
+          BubbleBlock() => _bubble(context, bg, block),
+          ActivityBlock(:final node) => _label(ActivityNodeView(node)),
+          ActivityRunBlock(:final start, :final nodes) => ActivityGroup(
+            key: ValueKey(start),
+            children: [
+              for (final node in nodes) _label(ActivityNodeView(node)),
+            ],
           ),
-        );
-
-    final results = widget.message.toolResults;
-    final activities = ref.watch(activityCatalogProvider);
-    final calls = {
-      for (final part in widget.message.parts.whereType<ToolCallPart>())
-        part.toolCall.id,
-    };
-
-    // Trailing state, not parts: they belong under the last thing said.
-    final extras = <Widget>[
-      if (widget.isWaiting && !carets && !widget.message.hasText)
-        _Spinner(
-          color: theme.colorScheme.onSurfaceVariant,
-          notice: widget.waitingNotice,
-          status: widget.waitingStatus,
-        ),
-      // Trailing like the spinner above: gone the moment the call's result
-      // lands or the turn ends, since the conversation's own output is what
-      // takes over from there. Not gated on [isWaiting], which is the last
-      // message's: a message said after this reply would take the block.
-      if (widget.shellOutput != null)
-        LiveShellOutput(code: widget.shellOutput!),
-      // A failed turn is a dead end without this; the same action is under the
-      // message, but it should not have to be uncovered.
-      if (_hasError && !widget.isWaiting && widget.onRegenerate != null)
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: widget.onRegenerate,
-            icon: const Icon(Icons.refresh, size: 16),
-            label: const Text("Retry"),
-            style: TextButton.styleFrom(
-              foregroundColor: theme.colorScheme.error,
-              visualDensity: VisualDensity.compact,
-            ),
+          FileBlock(:final file) => AttachmentStrip(
+            children: [
+              AttachmentChip.sent(file, chatId: widget.chatId, size: 256),
+            ],
           ),
-        ),
-    ];
-
-    void closeBubble({List<Widget> trailing = const []}) {
-      if (spoken.isEmpty && trailing.isEmpty && files.isEmpty) return;
-      rows.add(
-        _bubble(
-          context,
-          bg,
-          said: spoken.toList(),
-          files: files,
-          trailing: trailing,
-        ),
-      );
-      files = const [];
-      spoken.clear();
-    }
-
-    // A run of consecutive activities none of which is important, gathered so
-    // two or more of them can sit behind one centered "Expand activities"
-    // toggle rather than stacking above the reply. Text, errors and files are
-    // not activities and break a run too. A `ToolResultPart` whose call is
-    // present is drawn by that call's label, so it neither joins nor breaks one.
-    List<Widget> gathered = [];
-    var runStart = -1;
-
-    bool isLive(int i) => i == liveAt;
-
-    void flushRun() {
-      if (gathered.isEmpty) return;
-      closeBubble();
-      if (gathered.length >= 2) {
-        rows.add(ActivityGroup(key: ValueKey(runStart), children: gathered));
-      } else {
-        rows.addAll(gathered);
-      }
-      gathered = [];
-      runStart = -1;
-    }
-
-    for (var i = 0; i < parts.length; i++) {
-      final part = parts[i];
-      switch (part) {
-        case ToolResultPart(:final result) when calls.contains(result.callId):
-          // Drawn by the call it answers.
-          continue;
-        case ReasoningPart() ||
-            ToolCallPart() ||
-            ToolResultPart() ||
-            InstructionsPart() ||
-            ApprovalPart() ||
-            ArtifactPart() ||
-            SkillInstallPart():
-          final activity = activities.of(part)!;
-          final run = _runOf(part, i, results, live: isLive(i));
-          // What breaks a run of activities: one important of itself, the
-          // call the live turn is on, and a run that came back failed.
-          final important =
-              activity.important(run) ||
-              (isLive(i) && part is ToolCallPart) ||
-              (run.result?.returnCode ?? 0) != 0;
-          final label = _label(activity.build(run));
-          if (important) {
-            flushRun();
-            rows.add(label);
-            break;
-          }
-          if (runStart == -1) runStart = i;
-          gathered.add(label);
-        case FilePart():
-          if (isUser) continue;
-          flushRun();
-          closeBubble();
-          rows.add(
-            AttachmentStrip(
+          ShellRunBlock(:final run) => ShellRunBubble(run: run),
+          SteerBlock() => Align(
+            key: widget.steerKey?.call(block.message.id),
+            alignment: Alignment.centerRight,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                AttachmentChip.sent(part, chatId: widget.chatId, size: 256),
-              ],
-            ),
-          );
-        // Never drawn: a reaction shows on the message it answers.
-        case ReactionPart():
-          continue;
-        case ShellRunPart():
-          // Not a label: a command the user ran is the answer to their message
-          // rather than something the turn did on its way to one.
-          flushRun();
-          closeBubble();
-          rows.add(ShellRunBubble(run: part));
-        case TextPart(:final text):
-          // Text with a tool call under it stopped arriving before the call
-          // started, so a caret there would point at nothing while the label
-          // below it is what is busy.
-          flushRun();
-          final command = _command;
-          spoken.add(
-            command == null
-                ? said(text, caret: i == liveAt)
-                : ShellCommandText(command: command),
-          );
-        case ErrorPart(:final message):
-          flushRun();
-          spoken.add(said("Error: $message", isError: true));
-        case SteerPart(:final message):
-          // What the user said while the turn ran, where the turn read it:
-          // their bubble, with the reply carrying on under it. Or what the
-          // app said to it — a plan with tasks left — which is not theirs.
-          flushRun();
-          closeBubble();
-          final notice = isSystemNotification(message.plainText);
-          rows.add(
-            Align(
-              key: widget.steerKey?.call(message.id),
-              alignment: Alignment.centerRight,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4, right: 4, bottom: 2),
-                    child: Text(
-                      "${notice ? _noticeLabel : "You"}, while it worked",
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, right: 4, bottom: 2),
+                  child: Text(
+                    block.heading,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  _bubble(
-                    context,
-                    notice
-                        ? theme.colorScheme.tertiaryContainer
-                        : theme.colorScheme.primaryContainer,
-                    said: [if (message.hasText) said(message.plainText)],
-                    files: message.files.toList(),
-                    trailing: const [],
-                  ),
-                ],
-              ),
+                ),
+                _bubble(
+                  context,
+                  _fillOf(theme, block.bubble.tint),
+                  block.bubble,
+                ),
+              ],
             ),
-          );
-      }
-    }
-    flushRun();
-    closeBubble(trailing: extras);
-    return rows;
+          ),
+        },
+    ];
   }
 
-  /// A label sits inside the message's selection region but is not part of what
-  /// the message says, so dragging past one must not put "Thought for 12
-  /// seconds" on the clipboard. Its own drawer is a route and so is outside the
-  /// region already.
+  /// A label sits inside the message's selection region but is not part of
+  /// what the message says, so dragging past one must not put "Thought for
+  /// 12 seconds" on the clipboard. Its own detail is a route and so is
+  /// outside the region already.
   Widget _label(Widget child) => SelectionContainer.disabled(child: child);
 
-  /// What [part], at [at], is drawn from as an activity. [live] is the part
-  /// the turn is on.
-  Run _runOf(
-    MessagePart part,
-    int at,
-    Map<String, ToolResult> results, {
-    required bool live,
-  }) => switch (part) {
-    ToolCallPart(:final toolCall) => Run(
-      chatId: widget.chatId,
-      callId: toolCall.id,
-      call: toolCall,
-      result: results[toolCall.id],
-      going: live && widget.message.hasText,
-    ),
-    ToolResultPart(:final result) => Run(
-      chatId: widget.chatId,
-      callId: result.callId,
-      result: result,
-    ),
-    ApprovalPart(:final approvalId) => Run(
-      chatId: widget.chatId,
-      part: part,
-      result: results[approvalId],
-    ),
-    ReasoningPart(:final durationMs) => Run(
-      chatId: widget.chatId,
-      part: part,
-      at: at,
-      going: live && durationMs == null,
-    ),
-    _ => Run(chatId: widget.chatId, part: part, at: at),
-  };
+  Widget _said(Said said) => Padding(
+    padding: const EdgeInsets.only(bottom: 4),
+    child: switch (said) {
+      ProseSaid(:final markdown, :final caret) => MessageText(
+        text: markdown,
+        isError: false,
+        isWaiting: widget.isWaiting,
+        caret: caret,
+        onTapLink: widget.onTapLink,
+      ),
+      ErrorSaid() => MessageText(
+        text: said.text,
+        isError: true,
+        isWaiting: widget.isWaiting,
+        caret: false,
+        onTapLink: widget.onTapLink,
+      ),
+      CommandSaid(:final command) => ShellCommandText(command: command),
+    },
+  );
 
-  Widget _bubble(
-    BuildContext context,
-    Color? bg, {
-    required List<Widget> said,
-    required List<FilePart> files,
-    required List<Widget> trailing,
-  }) {
+  Widget _trailing(BuildContext context, Trailing trailing) {
+    final theme = Theme.of(context);
+    return switch (trailing) {
+      WaitingTrailing() => _Spinner(
+        color: theme.colorScheme.onSurfaceVariant,
+        line: trailing.line,
+        isError: trailing.notice != null,
+      ),
+      LiveOutputTrailing(:final output) => LiveShellOutput(code: output),
+      RetryTrailing() => Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: widget.onRegenerate,
+          icon: const Icon(Icons.refresh, size: 16),
+          label: const Text("Retry"),
+          style: TextButton.styleFrom(
+            foregroundColor: theme.colorScheme.error,
+            visualDensity: VisualDensity.compact,
+          ),
+        ),
+      ),
+    };
+  }
+
+  Widget _bubble(BuildContext context, Color? bg, BubbleBlock block) {
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (files.isNotEmpty)
+        if (block.files.isNotEmpty)
           AttachmentStrip(
             children: [
-              for (final f in files)
+              for (final f in block.files)
                 AttachmentChip.sent(f, chatId: widget.chatId),
             ],
           ),
         if (bg == null)
-          ...said
+          ...block.said.map(_said)
         else
           Theme(
             data: onFillTheme(Theme.of(context), bg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: said,
+              children: [...block.said.map(_said)],
             ),
           ),
-        ...trailing,
+        for (final t in block.trailing) _trailing(context, t),
       ],
     );
     if (bg == null) return SizedBox(width: double.infinity, child: content);
@@ -816,22 +619,19 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   }
 }
 
-/// Stands in for the reply until the first text arrives.
-///
-/// [status] is what the turn is doing and [notice] is what has gone wrong with
-/// it, and both sit on this one row. Trouble wins when there is any: a retry
-/// after a rate limit is what the reader needs, and "Thinking" beside it would
-/// be the turn claiming to be fine.
+/// Stands in for the reply until the first text arrives, beside the line
+/// the core picked for it — trouble, in the error colour, over what the turn
+/// is doing.
 class _Spinner extends StatelessWidget {
-  const _Spinner({required this.color, this.notice, this.status});
+  const _Spinner({required this.color, this.line, this.isError = false});
   final Color color;
-  final String? notice;
-  final String? status;
+  final String? line;
+  final bool isError;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final said = notice ?? status;
+    final said = line;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
@@ -849,7 +649,7 @@ class _Spinner extends StatelessWidget {
               child: Text(
                 said,
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: notice != null ? theme.colorScheme.error : color,
+                  color: isError ? theme.colorScheme.error : color,
                 ),
               ),
             ),
@@ -860,5 +660,12 @@ class _Spinner extends StatelessWidget {
   }
 }
 
-/// Who said a system notification, drawn where the user's name would be.
-const _noticeLabel = "System";
+/// The colour a tint fills with here: none for a reply, which is the page.
+Color? _fillOf(ThemeData theme, BubbleTint tint) => switch (tint) {
+  BubbleTint.none => null,
+  BubbleTint.prompt => theme.colorScheme.primaryContainer,
+  BubbleTint.command => theme.colorScheme.surfaceContainerHighest,
+  BubbleTint.notice ||
+  BubbleTint.tool ||
+  BubbleTint.system => theme.colorScheme.tertiaryContainer,
+};

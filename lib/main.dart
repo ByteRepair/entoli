@@ -40,9 +40,8 @@ import "domain/prompt_library.dart";
 import "domain/sync/identity.dart";
 import "providers.dart";
 import "ui/bot_avatar/licence.dart";
-import "ui/chat/activity/activities.dart" show ChatActivities;
-import "ui/chat/activity/activity.dart" show activityCatalogProvider;
 import "app/remote_turns.dart";
+import "core/transcript_bindings.dart";
 import "ui/app_licence.dart" show registerAppLicence, registerBlinkLicence;
 import "app/chat_edits.dart" show chatEditsProvider;
 import "ui/command_intents.dart";
@@ -342,7 +341,7 @@ class AppSession {
       overrides: [
         chatStoreProvider.overrideWithValue(store),
         agentBackendProvider.overrideWithValue(backend),
-        activityCatalogProvider.overrideWithValue(const ChatActivities()),
+        ...transcriptOverrides,
         shellProvider.overrideWithValue(backend.shell),
         appConfigProvider.overrideWithValue(config),
         appSecretsProvider.overrideWithValue(secrets),

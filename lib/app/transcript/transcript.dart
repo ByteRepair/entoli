@@ -1,10 +1,13 @@
 import "package:collection/collection.dart";
 
+import "../../domain/goal.dart";
+
 import "../../domain/end_turn.dart" show drawnAsRow;
 import "../../domain/models.dart";
 import "../../domain/reaction.dart";
 import "../../domain/room/room_state.dart" show ChatViewState;
 import "../chat_controller.dart" show TurnDriver;
+import "activity.dart";
 
 /// The conversation as rows, the core's account of what is on the page:
 /// each frontend draws these, and nothing it draws decides what a row is.
@@ -124,7 +127,9 @@ final class CompactionFailedRow extends TranscriptRow {
   String get key => "compaction-failed";
 }
 
-/// A change to the chat's goal.
+/// A change to the chat's goal, where the log says it happened: one label —
+/// "Goal set", "Goal paused", "Goal met" — opening the goal's prompt and
+/// where the goal stood after it. See "Goals" in `lib/domain/AGENTS.md`.
 final class GoalRow extends TranscriptRow {
   const GoalRow(this.mark, {required this.key});
 
@@ -132,7 +137,53 @@ final class GoalRow extends TranscriptRow {
 
   @override
   final String key;
+
+  String get label => "${goalChangeLabel(mark.change)}: ${mark.objective}";
+
+  bool get isError => mark.change == GoalChange.blocked;
+
+  /// The status it leaves, but for the two that say how it got there.
+  TranscriptGlyph get glyph => switch (mark.change) {
+    GoalChange.resumed => TranscriptGlyph.goalResumed,
+    GoalChange.cleared => TranscriptGlyph.goalCleared,
+    // Nothing moved; the icon says the command was heard and answered.
+    final change when !change.changesGoal => TranscriptGlyph.info,
+    final change => goalGlyph(goalStatusAfter(change)!),
+  };
+
+  ActivityDetail get detail => ActivityDetail(
+    title: goalChangeLabel(mark.change),
+    glyph: glyph,
+    status: DetailStatus(
+      // An answer changed nothing, so there is no "now" to name: "no goal"
+      // over a goal that still stands would be the one lie this could tell.
+      !mark.change.changesGoal
+          ? "No change"
+          : "Now: ${goalStatusAfter(mark.change)?.name ?? "no goal"}",
+      isError: isError,
+    ),
+    sections: [
+      DetailSection(label: "Objective", body: mark.objective),
+      DetailSection(
+        label: switch (mark.change) {
+          GoalChange.met || GoalChange.blocked => "Reviewer",
+          _ => "Why",
+        },
+        body: mark.reason,
+      ),
+      // A command that changed nothing sent the model no kickoff.
+      if (mark.change.changesGoal)
+        DetailSection(label: "Goal prompt", body: goalKickoff(mark.objective)),
+    ],
+  );
 }
+
+TranscriptGlyph goalGlyph(GoalStatus status) => switch (status) {
+  GoalStatus.active => TranscriptGlyph.goalActive,
+  GoalStatus.paused => TranscriptGlyph.goalPaused,
+  GoalStatus.met => TranscriptGlyph.goalMet,
+  GoalStatus.blocked => TranscriptGlyph.goalBlocked,
+};
 
 /// What a delete asks first, worded by whether anything is left: the last
 /// thread at a branch takes the rest of the conversation with it, which is a

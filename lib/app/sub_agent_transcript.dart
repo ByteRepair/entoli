@@ -2,25 +2,25 @@ import "dart:async";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../domain/chat_log.dart";
-import "../../domain/chat_repository.dart";
-import "../../domain/models.dart";
-import "../../domain/sub_agent_log.dart";
-import "../../providers.dart";
-import "../../app/mirror_controller.dart" show chatViewProvider;
-import "activity/card.dart" show LiveMessage;
+import "../domain/chat_log.dart";
+import "../domain/chat_repository.dart";
+import "../domain/models.dart";
+import "../domain/sub_agent_log.dart";
+import "../providers.dart";
+import "mirror_controller.dart" show chatViewProvider;
+import "transcript/activity.dart" show LiveMessage;
 
 /// Which sub-agent: the chat, and the `task` call that spawned it.
 typedef SubAgentCall = ({String chatId, String callId});
 
-/// A sub-agent's transcript as the `task` drawer draws it: the one message a
+/// A sub-agent's transcript as the `task` detail shows it: the one message a
 /// run is, and whether its log has closed.
 typedef SubAgentTranscript = ({Message? message, bool ended});
 
-/// One sub-agent's transcript while a drawer has it open: read whole, then
+/// One sub-agent's transcript while a detail has it open: read whole, then
 /// grown by each append — off the repository here, off the hub for a chat
 /// mirrored from a paired device. The same records either way, so what the
-/// drawer draws is the log rather than a second account of the run.
+/// detail shows is the log rather than a second account of the run.
 class SubAgentTranscriptNotifier extends Notifier<SubAgentTranscript> {
   SubAgentTranscriptNotifier(this.call);
 
@@ -79,7 +79,7 @@ final subAgentTranscriptProvider = NotifierProvider.autoDispose
       SubAgentTranscriptNotifier.new,
     );
 
-/// The transcript as a message a drawer can follow, for the labels inside it.
+/// The transcript as a message a detail can follow, for the labels inside it.
 /// Live while its log is open and its chat has a turn running: a log left
 /// open by a killed process is not a sub-agent still going.
 final subAgentLiveProvider = Provider.autoDispose

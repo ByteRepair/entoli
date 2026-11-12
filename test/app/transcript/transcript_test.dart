@@ -2,7 +2,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/reaction.dart";
-import "package:agent_chat/ui/chat/chat_page.dart";
+import "package:agent_chat/app/transcript/transcript.dart";
 
 import "../../harness.dart";
 
@@ -25,7 +25,7 @@ void main() {
         reactionTo(reply, Reaction.fire, id: "x", at: DateTime(2026)),
       ],
     );
-    final rows = entriesOf(chat).whereType<MessageEntry>().toList();
+    final rows = Transcript.of("c", chat).rows.whereType<MessageRow>().toList();
 
     expect(rows.map((e) => e.message.id), ["u", "r"]);
     expect(rows.last.last, isTrue);

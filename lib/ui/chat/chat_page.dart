@@ -2,7 +2,6 @@ import "dart:async";
 import "dart:math" as math;
 
 import "package:flutter/foundation.dart" show listEquals;
-import "package:collection/collection.dart" show IterableExtension;
 import "package:flutter/material.dart";
 import "package:flutter/rendering.dart"
     show RenderAbstractViewport, RenderProxyBox;
@@ -13,9 +12,7 @@ import "package:super_sliver_list/super_sliver_list.dart";
 import "../../domain/agent_backend.dart";
 import "../../domain/agent_face.dart";
 import "../../domain/chat_meta.dart";
-import "../../domain/end_turn.dart";
 import "../../domain/models.dart";
-import "../../domain/reaction.dart" show Reactions, reactionsOn;
 import "../../domain/room/room_state.dart";
 import "../../domain/project.dart";
 import "../../domain/prompt_library.dart" show nameOf;
@@ -36,6 +33,7 @@ import "../../app/chat_controller.dart";
 import "../../app/composer.dart" show ComposerBinding, ComposerModel;
 import "../../app/mirror_controller.dart";
 import "plan_page.dart" show PlanButton;
+import "../../app/transcript/transcript.dart";
 import "activity/card.dart" show ActivitySource, liveMessageOf;
 import "activity/format.dart" show formatRemaining;
 import "widgets/chapter_rail.dart";
@@ -795,103 +793,6 @@ class _ChatBody extends ConsumerStatefulWidget {
   ConsumerState<_ChatBody> createState() => _ChatBodyState();
 }
 
-/// One row of the conversation: a message, or a line saying the room's mode
-/// changed before it. Each row owns its own alignment — the bubble aligns
-/// itself, the separator is full width — so the list renders entries and
-/// nothing wraps anything.
-sealed class ConversationEntry {
-  const ConversationEntry();
-}
-
-class MessageEntry extends ConversationEntry {
-  const MessageEntry(
-    this.message, {
-    required this.last,
-    this.reactions = const [],
-  });
-
-  final Message message;
-
-  /// The emoji it has been reacted with, shown in its action row.
-  final List<String> reactions;
-
-  /// The newest message of the thread, which is the one a running turn
-  /// appends to — the spinner and the caret live on it.
-  final bool last;
-}
-
-class SectionEntry extends ConversationEntry {
-  const SectionEntry(this.omada);
-
-  /// The mode the room entered at this boundary.
-  final bool omada;
-}
-
-/// The divider after the message a compaction's boundary names. [summary] is
-/// what the drawer behind it shows.
-class CompactionEntry extends ConversationEntry {
-  const CompactionEntry(this.summary);
-
-  /// What the model reads in place of the messages above this line.
-  final String summary;
-}
-
-/// The divider an automatic compaction would have left, saying in red why
-/// it did not — [ChatViewState.compactFailure], at the end of the thread.
-class CompactionFailedEntry extends ConversationEntry {
-  const CompactionFailedEntry(this.reason);
-
-  final String reason;
-}
-
-/// A change to the chat's goal, after the message its record names.
-class GoalEntry extends ConversationEntry {
-  const GoalEntry(this.mark);
-
-  final GoalMark mark;
-}
-
-/// The conversation as rows, walked off the thread in order. A turn opener
-/// carrying a mode that differs from the running one emits a [SectionEntry]
-/// first — both flips are rows, the off-flip bounding an on-section. A
-/// compaction boundary is said after
-/// the message it covers: the divider is where the summary took over, and a
-/// goal's change after the message its record names. A reply
-/// that ended with `end_turn` is not a row: it is on the log, not the page.
-/// Nor is a reaction: it shows on the message it answers.
-List<ConversationEntry> entriesOf(Chat chat) {
-  final entries = <ConversationEntry>[];
-  var on = false;
-  final byBoundary = {for (final c in chat.compactions) c.upToMessageId: c};
-  final goals = chat.goals.groupListsBy((g) => g.afterMessageId);
-  final reactions = reactionsOn(chat.messages);
-  // What a running turn appends to: the newest message that is not a
-  // reaction, which a reaction queued behind the turn must not displace.
-  final newest = chat.messages.lastWhereOrNull((m) => m.reaction == null);
-  for (final m in chat.messages) {
-    final opener = m.omadaOn;
-    if (opener != null && opener != on) {
-      on = opener;
-      entries.add(SectionEntry(on));
-    }
-    if (drawnAsRow(m)) {
-      entries.add(
-        MessageEntry(
-          m,
-          last: identical(m, newest),
-          reactions: reactions[m.id] ?? const [],
-        ),
-      );
-    }
-    final marker = byBoundary[m.id];
-    if (marker != null) entries.add(CompactionEntry(marker.summary));
-    for (final mark in goals[m.id] ?? const <GoalMark>[]) {
-      entries.add(GoalEntry(mark));
-    }
-  }
-  return entries;
-}
-
 /// The conversation as the chapter rail reads it: its prompts, and every row
 /// by message id — null where a row is not a message — which is how going to
 /// a prompt finds its row.
@@ -901,8 +802,8 @@ class _Outline {
   _Outline.of(Chat chat)
     : chapters = chaptersOf(chat),
       rows = [
-        for (final e in entriesOf(chat))
-          e is MessageEntry ? e.message.id : null,
+        for (final row in Transcript.of("", chat).rows)
+          row is MessageRow ? row.message.id : null,
       ];
 
   static const empty = _Outline([], []);
@@ -1436,11 +1337,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   }) {
     final lines = [..._details(chat.state), ...details];
     final barHeight = _barHeight(context, lines.length);
-    final failure = view.compactFailure;
-    final entries = [
-      ...entriesOf(chat),
-      if (failure != null) CompactionFailedEntry(failure),
-    ];
+    final transcript = Transcript.of(
+      widget.chatId,
+      chat,
+      compactFailure: view.compactFailure,
+    );
     final title = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -1503,7 +1404,14 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
           ),
         ),
         sideWidth: ChapterRail.width,
-        child: _conversation(chat, entries, view, source, editing, whenEmpty),
+        child: _conversation(
+          chat,
+          transcript,
+          view,
+          source,
+          editing,
+          whenEmpty,
+        ),
       ),
     );
   }
@@ -1617,7 +1525,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
 
   Widget _conversation(
     Chat chat,
-    List<ConversationEntry> entries,
+    Transcript transcript,
     ChatViewState view,
     ProviderListenable<ChatViewState> source,
     TurnDriver? editing,
@@ -1640,14 +1548,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                 controller: _scroll,
                 listController: _list,
                 extentPrecalculationPolicy: _measureAll,
-                itemCount: entries.length,
-                itemBuilder: (context, i) => switch (entries[i]) {
-                  SectionEntry(:final omada) => ConversationSeparator(
-                    text: omada ? "Omada is turned on" : "Omada is turned off",
-                  ),
-                  GoalEntry(:final mark) => GoalMarkRow(mark: mark),
-                  CompactionEntry(:final summary) => ConversationSeparator(
-                    text: "Compact Conversation",
+                itemCount: transcript.rows.length,
+                itemBuilder: (context, i) => switch (transcript.rows[i]) {
+                  final ModeRow row => ConversationSeparator(text: row.text),
+                  final GoalRow row => GoalMarkRow(row: row),
+                  CompactionRow(:final summary) => ConversationSeparator(
+                    text: CompactionRow.text,
                     body: MessageText(
                       text: summary,
                       isError: false,
@@ -1656,8 +1562,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                       onTapLink: (href) => _openLink(context, href),
                     ),
                   ),
-                  CompactionFailedEntry(:final reason) => ConversationSeparator(
-                    text: "Could not compact the conversation",
+                  CompactionFailedRow(:final reason) => ConversationSeparator(
+                    text: CompactionFailedRow.text,
                     body: MessageText(
                       text: reason,
                       isError: true,
@@ -1666,7 +1572,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                       onTapLink: (href) => _openLink(context, href),
                     ),
                   ),
-                  MessageEntry(:final message, :final last, :final reactions) =>
+                  MessageRow(:final message, :final last, :final reactions) =>
                     KeyedSubtree(
                       key: message.role == MessageRole.user
                           ? _chapterKeys.putIfAbsent(message.id, GlobalKey.new)

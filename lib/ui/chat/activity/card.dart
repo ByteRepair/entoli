@@ -2,28 +2,17 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
-import "../../../domain/models.dart";
-import "../../../domain/room/room_state.dart" show ChatViewState;
+import "../../../app/transcript/activity.dart";
 import "../../app_chrome.dart";
 import "../../widgets/page_bar.dart";
 import "../../widgets/scrolling.dart" show ScrollFollow;
 import "../widgets/code_block.dart" show codeBlockDecoration, codeBlockStyle;
 import "../widgets/message_text.dart" show StreamingCaret;
 import "../widgets/shell_run.dart" show ShellCommandText;
+import "glyphs.dart";
+import "hand_off.dart";
 
-typedef ActivitySection = ({String? label, String? body, bool isError});
-
-/// A message as it stands now, for a drawer left open while its turn runs.
-/// [running] is the room's: a block or a call with no end yet is live only
-/// while a turn is.
-typedef LiveMessage = ({Message? message, String? shellOutput, bool running});
-
-/// Message [id] of [view] as a drawer follows it.
-LiveMessage liveMessageOf(ChatViewState view, String id) => (
-  message: view.chat?.messages.where((m) => m.id == id).firstOrNull,
-  shellOutput: view.shellOutput[id],
-  running: view.isRunning,
-);
+export "../../../app/transcript/activity.dart" show LiveMessage, liveMessageOf;
 
 /// Where a label's drawer reads its message from once it is open. The label
 /// cannot be: it is rebuilt per delta, folded into a collapsed run when its
@@ -78,21 +67,6 @@ Future<void> openActivityCard(
   return showActivityCard<void>(context, build);
 }
 
-/// A status line under a card's title: "Running · pid 4001", "Exit code 1".
-typedef ActivityStatus = ({String text, bool isError});
-
-/// One thing a drawer offers to do — Stop, Open log — beside its close
-/// button in the sheet, in the page's bar. Data rather than a widget, since
-/// a page's bar may be the window's. [run] null is offered but not on, [why]
-/// saying why where the sheet can.
-class DrawerAction {
-  const DrawerAction({required this.label, this.run, this.why});
-
-  final String label;
-  final void Function(BuildContext context)? run;
-  final String? why;
-}
-
 /// What a drawer draws, whoever is feeding it. Sections with nothing in them
 /// are left out, so a tool that returned nothing does not show an empty
 /// heading. [command] is set the way a `!` message is, under the title.
@@ -107,29 +81,14 @@ class DrawerAction {
 class ActivityCard extends StatefulWidget {
   const ActivityCard({
     super.key,
-    required this.title,
-    required this.sections,
-    this.icon,
-    this.command,
-    this.status,
-    this.actions = const [],
-    this.mono = false,
-    this.live = false,
+    required this.detail,
     this.below,
     this.page = false,
   });
 
-  final String title;
-  final IconData? icon;
-  final String? command;
-  final ActivityStatus? status;
+  final ActivityDetail detail;
 
-  /// What can be done to the thing shown.
-  final List<DrawerAction> actions;
-
-  final List<ActivitySection> sections;
-  final bool mono;
-  final bool live;
+  /// Drawn under the sections: a sub-agent's transcript.
   final Widget? below;
 
   /// Drawn as a pushed page rather than a sheet.
@@ -156,21 +115,23 @@ class _ActivityCardState extends State<ActivityCard> {
     super.dispose();
   }
 
+  ActivityDetail get _detail => widget.detail;
+
   @override
   Widget build(BuildContext context) {
-    if (widget.live) _follow.jumpIfFollowing();
+    if (_detail.live) _follow.jumpIfFollowing();
     return widget.page ? _page(context) : _sheet(context);
   }
 
   Widget _page(BuildContext context) => Scaffold(
     appBar: PageBar(
-      title: widget.title,
+      title: _detail.title,
       actions: [
-        for (final action in widget.actions)
+        for (final action in _detail.actions)
           PageAction.text(
             label: action.label,
             onPressed: switch (action.run) {
-              final run? => () => run(context),
+              final run? => () => run(ContextHandOff(context)),
               null => null,
             },
           ),
@@ -199,24 +160,24 @@ class _ActivityCardState extends State<ActivityCard> {
     final muted = theme.colorScheme.onSurfaceVariant;
     final header = Row(
       children: [
-        if (widget.icon != null) ...[
-          Icon(widget.icon, size: 22, color: muted),
+        if (_detail.glyph case final glyph?) ...[
+          Icon(iconOf(glyph), size: 22, color: muted),
           const SizedBox(width: 12),
         ],
         Expanded(
           child: Text(
-            widget.title,
+            _detail.title,
             style: theme.textTheme.headlineSmall,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        if (widget.live)
+        if (_detail.live)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: _spinner(muted),
           ),
-        for (final action in widget.actions) _actionButton(action),
+        for (final action in _detail.actions) _actionButton(action),
         IconButton(
           tooltip: "Close",
           icon: const Icon(Icons.close),
@@ -244,10 +205,10 @@ class _ActivityCardState extends State<ActivityCard> {
     );
   }
 
-  Widget _actionButton(DrawerAction action) {
+  Widget _actionButton(DetailAction action) {
     final run = action.run;
     final button = TextButton(
-      onPressed: run == null ? null : () => run(context),
+      onPressed: run == null ? null : () => run(ContextHandOff(context)),
       child: Text(action.label),
     );
     final why = action.why;
@@ -265,8 +226,8 @@ class _ActivityCardState extends State<ActivityCard> {
   Widget? _status(BuildContext context, {required bool spinner}) {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
-    final status = widget.status;
-    final spin = spinner && widget.live;
+    final status = _detail.status;
+    final spin = spinner && _detail.live;
     if (status == null && !spin) return null;
     return Row(
       children: [
@@ -289,13 +250,12 @@ class _ActivityCardState extends State<ActivityCard> {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
     final extra = widget.below;
-    final live = widget.live;
-    final filled = widget.sections
-        .where((s) => s.body != null && s.body!.trim().isNotEmpty)
-        .toList();
+    final live = _detail.live;
+    final mono = _detail.mono;
+    final filled = _detail.filled.toList();
 
-    Widget body(ActivitySection section, {required bool last}) {
-      final style = widget.mono
+    Widget body(DetailSection section, {required bool last}) {
+      final style = mono
           ? codeBlockStyle(
               theme,
             ).copyWith(color: section.isError ? theme.colorScheme.error : null)
@@ -322,10 +282,10 @@ class _ActivityCardState extends State<ActivityCard> {
             )
           // The newline output ends on would draw as a blank line under it.
           : Text(
-              widget.mono ? section.body!.trimRight() : section.body!,
+              mono ? section.body!.trimRight() : section.body!,
               style: style,
             );
-      if (!widget.mono) return text;
+      if (!mono) return text;
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(12),
@@ -346,7 +306,7 @@ class _ActivityCardState extends State<ActivityCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (widget.command case final command?)
+                  if (_detail.command case final command?)
                     Padding(
                       padding: const EdgeInsets.only(top: 4, bottom: 4),
                       child: ShellCommandText(command: command),

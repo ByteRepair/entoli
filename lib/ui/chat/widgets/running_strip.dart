@@ -3,8 +3,12 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../domain/room/room_state.dart" show ChatViewState;
-import "../tool_ui/command_ui.dart" show jobsRunning;
-import "../tool_ui/task_ui.dart" show subAgentsRunning;
+import "../../../app/mirror_controller.dart" show chatViewProvider;
+import "../../../app/transcript/activities/command.dart" show JobActivity;
+import "../../../app/transcript/activities/task.dart" show SubAgentActivity;
+import "../../../app/transcript/activity.dart" show Run, liveMessageOf;
+import "../../../domain/shell_job.dart" show firstLine;
+import "../activity/activity.dart" show openRunDetail;
 import "../activity/format.dart" show plural;
 import "browser_strip.dart" show browserRunning;
 import "running_pill.dart";
@@ -15,6 +19,57 @@ const runningSources = <RunningSource>[
   browserRunning,
   jobsRunning,
   subAgentsRunning,
+];
+
+/// The background jobs running, a pill each, opening the job's detail.
+List<RunningThing> jobsRunning(
+  WidgetRef ref,
+  ChatViewState view,
+  String chatId,
+) => [
+  for (final job in view.runningJobs.values)
+    RunningThing(
+      kind: RunningKind.job,
+      name: firstLine(job.command),
+      group: "background task",
+      label: firstLine(job.command),
+      mono: true,
+      tooltip: "Background job ${job.id}",
+      open: (context) => openRunDetail(
+        context,
+        JobActivity(command: job.command, jobId: job.id),
+        Run(chatId: chatId, callId: job.callId),
+      ),
+    ),
+];
+
+/// The sub-agents still running, a pill each, opening the detail its label
+/// in the reply opens and following the turn the same way.
+List<RunningThing> subAgentsRunning(
+  WidgetRef ref,
+  ChatViewState view,
+  String chatId,
+) => [
+  for (final MapEntry(key: replyId, value: agents)
+      in view.runningSubAgents.entries)
+    for (final agent in agents)
+      RunningThing(
+        kind: RunningKind.subAgent,
+        name: agent.agent,
+        group: "sub-agent",
+        label: "@${agent.agent}",
+        tooltip: "Sub-agent @${agent.agent}",
+        // The event's prompt is cut for the pill; the call, followed once it
+        // is written, has all of it.
+        open: (context) => openRunDetail(
+          context,
+          SubAgentActivity(agent: agent.agent, prompt: agent.prompt),
+          Run(chatId: chatId, callId: agent.id),
+          source: chatViewProvider(
+            chatId,
+          ).select((v) => liveMessageOf(v, replyId)),
+        ),
+      ),
 ];
 
 /// What [chatId] has running, from each of [runningSources] in turn: the

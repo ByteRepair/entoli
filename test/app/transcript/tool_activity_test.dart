@@ -2,26 +2,26 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/builtin/tools/agent_tool.dart";
 import "package:agent_chat/data/builtin/tools/registry.dart";
-import "package:agent_chat/ui/chat/activity/activity.dart" show Run;
-import "package:agent_chat/ui/chat/tool_ui/tools.dart";
+import "package:agent_chat/app/transcript/activities/catalog.dart";
+import "package:agent_chat/app/transcript/activity.dart" show Run;
 
 void main() {
   // A UI is paired with its tool by the name alone, so a rename on either
   // side leaves a UI drawing nothing: this is what catches it.
   test("every tool UI names a tool there is", () {
     final tools = {for (final tool in agentTools(const ToolOffer())) tool.name};
-    for (final ui in toolUIs) {
+    for (final ui in toolActivities) {
       expect(tools, contains(ui.tool), reason: "${ui.runtimeType}");
     }
   });
 
   test("one UI per tool", () {
-    final names = [for (final ui in toolUIs) ui.tool];
+    final names = [for (final ui in toolActivities) ui.tool];
     expect(names.toSet().length, names.length);
   });
 
   test("a tool with no UI of its own gets the defaults", () {
-    final ui = toolUIFor("memory_save");
+    final ui = toolActivityFor("memory_save");
     expect(ui.spoken, "Used memory_save");
     expect(ui.approval.$2, "Allow memory_save?");
     expect(ui.important(const Run(chatId: "c", callId: "x")), isFalse);

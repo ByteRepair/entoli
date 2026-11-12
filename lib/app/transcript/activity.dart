@@ -25,6 +25,13 @@ enum TranscriptGlyph {
   folderAdd,
   shield,
   error,
+  goalActive,
+  goalPaused,
+  goalMet,
+  goalBlocked,
+  goalResumed,
+  goalCleared,
+  info,
 }
 
 /// Which kind of activity each part of a message is. The transcript asks it

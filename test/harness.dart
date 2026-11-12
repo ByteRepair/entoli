@@ -43,10 +43,7 @@ import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/model_registry.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/room/room_state.dart";
-import "package:agent_chat/ui/chat/activity/activities.dart"
-    show ChatActivities;
-import "package:agent_chat/ui/chat/activity/activity.dart"
-    show activityCatalogProvider;
+import "package:agent_chat/core/transcript_bindings.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart" show LabelledField;
 import "package:agent_chat/ui/app_routes.dart";
 import "package:agent_chat/ui/routes.dart";
@@ -269,7 +266,7 @@ class TestApp {
         overrides: [
           chatStoreProvider.overrideWithValue(chats),
           agentBackendProvider.overrideWithValue(backend),
-          activityCatalogProvider.overrideWithValue(const ChatActivities()),
+          ...transcriptOverrides,
           shellProvider.overrideWithValue(shell ?? _defaultShell(linuxHost)),
           appConfigProvider.overrideWithValue(config),
           // Installed and signed in unless a test says otherwise, and running
