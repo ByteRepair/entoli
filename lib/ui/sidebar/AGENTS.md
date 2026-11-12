@@ -24,6 +24,13 @@ there whenever the project has chats in it — it goes with them, not with the
 results, or a search that matched nothing would take away the only way to undo
 itself.
 
+The field has no clear button of its own. The round button at its end is new
+chat while the field is empty and clear once it holds anything, so the row's
+one button is always the thing the user most likely wants next. An empty
+project has no field and keeps the button, being where its first chat is made.
+On Apple's platforms compose is in the header (see "The bottom block"), so the
+button there is only ever the clear.
+
 The query is a `ValueNotifier` the list listens to rather than `setState` on the
 sidebar: a keystroke changes the list, and the project switcher above it has no
 business rebuilding to answer one. It holds the *text* rather than the field's
@@ -69,13 +76,12 @@ and `off` is the honest answer for a chat that was just unpinned.
 
 ## The bottom block
 
-Profile, Marketplace and Settings are the tiles under the list, and the new-chat
-FAB floats over them — the one part of the sidebar that is not a list of chats
-and has room to its right (see "Shared UI"). The tiles are plain `ListTile`s
-that push their pages; see `lib/ui/marketplace/AGENTS.md` for what
-Marketplace's opens onto.
+Profile, Marketplace and Settings are the tiles under the list: plain
+`ListTile`s that push their pages; see `lib/ui/marketplace/AGENTS.md` for what
+Marketplace's opens onto. New chat is the round button beside the search field,
+above.
 
-On Apple's platforms (`isApple`) the new chat is not the FAB but a compose
+On Apple's platforms (`isApple`) the new chat is not that button but a compose
 glyph — `CupertinoIcons.square_pencil` in the primary colour — at the end of
 the header row beside the project's buttons, where Notes, Mail and Messages
 put theirs: a filled tile or a floating button is Material's answer, and read

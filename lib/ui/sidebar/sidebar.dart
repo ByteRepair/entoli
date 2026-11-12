@@ -153,29 +153,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
                     ),
             ),
             // The menu bar holds the app's pages where it is always on screen,
-            // and compose is in the header on Apple's platforms, which leaves
-            // nothing at the bottom.
-            if (!menuBarAlwaysShown) ...[
-              const Divider(height: 1),
-              if (isApple)
-                pages
-              else
-                Stack(
-                  alignment: Alignment.centerRight,
-                  children: [
-                    pages,
-                    Padding(
-                      padding: const EdgeInsets.only(right: 16),
-                      child: FloatingActionButton(
-                        heroTag: null,
-                        tooltip: "New chat",
-                        onPressed: () => openNewChat(context, ref),
-                        child: const Icon(Icons.add),
-                      ),
-                    ),
-                  ],
-                ),
-            ],
+            // which leaves nothing at the bottom.
+            if (!menuBarAlwaysShown) ...[const Divider(height: 1), pages],
           ],
         ),
       ),
@@ -184,6 +163,71 @@ class _SidebarState extends ConsumerState<Sidebar> {
 }
 
 const _noMatch = "No chat's title matches that.";
+
+/// The search field and the round button at its end: new chat while the field
+/// is empty, clear once it holds anything. Apple's platforms have compose in
+/// the header, so there the button is only ever the clear. A project with no
+/// chats has no field, but keeps the button, being where a new chat is made.
+class _SearchRow extends ConsumerWidget {
+  const _SearchRow({
+    required this.search,
+    required this.query,
+    this.field = true,
+  });
+
+  final TextEditingController search;
+  final ValueNotifier<String> query;
+  final bool field;
+
+  static Widget _gap(Widget button) =>
+      Padding(padding: const EdgeInsets.only(left: 8), child: button);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final button = ValueListenableBuilder<String>(
+      valueListenable: query,
+      builder: (context, text, _) {
+        if (text.isNotEmpty) {
+          return _gap(
+            IconButton.filledTonal(
+              icon: const Icon(Icons.close),
+              tooltip: "Clear search",
+              visualDensity: VisualDensity.standard,
+              onPressed: search.clear,
+            ),
+          );
+        }
+        if (isApple) return const SizedBox.shrink();
+        return _gap(
+          IconButton.filled(
+            icon: const Icon(Icons.add),
+            tooltip: "New chat",
+            visualDensity: VisualDensity.standard,
+            onPressed: () => openNewChat(context, ref),
+          ),
+        );
+      },
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: field
+                ? SearchField(
+                    controller: search,
+                    hint: "Search chats",
+                    padding: EdgeInsets.zero,
+                    clearButton: false,
+                  )
+                : const SizedBox.shrink(),
+          ),
+          button,
+        ],
+      ),
+    );
+  }
+}
 
 /// This device's chats in the project being shown. Its own widget so that
 /// [chatListProvider] — which re-reads every chat's `state.json` when it is
@@ -213,11 +257,18 @@ class _LocalChatList extends ConsumerWidget {
                 .where((c) => c.project == project && !c.isExpired())
                 .toList();
             if (chats.isEmpty) {
-              return const Nothing("No chats in this project yet.");
+              return Column(
+                children: [
+                  _SearchRow(search: search, query: query, field: false),
+                  const Expanded(
+                    child: Nothing("No chats in this project yet."),
+                  ),
+                ],
+              );
             }
             return Column(
               children: [
-                SearchField(controller: search, hint: "Search chats"),
+                _SearchRow(search: search, query: query),
                 Expanded(
                   child: _ChatList(chats: chats, query: query),
                 ),
@@ -263,11 +314,18 @@ class _RemoteChatList extends ConsumerWidget {
             .toList()
           ..sort((a, b) => b.state.updatedAt.compareTo(a.state.updatedAt));
     if (chats.isEmpty) {
-      return const Nothing("Nothing mirrored from this device yet.");
+      return Column(
+        children: [
+          _SearchRow(search: search, query: query, field: false),
+          const Expanded(
+            child: Nothing("Nothing mirrored from this device yet."),
+          ),
+        ],
+      );
     }
     return Column(
       children: [
-        SearchField(controller: search, hint: "Search chats"),
+        _SearchRow(search: search, query: query),
         Expanded(
           child: ValueListenableBuilder<String>(
             valueListenable: query,

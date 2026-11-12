@@ -4,7 +4,8 @@ import "package:flutter/material.dart";
 /// entries and the project palette's choices. The clear button comes and goes
 /// with whether the controller holds anything, listened to here so the field is
 /// not rebuilt from above for it — and only when that flips, not on every caret
-/// move the controller also reports.
+/// move the controller also reports. [clearButton] off is for a caller that
+/// puts its own beside the field, as the sidebar does.
 class SearchField extends StatefulWidget {
   const SearchField({
     super.key,
@@ -14,6 +15,7 @@ class SearchField extends StatefulWidget {
     this.autofocus = false,
     this.textInputAction = TextInputAction.search,
     this.onSubmitted,
+    this.clearButton = true,
   });
 
   final TextEditingController controller;
@@ -22,6 +24,7 @@ class SearchField extends StatefulWidget {
   final bool autofocus;
   final TextInputAction textInputAction;
   final ValueChanged<String>? onSubmitted;
+  final bool clearButton;
 
   @override
   State<SearchField> createState() => _SearchFieldState();
@@ -77,7 +80,7 @@ class _SearchFieldState extends State<SearchField> {
             minWidth: 40,
             minHeight: 36,
           ),
-          suffixIcon: _empty
+          suffixIcon: _empty || !widget.clearButton
               ? null
               : IconButton(
                   icon: const Icon(Icons.close, size: 18),
