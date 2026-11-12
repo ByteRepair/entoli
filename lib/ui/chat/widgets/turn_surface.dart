@@ -5,6 +5,7 @@ import "package:flutter/material.dart";
 import "../../../domain/goal.dart" show ChatGoals;
 import "../../../domain/models.dart";
 import "../../../domain/room/room_state.dart";
+import "../../../domain/todo.dart";
 import "../../../app/chat_controller.dart";
 import "approval_banner.dart";
 import "browser_strip.dart";
@@ -13,10 +14,11 @@ import "question_panel.dart";
 import "resume_bar.dart";
 import "running_strip.dart";
 import "steer_strip.dart";
+import "todo_strip.dart";
 
 /// Everything a running turn puts on screen above whatever is used to answer
 /// it: the offer to carry on an interrupted one, the chat's goal, the
-/// sub-agents still going, and the commands waiting to be approved.
+/// turn's task list, the sub-agents still going, and the commands waiting to be approved.
 ///
 /// Shared because voice mode draws the same turn. The widgets were shared from
 /// the start and the *wiring* was not, which is how the voice screen shipped
@@ -58,6 +60,7 @@ class TurnSurface extends StatelessWidget {
           ),
         if (chat != null) BrowserPrompts(chatId: chat.state.id),
         GoalStrip(goal: chat?.goal, onCommand: notifier.send),
+        TodoStrip(list: TodoList.ofLastTurn(chat?.messages ?? const [])),
         RunningStrip(view: view),
         SteerStrip(
           steering: view.steering,

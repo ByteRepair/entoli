@@ -10,6 +10,7 @@ import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/reaction.dart";
 import "../../domain/shell_command_analysis.dart" show isFileToolWork;
+import "../../domain/todo.dart";
 import "../../domain/tool_arg.dart";
 import "../../domain/wired_skill.dart";
 import "../../domain/shell.dart" show bashToolName;
@@ -38,6 +39,21 @@ import "templates.dart";
       ? 0
       : messages.lastIndexWhere((m) => m.id == marker.upToMessageId) + 1;
   return (marker: marker, from: from);
+}
+
+/// The viewer's task list where the summary swallowed it: the newest one its
+/// own replies wrote before [from], with nothing written since and tasks
+/// still open. One written after [from] is read verbatim, and a finished one
+/// is nothing left to work from.
+TodoList? _carriedTodos(List<Message> messages, int from, String? viewer) {
+  bool mine(Message m) {
+    final author = nameOf(m.author);
+    return author == null || author == viewer;
+  }
+
+  if (TodoList.latestIn(messages.skip(from).where(mine)) != null) return null;
+  final list = TodoList.latestIn(messages.take(from).where(mine));
+  return list == null || list.unfinished.isEmpty ? null : list;
 }
 
 /// The conversation as a provider has to see it, built out of what `conv.jsonl`
@@ -130,7 +146,13 @@ Future<List<LlmMessage>> projectionOf(
   var myMailSeen = false;
   if (marker != null) {
     projected.add(
-      LlmMessage(role: LlmRole.user, text: summarizedTurnText(marker.summary)),
+      LlmMessage(
+        role: LlmRole.user,
+        text: summarizedTurnText(
+          marker.summary,
+          todos: _carriedTodos(messages, from, viewer)?.summary,
+        ),
+      ),
     );
   }
   for (final (index, message) in messages.indexed) {

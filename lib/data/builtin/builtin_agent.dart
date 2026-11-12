@@ -12,6 +12,7 @@ import "../../domain/agent_browser.dart";
 import "../../domain/ask.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/goal.dart";
+import "../../domain/todo.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
 import "../../domain/plan.dart" show planInProgress, writesPlan;
@@ -694,6 +695,9 @@ class BuiltinAgent implements Turn {
 
   @override
   final GrantNudges grantNudges = GrantNudges();
+
+  @override
+  TodoList? todos;
 
   @override
   late final ApprovalGate gate = ApprovalGate(

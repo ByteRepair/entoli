@@ -10,6 +10,7 @@ import "../../domain/quote.dart" show blockquoted;
 import "../../domain/reaction.dart" show Reaction;
 import "../../domain/profile.dart";
 import "../../domain/shell.dart" show CommandSandbox;
+import "../../domain/todo.dart" show todoToolName;
 import "../../domain/tone.dart";
 
 /// The prompt prose, embedded at build time from
@@ -243,10 +244,16 @@ String addressedUserTurnText(
 /// system prompt — but it has to be a message of the conversation to sit
 /// between the summarized span and the verbatim one, so it is worded here like
 /// a user turn and stamped with no moment: there was none it was said at.
-String summarizedTurnText(String summary) =>
+///
+/// [todos] is the task list the summarized span left unfinished, carried as
+/// it was written: the summarizer's prose would word it, and the list is
+/// what the model works the rest of the way from.
+String summarizedTurnText(String summary, {String? todos}) =>
     "The earlier part of this conversation has been summarized to keep the "
     "context small. It follows; everything after it is the conversation "
-    "itself, unchanged.\n\n<summary>\n$summary\n</summary>";
+    "itself, unchanged.\n\n<summary>\n$summary\n</summary>"
+    "${todos == null ? "" : "\n\nYour task list, as you last wrote it with "
+              "`$todoToolName`:\n$todos"}";
 
 /// A participant's [instructions] as its turn reads them. The first line is
 /// its handle: the room contract tells a participant not to write its own,

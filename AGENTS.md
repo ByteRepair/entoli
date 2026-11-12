@@ -36,7 +36,8 @@ named in a cross-reference is findable from this list.
 - `lib/app/marketplace/AGENTS.md` — The marketplace page
 - `lib/data/builtin/AGENTS.md` — The agent loop, Tools, Running the commands, Background
   jobs, Running a command yourself, Approvals, Questions, Sub-agents, Their own transcripts,
-   Carrying one on, Web search, The browser, Images, Skills, The plan, Memory
+   Carrying one on, Web search, The browser, Images, Skills, The plan, The task list,
+  Memory
 - `lib/data/builtin/llm/AGENTS.md` — Reaching a provider, How much of an
   allowance is spent, A program in the model's place (the CLI providers),
   Errors, and how long the UI waits
@@ -68,6 +69,7 @@ named in a cross-reference is findable from this list.
   is set, Formulas, Code
   blocks, A command
   the user ran, Activities, on screen, A goal, on screen, The plan, on screen,
+  The task list, on screen,
   A chat whose home device is elsewhere, The chat page
 - `lib/data/voice/AGENTS.md` — Voice mode, What listens and what speaks, The
   Android system engines, Which language it is asked in, Ending the utterance,

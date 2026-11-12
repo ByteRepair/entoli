@@ -10,6 +10,7 @@ import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/end_turn.dart";
 import "package:agent_chat/domain/goal.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/todo.dart";
 import "package:agent_chat/domain/reaction.dart";
 
 void main() {
@@ -913,6 +914,50 @@ void main() {
         expect(projected.first.text, contains("The user asked things."));
       },
     );
+
+    Message listed(String status) => Message(
+      id: "m1",
+      role: MessageRole.assistant,
+      createdAt: at,
+      parts: [
+        MessagePart.toolCall(
+          toolCall: ToolCall(
+            id: "t1",
+            name: todoToolName,
+            argumentsJson: jsonEncode({
+              "todos": [
+                {"content": "one", "status": "completed"},
+                {"content": "two", "status": status},
+              ],
+            }),
+          ),
+        ),
+        const MessagePart.toolResult(
+          result: ToolResult(callId: "t1", returnCode: 0, output: ""),
+        ),
+      ],
+    );
+
+    test("an open task list the summary swallowed rides it", () async {
+      final projected = await projectionOf(
+        [asked("start"), listed("pending"), asked("later")],
+        load: noResources,
+        compactions: [marker],
+      );
+
+      expect(projected.first.text, contains("Your task list"));
+      expect(projected.first.text, contains("- two"));
+    });
+
+    test("a finished task list is not carried", () async {
+      final projected = await projectionOf(
+        [asked("start"), listed("completed"), asked("later")],
+        load: noResources,
+        compactions: [marker],
+      );
+
+      expect(projected.first.text, isNot(contains("Your task list")));
+    });
 
     test("the newest marker wins, an earlier one is a shadow", () async {
       final projected = await projectionOf(

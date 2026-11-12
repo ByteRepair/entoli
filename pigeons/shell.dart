@@ -522,6 +522,23 @@ class GoalSnapshot {
   String? reason;
 }
 
+/// Where one task of the turn's list stands: `TodoStatus` in the domain.
+enum TodoPhase { pending, inProgress, completed }
+
+class TodoItemSnapshot {
+  String content;
+  TodoPhase phase;
+}
+
+/// The latest turn's task list, the row above the composer while it has one.
+class TodoSnapshot {
+  List<TodoItemSnapshot> items;
+  int done;
+
+  /// The collapsed row's line: the task under way, or how much is left.
+  String headline;
+}
+
 /// An unfinished turn the resume bar offers to carry on.
 class ResumeSnapshot {
   /// When it started, in milliseconds since the epoch.
@@ -532,12 +549,13 @@ class ResumeSnapshot {
 }
 
 /// What a running turn puts above the composer: the offer to carry on an
-/// interrupted one, the chat's goal, what is running, what was said to it
+/// interrupted one, the chat's goal, the turn's task list, what is running, what was said to it
 /// unread, and the calls waiting on an answer. Empty where no chat page has
 /// one.
 class TurnSnapshot {
   TurnSnapshot({
     this.goal,
+    this.todo,
     this.resume,
     this.running = const [],
     this.steers = const [],
@@ -548,6 +566,9 @@ class TurnSnapshot {
 
   /// The chat's goal, null for none.
   GoalSnapshot? goal;
+
+  /// The latest turn's task list, null where it wrote none.
+  TodoSnapshot? todo;
 
   /// The unfinished turn to carry on, null for none.
   ResumeSnapshot? resume;

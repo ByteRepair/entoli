@@ -24,6 +24,7 @@ import "package:agent_chat/domain/system_notification.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/plan.dart";
 import "package:agent_chat/domain/shell.dart";
+import "package:agent_chat/domain/todo.dart";
 
 import "../../fakes.dart";
 import "../../harness.dart" show waitFor;
@@ -3038,6 +3039,96 @@ void main() {
         expect(tools, isNot(contains(artifactToolName)));
       },
     );
+  });
+
+  group("the todo tool", () {
+    Map<String, Object?> todos(List<(String, String)> items) => {
+      "todos": [
+        for (final (content, status) in items)
+          {"content": content, "status": status},
+      ],
+    };
+
+    test(
+      "a list is read back with what is under way and what is left",
+      () async {
+        final client = FakeLlmClient([
+          [
+            fileCall(
+              todoToolName,
+              todos([
+                ("Read the parser", "completed"),
+                ("Fix the header", "in_progress"),
+                ("Run the tests", "pending"),
+              ]),
+            ),
+          ],
+          [saidOnly("done")],
+        ]);
+        final events = await agentOver(
+          client,
+        ).run(userMessage("fix it")).toList();
+
+        expect(
+          events.whereType<ToolResultEvent>().single.result.output,
+          "1 of 3 tasks done.\n"
+          "In progress: Fix the header\n"
+          "Left:\n"
+          "- Run the tests",
+        );
+      },
+    );
+
+    test("two tasks in progress at once are refused", () async {
+      final client = FakeLlmClient([
+        [
+          fileCall(
+            todoToolName,
+            todos([("one", "in_progress"), ("two", "in_progress")]),
+          ),
+        ],
+        [saidOnly("done")],
+      ]);
+      final events = await agentOver(client).run(userMessage("go")).toList();
+
+      final result = events.whereType<ToolResultEvent>().single.result;
+      expect(result.returnCode, isNot(0));
+      expect(result.exceptionInfo, contains("Only one task"));
+      expect(events.whereType<SteerEvent>(), isEmpty);
+    });
+
+    test("a stop with this turn's list unfinished is told once", () async {
+      final client = FakeLlmClient([
+        [
+          fileCall(
+            todoToolName,
+            todos([("one", "completed"), ("two", "in_progress")]),
+          ),
+        ],
+        [saidOnly("Stopping after one.")],
+        [saidOnly("Two is blocked on a decision.")],
+        [saidOnly("unreached")],
+      ]);
+      final events = await agentOver(client).run(userMessage("go")).toList();
+
+      final said = events.whereType<SteerEvent>().single.message.plainText;
+      expect(isSystemNotification(said), isTrue);
+      expect(said, contains("- two"));
+      expect(said, isNot(contains("- one")));
+      expect(client.sent, hasLength(3));
+    });
+
+    test("a finished list lets the turn stop", () async {
+      final client = FakeLlmClient([
+        [
+          fileCall(todoToolName, todos([("one", "completed")])),
+        ],
+        [saidOnly("done")],
+      ]);
+      final events = await agentOver(client).run(userMessage("go")).toList();
+
+      expect(events.whereType<SteerEvent>(), isEmpty);
+    });
   });
 }
 
