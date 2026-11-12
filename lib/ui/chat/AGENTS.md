@@ -970,7 +970,8 @@ opens the native detail**: a job's or a sub-agent's `RunningThing` carries its
 activity and run (`detail`), which `ShellChat` opens in the conversation's
 sheet. **The chapter rail is native**: the chapters (`chaptersOf`, in the
 core) go with the conversation, and the Swift draws the ticks beside the
-column, the current one read off the row at the top of the view.
+column where the margin beside it has room, the current one read off the row
+at the top of the view.
 
 A message's reactions open the strip master drew under the shell, `GlassChoices`
 (`Strip.swift`), now a popover from the action row's smiley.

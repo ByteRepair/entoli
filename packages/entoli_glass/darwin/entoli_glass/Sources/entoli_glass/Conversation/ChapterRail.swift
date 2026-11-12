@@ -12,7 +12,7 @@ struct ChapterRail: View {
 
   private static let pitch: CGFloat = 18
   private static let leastPitch: CGFloat = 4
-  private static let width: CGFloat = 44
+  static let width: CGFloat = 44
 
   @State private var hovered: Int?
   @State private var pressed: Int?

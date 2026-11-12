@@ -18,6 +18,17 @@ struct ConversationView: View {
   /// The row at the top of the view, which says which chapter is being read.
   @State private var top: String?
 
+  /// How wide the conversation is, which says whether the margin beside the
+  /// column has room for the chapter rail.
+  @State private var width: CGFloat = 0
+
+  /// The column and its padding, as laid out below.
+  private static let column = ShellView.readableWidth + 32
+
+  /// The rail only where the margin beside the column holds it, so it never
+  /// lies over what the column shows.
+  private var railFits: Bool { (width - Self.column) / 2 >= ChapterRail.width }
+
   private var detailShown: Binding<Bool> {
     Binding(
       get: { model.detail.present },
@@ -49,11 +60,14 @@ struct ConversationView: View {
         .frame(maxWidth: .infinity)
       }
       .scrollPosition(id: $top, anchor: .top)
+      .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
       .overlay(alignment: .trailing) {
-        ChapterRail(chapters: model.chapters, current: current) { chapter in
-          withAnimation(.smooth) { proxy.scrollTo(chapter.row, anchor: .top) }
+        if railFits {
+          ChapterRail(chapters: model.chapters, current: current) { chapter in
+            withAnimation(.smooth) { proxy.scrollTo(chapter.row, anchor: .top) }
+          }
+          .padding(.bottom, bottom)
         }
-        .padding(.bottom, bottom)
       }
       .overlay {
         if model.order.isEmpty {
