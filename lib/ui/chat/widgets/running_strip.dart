@@ -41,6 +41,11 @@ List<RunningThing> jobsRunning(
         JobActivity(command: job.command, jobId: job.id),
         Run(chatId: chatId, callId: job.callId),
       ),
+      detail: (
+        activity: JobActivity(command: job.command, jobId: job.id),
+        run: Run(chatId: chatId, callId: job.callId),
+        source: null,
+      ),
     ),
 ];
 
@@ -66,6 +71,13 @@ List<RunningThing> subAgentsRunning(
           context,
           SubAgentActivity(agent: agent.agent, prompt: agent.prompt),
           Run(chatId: chatId, callId: agent.id),
+          source: chatViewProvider(
+            chatId,
+          ).select((v) => liveMessageOf(v, replyId)),
+        ),
+        detail: (
+          activity: SubAgentActivity(agent: agent.agent, prompt: agent.prompt),
+          run: Run(chatId: chatId, callId: agent.id),
           source: chatViewProvider(
             chatId,
           ).select((v) => liveMessageOf(v, replyId)),

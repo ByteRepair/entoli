@@ -15,10 +15,21 @@ struct ConversationView: View {
 
   @State private var atEnd = true
 
+  /// The row at the top of the view, which says which chapter is being read.
+  @State private var top: String?
+
   private var detailShown: Binding<Bool> {
     Binding(
       get: { model.detail.present },
       set: { if !$0 { model.closeDetail() } })
+  }
+
+  /// The last chapter at or above the top of the view.
+  private var current: Int? {
+    guard let top, let at = model.order.firstIndex(of: top) else { return nil }
+    let index = Dictionary(
+      model.order.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
+    return model.chapters.lastIndex { (index[$0.row] ?? .max) <= at }
   }
 
   var body: some View {
@@ -31,10 +42,18 @@ struct ConversationView: View {
             }
           }
         }
+        .scrollTargetLayout()
         .frame(maxWidth: ShellView.readableWidth)
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity)
+      }
+      .scrollPosition(id: $top, anchor: .top)
+      .overlay(alignment: .trailing) {
+        ChapterRail(chapters: model.chapters, current: current) { chapter in
+          withAnimation(.smooth) { proxy.scrollTo(chapter.row, anchor: .top) }
+        }
+        .padding(.bottom, bottom)
       }
       .overlay {
         if model.order.isEmpty {

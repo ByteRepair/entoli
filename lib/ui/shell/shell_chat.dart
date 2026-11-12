@@ -6,6 +6,7 @@ import "../../app/chat_controller.dart" show TurnDriver;
 import "../../app/chat_session.dart";
 import "../../app/mirror_controller.dart" show chatViewProvider;
 import "../../app/plan.dart";
+import "../../app/transcript/chapters.dart";
 import "../../app/transcript/transcript.dart";
 import "../../domain/plan.dart" show sectionsProgress;
 import "../../domain/project.dart";
@@ -102,7 +103,15 @@ class _OpenChat {
       onReply: (quote) => composer.embed(QuoteEmbed(quote)),
       republish: conversationPass,
     );
-    turn = TurnRunner(context: _shell._context, onWithdrawn: composer.restore);
+    turn = TurnRunner(
+      context: _shell._context,
+      onWithdrawn: composer.restore,
+      openDetail: (detail) => conversation.openRun(
+        detail.activity,
+        detail.run,
+        source: detail.source,
+      ),
+    );
     _conversationReader = TrackingReader(_container, conversationPass);
     _barReader = TrackingReader(_container, barPass);
     _turnReader = TrackingReader(_container, turnPass);
@@ -190,6 +199,7 @@ class _OpenChat {
         driver: driver,
         ink: ink,
         outline: outline,
+        chapters: chaptersOf(chat),
       );
     });
   }

@@ -59,6 +59,9 @@ void main() {
     expect(native.rows.keys, containsAll(["message:u", "message:r"]));
     final said = native.rows["message:r"]!.message!.blocks.single.said.single;
     expect(said.blocks.single.inlines.single.text, "Two");
+    expect(first.chapters.map((c) => (c.row, c.preview)), [
+      ("message:u", "List the files."),
+    ]);
     expect(shell.lastChatBar?.title, "files");
     expect(shell.lastComposer?.present, isTrue);
   });

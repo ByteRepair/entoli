@@ -21,6 +21,7 @@ import SwiftUI
   private(set) var rows: [String: RowSnapshot] = [:]
   private(set) var running = false
   private(set) var reactions: [ReactionChoice] = []
+  private(set) var chapters: [ChapterSnapshot] = []
   var detail = DetailSnapshot(
     present: false, title: "", statusError: false, sections: [], actions: [], mono: false,
     live: false)
@@ -55,6 +56,7 @@ extension TranscriptModel: NativeTranscript {
     }
     if running != snapshot.running { running = snapshot.running }
     if reactions != snapshot.reactions { reactions = snapshot.reactions }
+    if chapters != snapshot.chapters { chapters = snapshot.chapters }
   }
 
   func formulas(pictures: [FormulaPicture]) throws {

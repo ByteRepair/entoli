@@ -6,6 +6,8 @@ import "package:flutter/material.dart";
 import "../../../app/settings/spec.dart" show SettingReader;
 import "../../../domain/room/room_state.dart" show ChatViewState;
 import "../../fonts.dart";
+import "package:flutter_riverpod/misc.dart" show ProviderListenable;
+import "../../../app/transcript/activity.dart" show Activity, LiveMessage, Run;
 
 /// One thing the chat has running, as a pill in the row above the composer:
 /// a spinner, or [icon] where there is one, and what it is.
@@ -77,6 +79,7 @@ class RunningThing {
     this.group,
     this.icon,
     this.mono = false,
+    this.detail,
   });
 
   /// What it is, and its name — the page's host, the job's command, the
@@ -100,7 +103,19 @@ class RunningThing {
 
   /// Opens what it is, from the pill's [BuildContext].
   final void Function(BuildContext context) open;
+
+  /// The activity behind it and the run it is, where it is one: what a
+  /// frontend with a detail page of its own opens instead of [open].
+  final RunningDetail? detail;
 }
+
+/// A running thing's activity, its run, and the message an open detail of it
+/// follows.
+typedef RunningDetail = ({
+  Activity activity,
+  Run run,
+  ProviderListenable<LiveMessage>? source,
+});
 
 /// A kind of thing a chat can have running: what [chatId] has of it now,
 /// watching through [ref] whatever it reads beyond [view]. The row asks each

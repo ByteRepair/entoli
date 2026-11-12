@@ -9,7 +9,7 @@ import "../../domain/models.dart";
 import "../../domain/room/room_state.dart";
 import "../../app/chat_controller.dart";
 import "../chat/widgets/approval_banner.dart";
-import "../chat/widgets/running_pill.dart" show RunningThing;
+import "../chat/widgets/running_pill.dart" show RunningDetail, RunningThing;
 import "../chat/widgets/running_strip.dart" show runningOf;
 import "../../app/approvals.dart";
 import "../../app/settings/spec.dart" show SettingReader, WidgetReader;
@@ -49,7 +49,15 @@ class ShellTurnSurface extends ConsumerStatefulWidget {
 /// what the client says back, run through [driver]. Voice mode's widget and
 /// the open chat's publisher (`ShellChat`) each hold one.
 class TurnRunner implements TurnIntents {
-  TurnRunner({required this.context, required this.onWithdrawn});
+  TurnRunner({
+    required this.context,
+    required this.onWithdrawn,
+    this.openDetail,
+  });
+
+  /// Opens a running thing's detail the frontend's own way, where it has
+  /// one: the native conversation's sheet.
+  final void Function(RunningDetail detail)? openDetail;
 
   /// Where a running pill opens its page.
   final BuildContext Function() context;
@@ -159,8 +167,13 @@ class TurnRunner implements TurnIntents {
   /// A pill, by its index in [_running].
   @override
   Future<void> running(int id) async {
+    if (id < 0 || id >= _running.length) return;
+    final thing = _running[id];
+    final detail = thing.detail;
+    final opener = openDetail;
+    if (detail != null && opener != null) return opener(detail);
     final at = context();
-    if (id >= 0 && id < _running.length && at.mounted) _running[id].open(at);
+    if (at.mounted) thing.open(at);
   }
 
   @override

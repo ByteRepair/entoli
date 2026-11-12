@@ -374,6 +374,16 @@ class RowSnapshot {
   MessageSnapshot? message;
 }
 
+/// One thing the user said, as a place to go back to: the row it is in,
+/// its first line, and how many threads branch in its turn.
+class ChapterSnapshot {
+  ChapterSnapshot({required this.row, this.preview = "", this.threads = 1});
+
+  String row;
+  String preview;
+  int threads;
+}
+
 /// The conversation: every row's key in order, and the rows that changed
 /// since the last snapshot of the same chat — a client keeps the rest.
 class ConversationSnapshot {
@@ -383,6 +393,7 @@ class ConversationSnapshot {
     this.changed = const [],
     this.running = false,
     this.reactions = const [],
+    this.chapters = const [],
   });
 
   String? chatId;
@@ -392,6 +403,9 @@ class ConversationSnapshot {
 
   /// The reactions a message can be given, in the order offered.
   List<ReactionChoice> reactions;
+
+  /// The chapter rail's ticks, oldest first.
+  List<ChapterSnapshot> chapters;
 }
 
 /// A reaction on offer: what is drawn, and what it is called.

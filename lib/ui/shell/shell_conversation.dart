@@ -12,6 +12,7 @@ import "../../domain/bot_avatar/pose.dart" show BotMood;
 import "../../app/read_aloud.dart";
 import "../../app/settings/spec.dart" show SettingReader;
 import "../../app/transcript/activity.dart";
+import "../../app/transcript/chapters.dart";
 import "../../app/transcript/code.dart";
 import "../../app/transcript/formula.dart";
 import "../../app/transcript/message.dart";
@@ -98,6 +99,7 @@ class ConversationSurface implements wire.TranscriptIntents {
     required TurnDriver? driver,
     required int ink,
     required Color outline,
+    List<Chapter> chapters = const [],
   }) {
     _reader = reader;
     _chatId = chatId;
@@ -184,6 +186,14 @@ class ConversationSurface implements wire.TranscriptIntents {
           reactions: [
             for (final r in Reaction.values)
               wire.ReactionChoice(emoji: r.emoji, name: r.name),
+          ],
+          chapters: [
+            for (final c in chapters)
+              wire.ChapterSnapshot(
+                row: "message:${c.row}",
+                preview: c.preview,
+                threads: c.threads,
+              ),
           ],
         ),
       ),
@@ -316,6 +326,20 @@ class ConversationSurface implements wire.TranscriptIntents {
         _open = found;
         republish();
     }
+  }
+
+  /// Opens [activity]'s detail for [run], following [source]: a running
+  /// pill's job or sub-agent, which has no node in the conversation.
+  void openRun(
+    Activity activity,
+    Run run, {
+    ProviderListenable<LiveMessage>? source,
+  }) {
+    _open = (
+      node: LabelNode(activity, run, glyph: TranscriptGlyph.terminal, text: ""),
+      source: source,
+    );
+    republish();
   }
 
   @override
