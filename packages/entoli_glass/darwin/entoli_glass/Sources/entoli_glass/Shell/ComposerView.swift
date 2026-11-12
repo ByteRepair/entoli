@@ -38,7 +38,7 @@ extension ComposerAction {
 /// or goes is morphed by the system's glass rather than popped, the menu's
 /// highlight glides between rows, and the field grows a line at a time.
 struct ComposerView: View {
-  @ObservedObject var model: ComposerModel
+  var model: ComposerModel
   @Namespace private var glass
   @Namespace private var menuRows
 
@@ -132,6 +132,7 @@ struct ComposerView: View {
     .menuIndicator(.hidden)
     .buttonStyle(.plain)
     .glassControl("plus", in: glass, shape: Circle())
+    .stretchy()
     .help("Attach or insert")
     .accessibilityLabel("Attach or insert")
   }
@@ -161,6 +162,7 @@ struct ComposerView: View {
     .glassControl(
       "field", in: glass, shape: RoundedRectangle(cornerRadius: 20, style: .continuous),
       interactive: false)
+    .stretchy()
   }
 
   /// What an empty field says.
@@ -237,6 +239,7 @@ struct ComposerView: View {
     .glassControl(
       id, in: glass, shape: Circle(),
       tint: prominent ? Color.accentColor.opacity(Self.prominence) : nil)
+    .stretchy()
     .help(label)
     .accessibilityLabel(label)
   }

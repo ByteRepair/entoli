@@ -30,7 +30,7 @@ public final class EntoliGlassPlugin: NSObject, FlutterPlugin {
 /// place once — Flutter's alone, filling the window, or the shell's around
 /// it.
 public struct FrontendView: View {
-  @ObservedObject private var model: ShellModel
+  private var model: ShellModel
   private let flutter: PlatformViewController
 
   public init(flutter: PlatformViewController) {
@@ -57,13 +57,15 @@ public struct FrontendView: View {
 }
 
 #if os(iOS)
-  /// The settings sheet, observing the settings apart from the window's
-  /// content, so a change to them redraws the sheet and not the app.
+  /// The settings sheet, bound to whether the settings are up.
   private struct SettingsSheet: ViewModifier {
-    @ObservedObject var settings: SettingsModel
+    @Bindable var settings: SettingsModel
 
     func body(content: Content) -> some View {
-      content.sheet(isPresented: $settings.presented) { SettingsRoot(model: settings) }
+      content.sheet(isPresented: $settings.presented) {
+        // A page's room on an iPad, the whole screen on a phone.
+        SettingsRoot(model: settings).presentationSizing(.page)
+      }
     }
   }
 #endif

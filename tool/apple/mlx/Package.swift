@@ -6,7 +6,7 @@ import PackageDescription
 
 let package = Package(
   name: "EntoliMLX",
-  platforms: [.iOS(.v17), .macOS(.v14)],
+  platforms: [.iOS(.v18), .macOS(.v15)],
   products: [
     .library(name: "EntoliMLX", type: .dynamic, targets: ["EntoliMLX"]),
   ],

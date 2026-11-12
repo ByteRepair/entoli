@@ -377,14 +377,8 @@ class VoiceChannel: NSObject {
       guard granted else { done(false); return }
       // Both callbacks land on an arbitrary queue; `done` touches the engine.
 #if os(iOS)
-      if #available(iOS 17.0, *) {
-        AVAudioApplication.requestRecordPermission { mic in
-          DispatchQueue.main.async { done(mic) }
-        }
-      } else {
-        AVAudioSession.sharedInstance().requestRecordPermission { mic in
-          DispatchQueue.main.async { done(mic) }
-        }
+      AVAudioApplication.requestRecordPermission { mic in
+        DispatchQueue.main.async { done(mic) }
       }
 #else
       AVCaptureDevice.requestAccess(for: .audio) { mic in

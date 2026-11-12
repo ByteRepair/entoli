@@ -18,7 +18,7 @@ extension ApprovalSnapshot: Identifiable {}
 /// has not read yet, and the calls waiting on an answer. Dart's
 /// `ShellTurnSurface` says what is there and runs what is pressed.
 struct TurnSurfaceView: View {
-  @ObservedObject var model: ShellModel
+  var model: ShellModel
 
   /// Which groups of pills are open: the strip's own, as it is in Flutter.
   @State private var open: Set<String> = []

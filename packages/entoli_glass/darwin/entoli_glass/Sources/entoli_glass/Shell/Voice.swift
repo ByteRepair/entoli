@@ -36,7 +36,7 @@ extension VoiceSnapshot {
 /// to typing. Dart's `ShellVoice` says what is there and runs what is pressed;
 /// the session lives as long as Flutter's page under this does.
 struct VoiceView: View {
-  @ObservedObject var model: ShellModel
+  var model: ShellModel
 
   /// Whether Talk is held down, so a release is said once.
   @State private var holding = false
@@ -139,7 +139,7 @@ struct VoiceView: View {
         if voice.pushToTalk {
           key(
             voice.paused ? "mic" : "mic.fill", "Talk", help: "Hold to talk",
-            held: !voice.paused, enabled: voice.on
+            held: !voice.paused, enabled: voice.on, pulls: false
           ) {}
           .simultaneousGesture(
             DragGesture(minimumDistance: 0)
@@ -172,7 +172,7 @@ struct VoiceView: View {
 
   private func key(
     _ symbol: String, _ label: String, help: String, tint: Color? = nil, held: Bool = false,
-    enabled: Bool = true, action: @escaping () -> Void
+    enabled: Bool = true, pulls: Bool = true, action: @escaping () -> Void
   ) -> some View {
     VStack(spacing: 6) {
       Button(action: action) {
@@ -186,6 +186,7 @@ struct VoiceView: View {
       .disabled(!enabled)
       .opacity(enabled ? 1 : 0.4)
       .glassSurface(Circle(), tint: tint ?? (held ? Color.secondary.opacity(0.4) : nil))
+      .stretchy(pulls)
       .help(help)
       .accessibilityLabel(label)
       Text(label).font(.caption).foregroundStyle(enabled ? .secondary : .tertiary)

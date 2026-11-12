@@ -158,7 +158,7 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
   struct ComposerTextField: UIViewRepresentable {
     static let inset: CGFloat = 6
 
-    @ObservedObject var model: ComposerModel
+    var model: ComposerModel
 
     func makeUIView(context: Context) -> FieldView {
       let view = FieldView(usingTextLayoutManager: false)
@@ -351,7 +351,7 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
   struct ComposerTextField: NSViewRepresentable {
     static let inset: CGFloat = 4
 
-    @ObservedObject var model: ComposerModel
+    var model: ComposerModel
 
     func makeNSView(context: Context) -> NSScrollView {
       let field = FieldView(usingTextLayoutManager: false)

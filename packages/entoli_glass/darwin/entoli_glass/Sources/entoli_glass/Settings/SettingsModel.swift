@@ -11,22 +11,41 @@ import SwiftUI
 /// Holds nothing of its own: a snapshot replaces what was there, and a change
 /// is an intent Dart answers with the next snapshot. The [NativeSettings] end
 /// of `pigeons/settings.dart`.
-public final class SettingsModel: ObservableObject, NativeSettings {
+@Observable public final class SettingsModel: NativeSettings {
   /// The one, made as the plugin registers.
   public static var shared: SettingsModel?
 
-  @Published var pages: [SettingsPageData] = []
+  var pages: [SettingsPageData] = []
 
   /// The page asked for last, which the settings open at; none on a phone
-  /// opened plainly, which starts at the list of pages.
-  @Published var page: SettingsPageKey? = .general
+  /// opened plainly, which starts at the list of pages. Another page starts
+  /// with nothing pushed over it.
+  var page: SettingsPageKey? = .general {
+    didSet {
+      guard page != oldValue else { return }
+      path = []
+      ahead = []
+    }
+  }
+
+  /// What the settings are searched for. While it is set every page is
+  /// built, so a row on a page nobody has opened can be found.
+  var query = ""
+
+  /// The row a search result opened: its page scrolls to it and lights it
+  /// once.
+  var revealed: String?
+
+  /// A sub-page a search result opened, pushed once the page that opens it
+  /// is on screen: a stack made in the same moment as a path loses it.
+  var arriving: SettingsPageKey?
 
   /// What is pushed over the page, and what Back left behind for Forward.
-  @Published var path: [SettingsRoute] = []
-  @Published var ahead: [SettingsRoute] = []
+  var path: [SettingsRoute] = []
+  var ahead: [SettingsRoute] = []
 
   /// Whether the settings are up, where they are a sheet: iOS.
-  @Published var presented = false
+  var presented = false
 
   let say: SettingsIntents
 
@@ -36,15 +55,23 @@ public final class SettingsModel: ObservableObject, NativeSettings {
 
   /// Every row by its id, and each row's own beneath it, looked up once per
   /// snapshot rather than by every row as it draws.
-  private var rows: [String: SettingRowData] = [:]
-  private var parts: [String: [SettingRowData]] = [:]
-  private var accessories: [String: SettingRowData] = [:]
+  @ObservationIgnored private var rows: [String: SettingRowData] = [:]
+  @ObservationIgnored private var parts: [String: [SettingRowData]] = [:]
+  @ObservationIgnored private var accessories: [String: SettingRowData] = [:]
+  /// The page each sub-page is opened from, by the row that opens it. Kept
+  /// across snapshots: a page sends its rows only while it is drawn.
+  @ObservationIgnored private var openers: [SettingsPageKey: SettingsPageKey] = [:]
 
   func settings(snapshot: SettingsSnapshot) throws {
     let next = snapshot.pages.compactMap { $0 }
     rows = [:]
     parts = [:]
     accessories = [:]
+    for page in next {
+      for row in page.sections.compactMap({ $0 }).flatMap({ $0.rows.compactMap { $0 } }) {
+        if row.kind == .subpage, let sub = row.page { openers[sub] = page.key }
+      }
+    }
     for row in next.flatMap({ $0.sections.compactMap { $0 } }).flatMap({ $0.rows.compactMap { $0 } }) {
       rows[row.id] = row
       guard let parent = row.parent else { continue }
@@ -81,9 +108,11 @@ public final class SettingsModel: ObservableObject, NativeSettings {
     #endif
   }
 
-  /// The pages drawn: the one picked and every one pushed over it.
+  /// The pages drawn: the one picked and every one pushed over it, or all of
+  /// them while a search is under way.
   var drawn: [SettingsPageKey] {
-    [page].compactMap { $0 }
+    if !query.isEmpty { return pages.map(\.key) }
+    return [page].compactMap { $0 }
       + path.compactMap {
         if case .page(let key) = $0 { key } else { nil }
       }
@@ -100,7 +129,7 @@ public final class SettingsModel: ObservableObject, NativeSettings {
   func row(_ id: String) -> SettingRowData? { rows[id] }
 
   /// Which way the last move went, for the side a Mac's page comes in from.
-  @Published private(set) var forwards = true
+  private(set) var forwards = true
 
   /// Pushes [route]'s page over the one shown, clearing Forward.
   func push(_ route: SettingsRoute) {
@@ -132,6 +161,34 @@ public final class SettingsModel: ObservableObject, NativeSettings {
   func forward() {
     guard let next = ahead.popLast() else { return }
     move(forward: true) { path.append(next) }
+  }
+
+  /// What [query] finds: per page, in the pages' order, whether its title
+  /// matched and the rows that did. A row inside a group is found as itself,
+  /// and opened at the group.
+  var found: [(page: SettingsPageData, titled: Bool, rows: [SettingRowData])] {
+    let query = query.trimmingCharacters(in: .whitespaces)
+    guard !query.isEmpty else { return [] }
+    func matches(_ text: String?) -> Bool { text?.localizedStandardContains(query) ?? false }
+    return pages.compactMap { page in
+      let rows = page.sections.compactMap { $0 }.flatMap { $0.rows.compactMap { $0 } }
+        .filter { !$0.accessory && (matches($0.title) || matches($0.detail)) }
+      // A page with a row of its own name is found once, at the row.
+      let titled = matches(page.title) && !rows.contains { $0.title == page.title }
+      return titled || !rows.isEmpty ? (page, titled, rows) : nil
+    }
+  }
+
+  /// Opens [key] where it lives — a listed page picked, a sub-page pushed
+  /// over the page that opens it — and scrolls to [row] there.
+  func open(_ key: SettingsPageKey, at row: String?) {
+    if pages.first(where: { $0.key == key })?.listed == true {
+      page = key
+    } else if let opener = openers[key] {
+      page = opener
+      arriving = key
+    }
+    revealed = row.map { rows[$0]?.parent ?? $0 }
   }
 
   /// [row]'s own rows: a group's children, and an accessory drawn at its end.

@@ -6,24 +6,24 @@ import SwiftUI
   import FlutterMacOS
 #endif
 
-/// What the shell draws, as Dart last said it, one published value per
+/// What the shell draws, as Dart last said it, one observed value per
 /// concern; and the way back, [say]. Holds nothing of its own: a snapshot
 /// replaces what was there, and a tap is an intent Dart answers with the next
 /// snapshot. Both are the protocol `pigeons/shell.dart` generates, this the
 /// [NativeShell] end of it.
-final class ShellModel: ObservableObject {
+@Observable final class ShellModel {
   /// The one, made as the plugin registers: there is one engine and one
   /// window.
   static var shared: ShellModel?
 
-  @Published var window = WindowSnapshot.initial
-  @Published var sidebar = SidebarSnapshot.initial
-  @Published var chatBar = ChatBarSnapshot.initial
-  @Published var pageBar = TitleBarSnapshot.absent
-  @Published var turn = TurnSnapshot.initial
-  @Published var newChat = NewChatSnapshot.initial
-  @Published var voice = VoiceSnapshot.initial
-  @Published var palette = PaletteSnapshot.initial
+  var window = WindowSnapshot.initial
+  var sidebar = SidebarSnapshot.initial
+  var chatBar = ChatBarSnapshot.initial
+  var pageBar = TitleBarSnapshot.absent
+  var turn = TurnSnapshot.initial
+  var newChat = NewChatSnapshot.initial
+  var voice = VoiceSnapshot.initial
+  var palette = PaletteSnapshot.initial
 
   /// What the user did, for Dart to run: one object per surface, each a
   /// method per intent it can send, answered by whichever widget draws that
@@ -32,43 +32,43 @@ final class ShellModel: ObservableObject {
 
   /// A strip of choices over the Flutter view, and who waits on its answer:
   /// see `Strip.swift`.
-  @Published var strip: StripRequest?
-  var stripReply: ((Int64?) -> Void)?
+  var strip: StripRequest?
+  @ObservationIgnored var stripReply: ((Int64?) -> Void)?
 
-  /// Which column the split view shows where it is one column — an iPhone.
-  /// The detail to begin with, nothing selected being the new-chat screen
-  /// as it is in the Flutter app; the list when its button or the system's
-  /// back gesture asks for it; the detail again once a chat, a new one, a
-  /// page or a project is picked from it, as the Flutter drawer closes on
-  /// each. The split view writes it back as the user moves between the two.
-  @Published var compactColumn = NavigationSplitViewColumn.detail
+  /// Which of the two an iPhone's drawer shows (`Drawer.swift`). The detail
+  /// to begin with, nothing selected being the new-chat screen as it is in
+  /// the Flutter app; the list when its button or a swipe asks for it; the
+  /// detail again once a chat, a new one, a page or a project is picked from
+  /// it, as the Flutter drawer closes on each, or a swipe puts it back.
+  var compactColumn = NavigationSplitViewColumn.detail
 
-  /// Set only where it changes: the model is every view's, and a write it
-  /// publishes redraws them all.
+  /// Set only where it changes: an observed write tells every view that
+  /// reads it, equal or not.
   func showDetail() { if compactColumn != .detail { compactColumn = .detail } }
   func showSidebar() { if compactColumn != .sidebar { compactColumn = .sidebar } }
 
-  /// The microphone's level: not published, being many times a second and
+  /// The microphone's level: not observed, being many times a second and
   /// read by the glow on each of its frames.
   let voiceLevel = VoiceLevel()
 
-  /// The composer's own object, so a keystroke redraws it and nothing else.
-  private(set) lazy var composer = ComposerModel(shell: self)
+  /// The composer's own object, which a keystroke changes and nothing else
+  /// reads.
+  @ObservationIgnored private(set) lazy var composer = ComposerModel(shell: self)
 
   /// Which frontend the core picked at launch: this one (true) or Flutter's
   /// alone. Nil until Dart has said, the window showing only its colour.
-  @Published private(set) var frontend: Bool?
+  private(set) var frontend: Bool?
 
   /// The app proper is up: its window snapshot has come, which Dart sends
   /// only once the welcome tour and first-run setup are behind it. Until
   /// then the chrome stays out of the way, so nothing of it bypasses them.
-  @Published private(set) var ready = false
+  private(set) var ready = false
 
   init(messenger: FlutterBinaryMessenger) {
     say = ShellIntents(messenger: messenger)
   }
 
-  private var reported: EdgeInsets?
+  @ObservationIgnored private var reported: EdgeInsets?
 
   /// How much of the Flutter view the shell's own bars cover, which Dart
   /// hands the conversation as padding so it scrolls under them.

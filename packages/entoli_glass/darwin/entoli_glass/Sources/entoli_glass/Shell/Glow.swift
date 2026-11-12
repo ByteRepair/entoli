@@ -17,7 +17,7 @@ enum GlowMode: Equatable {
 }
 
 /// The microphone's level, read by the glow on each frame rather than
-/// published: it moves many times a second, and only the glow draws it.
+/// observed: it moves many times a second, and only the glow draws it.
 final class VoiceLevel {
   private(set) var raw: Double = 0
   private var smoothed: Double = 0
@@ -39,8 +39,7 @@ final class VoiceLevel {
 /// Voice mode's light: a mesh of the two voices' colours whose points drift
 /// slowly while idle, swell with the microphone while listening, orbit while a
 /// turn runs, and beat while the reply is read out, faded to a soft disc.
-/// `MeshGradient` where the system has it (macOS 15, iOS 18); before that, a
-/// blurred canvas of the same blobs.
+/// A `MeshGradient`, blurred.
 struct VoiceGlow: View {
   let mode: GlowMode
   let heard: Color
@@ -84,25 +83,12 @@ struct VoiceGlow: View {
     }
   }
 
-  @ViewBuilder private func glow(t: TimeInterval, loud: Double) -> some View {
-    if #available(macOS 15.0, iOS 18.0, *) {
-      MeshGradient(
-        width: 3, height: 3, points: points(t: t, loud: loud), colors: colors(t: t),
-        smoothsColors: true
-      )
-      .blur(radius: 18)
-    } else {
-      Canvas { context, size in
-        context.addFilter(.blur(radius: size.width * 0.12))
-        for (point, colour) in zip(points(t: t, loud: loud), colors(t: t)) {
-          let r = size.width * 0.32
-          let rect = CGRect(
-            x: CGFloat(point.x) * size.width - r, y: CGFloat(point.y) * size.height - r,
-            width: r * 2, height: r * 2)
-          context.fill(Circle().path(in: rect), with: .color(colour.opacity(0.7)))
-        }
-      }
-    }
+  private func glow(t: TimeInterval, loud: Double) -> some View {
+    MeshGradient(
+      width: 3, height: 3, points: points(t: t, loud: loud), colors: colors(t: t),
+      smoothsColors: true
+    )
+    .blur(radius: 18)
   }
 
   /// The mesh's nine points: the corners fixed, the edges and the middle

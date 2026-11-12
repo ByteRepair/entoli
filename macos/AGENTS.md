@@ -40,10 +40,11 @@ behind an Xcode configuration of its own, not as a fork of this one. That
 build re-enters the Powerbox territory deliberately, since a MAS archive
 cannot ship without it.
 
-The deployment target is 14.0, mlx-swift-lm's floor: the package will not
-link below it, so the number is the MLX models' cost to every Mac rather than
-what the rest of the app needs. FoundationModels is weak-linked in the
-Debug and Release xcconfigs, since 14 and 15 do not carry it.
+The deployment target is 15.0, iOS 18's year, so the native UI is written
+for one generation of SwiftUI on both (see "Liquid Glass" in
+`lib/ui/AGENTS.md`); it is above mlx-swift-lm's floor of 14. FoundationModels
+is weak-linked in the Debug and Release xcconfigs, since 15 does not carry
+it.
 
 ## What a command runs on
 

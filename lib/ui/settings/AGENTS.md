@@ -80,6 +80,18 @@ closed — goes through SwiftUI's `openSettings`, which `SettingsWindowOpener`
 in the main window hands the model. The menu's Settings item is the scene's
 own there, and Dart leaves its item out of the app menu.
 
+The native settings look like the platform's own Settings: each page leads
+with a white symbol on a tile of its colour (`PageIcon`, the colours by kin
+— the model pages purples, sync and the network blues, the app's own grey),
+and the list is searchable. A search finds pages by title and rows by title
+or description on every page, sub-pages included: while a query stands the
+client says every page is shown, so Dart builds the rows of pages nobody has
+opened, and goes back to the drawn ones when it clears. A result is a
+selection of the list rather than a button, since a phone's collapsed split
+view goes to the detail only for one; it opens its page, pushes the sub-page
+over the page that opens it once that page is up (a stack made in the same
+moment as its path drops it), then scrolls to the row and lights it.
+
 A Mac's settings draw their own page stack (`PageStack`) rather than a
 `NavigationStack`: in a split view's detail column a Mac's stack shows a
 pushed page with no animation (macOS 27, a plain `NavigationLink` too),

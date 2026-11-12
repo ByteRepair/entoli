@@ -402,7 +402,10 @@ Apple's terms, and the contract carries what they are written from: a phase,
 a time, a kind, a name, a count. The microphone's level goes raw, many times a second, and
 the glow reads it per frame rather than redrawing the shell for it.
 `ShellModel` is the Swift's `NativeShell`, holding what the last snapshot
-said and nothing of its own.
+said and nothing of its own. It is `@Observable`, as every model under the
+plugin is, so a view redraws for the concerns it reads; what was never meant
+to redraw anything — a frame measured in layout, a pending reply — is
+`@ObservationIgnored`, or writing it from a view would loop.
 
 **Adding to it** is an edit to `pigeons/shell.dart` and `tool/prepare.sh`;
 the compiler then names every place that has to follow. A default is a
@@ -595,23 +598,34 @@ The menu bar is `entoli_menu`'s under either frontend (see "The menu bar"),
 menu, so the native field takes its own editing keys — cut, copy, paste,
 select all, undo, and Return's send and queue — in `performKeyEquivalent`,
 which the window offers a view before the menu bar; an Edit menu would have
-sent the same keys to Flutter's own text fields too. On an iPhone the split
-view is a stack, and it opens on the detail column — nothing selected is the
-new-chat screen, as it is in the Flutter app, not the list. The chat's bar
-leads with a sidebar button in place of the split view's chevron, the Flutter
-app's menu button drawn the system's way, and picking a chat, a new one, a
-page or a project from the list goes back to the detail as the Flutter drawer
-closes on each; `ShellModel.compactColumn` is the one state for all of it.
-The list keeps no selection there, as an iPhone's lists do not: a selection
-standing is what holds a collapsed split view on its detail, and the sidebar
-button did nothing from a chat while one did. The drawer's swipes are the
-shell's own (`EdgeSwipe.swift`, and a drag on the list): in from the leading
-edge to the list, which the split view's back swipe would have been had the
-bar not hidden its back button for the sidebar button, and toward it on the
-list back to the chat. A Flutter page over the chat keeps the edge, for its
-own back swipe.
-Only the behaviour follows Flutter's: the layout stays the native split
-view. The app's pages are a menu on the list's bar, there being no menu bar
+sent the same keys to Flutter's own text fields too. **On an iPhone the split
+view is not used**: one column at a time, it can only jump between them, so
+a swipe could do nothing until it ended. The one-column layout is
+`Drawer.swift`, the list beneath the chat and the chat sliding off it to the
+trailing edge under the finger, the list's parallax and dimming as a stack's
+page beneath has, and a flick carried on by its speed into a spring that
+starts at it. It opens on the detail — nothing selected is the new-chat
+screen, as it is in the Flutter app, not the list. The chat's bar leads with
+a sidebar button, the Flutter app's menu button drawn the system's way, and
+picking a chat, a new one, a page or a project from the list slides back to
+the detail as the Flutter drawer closes on each; `ShellModel.compactColumn`
+is the one state for all of it, which the drawer writes when a swipe
+settles and slides to when anything else writes it. The list keeps no
+selection there, as an iPhone's lists do not. The swipe is a UIKit pan over
+the whole layout, the Flutter view's touches included: closed, one begun in
+from the leading edge; open, one toward it anywhere. A Flutter page over the
+chat keeps the edge, for its own back swipe. Both stacks being on screen
+mid-swipe, the Flutter view now stays in the window while the list is up.
+
+**Glass can be pulled** (`Stretch.swift`): the composer's controls and voice
+mode's keys follow a drag a resisting way, stretched along it, and spring
+back; pulled near a neighbour in the same `GlassGroup`, the system's
+container runs the two together. A drag after a held press is the field's
+selection, not a pull, a field whose text overflows pulls only across so
+an up or down drag still scrolls it, and a pull waits on the drawer's swipe,
+so one in from the edge over `+` opens the list. A Mac has none of it: a
+pointer has nothing to pull.
+Only the behaviour follows Flutter's: the layout stays native. The app's pages are a menu on the list's bar, there being no menu bar
 to hold them. The hosting is each Runner's own story — see "The native shell" in
 `macos/AGENTS.md` and `ios/AGENTS.md`.
 
