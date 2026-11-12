@@ -4,7 +4,7 @@ import "package:path/path.dart" as p;
 
 import "../../../app/transcript/hand_off.dart";
 import "../../../providers.dart";
-import "../../skills/skill_install_preview.dart";
+import "../../../app/pages/marketplace.dart";
 import "../../widgets/dialogs.dart" show say;
 import "../../../app/pages/text_file.dart";
 import "../../app_pages.dart";
@@ -43,13 +43,11 @@ class ContextHandOff implements TranscriptHandOff {
       );
 
   @override
-  Future<void> installSkill(String chatId, String installId) => Navigator.push(
-    context,
-    MaterialPageRoute<void>(
-      builder: (_) =>
-          SkillInstallPreviewPage(chatId: chatId, installId: installId),
-    ),
-  );
+  Future<void> installSkill(String chatId, String installId) async =>
+      openAppPage(
+        context,
+        SkillInstallAppPage(chatId: chatId, installId: installId),
+      );
 
   @override
   Future<void> openPlan(String chatId) async =>
