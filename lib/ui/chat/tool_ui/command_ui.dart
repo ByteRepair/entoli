@@ -36,10 +36,12 @@ class BashUI extends ToolUI {
   (IconData, String) get approval => (Icons.terminal, "Run this command?");
 
   /// The command set apart and its exit code under the title; a call that
-  /// started a job is drawn as the job, once it has.
+  /// started a job is drawn as the job, once it has. The label is the call's
+  /// `description`, the model's word for what it runs, where it gave one.
   @override
   RunView view(WidgetRef ref, Run run) {
     final result = run.result;
+    final said = stringArg(run.call?.argumentsJson, "description")?.trim();
     final jobId = result?.jobId;
     if (jobId != null) {
       return JobActivity(
@@ -50,6 +52,7 @@ class BashUI extends ToolUI {
     return toolRunView(
       run,
       commandArg: "command",
+      summary: said == null || said.isEmpty ? null : firstLine(said),
       status: result == null
           ? (text: "Running", isError: false)
           : (

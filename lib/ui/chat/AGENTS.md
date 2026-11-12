@@ -666,8 +666,10 @@ question. One class for each tool that shows anything of its own;
 `toolUIFor` gives every other name the defaults ("Used x", "Allow x?"). The
 bubble, the banner and the voice transcript ask it rather than switching on
 names. The default view is `toolRunView`, the tool's name and its arguments
-and output; `BashUI` sets the command apart with the exit code under it, and
-draws a call that started a job as a `JobActivity`; `TaskUI` is a
+and output; `BashUI` sets the command apart with the exit code under it,
+labels it with the call's `description` where the model gave one (see "The
+command's label" in `lib/data/builtin/AGENTS.md`), and draws a call that
+started a job as a `JobActivity`; `TaskUI` is a
 `SubAgentActivity`, following the sub-agent's transcript; the web tools show
 the query or URL and what came back. `JobActivity` and `SubAgentActivity`
 hold what they are drawn from, so the running row's pills open the same

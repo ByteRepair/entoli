@@ -11,25 +11,24 @@ import "card.dart";
 /// A tool run as any tool's is drawn: its name, and the arguments and output
 /// behind it. [commandArg] names the argument set apart as the command the
 /// call ran, [status] is the line under the drawer's title, and [title] the
-/// title where the tool's name is not it.
+/// title where the tool's name is not it. [summary] is the label in place of
+/// the tool's name, where the call said what it was doing.
 RunView toolRunView(
   Run run, {
   String? commandArg,
   ActivityStatus? status,
   String? title,
+  String? summary,
 }) {
   final call = run.call;
   final result = run.result;
   final name = call?.name;
   final verb = result == null ? "Using tool" : "Used tool";
   final outcome = result?.permissionOutcome;
+  final said = summary ?? (name == null ? verb : "$verb: $name");
   return RunView(
     icon: Icons.terminal,
-    label: name == null
-        ? verb
-        : outcome == null
-        ? "$verb: $name"
-        : "$verb: $name — $outcome",
+    label: name == null || outcome == null ? said : "$said — $outcome",
     isError:
         (result?.returnCode ?? 0) != 0 ||
         (result?.violations.isNotEmpty ?? false),

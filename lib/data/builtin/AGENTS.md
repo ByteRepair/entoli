@@ -371,6 +371,16 @@ the grace where the command never answered at all. The
 group is the reason the shell is spawned under `setsid` where that exists —
 learned by trying it, not by probing first.
 
+**The command's label is the model's own word for it.** `bash` takes an
+optional `description`, five to ten words on what the command does, and the
+reply draws it as the row's label in place of "Used tool: bash" — Claude
+Code's design: no second model reads the command to name it, so the label
+costs nothing. It is the agent's claim about its command and nothing checks
+it, which is why it stops at the label: the approval banner shows the command
+itself, and the classifier reads only `command`, so a call cannot argue its
+way past the gate in the words beside it. A call without one, and the user's
+`!`, keep the tool's name.
+
 **How long a command may run is Claude Code's two minutes and ten.**
 `BuiltinOptions.commandTimeout` is what a call naming no `timeout` gets, two
 minutes, and `maxCommandTimeout` is the most one may name, ten — Claude Code's

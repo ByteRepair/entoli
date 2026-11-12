@@ -89,6 +89,7 @@ class BashTool extends AgentTool {
     "type": "object",
     "properties": {
       "command": _command,
+      "description": _description,
       "timeout": _timeout(background: !offer.oneShot && offer.background),
       if (!offer.oneShot) ..._restart,
       if (leavesSandbox) ..._unsandboxed,
@@ -113,6 +114,17 @@ class BashTool extends AgentTool {
         "output through `| tail` or `| head`: a pipeline killed at its "
         "timeout loses everything `tail` was holding, where the command's "
         "own output is kept up to the moment it stopped.",
+  };
+
+  /// The model's own words for the command, drawn as its label. Never read by
+  /// the gate: the classifier judges the command, not the claim about it.
+  static const _description = {
+    "type": "string",
+    "description":
+        "What the command does, in 5 to 10 words and the active voice, shown "
+        "to the user as its label: \"Show working tree status\", \"Run the "
+        "widget tests\". Say what it does in plain words rather than "
+        "repeating the command, its flags or its paths.",
   };
 
   static final _defaultTimeout =
