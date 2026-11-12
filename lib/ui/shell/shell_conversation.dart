@@ -185,7 +185,10 @@ class _ShellConversationState extends ConsumerState<ShellConversation>
           changed: changed,
           running: widget.view.isRunning,
           flutterBottom: _flutterBottom(context),
-          reactions: [for (final r in Reaction.values) r.emoji],
+          reactions: [
+            for (final r in Reaction.values)
+              wire.ReactionChoice(emoji: r.emoji, name: r.name),
+          ],
         ),
       ),
     );

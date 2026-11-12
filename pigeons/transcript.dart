@@ -383,7 +383,15 @@ class ConversationSnapshot {
   double flutterBottom;
 
   /// The reactions a message can be given, in the order offered.
-  List<String> reactions;
+  List<ReactionChoice> reactions;
+}
+
+/// A reaction on offer: what is drawn, and what it is called.
+class ReactionChoice {
+  ReactionChoice({required this.emoji, required this.name});
+
+  String emoji;
+  String name;
 }
 
 class SectionSnapshot {

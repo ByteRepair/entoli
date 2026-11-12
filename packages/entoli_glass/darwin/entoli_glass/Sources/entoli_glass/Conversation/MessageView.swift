@@ -260,6 +260,7 @@ private struct MessageActionRow: View {
   let shown: Bool
 
   @State private var deleting = false
+  @State private var reacting = false
   @State private var editing = false
   @State private var edited = ""
 
@@ -283,17 +284,22 @@ private struct MessageActionRow: View {
           }
         }
         if actions.react {
-          Menu {
-            ForEach(model.reactions, id: \.self) { emoji in
-              Button(emoji) { model.react(key, emoji) }
+          icon("face.smiling", "React") { reacting = true }
+            // Master's strip: a popover from the smiley, in the system's
+            // glass, the reactions already given tinted; one picked again is
+            // taken back.
+            .popover(isPresented: $reacting, arrowEdge: .top) {
+              GlassChoices(
+                choices: model.reactions.map {
+                  ($0.emoji, $0.name, message.reactions.contains($0.emoji))
+                },
+                pick: { index in
+                  reacting = false
+                  model.react(key, model.reactions[index].emoji)
+                }
+              )
+              .presentationCompactAdaptation(.popover)
             }
-          } label: {
-            Image(systemName: "face.smiling")
-          }
-          .menuStyle(.borderlessButton)
-          .menuIndicator(.hidden)
-          .fixedSize()
-          .help("React")
         }
         if actions.speak {
           icon(
@@ -314,8 +320,9 @@ private struct MessageActionRow: View {
           icon("arrow.clockwise", "Regenerate") { model.act(key, .regenerate) }
         }
       }
-      .opacity(shown || actions.speaking ? 1 : 0)
-      .allowsHitTesting(shown || actions.speaking)
+      // Up while its strip is, or the popover would lose what it points at.
+      .opacity(shown || actions.speaking || reacting ? 1 : 0)
+      .allowsHitTesting(shown || actions.speaking || reacting)
       .animation(.easeOut(duration: 0.12), value: shown)
     }
     .frame(height: 28)

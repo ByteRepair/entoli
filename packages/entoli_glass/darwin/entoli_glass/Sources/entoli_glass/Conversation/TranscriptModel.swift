@@ -21,7 +21,7 @@ import SwiftUI
   private(set) var rows: [String: RowSnapshot] = [:]
   private(set) var running = false
   private(set) var flutterBottom: CGFloat = 0
-  private(set) var reactions: [String] = []
+  private(set) var reactions: [ReactionChoice] = []
   var detail = DetailSnapshot(
     present: false, title: "", statusError: false, sections: [], actions: [], mono: false,
     live: false)

@@ -43,9 +43,6 @@ extension ShellModel {
 /// Dart sends is a rect in this view. It takes no clicks itself.
 struct StripLayer: View {
   var model: ShellModel
-  @Namespace private var glass
-
-  private static let button: CGFloat = 40
 
   /// The popover's own dismissal is the strip dismissed; a pick has already
   /// answered and cleared it.
@@ -70,11 +67,28 @@ struct StripLayer: View {
   }
 
   private func choices(_ strip: StripRequest) -> some View {
+    GlassChoices(
+      choices: strip.choices.map { ($0.glyph, $0.name, $0.chosen) },
+      pick: { model.answerStrip($0) })
+  }
+}
+
+/// A row of choices as the system draws a small control: each a glass
+/// button of its own in one glass group, the picked ones tinted. What a
+/// strip shows, and a message's reactions in the native conversation.
+struct GlassChoices: View {
+  let choices: [(glyph: String, name: String, chosen: Bool)]
+  let pick: (Int) -> Void
+  @Namespace private var glass
+
+  private static let button: CGFloat = 40
+
+  var body: some View {
     GlassGroup(spacing: 4) {
       HStack(spacing: 4) {
-        ForEach(Array(strip.choices.enumerated()), id: \.offset) { i, choice in
+        ForEach(Array(choices.enumerated()), id: \.offset) { i, choice in
           Button {
-            model.answerStrip(i)
+            pick(i)
           } label: {
             Text(choice.glyph)
               .font(.system(size: 22))

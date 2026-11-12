@@ -928,6 +928,9 @@ offline bar — whose height goes with the snapshot (`flutterBottom`) so the
 native list leaves it clear. An empty chat is not sent, and Flutter's empty
 state shows.
 
+A message's reactions open the strip master drew under the shell, `GlassChoices`
+(`Strip.swift`), now a popover from the action row's smiley.
+
 What the native list does not have yet: the chapter rail, selecting a passage
 to reply to it, and a live Bot Avatar (the face is a still).
 
