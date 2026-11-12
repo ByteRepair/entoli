@@ -46,7 +46,6 @@ import "tracking_reader.dart";
 /// pages opened over [_context], the bridge's.
 class ShellChat implements ChatBarIntents {
   ShellChat(this._container, this._context) {
-    _answers.voiceOn.addListener(_turnPass);
     _selection = _container.listen<String?>(
       selectedChatIdProvider,
       (_, id) => _open(id),
@@ -119,13 +118,10 @@ class ShellChat implements ChatBarIntents {
     _screen = id == null ? _NewChat(this) : _OpenChat(this, id);
   }
 
-  void _turnPass() => _screen?.turnPass();
-
   @override
   void open(ChatBarDestination to) => _screen?.openBar(to);
 
   void close() {
-    _answers.voiceOn.removeListener(_turnPass);
     _selection.close();
     closeVoice();
     closeBrowser();
@@ -174,6 +170,7 @@ final class _OpenChat implements _Screen {
     _conversationReader = TrackingReader(_container, conversationPass);
     _barReader = TrackingReader(_container, barPass);
     _turnReader = TrackingReader(_container, turnPass);
+    _answers.turn.addListener(_turnReader.refresh);
     _composerReader = TrackingReader(_container, composerPass)
       ..listen(composer.shape);
     foot = _FootRunner(_shell._context);
@@ -303,21 +300,18 @@ final class _OpenChat implements _Screen {
     }
   }
 
-  /// Stands down while voice mode is up, whose own turn surface is drawn.
+  /// Sends nothing while covered — voice mode's turn surface is drawn over
+  /// it — and again once the cover goes.
   @override
   void turnPass() {
     if (_closed) return;
-    if (_answers.voiceOn.value) {
-      _answers.turn.release(turn);
-      return;
-    }
     _turnReader.pass(() {
       final (:view, :driver) = _state(_turnReader);
       if (driver == null || view.chat == null) {
         if (_answers.turn.release(turn)) _outbox.turn(TurnSnapshot());
         return;
       }
-      _answers.turn.take(turn);
+      if (!_answers.turn.take(turn)) return;
       _outbox.turn(turn.snapshot(_turnReader, view, driver));
     });
   }
@@ -414,6 +408,7 @@ final class _OpenChat implements _Screen {
   @override
   void close({bool handingOver = false}) {
     _closed = true;
+    _answers.turn.removeListener(_turnReader.refresh);
     for (final reader in [
       _conversationReader,
       _barReader,

@@ -8,7 +8,9 @@ import "package:agent_chat/domain/goal.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/room/room_state.dart";
 import "package:agent_chat/app/chat_controller.dart";
+import "package:agent_chat/app/settings/spec.dart" show ContainerReader;
 import "package:agent_chat/ui/shell/shell_answers.dart";
+import "package:agent_chat/ui/shell/shell_outbox.dart";
 import "package:agent_chat/ui/shell/shell_turn.dart";
 
 import "fake_native_shell.dart";
@@ -53,17 +55,25 @@ void main() {
     driver = _Driver();
   });
 
+  /// [view]'s turn surface sent as the open chat's publisher sends it.
   Future<TurnRunner> pump(WidgetTester tester, ChatViewState view) async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
     await tester.pumpWidget(
-      ProviderScope(
-        child: MaterialApp(
-          home: ShellTurnSurface(view: view, notifier: driver),
-        ),
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: SizedBox()),
       ),
     );
-    return tester
-        .state<ShellTurnSurfaceState>(find.byType(ShellTurnSurface))
-        .runner;
+    final runner = TurnRunner(
+      context: () => tester.element(find.byType(SizedBox)),
+      onWithdrawn: null,
+    );
+    container
+        .read(shellOutboxProvider)
+        .turn(runner.snapshot(ContainerReader(container), view, driver));
+    await tester.pump();
+    return runner;
   }
 
   testWidgets("a question goes out, and its answers come back", (tester) async {
@@ -151,48 +161,31 @@ void main() {
     expect(driver.sent, ["/goal resume", "/goal clear"]);
   });
 
-  // What decides which turn surface the shell draws is voice mode's flag,
-  // not which widget mounted last: the chat page's stands down beneath voice
-  // mode's and sends again once it goes.
-  testWidgets("voice mode's turn surface is drawn while it is up", (
+  // What decides which turn surface the shell draws is the app's state, not
+  // which surface came last: the chat's stands down beneath voice mode's,
+  // and is told to send again once it goes.
+  testWidgets("a cover answers over what took the surface, until it goes", (
     tester,
   ) async {
-    final container = ProviderContainer();
-    addTearDown(container.dispose);
-    final answers = container.read(shellAnswersProvider);
-    final voice = _Driver();
-    Future<void> show({required bool voiceUp}) => tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
-          home: Column(
-            children: [
-              ShellTurnSurface(view: ChatViewState(), notifier: driver),
-              if (voiceUp)
-                ShellTurnSurface(
-                  view: ChatViewState(),
-                  notifier: voice,
-                  voice: true,
-                ),
-            ],
-          ),
-        ),
-      ),
+    final answers = ShellAnswers();
+    final chat = TurnRunner(
+      context: () => throw StateError(""),
+      onWithdrawn: null,
     );
-    TurnRunner answering() => answers.turn.owner! as TurnRunner;
+    final voice = TurnRunner(
+      context: () => throw StateError(""),
+      onWithdrawn: null,
+    );
+    var told = 0;
+    answers.turn.addListener(() => told++);
 
-    await show(voiceUp: false);
-    await answering().goal(GoalAction.clear);
-    expect(driver.sent, ["/goal clear"]);
+    expect(answers.turn.take(chat), isTrue);
+    answers.turn.cover(voice);
+    expect(answers.turn.owner, same(voice));
+    expect(answers.turn.take(chat), isFalse);
 
-    answers.voiceOn.value = true;
-    await show(voiceUp: true);
-    await answering().goal(GoalAction.pause);
-    expect(voice.sent, ["/goal pause"]);
-
-    answers.voiceOn.value = false;
-    await show(voiceUp: false);
-    await answering().goal(GoalAction.resume);
-    expect(driver.sent, ["/goal clear", "/goal resume"]);
+    expect(answers.turn.release(voice), isFalse);
+    expect(answers.turn.owner, same(chat));
+    expect(told, 3);
   });
 }

@@ -35,7 +35,6 @@ class ShellVoiceSession implements VoiceIntents {
     _turn = TurnRunner(context: context, onWithdrawn: null);
     _reader = TrackingReader(_container, _pass);
     _answers.voice.take(this);
-    _answers.voiceOn.value = true;
     _controller.start(meta: meta);
     _pass();
   }
@@ -121,7 +120,7 @@ class ShellVoiceSession implements VoiceIntents {
       );
       // The turn's surface over voice mode, a question in it too.
       if (chat == null || chatId == null) return;
-      _answers.turn.take(_turn);
+      _answers.turn.cover(_turn);
       _outbox.turn(
         _turn.snapshot(
           _reader,
@@ -141,8 +140,6 @@ class ShellVoiceSession implements VoiceIntents {
     if (_answers.voice.release(this)) {
       _outbox.voice(VoiceSnapshot(present: false));
     }
-    // The open chat's turn surface comes back with this going.
-    _answers.voiceOn.value = false;
     _keep.close();
   }
 }

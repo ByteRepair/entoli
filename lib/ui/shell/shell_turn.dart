@@ -2,7 +2,6 @@ import "package:entoli_glass/entoli_glass.dart";
 
 import "../../app/running.dart" as app;
 import "package:flutter/material.dart";
-import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/goal.dart";
 import "../../domain/models.dart";
@@ -11,41 +10,13 @@ import "../../app/chat_controller.dart";
 import "../chat/widgets/approval_banner.dart";
 import "../chat/widgets/running_strip.dart" show openRunning;
 import "../../app/approvals.dart";
-import "../../app/settings/spec.dart" show SettingReader, WidgetReader;
-import "shell_outbox.dart";
+import "../../app/settings/spec.dart" show SettingReader;
 import "glyphs.dart";
-import "shell_answers.dart";
-
-/// [TurnSurface] drawn by the native shell, wired the same way: the resume
-/// offer, the chat's goal, what is running, the says the turn has not read, and the calls
-/// waiting on an answer go to the shell as a [TurnSnapshot], and what is
-/// pressed there comes back to [handle]. The browser's prompts stay Flutter's,
-/// beside this on the page.
-class ShellTurnSurface extends ConsumerStatefulWidget {
-  const ShellTurnSurface({
-    super.key,
-    required this.view,
-    required this.notifier,
-    this.onWithdrawn,
-    this.voice = false,
-  });
-
-  final ChatViewState view;
-  final TurnDriver notifier;
-  final ValueChanged<Draft>? onWithdrawn;
-
-  /// Voice mode's, over the chat page's: drawn while voice mode is up, and
-  /// the chat page's while it is not.
-  final bool voice;
-
-  @override
-  ConsumerState<ShellTurnSurface> createState() => ShellTurnSurfaceState();
-}
 
 /// The turn surface as the shell draws it, apart from any widget: the
 /// snapshot of [view] — the resume offer, the goal, what is running, the says
 /// the turn has not read, the calls waiting on an answer, the question — and
-/// what the client says back, run through [driver]. Voice mode's widget and
+/// what the client says back, run through [driver]. Voice mode's session and
 /// the open chat's publisher (`ShellChat`) each hold one.
 class TurnRunner implements TurnIntents {
   TurnRunner({
@@ -220,50 +191,6 @@ class TurnRunner implements TurnIntents {
       chat: offers.always,
       project: offers.always,
     );
-  }
-}
-
-/// Voice mode's turn surface: a [TurnRunner] over the page's view, drawn
-/// while voice mode is up. (The open chat's is `ShellChat`'s.)
-class ShellTurnSurfaceState extends ConsumerState<ShellTurnSurface> {
-  late final ShellOutbox _outbox = ref.read(shellOutboxProvider);
-  late final ShellAnswers _answers = ref.read(shellAnswersProvider);
-  late final TurnRunner runner = TurnRunner(
-    context: () => context,
-    onWithdrawn: widget.onWithdrawn,
-  );
-
-  @override
-  void initState() {
-    super.initState();
-    _answers.voiceOn.addListener(_resend);
-  }
-
-  @override
-  void dispose() {
-    _answers.voiceOn.removeListener(_resend);
-    if (_answers.turn.release(runner)) _outbox.turn(TurnSnapshot());
-    super.dispose();
-  }
-
-  bool get _drawn => widget.voice == _answers.voiceOn.value;
-
-  /// Voice mode came or went: the one now drawn sends, nothing it watches
-  /// having changed to rebuild it.
-  void _resend() {
-    if (!_drawn) _answers.turn.release(runner);
-    if (mounted) setState(() {});
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // The one beneath voice mode sends nothing: the shell draws the other.
-    if (!_drawn) return const SizedBox.shrink();
-    _answers.turn.take(runner);
-    _outbox.turn(
-      runner.snapshot(WidgetReader(ref), widget.view, widget.notifier),
-    );
-    return const SizedBox.shrink();
   }
 }
 

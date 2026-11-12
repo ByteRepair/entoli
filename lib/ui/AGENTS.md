@@ -441,9 +441,10 @@ composer's, the turn surface's, the new-chat screen's, voice mode's and the
 two title bars' go to the one widget answering for that surface
 (`ShellAnswer` in `shell_answers.dart`), which implements the `*Intents`
 itself, takes the channel when it is the one drawn and lets go when it goes,
-taking its snapshot back. Voice mode's flag, `ShellAnswers.voiceOn`, decides
-which turn surface that is: voice mode's while it is up, the chat page's
-beneath it standing down and sending again once it goes. The page bars follow
+taking its snapshot back. A surface may cover the one that took it:
+voice mode covers the open chat's turn surface while it is up, the chat's
+beneath standing down, and told by the answer to send again once the cover
+goes. The page bars follow
 the Navigator, this frontend's own navigation (below). A row's rename and a delete's confirmation are
 native dialogs that send the edit itself, which `ChatEdits` makes as it does
 for the Flutter sidebar's dialogs.

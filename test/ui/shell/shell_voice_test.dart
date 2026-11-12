@@ -78,7 +78,7 @@ void main() {
     expect(voice.title, "Walk");
     expect(voice.lines.map((l) => l.text), containsAll(["go on", "Half a"]));
     expect(native.lastTurn?.resume?.startedAt, isPositive);
-    expect(app.container.read(shellAnswersProvider).voiceOn.value, isTrue);
+    expect(app.container.read(shellAnswersProvider).turn.owner, isNotNull);
   });
 
   testWidgets("Done leaves voice mode", (tester) async {
@@ -89,6 +89,6 @@ void main() {
     session.done();
     await tester.pump();
     expect(native.lastVoice?.present, isFalse);
-    expect(app.container.read(shellAnswersProvider).voiceOn.value, isFalse);
+    expect(app.container.read(shellAnswersProvider).turn.owner, isNull);
   });
 }
