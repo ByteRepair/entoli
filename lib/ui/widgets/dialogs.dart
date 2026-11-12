@@ -56,6 +56,42 @@ void catchAndSay(BuildContext context, Future<void> Function() work) =>
       }),
     );
 
+/// A frontend that draws the app's dialogs itself — the native shell's
+/// alerts — set by it, so every helper here asks there instead.
+abstract interface class NativeDialogs {
+  Future<int?> choose(String title, List<String> choices, {int? picked});
+
+  Future<String?> text({
+    required String title,
+    required String initial,
+    required String confirmLabel,
+    String? hint,
+    String? helper,
+    int lines,
+    bool allowBlank,
+  });
+
+  Future<({String name, String value})?> pair({
+    required String title,
+    required String nameLabel,
+    required String valueLabel,
+    String name,
+    String value,
+  });
+
+  Future<void> tell({required String title, required String message});
+
+  Future<bool> confirm({
+    required String title,
+    required String message,
+    String? confirmLabel,
+    String? cancelLabel,
+    bool destructive,
+  });
+}
+
+NativeDialogs? nativeDialogs;
+
 /// Ask which project something belongs under. The answer is wrapped because
 /// the default project is null as well, and a dismissed dialog must not read
 /// as picking it.
@@ -63,29 +99,41 @@ Future<({String? project})?> pickProject(
   BuildContext context, {
   required List<String?> projects,
   String? current,
-}) => showDialog<({String? project})>(
-  context: context,
-  builder: (context) => SimpleDialog(
-    title: const Text("Move to project"),
-    children: [
-      for (final project in projects)
-        SimpleDialogOption(
-          onPressed: () => Navigator.pop(context, (project: project)),
-          child: Row(
-            children: [
-              Icon(
-                Icons.check,
-                size: 18,
-                color: project == current ? null : Colors.transparent,
-              ),
-              const SizedBox(width: 12),
-              Expanded(child: Text(projectLabel(project))),
-            ],
+}) async {
+  if (nativeDialogs case final native?) {
+    final at = await native.choose(
+      "Move to project",
+      [for (final p in projects) projectLabel(p)],
+      picked: current == null && !projects.contains(null)
+          ? null
+          : projects.indexOf(current),
+    );
+    return at == null ? null : (project: projects[at]);
+  }
+  return showDialog<({String? project})>(
+    context: context,
+    builder: (context) => SimpleDialog(
+      title: const Text("Move to project"),
+      children: [
+        for (final project in projects)
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, (project: project)),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.check,
+                  size: 18,
+                  color: project == current ? null : Colors.transparent,
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Text(projectLabel(project))),
+              ],
+            ),
           ),
-        ),
-    ],
-  ),
-);
+      ],
+    ),
+  );
+}
 
 /// Tab indents where there is more than one line to indent; where the field is
 /// one line it is still how the caret leaves for the buttons.
@@ -109,6 +157,17 @@ Future<String?> promptForText(
   int maxLines = 1,
   bool allowBlank = false,
 }) {
+  if (nativeDialogs case final native?) {
+    return native.text(
+      title: title,
+      initial: initial,
+      confirmLabel: confirmLabel,
+      hint: hint,
+      helper: helper,
+      lines: maxLines,
+      allowBlank: allowBlank,
+    );
+  }
   final controller = TextEditingController(text: initial);
   String? submit() {
     final text = controller.text.trim();
@@ -157,6 +216,15 @@ Future<({String name, String value})?> promptForPair(
   String name = "",
   String value = "",
 }) {
+  if (nativeDialogs case final native?) {
+    return native.pair(
+      title: title,
+      nameLabel: nameLabel,
+      valueLabel: valueLabel,
+      name: name,
+      value: value,
+    );
+  }
   final nameField = TextEditingController(text: name);
   final valueField = TextEditingController(text: value);
   ({String name, String value})? submit() {
@@ -205,19 +273,21 @@ Future<void> tell(
   BuildContext context, {
   required String title,
   required String message,
-}) => showDialog<void>(
-  context: context,
-  builder: (context) => AlertDialog(
-    title: Text(title),
-    content: Text(message),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text("OK"),
+}) =>
+    nativeDialogs?.tell(title: title, message: message) ??
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("OK"),
+          ),
+        ],
       ),
-    ],
-  ),
-);
+    );
 
 /// Ask before doing something irreversible. A null [confirmLabel] leaves only
 /// a way out, for when there is nothing to confirm.
@@ -226,17 +296,29 @@ Future<bool> confirm(
   required String title,
   required String message,
   String? confirmLabel,
+  String cancelLabel = "Cancel",
   bool destructive = false,
+  bool dismissible = true,
 }) async {
+  if (nativeDialogs case final native?) {
+    return native.confirm(
+      title: title,
+      message: message,
+      confirmLabel: confirmLabel,
+      cancelLabel: cancelLabel,
+      destructive: destructive,
+    );
+  }
   final answer = await showDialog<bool>(
     context: context,
+    barrierDismissible: dismissible,
     builder: (context) => AlertDialog(
       title: Text(title),
       content: Text(message),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text("Cancel"),
+          child: Text(cancelLabel),
         ),
         if (confirmLabel != null)
           TextButton(

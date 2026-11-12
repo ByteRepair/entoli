@@ -874,6 +874,66 @@ class BrowserViewSnapshot {
 }
 
 /// One frame of the page, in CSS pixels.
+/// What a dialog asks: something to say, a yes or no, a line or two of
+/// text, a name and its value, or one of several.
+enum DialogKind { tell, confirm, text, pair, choice }
+
+/// A dialog, drawn as the platform's own alert.
+class DialogRequest {
+  DialogRequest({
+    required this.kind,
+    required this.title,
+    this.message,
+    this.confirmLabel,
+    this.cancelLabel,
+    this.destructive = false,
+    this.initial,
+    this.hint,
+    this.helper,
+    this.lines = 1,
+    this.allowBlank = false,
+    this.label,
+    this.secondLabel,
+    this.secondInitial,
+    this.choices = const [],
+    this.picked,
+  });
+
+  DialogKind kind;
+  String title;
+  String? message;
+
+  /// Null for a confirm with nothing to confirm: only a way out.
+  String? confirmLabel;
+  String? cancelLabel;
+  bool destructive;
+
+  // text and pair: the field's, and a pair's second
+  String? initial;
+  String? hint;
+  String? helper;
+  int lines;
+  bool allowBlank;
+  String? label;
+  String? secondLabel;
+  String? secondInitial;
+
+  // choice: each by its place, and the one picked now
+  List<String> choices;
+  int? picked;
+}
+
+/// What the dialog was answered with: whether it was agreed to, the text,
+/// a pair's second, or the choice by its place.
+class DialogAnswer {
+  DialogAnswer({this.agreed = false, this.text, this.second, this.choice});
+
+  bool agreed;
+  String? text;
+  String? second;
+  int? choice;
+}
+
 class BrowserFrameSnapshot {
   BrowserFrameSnapshot({
     required this.jpeg,
@@ -930,6 +990,10 @@ abstract class NativeShell {
   /// index picked, or null for a strip dismissed.
   @async
   int? strip(ChoiceStrip request);
+
+  /// Asks [request] over the window, answering once it is.
+  @async
+  DialogAnswer dialog(DialogRequest request);
 }
 
 /// The window's own state, which the client reports.

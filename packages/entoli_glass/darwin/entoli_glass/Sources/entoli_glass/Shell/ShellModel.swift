@@ -42,6 +42,10 @@ import SwiftUI
   /// A strip of choices over the Flutter view, and who waits on its answer:
   /// see `Strip.swift`.
   var strip: StripRequest?
+
+  /// The dialog Dart asked, and who waits on its answer.
+  var dialog: DialogRequest?
+  @ObservationIgnored var dialogReply: ((DialogAnswer) -> Void)?
   @ObservationIgnored var stripReply: ((Int64?) -> Void)?
 
   /// Which of the two an iPhone's drawer shows (`Drawer.swift`). The detail
@@ -145,6 +149,21 @@ extension ShellModel: NativeShell {
 
   func strip(request: ChoiceStrip, completion: @escaping (Result<Int64?, Error>) -> Void) {
     showStrip(request) { completion(.success($0)) }
+  }
+
+  func dialog(request: DialogRequest, completion: @escaping (Result<DialogAnswer, Error>) -> Void) {
+    // One at a time: the one open is answered as dismissed.
+    dialogReply?(DialogAnswer(agreed: false))
+    dialogReply = { completion(.success($0)) }
+    dialog = request
+  }
+
+  /// Answers the dialog open, and takes it down.
+  func answer(_ answer: DialogAnswer) {
+    let reply = dialogReply
+    dialogReply = nil
+    dialog = nil
+    reply?(answer)
   }
 }
 

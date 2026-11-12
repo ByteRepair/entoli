@@ -17,7 +17,8 @@ import "shell_settings.dart";
 import "shell_sidebar.dart";
 import "shell_window.dart";
 import "shell_outbox.dart";
-import "../widgets/dialogs.dart" show nativeNotice;
+import "../widgets/dialogs.dart" show nativeDialogs, nativeNotice;
+import "shell_dialogs.dart";
 import "../voice/voice_page.dart" show nativeVoiceOpener;
 import "../chat/widgets/browser_strip.dart" show nativeBrowserOpener;
 
@@ -66,6 +67,7 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     _settings = SettingsBridge(container);
     _chat = ShellChat(container, () => context);
     nativeNotice = container.read(shellOutboxProvider).notice;
+    nativeDialogs = ShellDialogs();
     nativeVoiceOpener = _chat.openVoice;
     nativeBrowserOpener = _chat.openBrowser;
     nativeSettingsOpener = _settings.show;
@@ -80,6 +82,7 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     _chat.close();
     if (identical(_listening, this)) {
       nativeNotice = null;
+      nativeDialogs = null;
       nativeVoiceOpener = null;
       nativeBrowserOpener = null;
     }

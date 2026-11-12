@@ -1,10 +1,11 @@
-import "package:flutter/material.dart";
+import "package:flutter/widgets.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/chat_controller.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
 import "../selection.dart";
+import "../widgets/dialogs.dart";
 
 /// A temporary chat whose window has passed is offered a choice between
 /// keeping it — its TTL turned off — and deleting it, asked over [context].
@@ -18,30 +19,21 @@ Future<void> checkChatExpiry(
   final container = ProviderScope.containerOf(context, listen: false);
   if (!state.isExpired()) return;
   if (!context.mounted) return;
-  final keep = await showDialog<bool>(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) => AlertDialog(
-      title: const Text("Temporary chat expired"),
-      content: const Text(
+  // Not dismissed: the chat is kept or deleted, one or the other.
+  final keep = !await confirm(
+    context,
+    title: "Temporary chat expired",
+    message:
         "This temporary chat has passed its expiry. Turn temporary chat off "
         "to keep it, or delete it now.",
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: const Text("Keep"),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text("Delete"),
-        ),
-      ],
-    ),
+    confirmLabel: "Delete",
+    cancelLabel: "Keep",
+    destructive: true,
+    dismissible: false,
   );
   if (!context.mounted) return;
   final repo = container.read(chatRepositoryProvider);
-  if (keep == true) {
+  if (keep) {
     final written = await repo.keepExpiredChat(chatId, state);
     container.read(chatControllerProvider(chatId).notifier).applyState(written);
   } else {

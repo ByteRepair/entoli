@@ -79,6 +79,7 @@ struct ShellView: View {
       .sheet(isPresented: browserShown) { BrowserSheet(model: model) }
       // The app's pages: a chat's settings, the plan, the workspace.
       .modifier(AppPagesPresenter())
+      .modifier(DialogPresenter(model: model))
       // A line said in passing, over everything but voice mode.
       .overlay(alignment: .top) {
         if !model.voice.present { NoticeView(model: model) }
