@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreText
 
 #if os(iOS)
   import UIKit
@@ -33,9 +34,11 @@ enum ProseBuilder {
   static let pad: CGFloat = 12
   static let cellPad: CGFloat = 8
 
+  /// [width] is what the text is laid out in, which a table's columns fit;
+  /// nil leaves each column as wide as its widest cell.
   static func build(
     _ blocks: [TextBlockSnapshot], model: TranscriptModel, caret: Bool, tone: PlatformColor?,
-    dark: Bool
+    dark: Bool, width: CGFloat? = nil
   ) -> NSAttributedString {
     let out = NSMutableAttributedString()
     for (index, block) in blocks.enumerated() {
@@ -43,7 +46,8 @@ enum ProseBuilder {
       let first = index == 0
       switch block.kind {
       case .code: out.append(code(block, dark: dark, first: first))
-      case .table: out.append(table(block, model: model, tone: tone, first: first))
+      case .table:
+        out.append(table(block, model: model, tone: tone, first: first, width: width))
       default:
         let start = out.length
         out.append(line(block, model: model, tone: tone))
@@ -206,11 +210,16 @@ enum ProseBuilder {
     return out
   }
 
-  /// A table at the width its cells ask for: a row a paragraph, a cell a
-  /// tab stop placed and aligned as its column says, the grid drawn by the
-  /// view. It reads as a markdown table in a copy.
+  /// A table fitted to [width] as the Flutter app's is: each column as wide
+  /// as its widest cell where they all fit, and where they do not, no
+  /// narrower than its longest word, the rest of the room shared by how much
+  /// more each wants. A cell wraps onto as many lines as it needs, a row a
+  /// paragraph whose lines are line separators, a cell a tab stop placed and
+  /// aligned as its column says, the grid drawn by the view. A row reads as
+  /// a markdown row in a copy, whatever part of it was selected.
   private static func table(
-    _ block: TextBlockSnapshot, model: TranscriptModel, tone: PlatformColor?, first: Bool
+    _ block: TextBlockSnapshot, model: TranscriptModel, tone: PlatformColor?, first: Bool,
+    width: CGFloat?
   ) -> NSAttributedString {
     let colour = tone ?? PlatformColor.labelColor
     let rows = Dictionary(grouping: block.cells, by: \.row).sorted { $0.key < $1.key }
@@ -221,16 +230,42 @@ enum ProseBuilder {
       for inline in cell.inlines { out.append(piece(inline, model: model, font: font, colour: colour)) }
       return out
     }
-    var widths = [CGFloat](repeating: 0, count: columns)
-    for (_, cells) in rows {
-      for c in cells where Int(c.column) < columns {
-        let size = cell(c).boundingRect(
+    func measure(_ text: NSAttributedString) -> CGFloat {
+      ceil(
+        text.boundingRect(
           with: CGSize(width: 10_000, height: 10_000), options: [.usesLineFragmentOrigin],
-          context: nil)
-        widths[Int(c.column)] = max(widths[Int(c.column)], ceil(size.width) + 2 * cellPad)
+          context: nil
+        ).width)
+    }
+    let built = rows.map { ($0.key, $0.value.sorted { $0.column < $1.column }.map { ($0, cell($0)) }) }
+    var wants = [CGFloat](repeating: 2 * cellPad, count: columns)
+    var floors = [CGFloat](repeating: 2 * cellPad, count: columns)
+    for (_, cells) in built {
+      for (c, text) in cells where Int(c.column) < columns {
+        let at = Int(c.column)
+        wants[at] = max(wants[at], measure(text) + 2 * cellPad)
+        (text.string as NSString).enumerateSubstrings(
+          in: NSRange(location: 0, length: text.length), options: .byWords
+        ) { _, word, _, _ in
+          floors[at] = max(floors[at], measure(text.attributedSubstring(from: word)) + 2 * cellPad)
+        }
       }
     }
     let left = indent(block)
+    var widths = wants
+    if let width, width > 0 {
+      let room = width - left - 1
+      let wanted = wants.reduce(0, +)
+      let least = floors.reduce(0, +)
+      if wanted > room {
+        if least >= room {
+          widths = floors
+        } else {
+          let more = wanted - least
+          widths = (0..<columns).map { floors[$0] + (wants[$0] - floors[$0]) * (room - least) / more }
+        }
+      }
+    }
     var edges = [left]
     for w in widths { edges.append(edges.last! + w) }
     let stops = (0..<columns).map { c -> NSTextTab in
@@ -244,18 +279,22 @@ enum ProseBuilder {
     let rule = "|" + String(repeating: "---|", count: columns)
     let out = NSMutableAttributedString()
     let id = UUID().uuidString
-    for (r, (_, cells)) in rows.enumerated() {
+    for (r, (_, cells)) in built.enumerated() {
       if r > 0 { out.append(NSAttributedString(string: "\n")) }
       let start = out.length
-      let sorted = cells.sorted { $0.column < $1.column }
-      for (c, value) in sorted.enumerated() {
-        out.append(
-          NSAttributedString(string: "\t", attributes: [.font: body, swapKey: c == 0 ? "| " : " | "]))
-        out.append(cell(value))
+      let wrapped = cells.map { c, text in
+        wrap(text, in: widths[min(Int(c.column), columns - 1)] - 2 * cellPad)
       }
-      out.append(
-        NSAttributedString(
-          string: "\u{200B}", attributes: [.font: body, swapKey: r == 0 ? " |\n" + rule : " |"]))
+      let height = wrapped.map(\.count).max() ?? 1
+      for line in 0..<height {
+        if line > 0 { out.append(NSAttributedString(string: "\u{2028}", attributes: [.font: body])) }
+        for pieces in wrapped {
+          out.append(NSAttributedString(string: "\t", attributes: [.font: body]))
+          if line < pieces.count { out.append(pieces[line]) }
+        }
+      }
+      // Ends the row where its last cell is short of the last column.
+      out.append(NSAttributedString(string: "\u{200B}", attributes: [.font: body]))
       let style = NSMutableParagraphStyle()
       style.tabStops = stops
       style.headIndent = left
@@ -266,11 +305,44 @@ enum ProseBuilder {
       let range = NSRange(location: start, length: out.length - start)
       out.addAttribute(.paragraphStyle, value: style, range: range)
       out.addAttribute(rowKey, value: r, range: range)
+      let written = "| " + cells.map { plain($0.1) }.joined(separator: " | ") + " |"
+      out.addAttribute(swapKey, value: r == 0 ? written + "\n" + rule : written, range: range)
     }
     let all = NSRange(location: 0, length: out.length)
     out.addAttribute(tableKey, value: id, range: all)
     out.addAttribute(columnsKey, value: edges.map { NSNumber(value: Double($0)) }, range: all)
     return out
+  }
+
+  /// [text] broken into lines no wider than [width]: at a word where one
+  /// fits, inside a word too long for the line.
+  private static func wrap(_ text: NSAttributedString, in width: CGFloat) -> [NSAttributedString] {
+    guard text.length > 0 else { return [] }
+    let typesetter = CTTypesetterCreateWithAttributedString(text as CFAttributedString)
+    let room = Double(max(1, width))
+    var lines: [NSAttributedString] = []
+    var at = 0
+    while at < text.length {
+      var count = CTTypesetterSuggestLineBreak(typesetter, at, room)
+      let line = CTTypesetterCreateLine(typesetter, CFRange(location: at, length: max(1, count)))
+      if CTLineGetTypographicBounds(line, nil, nil, nil) - CTLineGetTrailingWhitespaceWidth(line)
+        > room
+      {
+        count = CTTypesetterSuggestClusterBreak(typesetter, at, room)
+      }
+      count = max(1, count)
+      var range = NSRange(location: at, length: count)
+      let string = text.string as NSString
+      while range.length > 0,
+        let scalar = Unicode.Scalar(string.character(at: NSMaxRange(range) - 1)),
+        CharacterSet.whitespacesAndNewlines.contains(scalar)
+      {
+        range.length -= 1
+      }
+      lines.append(text.attributedSubstring(from: range))
+      at += count
+    }
+    return lines
   }
 
   private static func heading(_ level: Int64) -> PlatformFont {
@@ -316,6 +388,9 @@ enum ProseBuilder {
   static func plain(_ text: NSAttributedString) -> String {
     var out = ""
     var fence: String?
+    // A swap spans runs where the text under it changes face, a table's row:
+    // it is read once for all of them.
+    var swapped: (value: String, end: Int)?
     text.enumerateAttributes(in: NSRange(location: 0, length: text.length)) { attributes, range, _ in
       let language = attributes[languageKey] as? String
       if language != fence {
@@ -324,8 +399,14 @@ enum ProseBuilder {
         fence = language
       }
       if let swap = attributes[swapKey] as? String {
+        if let last = swapped, last.value == swap, last.end == range.location {
+          swapped = (swap, NSMaxRange(range))
+          return
+        }
         out += swap
+        swapped = (swap, NSMaxRange(range))
       } else {
+        swapped = nil
         out += (text.string as NSString).substring(with: range)
           .replacingOccurrences(of: "\u{2028}", with: "\n")
       }

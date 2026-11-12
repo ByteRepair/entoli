@@ -13,15 +13,19 @@ struct MarkdownView: View {
   /// As wide as its words rather than the whole width offered: in a bubble.
   var hugs = false
   @Environment(\.colorScheme) private var scheme
+  /// The width it is laid out in, which a table fits. Not in a bubble,
+  /// whose width is its words': a table fitted to that would narrow it again.
+  @State private var width: CGFloat?
 
   var body: some View {
     let _ = model.formulasLanded
     ProseText(
       text: ProseBuilder.build(
         blocks, model: model, caret: caret, tone: tone.map { PlatformColor($0) },
-        dark: scheme == .dark),
+        dark: scheme == .dark, width: hugs ? nil : width),
       actions: ProseActions(reply: reply, link: { model.link($0.absoluteString) }),
       hugs: hugs)
+    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
   }
 }
 
