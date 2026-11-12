@@ -548,13 +548,18 @@ because the projection does not read one; everything it does read — the date, 
 attachment's bytes, what a `/skill` stood for — is on the prompt, which is the
 message being logged. See "The projection".
 
-**Stopping a turn keeps what its command printed.** `abort` kills, then gives
-each turn `_stopGrace` to forward the killed command's result — the `!` turn's
-`ShellRunPart`, the agent's tool result — before it ends the stream aborted;
-closing straight after the kill threw away output the user had watched arrive.
-A turn being stopped has its own `DoneEvent` swallowed, so it ends once, and
-aborted. Only one that outlasts the grace is closed over, and that `!` turn
-writes nothing, the session included.
+**Stopping a turn waits for it to end.** `abort` kills, then waits for each
+turn to forward the killed command's result — the `!` turn's `ShellRunPart`,
+the agent's tool result — and wind down, with no timeout. A turn given up on
+after a grace kept running, and its last write to the chat's session landed
+under the next turn, which then crashed on a session shorter than the one it
+started with. So every wait in a turn answers the stop. The stop is a signal
+the turn registers before it does anything, so the agent, the command and the
+sub-agents revived ahead of the agent all hear one sent before they existed.
+The command is killed, and a model call and a retry's wait are dropped rather
+than waited on, since a model thinking in silence sends no chunk to notice the
+stop on. A turn being stopped has its own
+`DoneEvent` swallowed, so it ends once, and aborted.
 
 **Two things outside this file ask the same question**, and both would otherwise
 send a command to a model. `endsUnfinished` never offers a `!` turn to be

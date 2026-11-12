@@ -905,6 +905,20 @@ void main() {
       expect(events.last, isA<DoneEvent>());
     });
 
+    test("cancel drops a model call that has sent nothing yet", () async {
+      final client = FakeLlmClient([])..silences.add(0);
+      final agent = agentOver(client);
+      final events = <AgentEvent>[];
+      final done = agent.run(userMessage("hi")).forEach(events.add);
+
+      await waitFor(() => client.sent.isNotEmpty, what: "the model call");
+      await agent.cancel();
+      await done;
+
+      expect(client.dropped, 1);
+      expect(events.last, isA<DoneEvent>());
+    });
+
     // A call the stop got to first is one the agent knows did not run. Left
     // unreported it is a call with no result in the log, which a reload can
     // only guess about — and guesses cautiously, "may or may not have run".

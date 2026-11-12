@@ -281,8 +281,12 @@ class BuiltinBackend implements AgentBackend {
     final project = settings.project;
     // Registered up front and removed by key in the finally: a parallel
     // round runs several turns of one chat, and a chat-keyed map would drop
-    // the earlier kill.
-    final stopKey = _running.add(chatId, () async {});
+    // the earlier kill. A signal rather than a kill, so whatever the turn
+    // starts hears a stop sent before it existed.
+    final stop = Completer<void>();
+    final stopKey = _running.add(chatId, () async {
+      if (!stop.isCompleted) stop.complete();
+    });
     try {
       // Before the model is resolved, because a `!` turn never needs one: a
       // chat with no provider configured can still run a command.
@@ -291,7 +295,7 @@ class BuiltinBackend implements AgentBackend {
           chatId,
           prompt,
           controller,
-          stopKey,
+          stop.future,
           history: history,
           participant: participant,
           project: project,
@@ -412,6 +416,8 @@ class BuiltinBackend implements AgentBackend {
         tone: settings.tone,
         citations: settings.citations,
       );
+      // Before revival, which runs sub-agents ahead of the agent's own cancel.
+      unawaited(stop.future.then((_) => runner.cancel()));
       final classifier = _resolveClassifier(
         settings.classifierProvider,
         settings.classifierModel,
@@ -679,8 +685,7 @@ class BuiltinBackend implements AgentBackend {
             controller.add(ShellOutputEvent(callId: callId, text: text)),
         onUsage: (usage) => _usage[chatId] = usage.contextTokens,
       );
-      // The real kill replaces the placeholder.
-      _running.replace(stopKey, agent.cancel);
+      unawaited(stop.future.then((_) => agent.cancel()));
 
       final mentions = mentionedAgents(said?.references ?? const []);
       final events = prompt == null
@@ -694,7 +699,6 @@ class BuiltinBackend implements AgentBackend {
       var reply = "";
       var endedDone = false;
       await for (final event in events) {
-        if (controller.isClosed) break;
         if (event is TextDelta) reply += event.text;
         if (event is DoneEvent && !event.aborted) {
           // A stopped turn ends aborted, said on the way out.
@@ -749,10 +753,10 @@ class BuiltinBackend implements AgentBackend {
     } finally {
       _clearApprovals(chatId);
       _clearQuestions(chatId);
-      if (_stopping.remove(controller) && !controller.isClosed) {
+      if (_stopping.remove(controller)) {
         controller.add(const DoneEvent(aborted: true));
       }
-      if (!controller.isClosed) await controller.close();
+      await controller.close();
       _drained.remove(controller)?.complete();
       final open = _controllers[chatId];
       if (open != null && open.remove(controller) && open.isEmpty) {
@@ -784,7 +788,7 @@ class BuiltinBackend implements AgentBackend {
     String chatId,
     Message prompt,
     StreamController<AgentEvent> controller,
-    String stopKey, {
+    Future<void> stopped, {
     required List<Message> history,
     required String participant,
     required String? project,
@@ -812,9 +816,7 @@ class BuiltinBackend implements AgentBackend {
       // respawns where the binds differ.
       readOnly: await _readOnlyFor(chatId, project),
     );
-    // Before the wait, so Stop kills the command rather than only closing the
-    // stream over it.
-    _running.replace(stopKey, run.kill);
+    unawaited(stopped.then((_) => run.kill()));
     controller.add(StatusEvent(runningCommand));
     _reportOutput(controller, run);
 
@@ -824,9 +826,6 @@ class BuiltinBackend implements AgentBackend {
     final filling = _sessionOf(chatId, history, viewer: participant);
     final result = await run.result;
     final session = await filling;
-    // Stopped past the grace: the turn ended without its part, so the session
-    // must not hold one either.
-    if (controller.isClosed) return;
     // The directory the shell was left in rides on the part as a fact; the
     // projection words the change, the way it does for the model's commands.
     // So does where a long output was saved, on `bash`'s terms.
@@ -1162,7 +1161,6 @@ class BuiltinBackend implements AgentBackend {
     // Through the event stream like any other result, so the reply on screen
     // and the records in `conv.jsonl` both gain it without a second path.
     for (final result in results) {
-      if (controller.isClosed) break;
       controller.add(ToolResultEvent(result));
     }
     return [
@@ -1181,7 +1179,6 @@ class BuiltinBackend implements AgentBackend {
     String message, {
     StackTrace? trace,
   }) {
-    if (controller.isClosed) return;
     controller.add(ErrorEvent(message, trace: trace?.toString()));
     controller.add(const DoneEvent());
   }
@@ -1762,8 +1759,6 @@ class BuiltinBackend implements AgentBackend {
     }
   }
 
-  static const _stopGrace = Duration(seconds: 2);
-
   @override
   Future<void> abort(String chatId) async {
     final open = Set.of(
@@ -1774,22 +1769,13 @@ class BuiltinBackend implements AgentBackend {
     await _running.stopAll(chatId);
     _clearApprovals(chatId);
     _clearQuestions(chatId);
-    // A killed command's result, and what it printed, arrives after the kill:
-    // each turn gets a grace to forward it rather than being closed over it.
+    // Waited out, never timed out: a killed command's result arrives after
+    // the kill, and a turn given up on keeps writing to the chat's session
+    // after the next turn has taken it.
     await Future.wait([
       for (final controller in open)
         if (_drained[controller] case final drained?) drained.future,
-    ]).timeout(_stopGrace, onTimeout: () => const []);
-    // Only the turns this stop was for: one sent during the grace is not.
-    final still = _controllers[chatId];
-    still?.removeAll(open);
-    if (still != null && still.isEmpty) _controllers.remove(chatId);
-    for (final controller in open) {
-      _stopping.remove(controller);
-      if (controller.isClosed) continue;
-      controller.add(const DoneEvent(aborted: true));
-      await controller.close();
-    }
+    ]);
   }
 
   @override
@@ -1878,11 +1864,6 @@ class _RunningTurns extends ValueNotifier<Set<String>> {
     _turns[key] = stop;
     value = chats;
     return key;
-  }
-
-  /// Swaps what [key] stops, without a second publish.
-  void replace(String key, Future<void> Function() stop) {
-    _turns[key] = stop;
   }
 
   /// The turn [key] registered finished on its own; the chat keeps any
