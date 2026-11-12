@@ -109,7 +109,7 @@ class CliSignInAppPage extends AppPage {
   void _finish(bool signedIn) {
     if (_done.isCompleted) return;
     _done.complete(signedIn);
-    app.read(appPagesProvider.notifier).leave(this);
+    pages.leave(this);
   }
 
   @override

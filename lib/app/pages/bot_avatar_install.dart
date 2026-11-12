@@ -72,13 +72,10 @@ class BotAvatarInstallAppPage extends AppPage {
         label: "Install",
         run: () async {
           await app.read(importedBotAvatarsProvider.notifier).add(definitions);
-          app
-              .read(appPagesProvider.notifier)
-              .leave(
-                this,
-                saying:
-                    "Installed ${definitions.map((d) => d.name).join(", ")}.",
-              );
+          pages.leave(
+            this,
+            saying: "Installed ${definitions.map((d) => d.name).join(", ")}.",
+          );
           return null;
         },
       ),

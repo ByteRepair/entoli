@@ -38,14 +38,12 @@ class ShareTargetAppPage extends AppPage {
     } catch (e) {
       return SettingNotice("Could not save: $e");
     }
-    app
-        .read(appPagesProvider.notifier)
-        .leave(
-          this,
-          saying: files.length == 1
-              ? "Saved ${files.single.path} to $title"
-              : "Saved ${files.length} files to $title",
-        );
+    pages.leave(
+      this,
+      saying: files.length == 1
+          ? "Saved ${files.single.path} to $title"
+          : "Saved ${files.length} files to $title",
+    );
     return null;
   }
 

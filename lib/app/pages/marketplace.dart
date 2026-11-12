@@ -89,16 +89,14 @@ class MarketplaceAppPage extends AppPage {
           label: tagged.isEmpty ? "All" : "${tagged.length} ticked",
           enabled: listed.hasValue,
           run: () async {
-            app
-                .read(appPagesProvider.notifier)
-                .open(
-                  MarketplaceTagsAppPage(
-                    kind: _kind,
-                    tags: tagsOf(listed.value!),
-                    ticked: tagged,
-                    onChanged: changed,
-                  ),
-                );
+            pages.open(
+              MarketplaceTagsAppPage(
+                kind: _kind,
+                tags: tagsOf(listed.value!),
+                ticked: tagged,
+                onChanged: changed,
+              ),
+            );
             return null;
           },
         ),
@@ -169,11 +167,9 @@ class MarketplaceAppPage extends AppPage {
             tap: "open",
           ),
           act: (index, _) async {
-            app
-                .read(appPagesProvider.notifier)
-                .open(
-                  MarketplaceEntryAppPage(kind: _kind, entry: entries[index]),
-                );
+            pages.open(
+              MarketplaceEntryAppPage(kind: _kind, entry: entries[index]),
+            );
             return null;
           },
         );
@@ -381,9 +377,10 @@ mixin InstallsPrompts on AppPage {
         .skills(config.promptsDir(CompletionKind.skill, project: target))
         .write(() => installSkillPackage(config, package, project: target));
     await reloadAllPromptLibraries(app.read);
-    app
-        .read(appPagesProvider.notifier)
-        .leave(this, saying: installedSnack("Installed", package.name, target));
+    pages.leave(
+      this,
+      saying: installedSnack("Installed", package.name, target),
+    );
     return null;
   }
 
@@ -644,9 +641,7 @@ class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
           );
         });
     await reloadAllPromptLibraries(app.read);
-    app
-        .read(appPagesProvider.notifier)
-        .leave(this, saying: installedSnack("Installed", name, target));
+    pages.leave(this, saying: installedSnack("Installed", name, target));
     return null;
   }
 }

@@ -222,7 +222,7 @@ class WelcomeAppPage extends AppPage {
       ),
       label: "",
       run: () async {
-        await connectCli(app, cli);
+        await connectCli(app, pages, cli);
         return null;
       },
     ),
@@ -255,7 +255,7 @@ class WelcomeAppPage extends AppPage {
         ),
         label: "",
         run: () async {
-          app.read(appPagesProvider.notifier).open(MarketplaceAppPage());
+          pages.open(MarketplaceAppPage());
           return null;
         },
       ),
@@ -420,7 +420,7 @@ class WelcomeAppPage extends AppPage {
       logFailure("welcome", "could not start the welcome chat", e);
     }
     await app.read(appSettingsProvider.notifier).setLicenceAccepted(true);
-    app.read(appPagesProvider.notifier).closeAll();
+    pages.closeAll();
     return null;
   }
 
@@ -435,7 +435,11 @@ class WelcomeAppPage extends AppPage {
 /// Connects [service], Entoli's own copy of its program installed and
 /// signed in where it is not yet, and added once it is; where an entry for
 /// it is already configured, that one adopted rather than a second added.
-Future<void> connectCli(SettingReader app, CliProvider service) async {
+Future<void> connectCli(
+  SettingReader app,
+  AppPages pages,
+  CliProvider service,
+) async {
   final notifier = app.read(appSettingsProvider.notifier);
   final programs = app.read(cliProgramsProvider);
   final existing = app
@@ -446,7 +450,7 @@ Future<void> connectCli(SettingReader app, CliProvider service) async {
   // A new entry's id first: its account is kept in a folder named by it.
   final config = existing ?? service.config.copyWith(id: const Uuid().v4());
   final page = CliSignInAppPage(cliProgramOf(programs, config));
-  app.read(appPagesProvider.notifier).open(page);
+  pages.open(page);
   if (!await page.done) {
     // A new entry given up on: its folders under every program go.
     if (existing == null) {

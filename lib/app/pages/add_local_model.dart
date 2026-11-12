@@ -128,7 +128,7 @@ class AddLocalModelAppPage extends AppPage {
         app
             .read(modelDownloadsProvider.notifier)
             .install(InstallableLocalModel(model, engine.store));
-        app.read(appPagesProvider.notifier).leave(this);
+        pages.leave(this);
         return null;
       },
     ),

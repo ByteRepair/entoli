@@ -325,15 +325,13 @@ class ProfileAppPage extends AppPage {
           act: (index, action) async {
             switch (action) {
               case "open":
-                app
-                    .read(appPagesProvider.notifier)
-                    .open(
-                      TextFileAppPage(
-                        path: _linked[index],
-                        name: nameOf(_linked[index]),
-                        handsOff: false,
-                      ),
-                    );
+                pages.open(
+                  TextFileAppPage(
+                    path: _linked[index],
+                    name: nameOf(_linked[index]),
+                    handsOff: false,
+                  ),
+                );
               case "up" when index > 0:
               case "down" when index < _linked.length - 1:
                 final to = action == "up" ? index - 1 : index + 1;
@@ -429,7 +427,7 @@ class ProfileAppPage extends AppPage {
     }
     _saving = false;
     _opened = _snapshot();
-    app.read(appPagesProvider.notifier).leave(this);
+    pages.leave(this);
     return null;
   }
 

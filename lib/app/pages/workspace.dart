@@ -133,7 +133,6 @@ class WorkspaceAppPage extends AppPage {
   /// A folder opens over this one; a text file in the app's viewer, which
   /// hands the file on itself if its bytes turn out not to be text.
   Future<SettingNotice?> _open(WorkspaceEntry entry) async {
-    final pages = app.read(appPagesProvider.notifier);
     if (entry.isDirectory) {
       pages.open(WorkspaceAppPage(root: root, owner: owner, dir: entry.path));
     } else if (looksTextual(entry.name)) {

@@ -50,7 +50,7 @@ class TextFileAppPage extends AppPage {
       if (content == null) {
         // The name said text and the bytes disagree.
         if (handsOff) {
-          app.read(appPagesProvider.notifier).leave(this);
+          pages.leave(this);
           await app.read(fileHandoffProvider).open(path);
           return;
         }

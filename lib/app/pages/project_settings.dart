@@ -88,7 +88,7 @@ class ProjectSettingsAppPage extends AppPage {
     part(id, title, hint: UiHint.open, description: description, glyph: glyph),
     label: label,
     run: () async {
-      app.read(appPagesProvider.notifier).open(page());
+      pages.open(page());
       return null;
     },
   );
@@ -332,7 +332,15 @@ class ProjectSettingsAppPage extends AppPage {
             destructive: true,
             confirm: () async => SettingConfirm(
               title: "Delete project?",
-              message: deleteProjectMessage(project, _count(app)),
+              // Counted once the list is read, not from what was drawn.
+              message: deleteProjectMessage(
+                project,
+                remote
+                    ? _count(app)
+                    : (await app.read(
+                        chatListProvider.future,
+                      )).where((c) => c.project == project).length,
+              ),
               confirmLabel: "Delete",
               destructive: true,
             ),
@@ -428,7 +436,6 @@ class ProjectSettingsAppPage extends AppPage {
   }
 
   Future<SettingNotice?> _delete() async {
-    final pages = app.read(appPagesProvider.notifier);
     if (remote) {
       if (!await app
           .read(syncHubProvider)

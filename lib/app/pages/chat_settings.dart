@@ -253,11 +253,9 @@ class ChatSettingsAppPage extends ChatSettingsFields {
             ),
             label: "",
             run: () async {
-              reader
-                  .read(appPagesProvider.notifier)
-                  .open(
-                    WorkspaceAppPage(root: workspace, owner: "Chat workspace"),
-                  );
+              pages.open(
+                WorkspaceAppPage(root: workspace, owner: "Chat workspace"),
+              );
               return null;
             },
           ),
@@ -271,9 +269,7 @@ class ChatSettingsAppPage extends ChatSettingsFields {
           ),
           label: "",
           run: () async {
-            reader
-                .read(appPagesProvider.notifier)
-                .open(ContextAppPage(chatId, project: project));
+            pages.open(ContextAppPage(chatId, project: project));
             return null;
           },
         ),
@@ -303,7 +299,6 @@ class ChatSettingsAppPage extends ChatSettingsFields {
             ),
             run: () async {
               final state = _state;
-              final pages = reader.read(appPagesProvider.notifier);
               pages.closeAll();
               if (state != null) {
                 await reader.read(chatEditsProvider).delete(state);
@@ -347,7 +342,7 @@ class ChatSettingsAppPage extends ChatSettingsFields {
     }
     app.invalidate(chatListProvider);
     _saving = false;
-    app.read(appPagesProvider.notifier).leave(this);
+    pages.leave(this);
     return null;
   }
 }
@@ -385,7 +380,7 @@ class NewChatSettingsAppPage extends ChatSettingsFields {
       label: "Save",
       run: () async {
         onSave(meta);
-        app.read(appPagesProvider.notifier).leave(this);
+        pages.leave(this);
         return null;
       },
     ),
