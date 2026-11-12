@@ -49,10 +49,6 @@ class ShellAnswers {
   late final transcript = _answer<TranscriptIntents>(TranscriptIntents.setUp);
   late final foot = _answer<ChatFootIntents>(ChatFootIntents.setUp);
   late final browser = _answer<BrowserIntents>(BrowserIntents.setUp);
-  late final pageBar = _answer<TitleBarIntents>(
-    (surface) =>
-        TitleBarIntents.setUp(surface, messageChannelSuffix: "pageBar"),
-  );
 
   /// Voice mode is on screen: its turn surface is the one drawn, the chat
   /// page's beneath it standing down until it goes.

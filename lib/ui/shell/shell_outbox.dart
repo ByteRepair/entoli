@@ -19,8 +19,6 @@ class ShellOutbox {
       _post("sidebar", snapshot, _shell.sidebar);
   void chatBar(ChatBarSnapshot snapshot) =>
       _post("chatBar", snapshot, _shell.chatBar);
-  void pageBar(TitleBarSnapshot snapshot) =>
-      _post("pageBar", snapshot, _shell.pageBar);
   void composer(ComposerSnapshot snapshot) =>
       _post("composer", snapshot, _shell.composer);
   void composerValue(ComposerValueSnapshot snapshot) =>

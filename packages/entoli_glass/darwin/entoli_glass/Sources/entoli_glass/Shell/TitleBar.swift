@@ -13,7 +13,7 @@ import SwiftUI
 /// pushed over the list.
 struct TitleBar: ViewModifier {
   let bar: TitleBarSnapshot
-  let intents: TitleBarIntentsProtocol
+  let intents: TitleBarPresses
   let sidebar: (() -> Void)?
 
   /// What leads the bar where Dart says nothing does.
@@ -37,7 +37,7 @@ struct TitleBar: ViewModifier {
 
 extension View {
   func titleBar(
-    _ bar: TitleBarSnapshot, intents: TitleBarIntentsProtocol, sidebar: (() -> Void)?
+    _ bar: TitleBarSnapshot, intents: TitleBarPresses, sidebar: (() -> Void)?
   ) -> some View {
     modifier(TitleBar(bar: bar, intents: intents, sidebar: sidebar))
   }
@@ -63,7 +63,7 @@ extension TitleBarMenuItem: Identifiable {}
 
 private struct TitleBarContent: ToolbarContent {
   let bar: TitleBarSnapshot
-  let intents: TitleBarIntentsProtocol
+  let intents: TitleBarPresses
   let sidebar: (() -> Void)?
 
   private var buttons: [TitleBarItem] {
@@ -124,7 +124,7 @@ private struct TitleBarContent: ToolbarContent {
 /// One of a bar's buttons, drawn as its style says.
 private struct TitleBarButton: View {
   let item: TitleBarItem
-  let intents: TitleBarIntentsProtocol
+  let intents: TitleBarPresses
 
   private func press(_ id: String) { intents.press(id: id) { _ in } }
 
@@ -244,8 +244,14 @@ extension ChatBarSnapshot {
   static let settings = "settings"
 }
 
+/// What a title bar's presses go to: its way back, and an item by its id.
+protocol TitleBarPresses {
+  func back(completion: @escaping (Result<Void, PigeonError>) -> Void)
+  func press(id: String, completion: @escaping (Result<Void, PigeonError>) -> Void)
+}
+
 /// The chat bar's presses, as where they go.
-struct ChatBarPresses: TitleBarIntentsProtocol {
+struct ChatBarPresses: TitleBarPresses {
   let intents: ChatBarIntents
 
   func back(completion: @escaping (Result<Void, PigeonError>) -> Void) { completion(.success(())) }

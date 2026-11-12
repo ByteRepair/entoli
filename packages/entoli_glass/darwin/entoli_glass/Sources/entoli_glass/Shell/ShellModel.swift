@@ -19,7 +19,6 @@ import SwiftUI
   var window = WindowSnapshot.initial
   var sidebar = SidebarSnapshot.initial
   var chatBar = ChatBarSnapshot.initial
-  var pageBar = TitleBarSnapshot.absent
   var turn = TurnSnapshot.initial
   var newChat = NewChatSnapshot.initial
   var voice = VoiceSnapshot.initial
@@ -39,10 +38,6 @@ import SwiftUI
   /// surface in Dart (`ShellAnswers`).
   let say: ShellIntents
 
-  /// A strip of choices over the Flutter view, and who waits on its answer:
-  /// see `Strip.swift`.
-  var strip: StripRequest?
-
   /// Whether the camera is up for a pairing code, and who waits on it.
   var scanning = false
   @ObservationIgnored var scanReply: ((String?) -> Void)?
@@ -50,7 +45,6 @@ import SwiftUI
   /// The dialog Dart asked, and who waits on its answer.
   var dialog: DialogRequest?
   @ObservationIgnored var dialogReply: ((DialogAnswer) -> Void)?
-  @ObservationIgnored var stripReply: ((Int64?) -> Void)?
 
   /// Which of the two an iPhone's drawer shows (`Drawer.swift`). The detail
   /// to begin with, nothing selected being the new-chat screen as it is in
@@ -82,25 +76,12 @@ import SwiftUI
   /// alone. Nil until Dart has said, the window showing only its colour.
   private(set) var frontend: Bool?
 
-  /// The app proper is up: its window snapshot has come, which Dart sends
-  /// only once the welcome tour and first-run setup are behind it. Until
-  /// then the chrome stays out of the way, so nothing of it bypasses them.
+  /// The app proper is up: its window snapshot has come. Until then the
+  /// chrome stays out of the way, there being nothing yet to draw it from.
   private(set) var ready = false
 
   init(messenger: FlutterBinaryMessenger) {
     say = ShellIntents(messenger: messenger)
-  }
-
-  @ObservationIgnored private var reported: EdgeInsets?
-
-  /// How much of the Flutter view the shell's own bars cover, which Dart
-  /// hands the conversation as padding so it scrolls under them.
-  func insets(_ insets: EdgeInsets) {
-    guard insets != reported else { return }
-    reported = insets
-    say.window.insets(
-      left: insets.leading, top: insets.top, right: insets.trailing, bottom: insets.bottom
-    ) { _ in }
   }
 }
 
@@ -118,7 +99,6 @@ extension ShellModel: NativeShell {
 
   func sidebar(snapshot: SidebarSnapshot) throws { sidebar = snapshot }
   func chatBar(snapshot: ChatBarSnapshot) throws { chatBar = snapshot }
-  func pageBar(snapshot: TitleBarSnapshot) throws { pageBar = snapshot }
   func composer(snapshot: ComposerSnapshot) throws { composer.apply(snapshot) }
   func composerValue(snapshot: ComposerValueSnapshot) throws { composer.apply(snapshot) }
   func turn(snapshot: TurnSnapshot) throws { turn = snapshot }
@@ -150,10 +130,6 @@ extension ShellModel: NativeShell {
   func voiceLevel(level: Double) throws { voiceLevel.set(level) }
 
   func composerFocus(focused: Bool) throws { composer.focus(focused) }
-
-  func strip(request: ChoiceStrip, completion: @escaping (Result<Int64?, Error>) -> Void) {
-    showStrip(request) { completion(.success($0)) }
-  }
 
   func dialog(request: DialogRequest, completion: @escaping (Result<DialogAnswer, Error>) -> Void) {
     // One at a time: the one open is answered as dismissed.
@@ -201,7 +177,6 @@ struct ShellIntents {
   let voice: VoiceIntents
   /// The chat's title bar, and a Flutter page's: one view draws both.
   let chatBar: ChatBarPresses
-  let pageBar: TitleBarIntents
   let foot: ChatFootIntents
   let browser: BrowserIntents
 
@@ -214,14 +189,13 @@ struct ShellIntents {
     newChat = NewChatIntents(binaryMessenger: messenger)
     voice = VoiceIntents(binaryMessenger: messenger)
     chatBar = ChatBarPresses(intents: ChatBarIntents(binaryMessenger: messenger))
-    pageBar = TitleBarIntents(binaryMessenger: messenger, messageChannelSuffix: "pageBar")
     foot = ChatFootIntents(binaryMessenger: messenger)
     browser = BrowserIntents(binaryMessenger: messenger)
   }
 }
 
 extension WindowSnapshot {
-  static let initial = WindowSnapshot(covered: false, overlaid: false, sidebarShown: true)
+  static let initial = WindowSnapshot(sidebarShown: true)
 
   var colorScheme: ColorScheme? { dark.map { $0 ? .dark : .light } }
 }

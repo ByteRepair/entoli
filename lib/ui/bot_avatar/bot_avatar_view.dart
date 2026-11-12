@@ -66,14 +66,6 @@ class _PointerWatch {
   }
 }
 
-/// The pointer where Flutter's own router cannot see it: over a frontend's
-/// chrome around the Flutter view.
-void setNativePointerPosition(Offset position) {
-  final watch = _PointerWatch.instance;
-  watch.position = position;
-  watch.touch = false;
-}
-
 /// A Bot Avatar drawn with Flutter's canvas: a still, or a live one moving
 /// in its [mood] on a ticker. The volume is built once per shape and cached
 /// (see [PreparedBotAvatar]); a frame is a handful of projected polygons.

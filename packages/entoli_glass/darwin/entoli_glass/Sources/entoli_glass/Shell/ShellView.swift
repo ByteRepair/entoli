@@ -1,10 +1,10 @@
 import SwiftUI
 
 /// The window: a split view whose sidebar is native and whose detail is the
-/// conversation, drawn natively, over the Flutter view that keeps the pages
-/// pushed over it, the shell's chrome over both. The Flutter view fills the
-/// detail, under the toolbar and the composer; how far those reach is the
-/// safe area, which goes to Dart as padding.
+/// conversation or the new-chat screen, the composer and the turn surface
+/// under them, every page of the app's in a sheet over it, all drawn from
+/// what the core sends. Nothing of Flutter's is drawn: its view is in the
+/// window only as the engine's host (`EngineHost`).
 struct ShellView: View {
   @Bindable var model: ShellModel
   let flutter: PlatformViewController
@@ -37,7 +37,7 @@ struct ShellView: View {
   /// button, and the drawer's swipe in from the edge. A Flutter page keeps
   /// the edge for its own back swipe.
   private var toList: (() -> Void)? {
-    model.ready && collapsed && !model.window.covered && !model.voice.present
+    model.ready && collapsed && !model.voice.present
       ? model.showSidebar : nil
   }
 
@@ -103,7 +103,6 @@ struct ShellView: View {
         .onChange(of: model.window.dark, initial: true) { _, dark in
           NSApp.appearance = dark.map { NSAppearance(named: $0 ? .darkAqua : .aqua) } ?? nil
         }
-        .reportsPointer(over: flutter, to: model)
       #endif
       // `columns` is the user's choice alone; `shownColumns` hides it before
       // the app is up. Gating it here too wrote the hidden column back to Dart
@@ -152,46 +151,16 @@ struct ShellView: View {
     .toolbar(removing: model.ready ? nil : .sidebarToggle)
   }
 
-  /// The conversation is native and on screen: a chat is open, and no
-  /// Flutter page, dialog or new-chat screen is over it.
+  /// A chat is open, and the new-chat screen is not over it.
   private var conversing: Bool {
-    model.ready && transcript.present && !model.window.overlaid && !model.newChat.present
-  }
-
-  /// Nothing on screen needs the Flutter view: a chat or the new-chat screen
-  /// is up, both published from the app's state, and no Flutter page or
-  /// dialog is over them.
-  private var flutterAway: Bool {
-    model.ready && !model.window.overlaid && (transcript.present || model.newChat.present)
+    model.ready && transcript.present && !model.newChat.present
   }
 
   private var detail: some View {
     ZStack {
-      // Out of the window while a chat or the new-chat screen is up: both are
-      // published from the app's state, which needs no frame (`ShellChat`).
-      // In it for a Flutter page or dialog over them, and the app before it
-      // is set up.
-      Group {
-        if flutterAway {
-          // Holds the place, so the insets below are still measured.
-          Color.clear
-        } else {
-          FlutterCanvas(flutter: flutter) {
-            StripLayer(model: model)
-          }
-        }
-      }
-      .onGeometryChange(for: EdgeInsets.self) { proxy in
-        EdgeInsets(
-          top: proxy.safeAreaInsets.top, leading: 0, bottom: proxy.safeAreaInsets.bottom,
-          trailing: 0)
-      } action: { model.insets($0) }
-      #if os(iOS)
-        // The Flutter view keeps the whole height and shrinks its page for
-        // the keyboard itself; the inset still reaches over the keyboard,
-        // which Dart's `ShellInsets` takes out.
-        .ignoresSafeArea(.keyboard)
-      #endif
+      Color.clear
+        // The engine's view, held in the window and drawing nothing.
+        .background { EngineHost(flutter: flutter) }
       if conversing {
         GeometryReader { proxy in
           ConversationView(
@@ -207,11 +176,9 @@ struct ShellView: View {
         .background(.background)
         .transition(.opacity)
       }
-      // Beside the Flutter view rather than over it, so it keeps to the
-      // keyboard's safe area: the composer rides on the keyboard and pads
-      // the new-chat screen up with it, where an overlay of the view above
-      // would have run on under the composer and the keys.
-      if model.newChat.present && !model.window.covered {
+      // In the keyboard's safe area: the composer rides on the keyboard and
+      // pads the new-chat screen up with it.
+      if model.newChat.present {
         NewChatView(model: model).transition(.opacity)
       }
     }
@@ -223,14 +190,14 @@ struct ShellView: View {
             .frame(maxWidth: .infinity)
             .transition(.opacity.combined(with: .move(edge: .bottom)))
         }
-        if !model.turn.isEmpty && !model.window.covered {
+        if !model.turn.isEmpty {
           TurnSurfaceView(model: model)
             .padding(.top, 6)
             .frame(maxWidth: ShellView.readableWidth + 16)
             .frame(maxWidth: .infinity)
             .transition(.opacity.combined(with: .move(edge: .bottom)))
         }
-        ComposerSlot(composer: model.composer, covered: model.window.covered)
+        ComposerSlot(composer: model.composer)
         if conversing && !model.composer.present {
           FootBarView(foot: model.foot, say: model.say.foot)
             .frame(maxWidth: ShellView.readableWidth + 16)
@@ -245,41 +212,29 @@ struct ShellView: View {
   }
 }
 
-/// The Flutter view, and every layer drawn in its coordinates over it — the
-/// anchor of a popover from a button in a message, and whatever comes next.
-/// One container, so what the layers share is said once: the view runs under
-/// the toolbar and the composer, which it scrolls beneath, and never under
-/// the sidebar, which on 26 floats over the detail; and a layer is laid out
-/// over exactly the view's frame, so a point Dart names is the same point
-/// here. What floats over everything — a popover — is the system's
-/// presentation, in a window of its own, rather than something drawn here.
-struct FlutterCanvas<Layers: View>: View {
+/// The engine's view, which the app needs in the window for the engine's
+/// lifecycle and for the plugins that present from it — a file chooser, a
+/// share sheet — and which draws nothing the user sees: a point of it,
+/// clear, taking no input, and hidden from accessibility.
+private struct EngineHost: View {
   let flutter: PlatformViewController
-  @ViewBuilder var layers: Layers
-
-  /// The edges the view and its layers run under.
-  static var edges: Edge.Set { [.top, .bottom] }
 
   var body: some View {
-    ZStack(alignment: .topLeading) {
-      FlutterPane(controller: flutter)
-        .ignoresSafeArea(edges: Self.edges)
-      layers
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .ignoresSafeArea(edges: Self.edges)
-    }
-    .ignoresSafeArea(edges: Self.edges)
+    FlutterPane(controller: flutter)
+      .frame(width: 1, height: 1)
+      .opacity(0)
+      .allowsHitTesting(false)
+      .accessibilityHidden(true)
   }
 }
 
-/// The composer, where the page in front has one and no Flutter page covers
-/// it. Its own view, so only it reads the composer.
+/// The composer, where the page in front has one. Its own view, so only it
+/// reads the composer.
 private struct ComposerSlot: View {
   var composer: ComposerModel
-  let covered: Bool
 
   var body: some View {
-    if composer.present && !covered {
+    if composer.present {
       ComposerView(model: composer)
         .frame(maxWidth: ShellView.readableWidth + 16)
         .frame(maxWidth: .infinity)
@@ -289,24 +244,10 @@ private struct ComposerSlot: View {
 }
 
 extension View {
-  /// The window's title bar: the chat's, or the Flutter page's over it — a
-  /// way back and the page's own buttons in place of the chat's. A page with
-  /// no bar of its own leaves the chat's title standing and nothing to press.
-  /// The chat's leads with [toList] where there is one.
+  /// The window's title bar: the chat's, leading with [toList] where there
+  /// is one.
   fileprivate func windowBar(_ model: ShellModel, toList: (() -> Void)?) -> some View {
-    let page = model.window.covered
-    let bar =
-      !page
-      ? model.chatBar.titleBar
-      : model.pageBar.present ? model.pageBar : model.chatBar.titleBar.bare
-    return self
-      .titleBar(
-        bar, intents: page ? model.say.pageBar as TitleBarIntentsProtocol : model.say.chatBar,
-        sidebar: toList)
-      #if os(iOS)
-        // A page whose bar Flutter still draws has it alone: one on screen.
-        .toolbar(page && !model.pageBar.present ? .hidden : .automatic, for: .navigationBar)
-      #endif
+    titleBar(model.chatBar.titleBar, intents: model.say.chatBar, sidebar: toList)
   }
 }
 
@@ -322,21 +263,4 @@ extension View {
   }
 }
 
-#if os(macOS)
-  extension View {
-    /// The pointer over the window, in [flutter]'s own coordinates, for the
-    /// agent's face to follow wherever it is over the window: the sidebar
-    /// lies to the view's left, so its x is negative there, and AppKit's
-    /// bottom-left origin is flipped to Flutter's top-left.
-    fileprivate func reportsPointer(over flutter: NSViewController, to model: ShellModel)
-      -> some View
-    {
-      onContinuousHover { _ in
-        guard let window = flutter.view.window else { return }
-        let view = flutter.view
-        let point = view.convert(window.mouseLocationOutsideOfEventStream, from: nil)
-        model.say.window.pointer(x: point.x - view.bounds.minX, y: view.bounds.maxY - point.y) { _ in }
-      }
-    }
-  }
-#endif
+

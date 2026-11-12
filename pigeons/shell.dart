@@ -53,18 +53,9 @@ enum Glyph {
   tune,
 }
 
-/// The window around everything: whether a Flutter page covers the
-/// conversation — the native chrome steps aside for it — whether the sidebar
-/// is shown, and which appearance the app wears, which may not be the
-/// system's.
+/// The window around everything: whether the sidebar is shown, and which
+/// appearance the app wears, which may not be the system's.
 class WindowSnapshot {
-  /// A page is pushed over the conversation: Settings, a chat's settings, a
-  /// drawer's page. A dialog is not; it draws over the Flutter view alone.
-  bool covered;
-
-  /// Anything is over the conversation, a dialog or a sheet included: the
-  /// Flutter view is needed in the window to draw it.
-  bool overlaid;
   bool sidebarShown;
 
   /// Whether the app is dark; null for the system's appearance.
@@ -268,10 +259,8 @@ class TitleBarItem {
 /// discards.
 enum TitleBarLeading { back, close }
 
-/// A title bar, whichever page it is for: one shape, so one view draws them
-/// all. The bar of the Flutter page over the conversation is
-/// [NativeShell.pageBar], not [present] where no page has one; the chat's own
-/// the client builds from [ChatBarSnapshot].
+/// A title bar, as one view draws them all: the chat's, which the client
+/// builds from [ChatBarSnapshot].
 class TitleBarSnapshot {
   TitleBarSnapshot({
     this.present = true,
@@ -762,24 +751,6 @@ class PaletteSnapshot {
 }
 
 /// One choice of a strip: its glyph, its name, and whether it is picked.
-class StripOption {
-  StripOption({required this.glyph, required this.name, this.chosen = false});
-
-  String glyph;
-  String name;
-  bool chosen;
-}
-
-/// A strip of choices over the Flutter view, just above the rect of what
-/// opened it, in the Flutter view's own coordinates.
-class ChoiceStrip {
-  double x;
-  double y;
-  double width;
-  double height;
-  List<StripOption> options;
-}
-
 /// What the app tells the client. A snapshot is a concern's whole state and
 /// replaces what the client held for it; the app sends one only when it
 /// changed.
@@ -961,7 +932,6 @@ abstract class NativeShell {
   void window(WindowSnapshot snapshot);
   void sidebar(SidebarSnapshot snapshot);
   void chatBar(ChatBarSnapshot snapshot);
-  void pageBar(TitleBarSnapshot snapshot);
   void composer(ComposerSnapshot snapshot);
   void composerValue(ComposerValueSnapshot snapshot);
   void turn(TurnSnapshot snapshot);
@@ -986,11 +956,6 @@ abstract class NativeShell {
   /// in step from the other side.
   void composerFocus(bool focused);
 
-  /// Show [request], answering the one already open as dismissed. Answers the
-  /// index picked, or null for a strip dismissed.
-  @async
-  int? strip(ChoiceStrip request);
-
   /// Asks [request] over the window, answering once it is.
   @async
   DialogAnswer dialog(DialogRequest request);
@@ -1004,15 +969,8 @@ abstract class NativeShell {
 /// The window's own state, which the client reports.
 @FlutterApi()
 abstract class WindowEvents {
-  /// How much of the Flutter view the client's bars cover from its edges, a
-  /// bar riding on the keyboard reaching over it; see `ShellInsets`.
-  void insets(double left, double top, double right, double bottom);
-
   /// The sidebar shown or hidden by the client's own control.
   void sidebarShown(bool shown);
-
-  /// The mouse position while it is over native chrome that covers Flutter.
-  void pointer(double x, double y);
 }
 
 /// The sidebar, which is always there.
@@ -1179,12 +1137,4 @@ abstract class BrowserIntents {
 
   void key(bool down, int keyCode, String? characters, int modifiers);
   void edit(BrowserEdit action);
-}
-
-@FlutterApi()
-abstract class TitleBarIntents {
-  void back();
-
-  /// One of the bar's items, or one of a menu's choices, by its id.
-  void press(String id);
 }
