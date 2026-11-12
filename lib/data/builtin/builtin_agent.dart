@@ -765,6 +765,29 @@ class BuiltinAgent implements Turn {
   Future<T?> untilStopped<T>(Future<T> wait) =>
       Future.any([wait, _stopped.future.then((_) => null)]);
 
+  /// [source] until the turn is stopped. A model thinking in silence sends no
+  /// chunk the loop could notice a stop on, and `abort` waits for the turn to
+  /// end, so the stop drops the request rather than waiting for its next word.
+  Stream<T> _untilStoppedStream<T>(Stream<T> source) {
+    late final StreamSubscription<T> sub;
+    late final StreamController<T> out;
+    out = StreamController<T>(
+      onListen: () {
+        sub = source.listen(out.add, onError: out.addError, onDone: out.close);
+        unawaited(
+          _stopped.future.then((_) {
+            unawaited(sub.cancel());
+            return out.close();
+          }),
+        );
+      },
+      onPause: () => sub.pause(),
+      onResume: () => sub.resume(),
+      onCancel: () => sub.cancel(),
+    );
+    return out.stream;
+  }
+
   /// Set by an `end_turn` call: the loop stops after the batch it was in.
   bool _ended = false;
 
@@ -1070,9 +1093,8 @@ class BuiltinAgent implements Turn {
   Future<({AgentEvent event, bool carriesOn})?> _reviewGoal(
     ChatGoal asked,
   ) async {
-    final verdict = await goalReviewer!.review(
-      asked.objective,
-      session.messages,
+    final verdict = await untilStopped(
+      goalReviewer!.review(asked.objective, session.messages),
     );
     if (verdict == null || _cancelled) return null;
     final current = _activeGoal();
@@ -1423,13 +1445,15 @@ class BuiltinAgent implements Turn {
       yield const StatusEvent("Thinking");
 
       try {
-        await for (final chunk in client.stream(
-          session.messages,
-          model: model,
-          tools: [for (final tool in _tools) tool.definition],
-          temperature: temperature,
-          reasoningEffort: reasoningEffort,
-          outputLimit: outputLimit,
+        await for (final chunk in _untilStoppedStream(
+          client.stream(
+            session.messages,
+            model: model,
+            tools: [for (final tool in _tools) tool.definition],
+            temperature: temperature,
+            reasoningEffort: reasoningEffort,
+            outputLimit: outputLimit,
+          ),
         )) {
           if (_cancelled) return;
           switch (chunk) {

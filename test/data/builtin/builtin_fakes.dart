@@ -61,6 +61,11 @@ class FakeLlmClient implements LlmClient {
   /// Thrown instead of streaming, for whichever calls name themselves here.
   final Map<int, Object> failures = {};
 
+  /// Calls that send nothing, the way a model thinking in silence does,
+  /// until the caller stops listening; [dropped] counts those that did.
+  final Set<int> silences = {};
+  int dropped = 0;
+
   @override
   Stream<LlmChunk> stream(
     List<LlmMessage> messages, {
@@ -81,6 +86,10 @@ class FakeLlmClient implements LlmClient {
     ));
     final failure = failures[at];
     if (failure != null) throw failure;
+    if (silences.contains(at)) {
+      yield* StreamController<LlmChunk>(onCancel: () => dropped++).stream;
+      return;
+    }
     if (at >= turns.length) throw StateError("no scripted turn $at");
     yield* Stream.fromIterable(turns[at]);
   }

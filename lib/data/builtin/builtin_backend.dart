@@ -680,7 +680,7 @@ class BuiltinBackend implements AgentBackend {
         onUsage: (usage) => _usage[chatId] = usage.contextTokens,
       );
       // The real kill replaces the placeholder.
-      _running.replace(stopKey, agent.cancel);
+      if (!_running.replace(stopKey, agent.cancel)) await agent.cancel();
 
       final mentions = mentionedAgents(said?.references ?? const []);
       final events = prompt == null
@@ -814,7 +814,7 @@ class BuiltinBackend implements AgentBackend {
     );
     // Before the wait, so Stop kills the command rather than only closing the
     // stream over it.
-    _running.replace(stopKey, run.kill);
+    if (!_running.replace(stopKey, run.kill)) await run.kill();
     controller.add(StatusEvent(runningCommand));
     _reportOutput(controller, run);
 
@@ -824,9 +824,6 @@ class BuiltinBackend implements AgentBackend {
     final filling = _sessionOf(chatId, history, viewer: participant);
     final result = await run.result;
     final session = await filling;
-    // Stopped past the grace: the turn ended without its part, so the session
-    // must not hold one either.
-    if (controller.isClosed) return;
     // The directory the shell was left in rides on the part as a fact; the
     // projection words the change, the way it does for the model's commands.
     // So does where a long output was saved, on `bash`'s terms.
@@ -1762,8 +1759,6 @@ class BuiltinBackend implements AgentBackend {
     }
   }
 
-  static const _stopGrace = Duration(seconds: 2);
-
   @override
   Future<void> abort(String chatId) async {
     final open = Set.of(
@@ -1774,22 +1769,13 @@ class BuiltinBackend implements AgentBackend {
     await _running.stopAll(chatId);
     _clearApprovals(chatId);
     _clearQuestions(chatId);
-    // A killed command's result, and what it printed, arrives after the kill:
-    // each turn gets a grace to forward it rather than being closed over it.
+    // Waited out, never timed out: a killed command's result arrives after
+    // the kill, and a turn given up on keeps writing to the chat's session
+    // after the next turn has taken it.
     await Future.wait([
       for (final controller in open)
         if (_drained[controller] case final drained?) drained.future,
-    ]).timeout(_stopGrace, onTimeout: () => const []);
-    // Only the turns this stop was for: one sent during the grace is not.
-    final still = _controllers[chatId];
-    still?.removeAll(open);
-    if (still != null && still.isEmpty) _controllers.remove(chatId);
-    for (final controller in open) {
-      _stopping.remove(controller);
-      if (controller.isClosed) continue;
-      controller.add(const DoneEvent(aborted: true));
-      await controller.close();
-    }
+    ]);
   }
 
   @override
@@ -1880,9 +1866,13 @@ class _RunningTurns extends ValueNotifier<Set<String>> {
     return key;
   }
 
-  /// Swaps what [key] stops, without a second publish.
-  void replace(String key, Future<void> Function() stop) {
+  /// Swaps what [key] stops, without a second publish. False where the turn
+  /// was stopped before it got here: the key is gone, and the caller stops
+  /// what it would have swapped in, since `abort` is waiting on it.
+  bool replace(String key, Future<void> Function() stop) {
+    if (!_turns.containsKey(key)) return false;
     _turns[key] = stop;
+    return true;
   }
 
   /// The turn [key] registered finished on its own; the chat keeps any
