@@ -273,11 +273,10 @@ void main() {
       expect(find.text("Marketplace"), findsNothing);
     }, variant: mac);
 
-    // The SwiftUI frontend's menu has its own Settings item, which opens the
-    // Settings scene's native window; Dart's would be a second one.
-    testWidgets("leaves Settings to the Settings scene under SwiftUI", (
-      tester,
-    ) async {
+    // The Settings scene's own item opens an empty window under Flutter, so
+    // the menu bar drops it on both frontends; Dart's stands in for it,
+    // opening the native settings under SwiftUI.
+    testWidgets("keeps its own Settings under SwiftUI too", (tester) async {
       menus = FakeAppMenus();
       app.dispose();
       app = TestApp.create(
@@ -286,7 +285,7 @@ void main() {
       );
       await pumpAt(tester, const Size(1200, 800));
 
-      expect(menus.shown, isNot(contains("Settings…")));
+      expect(menus.shown, contains("Settings…"));
       expect(menus.shown, contains("About Entoli"));
       expect(menus.shown, contains("Profile…"));
     }, variant: mac);

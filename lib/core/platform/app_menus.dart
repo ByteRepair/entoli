@@ -5,6 +5,10 @@ import "../../app/app_items.dart";
 import "../../app/app_menus.dart";
 import "../log.dart";
 
+/// SF Symbols for the items standing in for one of the platform's own, which
+/// wear its icon: Settings is in the place of the Settings scene's item.
+const _symbols = <AppItem, String>{Destination.settings: "gearshape"};
+
 /// The menu bar on macOS and iPadOS: `entoli_menu`'s, sent whole and only
 /// when what it says changed.
 class NativeAppMenus implements AppMenus, NativeMenuPicks {
@@ -48,6 +52,7 @@ class NativeAppMenus implements AppMenus, NativeMenuPicks {
                     shift: item.key?.shift ?? false,
                     alt: item.key?.alt ?? false,
                     enabled: enabled(item),
+                    symbol: _symbols[item],
                   ),
               ],
           ],
