@@ -159,12 +159,22 @@ abstract class AppPage {
 
 /// A titled run of a page's controllers.
 class PageSection {
-  const PageSection(this.id, this.title, this.controllers, {this.detail});
+  const PageSection(this.id, this.title, this.controllers, {this.detail})
+    : fills = false;
+
+  /// [controller] as the whole of its page rather than a row of a form: a
+  /// file, a web page. The page's only section.
+  PageSection.whole(this.id, SettingController controller)
+    : title = "",
+      detail = null,
+      controllers = [controller],
+      fills = true;
 
   final String id;
   final String title;
   final String? detail;
   final List<SettingController> controllers;
+  final bool fills;
 }
 
 /// The pages open, the first at the bottom: each one opened over the one

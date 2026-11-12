@@ -23,7 +23,8 @@ class WebAppPage extends AppPage {
 
   @override
   List<PageSection> sections(SettingReader reader) => [
-    PageSection("page", "", [
+    PageSection.whole(
+      "page",
       WebController(
         part("page", ""),
         url: url,
@@ -35,7 +36,7 @@ class WebAppPage extends AppPage {
           changed();
         },
       ),
-    ]),
+    ),
   ];
 
   @override
@@ -86,20 +87,23 @@ class ArtifactAppPage extends AppPage {
   @override
   List<PageSection> sections(SettingReader reader) {
     final server = _server;
+    if (server == null) {
+      return [
+        notice(
+          "page",
+          _error ?? "Opening…",
+          tone: _error == null ? NoticeTone.plain : NoticeTone.warning,
+        ),
+      ];
+    }
     return [
-      PageSection("page", "", [
-        if (server != null)
-          WebController(
-            part("page", ""),
-            url: Uri.parse("${server.baseUrl}/$entryFile"),
-          )
-        else
-          NoticeController(
-            part("state", ""),
-            tone: _error == null ? NoticeTone.plain : NoticeTone.warning,
-            lines: [NoticeLine(_error ?? "Opening…")],
-          ),
-      ]),
+      PageSection.whole(
+        "page",
+        WebController(
+          part("page", ""),
+          url: Uri.parse("${server.baseUrl}/$entryFile"),
+        ),
+      ),
     ];
   }
 }

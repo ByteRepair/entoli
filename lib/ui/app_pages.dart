@@ -126,10 +126,11 @@ class AppPageView extends ConsumerWidget {
           ],
         ),
         body: switch (sections) {
-          // A file is the whole of its page.
-          [PageSection(controllers: [final DocumentController c])] =>
-            DocumentView(c),
-          [PageSection(controllers: [final WebController c])] => WebPageView(c),
+          [PageSection(fills: true, controllers: [final c])] => switch (c) {
+            DocumentController() => DocumentView(c),
+            WebController() => WebPageView(c),
+            _ => SettingRow(c),
+          },
           _ => ListView(
             padding: const EdgeInsets.only(bottom: 24),
             children: [

@@ -130,7 +130,8 @@ class TextFileAppPage extends AppPage {
       ];
     }
     return [
-      PageSection("text", "", [
+      PageSection.whole(
+        "text",
         DocumentController(
           part("text", name),
           text: _draft,
@@ -142,7 +143,7 @@ class TextFileAppPage extends AppPage {
             if (was != _dirty) changed();
           },
         ),
-      ]),
+      ),
     ];
   }
 

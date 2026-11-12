@@ -598,12 +598,16 @@ class SettingsSectionData {
     required this.title,
     this.detail,
     this.rows = const [],
+    this.fills = false,
   });
 
   String id;
   String title;
   String? detail;
   List<SettingRowData?> rows;
+
+  /// Its one row is the whole of its page: a file, a web page.
+  bool fills;
 }
 
 class SettingsPageData {

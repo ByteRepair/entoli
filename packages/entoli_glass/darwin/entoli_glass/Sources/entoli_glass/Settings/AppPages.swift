@@ -159,11 +159,12 @@ struct AppPageView: View {
   @Environment(\.appPagesCard) private var card
   @State private var leaving: SettingConfirmData?
 
-  /// A file or a web page is the whole of its page, not a row of a form.
+  /// The row the page says is the whole of it — a file, a web page — rather
+  /// than a row of a form.
   private var whole: SettingRowData? {
-    let rows = page.rows
-    guard rows.count == 1, [.document, .web].contains(rows[0].kind) else { return nil }
-    return rows[0]
+    let sections = page.sections.compactMap { $0 }
+    guard sections.count == 1, sections[0].fills else { return nil }
+    return sections[0].rows.first ?? nil
   }
 
   var body: some View {

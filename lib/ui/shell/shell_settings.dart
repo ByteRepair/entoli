@@ -139,6 +139,7 @@ class _Encoder {
     title: section.title,
     detail: section.detail,
     rows: [for (final c in section.controllers) ...rows(c)],
+    fills: section.fills,
   );
 
   List<SettingRowData> rows(SettingController c) =>
