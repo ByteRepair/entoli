@@ -7,3 +7,4 @@
 library;
 
 export "src/shell_contract.g.dart";
+export "src/settings_contract.g.dart" hide wrapResponse;

@@ -33,8 +33,7 @@ what keeps every sync-unaware caller on the local paths unchanged.
 ## Links into Entoli
 
 Entoli registers the `entoli://` scheme on every platform — Android's
-`VIEW` filter (on `MainActivity` and the `PromptIcon` alias, for the reason
-the share filter is on both), `CFBundleURLTypes` in both Apple `Info.plist`s,
+`VIEW` filter on `MainActivity`, `CFBundleURLTypes` in both Apple `Info.plist`s,
 `x-scheme-handler/entoli` in the Linux desktop entry, and
 `HKLM\Software\Classes\entoli` in the MSI. `app_links` delivers them, the
 launching one and every one after, on one stream that `IncomingLinks` (wrapped
@@ -81,8 +80,8 @@ One palette, seeded by default from the iOS / macOS theme (Apple's systemBlue
 as both seeds, on grey surfaces; see below) and built in each brightness by `entoliTheme`. `MaterialApp` gets both as `theme` and
 `darkTheme` whichever is in use, so a system that turns dark at sunset turns the
 app with it without anything being told. `AppTheme` — `system`, `light`, `dark`
-— says which, and is app-level with no per-chat override for the same reason the
-icon is.
+— says which, and is app-level with no per-chat override: a palette is the
+app's, not a conversation's.
 
 **The faces are the artifact stylesheet's.** Source Serif 4 on every tier of
 the text theme, and Playfair Display on the display and headline tiers plus
@@ -192,7 +191,7 @@ is about the framework's UI half rather than about Flutter at all — and the na
 in `settings.json` should not be pinned to a framework enum's, which would make
 the file unreadable if that enum were ever renamed. `ui/theme.dart` is the one
 place that maps between them, and the label the settings page draws is on the
-enum, the arrangement `AppIcon` and `ApproveMode` already have.
+enum, the arrangement `ApproveMode` already has.
 
 The one other thing in it is `inputDecorationTheme`, and it is there because
 every field and every dropdown in the app is outlined. Spelled at each of them
@@ -340,9 +339,12 @@ draws its own apps in — Liquid Glass on 26, its materials before that, since
 every glass call names what the OS provides rather than drawing a look of its
 own (`Glass.swift`). The conversation itself, and every page pushed over it,
 stay Flutter: one Flutter view, embedded in the SwiftUI window. So a feature
-in a reply or on a settings page is still built once, and only the chrome is
-built twice — a native copy of what the Flutter app draws, with the rules
-shared.
+in a reply is still built once, and only the chrome is built twice — a native
+copy of what the Flutter app draws, with the rules shared. The app's settings
+are the one page that is the platform's own, a Settings window on a Mac and a
+sheet on iOS, built from the same schema the Flutter page is: see "Settings
+as data" in `lib/ui/settings/AGENTS.md`. A chat's and a project's settings
+stay Flutter pages.
 
 **It is the switch in Settings > General > Appearance**, `liquidGlass` in
 `settings.json`, on by default and written only when off, the way `autoUpdate`

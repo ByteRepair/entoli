@@ -10,6 +10,9 @@ import "../commands.dart";
 import "../chat/chat_page.dart";
 import "shell_palette.dart";
 import "shell_publisher.dart";
+import "../settings/settings_category.dart" show nativeSettingsOpener;
+import "../settings/settings_hand_off.dart";
+import "shell_settings.dart";
 import "shell_sidebar.dart";
 import "shell_window.dart";
 
@@ -35,6 +38,9 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
   /// change.
   late final ShellPublisher _publisher;
 
+  /// Every settings page, sent to the client's own settings as it changes.
+  late final SettingsBridge _settings;
+
   /// The bridge the shell's events reach, which is the last one mounted. A
   /// restart builds the next session's before it takes this one down, so the
   /// one going unbinds them only while they are still its own.
@@ -47,9 +53,10 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     _scope.attach(_commands);
     _listening = this;
     _bind(this);
-    _publisher = ShellPublisher(
-      ProviderScope.containerOf(context, listen: false),
-    );
+    final container = ProviderScope.containerOf(context, listen: false);
+    _publisher = ShellPublisher(container);
+    _settings = SettingsBridge(container);
+    nativeSettingsOpener = _settings.show;
   }
 
   @override
@@ -57,6 +64,8 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     HardwareKeyboard.instance.removeHandler(_key);
     _scope.detach(_commands);
     _publisher.close();
+    _settings.close();
+    if (nativeSettingsOpener == _settings.show) nativeSettingsOpener = null;
     if (identical(_listening, this)) {
       _listening = null;
       _bind(null);
@@ -83,8 +92,9 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
   bool _key(KeyEvent event) => runKey(event, ref, _commands);
 
   @override
-  Widget build(BuildContext context) =>
-      const AppMenuSync(navigate: shellNavigate, child: ChatPage());
+  Widget build(BuildContext context) => const SettingsHandOffs(
+    child: AppMenuSync(navigate: shellNavigate, child: ChatPage()),
+  );
 }
 
 /// This frontend's way to every [Destination]: the native palette for a

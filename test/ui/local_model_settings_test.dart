@@ -110,7 +110,7 @@ void main() {
     // Downloaded is not loaded. A gigabyte of memory is spent when a chat asks
     // for the model, not when the file lands.
     expect(app.localRuntime.served, isEmpty);
-    expect(find.text("Nothing loaded"), findsOneWidget);
+    expect(find.textContaining("Nothing loaded"), findsOneWidget);
 
     await tester.tap(find.text("LLM settings"));
     await settleIo(tester);
@@ -247,12 +247,12 @@ void main() {
     });
     await pumpOnDevice(tester);
 
-    await tester.tap(find.byTooltip("Unload ${model.name}"));
+    await tester.tap(find.text("Unload ${model.name}"));
     await settleIo(tester);
 
     expect(app.localRuntime.events.last, "stop ${model.id}");
-    expect(find.byTooltip("Unload ${model.name}"), findsNothing);
-    expect(find.byTooltip("Unload ${other.name}"), findsOneWidget);
+    expect(find.text("Unload ${model.name}"), findsNothing);
+    expect(find.text("Unload ${other.name}"), findsOneWidget);
   });
 
   testWidgets("what is loaded leads the On-device page, with what it takes "

@@ -14,7 +14,7 @@ actually offer: since skills are held to the Agent Skills spec (see
 `name:` matching the folder and a `description`, and its `metadata:` argument
 is the way a test writes the client keys — `{"invocation": "callback"}` makes
 it one the controller dispatches. `test/fakes.dart` holds `FakeBackend`, whose
-`scriptedEvents` and `hold` drive a turn, beside `FakeAttachmentPicker`, `FakeLauncherIcons`, `FakeBackgroundWork`,
+`scriptedEvents` and `hold` drive a turn, beside `FakeAttachmentPicker`, `FakeBackgroundWork`,
 `FakeFileHandoff`, `FakeBackupHandoff`, `FakeAppRestart`, `FakeVoice`,
 `FakeAssistantLaunch` and `testLibrary`.
 

@@ -19,12 +19,28 @@ String formatSize(int bytes) {
 }
 
 /// "200K", "1M": a window as providers write it.
+/// "256k" for 256000; a count that is not whole thousands as it is.
+String inK(int n) => n >= 1000 && n % 1000 == 0 ? "${n ~/ 1000}k" : "$n";
+
 String tokenCount(int n) {
   if (n >= 1000000) {
     final m = n / 1000000;
     return "${m == m.roundToDouble() ? m.round() : m.toStringAsFixed(1)}M";
   }
   return n >= 1000 ? "${(n / 1000).round()}K" : "$n";
+}
+
+/// What a model costs per million tokens, in and out, the way providers quote
+/// it; null where nothing is known.
+String? modelPrice(double? input, double? output) {
+  if (input == null && output == null) return null;
+  if ((input ?? 0) == 0 && (output ?? 0) == 0) return "Free";
+  String dollars(double v) {
+    final text = v.toStringAsFixed(v < 0.1 ? 3 : 2);
+    return text.contains(".") ? text.replaceFirst(RegExp(r"\.?0+$"), "") : text;
+  }
+
+  return "\$${dollars(input ?? 0)} in · \$${dollars(output ?? 0)} out /M";
 }
 
 /// The first [end] UTF-16 code units of [text], one fewer where [end] would
@@ -34,4 +50,38 @@ String safeCut(String text, int end) {
   if (at == 0 || at == text.length) return text.substring(0, at);
   final last = text.codeUnitAt(at - 1);
   return text.substring(0, last >= 0xD800 && last <= 0xDBFF ? at - 1 : at);
+}
+
+/// "1 chat", "3 chats".
+String plural(int count, String unit) => "$count $unit${count == 1 ? "" : "s"}";
+
+/// "a moment ago", "5 minutes ago", "2 days ago" — how long ago something
+/// happened. Coarse on purpose: it is read to decide whether carrying on still
+/// makes sense, not to know exactly when.
+String formatAge(Duration age) {
+  if (age.inMinutes < 1) return "a moment ago";
+  if (age.inHours < 1) return "${plural(age.inMinutes, "minute")} ago";
+  if (age.inDays < 1) return "${plural(age.inHours, "hour")} ago";
+  return "${plural(age.inDays, "day")} ago";
+}
+
+/// "23m left", "5h left", "3d left" — how long before a temporary chat expires.
+/// Coarse like [formatAge]: the shortest TTL is 24 hours, so minute precision
+/// is enough. "expiring" is the brief edge state before the sweep hides it.
+String formatRemaining(Duration remaining) {
+  if (remaining.inMinutes <= 0) return "expiring";
+  if (remaining.inHours < 1) {
+    return "${plural(remaining.inMinutes, "minute")} left";
+  }
+  if (remaining.inDays < 1) return "${plural(remaining.inHours, "hour")} left";
+  return "${plural(remaining.inDays, "day")} left";
+}
+
+/// "in 23 minutes", "in 5 hours", "in 3 days" — how long before something
+/// starts again. Coarse like [formatAge]; "now" under a minute.
+String formatUntil(Duration left) {
+  if (left.inMinutes < 1) return "now";
+  if (left.inHours < 1) return "in ${plural(left.inMinutes, "minute")}";
+  if (left.inDays < 1) return "in ${plural(left.inHours, "hour")}";
+  return "in ${plural(left.inDays, "day")}";
 }

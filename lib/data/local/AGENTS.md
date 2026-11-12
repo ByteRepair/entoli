@@ -469,13 +469,14 @@ It also means a launch loads nothing at all, where it used to spend a minute and
 a gigabyte restoring a pick the user might not have been about to use.
 
 **What is loaded leads the On-device page.** "Running models"
-(`running_models.dart`) is the page's first section rather than a row of LLM
+(the `running` section of `lib/app/settings/pages/on_device.dart`) is the page's
+first section rather than a row of LLM
 settings, three taps deep: it is what the page is most often opened for. Each
 row has an Unload button (`LocalEngine.stop`), loading and failed rows
 included, beside Unload all; a warm-up of the model it unloads stops with it,
 since the prefill watches the list rather than the buttons. A ready row says
 what the model takes up (`LocalInstance.usage`), asked again every few
-seconds while it is drawn: a llama.cpp server's resident memory, read off
+seconds while something shows it (`runningUsageProvider`): a llama.cpp server's resident memory, read off
 `/proc/<pid>/status` since each model is a process of its own; an MLX model's
 weights, counted by the Swift half when it loads, and its cache as the tokens
 it held when its last generation ended, at the model's `kvBytesPerToken`,

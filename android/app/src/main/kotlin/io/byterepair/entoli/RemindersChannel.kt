@@ -188,9 +188,7 @@ object RemindersChannel {
             .setSmallIcon(R.drawable.ic_cookie_monochrome)
             .setAutoCancel(true)
         if (chatId != null) {
-            // Explicit, at whichever launcher entry is enabled: the other is
-            // disabled and cannot be started. See IconChannel.
-            val open = Intent().setComponent(IconChannel.enabledEntry(context))
+            val open = Intent(context, MainActivity::class.java)
                 .putExtra(EXTRA_CHAT_ID, chatId)
             builder.setContentIntent(
                 PendingIntent.getActivity(

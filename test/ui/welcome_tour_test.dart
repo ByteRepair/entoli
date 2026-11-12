@@ -8,7 +8,6 @@ import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/selection.dart";
-import "package:agent_chat/ui/settings/llm_settings.dart" show ImageSection;
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/settings/welcome_page.dart";
 import "package:agent_chat/ui/welcome_gate.dart";
@@ -105,7 +104,7 @@ void main() {
     await scrollTo(tester, find.text("Image generation"));
     await tester.tap(find.text("Image generation"));
     await tester.pumpAndSettle();
-    expect(find.byType(ImageSection), findsOneWidget);
+    expect(find.text("Image LLM"), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.text("More to set up"), findsOneWidget);

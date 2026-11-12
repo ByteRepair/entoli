@@ -190,13 +190,11 @@ abstract class ForegroundWork : Service() {
             .setOnlyAlertOnce(true)
             .addAction(Notification.Action.Builder(null as Icon?, actionLabel, pendingStop()).build())
 
-        // Whichever launcher entry is enabled: the other one is disabled and
-        // cannot be started. See IconChannel.
-        packageManager.getLaunchIntentForPackage(packageName)?.let {
-            builder.setContentIntent(
-                PendingIntent.getActivity(this, 0, it, PendingIntent.FLAG_IMMUTABLE)
+        builder.setContentIntent(
+            PendingIntent.getActivity(
+                this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE,
             )
-        }
+        )
 
         describe(intent, builder)
         return builder.build()

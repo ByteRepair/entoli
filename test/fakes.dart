@@ -27,7 +27,6 @@ import "package:agent_chat/data/sync/channel.dart";
 import "package:agent_chat/data/sync/peers.dart" show PeerState;
 import "package:agent_chat/data/sync/sync_hub.dart"
     show RemoteChatEntry, RemoteProject;
-import "package:agent_chat/domain/app_icon.dart";
 import "package:agent_chat/domain/app_update.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/app_restart.dart";
@@ -180,20 +179,6 @@ Attachment testAttachment(
   mimeType: mimeType,
   bytes: Uint8List.fromList(bytes),
 );
-
-/// The launcher, which a test has none of. Records what it was told so a test
-/// can assert the home screen was asked to change, not just the settings file.
-class FakeLauncherIcons implements LauncherIcons {
-  FakeLauncherIcons({this.available = true});
-
-  @override
-  final bool available;
-
-  final List<AppIcon> used = [];
-
-  @override
-  Future<void> use(AppIcon icon) async => used.add(icon);
-}
 
 /// The menu bar, keeping what it was last shown: each item's title and
 /// whether it was enabled, in any menu. [pick] is the user choosing one.

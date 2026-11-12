@@ -60,11 +60,13 @@ public struct AppCommands: Commands {
   public init(model: MenuModel = .shared) { self.model = model }
 
   public var body: some Commands {
-    // The app's menu: About in About's place, the rest in Settings'.
+    // The app's menu: About in About's place, the rest after Settings —
+    // on a Mac the Settings scene's own item, which Dart leaves out of its
+    // list there.
     CommandGroup(replacing: .appInfo) {
       MenuGroups(model: model, groups: Array(model.groups(.app).prefix(1)))
     }
-    CommandGroup(replacing: .appSettings) {
+    CommandGroup(after: .appSettings) {
       MenuGroups(model: model, groups: Array(model.groups(.app).dropFirst()))
     }
     CommandGroup(replacing: .newItem) {

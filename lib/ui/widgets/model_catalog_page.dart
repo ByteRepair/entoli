@@ -1,14 +1,19 @@
+import "../../app/settings/forms/model.dart"
+    show modelFormFor, pickerProviders, saveModel;
+import "../../app/settings/spec.dart" show WidgetReader;
+import "../settings/form_dialog.dart";
+import "../../app/model_facts.dart" show providerHue;
+import "../../app/model_picker.dart";
 import "package:flutter/material.dart";
-import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../data/builtin/llm/hosted_models.dart";
 import "../../data/builtin/llm/providers/provider.dart" show LlmProvider;
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/llm_provider.dart";
-import "../../domain/local_model.dart" show isTitleOnlyModel;
 import "../../domain/model_capability.dart";
 import "../../domain/model_registry.dart";
+import "../../app/model_role.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
 import "../../core/formatting.dart";
@@ -17,134 +22,8 @@ import "catalog.dart" show InfoTag;
 import "dialogs.dart" show confirm;
 import "page_bar.dart";
 
-/// One model a picker can offer, with the provider it is reached through.
-class CatalogEntry {
-  const CatalogEntry(
-    this.providerId,
-    this.providerName,
-    this.info, {
-    this.custom = false,
-  });
-
-  final String providerId;
-  final String providerName;
-  final ModelInfo info;
-
-  /// Added by hand rather than listed by models.dev.
-  final bool custom;
-
-  ModelRef get ref => (providerId: providerId, modelId: info.id);
-}
-
-/// What a picker's model is for, which decides what it is offered.
-enum ModelRole {
-  /// Answers turns, which the agent does through tools: only models that call
-  /// them.
-  agent,
-
-  /// A background completion — a classifier verdict, a memory pass — which
-  /// needs only text in and text out.
-  text,
-
-  /// A chat's title: [text], plus the models that answer nothing else
-  /// ([isTitleOnlyModel]).
-  title,
-
-  /// Answers `image_generation`: only models that make images.
-  image,
-
-  /// Voice mode's ears through a provider: only models that transcribe.
-  transcription,
-
-  /// Voice mode's voice through a provider: only models that speak.
-  speech;
-
-  bool offers(Model m) => switch (this) {
-    agent => m is ChatModel && m.info.answersTurns,
-    text || title => m is ChatModel,
-    image => m is ImageModel,
-    transcription => m is TranscriptionModel,
-    speech => m is SynthesisModel,
-  };
-
-  /// Whether its models are chat models: the ones only an endpoint's own list
-  /// names are offered, being taken for chat models since nothing says
-  /// otherwise, and whether one sees images is worth filtering on.
-  bool get chat => this == agent || this == text || this == title;
-
-  bool get voice => this == transcription || this == speech;
-
-  /// What the picker's page is called, and what its empty list says.
-  String get noun => switch (this) {
-    image => "image model",
-    transcription => "transcription model",
-    speech => "speech model",
-    _ => "model",
-  };
-}
-
-/// What a picker offers: each provider's models that [role] can use — the
-/// on-device one's, then the configured ones' from the catalog — then whatever
-/// the endpoints list that the catalog does not know, a self-hosted server's
-/// models.
-List<CatalogEntry> catalogEntries(
-  ModelCatalog catalog,
-  List<LlmProvider> providers,
-  List<ModelOption> listed, {
-  required ModelRole role,
-  ModelHost? host,
-}) {
-  host ??= ModelHost.resolving();
-  // Same-named models — one model through two providers — keep the order the
-  // providers are configured in.
-  final order = {for (final (i, p) in providers.indexed) p.id: i};
-  final described = [
-    for (final p in providers)
-      for (final m in p.offered(catalog, host)) (provider: p, model: m),
-  ];
-  // Every model a provider describes, whatever this role makes of it: what
-  // the catalog says of one wins over the endpoint naming it.
-  final known = {for (final d in described) (d.provider.id, d.model.info.id)};
-  final shown = <(String, String)>{};
-  return [
-    for (final (:provider, :model) in described)
-      if (role.offers(model) && shown.add((provider.id, model.info.id)))
-        CatalogEntry(
-          provider.id,
-          provider.displayName,
-          model.info,
-          custom: provider.config.customModels.any(
-            (c) => c.id == model.info.id,
-          ),
-        ),
-    // Named by their own listing — `<endpoint> · <model>` — and taken to be
-    // chat models, since nothing says otherwise: no image model is guessed.
-    if (role.chat)
-      for (final o in listed)
-        if (!known.contains((o.providerId, o.modelId)) &&
-            (role == ModelRole.title ||
-                !isTitleOnlyModel(o.providerId, o.modelId)))
-          _listedEntry(o),
-  ]..sort((a, b) {
-    final byName = a.info.displayName.toLowerCase().compareTo(
-      b.info.displayName.toLowerCase(),
-    );
-    return byName != 0
-        ? byName
-        : (order[a.providerId] ?? order.length).compareTo(
-            order[b.providerId] ?? order.length,
-          );
-  });
-}
-
-CatalogEntry _listedEntry(ModelOption o) {
-  final parts = (o.label ?? o.modelId).split(" · ");
-  return CatalogEntry(
-    o.providerId,
-    parts.length > 1 ? parts.first : o.providerId,
-    ModelInfo(id: o.modelId, name: parts.last, toolCall: true),
-  );
-}
+export "../../app/model_picker.dart" show CatalogEntry, catalogEntries;
+export "../../app/model_role.dart";
 
 /// Where a picker field goes when tapped: every model the role can use, to
 /// search and compare, above the entries that store less than a model — the
@@ -207,9 +86,7 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
   }
 
   bool _matches(CatalogEntry e, List<String> words) {
-    final hay = "${e.info.displayName} ${e.info.id} ${e.providerName}"
-        .toLowerCase();
-    return words.every(hay.contains) &&
+    return words.every(e.searched.contains) &&
         (!_reasoning || e.info.reasoning) &&
         (!_seesImages || e.info.readsImages) &&
         (_provider == null || e.providerId == _provider);
@@ -225,17 +102,25 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
 
   /// Adds a model, or edits [initial] on [provider].
   Future<void> _openModelPage({String? provider, ModelInfo? initial}) async {
-    final saved = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => AddModelPage(
-          role: widget.role,
-          provider: provider,
-          initial: initial,
-        ),
-      ),
+    final reader = WidgetReader(ref);
+    final form = modelFormFor(
+      reader,
+      widget.role,
+      providerId: provider,
+      model: initial?.id,
+    );
+    if (form == null) return;
+    String? saved;
+    await showSettingForm(
+      context,
+      form,
+      save: (answers) async {
+        await saveModel(reader, form, answers);
+        saved = answers["id"]!.trim();
+      },
     );
     // Found straight away, since it is what was just described.
-    if (saved != null) setState(() => _search.text = saved);
+    if (saved case final id? when mounted) setState(() => _search.text = id);
   }
 
   Future<void> _addModel() => _openModelPage(provider: _provider);
@@ -257,16 +142,10 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final configured = ref.watch(
-      appSettingsProvider.select((s) => s.llmProviders),
-    );
+    // Drawn again as the providers change.
+    ref.watch(appSettingsProvider.select((s) => s.llmProviders));
     final cutsUtterances = ref.watch(voiceProvider).hasModelCatalog;
-    // No provider serves a transcription model where the device cannot cut
-    // the microphone into utterances, so none is offered a Default entry or a
-    // model to add for one there either.
-    final providers = widget.role == ModelRole.transcription && !cutsUtterances
-        ? const <LlmProviderConfig>[]
-        : configured;
+    final providers = pickerProviders(WidgetReader(ref), widget.role);
     final listed =
         ref.watch(sortedModelsProvider).value ?? const <ModelOption>[];
     final serving = ref.watch(modelProvidersProvider);
@@ -277,21 +156,25 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
         final words = _search.text.toLowerCase().split(RegExp(r"\s+"))
           ..removeWhere((w) => w.isEmpty);
         final shown = all.where((e) => _matches(e, words)).toList();
-        final names = {
-          for (final p in providers) p.id: p.displayName,
-          for (final e in all) e.providerId: e.providerName,
-        }..removeWhere((id, _) => !all.any((e) => e.providerId == id));
         final searching = _search.text.isNotEmpty;
         final favourites = ref.watch(
           appSettingsProvider.select((s) => s.favouriteModels),
         );
-        // In the order they were starred, which is the order they were wanted.
-        final starred = [
-          for (final f in favourites) ?all.where((e) => e.ref == f).firstOrNull,
-        ];
+        final view = pickerView(
+          entries: all,
+          providers: providers,
+          favourites: favourites,
+          choice: widget.choice,
+          role: widget.role,
+          nullLabel: widget.nullEntry,
+          defaultOf: widget.defaultOf,
+          searching: searching,
+        );
+        final names = view.providers;
+        final starred = view.starred;
         return Scaffold(
           appBar: PageBar(
-            title: "Choose a ${widget.role.noun}",
+            title: pickerTitle(widget.role),
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(112),
               child: _Readable(
@@ -384,21 +267,16 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
                   _header(theme, "Quick picks"),
                   SliverList.list(
                     children: [
-                      _QuickPick(
-                        icon: Icons.block,
-                        title: widget.nullEntry,
-                        selected: _picked(null, null),
-                        onTap: () => _pick(null, null),
-                      ),
-                      for (final p in providers)
-                        if (widget.defaultOf(p) case final id?)
-                          _QuickPick(
-                            icon: Icons.auto_awesome,
-                            title: "${p.displayName} - Default",
-                            subtitle: modelInfoOf(p, id)?.displayName ?? id,
-                            selected: _picked(p.id, null),
-                            onTap: () => _pick(p.id, null),
-                          ),
+                      for (final q in view.quick)
+                        _QuickPick(
+                          icon: q.providerId == null
+                              ? Icons.block
+                              : Icons.auto_awesome,
+                          title: q.title,
+                          subtitle: q.subtitle,
+                          selected: q.selected,
+                          onTap: () => _pick(q.providerId, null),
+                        ),
                     ],
                   ),
                 ],
@@ -419,7 +297,8 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
                   SliverFillRemaining(
                     hasScrollBody: false,
                     child: _Empty(
-                      role: searching ? null : widget.role,
+                      title: view.noneTitle,
+                      note: view.emptyNote,
                       onAdd: providers.isEmpty ? null : _addModel,
                     ),
                   )
@@ -557,7 +436,7 @@ class _ModelCard extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final info = entry.info;
-    final price = _price(info);
+    final price = modelPrice(info.inputCost, info.outputCost);
     // The theme's corners with an outline of our own: the app's card shape
     // replaces the outlined card's, border and all.
     final base = theme.cardTheme.shape is OutlinedBorder
@@ -666,19 +545,6 @@ class _ModelCard extends StatelessWidget {
       ),
     );
   }
-
-  /// Per million tokens, in and out, the way providers quote it.
-  static String? _price(ModelInfo info) {
-    final (input, output) = (info.inputCost, info.outputCost);
-    if (input == null && output == null) return null;
-    if ((input ?? 0) == 0 && (output ?? 0) == 0) return "Free";
-    return "\$${_dollars(input ?? 0)} in · \$${_dollars(output ?? 0)} out /M";
-  }
-
-  static String _dollars(double v) {
-    final text = v.toStringAsFixed(v < 0.1 ? 3 : 2);
-    return text.contains(".") ? text.replaceFirst(RegExp(r"\.?0+$"), "") : text;
-  }
 }
 
 /// The provider's initial on a colour of its own, so a long list reads by
@@ -691,9 +557,7 @@ class _Monogram extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    // A hue of its own per provider, from its name's characters rather than
-    // `hashCode`, which is not the same from one run to the next.
-    final hue = (name.codeUnits.fold(0, (a, c) => a * 31 + c) % 360).toDouble();
+    final hue = providerHue(name).toDouble();
     final bg = HSLColor.fromAHSL(1, hue, 0.45, dark ? 0.28 : 0.86).toColor();
     final fg = HSLColor.fromAHSL(1, hue, 0.5, dark ? 0.86 : 0.28).toColor();
     return CircleAvatar(
@@ -708,28 +572,11 @@ class _Monogram extends StatelessWidget {
 }
 
 class _Empty extends StatelessWidget {
-  const _Empty({required this.role, required this.onAdd});
+  const _Empty({required this.title, required this.note, required this.onAdd});
 
-  /// The picker with nothing to offer at all, null while searching. For a
-  /// media role that is most often a provider without such models rather than
-  /// a model missing from the list.
-  final ModelRole? role;
+  final String title;
+  final String note;
   final VoidCallback? onAdd;
-
-  String? get _media => switch (role) {
-    ModelRole.image =>
-      "None of your providers makes images. OpenAI and "
-          "OpenRouter do: add one in Settings > Providers.",
-    ModelRole.transcription =>
-      "Nothing here can listen yet. Download a "
-          "model in Settings > On-device, or add a provider with one: Groq "
-          "has Whisper, and OpenAI's whisper-1 can be added by hand.",
-    ModelRole.speech =>
-      "Nothing here can speak yet. Download a model in "
-          "Settings > On-device, or add a provider with one: Groq and Google "
-          "have them, and OpenAI's tts-1 can be added by hand.",
-    _ => null,
-  };
 
   @override
   Widget build(BuildContext context) {
@@ -745,17 +592,10 @@ class _Empty extends StatelessWidget {
             color: theme.colorScheme.onSurfaceVariant,
           ),
           const SizedBox(height: 12),
-          Text(
-            _media != null ? "No ${role!.noun}s" : "No model matches",
-            style: theme.textTheme.titleMedium,
-          ),
+          Text(title, style: theme.textTheme.titleMedium),
           const SizedBox(height: 4),
           Text(
-            onAdd == null && role?.voice != true
-                ? "Add a provider in Settings > Providers to see its models."
-                : _media ??
-                      "Not every model is in the catalog. A fine-tune or a "
-                          "private deployment can be added by hand.",
+            note,
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
@@ -773,300 +613,4 @@ class _Empty extends StatelessWidget {
       ),
     );
   }
-}
-
-/// A model models.dev does not list, described by hand: the same fields the
-/// catalog reads, for the user to fill in. Pops with the new model's id.
-class AddModelPage extends ConsumerStatefulWidget {
-  const AddModelPage({
-    super.key,
-    required this.role,
-    this.provider,
-    this.initial,
-  });
-
-  /// The picker this was opened from: the toggles start where its models'
-  /// would be.
-  final ModelRole role;
-
-  /// The provider the catalog was narrowed to, where it was; for an edit, the
-  /// one [initial] is on.
-  final String? provider;
-
-  /// The model being edited, added by hand earlier; null adds one.
-  final ModelInfo? initial;
-
-  @override
-  ConsumerState<AddModelPage> createState() => _AddModelPageState();
-}
-
-class _AddModelPageState extends ConsumerState<AddModelPage> {
-  final _form = GlobalKey<FormState>();
-  late final _id = TextEditingController(text: widget.initial?.id);
-  late final _name = TextEditingController(text: widget.initial?.name);
-  late final _context = TextEditingController(
-    text: widget.initial?.context?.toString(),
-  );
-  late final _output = TextEditingController(
-    text: widget.initial?.output?.toString(),
-  );
-  late final _inputCost = TextEditingController(
-    text: widget.initial?.inputCost?.toString(),
-  );
-  late final _outputCost = TextEditingController(
-    text: widget.initial?.outputCost?.toString(),
-  );
-  late String? _provider = widget.provider;
-  late var _toolCall =
-      widget.initial?.toolCall ?? widget.role == ModelRole.agent;
-  late var _reasoning = widget.initial?.reasoning ?? false;
-  late var _readsImages = widget.initial?.readsImages ?? false;
-  late var _readsPdfs = widget.initial?.readsPdfs ?? false;
-  late var _makesImages =
-      widget.initial?.makesImages ?? widget.role == ModelRole.image;
-
-  /// What the model is: a chat model, or one of the two speech kinds, which
-  /// answer endpoints of their own and take none of the chat toggles.
-  late var _kind = switch (widget.initial) {
-    ModelInfo(transcribes: true) => ModelRole.transcription,
-    ModelInfo(speaks: true) => ModelRole.speech,
-    ModelInfo() => ModelRole.text,
-    null => switch (widget.role) {
-      ModelRole.transcription || ModelRole.speech => widget.role,
-      _ => ModelRole.text,
-    },
-  };
-
-  @override
-  void dispose() {
-    for (final c in [_id, _name, _context, _output, _inputCost, _outputCost]) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    if (!_form.currentState!.validate()) return;
-    final id = _id.text.trim();
-    String? text(TextEditingController c) =>
-        c.text.trim().isEmpty ? null : c.text.trim();
-    final chat = _kind == ModelRole.text;
-    final before = widget.initial;
-    await ref
-        .read(appSettingsProvider.notifier)
-        .putCustomModel(
-          _provider!,
-          ModelInfo(
-            id: id,
-            name: text(_name),
-            context: int.tryParse(text(_context) ?? ""),
-            output: int.tryParse(text(_output) ?? ""),
-            inputCost: double.tryParse(text(_inputCost) ?? ""),
-            outputCost: double.tryParse(text(_outputCost) ?? ""),
-            talks: chat,
-            transcribes: _kind == ModelRole.transcription,
-            speaks: _kind == ModelRole.speech,
-            toolCall: chat && _toolCall,
-            reasoning: chat && _reasoning,
-            readsImages: chat && _readsImages,
-            readsPdfs: chat && _readsPdfs,
-            makesImages: chat && _makesImages,
-          ),
-          replacing: before == null ? null : (widget.provider!, before.id),
-        );
-    if (mounted) Navigator.of(context).pop(id);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final providers = ref.watch(
-      appSettingsProvider.select((s) => s.llmProviders),
-    );
-    _provider ??= providers.firstOrNull?.id;
-    return Scaffold(
-      appBar: PageBar(
-        title: widget.initial == null ? "Add model" : "Edit model",
-        actions: [
-          PageAction.text(label: "Save", onPressed: _save, prominent: true),
-        ],
-      ),
-      body: Form(
-        key: _form,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-          children: [
-            Text(
-              "For a model models.dev does not list: a fine-tune, a private "
-              "deployment. Entoli trusts what you enter here, so take it from "
-              "the provider's documentation.",
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 20),
-            DropdownButtonFormField<String>(
-              initialValue: _provider,
-              decoration: const InputDecoration(labelText: "Provider"),
-              items: [
-                for (final p in providers)
-                  DropdownMenuItem(value: p.id, child: Text(p.displayName)),
-              ],
-              onChanged: (v) => setState(() => _provider = v),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _id,
-              decoration: const InputDecoration(
-                labelText: "Model id",
-                helperText: "Exactly as the provider's API names it",
-              ),
-              style: const TextStyle(fontFamily: monoFamily),
-              validator: (v) => (v ?? "").trim().isEmpty ? "Required" : null,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _name,
-              decoration: const InputDecoration(
-                labelText: "Display name (optional)",
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(child: _number(_context, "Context window", "tokens")),
-                const SizedBox(width: 12),
-                Expanded(child: _number(_output, "Max output", "tokens")),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _number(
-                    _inputCost,
-                    "Input price",
-                    "\$ per M tokens",
-                    decimal: true,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _number(
-                    _outputCost,
-                    "Output price",
-                    "\$ per M tokens",
-                    decimal: true,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            SegmentedButton<ModelRole>(
-              segments: const [
-                ButtonSegment(value: ModelRole.text, label: Text("Chat")),
-                ButtonSegment(
-                  value: ModelRole.transcription,
-                  label: Text("Transcribes"),
-                ),
-                ButtonSegment(value: ModelRole.speech, label: Text("Speaks")),
-              ],
-              selected: {_kind},
-              onSelectionChanged: (v) => setState(() => _kind = v.single),
-            ),
-            if (_kind != ModelRole.text)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  _kind == ModelRole.transcription
-                      ? "Called at /audio/transcriptions, for voice mode's listening."
-                      : "Called at /audio/speech, for voice mode's speaking.",
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            if (_kind == ModelRole.text) ...[
-              const SizedBox(height: 24),
-              Text("What it can do", style: theme.textTheme.titleSmall),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text("Tool calling"),
-                subtitle: _required(theme, _toolCall),
-                value: _toolCall,
-                onChanged: (v) => setState(() => _toolCall = v),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text("Reasoning"),
-                value: _reasoning,
-                onChanged: (v) => setState(() => _reasoning = v),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text("Sees images"),
-                subtitle: const Text("Images are sent to it rather than named"),
-                value: _readsImages,
-                onChanged: (v) => setState(() => _readsImages = v),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text("Reads PDFs"),
-                subtitle: const Text(
-                  "PDFs are sent to it, where the provider takes them",
-                ),
-                value: _readsPdfs,
-                onChanged: (v) => setState(() => _readsPdfs = v),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text("Makes images"),
-                value: _makesImages,
-                onChanged: (v) => setState(() => _makesImages = v),
-              ),
-              if (widget.role == ModelRole.image && !_makesImages)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    "It will not be offered as an image model unless it makes images.",
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.error,
-                    ),
-                  ),
-                ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Said whatever the switch reads, so it is known before it matters; in the
-  /// error colour while it is off, since the model is then not offered as a
-  /// chat's model — a title or memory model needs no tools.
-  Widget _required(ThemeData theme, bool on) => Text(
-    "Required for agentic use: without it, the model is not offered for chats",
-    style: on ? null : TextStyle(color: theme.colorScheme.error),
-  );
-
-  Widget _number(
-    TextEditingController c,
-    String label,
-    String suffix, {
-    bool decimal = false,
-  }) => TextFormField(
-    controller: c,
-    decoration: InputDecoration(labelText: label, helperText: suffix),
-    keyboardType: TextInputType.numberWithOptions(decimal: decimal),
-    inputFormatters: [
-      FilteringTextInputFormatter.allow(
-        decimal ? RegExp(r"[0-9.]") : RegExp(r"[0-9]"),
-      ),
-    ],
-    validator: (v) =>
-        (v ?? "").isEmpty ||
-            (decimal ? double.tryParse(v!) : int.tryParse(v!)) != null
-        ? null
-        : "Not a number",
-  );
 }

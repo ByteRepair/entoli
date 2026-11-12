@@ -5,24 +5,24 @@ import "package:uuid/uuid.dart";
 
 import "../core/config.dart";
 import "../core/log.dart";
-import "../domain/agent_backend.dart";
-import "../domain/app_settings.dart";
-import "../domain/builtin_project.dart";
-import "../domain/chat_log.dart";
-import "../domain/chat_meta.dart";
-import "../domain/chat_store.dart";
-import "../domain/chat_title.dart";
-import "../domain/goal.dart";
-import "../domain/models.dart";
-import "../domain/permission.dart";
-import "../domain/project.dart";
-import "../domain/wired_skill.dart";
-import "../domain/project_settings.dart";
-import "../domain/prompt_library.dart";
-import "../domain/shell.dart";
-import "../domain/shell_job.dart" show ChatShellJobs;
-import "../domain/temp_chat_ttl.dart";
-import "../domain/tristate.dart";
+import "agent_backend.dart";
+import "app_settings.dart";
+import "builtin_project.dart";
+import "chat_log.dart";
+import "chat_meta.dart";
+import "chat_store.dart";
+import "chat_title.dart";
+import "goal.dart";
+import "models.dart";
+import "permission.dart";
+import "project.dart";
+import "wired_skill.dart";
+import "project_settings.dart";
+import "prompt_library.dart";
+import "shell.dart";
+import "shell_job.dart" show ChatShellJobs;
+import "temp_chat_ttl.dart";
+import "tristate.dart";
 
 /// What changed on disk, as [ChatRepository.changes] reports it. The sync
 /// layer's whole view of this device: everything a mirror needs to follow.

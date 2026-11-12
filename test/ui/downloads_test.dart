@@ -9,8 +9,8 @@ import "package:agent_chat/domain/rootfs.dart";
 import "package:agent_chat/domain/voice_model.dart";
 import "package:agent_chat/domain/voice_model_store.dart";
 import "package:agent_chat/providers.dart";
-import "package:agent_chat/ui/settings/model_downloads.dart";
-import "package:agent_chat/ui/settings/rootfs_downloads.dart";
+import "package:agent_chat/app/downloads/model_downloads.dart";
+import "package:agent_chat/app/downloads/rootfs_downloads.dart";
 
 import "../harness.dart";
 

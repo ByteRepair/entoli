@@ -19,6 +19,9 @@ public final class EntoliGlassPlugin: NSObject, FlutterPlugin {
     let model = ShellModel(messenger: messenger)
     ShellModel.shared = model
     NativeShellSetup.setUp(binaryMessenger: messenger, api: model)
+    let settings = SettingsModel(messenger: messenger)
+    SettingsModel.shared = settings
+    NativeSettingsSetup.setUp(binaryMessenger: messenger, api: settings)
   }
 }
 
@@ -36,6 +39,15 @@ public struct FrontendView: View {
   }
 
   public var body: some View {
+    frontend
+      #if os(iOS)
+        // The settings are the platform's own over the app, where a Mac has
+        // a Settings window of its own.
+        .modifier(SettingsSheet(settings: SettingsModel.shared!))
+      #endif
+  }
+
+  @ViewBuilder private var frontend: some View {
     switch model.frontend {
     case true?: ShellView(model: model, flutter: flutter)
     case false?: FlutterPane(controller: flutter).ignoresSafeArea()
@@ -43,3 +55,15 @@ public struct FrontendView: View {
     }
   }
 }
+
+#if os(iOS)
+  /// The settings sheet, observing the settings apart from the window's
+  /// content, so a change to them redraws the sheet and not the app.
+  private struct SettingsSheet: ViewModifier {
+    @ObservedObject var settings: SettingsModel
+
+    func body(content: Content) -> some View {
+      content.sheet(isPresented: $settings.presented) { SettingsRoot(model: settings) }
+    }
+  }
+#endif

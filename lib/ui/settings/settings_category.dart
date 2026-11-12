@@ -1,7 +1,8 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../providers.dart";
+import "../../app/settings/settings.dart" show pageOffered;
+import "../../app/settings/spec.dart";
 
 /// The page's categories, in the order they are offered and the groups they
 /// are offered in. General, Providers, On-device, LLMs and Image Generation
@@ -15,46 +16,40 @@ import "../../providers.dart";
 /// Welcome, Shortcuts and About are the app rather than anything it does,
 /// which is why they are last.
 enum SettingsCategory {
-  general("General", Icons.tune),
-  providers("Providers", Icons.cloud_outlined),
-  onDevice("On-device", Icons.memory),
-  llms("LLMs", Icons.auto_awesome_outlined),
-  images("Image Generation", Icons.image_outlined),
-  memory("Memory", Icons.psychology, dividerAbove: true),
-  voice("Voice", Icons.graphic_eq),
-  triggers("Triggers", Icons.alarm),
-  agents("Agents", Icons.person_outline, dividerAbove: true),
-  skills("Skills", Icons.extension),
-  terminal("Terminal", Icons.terminal, dividerAbove: true),
-  agentBrowser("Agent Browser", Icons.travel_explore),
-  byteRepair("Byte Repair", Icons.verified_user),
-  sync("Sync", Icons.sync, dividerAbove: true),
-  data("Data", Icons.inventory_2_outlined),
-  welcome("Welcome", Icons.waving_hand, dividerAbove: true),
-  shortcuts("Shortcuts", Icons.keyboard_outlined),
-  about("About", Icons.info_outline);
+  general(SettingsPageId.general, Icons.tune),
+  providers(SettingsPageId.providers, Icons.cloud_outlined),
+  onDevice(SettingsPageId.onDevice, Icons.memory),
+  llms(SettingsPageId.llms, Icons.auto_awesome_outlined),
+  images(SettingsPageId.images, Icons.image_outlined),
+  memory(SettingsPageId.memory, Icons.psychology),
+  voice(SettingsPageId.voice, Icons.graphic_eq),
+  triggers(SettingsPageId.triggers, Icons.alarm),
+  agents(SettingsPageId.agents, Icons.person_outline),
+  skills(SettingsPageId.skills, Icons.extension),
+  terminal(SettingsPageId.terminal, Icons.terminal),
+  agentBrowser(SettingsPageId.agentBrowser, Icons.travel_explore),
+  byteRepair(SettingsPageId.byteRepair, Icons.verified_user),
+  sync(SettingsPageId.sync, Icons.sync),
+  data(SettingsPageId.data, Icons.inventory_2_outlined),
+  welcome(SettingsPageId.welcome, Icons.waving_hand),
+  shortcuts(SettingsPageId.shortcuts, Icons.keyboard_outlined),
+  about(SettingsPageId.about, Icons.info_outline);
 
-  const SettingsCategory(this.label, this.icon, {this.dividerAbove = false});
+  const SettingsCategory(this.page, this.icon);
 
-  final String label;
+  /// The schema's page it shows: its title, its group, and what is on it.
+  final SettingsPageId page;
   final IconData icon;
+
+  String get label => page.title;
 
   /// A divider drawn above the category's tile, where one group of categories
   /// ends and another begins.
-  final bool dividerAbove;
+  bool get dividerAbove => page.groupStart;
 
   /// Whether this platform can do anything the category sets. One it cannot
-  /// is neither listed nor opened, so its page never has to say so. On-device
-  /// holds the model server's downloads and the voice models', so a build with
-  /// neither has no page to offer.
-  bool offered(WidgetRef ref) => switch (this) {
-    agentBrowser => ref.watch(agentBrowserProvider).available,
-    triggers => ref.watch(reminderAlarmsProvider).available,
-    onDevice =>
-      ref.watch(localEngineProvider).available ||
-          ref.watch(voiceProvider).hasModelCatalog,
-    _ => true,
-  };
+  /// is neither listed nor opened, so its page never has to say so.
+  bool offered(WidgetRef ref) => pageOffered(WidgetReader(ref), page);
 }
 
 /// The route Settings is reached by, registered once with the app's
@@ -67,11 +62,23 @@ const settingsRoute = "/settings";
 /// setup row or a bar points at one thing to set.
 typedef SettingsArgs = ({SettingsCategory? category, bool focus});
 
-/// Open Settings, at [category] where there is one.
+/// The native settings' way in, while the SwiftUI frontend is up: set by its
+/// bridge, which sends them every page. Null under the Flutter frontend.
+Future<void> Function(SettingsPageId? page)? nativeSettingsOpener;
+
+/// Open Settings, at [category] where there is one: the native settings
+/// where the frontend has its own, Flutter's page otherwise. The welcome tour
+/// is not settings, and is Flutter's on every frontend.
 Future<void> openSettings(
   BuildContext context, {
   SettingsCategory? category,
   bool focus = false,
-}) => Navigator.of(
-  context,
-).pushNamed(settingsRoute, arguments: (category: category, focus: focus));
+}) {
+  final native = nativeSettingsOpener;
+  if (native != null && category != SettingsCategory.welcome) {
+    return native(category?.page);
+  }
+  return Navigator.of(
+    context,
+  ).pushNamed(settingsRoute, arguments: (category: category, focus: focus));
+}

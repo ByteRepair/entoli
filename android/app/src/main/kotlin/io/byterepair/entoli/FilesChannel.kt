@@ -25,9 +25,9 @@ import java.util.concurrent.Executors
 // is the whole of that file. Dart stages those copies; this end only wraps them
 // in intents.
 //
-// Registered on the engine against the application context, like IconChannel
-// and for the same reason: the engine outlives the activity, so a handler
-// closing over one would hold a destroyed activity for the life of the process.
+// Registered on the engine against the application context: the engine
+// outlives the activity, so a handler closing over one would hold a destroyed
+// activity for the life of the process.
 // FLAG_ACTIVITY_NEW_TASK is what an app context needs to start anything, and
 // the chooser wants it anyway.
 object FilesChannel {
@@ -147,7 +147,7 @@ object FilesChannel {
     private fun MethodCall.mime() = argument<String>("mime") ?: "*/*"
 
     // The authority is ${applicationId}.files, so it follows the debug
-    // applicationIdSuffix the way IconChannel's ComponentName has to.
+    // applicationIdSuffix.
     private fun incomingDir(context: Context) = File(context.cacheDir, "incoming")
 
     private fun uriFor(context: Context, path: String): Uri =

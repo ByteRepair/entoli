@@ -182,3 +182,6 @@ tool/apple/mlx/.swiftpm/
 
 # Claude Code's agent worktrees, each a git checkout of its own.
 /.claude/worktrees/
+
+# SwiftPM output of building the glass package on its own.
+.build/

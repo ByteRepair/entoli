@@ -81,11 +81,10 @@ nothing the user can do on purpose. So the sticky isolate lasts exactly as long
 as the thing that needs it, and closing the app with nothing running gives a
 genuinely fresh one next time.
 
-An engine outliving its activity is also why `IconChannel` was pulled out of
-`MainActivity` and registered on the engine against the application context: the
-handler used to close over the activity, and holding a destroyed one for the
-life of a process is the leak this feature would have created. `FilesChannel`
-is built the same way for the same reason, and starts everything it starts with
+An engine outliving its activity is also why every channel is registered on
+the engine against the application context rather than in `MainActivity`: a
+handler closing over the activity would hold a destroyed one for the life of
+the process. `FilesChannel` starts everything it starts with
 `FLAG_ACTIVITY_NEW_TASK`, which is what an application context needs.
 
 Stopping is one path. The notification's Stop asks Dart, Dart aborts every
@@ -205,10 +204,7 @@ raise Google's — long-press home, or a swipe up from a corner — and opens a 
 chat, in the project and the view the Assistant settings name. Android's, and
 only Android's.
 
-The manifest half is an `ACTION_ASSIST` filter on `MainActivity` and on the
-`.PromptIcon` alias, for the reason the share filter is on both: whichever is
-enabled is the only component that can be started, and being the assistant must
-not stop working because the user changed the icon. `CATEGORY_DEFAULT` is
+The manifest half is an `ACTION_ASSIST` filter on `MainActivity`. `CATEGORY_DEFAULT` is
 load-bearing rather than boilerplate — the role is offered to whatever
 `queryIntentActivities(ACTION_ASSIST, MATCH_DEFAULT_ONLY)` finds exported, so
 without it the app is not in the picker at all. Nothing else is needed: no
@@ -258,33 +254,29 @@ project in it and the other the list without.
 
 ## The app icon
 
-Two icons, `AppIcon.cookie` (the default) and `AppIcon.prompt`. The enum's
-declaration order is the order the settings page offers them in, so the default
-reads first. Each exists
-several times over, because each platform wants its own form and they are
-checked in rather than built: `assets/icons/*.svg` is what the app draws,
-`drawable/ic_<name>_{foreground,monochrome}` over the shared
-`ic_icon_background` are the Android adaptive layers named by
-`mipmap-anydpi-v26/ic_<name>.xml`, and `tool/icons/cookie-512.png` is the
-default rendered for the desktops that take a raster. Android reads no SVG, so its copies are the same path data as a vector drawable, and
-editing one means editing all of them — there is no generator. The Apples'
-copy is one file for both platforms and the default only: `entoli.icon` under
+One icon, the cookie. It exists several times over, because each platform
+wants its own form and they are checked in rather than built:
+`assets/icons/cookie.svg` is what the app draws (`AppMark`),
+`drawable/ic_cookie_{foreground,monochrome}` over `ic_icon_background` are the
+Android adaptive layers named by `mipmap-anydpi-v26/ic_cookie.xml`, and
+`tool/icons/cookie-512.png` is it rendered for the desktops that take a raster.
+Android reads no SVG, so its copies are the same path data as a vector
+drawable, and editing one means editing all of them — there is no generator.
+The Apples' copy is one file for both platforms: `entoli.icon` under
 `macos/Runner/`, the Liquid Glass layers, with `ios/Runner/entoli.icon/AGENTS.md`
-a symlink into it. The cookie's
-launcher layers are the exception: `drawable-*/dpi/ic_cookie_{bg,fg}.png` are
-`cookie.svg` rendered by `resvg` (`bg` is the gradient and sheen alone, `fg`
-the blob and glyphs with their drop shadows, at the five adaptive sizes), so
-an artwork edit means re-rendering them the same way — the SVG filters a
-vector drawable cannot carry is why they are rasters. The monochrome layer
-stays a flat silhouette, a themed icon being a tinted one; the debug build
-keeps its black vectors through its own `mipmap-anydpi-v26/ic_cookie.xml`.
+a symlink into it. The launcher layers are the exception:
+`drawable-*/dpi/ic_cookie_{bg,fg}.png` are `cookie.svg` rendered by `resvg`
+(`bg` is the gradient and sheen alone, `fg` the blob and glyphs with their drop
+shadows, at the five adaptive sizes), so an artwork edit means re-rendering
+them the same way — the SVG filters a vector drawable cannot carry is why they
+are rasters. The monochrome layer stays a flat silhouette, a themed icon being
+a tinted one; the debug build keeps its black vectors through its own
+`mipmap-anydpi-v26/ic_cookie.xml`.
 
-`tool/icons/cookie-512.png` is the default icon's SVG rendered at 512 as it
-stands, squircle `clip-path` and all, and only the default's: the AppImage
-installs it and `tool/windows/make-ico.py` renders the Windows ico from it,
-and neither a Linux desktop entry nor an exe's resources can be told to
-switch, so the other icon has no copy there. See "The Linux AppImage" and
-"The icon" in `windows/AGENTS.md`.
+`tool/icons/cookie-512.png` is the SVG rendered at 512 as it stands, squircle
+`clip-path` and all: the AppImage installs it and `tool/windows/make-ico.py`
+renders the Windows ico from it. See "The Linux AppImage" and "The icon" in
+`windows/AGENTS.md`.
 
 `minSdk` is pinned to 26 rather than following `flutter.minSdkVersion`, which
 is 24. Adaptive icons start at 26; below it every icon needs a full set of
@@ -295,65 +287,13 @@ theme background instead of hardcoding white, so the splash follows dark mode.
 
 The monochrome layer is not decoration: a themed icon is the silhouette tinted
 from the wallpaper, so an icon whose meaning lives in its colour has none there.
-The background is one file for both icons rather than one each, since both sit
-on the same flat indigo. `AgentService`'s status bar icon is the default icon's
-monochrome layer, and it does not follow the setting: a notification is the
-app's, and nothing there is per-choice.
+`AgentService`'s status bar icon is the same monochrome layer.
 
-`<application android:icon>` points at `@mipmap/ic_cookie`, the default icon's
-own resource, rather than a copy under a name of its own — the app-info icon
-then gets the adaptive form too, and there is one fewer image to keep in step.
+`<application android:icon>` points at `@mipmap/ic_cookie` rather than a copy
+under a name of its own — the app-info icon then gets the adaptive form too,
+and there is one fewer image to keep in step.
 
-`appIcon` is app-level and has no per-chat override — an icon is the app's, not
-a conversation's.
-
-Changing it is two writes, and only one of them is the app's. `setAppIcon`
-saves the setting first and then tells the launcher, because the setting is what
-`AppMark` draws from: a launcher that refuses still leaves the app showing what
-was picked. Android is the only platform where the launcher can be told
-anything at all; everywhere else `LauncherIcons.available` is false, the
-settings page says the home screen will not follow, and the setting is in-app
-only.
-
-Android switches icons by making `MainActivity` the launcher entry and
-enabling an `activity-alias` in its place when a non-default icon is picked.
-`MainActivity` carries the MAIN+LAUNCHER intent-filter and wears the app-level
-`android:icon` (`@mipmap/ic_cookie`); each non-default icon is an
-`activity-alias` targeting `MainActivity`, disabled by default. Exactly one
-entry is enabled at a time, or the app appears on the home screen twice — so
-`IconChannel.kt` treats the default as one entry among the aliases, enabling
-the wanted one *before* disabling the rest. An instant with no launcher entry
-enabled is one a launcher can read, and it drops the app off the home screen
-for good.
-
-`MainActivity` carries the LAUNCHER filter (rather than only the aliases
-carrying it) because Flutter's pre-build manifest parse — the fallback when no
-built APK exists yet — matches `activity` by exact element name and never sees
-`activity-alias`. With the launcher entry only on aliases, `flutter run` after
-`flutter clean` fails to find a launch activity and never builds. The aapt2
-path (used once an APK exists) does handle aliases, but the fallback has to
-work too.
-
-A `ComponentName` is (application id, fully-qualified class), and the halves
-come from different strings. The manifest's `.PromptIcon` is expanded against
-the **namespace**, so the class name is derived from `MainActivity`'s own
-package, while the package half has to be the context's `packageName` — the id
-the app is installed under, which the debug `applicationIdSuffix` (`.debug`,
-what lets a debug and a release build sit side by side) makes a different
-string. Naming the
-package half with the namespace makes `setComponentEnabledSetting` throw, and
-the Dart side swallows that, so the first version of this silently did nothing
-in every debug build.
-
-Not chosen per platform the way `Shell` is: a `MethodChannel` compiles
-everywhere and a platform with nothing answering it throws, which is the same
-no-op `available` being false gives — `ForegroundService` is the second channel
-to be built this way.
-
-Every channel — this one, `ForegroundService`, `FilesChannel` and
-`AssistantChannel` — is registered when the engine is created rather than on
-each attach, and holds the application context. That is forced by the engine
-outliving the activity: see "Staying alive off screen".
+`MainActivity` is the one launcher entry, and an explicit intent names it.
 
 ### The debug build's own
 
@@ -475,9 +415,7 @@ gets no notifications from a cold-started reminder; the service still runs, the
 turn still completes, and the chat is on disk for the next open.
 
 **The completion notification's tap deep-links to the chat.** `RemindersChannel`
-builds an explicit `Intent` carrying the chat id to whichever launcher entry
-is enabled (`IconChannel.enabledEntry`: `MainActivity` is disabled while the
-Prompt icon is picked, and an intent naming it then starts nothing);
+builds an explicit `Intent` carrying the chat id to `MainActivity`;
 `MainActivity.onCreate` and `onNewIntent` hand it to
 `RemindersChannel.receive`, which stashes it held-pending and nudges Dart.
 `IncomingReminderOpen` (`lib/ui/reminders/incoming_open.dart`) drains it on the

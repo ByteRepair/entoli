@@ -105,9 +105,7 @@ agreeing with `prompt_library.dart`, and one copy of it can.
 
 `TempChatTtlField` is how long a chat lives, as the chat settings page asks it —
 `Default` naming the project's or the app's answer, and the value written
-straight onto `meta.json`. The trigger editor asks with the same field: the
-new chat a trigger makes is a chat, and a bool could only ever have named one of
-the five TTLs.
+straight onto `meta.json`.
 
 `text_input.dart` is the pair of things a field wants and Material does not
 give it. `replaceIn` writes over a range and leaves the caret after it —
@@ -383,8 +381,8 @@ does not turn up among the chat models. A starred model whose provider has gone
 is simply not listed; the pair stays until it is unstarred, should the provider
 come back.
 
-A model the catalog does not list is added on the "Add model" page, onto the
-provider it is reached through (`LlmProviderConfig.customModels`, in the same
+A model the catalog does not list is added through `ModelForm`, the core's
+form both frontends draw, onto the provider it is reached through (`LlmProviderConfig.customModels`, in the same
 shape), where it comes before the catalog's own entry of the same id.
 
 A provider's own list is asked only where the user names one: the dialog's

@@ -10,8 +10,8 @@ import io.flutter.plugin.common.MethodChannel
 // palette from, and it only exists from 12 — an older phone answers null,
 // which is what takes the switch off the settings page.
 //
-// Registered against the application context for the reason IconChannel is:
-// the engine outlives the activity.
+// Registered against the application context: the engine outlives the
+// activity.
 object ThemeChannel {
     fun register(context: Context, messenger: BinaryMessenger) {
         val appContext = context.applicationContext

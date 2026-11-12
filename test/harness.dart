@@ -74,6 +74,7 @@ import "package:agent_chat/ui/widgets/decorative_motion.dart";
 
 import "fakes.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
+import "package:agent_chat/ui/settings/settings_hand_off.dart";
 import "package:agent_chat/domain/rootfs.dart";
 
 /// The shell a test gets by default: a real host shell where the test pretends
@@ -101,7 +102,6 @@ class TestApp {
     required this.picker,
     required this.folders,
     required this.clipboard,
-    required this.launcher,
     required this.handoff,
     required this.assistant,
     required this.reminderAlarms,
@@ -174,7 +174,6 @@ class TestApp {
   /// nothing here builds. [mirrors] is what one of those chats reads as.
   factory TestApp.create({
     PromptLibrary? library,
-    bool launcherIcons = true,
     AppUpdateHost updateHost = const UnavailableAppUpdateHost(),
     AppMenus menus = const NoAppMenus(),
     ChatStore? store,
@@ -215,7 +214,6 @@ class TestApp {
     final picker = FakeAttachmentPicker();
     final folders = FakeFolderPicker();
     final clipboard = FakeClipboardFiles();
-    final launcher = FakeLauncherIcons(available: launcherIcons);
     final files = handoff ?? FakeFileHandoff();
     final assist = FakeAssistantLaunch(hasGesture: assistantGesture);
     final alarms = reminderAlarms ?? FakeReminderAlarms(available: false);
@@ -253,7 +251,6 @@ class TestApp {
       picker: picker,
       folders: folders,
       clipboard: clipboard,
-      launcher: launcher,
       handoff: files,
       assistant: assist,
       reminderAlarms: alarms,
@@ -290,7 +287,6 @@ class TestApp {
             (project) =>
                 PromptLibraryNotifier(project, library ?? testLibrary()),
           ),
-          launcherIconsProvider.overrideWithValue(launcher),
           frontendProvider.overrideWithValue(frontend),
           if (frontend.swiftUI) ...shellOverrides,
           appUpdateHostProvider.overrideWithValue(updateHost),
@@ -400,7 +396,6 @@ class TestApp {
   final FakeAttachmentPicker picker;
   final FakeFolderPicker folders;
   final FakeClipboardFiles clipboard;
-  final FakeLauncherIcons launcher;
   final FakeFileHandoff handoff;
   final FakeAssistantLaunch assistant;
 
@@ -529,7 +524,8 @@ class TestApp {
           navigatorObservers: [container.read(appRoutesProvider)],
           builder: (context, app) =>
               DecorativeMotion(enabled: false, child: app!),
-          home: FocusFollowsKeyboard(child: child),
+          // As the frontend at the root binds them.
+          home: SettingsHandOffs(child: FocusFollowsKeyboard(child: child)),
         ),
       ),
     );
@@ -1218,4 +1214,43 @@ Future<void> writePrompt(
   );
   await tester.tap(find.descendant(of: page, matching: find.text("Save")));
   await settleIo(tester);
+}
+
+/// [label] run from the settings list row titled [title]: its button where
+/// the row draws its few side by side, its menu's item where they are many.
+Future<void> rowAction(
+  WidgetTester tester,
+  String title,
+  String label, {
+  bool settle = true,
+}) async {
+  final row = find.widgetWithText(ListTile, title);
+  await scrollTo(tester, row);
+  final button = find.descendant(
+    of: row,
+    matching: find.widgetWithText(TextButton, label),
+  );
+  if (button.evaluate().isNotEmpty) {
+    await tester.tap(button);
+  } else {
+    await openRowMenu(tester, title);
+    await tester.tap(find.text(label).last);
+  }
+  if (settle) {
+    await settleIo(tester);
+  } else {
+    await frames(tester);
+  }
+}
+
+/// The menu of the settings list row titled [title] open, where it has one:
+/// what the row offers is then either on it or in the menu.
+Future<void> openRowMenu(WidgetTester tester, String title) async {
+  final row = find.widgetWithText(ListTile, title);
+  await scrollTo(tester, row);
+  final menu = find.descendant(of: row, matching: find.byTooltip("More"));
+  if (menu.evaluate().isEmpty) return;
+  await tester.tap(menu);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
 }

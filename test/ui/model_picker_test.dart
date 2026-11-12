@@ -506,11 +506,11 @@ void main() {
     expect(find.textContaining("Required for agentic use"), findsOneWidget);
     expect(find.text("Structured output"), findsNothing);
     await tester.enterText(
-      find.widgetWithText(TextFormField, "Model id"),
+      find.widgetWithText(TextField, "Model id"),
       "ft:glm:acme",
     );
     await tester.enterText(
-      find.widgetWithText(TextFormField, "Context window"),
+      find.widgetWithText(TextField, "Context window"),
       "65536",
     );
     await tester.tap(find.text("Save"));
@@ -554,7 +554,7 @@ void main() {
       expect(find.text("Edit model"), findsOneWidget);
       expect(find.text("65536"), findsOneWidget);
       await tester.enterText(
-        find.widgetWithText(TextFormField, "Model id"),
+        find.widgetWithText(TextField, "Model id"),
         "ft:glm:acme-2",
       );
       await tester.tap(find.text("Save"));

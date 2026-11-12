@@ -2,14 +2,12 @@ import "package:collection/collection.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../data/builtin/llm/hosted_models.dart";
-import "../../data/builtin/llm/providers/provider.dart"
-    show LlmProvider, resolveIn;
+import "../../data/builtin/llm/providers/provider.dart" show LlmProvider;
 import "../../domain/llm_provider.dart";
-import "../../domain/model_capability.dart";
-import "../../domain/model_registry.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
+import "../../app/model_picker.dart"
+    show missingModelLabel, modelFieldError, modelFieldLabel, modelName;
 import "model_catalog_page.dart";
 import "resettable_field.dart";
 
@@ -75,21 +73,16 @@ class ModelPicker extends ConsumerWidget {
     final listed = models.value ?? const <ModelOption>[];
     final serving = ref.watch(modelProvidersProvider);
     final none = choice.providerId == null && choice.modelId == null;
-    // A provider named and not here — removed from Settings, or a device's
-    // model this one has not got. Said, in the turn error's words, rather
-    // than read as the null entry: a turn on it fails, and the field must
-    // not claim it would run on something else.
-    // Only once the list is in, so a field opened before it is not briefly
-    // an error.
-    final missing =
-        !role.voice &&
-        models.hasValue &&
-        choice.providerId != null &&
-        !serving.any((p) => p.id == choice.providerId) &&
-        !listed.any((m) => m.providerId == choice.providerId);
+    final missing = modelFieldError(
+      choice: choice,
+      role: role,
+      loaded: models.hasValue,
+      listed: listed,
+      serving: serving,
+    );
     final nullEntry = inherited == null
         ? nullLabel
-        : "$nullLabel (${_name(providers, listed, inherited!)})";
+        : "$nullLabel (${modelName(providers, listed, inherited!)})";
     final defaultEntry = _defaultEntry(providers, defaultOf);
     return ResettableField(
       resetLabel: defaultEntry == null
@@ -121,14 +114,14 @@ class ModelPicker extends ConsumerWidget {
                 ? helperOffText ?? _inheritedHelper(providers, listed)
                 : null,
             helperMaxLines: 3,
-            errorText: missing
-                ? missingProviderMessage(choice.modelId, choice.providerId!)
-                : null,
+            errorText: missing,
             errorMaxLines: 2,
             suffixIcon: const Icon(Icons.chevron_right),
           ),
           child: Text(
-            missing ? "Select New Model" : _label(providers, listed, serving),
+            missing != null
+                ? missingModelLabel
+                : _label(providers, listed, serving),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -142,74 +135,21 @@ class ModelPicker extends ConsumerWidget {
     List<ModelOption> listed,
   ) => inherited == null
       ? null
-      : "Using ${_name(providers, listed, inherited!)}";
+      : "Using ${modelName(providers, listed, inherited!)}";
 
-  /// What the field reads as, for a provider still there: a Default that
-  /// names no model has nothing to resolve to and reads as the null entry,
-  /// whose helper names what it inherits; a model
-  /// is named by what the catalog calls it, its id where nothing does.
   String _label(
     List<LlmProviderConfig> providers,
     List<ModelOption> listed,
     List<LlmProvider> serving,
-  ) {
-    // A voice model is named by what its provider says of it, since no
-    // endpoint lists one; nothing serving it is as good as nothing chosen.
-    if (role.voice) {
-      final pick = refOf(choice);
-      return (pick == null
-                  ? null
-                  : resolveIn<Model>(
-                      serving,
-                      pick,
-                      (_) => ModelHost.resolving(),
-                    ))
-              ?.info
-              .displayName ??
-          nullLabel;
-    }
-    final provider = providers.firstWhereOrNull(
-      (p) => p.id == choice.providerId,
-    );
-    if (choice.modelId == null) {
-      final model = provider == null ? null : defaultOf(provider);
-      return model == null
-          ? nullLabel
-          : "${provider!.displayName} - Default ($model)";
-    }
-    // A provider gone from settings, and from the on-device endpoints, leaves
-    // nothing that could answer: as good as nothing chosen.
-    final reachable =
-        provider != null ||
-        choice.providerId == null ||
-        listed.any((m) => m.providerId == choice.providerId);
-    return reachable ? _name(providers, listed, choice) : nullLabel;
-  }
-}
-
-/// A chosen model by the name the catalog gives it, then the on-device list's,
-/// then its id; "the app default" where nothing is chosen.
-String _name(
-  List<LlmProviderConfig> providers,
-  List<ModelOption> listed,
-  ModelChoice choice,
-) {
-  final provider = providers.firstWhereOrNull((p) => p.id == choice.providerId);
-  final model =
-      choice.modelId ??
-      (provider == null ? null : LlmProviderConfig.chatDefaultOf(provider));
-  if (model == null) return "the app default";
-  return modelInfoOf(provider, model)?.name ??
-      listed
-          // A model stored without its provider, as an older chat's was.
-          .firstWhereOrNull(
-            (m) =>
-                m.modelId == model &&
-                (choice.providerId == null ||
-                    m.providerId == choice.providerId),
-          )
-          ?.label ??
-      model;
+  ) => modelFieldLabel(
+    choice: choice,
+    role: role,
+    nullLabel: nullLabel,
+    defaultOf: defaultOf,
+    providers: providers,
+    listed: listed,
+    serving: serving,
+  );
 }
 
 /// The first provider whose Default entry the catalog shows, or null when

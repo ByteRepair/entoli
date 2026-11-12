@@ -84,22 +84,12 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
-            <!-- MainActivity is the launch entry, so the Flutter tool's pre-build
-                 manifest parse (which matches `activity` by exact name and never
-                 sees `activity-alias`) finds it. It wears the app-level icon
-                 (@mipmap/ic_cookie); the PromptIcon alias below is enabled by
-                 MainActivity.kt when the user picks the other icon, and
-                 MainActivity is disabled in its place so the app does not show
-                 twice. -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
             <!-- Entoli as a share target: another app's files, offered a
-                 workspace by ShareTargetPage. On the alias below as well, since
-                 whichever of the two is enabled is the only component that can
-                 be started, and a share must not stop working because the user
-                 changed the icon. -->
+                 workspace by ShareTargetPage. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND"/>
                 <action android:name="android.intent.action.SEND_MULTIPLE"/>
@@ -112,15 +102,13 @@
                  load-bearing rather than boilerplate — the role is offered to
                  whatever `queryIntentActivities(ACTION_ASSIST,
                  MATCH_DEFAULT_ONLY)` finds exported, so without it the app is
-                 not in the picker at all. On the alias below as well, for the
-                 reason the share filter is. -->
+                 not in the picker at all. -->
             <intent-filter>
                 <action android:name="android.intent.action.ASSIST"/>
                 <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
             <!-- entoli:// links, read by IncomingLinks (app_links): a new chat
-                 with a prompt, or something to install. On the alias below as
-                 well, for the reason the share filter is. -->
+                 with a prompt, or something to install. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
@@ -129,37 +117,6 @@
             </intent-filter>
         </activity>
 
-        <!-- The non-default icon, enabled by MainActivity.kt when the user picks
-             it. Disabled by default: MainActivity is the launcher entry, and only
-             one of {MainActivity, this alias} is enabled at a time, or the app
-             appears on the home screen twice. -->
-        <activity-alias
-            android:name=".PromptIcon"
-            android:targetActivity=".MainActivity"
-            android:icon="@mipmap/ic_prompt"
-            android:enabled="false"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.SEND"/>
-                <action android:name="android.intent.action.SEND_MULTIPLE"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-                <data android:mimeType="*/*"/>
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.ASSIST"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-                <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="entoli"/>
-            </intent-filter>
-        </activity-alias>
         <!-- dataSync rather than one of the named types: what a turn is doing
              is a model call and whatever the user's own commands do, which is
              none of location, media or the rest. A download is the same kind of

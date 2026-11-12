@@ -1,79 +1,87 @@
 import "dart:convert";
 
-import "app_settings.dart" show ReasoningEffort;
+import "model_options.dart";
 import "permission.dart";
+import "settings/keys.dart";
+import "settings/setting.dart";
 import "temp_chat_ttl.dart";
 
-/// A chat's overrides of the app defaults, persisted to `meta.json`. Edited via
-/// the chat settings page. Distinct from `state.json` (chat metadata) and
-/// `conv.jsonl` (message tree). Null everywhere means "inherit".
+/// A chat's overrides of the app defaults, persisted to `meta.json`: a typed
+/// view of its document, where unset inherits the project's and the app's.
+/// Distinct from `state.json` (chat metadata) and `conv.jsonl` (message tree).
 class ChatMeta {
   ChatMeta({
-    this.model,
-    this.provider,
-    this.approveMode,
-    this.reasoningEffort,
-    this.tempChatTtl,
-    this.permissions = const [],
-    this.writableDirs = const [],
-    this.memoryOff,
-    this.sandbox,
-    this.headless,
-  });
+    String? model,
+    String? provider,
+    ApproveMode? approveMode,
+    ReasoningEffort? reasoningEffort,
+    TempChatTtl? tempChatTtl,
+    List<PermissionRule> permissions = const [],
+    List<String> writableDirs = const [],
+    bool? memoryOff,
+    bool? sandbox,
+    bool? headless,
+  }) : doc = SettingsDocument() {
+    this
+      ..model = model
+      ..provider = provider
+      ..approveMode = approveMode
+      ..reasoningEffort = reasoningEffort
+      ..tempChatTtl = tempChatTtl
+      ..permissions = permissions
+      ..writableDirs = writableDirs
+      ..memoryOff = memoryOff
+      ..sandbox = sandbox
+      ..headless = headless;
+  }
 
-  String? model;
-  String? provider;
-  ApproveMode? approveMode;
+  ChatMeta.of(this.doc);
 
-  /// How long this chat's model thinks. Null means the app's answer.
-  ReasoningEffort? reasoningEffort;
+  final SettingsDocument doc;
 
-  /// This chat's own standing rules, in front of the project's and the app's.
-  /// What "Allow in Chat" on a banner writes.
-  List<PermissionRule> permissions;
+  String? get model => doc.read(SettingKeys.model);
+  set model(String? value) => doc.set(SettingKeys.model, value);
 
-  /// Machine directories this chat's sandboxed commands may write to, beside
-  /// the workspace — what "Allow in Chat" on a sandbox-denied write grants.
-  /// In front of the project's list.
-  List<String> writableDirs;
+  String? get provider => doc.read(SettingKeys.provider);
+  set provider(String? value) => doc.set(SettingKeys.provider, value);
 
-  /// How long this chat lives once its TTL is enabled. Null means inherit the
-  /// project (if set) or app default.
-  TempChatTtl? tempChatTtl;
+  ApproveMode? get approveMode => doc.read(SettingKeys.approveMode);
+  set approveMode(ApproveMode? value) =>
+      doc.set(SettingKeys.approveMode, value);
 
-  /// Whether this chat keeps out of the auto-memory: the recall, the
-  /// extraction and the memory tools. The instruction files keep reaching it —
-  /// they are read into every turn. Null means follow whatever the project
-  /// answers, and a project that takes the subsystem away cannot be given it
-  /// back from here.
-  bool? memoryOff;
+  ReasoningEffort? get reasoningEffort => doc.read(SettingKeys.reasoningEffort);
+  set reasoningEffort(ReasoningEffort? value) =>
+      doc.set(SettingKeys.reasoningEffort, value);
 
-  /// Whether this chat's commands run under Landlock, over the project's
-  /// answer. Null means follow the project.
-  bool? sandbox;
+  TempChatTtl? get tempChatTtl => doc.read(SettingKeys.tempChatTtl);
+  set tempChatTtl(TempChatTtl? value) =>
+      doc.set(SettingKeys.tempChatTtl, value);
 
-  /// A chat nobody watches — a trigger's new one. Every turn on it drops `ask_user`
-  /// and `task`, since nobody is there to answer or to need the fan-out, and
-  /// suppresses the title model, since a trigger already named the chat. Null
-  /// means an ordinary chat the user drives.
-  bool? headless;
+  /// In front of the project's and the app's. What "Allow in Chat" on a
+  /// banner writes.
+  List<PermissionRule> get permissions =>
+      doc.read(SettingKeys.permissions) ?? const [];
+  set permissions(List<PermissionRule> value) =>
+      doc.set(SettingKeys.permissions, value);
 
-  factory ChatMeta.fromJson(Map<String, dynamic> json) => ChatMeta(
-    model: json["model"] as String?,
-    provider: json["provider"] as String?,
-    approveMode: _approveMode(json),
-    reasoningEffort: ReasoningEffort.values
-        .asNameMap()[json["reasoningEffort"]],
-    permissions: permissionRulesFromJson(json["permissions"] as List<dynamic>?),
-    writableDirs: [
-      for (final w in (json["writableDirs"] as List<dynamic>? ?? const []))
-        if (w is String) w,
-    ],
-    tempChatTtl: TempChatTtl.values.asNameMap()[json["tempChatTtl"]],
-    memoryOff: json["memoryOff"] as bool?,
-    sandbox: json["sandbox"] as bool?,
-    headless: json["headless"] as bool?,
-  );
+  /// What "Allow in Chat" on a sandbox-denied write grants. In front of the
+  /// project's list.
+  List<String> get writableDirs =>
+      doc.read(SettingKeys.writableDirs) ?? const [];
+  set writableDirs(List<String> value) =>
+      doc.set(SettingKeys.writableDirs, value);
+
+  bool? get memoryOff => doc.read(SettingKeys.memoryOff);
+  set memoryOff(bool? value) => doc.set(SettingKeys.memoryOff, value);
+
+  bool? get sandbox => doc.read(SettingKeys.sandbox);
+  set sandbox(bool? value) => doc.set(SettingKeys.sandbox, value);
+
+  bool? get headless => doc.read(SettingKeys.headless);
+  set headless(bool? value) => doc.set(SettingKeys.headless, value);
+
+  factory ChatMeta.fromJson(Map<String, dynamic> json) =>
+      ChatMeta.of(SettingsDocument(json: json, upgrades: SettingKeys.upgrades));
 
   /// Null is a `meta.json` that was never written, which inherits everything —
   /// and so is one that cannot be parsed.
@@ -86,35 +94,16 @@ class ChatMeta {
     }
   }
 
-  /// `approveMode` is the current key. An older file has `approveCommands` as
-  /// a bool, migrated by [approveModeFromJson]. Null when neither key is
-  /// present, meaning "inherit the app default".
-  static ApproveMode? _approveMode(Map<String, dynamic> json) =>
-      approveModeFromJson(json);
-
   /// The same overrides again, to be edited without the original moving. The
-  /// fields are mutable and the settings page writes them in place, so a page
-  /// backed out of has to leave what it was handed alone. `AppSettings.copy`
-  /// and `ProjectSettings.copy` are the same call for the same reason.
-  ChatMeta copy() => ChatMeta.fromJson(toJson());
+  /// values are mutable and the settings page writes them in place, so a page
+  /// backed out of has to leave what it was handed alone.
+  ChatMeta copy() => ChatMeta.of(doc.copy());
 
   /// Nothing overridden, so nothing to write down: this chat inherits the
   /// project's answers and the app's, which is what no `meta.json` means.
-  bool get isEmpty => toJson().isEmpty;
+  bool get isEmpty => doc.isEmpty;
 
-  Map<String, dynamic> toJson() => {
-    if (model != null) "model": model,
-    if (provider != null) "provider": provider,
-    if (approveMode != null) "approveMode": approveMode!.name,
-    if (reasoningEffort != null) "reasoningEffort": reasoningEffort!.name,
-    if (permissions.isNotEmpty)
-      "permissions": permissionRulesToJson(permissions),
-    if (writableDirs.isNotEmpty) "writableDirs": writableDirs,
-    if (tempChatTtl != null) "tempChatTtl": tempChatTtl!.name,
-    if (memoryOff != null) "memoryOff": memoryOff,
-    if (sandbox != null) "sandbox": sandbox,
-    if (headless != null) "headless": headless,
-  };
+  Map<String, dynamic> toJson() => doc.toJson();
 
   String encode() => jsonEncode(toJson());
 }

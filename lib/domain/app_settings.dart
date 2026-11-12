@@ -2,215 +2,444 @@ import "dart:convert";
 
 import "../core/config.dart";
 import "agent_browser.dart" show BrowserApproval, BrowserUploadPolicy;
-import "app_icon.dart";
 import "app_theme.dart";
 import "assistant_view.dart";
 import "corner_radius.dart";
 import "llm_provider.dart";
-import "local_llm.dart";
-import "local_model.dart" show localProviderId;
 import "model_capability.dart" show ModelRef;
+import "model_options.dart";
+import "omada_ordering.dart";
 import "permission.dart";
 import "profile.dart";
-import "project_settings.dart";
+import "settings/keys.dart";
+import "settings/setting.dart";
 import "temp_chat_ttl.dart";
 import "theme_colour.dart";
 import "tone.dart";
 
-/// How hard the image model works on one image. Named as OpenAI's `quality`
-/// is; [auto] sends nothing and leaves the provider's own default.
-enum ImageQuality { auto, low, medium, high }
+export "model_options.dart";
 
-/// What each [ImageQuality] is called on a slider.
-const imageQualityLabels = {
-  ImageQuality.auto: "Default",
-  ImageQuality.low: "Low",
-  ImageQuality.medium: "Medium",
-  ImageQuality.high: "High",
-};
-
-/// How long a reasoning model thinks before it answers, sent as the OpenAI
-/// shape's `reasoning_effort` and mapped onto a thinking budget for
-/// Anthropic. [auto] sends nothing and leaves the model's own default.
-enum ReasoningEffort {
-  auto,
-  low,
-  medium,
-  high;
-
-  /// What the request carries, or null for nothing.
-  String? get wire => this == auto ? null : name;
-}
-
-/// What each [ReasoningEffort] is called on a slider.
-const reasoningEffortLabels = {
-  ReasoningEffort.auto: "Default",
-  ReasoningEffort.low: "Low",
-  ReasoningEffort.medium: "Medium",
-  ReasoningEffort.high: "High",
-};
-
-/// Persisted app-level settings (default model for new chats, etc.).
+/// The app's own settings, : a typed view of its document.
+/// What each value is, how it is kept and what it falls back to is its
+/// declaration in [SettingKeys]; a value here is one line over that.
 class AppSettings {
   AppSettings({
-    this.defaultModelId,
-    this.defaultProviderId,
-    this.titleModelId,
-    this.titleProviderId,
-    this.classifierModelId,
-    this.classifierProviderId,
-    this.imageModelId,
-    this.imageProviderId,
-    this.imageQuality = ImageQuality.auto,
-    this.reasoningEffort = ReasoningEffort.auto,
-    this.favouriteModels = const [],
-    this.instructionImports = true,
-    this.nestedInstructions = true,
-    this.instructionExcludes = const [],
-    this.autoMemory = false,
-    this.memoryRecall = true,
-    this.memoryExtraction = true,
-    this.memoryAgentTool = true,
-    this.memoryModelId,
-    this.memoryProviderId,
-    this.environment = const {},
-    this.approveMode = ApproveMode.auto,
-    this.llmProviders = const [],
-    this.profile,
-    this.tone = Tone.none,
-    this.citations = false,
-    this.appIcon = AppIcon.cookie,
-    this.appTheme = AppTheme.system,
-    this.primaryColour = ThemeColour.apple,
-    this.secondaryColour = ThemeColour.apple,
-    this.cornerRadius = CornerRadius.medium,
-    this.systemPalette = false,
-    this.showCommandChips = false,
-    this.tempChatTtl = TempChatTtl.off,
-    this.voiceRecognitionModelId,
-    this.voiceSpeechModelId,
-    this.voiceSpeaker = 0,
-    this.voiceRecognitionProviderId = localProviderId,
-    this.voiceSpeechProviderId = localProviderId,
-    this.voiceSpeechVoice,
-    this.voiceLanguage,
-    this.voicePushToTalk = false,
-    this.assistantProject,
-    this.assistantView = AssistantView.chat,
-    this.rootfsId,
-    this.maxLocalModels = 1,
-    this.localModelDevice,
-    this.localModelContext,
-    this.localModelPrefill = false,
-    this.localModelThreads,
-    this.localModelKvCachePrompts,
-    this.deviceName,
-    this.syncRelayUrl,
-    this.syncKeepAlive = false,
-    this.turnUrl,
-    this.turnUsername,
-    this.turnRetries = defaultTurnRetries,
-    this.omadaByDefault = false,
-    this.omadaMaxGenerations = defaultOmadaMaxGenerations,
-    this.omadaOrdering,
-    this.turnMaxSteps,
-    this.autoCompact = defaultAutoCompact,
-    this.autoCompactPercent = defaultAutoCompactPercent,
-    this.totalContext = defaultTotalContext,
-    this.capResponseLength = false,
-    this.responseLength = defaultResponseLength,
-    this.licenceAccepted = false,
-    this.autoUpdate = true,
-    this.liquidGlass = true,
-    this.agentBrowser,
-    this.agentBrowserVisible = false,
-    this.agentBrowserApproval = BrowserApproval.never,
-    this.agentBrowserUploads = BrowserUploadPolicy.classifier,
-  });
+    String? defaultModelId,
+    String? defaultProviderId,
+    String? titleModelId,
+    String? titleProviderId,
+    String? classifierModelId,
+    String? classifierProviderId,
+    String? imageModelId,
+    String? imageProviderId,
+    ImageQuality? imageQuality,
+    ReasoningEffort? reasoningEffort,
+    List<ModelRef>? favouriteModels,
+    bool? instructionImports,
+    bool? nestedInstructions,
+    List<String>? instructionExcludes,
+    bool? autoMemory,
+    String? memoryModelId,
+    String? memoryProviderId,
+    bool? memoryRecall,
+    bool? memoryExtraction,
+    bool? memoryAgentTool,
+    Map<String, String>? environment,
+    ApproveMode? approveMode,
+    List<LlmProviderConfig>? llmProviders,
+    Profile? profile,
+    Tone? tone,
+    bool? citations,
+    AppTheme? appTheme,
+    ThemeColour? primaryColour,
+    ThemeColour? secondaryColour,
+    CornerRadius? cornerRadius,
+    bool? systemPalette,
+    bool? showCommandChips,
+    TempChatTtl? tempChatTtl,
+    String? voiceRecognitionModelId,
+    String? voiceSpeechModelId,
+    int? voiceSpeaker,
+    String? voiceRecognitionProviderId,
+    String? voiceSpeechProviderId,
+    String? voiceSpeechVoice,
+    String? voiceLanguage,
+    bool? voicePushToTalk,
+    String? assistantProject,
+    AssistantView? assistantView,
+    String? rootfsId,
+    int? maxLocalModels,
+    String? localModelDevice,
+    int? localModelContext,
+    bool? localModelPrefill,
+    int? localModelThreads,
+    int? localModelKvCachePrompts,
+    String? deviceName,
+    String? syncRelayUrl,
+    bool? syncKeepAlive,
+    String? turnUrl,
+    String? turnUsername,
+    int? turnRetries,
+    bool? omadaByDefault,
+    int? omadaMaxGenerations,
+    OmadaOrdering? omadaOrdering,
+    int? turnMaxSteps,
+    bool? autoCompact,
+    int? autoCompactPercent,
+    int? totalContext,
+    bool? capResponseLength,
+    int? responseLength,
+    bool? licenceAccepted,
+    bool? autoUpdate,
+    bool? liquidGlass,
+    String? agentBrowser,
+    bool? agentBrowserVisible,
+    BrowserApproval? agentBrowserApproval,
+    BrowserUploadPolicy? agentBrowserUploads,
+  }) : doc = SettingsDocument(root: true) {
+    doc
+      ..set(SettingKeys.defaultModelId, defaultModelId)
+      ..set(SettingKeys.defaultProviderId, defaultProviderId)
+      ..set(SettingKeys.titleModelId, titleModelId)
+      ..set(SettingKeys.titleProviderId, titleProviderId)
+      ..set(SettingKeys.classifierModelId, classifierModelId)
+      ..set(SettingKeys.classifierProviderId, classifierProviderId)
+      ..set(SettingKeys.imageModelId, imageModelId)
+      ..set(SettingKeys.imageProviderId, imageProviderId)
+      ..set(SettingKeys.imageQuality, imageQuality)
+      ..set(SettingKeys.reasoningEffort, reasoningEffort)
+      ..set(SettingKeys.favouriteModels, favouriteModels)
+      ..set(SettingKeys.instructionImports, instructionImports)
+      ..set(SettingKeys.nestedInstructions, nestedInstructions)
+      ..set(SettingKeys.instructionExcludes, instructionExcludes)
+      ..set(SettingKeys.autoMemory, autoMemory)
+      ..set(SettingKeys.memoryModelId, memoryModelId)
+      ..set(SettingKeys.memoryProviderId, memoryProviderId)
+      ..set(SettingKeys.memoryRecall, memoryRecall)
+      ..set(SettingKeys.memoryExtraction, memoryExtraction)
+      ..set(SettingKeys.memoryAgentTool, memoryAgentTool)
+      ..set(SettingKeys.environment, environment)
+      ..set(SettingKeys.approveMode, approveMode)
+      ..set(SettingKeys.llmProviders, llmProviders)
+      ..set(SettingKeys.profile, profile)
+      ..set(SettingKeys.tone, tone)
+      ..set(SettingKeys.citations, citations)
+      ..set(SettingKeys.appTheme, appTheme)
+      ..set(SettingKeys.primaryColour, primaryColour)
+      ..set(SettingKeys.secondaryColour, secondaryColour)
+      ..set(SettingKeys.cornerRadius, cornerRadius)
+      ..set(SettingKeys.systemPalette, systemPalette)
+      ..set(SettingKeys.showCommandChips, showCommandChips)
+      ..set(SettingKeys.tempChatTtl, tempChatTtl)
+      ..set(SettingKeys.voiceRecognitionModelId, voiceRecognitionModelId)
+      ..set(SettingKeys.voiceSpeechModelId, voiceSpeechModelId)
+      ..set(SettingKeys.voiceSpeaker, voiceSpeaker)
+      ..set(SettingKeys.voiceRecognitionProviderId, voiceRecognitionProviderId)
+      ..set(SettingKeys.voiceSpeechProviderId, voiceSpeechProviderId)
+      ..set(SettingKeys.voiceSpeechVoice, voiceSpeechVoice)
+      ..set(SettingKeys.voiceLanguage, voiceLanguage)
+      ..set(SettingKeys.voicePushToTalk, voicePushToTalk)
+      ..set(SettingKeys.assistantProject, assistantProject)
+      ..set(SettingKeys.assistantView, assistantView)
+      ..set(SettingKeys.rootfsId, rootfsId)
+      ..set(SettingKeys.maxLocalModels, maxLocalModels)
+      ..set(SettingKeys.localModelDevice, localModelDevice)
+      ..set(SettingKeys.localModelContext, localModelContext)
+      ..set(SettingKeys.localModelPrefill, localModelPrefill)
+      ..set(SettingKeys.localModelThreads, localModelThreads)
+      ..set(SettingKeys.localModelKvCachePrompts, localModelKvCachePrompts)
+      ..set(SettingKeys.deviceName, deviceName)
+      ..set(SettingKeys.syncRelayUrl, syncRelayUrl)
+      ..set(SettingKeys.syncKeepAlive, syncKeepAlive)
+      ..set(SettingKeys.turnUrl, turnUrl)
+      ..set(SettingKeys.turnUsername, turnUsername)
+      ..set(SettingKeys.turnRetries, turnRetries)
+      ..set(SettingKeys.omadaByDefault, omadaByDefault)
+      ..set(SettingKeys.omadaMaxGenerations, omadaMaxGenerations)
+      ..set(SettingKeys.omadaOrdering, omadaOrdering)
+      ..set(SettingKeys.turnMaxSteps, turnMaxSteps)
+      ..set(SettingKeys.autoCompact, autoCompact)
+      ..set(SettingKeys.autoCompactPercent, autoCompactPercent)
+      ..set(SettingKeys.totalContext, totalContext)
+      ..set(SettingKeys.capResponseLength, capResponseLength)
+      ..set(SettingKeys.responseLength, responseLength)
+      ..set(SettingKeys.licenceAccepted, licenceAccepted)
+      ..set(SettingKeys.autoUpdate, autoUpdate)
+      ..set(SettingKeys.liquidGlass, liquidGlass)
+      ..set(SettingKeys.agentBrowser, agentBrowser)
+      ..set(SettingKeys.agentBrowserVisible, agentBrowserVisible)
+      ..set(SettingKeys.agentBrowserApproval, agentBrowserApproval)
+      ..set(SettingKeys.agentBrowserUploads, agentBrowserUploads);
+  }
 
-  String? defaultModelId;
-  String? defaultProviderId;
+  AppSettings.of(this.doc);
 
-  /// What names a chat after its first message. Both halves or neither: with
-  /// nothing here the feature is off and a chat keeps the name it was made
-  /// with.
-  String? titleModelId;
-  String? titleProviderId;
+  final SettingsDocument doc;
 
-  /// What classifies a command as safe enough to run without asking, when
-  /// [approveMode] is [ApproveMode.auto]. Both halves or neither: with nothing
-  /// here auto mode falls back to asking for every command.
-  String? classifierModelId;
-  String? classifierProviderId;
+  String? get defaultModelId => doc.read(SettingKeys.defaultModelId);
+  set defaultModelId(String? value) =>
+      doc.set(SettingKeys.defaultModelId, value);
 
-  /// What answers `image_generation`, and whether the agent is offered it at
-  /// all: no provider is off, the default, since every call is a paid request.
-  /// Both halves or neither, as the title's.
-  String? imageModelId;
-  String? imageProviderId;
-  ImageQuality imageQuality;
+  String? get defaultProviderId => doc.read(SettingKeys.defaultProviderId);
+  set defaultProviderId(String? value) =>
+      doc.set(SettingKeys.defaultProviderId, value);
 
-  /// How long the chat LLM thinks, where it is a model that reasons. Sent to
-  /// no other: a model that does not reason may refuse the field.
-  ReasoningEffort reasoningEffort;
+  String? get titleModelId => doc.read(SettingKeys.titleModelId);
+  set titleModelId(String? value) => doc.set(SettingKeys.titleModelId, value);
 
-  /// The models starred in a picker, in the order they were starred: what its
-  /// Favourites section lists, for every role that can use one.
-  List<ModelRef> favouriteModels;
+  String? get titleProviderId => doc.read(SettingKeys.titleProviderId);
+  set titleProviderId(String? value) =>
+      doc.set(SettingKeys.titleProviderId, value);
 
-  /// Whether `@path` references inside an AGENTS.md pull in more files. The
-  /// files themselves are read into every turn; this and [nestedInstructions]
-  /// only reach further than the two of them.
-  bool instructionImports;
+  String? get classifierModelId => doc.read(SettingKeys.classifierModelId);
+  set classifierModelId(String? value) =>
+      doc.set(SettingKeys.classifierModelId, value);
 
-  /// Whether reading a file pulls the AGENTS.md of each directory above it,
-  /// up to the filesystem root, into the turn.
-  bool nestedInstructions;
+  String? get classifierProviderId =>
+      doc.read(SettingKeys.classifierProviderId);
+  set classifierProviderId(String? value) =>
+      doc.set(SettingKeys.classifierProviderId, value);
 
-  /// Glob patterns that keep an AGENTS.md out of a turn: a file whose path
-  /// one of them names is skipped, wherever the load meets it; empty skips
-  /// nothing.
-  List<String> instructionExcludes;
+  String? get imageModelId => doc.read(SettingKeys.imageModelId);
+  set imageModelId(String? value) => doc.set(SettingKeys.imageModelId, value);
 
-  /// Whether the auto-memory subsystem runs: a per-project store of markdown
-  /// memories the agent reads, recalls and writes with a background model.
-  /// Off by default, and inert beside it until [memoryModelId] is set.
-  bool autoMemory;
+  String? get imageProviderId => doc.read(SettingKeys.imageProviderId);
+  set imageProviderId(String? value) =>
+      doc.set(SettingKeys.imageProviderId, value);
 
-  /// What writes memories in the background (extraction after a turn,
-  /// consolidation between chats). Both halves or neither: with nothing here
-  /// auto-memory stays read-only — nothing is written on the user's behalf
-  /// by a model they have not chosen.
-  String? memoryModelId;
-  String? memoryProviderId;
+  ImageQuality get imageQuality => doc.of(SettingKeys.imageQuality);
+  set imageQuality(ImageQuality value) =>
+      doc.set(SettingKeys.imageQuality, value);
 
-  /// Whether relevant memories are recalled into each turn. A sub-gate of
-  /// [autoMemory], on by default: the store is read-only from the turn's point
-  /// of view, so the cost is prompt size, capped.
-  bool memoryRecall;
+  ReasoningEffort get reasoningEffort => doc.of(SettingKeys.reasoningEffort);
+  set reasoningEffort(ReasoningEffort value) =>
+      doc.set(SettingKeys.reasoningEffort, value);
 
-  /// Whether a background model writes memories from a turn after it ends.
-  /// A sub-gate of [autoMemory], on by default, inert beside it until
-  /// [memoryModelId] is set.
-  bool memoryExtraction;
+  List<ModelRef> get favouriteModels => doc.of(SettingKeys.favouriteModels);
+  set favouriteModels(List<ModelRef> value) =>
+      doc.set(SettingKeys.favouriteModels, value);
 
-  /// Whether the agent is offered the `memorySave` and `memorySearch` tools.
-  /// A sub-gate of [autoMemory], on by default: a memory it decides to keep is
-  /// one it judged worth keeping, rather than one a background pass guessed at.
-  bool memoryAgentTool;
+  bool get instructionImports => doc.of(SettingKeys.instructionImports);
+  set instructionImports(bool value) =>
+      doc.set(SettingKeys.instructionImports, value);
 
-  /// Environment variables the agent's commands run under, and that a provider
-  /// may name instead of holding its key. Held here rather than in the shell
-  /// because the settings page edits them.
-  Map<String, String> environment;
+  bool get nestedInstructions => doc.of(SettingKeys.nestedInstructions);
+  set nestedInstructions(bool value) =>
+      doc.set(SettingKeys.nestedInstructions, value);
 
-  /// How the agent handles a command before it runs. A chat can override it.
-  /// Default [ApproveMode.auto].
-  ApproveMode approveMode;
+  List<String> get instructionExcludes =>
+      doc.of(SettingKeys.instructionExcludes);
+  set instructionExcludes(List<String> value) =>
+      doc.set(SettingKeys.instructionExcludes, value);
 
-  /// The endpoints the agent can call. Empty until the user adds one, which is
-  /// why the first thing settings offers is a list of presets.
-  List<LlmProviderConfig> llmProviders;
+  bool get autoMemory => doc.of(SettingKeys.autoMemory);
+  set autoMemory(bool value) => doc.set(SettingKeys.autoMemory, value);
+
+  String? get memoryModelId => doc.read(SettingKeys.memoryModelId);
+  set memoryModelId(String? value) => doc.set(SettingKeys.memoryModelId, value);
+
+  String? get memoryProviderId => doc.read(SettingKeys.memoryProviderId);
+  set memoryProviderId(String? value) =>
+      doc.set(SettingKeys.memoryProviderId, value);
+
+  bool get memoryRecall => doc.of(SettingKeys.memoryRecall);
+  set memoryRecall(bool value) => doc.set(SettingKeys.memoryRecall, value);
+
+  bool get memoryExtraction => doc.of(SettingKeys.memoryExtraction);
+  set memoryExtraction(bool value) =>
+      doc.set(SettingKeys.memoryExtraction, value);
+
+  bool get memoryAgentTool => doc.of(SettingKeys.memoryAgentTool);
+  set memoryAgentTool(bool value) =>
+      doc.set(SettingKeys.memoryAgentTool, value);
+
+  Map<String, String> get environment => doc.of(SettingKeys.environment);
+  set environment(Map<String, String> value) =>
+      doc.set(SettingKeys.environment, value);
+
+  ApproveMode get approveMode => doc.of(SettingKeys.approveMode);
+  set approveMode(ApproveMode value) => doc.set(SettingKeys.approveMode, value);
+
+  List<LlmProviderConfig> get llmProviders => doc.of(SettingKeys.llmProviders);
+  set llmProviders(List<LlmProviderConfig> value) =>
+      doc.set(SettingKeys.llmProviders, value);
+
+  Profile? get profile => doc.read(SettingKeys.profile);
+  set profile(Profile? value) => doc.set(SettingKeys.profile, value);
+
+  Tone get tone => doc.of(SettingKeys.tone);
+  set tone(Tone value) => doc.set(SettingKeys.tone, value);
+
+  bool get citations => doc.of(SettingKeys.citations);
+  set citations(bool value) => doc.set(SettingKeys.citations, value);
+
+  AppTheme get appTheme => doc.of(SettingKeys.appTheme);
+  set appTheme(AppTheme value) => doc.set(SettingKeys.appTheme, value);
+
+  ThemeColour get primaryColour => doc.of(SettingKeys.primaryColour);
+  set primaryColour(ThemeColour value) =>
+      doc.set(SettingKeys.primaryColour, value);
+
+  ThemeColour get secondaryColour => doc.of(SettingKeys.secondaryColour);
+  set secondaryColour(ThemeColour value) =>
+      doc.set(SettingKeys.secondaryColour, value);
+
+  CornerRadius get cornerRadius => doc.of(SettingKeys.cornerRadius);
+  set cornerRadius(CornerRadius value) =>
+      doc.set(SettingKeys.cornerRadius, value);
+
+  bool get systemPalette => doc.of(SettingKeys.systemPalette);
+  set systemPalette(bool value) => doc.set(SettingKeys.systemPalette, value);
+
+  bool get showCommandChips => doc.of(SettingKeys.showCommandChips);
+  set showCommandChips(bool value) =>
+      doc.set(SettingKeys.showCommandChips, value);
+
+  TempChatTtl get tempChatTtl => doc.of(SettingKeys.tempChatTtl);
+  set tempChatTtl(TempChatTtl value) => doc.set(SettingKeys.tempChatTtl, value);
+
+  String? get voiceRecognitionModelId =>
+      doc.read(SettingKeys.voiceRecognitionModelId);
+  set voiceRecognitionModelId(String? value) =>
+      doc.set(SettingKeys.voiceRecognitionModelId, value);
+
+  String? get voiceSpeechModelId => doc.read(SettingKeys.voiceSpeechModelId);
+  set voiceSpeechModelId(String? value) =>
+      doc.set(SettingKeys.voiceSpeechModelId, value);
+
+  int get voiceSpeaker => doc.of(SettingKeys.voiceSpeaker);
+  set voiceSpeaker(int value) => doc.set(SettingKeys.voiceSpeaker, value);
+
+  String get voiceRecognitionProviderId =>
+      doc.of(SettingKeys.voiceRecognitionProviderId);
+  set voiceRecognitionProviderId(String value) =>
+      doc.set(SettingKeys.voiceRecognitionProviderId, value);
+
+  String get voiceSpeechProviderId => doc.of(SettingKeys.voiceSpeechProviderId);
+  set voiceSpeechProviderId(String value) =>
+      doc.set(SettingKeys.voiceSpeechProviderId, value);
+
+  String? get voiceSpeechVoice => doc.read(SettingKeys.voiceSpeechVoice);
+  set voiceSpeechVoice(String? value) =>
+      doc.set(SettingKeys.voiceSpeechVoice, value);
+
+  String? get voiceLanguage => doc.read(SettingKeys.voiceLanguage);
+  set voiceLanguage(String? value) => doc.set(SettingKeys.voiceLanguage, value);
+
+  bool get voicePushToTalk => doc.of(SettingKeys.voicePushToTalk);
+  set voicePushToTalk(bool value) =>
+      doc.set(SettingKeys.voicePushToTalk, value);
+
+  String? get assistantProject => doc.read(SettingKeys.assistantProject);
+  set assistantProject(String? value) =>
+      doc.set(SettingKeys.assistantProject, value);
+
+  AssistantView get assistantView => doc.of(SettingKeys.assistantView);
+  set assistantView(AssistantView value) =>
+      doc.set(SettingKeys.assistantView, value);
+
+  String? get rootfsId => doc.read(SettingKeys.rootfsId);
+  set rootfsId(String? value) => doc.set(SettingKeys.rootfsId, value);
+
+  int get maxLocalModels => doc.of(SettingKeys.maxLocalModels);
+  set maxLocalModels(int value) => doc.set(SettingKeys.maxLocalModels, value);
+
+  String? get localModelDevice => doc.read(SettingKeys.localModelDevice);
+  set localModelDevice(String? value) =>
+      doc.set(SettingKeys.localModelDevice, value);
+
+  int? get localModelContext => doc.read(SettingKeys.localModelContext);
+  set localModelContext(int? value) =>
+      doc.set(SettingKeys.localModelContext, value);
+
+  bool get localModelPrefill => doc.of(SettingKeys.localModelPrefill);
+  set localModelPrefill(bool value) =>
+      doc.set(SettingKeys.localModelPrefill, value);
+
+  int? get localModelThreads => doc.read(SettingKeys.localModelThreads);
+  set localModelThreads(int? value) =>
+      doc.set(SettingKeys.localModelThreads, value);
+
+  int? get localModelKvCachePrompts =>
+      doc.read(SettingKeys.localModelKvCachePrompts);
+  set localModelKvCachePrompts(int? value) =>
+      doc.set(SettingKeys.localModelKvCachePrompts, value);
+
+  String? get deviceName => doc.read(SettingKeys.deviceName);
+  set deviceName(String? value) => doc.set(SettingKeys.deviceName, value);
+
+  String? get syncRelayUrl => doc.read(SettingKeys.syncRelayUrl);
+  set syncRelayUrl(String? value) => doc.set(SettingKeys.syncRelayUrl, value);
+
+  bool get syncKeepAlive => doc.of(SettingKeys.syncKeepAlive);
+  set syncKeepAlive(bool value) => doc.set(SettingKeys.syncKeepAlive, value);
+
+  String? get turnUrl => doc.read(SettingKeys.turnUrl);
+  set turnUrl(String? value) => doc.set(SettingKeys.turnUrl, value);
+
+  String? get turnUsername => doc.read(SettingKeys.turnUsername);
+  set turnUsername(String? value) => doc.set(SettingKeys.turnUsername, value);
+
+  int get turnRetries => doc.of(SettingKeys.turnRetries);
+  set turnRetries(int value) => doc.set(SettingKeys.turnRetries, value);
+
+  bool get omadaByDefault => doc.of(SettingKeys.omadaByDefault);
+  set omadaByDefault(bool value) => doc.set(SettingKeys.omadaByDefault, value);
+
+  int get omadaMaxGenerations => doc.of(SettingKeys.omadaMaxGenerations);
+  set omadaMaxGenerations(int value) =>
+      doc.set(SettingKeys.omadaMaxGenerations, value);
+
+  OmadaOrdering? get omadaOrdering => doc.read(SettingKeys.omadaOrdering);
+  set omadaOrdering(OmadaOrdering? value) =>
+      doc.set(SettingKeys.omadaOrdering, value);
+
+  int? get turnMaxSteps => doc.read(SettingKeys.turnMaxSteps);
+  set turnMaxSteps(int? value) => doc.set(SettingKeys.turnMaxSteps, value);
+
+  bool get autoCompact => doc.of(SettingKeys.autoCompact);
+  set autoCompact(bool value) => doc.set(SettingKeys.autoCompact, value);
+
+  int get autoCompactPercent => doc.of(SettingKeys.autoCompactPercent);
+  set autoCompactPercent(int value) =>
+      doc.set(SettingKeys.autoCompactPercent, value);
+
+  int get totalContext => doc.of(SettingKeys.totalContext);
+  set totalContext(int value) => doc.set(SettingKeys.totalContext, value);
+
+  bool get capResponseLength => doc.of(SettingKeys.capResponseLength);
+  set capResponseLength(bool value) =>
+      doc.set(SettingKeys.capResponseLength, value);
+
+  int get responseLength => doc.of(SettingKeys.responseLength);
+  set responseLength(int value) => doc.set(SettingKeys.responseLength, value);
+
+  bool get licenceAccepted => doc.of(SettingKeys.licenceAccepted);
+  set licenceAccepted(bool value) =>
+      doc.set(SettingKeys.licenceAccepted, value);
+
+  bool get autoUpdate => doc.of(SettingKeys.autoUpdate);
+  set autoUpdate(bool value) => doc.set(SettingKeys.autoUpdate, value);
+
+  bool get liquidGlass => doc.of(SettingKeys.liquidGlass);
+  set liquidGlass(bool value) => doc.set(SettingKeys.liquidGlass, value);
+
+  String? get agentBrowser => doc.read(SettingKeys.agentBrowser);
+  set agentBrowser(String? value) => doc.set(SettingKeys.agentBrowser, value);
+
+  bool get agentBrowserVisible => doc.of(SettingKeys.agentBrowserVisible);
+  set agentBrowserVisible(bool value) =>
+      doc.set(SettingKeys.agentBrowserVisible, value);
+
+  BrowserApproval get agentBrowserApproval =>
+      doc.of(SettingKeys.agentBrowserApproval);
+  set agentBrowserApproval(BrowserApproval value) =>
+      doc.set(SettingKeys.agentBrowserApproval, value);
+
+  BrowserUploadPolicy get agentBrowserUploads =>
+      doc.of(SettingKeys.agentBrowserUploads);
+  set agentBrowserUploads(BrowserUploadPolicy value) =>
+      doc.set(SettingKeys.agentBrowserUploads, value);
 
   /// Whether a provider other than [exceptId] is called [name], whatever its
   /// case: a name is what tells two of them apart.
@@ -221,318 +450,24 @@ class AppSettings {
     );
   }
 
-  /// The user's profile, injected at the end of the system prompt. App-level
-  /// default; a project can override it. Null means nothing is injected.
-  Profile? profile;
-
-  /// How the agent words its replies. App-level default; a project can
-  /// override it. [Tone.none] adds nothing to the prompt.
-  Tone tone;
-
-  /// Whether the agent numbers the web pages a reply drew on and lists them
-  /// at the end of it. It names what it used, never a search it was not
-  /// asked to make. App-level default; a project can override it.
-  bool citations;
-
-  /// Which icon the app wears, in the app and on the Android home screen.
-  /// App-level only: an icon is the app's, not a chat's.
-  AppIcon appIcon;
-
-  /// Which palette the app draws. App-level only, for the same reason.
-  AppTheme appTheme;
-
-  /// The two colours the palette is built from: the primary is the seed, and
-  /// the secondary seeds the accent group beside it. Both indigo is the app's
-  /// own scheme, where the secondary is whatever Material derives from the one
-  /// seed. App-level, like the theme and the icon.
-  ThemeColour primaryColour;
-  ThemeColour secondaryColour;
-
-  /// How round the corners the theme rounds are — fields, dialogs, menus,
-  /// sheets and buttons.
-  CornerRadius cornerRadius;
-
-  /// Whether the palette comes from the system instead of the two colours
-  /// above — Android's Material 3 Expressive, which follows the wallpaper.
-  /// Ignored where the platform has no accent to give.
-  bool systemPalette;
-
-  /// Whether the new-chat screen offers a chip per `/skill` and `@agent` the
-  /// library holds. Off, the row is absent from the screen rather than a
-  /// blank one, and the composer's menus are the only place those are named.
-  /// App-level only, like the theme and the icon.
-  bool showCommandChips;
-
-  /// How long a temporary chat lives once its TTL is enabled. App-level
-  /// default; a project and a chat can override it. [TempChatTtl.off] means
-  /// temporary chats are off — chats live forever.
-  TempChatTtl tempChatTtl;
-
-  /// Which voice models listen and speak, and which of a multi-voice model's
-  /// speakers is used. A model id is the on-device catalog's where its
-  /// provider is [localProviderId], as a picker offers it, and that
-  /// provider's own otherwise. App-level only, like the icon and
-  /// the theme: a voice is the app's, not a conversation's. Either being null
-  /// is voice mode not set up yet, which is what takes the button off the
-  /// composer.
-  String? voiceRecognitionModelId;
-  String? voiceSpeechModelId;
-  int voiceSpeaker;
-
-  String voiceRecognitionProviderId;
-  String voiceSpeechProviderId;
-
-  /// The provider's own name for the voice its speech model reads in, sent as
-  /// is. Null sends none, which some providers refuse.
-  String? voiceSpeechVoice;
-
-  /// Which language the device's own engines are asked to hear and speak in,
-  /// as a BCP-47 tag. Null is the device's own — see `Voice.systemLanguages`.
-  String? voiceLanguage;
-
-  /// Whether the microphone is open only while a button is held. Off is voice
-  /// mode listening for as long as it is on screen, which is what it is for;
-  /// on is for a room where that does not work — a recogniser transcribes
-  /// whatever is loud enough, and somewhere noisy enough the only reliable
-  /// answer is for the user to say when.
-  bool voicePushToTalk;
-
-  /// Which project the system's assistant gesture opens a chat in. Null is the
-  /// default project, the same null `selectedProjectProvider` uses. App-level:
-  /// the assistant is the app's, not a conversation's. See issue #54.
-  String? assistantProject;
-
-  /// Which view the assistant gesture opens. App-level, for the same reason.
-  AssistantView assistantView;
-
-  /// The Linux the agent's commands run inside, by catalog id. Null is Android
-  /// itself, which is where every command ran before there was anything else to
-  /// run one in — and so what an existing `settings.json` already says by
-  /// saying nothing. App-level: which machine the agent is on is the app's, and
-  /// a chat moved between the two mid-conversation would be a conversation
-  /// about a filesystem that is no longer there.
-  String? rootfsId;
-
-  /// How many on-device models may be loaded at once, capped at
-  /// [maxLocalModelsAllowed]. One is the default because each is a process
-  /// holding a set of weights and a gigabyte of KV cache; two is what makes a
-  /// small model naming chats beside a large one answering them worth setting,
-  /// and is what stops the two evicting each other turn after turn.
-  int maxLocalModels;
-
-  /// The accelerator it is offloaded to, by the name `--list-devices` gave it.
-  /// Null is auto — the best one the phone turned out to have — and
-  /// `LocalDevice.cpu` is how the picker rules them all out. Stored as the name
-  /// rather than as a kind, because that is the string the server is passed and
-  /// a phone can have two of the same kind.
-  String? localModelDevice;
-
-  /// How much context every on-device model is loaded with, or null to let each
-  /// one answer for itself — `LocalModel.defaultContext`, which is what its own
-  /// KV cache costs divided into [kvBudgetBytes]. Set here, it overrides that
-  /// for all of them, which is the honest shape now that any downloaded model
-  /// can be the one a turn asks for.
-  int? localModelContext;
-
-  /// Whether to warm an on-device model's system-prompt KV in the background
-  /// when it is set as a default, so the first chat does not pay the whole
-  /// prompt at once. Off by default: it is minutes of the CPU on a phone, so it
-  /// is the user's to ask for. See "Prefilling the system prompt" in
-  /// `lib/data/local/AGENTS.md`.
-  bool localModelPrefill;
-
-  /// How many CPU cores the model server may run on, or null for the default —
-  /// every big core (`bigCoreCount`). Lowering it trades tokens-per-second for
-  /// battery, which is the only reason to. Read per launch, so a change reaches
-  /// the next server rather than the running one.
-  int? localModelThreads;
-
-  /// How many prompt prefixes the on-device provider keeps warmed on disk, so
-  /// reopening a chat restores its KV rather than reprocessing it. Null is the
-  /// default (10) and `0` is off — nothing is written.
-  ///
-  /// One prompt is one request to the model, so it is neither per chat nor per
-  /// turn: a turn writes one for each step it takes, and the bound is over
-  /// every chat at once. It was called `Chats` and counted neither. See
-  /// "Persisting the KV cache to disk" in `lib/data/local/AGENTS.md`.
-  int? localModelKvCachePrompts;
-
-  /// This device's name as paired devices see it. Null falls back to
-  /// "Entoli " plus a fingerprint prefix in [SyncHub].
-  String? deviceName;
-
-  /// A user-supplied WebSocket relay endpoint for pairing over the internet.
-  /// Empty or null means relay is off and only LAN / manual paste work.
-  String? syncRelayUrl;
-
-  /// Whether a connected peer holds the process open off screen, as a
-  /// foreground service with a notification naming the connected devices and
-  /// a Disconnect action. Off by default: the cost is a wake lock and a
-  /// persistent notification for as long as a device is connected. Android
-  /// only; a no-op everywhere a foreground service cannot be started.
-  bool syncKeepAlive;
-
-  /// TURN server URL for NAT traversal. Bring-your-own; STUN defaults are
-  /// public. Null means no TURN, so symmetric-NAT pairs fail honestly.
-  String? turnUrl;
-
-  /// TURN credentials, stored beside the URL. Null where the TURN server
-  /// needs none (rare) or none is configured. The password is not here: it is
-  /// a secret, and lives in the [AppSecrets] store beside the sync identity.
-  String? turnUsername;
-
-  /// How many times a turn that died on a retryable error — a connection that
-  /// dropped, a provider hiccup — is carried on automatically before it is
-  /// left failed. `0` is off: the turn stops where it failed and the Continue
-  /// bar is the only way on. App-level, like the model default it sits beside.
-  int turnRetries;
-
-  /// Whether a new project starts with Omada on, so the user who wants a
-  /// workspace of teams does not flip the toggle per project. Baked into the
-  /// project at creation; existing projects and the built-ins are untouched.
-  bool omadaByDefault;
-
-  /// How many handoff generations one Omada round may run — dispatch waves,
-  /// not turns: a three-member fan-out is one generation. The user's message
-  /// is generation one and uncapped; this bounds the waves that follow, and
-  /// the user speaking resets the count. A project's
-  /// `ProjectSettings.omadaMaxGenerations` overrides it per project.
-  int omadaMaxGenerations;
-
-  /// The room's scheduling default for a project that picked none of its own:
-  /// sequential runs the schedule one turn at a time, parallel answers with
-  /// one turn per member at once, and relay answers what a reply names the
-  /// moment it is written — per member still one turn at a time, but with no
-  /// wave barrier between the waves. `ProjectSettings.omadaOrdering` overrides
-  /// it per project; when neither names one the round runs relay. The enum
-  /// lives with the project settings, where a per-project answer was first
-  /// written.
-  OmadaOrdering? omadaOrdering;
-
-  /// How many model calls one turn may make before it stops for the user —
-  /// the step limit the backend runs under. Null is the backend's own
-  /// default; the value rides every turn, an Omada member turn included,
-  /// and the round's own bound is `omadaMaxGenerations` beside it.
-  int? turnMaxSteps;
-
-  /// Whether the conversation is summarized when it grows past
-  /// [autoCompactPercent] of the model's window — the auto half of compaction,
-  /// which bounds a long chat without a prompt of its own. The manual half is
-  /// `/compact`, and needs nothing here.
-  bool autoCompact;
-
-  /// The share of the context window auto-compact acts at. A named constant
-  /// so the settings row's "Default (80%)" and the controller's check are one
-  /// number.
-  int autoCompactPercent;
-
-  /// The most context a chat is let grow to, in tokens: the window
-  /// [autoCompactPercent] is a share of is the model's own or this, whichever
-  /// is smaller, and this where the catalog does not know the model — so a
-  /// million-token model compacts at a share of this rather than at 800k, a
-  /// context no model reads well. The summarizer's own ask is held to the
-  /// model's real window where it is known, this only where it is not. The
-  /// constant is the row's "(256k)" and the check's number both.
-  int totalContext;
-
-  /// Whether every reply is held to [responseLength], over what models.dev
-  /// says each model can write. Off, [responseLength] is only the fallback
-  /// for a model whose own limit is not known.
-  bool capResponseLength;
-
-  /// The most tokens one reply may run to: the cap where
-  /// [capResponseLength] is on, and the limit a model with no known one gets
-  /// where it is off. See "How long a reply may be" in
-  /// `lib/data/builtin/llm/AGENTS.md`.
-  int responseLength;
-
-  /// Whether the welcome tour was finished with its licence ticked: what first
-  /// launch reads to decide whether to show the tour, and what its Done
-  /// writes. It replaced `welcomeSeen`, which a file from before still
-  /// carries and nothing reads, so those installs walk the tour once more.
-  bool licenceAccepted;
-
-  /// Whether the app checks the latest release at startup and puts the newer
-  /// build in place of this one, where the platform can do that — the three
-  /// desktops are, and each sees the row. Default on, and written only when
-  /// off, so a settings file from before it existed says nothing and gets the
-  /// on default. See `app_update.dart` for what the check does.
-  bool autoUpdate;
-
-  /// Whether iOS and macOS draw the app's chrome — the sidebar, a chat's bar
-  /// and composer, the new-chat and voice pages — in Apple's own controls and
-  /// glass, a SwiftUI shell around the Flutter that draws the conversation.
-  /// Read once at launch, since the shell owns the window before any page is
-  /// built: a change waits for a restart. Default on and written only when
-  /// off, as [autoUpdate] is.
-  bool liquidGlass;
-
-  /// The default when nothing is set: five carry-ons per failure. A named
-  /// constant so the settings page's switch — which turns the feature on at
-  /// the default — and the load and save answers are one number.
-  static const defaultTurnRetries = 5;
-
-  /// The most the setting may say, and the slider's top.
-  static const maxTurnRetries = 10;
-
-  /// The default and the stops of the max-generations slider. Ten waves of
-  /// agent-to-agent work before the round stops for the user.
-  static const defaultOmadaMaxGenerations = 10;
-  static const omadaGenerationStops = [5, 10, 20, 40, 60, 80, 100];
-
-  /// The stops of the max-steps dropdown, and the backend default the
-  /// "Default" entry names.
-  static const turnStepStops = [20, 40, 60, 80, 100, 150];
-  static const defaultTurnMaxSteps = 40;
-
-  /// Auto-compact's defaults: on, at eighty percent — low enough that the
-  /// summary itself and the turn that follows still fit above the window.
-  static const defaultAutoCompact = true;
-  static const defaultAutoCompactPercent = 80;
-  static const autoCompactPercentStops = [60, 70, 80, 90];
-
-  /// The window the guess lands on: 128k sits under every hosted window
-  /// today — underestimating costs an early compaction, overestimating costs
-  /// a failed request, so the safe guess is the small one.
-  static const defaultTotalContext = 256000;
-
-  /// The bounds Total Context is clamped to, at load and at the settings
-  /// row's save — two sites that must agree, named once.
-  static const minTotalContext = 1024;
-  static const maxTotalContext = 1000000000;
-
-  /// The reply length a model with no known limit gets, and the cap's
-  /// starting point: the 8192 every Anthropic request used to send.
-  static const defaultResponseLength = 8192;
-
-  /// The bounds Maximum response length is clamped to, at load and at the
-  /// settings row's save.
-  static const minResponseLength = 1024;
-  static const maxResponseLength = 1000000;
-
-  /// The default when nothing is set: on, at ten prefixes. A named constant so
-  /// the UI's "Default (10)" label and the provider's effective count are one
-  /// number.
-  static const defaultKvCachePrompts = 10;
-
-  /// The browser the agent drives: null off, `embedded` for the downloaded
-  /// Helium, or a Chromium-family executable's path. On the phones the
-  /// WebView is on by default: null and `webview` are on, `off` is off. See
-  /// "The browser" in `lib/data/builtin/AGENTS.md`.
-  String? agentBrowser;
-
-  /// Whether that browser runs with a window. Hidden by default, with its
-  /// user agent cleared of "Headless"; the agent can still show it for the
-  /// user to finish a check.
-  bool agentBrowserVisible;
-
-  /// Who is asked before the browser's agent opens a page or acts on one.
-  /// Nobody by default: picking a browser is the consent.
-  BrowserApproval agentBrowserApproval;
-
-  /// Who picks what the agent uploads: its own scope, so the user can take
-  /// uploads from the agent and leave it everything else.
-  BrowserUploadPolicy agentBrowserUploads;
+  static const defaultTurnRetries = SettingKeys.defaultTurnRetries;
+  static const maxTurnRetries = SettingKeys.maxTurnRetries;
+  static const defaultOmadaMaxGenerations =
+      SettingKeys.defaultOmadaMaxGenerations;
+  static const omadaGenerationStops = SettingKeys.omadaGenerationStops;
+  static const turnStepStops = SettingKeys.turnStepStops;
+  static const defaultTurnMaxSteps = SettingKeys.defaultTurnMaxSteps;
+  static const defaultAutoCompact = SettingKeys.defaultAutoCompact;
+  static const defaultAutoCompactPercent =
+      SettingKeys.defaultAutoCompactPercent;
+  static const autoCompactPercentStops = SettingKeys.autoCompactPercentStops;
+  static const defaultTotalContext = SettingKeys.defaultTotalContext;
+  static const minTotalContext = SettingKeys.minTotalContext;
+  static const maxTotalContext = SettingKeys.maxTotalContext;
+  static const defaultResponseLength = SettingKeys.defaultResponseLength;
+  static const minResponseLength = SettingKeys.minResponseLength;
+  static const maxResponseLength = SettingKeys.maxResponseLength;
+  static const defaultKvCachePrompts = SettingKeys.defaultKvCachePrompts;
 
   static AppSettings load(AppConfig config) {
     final text = config.documents.read(config.settingsFile);
@@ -544,269 +479,19 @@ class AppSettings {
     }
   }
 
-  /// An enum name this build does not know is a later build's, and falls
-  /// back to the default rather than failing the whole load.
-  factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
-    defaultModelId: _orNull(json["defaultModelId"] as String?),
-    defaultProviderId: _orNull(json["defaultProviderId"] as String?),
-    titleModelId: _orNull(json["titleModelId"] as String?),
-    titleProviderId: _orNull(json["titleProviderId"] as String?),
-    classifierModelId: _orNull(json["classifierModelId"] as String?),
-    classifierProviderId: _orNull(json["classifierProviderId"] as String?),
-    imageModelId: _orNull(json["imageModelId"] as String?),
-    imageProviderId: _orNull(json["imageProviderId"] as String?),
-    imageQuality:
-        ImageQuality.values.asNameMap()[json["imageQuality"]] ??
-        ImageQuality.auto,
-    reasoningEffort:
-        ReasoningEffort.values.asNameMap()[json["reasoningEffort"]] ??
-        ReasoningEffort.auto,
-    favouriteModels: [
-      for (final pair in json["favouriteModels"] as List? ?? const [])
-        if (pair case [final String providerId, final String modelId])
-          (providerId: providerId, modelId: modelId),
-    ],
-    instructionImports: json["instructionImports"] as bool? ?? true,
-    nestedInstructions: json["nestedInstructions"] as bool? ?? true,
-    instructionExcludes: (json["instructionExcludes"] as List? ?? const [])
-        .map((e) => e as String)
-        .toList(),
-    autoMemory: json["autoMemory"] as bool? ?? false,
-    // Written only when off, so a file that predates them says nothing and
-    // gets the on defaults.
-    memoryRecall: json["memoryRecall"] as bool? ?? true,
-    memoryExtraction: json["memoryExtraction"] as bool? ?? true,
-    memoryAgentTool: json["memoryAgentTool"] as bool? ?? true,
-    memoryModelId: _orNull(json["memoryModelId"] as String?),
-    memoryProviderId: _orNull(json["memoryProviderId"] as String?),
-    // `opencodeEnv` is what this was called when a second backend spawned
-    // servers. Read-only: `save` writes `environment`, so a file migrates
-    // itself the first time anything is changed, and the fallback can go
-    // once no unwritten files are left.
-    environment: _stringMap(json["environment"] ?? json["opencodeEnv"]),
-    approveMode: _approveMode(json),
-    llmProviders: _providers(json["llmProviders"]),
-    profile: Profile.fromJson(json["profile"]),
-    tone: Tone.values.asNameMap()[json["tone"]] ?? Tone.none,
-    citations: json["citations"] as bool? ?? false,
-    appIcon: AppIcon.values.asNameMap()[json["appIcon"]] ?? AppIcon.cookie,
-    appTheme: AppTheme.values.asNameMap()[json["appTheme"]] ?? AppTheme.system,
-    primaryColour:
-        ThemeColour.values.asNameMap()[json["primaryColour"]] ??
-        ThemeColour.apple,
-    secondaryColour:
-        ThemeColour.values.asNameMap()[json["secondaryColour"]] ??
-        ThemeColour.apple,
-    cornerRadius:
-        CornerRadius.values.asNameMap()[json["cornerRadius"]] ??
-        CornerRadius.medium,
-    systemPalette: json["systemPalette"] as bool? ?? false,
-    showCommandChips: json["showCommandChips"] as bool? ?? false,
-    tempChatTtl:
-        TempChatTtl.values.asNameMap()[json["tempChatTtl"]] ?? TempChatTtl.off,
-    voiceRecognitionModelId: _orNull(
-      json["voiceRecognitionModelId"] as String?,
-    ),
-    voiceSpeechModelId: _orNull(json["voiceSpeechModelId"] as String?),
-    voiceSpeaker: json["voiceSpeaker"] as int? ?? 0,
-    // Absent in a file from before providers could listen and speak.
-    voiceRecognitionProviderId:
-        _orNull(json["voiceRecognitionProviderId"] as String?) ??
-        localProviderId,
-    voiceSpeechProviderId:
-        _orNull(json["voiceSpeechProviderId"] as String?) ?? localProviderId,
-    voiceSpeechVoice: _orNull(json["voiceSpeechVoice"] as String?),
-    voiceLanguage: _orNull(json["voiceLanguage"] as String?),
-    voicePushToTalk: json["voicePushToTalk"] as bool? ?? false,
-    assistantProject: _orNull(json["assistantProject"] as String?),
-    assistantView:
-        AssistantView.values.asNameMap()[json["assistantView"]] ??
-        AssistantView.chat,
-    rootfsId: _orNull(json["rootfsId"] as String?),
-    maxLocalModels: (json["maxLocalModels"] as int? ?? 1).clamp(
-      1,
-      maxLocalModelsAllowed,
-    ),
-    localModelDevice: _orNull(json["localModelDevice"] as String?),
-    localModelContext: json["localModelContext"] as int?,
-    localModelPrefill: json["localModelPrefill"] as bool? ?? false,
-    localModelThreads: json["localModelThreads"] as int?,
-    // `localModelKvCacheChats` is what this was called while it was thought
-    // to count chats. Read-only, like `opencodeEnv` above: `save` writes
-    // the new name, so a file migrates itself on the next change.
-    localModelKvCachePrompts:
-        (json["localModelKvCachePrompts"] ?? json["localModelKvCacheChats"])
-            as int?,
-    deviceName: _orNull(json["deviceName"] as String?),
-    syncRelayUrl: _orNull(json["syncRelayUrl"] as String?),
-    syncKeepAlive: json["syncKeepAlive"] as bool? ?? false,
-    turnUrl: _orNull(json["turnUrl"] as String?),
-    turnUsername: _orNull(json["turnUsername"] as String?),
-    turnRetries: (json["turnRetries"] as int? ?? defaultTurnRetries).clamp(
-      0,
-      maxTurnRetries,
-    ),
-    omadaByDefault: json["omadaByDefault"] as bool? ?? false,
-    omadaMaxGenerations:
-        (json["omadaMaxGenerations"] as int? ?? defaultOmadaMaxGenerations),
-    omadaOrdering: OmadaOrdering.values.asNameMap()[json["omadaOrdering"]],
-    turnMaxSteps: json["turnMaxSteps"] as int?,
-    autoCompact: json["autoCompact"] as bool? ?? defaultAutoCompact,
-    autoCompactPercent:
-        (json["autoCompactPercent"] as int? ?? defaultAutoCompactPercent).clamp(
-          10,
-          95,
-        ),
-    totalContext: (json["totalContext"] as int? ?? defaultTotalContext).clamp(
-      minTotalContext,
-      maxTotalContext,
-    ),
-    capResponseLength: json["capResponseLength"] as bool? ?? false,
-    responseLength: (json["responseLength"] as int? ?? defaultResponseLength)
-        .clamp(minResponseLength, maxResponseLength),
-    licenceAccepted: json["licenceAccepted"] as bool? ?? false,
-    // Written only when on is the default, so a file that predates it
-    // says nothing and gets the on default — the same bargain the memory
-    // gates are held to.
-    autoUpdate: json["autoUpdate"] as bool? ?? true,
-    liquidGlass: json["liquidGlass"] as bool? ?? true,
-    agentBrowser: _orNull(json["agentBrowser"] as String?),
-    agentBrowserVisible: json["agentBrowserVisible"] as bool? ?? false,
-    agentBrowserApproval:
-        BrowserApproval.values.asNameMap()[json["agentBrowserApproval"]] ??
-        BrowserApproval.never,
-    agentBrowserUploads:
-        BrowserUploadPolicy.values.asNameMap()[json["agentBrowserUploads"]] ??
-        BrowserUploadPolicy.classifier,
+  factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings.of(
+    SettingsDocument(json: json, root: true, upgrades: SettingKeys.upgrades),
   );
 
-  /// `approveMode` is the current key. An older file has `approveCommands` as
-  /// a bool, migrated by [approveModeFromJson]. A file with neither is the
-  /// default, [ApproveMode.auto].
-  static ApproveMode _approveMode(Map<String, dynamic> json) =>
-      approveModeFromJson(json) ?? ApproveMode.auto;
-
-  // Builds before the /provider flattening fix wrote empty ids here.
-  static String? _orNull(String? v) => (v == null || v.isEmpty) ? null : v;
-
-  static List<LlmProviderConfig> _providers(Object? value) {
-    if (value is! List) return const [];
-    return [for (final entry in value) ?LlmProviderConfig.fromJson(entry)];
-  }
-
-  static Map<String, String> _stringMap(Object? value) {
-    if (value is! Map) return const {};
-    return {
-      for (final entry in value.entries)
-        if (entry.value is String) entry.key.toString(): entry.value as String,
-    };
-  }
-
   /// A fresh instance holding the same values, for a notifier that has to hand
-  /// out a new object to be noticed: what a save and a reload would give. The
-  /// fields are mutable, so a caller changes them with a cascade.
-  AppSettings copy() => AppSettings.fromJson(toJson());
+  /// out a new object to be noticed. The values are mutable, so a caller
+  /// changes them with a cascade.
+  AppSettings copy() => AppSettings.of(doc.copy());
 
   Future<void> save(AppConfig config) =>
       config.documents.write(config.settingsFile, jsonEncode(toJson()));
 
-  Map<String, dynamic> toJson() => {
-    if (defaultModelId != null) "defaultModelId": defaultModelId,
-    if (defaultProviderId != null) "defaultProviderId": defaultProviderId,
-    if (titleModelId != null) "titleModelId": titleModelId,
-    if (titleProviderId != null) "titleProviderId": titleProviderId,
-    if (classifierModelId != null) "classifierModelId": classifierModelId,
-    if (classifierProviderId != null)
-      "classifierProviderId": classifierProviderId,
-    if (imageModelId != null) "imageModelId": imageModelId,
-    if (imageProviderId != null) "imageProviderId": imageProviderId,
-    if (imageQuality != ImageQuality.auto) "imageQuality": imageQuality.name,
-    if (reasoningEffort != ReasoningEffort.auto)
-      "reasoningEffort": reasoningEffort.name,
-    if (favouriteModels.isNotEmpty)
-      "favouriteModels": [
-        for (final f in favouriteModels) [f.providerId, f.modelId],
-      ],
-    // Written only when off, so a file that predates the on defaults says
-    // nothing and gets them.
-    if (!instructionImports) "instructionImports": instructionImports,
-    if (!nestedInstructions) "nestedInstructions": nestedInstructions,
-    if (instructionExcludes.isNotEmpty)
-      "instructionExcludes": instructionExcludes,
-    if (autoMemory) "autoMemory": autoMemory,
-    if (!memoryRecall) "memoryRecall": memoryRecall,
-    if (!memoryExtraction) "memoryExtraction": memoryExtraction,
-    if (!memoryAgentTool) "memoryAgentTool": memoryAgentTool,
-    if (memoryModelId != null) "memoryModelId": memoryModelId,
-    if (memoryProviderId != null) "memoryProviderId": memoryProviderId,
-    if (environment.isNotEmpty) "environment": environment,
-    // Written only when not auto, so a file that predates the default
-    // says nothing and gets it.
-    if (approveMode != ApproveMode.auto) "approveMode": approveMode.name,
-    if (llmProviders.isNotEmpty)
-      "llmProviders": [for (final provider in llmProviders) provider.toJson()],
-    if (profile != null && !profile!.isEmpty) "profile": profile!.toJson(),
-    if (tone != Tone.none) "tone": tone.name,
-    if (citations) "citations": citations,
-    "appIcon": appIcon.name,
-    "appTheme": appTheme.name,
-    "primaryColour": primaryColour.name,
-    "secondaryColour": secondaryColour.name,
-    "cornerRadius": cornerRadius.name,
-    "systemPalette": systemPalette,
-    if (showCommandChips) "showCommandChips": showCommandChips,
-    "tempChatTtl": tempChatTtl.name,
-    if (voiceRecognitionModelId != null)
-      "voiceRecognitionModelId": voiceRecognitionModelId,
-    if (voiceSpeechModelId != null) "voiceSpeechModelId": voiceSpeechModelId,
-    if (voiceSpeaker != 0) "voiceSpeaker": voiceSpeaker,
-    if (voiceRecognitionProviderId != localProviderId)
-      "voiceRecognitionProviderId": voiceRecognitionProviderId,
-    if (voiceSpeechProviderId != localProviderId)
-      "voiceSpeechProviderId": voiceSpeechProviderId,
-    "voiceSpeechVoice": ?voiceSpeechVoice,
-    if (voiceLanguage != null) "voiceLanguage": voiceLanguage,
-    if (voicePushToTalk) "voicePushToTalk": voicePushToTalk,
-    if (assistantProject != null) "assistantProject": assistantProject,
-    "assistantView": assistantView.name,
-    if (rootfsId != null) "rootfsId": rootfsId,
-    if (maxLocalModels != 1) "maxLocalModels": maxLocalModels,
-    if (localModelDevice != null) "localModelDevice": localModelDevice,
-    if (localModelContext != null) "localModelContext": localModelContext,
-    if (localModelPrefill) "localModelPrefill": localModelPrefill,
-    if (localModelThreads != null) "localModelThreads": localModelThreads,
-    if (localModelKvCachePrompts != null)
-      "localModelKvCachePrompts": localModelKvCachePrompts,
-    if (deviceName != null) "deviceName": deviceName,
-    if (syncRelayUrl != null) "syncRelayUrl": syncRelayUrl,
-    if (syncKeepAlive) "syncKeepAlive": syncKeepAlive,
-    if (turnUrl != null) "turnUrl": turnUrl,
-    if (turnUsername != null) "turnUsername": turnUsername,
-    // Written only when not the default, for the same reason the memory
-    // gates are: a file that predates it says nothing and gets the default.
-    if (turnRetries != defaultTurnRetries) "turnRetries": turnRetries,
-    if (omadaByDefault) "omadaByDefault": omadaByDefault,
-    if (omadaMaxGenerations != defaultOmadaMaxGenerations)
-      "omadaMaxGenerations": omadaMaxGenerations,
-    if (omadaOrdering != null) "omadaOrdering": omadaOrdering!.name,
-    if (turnMaxSteps != null) "turnMaxSteps": turnMaxSteps,
-    if (!autoCompact) "autoCompact": autoCompact,
-    if (autoCompactPercent != defaultAutoCompactPercent)
-      "autoCompactPercent": autoCompactPercent,
-    if (totalContext != defaultTotalContext) "totalContext": totalContext,
-    if (capResponseLength) "capResponseLength": capResponseLength,
-    if (responseLength != defaultResponseLength)
-      "responseLength": responseLength,
-    if (licenceAccepted) "licenceAccepted": licenceAccepted,
-    if (!autoUpdate) "autoUpdate": autoUpdate,
-    if (!liquidGlass) "liquidGlass": liquidGlass,
-    if (agentBrowser != null) "agentBrowser": agentBrowser,
-    if (agentBrowserVisible) "agentBrowserVisible": agentBrowserVisible,
-    if (agentBrowserApproval != BrowserApproval.never)
-      "agentBrowserApproval": agentBrowserApproval.name,
-    if (agentBrowserUploads != BrowserUploadPolicy.classifier)
-      "agentBrowserUploads": agentBrowserUploads.name,
-  };
+  Map<String, dynamic> toJson() => doc.toJson();
 }
 
 /// How the tools write: the settings notifier's own update, so a change lands

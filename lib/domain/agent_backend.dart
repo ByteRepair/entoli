@@ -2,22 +2,21 @@ import "dart:async";
 
 import "package:flutter/foundation.dart" show ValueListenable;
 
-import "../domain/app_settings.dart"
-    show AppSettings, ImageQuality, ReasoningEffort;
-import "../domain/ask.dart";
-import "../domain/shell_job.dart";
-import "../domain/builtin_project.dart";
-import "../domain/chat_log.dart";
-import "../domain/goal.dart";
-import "../domain/model_capability.dart";
-import "../domain/models.dart";
-import "../domain/permission.dart";
-import "../domain/provider_usage.dart";
-import "../domain/profile.dart";
-import "../domain/sub_agent_log.dart";
-import "../domain/tone.dart";
+import "app_settings.dart" show AppSettings, ImageQuality, ReasoningEffort;
+import "ask.dart";
+import "shell_job.dart";
+import "builtin_project.dart";
+import "chat_log.dart";
+import "goal.dart";
+import "model_capability.dart";
+import "models.dart";
+import "permission.dart";
+import "provider_usage.dart";
+import "profile.dart";
+import "sub_agent_log.dart";
+import "tone.dart";
 
-export "../domain/sub_agent_log.dart" show SubAgentFeed, SubAgentAppend;
+export "sub_agent_log.dart" show SubAgentFeed, SubAgentAppend;
 
 /// Streamed events from an agent turn. The UI renders these as they arrive.
 sealed class AgentEvent {

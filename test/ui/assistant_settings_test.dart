@@ -3,7 +3,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/assistant_view.dart";
-import "package:agent_chat/ui/settings/assistant_settings.dart";
+import "package:agent_chat/ui/settings/schema_view.dart";
 
 import "../harness.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
@@ -24,7 +24,7 @@ void main() {
   }
 
   Finder inSection(Finder matching) =>
-      find.descendant(of: find.byType(AssistantSection), matching: matching);
+      find.descendant(of: find.byType(SchemaSections), matching: matching);
 
   /// What a reload would read, rather than what the notifier is holding: the
   /// setting is only worth anything if it survives to the next launch, which is

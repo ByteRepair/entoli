@@ -43,7 +43,6 @@ object AppEngine {
         // Registered against the application context: the engine outlives any
         // activity, and a handler closing over one would hold a destroyed
         // activity for the life of the process.
-        IconChannel.register(appContext, engine.dartExecutor.binaryMessenger)
         ThemeChannel.register(appContext, engine.dartExecutor.binaryMessenger)
         ClipboardChannel.register(appContext, engine.dartExecutor.binaryMessenger)
         DeviceChannel.register(appContext, engine.dartExecutor.binaryMessenger)

@@ -33,10 +33,13 @@ struct EntoliApp: App {
   var body: some Scene {
     Window("Entoli", id: "main") {
       FrontendView(flutter: delegate.flutter)
+        .background(SettingsWindowOpener())
     }
     .defaultSize(width: 1100, height: 760)
     .windowToolbarStyle(.unified)
     .commands { AppCommands() }
+    // The settings, as the platform's own window, built from what Dart sends.
+    Settings { SettingsWindow() }
   }
 }
 

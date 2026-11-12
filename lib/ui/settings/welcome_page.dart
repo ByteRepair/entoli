@@ -18,7 +18,8 @@ import "../app_licence.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/scrolling.dart";
-import "llm_settings.dart";
+import "schema_view.dart";
+import "../../app/settings/spec.dart";
 import "connect_provider.dart";
 import "settings_category.dart";
 
@@ -510,7 +511,11 @@ class _ModelPage extends ConsumerWidget {
                     ),
                     if (unanswered) ...[
                       const SizedBox(height: 16),
-                      const DefaultsSection(),
+                      const SchemaSection(
+                        SettingsPageId.llms,
+                        "newChats",
+                        only: {"defaultModel", "titleModel"},
+                      ),
                     ],
                   ],
                 )

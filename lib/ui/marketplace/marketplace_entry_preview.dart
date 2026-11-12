@@ -319,7 +319,7 @@ class _MarketplaceEntryPreviewPageState
     await platform.readOnlyDirs
         .skills(config.promptsDir(CompletionKind.skill, project: target))
         .write(() => installSkillPackage(config, pkg, project: target));
-    await reloadAllPromptLibraries(ref);
+    await reloadAllPromptLibraries(ref.read);
     return pkg.name;
   }
 
@@ -385,7 +385,7 @@ class _MarketplaceEntryPreviewPageState
             project: target,
           );
         });
-    await reloadAllPromptLibraries(ref);
+    await reloadAllPromptLibraries(ref.read);
     return name;
   }
 

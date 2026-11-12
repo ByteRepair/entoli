@@ -9,7 +9,7 @@ import "package:uuid/uuid.dart";
 import "../../core/config.dart";
 import "../../core/read_only_dirs.dart";
 import "../../core/log.dart";
-import "../../data/zip.dart" show archiveOf;
+import "../zip.dart" show archiveOf;
 import "../../domain/chat_log.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/documents.dart";

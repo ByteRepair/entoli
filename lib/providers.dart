@@ -12,6 +12,7 @@ import "package:uuid/uuid.dart";
 
 import "app/app_menus.dart";
 import "../core/config.dart";
+import "domain/settings/setting.dart";
 import "domain/chat_intents.dart";
 import "domain/file_tools.dart" show resolveWorkspacePath;
 import "../core/platform/platform.dart"
@@ -31,7 +32,6 @@ import "data/prompts/agent_pictures.dart";
 import "domain/agent_face.dart";
 import "domain/bot_avatar/definition.dart";
 import "domain/bot_avatar/spec.dart";
-import "domain/app_icon.dart";
 import "domain/agent_backend.dart";
 import "domain/app_restart.dart";
 import "domain/app_secrets.dart";
@@ -633,12 +633,14 @@ final promptLibraryProvider =
 /// The project list comes from the cached [projectListProvider] rather than a
 /// fresh directory walk, and the per-project reloads overlap since each reads
 /// its own dir.
-Future<void> reloadAllPromptLibraries(WidgetRef ref) async {
-  final named = await ref.read(projectListProvider.future);
+Future<void> reloadAllPromptLibraries(
+  T Function<T>(ProviderListenable<T> provider) read,
+) async {
+  final named = await read(projectListProvider.future);
   await Future.wait(
-    everyProject(named).map(
-      (project) => ref.read(promptLibraryProvider(project).notifier).reload(),
-    ),
+    everyProject(
+      named,
+    ).map((project) => read(promptLibraryProvider(project).notifier).reload()),
   );
 }
 
@@ -852,13 +854,6 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
           ..tone = tone ?? s.tone
           ..citations = citations ?? s.citations,
       );
-
-  /// Setting first, launcher second: a launcher that refuses still leaves the
-  /// app showing what was picked.
-  Future<void> setAppIcon(AppIcon icon) async {
-    await _update((s) => s.appIcon = icon);
-    await ref.read(launcherIconsProvider).use(icon);
-  }
 
   Future<void> setAppTheme(AppTheme theme) =>
       _update((s) => s.appTheme = theme);
@@ -1133,6 +1128,15 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setLicenceAccepted(bool accepted) =>
       _update((s) => s.licenceAccepted = accepted);
 
+  /// Sets [setting] to [value], or clears it: what a settings controller
+  /// writes, where no setter of its own has more to do.
+  Future<void> put<T extends Object>(Setting<T> setting, T? value) =>
+      _update((s) => s.doc.set(setting, value));
+
+  /// Sets each of [values] in one write.
+  Future<void> putAll(Map<Setting, Object?> values) =>
+      _update((s) => s.doc.setAll(values));
+
   /// Change a copy and publish it: the notifier compares by identity, so
   /// editing in place would save the file and update nothing on screen.
   /// [_update] for a writer outside the UI — the customization tools — so
@@ -1149,10 +1153,6 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
 
 final appSettingsProvider = NotifierProvider<AppSettingsNotifier, AppSettings>(
   AppSettingsNotifier.new,
-);
-
-final launcherIconsProvider = Provider<LauncherIcons>(
-  (ref) => throw UnimplementedError(),
 );
 
 /// The system's own accent, read once in `main` and overridden with what it
@@ -1414,6 +1414,18 @@ class AppHidden extends Notifier<bool> {
   bool build() => false;
 
   void set(bool hidden) => state = hidden;
+}
+
+/// How many times the app has come back to the front, written beside
+/// [appHiddenProvider]: what a reading the user may have changed in the
+/// system's settings meanwhile watches, to be asked again.
+final appResumesProvider = NotifierProvider<AppResumes, int>(AppResumes.new);
+
+class AppResumes extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void resumed() => state++;
 }
 
 /// The app's clock, read as "now" by whatever needs a swappable time. The
@@ -1916,6 +1928,14 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
     _config = ref.watch(appConfigProvider);
     return ProjectSettings.load(_config, project: project);
   }
+
+  /// Sets [setting] to [value] here, or clears it to inherit.
+  Future<void> put<T extends Object>(Setting<T> setting, T? value) =>
+      _update((s) => s.doc.set(setting, value));
+
+  /// Sets each of [values] here in one write.
+  Future<void> putAll(Map<Setting, Object?> values) =>
+      _update((s) => s.doc.setAll(values));
 
   /// Which auto-memory store this project's chats use.
   Future<void> setMemory(Tristate value) => _update((s) => s.memory = value);

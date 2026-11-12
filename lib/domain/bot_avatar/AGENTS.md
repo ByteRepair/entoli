@@ -126,6 +126,20 @@ anywhere in the window — until it leaves it — and counts touches, each of
 which an avatar glances at for 2.5 s on its own clock. A thinking avatar
 does not follow; its look is its own.
 
+**The animation is the core's, the drawing each frontend's.** `BotActor`
+(`lib/app/bot_avatar/actor.dart`) is one avatar on screen — its mood eased
+from the last, a tap's reaction, the frame for a moment on its own clock —
+and `BotAvatarView` runs one, keeping only the ticker, the pointer and the
+drag. The native settings draw with SwiftUI's Canvas (`BotFace.swift`) from
+the same engine: `BotStage` (`lib/app/bot_avatar/stage.dart`) hands out a
+definition by key, sends its slices once, and keeps an actor per live
+avatar, whose frames — each shape's kind, its slice by place or its eye,
+and its matrix — the client asks for each display frame and paints. A
+client poses nothing itself, so the two never drift apart. The Bot Avatars
+page under Settings > Agents is that client's own page, the editor's, with
+what it offers (`botAvatarEntries`) and what an import makes of its text
+the core's.
+
 On top of the mood, a live avatar plays a `BotAnimation`
 (`animation.dart`): a mood held for a while, optionally with one eased full
 turn, timed on the avatar's own clock, which stands still while it is off
