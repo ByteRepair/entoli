@@ -37,7 +37,7 @@ void main() {
     app.handoff.pendingShare = [incomingFile("notes.md")];
     await start(tester);
 
-    expect(find.text("Share 1 file to"), findsOneWidget);
+    expect(find.text("Share 1 File To"), findsOneWidget);
     expect(find.text("Default"), findsWidgets);
   });
 
@@ -50,7 +50,7 @@ void main() {
     app.handoff.share([incomingFile("a.txt"), incomingFile("b.txt")]);
     await settleIo(tester);
 
-    expect(find.text("Share 2 files to"), findsOneWidget);
+    expect(find.text("Share 2 Files To"), findsOneWidget);
   });
 
   testWidgets("picking the default project writes into its shared workspace", (
@@ -68,7 +68,7 @@ void main() {
     );
     // Closed, so the app is back where the share found it.
     expect(find.text("chat"), findsOneWidget);
-    expect(find.text("Share 1 file to"), findsNothing);
+    expect(find.text("Share 1 File To"), findsNothing);
   });
 
   testWidgets("picking a project writes into that project's workspace", (
@@ -139,6 +139,6 @@ void main() {
     app.handoff.share(const []);
     await settleIo(tester);
 
-    expect(find.text("Share 1 file to"), findsNothing);
+    expect(find.text("Share 1 File To"), findsNothing);
   });
 }

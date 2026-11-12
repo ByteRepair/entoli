@@ -1527,9 +1527,11 @@ class _Collection<T> extends StatelessWidget {
     if (row.opens case final page?) {
       return () => openTextPage(context, page);
     }
-    final tap = row.actions.where((a) => a.id == row.tap).firstOrNull;
-    if (tap != null) return () => _act(context, index, tap);
-    return null;
+    final tap = row.tap;
+    if (tap == null) return null;
+    // A tap need not be in the row's menu: opening a folder is the row itself.
+    final listed = row.actions.where((a) => a.id == tap).firstOrNull;
+    return () => _act(context, index, listed ?? ItemAction(tap, row.title));
   }
 
   Widget? _words(BuildContext context, CollectionItem row) {

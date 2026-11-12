@@ -72,10 +72,16 @@ struct CollectionRow: View {
             ) {
               words.frame(maxWidth: .infinity, alignment: .leading)
             }
-          } else if let tap = item.tap, let action = actions.first(where: { $0.id == tap }) {
+          } else if let tap = item.tap {
             // A row that runs an action of its own when tapped: a device's
-            // page.
-            Button { acting.act(model, row.id, index, action) } label: {
+            // page, or a folder opened, which is the row and in no menu.
+            Button {
+              if let action = actions.first(where: { $0.id == tap }) {
+                acting.act(model, row.id, index, action)
+              } else {
+                acting.run(model, row.id, index, tap)
+              }
+            } label: {
               words.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
