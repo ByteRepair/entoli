@@ -11,6 +11,7 @@ import "../chat/widgets/markdown_text.dart";
 import "../../domain/workspace.dart";
 import "../fonts.dart";
 import "../../providers.dart";
+import "../../core/code_grammars.dart" show grammarOfFile;
 import "../chat/widgets/code_block.dart";
 import "busy.dart";
 import "dialogs.dart";
