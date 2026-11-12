@@ -11,22 +11,45 @@ import SwiftUI
 /// Holds nothing of its own: a snapshot replaces what was there, and a change
 /// is an intent Dart answers with the next snapshot. The [NativeSettings] end
 /// of `pigeons/settings.dart`.
-public final class SettingsModel: ObservableObject, NativeSettings {
+@Observable public final class SettingsModel: NativeSettings {
   /// The one, made as the plugin registers.
   public static var shared: SettingsModel?
 
-  @Published var pages: [SettingsPageData] = []
+  var pages: [SettingsPageData] = []
 
   /// The page asked for last, which the settings open at; none on a phone
-  /// opened plainly, which starts at the list of pages.
-  @Published var page: SettingsPageKey? = .general
+  /// opened plainly, which starts at the list of pages. Another page starts
+  /// with nothing pushed over it.
+  var page: SettingsPageKey? = .general {
+    didSet {
+      guard page != oldValue else { return }
+      path = []
+      ahead = []
+    }
+  }
+
+  /// What the settings are searched for. While it holds a word every page
+  /// is built, so a row on a page nobody has opened can be found.
+  var query = "" { didSet { search() } }
+
+  /// What [query] finds, worked out as the query or the pages change.
+  private(set) var found: [SearchHit] = []
+
+  /// The row a search result opened: its page scrolls to it and lights it
+  /// once.
+  var revealed: String?
+
+  /// A sub-page a search result opened, pushed once the page that opens it
+  /// is on screen: a phone's collapsed split view resets the detail's stack
+  /// as it goes to it, dropping a path set in the same moment.
+  var arriving: SettingsPageKey?
 
   /// What is pushed over the page, and what Back left behind for Forward.
-  @Published var path: [SettingsRoute] = []
-  @Published var ahead: [SettingsRoute] = []
+  var path: [SettingsRoute] = []
+  var ahead: [SettingsRoute] = []
 
   /// Whether the settings are up, where they are a sheet: iOS.
-  @Published var presented = false
+  var presented = false
 
   let say: SettingsIntents
 
@@ -34,23 +57,33 @@ public final class SettingsModel: ObservableObject, NativeSettings {
     say = SettingsIntents(binaryMessenger: messenger)
   }
 
-  /// Every row by its id, and each row's own beneath it, looked up once per
-  /// snapshot rather than by every row as it draws.
-  private var rows: [String: SettingRowData] = [:]
-  private var parts: [String: [SettingRowData]] = [:]
-  private var accessories: [String: SettingRowData] = [:]
+  /// Every row by its id, the page it is on, and each row's own beneath
+  /// it, looked up once per snapshot rather than by every row as it draws.
+  @ObservationIgnored private var rows: [String: SettingRowData] = [:]
+  @ObservationIgnored private var homes: [String: SettingsPageKey] = [:]
+  @ObservationIgnored private var parts: [String: [SettingRowData]] = [:]
+  @ObservationIgnored private var accessories: [String: SettingRowData] = [:]
 
   func settings(snapshot: SettingsSnapshot) throws {
     let next = snapshot.pages.compactMap { $0 }
     rows = [:]
+    homes = [:]
     parts = [:]
     accessories = [:]
-    for row in next.flatMap({ $0.sections.compactMap { $0 } }).flatMap({ $0.rows.compactMap { $0 } }) {
-      rows[row.id] = row
-      guard let parent = row.parent else { continue }
-      if row.accessory { accessories[parent] = row } else { parts[parent, default: []].append(row) }
+    for page in next {
+      for row in page.rows {
+        rows[row.id] = row
+        homes[row.id] = page.key
+        guard let parent = row.parent else { continue }
+        if row.accessory {
+          accessories[parent] = row
+        } else {
+          parts[parent, default: []].append(row)
+        }
+      }
     }
     pages = next
+    search()
   }
 
   #if os(macOS)
@@ -81,16 +114,18 @@ public final class SettingsModel: ObservableObject, NativeSettings {
     #endif
   }
 
-  /// The pages drawn: the one picked and every one pushed over it.
+  /// The pages drawn: the one picked and every one pushed over it, or all of
+  /// them while a search is under way.
   var drawn: [SettingsPageKey] {
-    [page].compactMap { $0 }
+    if !SearchWords(query).isEmpty { return pages.map(\.key) }
+    return [page].compactMap { $0 }
       + path.compactMap {
         if case .page(let key) = $0 { key } else { nil }
       }
   }
 
   /// The pages offered among the others, rather than opened from a row.
-  var listed: [SettingsPageData] { pages.filter(\.listed) }
+  var listed: [SettingsPageData] { pages.filter { $0.openedFrom == nil } }
 
   func page(_ key: SettingsPageKey) -> SettingsPageData? {
     pages.first { $0.key == key }
@@ -99,12 +134,9 @@ public final class SettingsModel: ObservableObject, NativeSettings {
   /// The row [id] names, on whichever page it is.
   func row(_ id: String) -> SettingRowData? { rows[id] }
 
-  /// Which way the last move went, for the side a Mac's page comes in from.
-  @Published private(set) var forwards = true
-
   /// Pushes [route]'s page over the one shown, clearing Forward.
   func push(_ route: SettingsRoute) {
-    move(forward: true) {
+    move {
       ahead = []
       path.append(route)
     }
@@ -112,27 +144,84 @@ public final class SettingsModel: ObservableObject, NativeSettings {
 
   /// [change] to the stack, animated even from inside a form row, whose tap
   /// otherwise carries a transaction with animations turned off.
-  private func move(forward: Bool, _ change: () -> Void) {
+  private func move(_ change: () -> Void) {
     var transaction = Transaction(animation: .smooth(duration: 0.3))
     transaction.disablesAnimations = false
-    withTransaction(transaction) {
-      forwards = forward
-      change()
-    }
+    withTransaction(transaction, change)
   }
 
   /// Back one page, kept for Forward.
   func back() {
     guard let last = path.last else { return }
     ahead.append(last)
-    move(forward: false) { _ = path.removeLast() }
+    move { _ = path.removeLast() }
   }
 
   /// The page Back left.
   func forward() {
     guard let next = ahead.popLast() else { return }
-    move(forward: true) { path.append(next) }
+    move { path.append(next) }
   }
+
+  /// The paired device whose page is up, as Dart last sent it: none yet,
+  /// or with why its record could not be read.
+  struct ShownDevice {
+    let id: String
+    let record: PairedDeviceData?
+    let readError: String?
+  }
+
+  private(set) var device: ShownDevice?
+
+  /// A device page asked for and not yet pushed: it waits for its record,
+  /// or it would slide in empty and fill once it had stopped.
+  @ObservationIgnored private var opening: String?
+
+  func openDevice(id: String) throws {
+    device = nil
+    opening = id
+    say.deviceShown(id: id, completion: ignore)
+  }
+
+  func device(id: String, device: PairedDeviceData?, readError: String?) throws {
+    self.device = ShownDevice(id: id, record: device, readError: readError)
+    if opening == id {
+      opening = nil
+      push(.device(id))
+    }
+  }
+
+  /// Fills [found]: per page, in the pages' order, whether its title
+  /// matched and the rows whose title or description did. A row inside a
+  /// group is found as itself, and opened at the group.
+  private func search() {
+    let words = SearchWords(query)
+    guard !words.isEmpty else {
+      if !found.isEmpty { found = [] }
+      return
+    }
+    found = pages.compactMap { page in
+      let rows = page.rows.filter {
+        !$0.accessory && words.found(in: "\($0.title) \($0.detail ?? "")".lowercased())
+      }
+      // A page with a row of its own name is found once, at the row.
+      let titled =
+        words.found(in: page.title.lowercased()) && !rows.contains { $0.title == page.title }
+      return titled || !rows.isEmpty ? SearchHit(page: page, titled: titled, rows: rows) : nil
+    }
+  }
+
+  /// Opens [key] where it lives — a listed page picked, a sub-page pushed
+  /// over the page that opens it — and scrolls to [row] there.
+  func open(_ key: SettingsPageKey, at row: String?) {
+    let opener = page(key)?.openedFrom
+    page = opener ?? key
+    arriving = opener.map { _ in key }
+    revealed = row.map { rows[$0]?.parent ?? $0 }
+  }
+
+  /// The page [row] is on.
+  func home(of row: String) -> SettingsPageKey? { homes[row] }
 
   /// [row]'s own rows: a group's children, and an accessory drawn at its end.
   func children(of row: SettingRowData) -> [SettingRowData] { parts[row.id] ?? [] }
@@ -211,6 +300,12 @@ extension SettingsModel {
     await reply(or: "") { say.page(opens: opens, completion: $0) }
   }
 
+  func deviceAction(_ id: String, _ op: DeviceOp, name: String? = nil) async
+    -> SettingNoticeData?
+  {
+    await reply(or: nil) { say.deviceAction(id: id, op: op, name: name, completion: $0) }
+  }
+
   func pairWith(_ id: String, _ code: String) async -> String? {
     await reply(or: nil) { say.pairWith(id: id, code: code, completion: $0) }
   }
@@ -252,10 +347,27 @@ func ignore(_: Result<Void, PigeonError>) {}
   }
 #endif
 
+/// One page of what a search found.
+struct SearchHit: Identifiable {
+  let page: SettingsPageData
+  /// Whether the page's own title matched.
+  let titled: Bool
+  let rows: [SettingRowData]
+
+  var id: SettingsPageKey { page.key }
+}
+
+extension SettingsPageData {
+  /// Every row on the page, a group's own among them.
+  var rows: [SettingRowData] { sections.compactMap { $0 }.flatMap { $0.rows.compactMap { $0 } } }
+}
+
 /// A page pushed over a settings page.
 enum SettingsRoute: Hashable {
   case page(SettingsPageKey)
   case text(OpenedText)
   case avatars(OpenedAvatars)
   case models(OpenedModels)
+  /// A paired device's page, by its id.
+  case device(String)
 }

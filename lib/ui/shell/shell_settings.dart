@@ -25,6 +25,7 @@ import "../../domain/bot_avatar/spec.dart";
 import "../../domain/model_registry.dart" show ModelCatalog;
 import "../../providers.dart";
 import "../../app/prompts/skill_files.dart";
+import "shell_device.dart";
 
 /// Every page the native settings offer, as rows, and the controller each
 /// row was sent from, by its id: what an intent naming a row acts on.
@@ -103,7 +104,10 @@ final nativeSettingsProvider = Provider.autoDispose<NativeSettingsPages>((ref) {
           key: SettingsPageKey.values.byName(page.name),
           title: page.title,
           groupStart: page.groupStart,
-          listed: page.listed,
+          openedFrom: switch (page.openedFrom) {
+            final from? => SettingsPageKey.values.byName(from.name),
+            null => null,
+          },
           sections: [
             if (shown.contains(page))
               for (final section in buildPage(
@@ -512,6 +516,22 @@ class SettingsBridge implements SettingsIntents {
   final ProviderContainer _container;
   late final _reader = ContainerReader(_container);
   final _native = NativeSettings();
+  late final _device = ShellDevicePage(_container, _native);
+
+  /// Binds [handOff]'s paired device to the client's own page of it.
+  void bindDevicePage(SettingsHandOff handOff) => handOff
+    ..pairedDevice = _native.openDevice
+    ..pairedDeviceInSettings = true;
+
+  @override
+  void deviceShown(String? id) => _device.show(id);
+
+  @override
+  Future<SettingNoticeData?> deviceAction(
+    String id,
+    DeviceOp op,
+    String? name,
+  ) => _device.act(id, op, name);
 
   /// The pages as they change, while the settings are on screen.
   ProviderSubscription<NativeSettingsPages>? _sending;
@@ -560,6 +580,7 @@ class SettingsBridge implements SettingsIntents {
 
   void close() {
     shown(false, const []);
+    _device.close();
     SettingsIntents.setUp(null);
   }
 

@@ -5,8 +5,8 @@ import PackageDescription
 let package = Package(
   name: "entoli_menu",
   platforms: [
-    .iOS("17.0"),
-    .macOS("14.0"),
+    .iOS("18.0"),
+    .macOS("15.0"),
   ],
   products: [
     .library(name: "entoli-menu", targets: ["entoli_menu"])

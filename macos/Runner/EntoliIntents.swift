@@ -598,11 +598,7 @@ struct DeleteChatIntent: AppIntent {
 
   func perform() async throws -> some IntentResult {
     let dialog: IntentDialog = "Delete “\(chat.title)”? This cannot be undone."
-    if #available(iOS 18, macOS 15, *) {
-      try await requestConfirmation(actionName: .go, dialog: dialog)
-    } else {
-      try await requestConfirmation(result: .result(dialog: dialog))
-    }
+    try await requestConfirmation(actionName: .go, dialog: dialog)
     _ = try await IntentBridge.shared.perform("deleteChat", ["chat": chat.id])
     return .result()
   }

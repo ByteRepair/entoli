@@ -15,7 +15,7 @@ extension PaletteItem: Identifiable {}
 /// `paletteSnapshotProvider` lists and narrows the rows by `ProjectPalette`'s
 /// rules; a pick is an intent.
 struct PaletteView: View {
-  @ObservedObject var model: ShellModel
+  var model: ShellModel
 
   @State private var query = ""
   @State private var active: String?

@@ -42,7 +42,7 @@ extension ShellModel {
 /// A layer of `FlutterCanvas`, which gives it the view's frame, so the anchor
 /// Dart sends is a rect in this view. It takes no clicks itself.
 struct StripLayer: View {
-  @ObservedObject var model: ShellModel
+  var model: ShellModel
   @Namespace private var glass
 
   private static let button: CGFloat = 40

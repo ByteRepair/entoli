@@ -119,22 +119,25 @@ enum SettingsPageId {
   about("About"),
 
   // Opened from a row on another page rather than listed.
-  syncRelay("Internet relay", listed: false),
-  syncTurn("TURN server", listed: false),
-  onDeviceLlm("LLM settings", listed: false);
+  syncRelay("Internet relay", openedFrom: sync),
+  syncTurn("TURN server", openedFrom: sync),
+  onDeviceLlm("LLM settings", openedFrom: onDevice);
 
   const SettingsPageId(
     this.title, {
     this.groupStart = false,
-    this.listed = true,
+    this.openedFrom,
     this.settings = true,
   });
 
   final String title;
   final bool groupStart;
 
+  /// The page whose row opens it, where it is not offered among the pages.
+  final SettingsPageId? openedFrom;
+
   /// Whether it is offered among the pages, rather than opened from a row.
-  final bool listed;
+  bool get listed => openedFrom == null;
 
   /// Whether it is made of settings, rather than a page of the app's own
   /// filed among them: the tour.

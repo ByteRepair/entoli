@@ -455,8 +455,7 @@ to), and needs Xcode 27 with the Metal Toolchain component
 adapter compiles out, so `EntoliMLX` is an `#error` there rather than an
 empty framework that silently hides the MLX section — and both release jobs
 run on the `xcode-27` image. The deployment targets are
-the package's floor, iOS 17 and macOS 14 — the app's, not just the
-feature's. The simulator is built arm64 alone (`ios/Flutter/Mlx.xcconfig`):
+the app's, iOS 18 and macOS 15, above the package's own floor of 17 and 14. The simulator is built arm64 alone (`ios/Flutter/Mlx.xcconfig`):
 Flutter's simulator build adds x86_64, where the import has no module, and
 Xcode 27 runs on no Intel Mac to want one. The macOS Runner compiles `AppleFmChannel.swift`, `MlxChannel.swift` and
 `GenerationChannel.swift` by reference, the
@@ -630,19 +629,24 @@ past the welcome tour and first-run setup — so the tour stands alone and
 nothing bypasses it. The launch screen and the view's background are
 `systemBackground`, so a dark device never flashes white.
 
-The plugin's package is iOS 17 and macOS 14, the floor the app already has for
-MLX, and the Runner's targets say 17.0 outright rather than "the recommended
-version": Flutter writes its generated plugin package's platform from the
-targets', and the recommended one resolved to 15, which an iOS 17 package
-refuses.
+The app is iOS 18 and macOS 15, the plugins' packages and the Runners'
+targets alike. iOS 18 runs on every iPhone 17 did, so the floor costs no
+device, and it is what the native UI is written for: the UIKit recognizers
+under the drawer and the pulled glass, `MeshGradient`, `onGeometryChange`,
+`presentationSizing`, with no branch for an older system — only Liquid
+Glass, which is 26's, is asked for. The Runner's targets say 18.0 outright
+rather than "the recommended version": Flutter writes its generated plugin
+package's platform from the targets', and the recommended one resolved to
+15, which an iOS 18 package refuses.
 
-An iPhone is the split view collapsed to a stack, which starts on the detail
-column (`compactColumn`), the new-chat screen being nothing selected rather
-than the list; the chat's bar leads with the shell's own sidebar button
-rather than the split view's chevron, and a pick from the list goes back to
-the detail. The list being up is the Flutter view out of the window and the
-engine paused, which is why the sidebar's snapshot is sent from a provider's
-listener rather than a build (see "The bridge" in `lib/ui/AGENTS.md`). The app's pages — Settings, Profile,
+An iPhone is a drawer rather than the split view (`Drawer.swift`), which
+starts on the detail (`compactColumn`), the new-chat screen being nothing
+selected rather than the list; the chat's bar leads with the shell's own
+sidebar button, a swipe slides the chat off the list under the finger, and
+a pick from the list slides back to the detail. The sidebar's snapshot is
+still sent from a provider's listener rather than a build (see "The bridge"
+in `lib/ui/AGENTS.md`), which an engine paused under the split view's list
+first made necessary. The app's pages — Settings, Profile,
 Marketplace — are a menu on the list's bar, the menu bar being iPadOS's and
 not there without a pointer. A Flutter page over the chat hides the native
 navigation bar, the page having its own. The keyboard reaches the native

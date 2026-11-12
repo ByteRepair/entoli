@@ -5,7 +5,7 @@ import SwiftUI
 /// detail, under the toolbar and the composer; how far those reach is the
 /// safe area, which goes to Dart as padding.
 struct ShellView: View {
-  @ObservedObject var model: ShellModel
+  @Bindable var model: ShellModel
   let flutter: PlatformViewController
 
   /// The conversation's column in the Flutter view, which the composer is
@@ -28,10 +28,9 @@ struct ShellView: View {
     private let collapsed = false
   #endif
 
-  /// The way to the list where the split view is one column and the chat is
-  /// in front: the bar's sidebar button, and the swipe in from the edge that
-  /// went with the split view's back button the bar hides for it. A Flutter
-  /// page keeps the edge for its own back swipe.
+  /// The way to the list on an iPhone, the chat in front: the bar's sidebar
+  /// button, and the drawer's swipe in from the edge. A Flutter page keeps
+  /// the edge for its own back swipe.
   private var toList: (() -> Void)? {
     model.ready && collapsed && !model.window.covered && !model.voice.present
       ? model.showSidebar : nil
@@ -46,105 +45,126 @@ struct ShellView: View {
   }
 
   var body: some View {
-    NavigationSplitView(
-      columnVisibility: shownColumns,
-      preferredCompactColumn: model.ready ? $model.compactColumn : .constant(.detail)
-    ) {
+    layout
+      // Voice mode over everything: the sidebar too, as the Flutter page was
+      // pushed over the whole window.
+      .overlay {
+        if model.voice.present {
+          VoiceView(model: model).transition(.opacity)
+        }
+      }
+      .animation(.smooth(duration: 0.3), value: model.voice.present)
+      // The palette over everything but voice mode, which has no palette to
+      // switch from. Keyed on its opening, so each starts afresh.
+      .overlay {
+        if model.palette.open && !model.voice.present {
+          PaletteView(model: model)
+            .id(model.palette.serial)
+            .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+        }
+      }
+      .animation(.snappy(duration: 0.2), value: model.palette.open)
+      // Voice mode is the whole window: nothing of the toolbar's — the title,
+      // the new chat and sidebar buttons — stands over it.
+      #if os(macOS)
+        .toolbar(model.voice.present ? .hidden : .automatic, for: .windowToolbar)
+      #endif
+      .preferredColorScheme(model.window.colorScheme)
+      #if os(macOS)
+        // The app's, not the window's: popovers, menus and sheets are windows
+        // of their own, and the system's glass follows the app. Nil follows the
+        // system.
+        .onChange(of: model.window.dark, initial: true) { _, dark in
+          NSApp.appearance = dark.map { NSAppearance(named: $0 ? .darkAqua : .aqua) } ?? nil
+        }
+        .reportsPointer(over: flutter, to: model)
+      #endif
+      // `columns` is the user's choice alone; `shownColumns` hides it before
+      // the app is up. Gating it here too wrote the hidden column back to Dart
+      // at launch, and the sidebar started collapsed.
+      .onChange(of: model.window.sidebarShown, initial: true) { _, shown in
+        let wanted: NavigationSplitViewVisibility = shown ? .all : .detailOnly
+        guard wanted != columns else { return }
+        withAnimation(.smooth(duration: 0.3)) { columns = wanted }
+      }
+      .onChange(of: columns) { _, columns in
+        let shown = columns != .detailOnly
+        if shown != model.window.sidebarShown { model.say.window.sidebarShown(shown: shown) { _ in } }
+      }
+  }
+
+  /// The split view; on an iPhone, the drawer, which a swipe moves under the
+  /// finger where the split view's one column could only jump.
+  @ViewBuilder private var layout: some View {
+    #if os(iOS)
+      if collapsed {
+        Drawer(
+          column: model.ready ? $model.compactColumn : .constant(.detail), opens: toList != nil
+        ) {
+          if model.ready { NavigationStack { SidebarView(model: model, collapsed: true) } }
+        } detail: {
+          NavigationStack { detail }
+        }
+      } else {
+        split
+      }
+    #else
+      split
+    #endif
+  }
+
+  private var split: some View {
+    NavigationSplitView(columnVisibility: shownColumns) {
       // Nothing to swipe in before the app is up.
       if model.ready {
-        SidebarView(model: model, collapsed: collapsed)
+        SidebarView(model: model, collapsed: false)
           .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 400)
       }
     } detail: {
-      ZStack {
-        GeometryReader { proxy in
-          FlutterCanvas(flutter: flutter) {
-            StripLayer(model: model)
-          }
-          .onChange(of: proxy.safeAreaInsets, initial: true) { _, insets in
-            model.insets(
-              EdgeInsets(top: insets.top, leading: 0, bottom: insets.bottom, trailing: 0))
-          }
-        }
-        #if os(iOS)
-          // The Flutter view keeps the whole height and shrinks its page for
-          // the keyboard itself; the inset still reaches over the keyboard,
-          // which Dart's `ShellInsets` takes out.
-          .ignoresSafeArea(.keyboard)
-        #endif
-        // Beside the Flutter view rather than over it, so it keeps to the
-        // keyboard's safe area: the composer rides on the keyboard and pads
-        // the new-chat screen up with it, where an overlay of the view above
-        // would have run on under the composer and the keys.
-        if model.newChat.present && !model.window.covered {
-          NewChatView(model: model).transition(.opacity)
-        }
-      }
-      .safeAreaInset(edge: .bottom, spacing: 0) {
-        VStack(spacing: 0) {
-          if !model.turn.isEmpty && !model.window.covered {
-            TurnSurfaceView(model: model)
-              .padding(.top, 6)
-              .frame(maxWidth: ShellView.readableWidth + 16)
-              .frame(maxWidth: .infinity)
-              .transition(.opacity.combined(with: .move(edge: .bottom)))
-          }
-          ComposerSlot(composer: model.composer, covered: model.window.covered)
-        }
-        .animation(ComposerView.motion, value: model.turn.isEmpty)
-      }
-      .windowBar(model, toList: toList)
-      .welcome(!model.ready)
-      #if os(iOS)
-        .edgeSwipe(toList)
-      #endif
+      detail
     }
     .toolbar(removing: model.ready ? nil : .sidebarToggle)
-    // Voice mode over everything: the sidebar too, as the Flutter page was
-    // pushed over the whole window.
-    .overlay {
-      if model.voice.present {
-        VoiceView(model: model).transition(.opacity)
+  }
+
+  private var detail: some View {
+    ZStack {
+      FlutterCanvas(flutter: flutter) {
+        StripLayer(model: model)
+      }
+      .onGeometryChange(for: EdgeInsets.self) { proxy in
+        EdgeInsets(
+          top: proxy.safeAreaInsets.top, leading: 0, bottom: proxy.safeAreaInsets.bottom,
+          trailing: 0)
+      } action: { model.insets($0) }
+      #if os(iOS)
+        // The Flutter view keeps the whole height and shrinks its page for
+        // the keyboard itself; the inset still reaches over the keyboard,
+        // which Dart's `ShellInsets` takes out.
+        .ignoresSafeArea(.keyboard)
+      #endif
+      // Beside the Flutter view rather than over it, so it keeps to the
+      // keyboard's safe area: the composer rides on the keyboard and pads
+      // the new-chat screen up with it, where an overlay of the view above
+      // would have run on under the composer and the keys.
+      if model.newChat.present && !model.window.covered {
+        NewChatView(model: model).transition(.opacity)
       }
     }
-    .animation(.smooth(duration: 0.3), value: model.voice.present)
-    // The palette over everything but voice mode, which has no palette to
-    // switch from. Keyed on its opening, so each starts afresh.
-    .overlay {
-      if model.palette.open && !model.voice.present {
-        PaletteView(model: model)
-          .id(model.palette.serial)
-          .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+    .safeAreaInset(edge: .bottom, spacing: 0) {
+      VStack(spacing: 0) {
+        if !model.turn.isEmpty && !model.window.covered {
+          TurnSurfaceView(model: model)
+            .padding(.top, 6)
+            .frame(maxWidth: ShellView.readableWidth + 16)
+            .frame(maxWidth: .infinity)
+            .transition(.opacity.combined(with: .move(edge: .bottom)))
+        }
+        ComposerSlot(composer: model.composer, covered: model.window.covered)
       }
+      .animation(ComposerView.motion, value: model.turn.isEmpty)
     }
-    .animation(.snappy(duration: 0.2), value: model.palette.open)
-    // Voice mode is the whole window: nothing of the toolbar's — the title,
-    // the new chat and sidebar buttons — stands over it.
-    #if os(macOS)
-      .toolbar(model.voice.present ? .hidden : .automatic, for: .windowToolbar)
-    #endif
-    .preferredColorScheme(model.window.colorScheme)
-    #if os(macOS)
-      // The app's, not the window's: popovers, menus and sheets are windows
-      // of their own, and the system's glass follows the app. Nil follows the
-      // system.
-      .onChange(of: model.window.dark, initial: true) { _, dark in
-        NSApp.appearance = dark.map { NSAppearance(named: $0 ? .darkAqua : .aqua) } ?? nil
-      }
-      .reportsPointer(over: flutter, to: model)
-    #endif
-    // `columns` is the user's choice alone; `shownColumns` hides it before
-    // the app is up. Gating it here too wrote the hidden column back to Dart
-    // at launch, and the sidebar started collapsed.
-    .onChange(of: model.window.sidebarShown, initial: true) { _, shown in
-      let wanted: NavigationSplitViewVisibility = shown ? .all : .detailOnly
-      guard wanted != columns else { return }
-      withAnimation(.smooth(duration: 0.3)) { columns = wanted }
-    }
-    .onChange(of: columns) { _, columns in
-      let shown = columns != .detailOnly
-      if shown != model.window.sidebarShown { model.say.window.sidebarShown(shown: shown) { _ in } }
-    }
+    .windowBar(model, toList: toList)
+    .welcome(!model.ready)
   }
 }
 
@@ -176,9 +196,9 @@ struct FlutterCanvas<Layers: View>: View {
 }
 
 /// The composer, where the page in front has one and no Flutter page covers
-/// it. Its own view, observing the composer alone.
+/// it. Its own view, so only it reads the composer.
 private struct ComposerSlot: View {
-  @ObservedObject var composer: ComposerModel
+  var composer: ComposerModel
   let covered: Bool
 
   var body: some View {

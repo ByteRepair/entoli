@@ -27,24 +27,24 @@ protocol ComposerEditor: AnyObject {
 /// The composer's state as Dart last said it, and the way back to Dart. Dart
 /// decides — `ShellComposer` over the core's `ComposerModel`, which the
 /// Flutter composer runs on too — and this draws what it was told, in its own
-/// words, and says what the user did. Its own object rather than a field of [ShellModel], so a keystroke
-/// redraws the composer and nothing else.
-final class ComposerModel: ObservableObject {
-  @Published private(set) var look = ComposerSnapshot.initial
+/// words, and says what the user did. Its own object rather than a field of [ShellModel], being what a
+/// keystroke changes.
+@Observable final class ComposerModel {
+  private(set) var look = ComposerSnapshot.initial
 
   /// The menu row the arrows are on: the view's own, since only it moves it.
-  @Published var highlighted = 0
+  var highlighted = 0
 
   /// Whether the field is empty, for the hint drawn over it.
-  @Published var empty = true
+  var empty = true
 
   /// The field's height as the text view measured it, held to [maxLines].
-  @Published var fieldHeight: CGFloat = 22
+  var fieldHeight: CGFloat = 22
 
-  private weak var shell: ShellModel?
+  @ObservationIgnored private weak var shell: ShellModel?
 
   /// The value Dart sent before the text view existed.
-  private var pending: ComposerValueSnapshot?
+  @ObservationIgnored private var pending: ComposerValueSnapshot?
 
   weak var editor: ComposerEditor? {
     didSet {
@@ -76,14 +76,14 @@ final class ComposerModel: ObservableObject {
   /// The cards by their codes, as [look] last said them: made when they
   /// change rather than on every read, the field reading them once per
   /// character it draws.
-  private(set) var cards: [UInt16: ComposerCard] = [:]
+  @ObservationIgnored private(set) var cards: [UInt16: ComposerCard] = [:]
 
   /// The menu's agent faces by row, decoded when a snapshot arrives rather
   /// than on every body.
-  private(set) var pictures: [Int: Image] = [:]
+  @ObservationIgnored private(set) var pictures: [Int: Image] = [:]
 
   /// The faces the menu showed last, by their PNG bytes.
-  private var faces: [Data: Image] = [:]
+  @ObservationIgnored private var faces: [Data: Image] = [:]
 
   private static func image(_ png: Data) -> Image? {
     #if os(iOS)
@@ -122,10 +122,10 @@ final class ComposerModel: ObservableObject {
   /// The text and selection Dart and the field last agreed on, so a report
   /// that changes nothing is not sent: one keystroke both edits the text and
   /// moves the caret, and the field says so for each.
-  private var known: (text: String, start: Int64, end: Int64)?
+  @ObservationIgnored private var known: (text: String, start: Int64, end: Int64)?
 
   /// The last revision applied: Dart sends a value only when it set one.
-  private var revision: Int64 = -1
+  @ObservationIgnored private var revision: Int64 = -1
 
   /// A value Dart set: a completion taken, a message restored, a send.
   func apply(_ value: ComposerValueSnapshot) {
@@ -160,7 +160,7 @@ final class ComposerModel: ObservableObject {
     say?.edited(text: text, start: value.start, end: value.end) { _ in }
   }
 
-  /// What the field now holds, for the hint over it: published only when
+  /// What the field now holds, for the hint over it: written only when
   /// that flips, not on every keystroke.
   func shown(text: String) {
     if empty != text.isEmpty { empty = text.isEmpty }

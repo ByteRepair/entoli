@@ -17,7 +17,7 @@ extension SidebarGroup: Identifiable {
 /// and its dialogs. Everything it shows is Dart's, and everything it does is
 /// an intent; the only state here is what a dialog holds while it is open.
 struct SidebarView: View {
-  @ObservedObject var model: ShellModel
+  var model: ShellModel
 
   @State private var query = ""
   @State private var renaming: SidebarRow?
@@ -27,14 +27,12 @@ struct SidebarView: View {
 
   private var state: SidebarSnapshot { model.sidebar }
 
-  /// The split view is one column: an iPhone.
+  /// An iPhone's drawer rather than a split view's column.
   let collapsed: Bool
 
-  /// The chat that is open, highlighted — except where the split view is one
-  /// column, where a selection is what holds the detail in front: with one
-  /// standing, the split view would not go back to the list for its button
-  /// or a swipe. There the column is `compactColumn`'s alone, and a pick
-  /// only asks for the detail.
+  /// The chat that is open, highlighted — except on an iPhone, whose lists
+  /// keep no selection: there the drawer is `compactColumn`'s alone, and a
+  /// pick only asks for the detail.
   private var selection: Binding<String?> {
     Binding(
       get: { collapsed ? nil : state.selected },
@@ -122,16 +120,6 @@ struct SidebarView: View {
     .sheet(isPresented: $creating) {
       NewProjectSheet(model: model, omada: state.omadaByDefault)
     }
-    .simultaneousGesture(swipeToChat, including: collapsed ? .all : .subviews)
-  }
-
-  /// On an iPhone, a swipe toward the leading edge goes back to the chat, as
-  /// the Flutter drawer closed: a stack has no swipe forward of its own.
-  private var swipeToChat: some Gesture {
-    DragGesture(minimumDistance: 30).onEnded { drag in
-      let along = drag.translation.width
-      if -along > 80 && abs(along) > 2 * abs(drag.translation.height) { model.showDetail() }
-    }
   }
 
   /// One of the app's pages, opened over the chat: on an iPhone the chat is
@@ -199,7 +187,7 @@ private struct ChatRow: View {
 /// The project being shown, as a menu of every project to switch to, and the
 /// pages it has beside its chats.
 private struct ProjectHeader: View {
-  @ObservedObject var model: ShellModel
+  var model: ShellModel
   @Binding var creating: Bool
 
   private var state: SidebarSnapshot { model.sidebar }
@@ -286,7 +274,7 @@ private struct ProjectHeader: View {
 /// whether it runs Omada. It stays open, spinning, until the project is made,
 /// and says so where it could not be.
 struct NewProjectSheet: View {
-  @ObservedObject var model: ShellModel
+  var model: ShellModel
   @Environment(\.dismiss) private var dismiss
 
   /// Told once the project is made: the palette closes itself with it.

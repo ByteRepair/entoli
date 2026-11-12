@@ -82,12 +82,40 @@ both frontends, wearing the scene's gear; the scene's own is removed
 (`commandsRemoved`), since under the Flutter frontend it opened that window
 empty.
 
+The native settings look like the platform's own Settings: each page leads
+with a white symbol on a tile of its colour (`PageIcon`, the colours by kin
+— the model pages purples, sync and the network blues, the app's own grey),
+and the list is searchable. A search finds pages by title and rows by title
+or description on every page, sub-pages included: while a query stands the
+client says every page is shown, so Dart builds the rows of pages nobody has
+opened, and goes back to the drawn ones when it clears. A result is a
+selection of the list rather than a button, since a phone's collapsed split
+view goes to the detail only for one; it opens its page — a sub-page pushed
+over the page that opens it, which every page says (`openedFrom`, declared
+on `SettingsPageId` beside its title, a page with none being one the list
+offers), and once that page is up, since a phone's collapsed split view
+resets the detail's stack as it goes to it and drops a path set alongside —
+then scrolls to the row and lights it.
+
 A Mac's settings draw their own page stack (`PageStack`) rather than a
 `NavigationStack`: in a split view's detail column a Mac's stack shows a
 pushed page with no animation (macOS 27, a plain `NavigationLink` too),
-though a pop animates. Only the top page is drawn, pushed in by SwiftUI's
-`.push` transition from the side the move went, with Back and Forward the
-model's own. iOS keeps its `NavigationStack`.
+though a pop animates. Every page of the stack is drawn, each opaque over the
+one beneath, so a push slides the new page in from the trailing edge over
+the one shown, which stays put, and Back slides it out the same way — a Mac
+app's pages, not a carousel; with Back and Forward the model's own. iOS
+keeps its `NavigationStack`.
+
+A paired device's page is the native settings' own (`DevicePage.swift`):
+the shell binds `SettingsHandOff.pairedDevice` to `openDevice`, which asks
+for the device's record and pushes the page over the Sync page once it is
+there — pushed at once, it slid in as a spinner and filled after it had
+stopped — and says so with `pairedDeviceInSettings`, which
+keeps the row's Details from stepping the settings aside. While the page is
+up the client says `deviceShown`, and Dart sends the record whenever the
+device's peer state moves — a rename, a connection, a revoke from the other
+end — and runs connect, disconnect, rename and revoke for it
+(`ShellDevicePage`). It is the Flutter `PairedDevicePage` drawn the Apple way.
 
 A model picker is the catalog page in both: the native one is sent the
 quick picks and every model's card whole (`ModelPickerData`), and adding or

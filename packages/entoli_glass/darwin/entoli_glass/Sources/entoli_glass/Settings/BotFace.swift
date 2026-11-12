@@ -22,7 +22,7 @@ struct BotFaceView: View {
   var turnable = false
   var reactToTap = false
 
-  @StateObject private var driver = BotFaceDriver()
+  @State private var driver = BotFaceDriver()
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   /// Whether it is scrolled into view: a list's faces all sit in one row,
   /// which stays drawn while most of them are out of sight.
@@ -47,14 +47,12 @@ struct BotFaceView: View {
       }
     }
     .frame(width: size, height: size)
-    .modifier(ScrolledIntoView(seen: $seen))
-    .background {
-      // Where the face is in its window, for the pointer it follows.
-      GeometryReader { geometry in
-        Color.clear
-          .onAppear { driver.frameInWindow = geometry.frame(in: .global) }
-          .onChange(of: geometry.frame(in: .global)) { _, frame in driver.frameInWindow = frame }
-      }
+    .onScrollVisibilityChange(threshold: 0.01) { seen = $0 }
+    // Where the face is in its window, for the pointer it follows.
+    .onGeometryChange(for: CGRect.self) {
+      $0.frame(in: .global)
+    } action: {
+      driver.frameInWindow = $0
     }
     .contentShape(Rectangle())
     .gesture(turnable ? drag : nil)
@@ -121,16 +119,16 @@ struct BotFaceView: View {
 /// One avatar's own state on the client: who it is to the core, its clock,
 /// the drag's turn, and the last frame and slices it was sent.
 @MainActor
-final class BotFaceDriver: ObservableObject {
+@Observable final class BotFaceDriver {
   let instance = UUID().uuidString
   private let start = Date()
-  @Published var frame: BotFrame?
-  @Published var geometry: [BotSlice]?
-  @Published var reacting = false
-  var asking = false
-  var turn: (CGFloat, CGFloat) = (0, 0)
-  var dragFrom: (CGFloat, CGFloat)?
-  var frameInWindow: CGRect = .zero
+  var frame: BotFrame?
+  var geometry: [BotSlice]?
+  var reacting = false
+  @ObservationIgnored var asking = false
+  @ObservationIgnored var turn: (CGFloat, CGFloat) = (0, 0)
+  @ObservationIgnored var dragFrom: (CGFloat, CGFloat)?
+  @ObservationIgnored var frameInWindow: CGRect = .zero
 
   /// Where the mouse is over this face's box, from its top left, while it is
   /// in the window: what a live face looks toward, wherever the mouse is in
@@ -292,19 +290,5 @@ extension FlutterStandardTypedData {
   /// A Float64List's numbers.
   var doubles: [Double] {
     data.withUnsafeBytes { Array($0.bindMemory(to: Double.self)) }
-  }
-}
-
-/// [seen] kept to whether the view is scrolled into sight, where the system
-/// says; always seen before macOS 15 and iOS 18.
-private struct ScrolledIntoView: ViewModifier {
-  @Binding var seen: Bool
-
-  func body(content: Content) -> some View {
-    if #available(iOS 18, macOS 15, *) {
-      content.onScrollVisibilityChange(threshold: 0.01) { seen = $0 }
-    } else {
-      content
-    }
   }
 }

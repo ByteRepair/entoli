@@ -14,7 +14,7 @@ struct CollectionRow: View {
   let model: SettingsModel
   let row: SettingRowData
   @State private var editing: Editing?
-  @StateObject private var acting = ItemActing()
+  @State private var acting = ItemActing()
   @State private var picking: Int?
   @State private var photo: PhotosPickerItem?
 
@@ -182,10 +182,10 @@ struct CollectionRow: View {
 
 /// What running an item's action holds: the confirm it waits on, the item
 /// and action that confirm is for, and what the action said.
-@MainActor final class ItemActing: ObservableObject {
-  @Published var confirm: SettingConfirmData?
-  @Published var notice: SettingNoticeData?
-  private var pending: (index: Int, action: String)?
+@MainActor @Observable final class ItemActing {
+  var confirm: SettingConfirmData?
+  var notice: SettingNoticeData?
+  @ObservationIgnored private var pending: (index: Int, action: String)?
 
   func act(_ model: SettingsModel, _ row: String, _ index: Int, _ action: SettingItemActionData) {
     if let ask = action.confirm {

@@ -7,7 +7,7 @@ struct TriggersView: View {
   let model: SettingsModel
   let row: SettingRowData
   @State private var editing: CollectionRow.Editing?
-  @StateObject private var acting = ItemActing()
+  @State private var acting = ItemActing()
 
   var body: some View {
     let items = row.items.compactMap { $0 }

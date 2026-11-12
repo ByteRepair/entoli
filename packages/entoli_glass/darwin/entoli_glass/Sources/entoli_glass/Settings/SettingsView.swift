@@ -16,7 +16,7 @@ public struct SettingsWindow: View {
 /// its sections, every row drawn from what Dart sent for it. On a Mac the
 /// app's Settings window; on iOS a sheet over the app.
 public struct SettingsRoot: View {
-  @ObservedObject var model: SettingsModel
+  @Bindable var model: SettingsModel
 
   public init(model: SettingsModel) { self.model = model }
 
@@ -29,22 +29,58 @@ public struct SettingsRoot: View {
     }
   }
 
+  /// The sidebar's selection: a page, or a search result, which opens its
+  /// page at its row. A selection rather than a button, since a phone's
+  /// collapsed split view goes to the detail only for a selection.
+  private var picked: Binding<SidebarPick?> {
+    Binding(
+      get: { model.page.map(SidebarPick.page) },
+      set: { pick in
+        switch pick {
+        case .page(let key)?: model.page = key
+        case .hit(let key, let row)?: model.open(key, at: row)
+        case nil: model.page = nil
+        }
+      })
+  }
+
   public var body: some View {
     // The pages always beside the page, with no button to hide them.
     NavigationSplitView(columnVisibility: .constant(.all)) {
-      List(selection: $model.page) {
-        ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
-          Section {
-            ForEach(group, id: \.key) { page in
-              NavigationLink(value: page.key) {
-                Label(page.title, systemImage: page.key.symbol)
+      List(selection: picked) {
+        if model.query.isEmpty {
+          ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
+            Section {
+              ForEach(group, id: \.key) { page in
+                NavigationLink(value: SidebarPick.page(page.key)) {
+                  Label {
+                    Text(page.title)
+                  } icon: {
+                    PageIcon(key: page.key)
+                  }
+                }
               }
             }
           }
+        } else {
+          SearchResults(model: model)
+        }
+      }
+      .searchable(text: $model.query, placement: .sidebar, prompt: "Search settings")
+      .overlay {
+        if !model.query.isEmpty && model.found.isEmpty {
+          ContentUnavailableView.search(text: model.query)
         }
       }
       .navigationTitle("Settings")
       .toolbar(removing: .sidebarToggle)
+      #if os(iOS)
+        // On the list rather than the split view, whose own toolbar a
+        // phone's collapsed one does not show.
+        .toolbar {
+          ToolbarItem(placement: .topBarTrailing) { DoneButton { model.presented = false } }
+        }
+      #endif
       #if os(macOS)
         .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 260)
       #endif
@@ -63,20 +99,10 @@ public struct SettingsRoot: View {
           }
         #endif
       }
-      .onChange(of: model.page) {
-        model.path = []
-        model.ahead = []
-      }
     }
     #if os(macOS)
       .frame(minWidth: 720, minHeight: 480)
       .background(UnifiedToolbar())
-    #else
-      .toolbar {
-        ToolbarItem(placement: .confirmationAction) {
-          Button("Done") { model.presented = false }
-        }
-      }
     #endif
     // Dart builds the pages only while they are on screen.
     .onAppear { model.say.shown(on: true, pages: model.drawn, completion: ignore) }
@@ -85,28 +111,135 @@ public struct SettingsRoot: View {
   }
 }
 
-/// One page: its sections as a grouped form.
+/// One page: its sections as a grouped form. A row a search opened is
+/// scrolled to and lit for a moment.
 struct SettingsPageView: View {
-  @ObservedObject var model: SettingsModel
+  var model: SettingsModel
   let page: SettingsPageData
 
+  @State private var lit: String?
+
   var body: some View {
-    Form {
-      ForEach(page.sections.compactMap { $0 }, id: \.id) { section in
-        Section {
-          ForEach(section.rows.compactMap { $0 }.filter { $0.parent == nil }, id: \.id) {
-            row in
-            SettingRowView(model: model, row: row)
+    ScrollViewReader { proxy in
+      Form {
+        ForEach(page.sections.compactMap { $0 }, id: \.id) { section in
+          Section {
+            ForEach(section.rows.compactMap { $0 }.filter { $0.parent == nil }, id: \.id) {
+              row in
+              SettingRowView(model: model, row: row)
+                .id(row.id)
+                .listRowBackground(lit == row.id ? Color.accentColor.opacity(0.18) : nil)
+            }
+          } header: {
+            if !section.title.isEmpty { Text(section.title) }
+          } footer: {
+            if let detail = section.detail { Text(detail) }
           }
-        } header: {
-          if !section.title.isEmpty { Text(section.title) }
-        } footer: {
-          if let detail = section.detail { Text(detail) }
+        }
+      }
+      .formStyle(.grouped)
+      .task(id: model.revealed) { await reveal(proxy) }
+      .task(id: model.arriving) { await arrive() }
+    }
+    .navigationTitle(page.title)
+  }
+
+  /// The sub-page a search opened, pushed over this page once it is up.
+  private func arrive() async {
+    guard let key = model.arriving, model.page == page.key, model.path.isEmpty else { return }
+    model.arriving = nil
+    try? await Task.sleep(for: .milliseconds(350))
+    model.push(.page(key))
+  }
+
+  /// The row a search opened, if it is on this page: brought into sight,
+  /// then lit and let fade.
+  private func reveal(_ proxy: ScrollViewProxy) async {
+    guard let id = model.revealed, model.home(of: id) == page.key else { return }
+    model.revealed = nil
+    // After the push lands, or the scroll is lost to it.
+    try? await Task.sleep(for: .milliseconds(350))
+    withAnimation(.smooth) { proxy.scrollTo(id, anchor: .center) }
+    withAnimation(.easeOut(duration: 0.2)) { lit = id }
+    try? await Task.sleep(for: .seconds(1.2))
+    withAnimation(.easeIn(duration: 0.6)) { lit = nil }
+  }
+}
+
+/// What a search found: per page, the page itself where its title matched
+/// and each row that did, under the page's name.
+private struct SearchResults: View {
+  let model: SettingsModel
+
+  var body: some View {
+    ForEach(model.found) { hit in
+      Section(hit.page.title) {
+        if hit.titled {
+          result(hit.page.title, page: hit.page.key, row: nil)
+        }
+        ForEach(hit.rows, id: \.id) { row in
+          result(row.title, detail: row.detail, page: hit.page.key, row: row.id)
         }
       }
     }
-    .formStyle(.grouped)
-    .navigationTitle(page.title)
+  }
+
+  private func result(
+    _ title: String, detail: String? = nil, page: SettingsPageKey, row: String?
+  ) -> some View {
+    NavigationLink(value: SidebarPick.hit(page, row: row)) {
+      Label {
+        Text(title)
+        if let detail { Text(detail).lineLimit(2) }
+      } icon: {
+        PageIcon(key: page)
+      }
+    }
+  }
+}
+
+/// What the settings sidebar can have picked.
+private enum SidebarPick: Hashable {
+  case page(SettingsPageKey)
+  case hit(SettingsPageKey, row: String?)
+}
+
+/// A page's picture as Settings draws its own: a white symbol on a tile in
+/// the page's colour.
+struct PageIcon: View {
+  let key: SettingsPageKey
+
+  #if os(macOS)
+    private static let side: CGFloat = 20
+    private static let glyph: CGFloat = 11
+  #else
+    private static let side: CGFloat = 29
+    private static let glyph: CGFloat = 15
+  #endif
+
+  var body: some View {
+    Image(systemName: key.symbol)
+      .font(.system(size: Self.glyph, weight: .semibold))
+      .foregroundStyle(.white)
+      .frame(width: Self.side, height: Self.side)
+      .background(
+        key.tint.gradient,
+        in: RoundedRectangle(cornerRadius: Self.side * 0.23, style: .continuous)
+      )
+      .accessibilityHidden(true)
+  }
+}
+
+/// The sheet's way out: the system's close where it has one, Done before.
+private struct DoneButton: View {
+  let action: () -> Void
+
+  var body: some View {
+    if #available(iOS 26.0, macOS 26.0, *) {
+      Button(role: .close, action: action)
+    } else {
+      Button("Done", action: action)
+    }
   }
 }
 
@@ -171,29 +304,51 @@ struct SettingRowView: View {
 }
 
 extension SettingsPageKey {
-  /// The page's picture in the sidebar.
+  /// The page's symbol on its tile.
   var symbol: String {
     switch self {
-    case .general: "gearshape"
-    case .providers: "cloud"
-    case .onDevice: "cpu"
+    case .general: "gearshape.fill"
+    case .providers: "cloud.fill"
+    case .onDevice: "cpu.fill"
     case .llms: "sparkles"
-    case .images: "photo"
+    case .images: "photo.fill"
     case .memory: "brain"
     case .voice: "waveform"
-    case .triggers: "alarm"
-    case .agents: "person"
-    case .skills: "puzzlepiece.extension"
-    case .terminal: "terminal"
-    case .agentBrowser: "safari"
-    case .byteRepair: "checkmark.shield"
+    case .triggers: "alarm.fill"
+    case .agents: "person.fill"
+    case .skills: "puzzlepiece.extension.fill"
+    case .terminal: "terminal.fill"
+    case .agentBrowser: "safari.fill"
+    case .byteRepair: "checkmark.shield.fill"
     case .sync: "arrow.triangle.2.circlepath"
-    case .data: "archivebox"
-    case .welcome: "hand.wave"
-    case .shortcuts: "keyboard"
-    case .about: "info.circle"
+    case .data: "archivebox.fill"
+    case .welcome: "hand.wave.fill"
+    case .shortcuts: "keyboard.fill"
+    case .about: "info"
     case .syncRelay, .syncTurn: "network"
     case .onDeviceLlm: "slider.horizontal.3"
+    }
+  }
+
+  /// The tile's colour, as Settings colours its own pages: kin pages in kin
+  /// colours, the app's own in grey.
+  var tint: Color {
+    switch self {
+    case .general, .shortcuts, .about: .gray
+    case .providers, .agentBrowser, .syncRelay, .syncTurn: .blue
+    case .onDevice, .onDeviceLlm: .indigo
+    case .llms: .purple
+    case .images: .orange
+    case .memory: .pink
+    case .voice: .red
+    case .triggers: .orange
+    case .agents: .teal
+    case .skills: .mint
+    case .terminal: Color(white: 0.2)
+    case .byteRepair: .green
+    case .sync: .cyan
+    case .data: .brown
+    case .welcome: .yellow
     }
   }
 }
@@ -291,37 +446,61 @@ extension View {
   /// The detail pane's pages, drawn here rather than by a NavigationStack: in
   /// a split view's detail column a Mac's stack shows a pushed page with no
   /// animation (macOS 27, a plain NavigationLink included), though it
-  /// animates a pop. Only the top page is drawn, pushed in from the side it
-  /// comes from.
+  /// animates a pop. Every page of the stack is drawn, each over the one
+  /// beneath, as a Mac app's pages stack: a page pushed slides in from the
+  /// trailing edge over the one shown, which stays where it is, and slides
+  /// back out the same way.
   private struct PageStack: View {
-    @ObservedObject var model: SettingsModel
+    var model: SettingsModel
 
-    private struct Place: Hashable {
-      let page: SettingsPageKey?
+    /// One page of the stack: the page picked at the bottom, and each one
+    /// pushed over it. The picked page is in every level, so picking another
+    /// is a new stack rather than a push.
+    private struct Level: Hashable {
+      let root: SettingsPageKey?
       let depth: Int
+      let route: SettingsRoute?
+    }
+
+    private var levels: [Level] {
+      [Level(root: model.page, depth: 0, route: nil)]
+        + model.path.enumerated().map {
+          Level(root: model.page, depth: $0.offset + 1, route: $0.element)
+        }
     }
 
     var body: some View {
+      let top = model.path.count
       ZStack {
-        Group {
-          if let route = model.path.last {
-            SettingsDestination(model: model, route: route)
-          } else if let key = model.page, let page = model.page(key) {
-            SettingsPageView(model: model, page: page)
-          }
+        ForEach(levels, id: \.self) { level in
+          page(level)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Opaque, or the page beneath shows through a form's gaps.
+            .background(.background)
+            .zIndex(Double(level.depth))
+            .allowsHitTesting(level.depth == top)
+            .accessibilityHidden(level.depth != top)
+            .transition(level.depth == 0 ? .identity : .move(edge: .trailing))
         }
-        .id(Place(page: model.page, depth: model.path.count))
-        .transition(.push(from: model.forwards ? .trailing : .leading))
       }
+      .clipped()
       .toolbar {
         ToolbarItemGroup(placement: .navigation) { PageArrows(model: model) }
+      }
+    }
+
+    @ViewBuilder private func page(_ level: Level) -> some View {
+      if let route = level.route {
+        SettingsDestination(model: model, route: route)
+      } else if let key = level.root, let page = model.page(key) {
+        SettingsPageView(model: model, page: page)
       }
     }
   }
 
   /// Back and Forward through the pages pushed in this pane.
   private struct PageArrows: View {
-    @ObservedObject var model: SettingsModel
+    var model: SettingsModel
 
     var body: some View {
       Button {
@@ -364,7 +543,7 @@ extension View {
 
 /// The page a pushed [route] opens.
 private struct SettingsDestination: View {
-  @ObservedObject var model: SettingsModel
+  var model: SettingsModel
   let route: SettingsRoute
 
   var body: some View {
@@ -378,6 +557,8 @@ private struct SettingsDestination: View {
         BotAvatarsPage(model: model, opened: opened)
       case .models(let opened):
         if let row = model.row(opened.row) { ModelList(model: model, row: row) }
+      case .device(let id):
+        PairedDevicePage(model: model, id: id)
       }
     }
   }

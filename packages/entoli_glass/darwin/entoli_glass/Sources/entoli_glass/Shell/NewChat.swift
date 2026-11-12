@@ -27,7 +27,7 @@ extension NewChatSnapshot {
 /// Command Chips in start page" is on. Dart's `ShellNewChat` says what is
 /// there; a badge or a starter is an intent.
 struct NewChatView: View {
-  @ObservedObject var model: ShellModel
+  var model: ShellModel
 
   private var state: NewChatSnapshot { model.newChat }
   private var say: NewChatIntents { model.say.newChat }
