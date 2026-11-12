@@ -1,12 +1,12 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/app/pages/chat_settings.dart";
 import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry;
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/room/room_state.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
-import "package:agent_chat/ui/chat/chat_settings_page.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/view_only_bar.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
@@ -121,20 +121,20 @@ void main() {
 
       await tester.tap(find.text("On the desktop"));
       await settleIo(tester);
-      expect(find.byType(ChatSettingsPage), findsOneWidget);
-      expect(find.text("On Desktop"), findsOneWidget);
+      expect(findPage<ChatSettingsAppPage>(), findsOneWidget);
+      expect(find.text("This chat lives on Desktop."), findsOneWidget);
       expect(find.text("Context"), findsOneWidget);
       await tester.scrollUntilVisible(
-        find.text("Delete chat"),
+        find.text("Delete Chat"),
         200,
         scrollable: find
             .descendant(
-              of: find.byType(ChatSettingsPage),
+              of: findPage<ChatSettingsAppPage>(),
               matching: find.byType(Scrollable),
             )
             .first,
       );
-      expect(find.text("Delete chat"), findsOneWidget);
+      expect(find.text("Delete Chat"), findsOneWidget);
       // Its files and its providers are the home device's.
       expect(find.text("Chat workspace"), findsNothing);
       expect(find.text("LLM"), findsNothing);
@@ -146,11 +146,11 @@ void main() {
 
       await tester.tap(find.text("On the desktop"));
       await settleIo(tester);
-      final save = tester.widget<IconButton>(
-        find.widgetWithIcon(IconButton, Icons.check),
+      final save = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, "Save"),
       );
       expect(save.onPressed, isNull);
-      expect(find.text("Delete chat"), findsNothing);
+      expect(find.text("Delete Chat"), findsNothing);
     });
 
     testWidgets("offline it is a snapshot: said twice, and nothing to type or "

@@ -1,55 +1,14 @@
-import "dart:convert";
 import "dart:io";
-import "dart:typed_data";
 
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/prompts/skill_import.dart";
-import "package:agent_chat/data/prompts/skill_package.dart";
 import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/ui/skills/skill_install_preview.dart";
-import "package:agent_chat/ui/sidebar/project_settings_page.dart";
-import "package:agent_chat/ui/widgets/install_destination.dart";
+import "package:agent_chat/app/pages/project_settings.dart";
 
-import "../fakes.dart" show FakeChatStore;
 import "../harness.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
-
-const _skillMd =
-    "---\nname: letterbox\ndescription: frames the reply\n---\n\nFrame.\n";
-
-/// A home that pushes the preview page as soon as it is on screen, the way
-/// `skill_install_preview_test.dart` does.
-class _Launcher extends StatefulWidget {
-  const _Launcher();
-
-  @override
-  State<_Launcher> createState() => _LauncherState();
-}
-
-class _LauncherState extends State<_Launcher> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => const SkillInstallPreviewPage(
-            chatId: "chat-1",
-            installId: "install-1",
-          ),
-        ),
-      );
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) => const Scaffold(body: SizedBox());
-}
-
-final _installButton = find.widgetWithText(FilledButton, "Install skill");
 
 void main() {
   late TestApp app;
@@ -68,7 +27,7 @@ void main() {
         await writeSkill(app, "local-note", project: "work");
       });
 
-      await app.pump(tester, const ProjectSettingsPage(project: "work"));
+      await app.pumpPage(tester, ProjectSettingsAppPage("work"));
       await scrollTo(tester, find.text("Skills"));
       await tester.tap(find.text("Skills"));
       await settleIo(tester);
@@ -103,7 +62,7 @@ void main() {
     testWidgets("a user project's page imports, without the destination "
         "combobox the global page carries", (tester) async {
       await io(tester, () => app.repo.createProject("work"));
-      await app.pump(tester, const ProjectSettingsPage(project: "work"));
+      await app.pumpPage(tester, ProjectSettingsAppPage("work"));
       await scrollTo(tester, find.text("Skills"));
       await tester.tap(find.text("Skills"));
       await settleIo(tester);
@@ -129,7 +88,7 @@ void main() {
     ) async {
       await io(tester, () => app.repo.createProject("work"));
 
-      await app.pump(tester, const ProjectSettingsPage(project: "work"));
+      await app.pumpPage(tester, ProjectSettingsAppPage("work"));
       await scrollTo(tester, find.text("Agents"));
       await tester.tap(find.text("Agents"));
       await settleIo(tester);
@@ -182,7 +141,7 @@ void main() {
     testWidgets("Byte Repair's page lists its bundled agent read-only", (
       tester,
     ) async {
-      await app.pump(tester, ProjectSettingsPage(project: "byte-repair"));
+      await app.pumpPage(tester, ProjectSettingsAppPage("byte-repair"));
       await scrollTo(tester, find.text("Agents"));
       await tester.tap(find.text("Agents"));
       await settleIo(tester);
@@ -202,7 +161,7 @@ void main() {
     testWidgets(
       "Byte Repair's skills page is read-only and has no destination",
       (tester) async {
-        await app.pump(tester, ProjectSettingsPage(project: "byte-repair"));
+        await app.pumpPage(tester, ProjectSettingsAppPage("byte-repair"));
         await scrollTo(tester, find.text("Skills"));
         await tester.tap(find.text("Skills"));
         await settleIo(tester);
@@ -219,43 +178,6 @@ void main() {
         expect(find.text("Remove"), findsNothing);
       },
     );
-  });
-
-  group("the install destination", () {
-    testWidgets("the project picked on the preview page is where the skill "
-        "lands", (tester) async {
-      final store = FakeChatStore();
-      app = TestApp.create(store: store);
-      await io(tester, () => app.repo.createProject("work"));
-
-      final bytes = packageSkillBytes(
-        SkillPackage("letterbox", [
-          ("SKILL.md", Uint8List.fromList(utf8.encode(_skillMd))),
-        ]),
-      );
-      store.stageSkillInstall("chat-1", "install-1", bytes);
-
-      await app.pump(tester, const _Launcher(), settle: false);
-      await pumpUntil(tester, _installButton);
-      await settleIo(tester);
-
-      // Global is the default; the user's projects are the other choices.
-      await tester.tap(find.byType(InstallDestination));
-      await tester.pumpAndSettle();
-      expect(popupLabels(tester), containsAll(<String>["Global", "work"]));
-      await tester.tap(find.text("work").last);
-      await settleIo(tester);
-
-      await tester.tap(_installButton);
-      await settleIo(tester, least: 20, tries: 80);
-
-      final dir = skillDirectory(app.config, "letterbox", project: "work");
-      expect(File("$dir/SKILL.md").existsSync(), isTrue);
-      expect(
-        Directory(skillDirectory(app.config, "letterbox")).existsSync(),
-        isFalse,
-      );
-    });
   });
 
   group("isBundledPromptName", () {

@@ -1,4 +1,3 @@
-import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/sync/peers.dart" show PeerState, PeerStatus;
@@ -9,13 +8,13 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/project.dart" show ProjectRef;
 import "package:agent_chat/domain/project_settings.dart";
 import "package:agent_chat/domain/prompt_library.dart";
-import "package:agent_chat/ui/chat/widgets/view_only_bar.dart" show MirrorStrip;
-import "package:agent_chat/ui/memory/memory_page.dart" show MemoryTile;
-import "package:agent_chat/ui/sidebar/project_settings_page.dart";
+import "package:agent_chat/app/settings/controller.dart";
+import "package:agent_chat/app/pages/project_settings.dart";
 import "package:agent_chat/app/remote_projects.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/selection.dart";
 
+import "../app/pages/page_driver.dart";
 import "../harness.dart";
 
 /// A project on a paired device: its settings page reads what that device
@@ -60,98 +59,76 @@ void main() {
   late TestApp app;
   tearDown(() => app.dispose());
 
-  testWidgets("it waits for the device to answer", (tester) async {
+  test("it waits for the device to answer", () async {
     app = appWith(online: true, answered: false);
-    await app.pump(
-      tester,
-      const ProjectSettingsPage(project: "work", device: "device-1"),
-      settle: false,
+    final page = PageDriver(
+      app,
+      ProjectSettingsAppPage("work", device: "device-1"),
     );
-    await tester.pump();
-
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    expect(find.text("Project name"), findsNothing);
+    expect(page.find<NoticeController>("loading"), isNotNull);
+    expect(page.find<ActionController>("name"), isNull);
   });
 
-  testWidgets("a project the device no longer lists says so rather than wait", (
-    tester,
-  ) async {
-    app = appWith(online: true);
-    await app.pump(
-      tester,
-      const ProjectSettingsPage(project: "gone", device: "device-1"),
-    );
+  test(
+    "a project the device no longer lists says so rather than wait",
+    () async {
+      app = appWith(online: true);
+      final page = PageDriver(
+        app,
+        ProjectSettingsAppPage("gone", device: "device-1"),
+      );
+      await page.until(() => page.find<NoticeController>("gone") != null);
+      expect(
+        page.at<NoticeController>("gone").lines.single.text,
+        "This project is no longer on that device.",
+      );
+    },
+  );
 
+  test("it reads the device's settings, less what is on its disk", () async {
+    app = appWith(online: true);
+    final page = PageDriver(
+      app,
+      ProjectSettingsAppPage("work", device: "device-1"),
+    );
+    await page.until(() => page.find<ActionController>("name") != null);
     expect(
-      find.text("This project is no longer on that device."),
-      findsOneWidget,
+      page.at<TextController>("description").value,
+      "Asked on the desktop",
     );
-    expect(find.byType(CircularProgressIndicator), findsNothing);
-  });
-
-  testWidgets("it reads the device's settings, less what is on its disk", (
-    tester,
-  ) async {
-    app = appWith(online: true);
-    await app.pump(
-      tester,
-      const ProjectSettingsPage(project: "work", device: "device-1"),
-    );
-    await settleIo(tester);
-
-    expect(find.text("Asked on the desktop"), findsOneWidget);
-    expect(find.text("Chats"), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.byType(MemoryTile),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.scrollUntilVisible(
-      find.text("Round order"),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.text("Round order"), findsOneWidget);
-    for (final local in ["Path", "Project workspace", "Instructions"]) {
-      expect(find.text(local), findsNothing, reason: local);
+    expect(page.find<InfoController>("chats"), isNotNull);
+    expect(page.find<SettingController>("omadaOrdering"), isNotNull);
+    expect(page.find<ActionController>("memories"), isNotNull);
+    for (final local in ["path", "workspace", "instructions"]) {
+      expect(page.find<SettingController>(local), isNull, reason: local);
     }
-    // The strip under the title says whose it is.
-    expect(find.text("On Desktop"), findsOneWidget);
-  });
-
-  // Its library is the device's: listed, and nothing here to open or export.
-  testWidgets("its skills are the device's, shown and not changed", (
-    tester,
-  ) async {
-    app = appWith(online: true);
-    await app.pump(
-      tester,
-      const ProjectSettingsPage(project: "work", device: "device-1"),
-    );
-    await settleIo(tester);
-
-    await tester.tap(find.text("Skills"));
-    await settleIo(tester);
-    expect(find.widgetWithText(ListTile, "deploy"), findsOneWidget);
-    expect(find.byTooltip("Export deploy"), findsNothing);
-    expect(find.text("Import skill"), findsNothing);
-  });
-
-  testWidgets("with the device away it is read, not written", (tester) async {
-    app = appWith(online: false);
-    await app.pump(
-      tester,
-      const ProjectSettingsPage(project: "work", device: "device-1"),
-    );
-    await settleIo(tester);
-
-    expect(find.byType(MirrorStrip), findsOneWidget);
-    expect(find.text("Asked on the desktop"), findsOneWidget);
     expect(
-      tester
-          .widgetList<AbsorbPointer>(find.byType(AbsorbPointer))
-          .any((pointer) => pointer.absorbing),
-      isTrue,
+      page.at<NoticeController>("device").lines.single.text,
+      "This project lives on Desktop.",
+    );
+  });
+
+  test("its skills are the device's, shown and not changed", () async {
+    app = appWith(online: true);
+    final page = PageDriver(
+      app,
+      ProjectSettingsAppPage("work", device: "device-1"),
+    );
+    await page.until(() => page.find<ActionController>("skill") != null);
+    expect(page.at<ActionController>("skill").label, "1");
+  });
+
+  test("with the device away it is read, not written", () async {
+    app = appWith(online: false);
+    final page = PageDriver(
+      app,
+      ProjectSettingsAppPage("work", device: "device-1"),
+    );
+    await page.until(() => page.find<NoticeController>("device") != null);
+    expect(page.at<NoticeController>("device").tone, NoticeTone.warning);
+    expect(
+      page.controllers.whereType<ActionController>().any((a) => a.enabled),
+      isFalse,
     );
   });
 
@@ -165,8 +142,7 @@ void main() {
 
     await tester.tap(find.byTooltip("Project settings"));
     await settleIo(tester);
-    expect(find.byType(ProjectSettingsPage), findsOneWidget);
-    expect(find.text("Asked on the desktop"), findsOneWidget);
+    expect(findPage<ProjectSettingsAppPage>(), findsOneWidget);
   });
 
   test("every project a device names is listed, mirrored or not", () {

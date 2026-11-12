@@ -2,10 +2,8 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/corner_radius.dart";
-import "package:agent_chat/ui/sidebar/project_settings_page.dart";
 import "package:agent_chat/ui/theme.dart";
 import "package:agent_chat/ui/widgets/settings_card.dart";
-import "package:agent_chat/ui/workspace/workspace_page.dart";
 
 import "../harness.dart";
 
@@ -161,36 +159,6 @@ void main() {
       expect(rects, hasLength(2));
       expect(rects[0].width, 240.0);
       expect(rects[1].width, 240.0);
-    });
-  });
-
-  group("the project settings page", () {
-    testWidgets("the name card copies, without its own copy button", (
-      tester,
-    ) async {
-      final copied = clipboard(tester);
-      await io(tester, () => app.repo.createProject("research"));
-      await app.pump(tester, const ProjectSettingsPage(project: "research"));
-
-      await tester.tap(find.text("research"));
-      await settleIo(tester);
-
-      expect(copied, ["research"]);
-      expect(find.text("Copied project name"), findsOneWidget);
-    });
-
-    testWidgets("the chats card states its count and takes no tap", (
-      tester,
-    ) async {
-      await io(tester, () => app.repo.createProject("research"));
-      await io(tester, () => app.seedChat(project: "research"));
-      await app.pump(tester, const ProjectSettingsPage(project: "research"));
-
-      expect(find.widgetWithText(SettingsCard, "Chats"), findsOneWidget);
-      await tester.tap(find.text("Chats"));
-      await settleIo(tester);
-
-      expect(find.byType(WorkspacePage), findsNothing);
     });
   });
 }

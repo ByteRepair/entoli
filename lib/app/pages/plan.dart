@@ -58,7 +58,7 @@ class PlanAppPage extends AppPage {
   }
 
   static InfoRow _row(PlanTask task) => InfoRow(
-    task.text,
+    "${task.index}. ${task.text}",
     subtitle: switch (task.status) {
       PlanTaskStatus.done => "Done",
       PlanTaskStatus.inProgress => "In progress",

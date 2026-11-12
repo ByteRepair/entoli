@@ -387,6 +387,33 @@ Frame it, from upstream.
     );
   });
 
+  test("the project picked is where the skill lands", () async {
+    final store = FakeChatStore()
+      ..stageSkillInstall("chat-1", "install-1", letterboxPackage());
+    app = TestApp.create(store: store);
+    await app.repo.createProject("work");
+    final page = PageDriver(
+      app,
+      SkillInstallAppPage(chatId: "chat-1", installId: "install-1"),
+    );
+    await page.until(() => page.find<ChoiceController>("destination") != null);
+    await page.until(
+      () => page
+          .at<ChoiceController<String>>("destination")
+          .options
+          .any((o) => o.value == "work"),
+    );
+    await page.at<ChoiceController<String>>("destination").set("work");
+    await page.tool("install").run();
+    expect(
+      File(
+        "${skillDirectory(app.config, "letterbox", project: "work")}/SKILL.md",
+      ).existsSync(),
+      isTrue,
+    );
+    expect(Directory(skillDir("letterbox")).existsSync(), isFalse);
+  });
+
   test("a staged package that cannot be read says so", () async {
     start();
     final page = PageDriver(

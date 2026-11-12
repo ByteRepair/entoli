@@ -1,3 +1,5 @@
+import "package:agent_chat/app/pages/app_page.dart";
+import "package:agent_chat/ui/app_pages.dart";
 import "package:agent_chat/ui/shell/shell_overrides.dart";
 import "package:agent_chat/app/app_menus.dart";
 import "dart:async";
@@ -522,11 +524,23 @@ class TestApp {
           builder: (context, app) =>
               DecorativeMotion(enabled: false, child: app!),
           // As the frontend at the root binds them.
-          home: SettingsHandOffs(child: FocusFollowsKeyboard(child: child)),
+          home: SettingsHandOffs(
+            // As `AppShell` follows it: a page opened onto the core's stack
+            // is pushed.
+            child: AppPagesFollower(child: FocusFollowsKeyboard(child: child)),
+          ),
         ),
       ),
     );
     if (settle) await settleIo(tester);
+  }
+
+  /// [page] opened onto the core's stack over an empty host, as a page is
+  /// opened in the app, and drawn as the Flutter frontend draws it.
+  Future<void> pumpPage(WidgetTester tester, AppPage page) async {
+    await pump(tester, const Scaffold(body: SizedBox()));
+    container.read(appPagesProvider.notifier).open(page);
+    await settleIo(tester);
   }
 
   /// A finished reply holding [markdown], which is the only state that renders
@@ -1251,3 +1265,7 @@ Future<void> openRowMenu(WidgetTester tester, String title) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));
 }
+
+/// The page drawn for an [AppPage] of type [P].
+Finder findPage<P extends AppPage>() =>
+    find.byWidgetPredicate((w) => w is AppPageView && w.page is P);

@@ -115,6 +115,7 @@ class ProjectSettingsAppPage extends AppPage {
               ? "${_deviceName(reader)} is offline. These settings can be "
                     "changed once it is back."
               : "This project lives on ${_deviceName(reader)}.",
+          tone: frozen ? NoticeTone.warning : NoticeTone.plain,
         ),
       PageSection("project", "", [
         ActionController(
@@ -155,7 +156,23 @@ class ProjectSettingsAppPage extends AppPage {
             prompt: defaultEmptyChatQuestion,
             lines: 3,
             allowBlank: true,
-            clearLabel: "Use Default",
+            // Blank is an answer of its own, the screen asking nothing; the
+            // way back to the app's question is this.
+            accessory: ActionController(
+              part(
+                "descriptionReset",
+                "Use the Default Question",
+                glyph: SettingGlyph.tune,
+              ),
+              label: "Use the Default Question",
+              enabled: settings.description != null,
+              run: () async {
+                await app
+                    .read(projectSettingsOf(at).notifier)
+                    .setDescription(null);
+                return null;
+              },
+            ),
             onSet: (text) async {
               await app
                   .read(projectSettingsOf(at).notifier)
@@ -355,8 +372,12 @@ class ProjectSettingsAppPage extends AppPage {
   String _deviceName(SettingReader reader) =>
       reader.watch(syncPeersProvider)[device]?.name ?? "The device";
 
-  PageSection _say(String id, String text) => PageSection(id, "", [
-    NoticeController(part(id, ""), lines: [NoticeLine(text)]),
+  PageSection _say(
+    String id,
+    String text, {
+    NoticeTone tone = NoticeTone.plain,
+  }) => PageSection(id, "", [
+    NoticeController(part(id, ""), tone: tone, lines: [NoticeLine(text)]),
   ]);
 
   /// [section] as it is drawn while the device is away: what is shown, with
