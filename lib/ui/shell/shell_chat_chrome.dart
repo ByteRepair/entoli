@@ -1,11 +1,13 @@
 import "package:entoli_glass/entoli_glass.dart" show ChatBarSnapshot;
 import "package:flutter/widgets.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
 import "../../app/chat_controller.dart" show TurnDriver;
 import "../../app/composer.dart";
 import "../../domain/room/room_state.dart" show ChatViewState;
 import "../../app/plan.dart";
+import "../../app/transcript/transcript.dart";
 import "../../domain/models.dart";
 import "../../domain/plan.dart" show sectionsProgress;
 import "../../domain/project.dart";
@@ -15,13 +17,15 @@ import "../chat/plan_page.dart" show openPlan;
 import "../chat/widgets/browser_strip.dart" show BrowserPrompts;
 import "../chat/widgets/composer_controller.dart";
 import "shell_composer.dart";
+import "shell_conversation.dart";
 import "shell_new_chat.dart";
 import "shell_turn.dart";
 
 /// The native shell's chat page: its bar and composer are the window's,
 /// over the page; its turn surface draws the question too; the new-chat
-/// screen is native. What stays Flutter's is the conversation, and the
-/// browser's prompts, which are fields and a picker.
+/// screen is native, and so is the conversation, drawn from the core's
+/// transcript. What stays Flutter's is the browser's prompts, which are
+/// fields and a picker, and the pages pushed over the conversation.
 class ShellChatChrome extends ChatChrome {
   const ShellChatChrome();
 
@@ -81,6 +85,21 @@ class ShellChatChrome extends ChatChrome {
     required ComposerController controller,
     required bool starting,
   }) => ShellNewChat(at: at, controller: controller, starting: starting);
+
+  @override
+  Widget? conversation({
+    required String chatId,
+    required Transcript transcript,
+    required ChatViewState view,
+    required ProviderListenable<ChatViewState> source,
+    TurnDriver? driver,
+  }) => ShellConversation(
+    chatId: chatId,
+    transcript: transcript,
+    view: view,
+    source: source,
+    driver: driver,
+  );
 }
 
 /// A chat's bar: its title, the line under it, the running spinner, the

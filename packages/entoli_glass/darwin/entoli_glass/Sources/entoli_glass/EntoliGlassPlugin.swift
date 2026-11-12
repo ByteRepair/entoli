@@ -22,6 +22,9 @@ public final class EntoliGlassPlugin: NSObject, FlutterPlugin {
     let settings = SettingsModel(messenger: messenger)
     SettingsModel.shared = settings
     NativeSettingsSetup.setUp(binaryMessenger: messenger, api: settings)
+    let transcript = TranscriptModel(messenger: messenger)
+    TranscriptModel.shared = transcript
+    NativeTranscriptSetup.setUp(binaryMessenger: messenger, api: transcript)
   }
 }
 

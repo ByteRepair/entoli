@@ -46,6 +46,7 @@ class ShellAnswers {
   late final newChat = _answer<NewChatIntents>(NewChatIntents.setUp);
   late final voice = _answer<VoiceIntents>(VoiceIntents.setUp);
   late final chatBar = _answer<ChatBarIntents>(ChatBarIntents.setUp);
+  late final transcript = _answer<TranscriptIntents>(TranscriptIntents.setUp);
   late final pageBar = _answer<TitleBarIntents>(
     (surface) =>
         TitleBarIntents.setUp(surface, messageChannelSuffix: "pageBar"),

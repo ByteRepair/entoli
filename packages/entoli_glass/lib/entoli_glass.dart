@@ -8,3 +8,4 @@ library;
 
 export "src/shell_contract.g.dart";
 export "src/settings_contract.g.dart" hide wrapResponse;
+export "src/transcript_contract.g.dart" hide wrapResponse;

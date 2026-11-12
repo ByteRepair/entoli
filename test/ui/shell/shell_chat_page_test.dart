@@ -22,16 +22,19 @@ import "package:agent_chat/ui/widgets/page_bar.dart";
 
 import "../../harness.dart";
 import "fake_native_shell.dart";
+import "fake_native_transcript.dart";
 
 /// The chat page as the native shell hosts it: no Flutter bar or composer,
 /// the toolbar and the composer sent as snapshots instead.
 void main() {
   late TestApp app;
   late FakeNativeShell shell;
+  late FakeNativeTranscript transcript;
 
   setUp(() {
     app = TestApp.create();
     shell = FakeNativeShell.install();
+    transcript = FakeNativeTranscript.install();
   });
   tearDown(() => app.dispose());
 
@@ -58,10 +61,6 @@ void main() {
       ),
     ),
   );
-
-  /// The shell composer on top, as the Swift reaches it.
-  ComposerIntents composer() =>
-      app.container.read(shellAnswersProvider).composer.owner!;
 
   /// A chat with something said in it, open: [said] messages, enough past
   /// the window's height to scroll.
@@ -149,26 +148,26 @@ void main() {
     expect(shell.lastComposerValue?.text, "@scout ");
   });
 
-  testWidgets("a chat fills the page, its title in the toolbar", (
-    tester,
-  ) async {
+  testWidgets("a chat's conversation goes to the shell, Flutter drawing no "
+      "list, its title in the toolbar", (tester) async {
     await openChat(tester);
     await pump(tester);
     await settleIo(tester);
     expect(shell.lastChatBar?.title, "old chat");
-    expect(tester.getSize(find.byType(SuperListView)).height, 600);
+    expect(find.byType(SuperListView), findsNothing);
+    expect(transcript.conversations.last.order, [
+      for (var i = 0; i < 4; i++) "message:m$i",
+    ]);
   });
 
-  testWidgets("the conversation runs under the composer, padded to clear it", (
-    tester,
-  ) async {
+  testWidgets("what Flutter still draws at the foot is said, the composer "
+      "not counted in it", (tester) async {
+    addTearDown(() => shellInsets.value = EdgeInsets.zero);
+    shellInsets.value = const EdgeInsets.only(bottom: 80);
     await openChat(tester);
     await pump(tester, composer: 80);
     await settleIo(tester);
-    final list = find.byType(SuperListView);
-    expect(tester.getRect(list).bottom, 600, reason: "under the composer");
-    final padding = MediaQuery.paddingOf(tester.element(list)).bottom;
-    expect(padding, greaterThanOrEqualTo(80), reason: "its end clears it");
+    expect(transcript.conversations.last.flutterBottom, 0);
   });
 
   testWidgets("an interrupted turn's offer to carry on goes to the shell", (
@@ -188,37 +187,7 @@ void main() {
     expect(shell.lastTurn?.approvals, isEmpty);
   });
 
-  testWidgets("a tooltip on the page opens above what it is about", (
-    tester,
-  ) async {
-    await openChat(tester);
-    await pump(tester, composer: 80);
-    await settleIo(tester);
-    final list = tester.element(find.byType(SuperListView));
-    expect(TooltipTheme.of(list).preferBelow, isFalse);
-  });
-
   group("the keyboard", () {
-    testWidgets("goes with a drag back through the conversation", (
-      tester,
-    ) async {
-      await openChat(tester, said: 40);
-      await pump(tester);
-      await settleIo(tester);
-
-      composer().focused(true);
-      await tester.pump();
-      expect(
-        shell.sent["composerFocus"],
-        isNull,
-        reason: "the field said so; nothing goes back",
-      );
-
-      await tester.drag(find.byType(SuperListView), const Offset(0, 200));
-      await tester.pump();
-      expect(shell.sent["composerFocus"], [false]);
-    });
-
     testWidgets("is not counted twice in the padding", (tester) async {
       addTearDown(() => shellInsets.value = EdgeInsets.zero);
       shellInsets.value = const EdgeInsets.only(top: 116, bottom: 384);
@@ -239,23 +208,6 @@ void main() {
       expect(seen.padding, const EdgeInsets.only(top: 116, bottom: 56));
       expect(seen.viewPadding, const EdgeInsets.only(top: 116, bottom: 384));
     });
-  });
-
-  testWidgets("sending goes back down to the latest", (tester) async {
-    await openChat(tester, said: 40);
-    await pump(tester);
-    await settleIo(tester);
-    final position = tester
-        .state<ScrollableState>(find.byType(Scrollable).first)
-        .position;
-    await tester.drag(find.byType(SuperListView), const Offset(0, 400));
-    await tester.pumpAndSettle();
-    expect(position.pixels, lessThan(position.maxScrollExtent));
-
-    composer().edited("hello", 5, 5);
-    composer().run(ComposerAction.send);
-    await settleIo(tester);
-    expect(position.pixels, position.maxScrollExtent);
   });
 
   group("an activity's drawer", () {
@@ -304,28 +256,23 @@ void main() {
               .select(chat.state.id);
         });
 
-    testWidgets("is a page the composer steps aside for, not a sheet under "
-        "it", (tester) async {
+    testWidgets("is the shell's detail, sent when its node is opened", (
+      tester,
+    ) async {
       await openRuns(tester, ["ls"]);
       await pump(tester);
       await settleIo(tester);
-      await tester.tap(find.text("Used tool: bash"));
-      await tester.pumpAndSettle();
+      final node =
+          transcript.rows["message:m1"]!.message!.blocks.first.nodes.single;
+      expect(node.text, "Used tool: bash");
 
+      app.container.read(shellAnswersProvider).transcript.owner!.open(node.id);
+      await tester.pump();
+      final detail = transcript.details.last;
+      expect(detail.present, isTrue);
+      expect(detail.title, "bash");
+      expect(detail.sections.map((s) => s.body), contains("out of ls"));
       expect(find.byType(BottomSheet), findsNothing);
-      final output = find.text("out of ls");
-      expect(output, findsOneWidget);
-      // A page is what the window's chrome steps aside for.
-      expect(ModalRoute.of(tester.element(output)), isA<PageRoute<void>>());
-      // Its bar is the page's: the window's under the shell, which `main`
-      // turns on above the Navigator rather than here around the page.
-      final bar = tester.widget<PageBar>(find.byType(PageBar));
-      expect(bar.title, "bash");
-
-      // The window's back, which the shell sends as the bar's.
-      Navigator.of(tester.element(output)).pop();
-      await tester.pumpAndSettle();
-      expect(find.text("out of ls"), findsNothing);
     });
   });
 }

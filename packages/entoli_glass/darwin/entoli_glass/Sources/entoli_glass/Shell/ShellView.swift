@@ -1,12 +1,17 @@
 import SwiftUI
 
 /// The window: a split view whose sidebar is native and whose detail is the
-/// Flutter view, the shell's chrome over it. The Flutter view fills the
+/// conversation, drawn natively, over the Flutter view that keeps the pages
+/// pushed over it, the shell's chrome over both. The Flutter view fills the
 /// detail, under the toolbar and the composer; how far those reach is the
 /// safe area, which goes to Dart as padding.
 struct ShellView: View {
   @Bindable var model: ShellModel
   let flutter: PlatformViewController
+
+  /// The conversation, drawn here from the core's transcript rather than by
+  /// the Flutter view beneath it.
+  private let transcript = TranscriptModel.shared!
 
   /// The conversation's column in the Flutter view, which the composer is
   /// held to as the Flutter one is: `_readableWidth`, and the composer's own
@@ -142,6 +147,14 @@ struct ShellView: View {
         // which Dart's `ShellInsets` takes out.
         .ignoresSafeArea(.keyboard)
       #endif
+      // Over the Flutter view, which keeps the pages pushed over the
+      // conversation and the strip it still draws at the foot — left clear.
+      if transcript.present && !model.window.covered && !model.newChat.present {
+        ConversationView(model: transcript)
+          .background(.background)
+          .padding(.bottom, transcript.flutterBottom)
+          .transition(.opacity)
+      }
       // Beside the Flutter view rather than over it, so it keeps to the
       // keyboard's safe area: the composer rides on the keyboard and pads
       // the new-chat screen up with it, where an overlay of the view above

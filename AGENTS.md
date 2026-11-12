@@ -59,6 +59,7 @@ named in a cross-reference is findable from this list.
 - `lib/domain/room/AGENTS.md` — The room and its participants, The contract
   between direct and Omada chats, When a turn is over, Automatic retry rounds
 - `lib/ui/chat/AGENTS.md` — What the turn's extraction kept, Thinking and tool runs,
+  Activities, on screen (the transcript core), The conversation, natively,
   What is running, on screen, The agent's browser, on screen,
   Selecting a reply, and copying it, Replying to a passage, How a reply
   is set, Formulas, Code
@@ -121,8 +122,8 @@ on every platform, and the SwiftUI one in `packages/entoli_glass` on Apple's. A 
 is a file that is both something others build on and a user of those
 builders, and each place it could happen is held apart the same few ways:
 
-- **A base apart from its catalogue.** `ToolUI` is the base; the list of
-  every tool is `tools.dart`, above the tools.
+- **A base apart from its catalogue.** `ToolActivity` is the base; the list
+  of every tool is `transcript/activities/catalog.dart`, above the tools.
 - **State apart from a widget.** The open chat and project are
   `ui/selection.dart`, which every page reads and none of them owns.
 - **An interface where the concrete is above.** A tool's `Turn` holds

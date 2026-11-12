@@ -337,10 +337,10 @@ sidebar, toolbar, composer, turn surface, new-chat screen, voice mode, project
 palette and popovers drawn by the system in the glass this version of the OS
 draws its own apps in — Liquid Glass on 26, its materials before that, since
 every glass call names what the OS provides rather than drawing a look of its
-own (`Glass.swift`). The conversation itself, and every page pushed over it,
-stay Flutter: one Flutter view, embedded in the SwiftUI window. So a feature
-in a reply is still built once, and only the chrome is built twice — a native
-copy of what the Flutter app draws, with the rules shared. The app's settings
+own (`Glass.swift`). The conversation is native too, drawn from the core's
+transcript (see "The conversation, natively" in `lib/ui/chat/AGENTS.md`), so
+what a reply is is decided once and drawn twice. The pages pushed over it stay
+Flutter: one Flutter view, embedded in the SwiftUI window. The app's settings
 are the one page that is the platform's own, a Settings window on a Mac and a
 sheet on iOS, built from the same schema the Flutter page is: see "Settings
 as data" in `lib/ui/settings/AGENTS.md`. A chat's and a project's settings
@@ -371,8 +371,8 @@ launch's answer: `native` on the two Apples, and `current` as it started.
 one client: the Flutter app on every other platform, and on these with the
 switch off, reads its providers as it always has. With the shell, `main` puts
 `ShellBridge` where `AppShell` would be. It sends
-it what to draw, runs what it sends back, and draws `ChatPage`, with no bar
-and no composer of its own.
+it what to draw, runs what it sends back, and draws `ChatPage`, with no bar,
+no composer and no conversation of its own.
 
 **The wire is one definition, `pigeons/shell.dart`**, which Pigeon turns
 into the Dart in `packages/entoli_glass/lib/src/`, the Swift in the plugin's
