@@ -41,6 +41,7 @@ enum SettingKind {
   pairing,
   setup,
   document,
+  web,
 }
 
 /// How a row would like to be drawn; a client that cannot honour one draws
@@ -469,6 +470,7 @@ class SettingRowData {
     this.fileName,
     this.markdown = false,
     this.editing = false,
+    this.webUrl,
   });
 
   String id;
@@ -583,6 +585,9 @@ class SettingRowData {
   String? fileName;
   bool markdown;
   bool editing;
+
+  // web
+  String? webUrl;
 }
 
 class SettingsSectionData {

@@ -6,6 +6,7 @@ import "../app/settings/spec.dart";
 import "../app/settings/controller.dart";
 import "settings/schema_view.dart";
 import "widgets/document_view.dart";
+import "widgets/web_view.dart";
 import "widgets/dialogs.dart";
 import "widgets/page_bar.dart";
 import "widgets/section_header.dart";
@@ -113,6 +114,7 @@ class AppPageView extends ConsumerWidget {
           // A file is the whole of its page.
           [PageSection(controllers: [final DocumentController c])] =>
             DocumentView(c),
+          [PageSection(controllers: [final WebController c])] => WebPageView(c),
           _ => ListView(
             padding: const EdgeInsets.only(bottom: 24),
             children: [

@@ -111,17 +111,24 @@ struct AppPageView: View {
 
   @State private var leaving: SettingConfirmData?
 
-  /// A file is the whole of its page, not a row of a form.
-  private var document: SettingRowData? {
+  /// A file or a web page is the whole of its page, not a row of a form.
+  private var whole: SettingRowData? {
     let rows = page.rows
-    return rows.count == 1 && rows[0].kind == .document ? rows[0] : nil
+    guard rows.count == 1, [.document, .web].contains(rows[0].kind) else { return nil }
+    return rows[0]
   }
 
   var body: some View {
     Group {
-      if let document {
-        DocumentRow(model: model.rows, row: document)
-          .navigationTitle(page.title)
+      if let row = whole {
+        Group {
+          if row.kind == .web {
+            WebRow(row: row).ignoresSafeArea(edges: .bottom)
+          } else {
+            DocumentRow(model: model.rows, row: row)
+          }
+        }
+        .navigationTitle(page.title)
       } else {
         SettingsPageView(model: model.rows, page: page)
       }

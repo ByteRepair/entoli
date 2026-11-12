@@ -363,6 +363,10 @@ SettingRowData _row(
         ..lines = c.lines
         ..submitLabel = c.submitLabel
         ..clearLabel = c.clearLabel;
+    case WebController():
+      row
+        ..kind = SettingKind.web
+        ..webUrl = c.url.toString();
     case DocumentController():
       row
         ..kind = SettingKind.document

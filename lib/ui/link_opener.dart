@@ -2,18 +2,16 @@ import "dart:io";
 
 import "package:flutter/material.dart";
 import "package:url_launcher/url_launcher.dart";
-import "package:webview_flutter/webview_flutter.dart";
-import "package:webview_flutter_android/webview_flutter_android.dart";
 
 import "../core/log.dart";
 import "../core/platform/form_factor.dart";
-import "../core/platform/artifact_server.dart";
 import "../core/platform/remote_artifact.dart" show RemoteArtifacts;
 import "../data/sync/sync_hub.dart";
 import "../domain/chat_store.dart";
 import "../domain/link_opener.dart";
 import "widgets/dialogs.dart";
-import "widgets/page_bar.dart";
+import "../app/pages/web.dart";
+import "app_pages.dart";
 
 /// Web, mail and phone links alone: anything else, `file:` included, would
 /// hand the OS whatever scheme a model wrote.
@@ -66,9 +64,7 @@ class PlatformLinkOpener implements LinkOpener {
       return;
     }
     if (isAndroid && (url.scheme == "http" || url.scheme == "https")) {
-      await Navigator.of(
-        context,
-      ).push(MaterialPageRoute<void>(builder: (_) => _WebViewPage(url: url)));
+      openAppPage(context, WebAppPage(url));
       return;
     }
     await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -116,11 +112,9 @@ class PlatformLinkOpener implements LinkOpener {
       return;
     }
     if (!context.mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) =>
-            _ArtifactWebViewPage(dir: dir, entryFile: entryFile, title: title),
-      ),
+    openAppPage(
+      context,
+      ArtifactAppPage(dir: dir, entryFile: entryFile, label: title),
     );
   }
 
@@ -155,11 +149,9 @@ class PlatformLinkOpener implements LinkOpener {
       return true;
     }
     if (!context.mounted) return true;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) =>
-            _ArtifactWebViewPage(dir: dir, entryFile: entryFile, title: title),
-      ),
+    openAppPage(
+      context,
+      ArtifactAppPage(dir: dir, entryFile: entryFile, label: title),
     );
     return true;
   }
@@ -192,182 +184,3 @@ class PlatformLinkOpener implements LinkOpener {
 /// The plugin's Android default draws the WebView into a texture Flutter
 /// composites, which lags scrolling by a frame and makes flings stutter;
 /// hybrid composition puts the native view on screen to scroll by itself.
-Widget _webView(WebViewController controller) {
-  final platform = controller.platform;
-  return WebViewWidget.fromPlatformCreationParams(
-    params: platform is AndroidWebViewController
-        ? AndroidWebViewWidgetCreationParams(
-            controller: platform,
-            displayWithHybridComposition: true,
-          )
-        : PlatformWebViewWidgetCreationParams(controller: platform),
-  );
-}
-
-/// A full-screen webview for browsing a web page on Android, so a link tap
-/// keeps the user in the app rather than bouncing them out to the browser.
-/// The back button walks webview history first and only then pops the route.
-/// Copy link and Open in browser act on the page navigated to rather than the
-/// link that opened it, which is why `_url` follows the webview.
-class _WebViewPage extends StatefulWidget {
-  const _WebViewPage({required this.url});
-  final Uri url;
-
-  @override
-  State<_WebViewPage> createState() => _WebViewPageState();
-}
-
-class _WebViewPageState extends State<_WebViewPage> {
-  late final WebViewController _controller;
-  late Uri _url;
-  var _title = "";
-  var _canGoBack = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _url = widget.url;
-    _title = widget.url.host;
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          // Fires without a page load too, which is the only notice a
-          // history-rewriting page gives.
-          onUrlChange: (change) {
-            final url = change.url;
-            if (url != null) _url = Uri.parse(url);
-          },
-          onPageFinished: (url) async {
-            _url = Uri.parse(url);
-            _title = await _controller.getTitle() ?? _url.host;
-            _canGoBack = await _controller.canGoBack();
-            if (mounted) setState(() {});
-          },
-        ),
-      )
-      ..loadRequest(widget.url);
-  }
-
-  Future<void> _openExternally() =>
-      launchUrl(_url, mode: LaunchMode.externalApplication);
-
-  Future<void> _copyLink() =>
-      copyToClipboard(context, _url.toString(), said: "Copied link");
-
-  @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: !_canGoBack,
-    onPopInvokedWithResult: (didPop, _) async {
-      if (!didPop && _canGoBack) await _controller.goBack();
-    },
-    child: Scaffold(
-      appBar: PageBar(
-        title: _title,
-        actions: [
-          PageAction.icon(
-            icon: Icons.copy,
-            label: "Copy link",
-            onPressed: _copyLink,
-          ),
-          PageAction.icon(
-            icon: Icons.open_in_browser,
-            label: "Open in browser",
-            onPressed: _openExternally,
-          ),
-        ],
-      ),
-      body: _webView(_controller),
-    ),
-  );
-}
-
-/// An artifact viewer that serves the artifact's files over a local HTTP
-/// server, since Android's WebView blocks `file://` URLs. The server starts
-/// in `initState` and stops in `dispose`, so it lives only while the page
-/// is on screen — which is why this one has no Copy link or Open in browser:
-/// its URL is a port that is gone by the time anything else could follow it.
-class _ArtifactWebViewPage extends StatefulWidget {
-  const _ArtifactWebViewPage({
-    required this.dir,
-    required this.entryFile,
-    this.title,
-  });
-  final String dir;
-  final String entryFile;
-  final String? title;
-
-  @override
-  State<_ArtifactWebViewPage> createState() => _ArtifactWebViewPageState();
-}
-
-class _ArtifactWebViewPageState extends State<_ArtifactWebViewPage> {
-  WebViewController? _controller;
-  ArtifactServer? _server;
-  var _title = "";
-  var _canGoBack = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _title = widget.title ?? "Artifact";
-    _start();
-  }
-
-  Future<void> _start() async {
-    try {
-      _server = await ArtifactServer.start(widget.dir);
-      _controller = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setNavigationDelegate(
-          NavigationDelegate(
-            onPageFinished: (url) async {
-              _title = await _controller!.getTitle() ?? "Artifact";
-              _canGoBack = await _controller!.canGoBack();
-              if (mounted) setState(() {});
-            },
-          ),
-        )
-        ..loadRequest(Uri.parse("${_server!.baseUrl}/${widget.entryFile}"));
-      if (mounted) setState(() {});
-    } catch (e) {
-      if (mounted) {
-        setState(() => _error = "Failed to open artifact: $e");
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _server?.stop();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_error != null) {
-      return Scaffold(
-        appBar: PageBar(title: "Artifact"),
-        body: Center(child: Text(_error!)),
-      );
-    }
-    final controller = _controller;
-    if (controller == null) {
-      return Scaffold(
-        appBar: PageBar(title: _title),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-    return PopScope(
-      canPop: !_canGoBack,
-      onPopInvokedWithResult: (didPop, _) async {
-        if (!didPop && _canGoBack) await controller.goBack();
-      },
-      child: Scaffold(
-        appBar: PageBar(title: _title),
-        body: _webView(controller),
-      ),
-    );
-  }
-}

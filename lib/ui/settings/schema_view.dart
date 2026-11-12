@@ -1,5 +1,6 @@
 import "../bot_avatar/bot_avatar_view.dart";
 import "../widgets/document_view.dart";
+import "../widgets/web_view.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -135,6 +136,7 @@ class SettingRow extends StatelessWidget {
         height: 480,
         child: DocumentView(c),
       ),
+      final WebController c => SizedBox(height: 480, child: WebPageView(c)),
       final NoticeController c => switch (c.hint) {
         UiHint.banner => _Banner(c),
         UiHint.installed || UiHint.field => LabelledField(

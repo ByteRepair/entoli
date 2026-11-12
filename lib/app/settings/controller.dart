@@ -608,6 +608,23 @@ final class DocumentController extends SettingController {
   void edit(String text) => _edit?.call(text);
 }
 
+/// A web page, the whole of a page: an artifact served on loopback, a link
+/// opened in the app.
+final class WebController extends SettingController {
+  WebController(
+    super.spec, {
+    required this.url,
+    super.title,
+    super.description,
+    super.footnote,
+    super.enabled,
+    super.visible,
+    super.accessory,
+  });
+
+  final Uri url;
+}
+
 /// Something to read rather than set: lines of text, and links out.
 final class NoticeController extends SettingController {
   NoticeController(
