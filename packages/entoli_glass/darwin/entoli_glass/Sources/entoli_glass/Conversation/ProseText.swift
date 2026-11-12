@@ -10,21 +10,34 @@ import SwiftUI
 /// reply read back in the picture's place.
 private let texKey = NSAttributedString.Key("entoli.tex")
 
-/// Runs of prose — paragraphs, headings, list items, quotes, formulas — as
-/// one attributed string, so a selection runs across them as it does in the
-/// Flutter app.
+/// The key a code block's lines carry its fence's language under, "" for
+/// none, which a copy reads back as the fence.
+private let codeKey = NSAttributedString.Key("entoli.code")
+
+/// A reply's markdown as one attributed string — paragraphs, headings, list
+/// items, quotes, formulas, code and tables — so a selection runs across all
+/// of it as it does in the Flutter app.
 enum ProseBuilder {
   static func build(
-    _ blocks: [TextBlockSnapshot], model: TranscriptModel, caret: Bool, tone: PlatformColor?
+    _ blocks: [TextBlockSnapshot], model: TranscriptModel, caret: Bool, tone: PlatformColor?,
+    dark: Bool
   ) -> NSAttributedString {
     let out = NSMutableAttributedString()
     for (index, block) in blocks.enumerated() {
       if index > 0 { out.append(NSAttributedString(string: "\n")) }
-      let start = out.length
-      out.append(line(block, model: model, tone: tone))
-      let style = paragraph(block, first: index == 0)
-      out.addAttribute(
-        .paragraphStyle, value: style, range: NSRange(location: start, length: out.length - start))
+      switch block.kind {
+      case .code:
+        out.append(code(block, dark: dark, first: index == 0))
+      case .table:
+        out.append(table(block, model: model, tone: tone, first: index == 0))
+      default:
+        let start = out.length
+        out.append(line(block, model: model, tone: tone))
+        let style = paragraph(block, first: index == 0)
+        out.addAttribute(
+          .paragraphStyle, value: style,
+          range: NSRange(location: start, length: out.length - start))
+      }
     }
     if caret {
       out.append(
@@ -120,6 +133,120 @@ enum ProseBuilder {
     return out
   }
 
+  /// A fenced block: its lines in the mono face, coloured by their tokens'
+  /// scopes, on a shaded box — AppKit's text block, which UIKit has not, so
+  /// there the shade is the glyphs' — each line wrapping rather than
+  /// scrolling, since a scroll is a selection of its own.
+  private static func code(_ block: TextBlockSnapshot, dark: Bool, first: Bool)
+    -> NSAttributedString
+  {
+    let font = PlatformFont.monospacedSystemFont(ofSize: body.pointSize * 0.9, weight: .regular)
+    let shade = PlatformColor.secondaryLabelColor.withAlphaComponent(0.1)
+    let out = NSMutableAttributedString()
+    let tokens =
+      block.tokens.isEmpty ? [CodeTokenSnapshot(text: block.code)] : block.tokens
+    for token in tokens {
+      var attributes: [NSAttributedString.Key: Any] = [
+        .font: font, .foregroundColor: PlatformColor.labelColor,
+      ]
+      if let scope = token.scope, let colour = CodeColours.of(scope, dark: dark) {
+        attributes[.foregroundColor] = PlatformColor(colour)
+      }
+      out.append(NSAttributedString(string: token.text, attributes: attributes))
+    }
+    let style = NSMutableParagraphStyle()
+    style.lineBreakMode = .byCharWrapping
+    style.paragraphSpacingBefore = first ? 0 : 8
+    let indent = CGFloat(block.items.count) * 22 + CGFloat(block.quotes) * 14
+    #if os(macOS)
+      let box = NSTextBlock()
+      box.backgroundColor = shade
+      box.setWidth(10, type: .absoluteValueType, for: .padding)
+      box.setWidth(indent, type: .absoluteValueType, for: .margin, edge: .minX)
+      style.textBlocks = [box]
+    #else
+      style.headIndent = indent + 10
+      style.firstLineHeadIndent = indent + 10
+      out.addAttribute(
+        .backgroundColor, value: shade, range: NSRange(location: 0, length: out.length))
+    #endif
+    let all = NSRange(location: 0, length: out.length)
+    out.addAttribute(.paragraphStyle, value: style, range: all)
+    out.addAttribute(codeKey, value: block.language ?? "", range: all)
+    return out
+  }
+
+  /// A table: on a Mac AppKit's own, a bordered cell per paragraph; on a
+  /// phone its cells set apart by tabs on a row each.
+  private static func table(
+    _ block: TextBlockSnapshot, model: TranscriptModel, tone: PlatformColor?, first: Bool
+  ) -> NSAttributedString {
+    let out = NSMutableAttributedString()
+    let colour = tone ?? PlatformColor.labelColor
+    let rows = Dictionary(grouping: block.cells, by: \.row).sorted { $0.key < $1.key }
+    #if os(macOS)
+      let grid = NSTextTable()
+      grid.numberOfColumns = max(1, Int(block.columns))
+      grid.collapsesBorders = true
+      for (r, (_, cells)) in rows.enumerated() {
+        for cell in cells.sorted(by: { $0.column < $1.column }) {
+          if out.length > 0 { out.append(NSAttributedString(string: "\n")) }
+          let start = out.length
+          let font = cell.header ? marked(body, bold: true, italic: false, code: false) : body
+          for inline in cell.inlines {
+            out.append(piece(inline, model: model, font: font, colour: colour))
+          }
+          let box = NSTextTableBlock(
+            table: grid, startingRow: r, rowSpan: 1, startingColumn: Int(cell.column),
+            columnSpan: 1)
+          box.setWidth(1, type: .absoluteValueType, for: .border)
+          box.setBorderColor(PlatformColor.separatorColor)
+          box.setWidth(5, type: .absoluteValueType, for: .padding)
+          let style = NSMutableParagraphStyle()
+          style.textBlocks = [box]
+          style.alignment = alignment(of: cell, in: block)
+          if r == 0 && cell.column == 0 && !first { style.paragraphSpacingBefore = 8 }
+          out.addAttribute(
+            .paragraphStyle, value: style,
+            range: NSRange(location: start, length: max(out.length - start, 0)))
+          if out.length == start {
+            out.append(NSAttributedString(string: " ", attributes: [.paragraphStyle: style]))
+          }
+        }
+      }
+    #else
+      let style = NSMutableParagraphStyle()
+      style.tabStops = (1..<max(2, Int(block.columns))).map {
+        NSTextTab(textAlignment: .left, location: CGFloat($0) * 120)
+      }
+      style.paragraphSpacingBefore = first ? 0 : 8
+      for (r, (_, cells)) in rows.enumerated() {
+        if r > 0 { out.append(NSAttributedString(string: "\n")) }
+        for (c, cell) in cells.sorted(by: { $0.column < $1.column }).enumerated() {
+          if c > 0 { out.append(NSAttributedString(string: "\t", attributes: [.font: body])) }
+          let font = cell.header ? marked(body, bold: true, italic: false, code: false) : body
+          for inline in cell.inlines {
+            out.append(piece(inline, model: model, font: font, colour: colour))
+          }
+        }
+      }
+      out.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: out.length))
+    #endif
+    return out
+  }
+
+  private static func alignment(of cell: CellSnapshot, in block: TextBlockSnapshot)
+    -> NSTextAlignment
+  {
+    let index = Int(cell.column)
+    guard index < block.align.count else { return .left }
+    switch block.align[index] {
+    case .start: return .left
+    case .center: return .center
+    case .end: return .right
+    }
+  }
+
   private static func heading(_ level: Int64) -> PlatformFont {
     let size = body.pointSize
     let scale: CGFloat = level == 1 ? 1.45 : level == 2 ? 1.25 : level == 3 ? 1.1 : 1
@@ -159,10 +286,18 @@ enum ProseBuilder {
     return style
   }
 
-  /// [text]'s plain words, a formula as the TeX it was written as.
+  /// [text]'s words as a reader would paste them where markdown is read: a
+  /// formula as the TeX it was written as, code inside its fence.
   static func plain(_ text: NSAttributedString) -> String {
     var out = ""
+    var fence: String?
     text.enumerateAttributes(in: NSRange(location: 0, length: text.length)) { attributes, range, _ in
+      let language = attributes[codeKey] as? String
+      if language != fence {
+        if fence != nil { out += out.hasSuffix("\n") ? "```\n" : "\n```\n" }
+        if let language { out += "```\(language)\n" }
+        fence = language
+      }
       if let tex = attributes[texKey] as? String {
         out += tex
       } else {
@@ -170,6 +305,7 @@ enum ProseBuilder {
           .replacingOccurrences(of: "\u{2028}", with: "\n")
       }
     }
+    if fence != nil { out += out.hasSuffix("\n") ? "```" : "\n```" }
     return out
   }
 }

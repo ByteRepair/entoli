@@ -934,10 +934,15 @@ A message's reactions open the strip master drew under the shell, `GlassChoices`
 **Prose is a text view of the platform's own** (`ProseText.swift`), not
 SwiftUI's `Text`: `.textSelection` offers Apple's whole menu and never says
 what is selected, so Reply could not be on it. A run of prose — paragraphs,
-headings, list items, quotes, formulas — is one `NSTextView` or `UITextView`
-over an attributed string (`ProseBuilder`), so a selection crosses them as
-Flutter's does; a code block or a table breaks the run. Its menu is Copy and
-Reply alone. Both read a formula as its TeX, carried on its attachment, and
+headings, list items, quotes, formulas, code blocks and tables — is one
+`NSTextView` or `UITextView` over an attributed string (`ProseBuilder`), so a
+selection crosses all of it as Flutter's does. Code and tables are in it
+rather than beside it because a view beside it is a selection of its own: on
+a Mac they are AppKit's text blocks (a shaded box, a bordered table), which
+UIKit has not, so a phone shades the code's glyphs and sets a table's cells
+apart by tabs; code wraps rather than scrolls, a scroll being a selection
+apart too. Its menu is Copy and Reply alone. Both read a formula as its TeX,
+carried on its attachment, and code inside its fence, and
 Reply sends the passage back (`reply`), quoted under the author's handle as
 the Flutter selection's Reply quotes it.
 
