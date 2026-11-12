@@ -9,8 +9,7 @@ import "../../domain/models.dart";
 import "../../domain/room/room_state.dart";
 import "../../app/chat_controller.dart";
 import "../chat/widgets/approval_banner.dart";
-import "../chat/widgets/running_pill.dart" show RunningDetail, RunningThing;
-import "../chat/widgets/running_strip.dart" show runningOf;
+import "../chat/widgets/running_strip.dart" show openRunning;
 import "../../app/approvals.dart";
 import "../../app/settings/spec.dart" show SettingReader, WidgetReader;
 import "shell_outbox.dart";
@@ -57,7 +56,7 @@ class TurnRunner implements TurnIntents {
 
   /// Opens a running thing's detail the frontend's own way, where it has
   /// one: the native conversation's sheet.
-  final void Function(RunningDetail detail)? openDetail;
+  final void Function(app.OpensDetail detail)? openDetail;
 
   /// Where a running pill opens its page.
   final BuildContext Function() context;
@@ -69,7 +68,7 @@ class TurnRunner implements TurnIntents {
   TurnDriver? _driver;
 
   /// The pills as last sent, which a `running` intent names one of by index.
-  List<RunningThing> _running = const [];
+  List<app.RunningThing> _running = const [];
 
   /// [view]'s snapshot, read through [reader], and the turn intents now act
   /// on it through [driver].
@@ -86,7 +85,7 @@ class TurnRunner implements TurnIntents {
     if (chatId == null) {
       _running = const [];
     } else {
-      final (:alone, :groups) = runningOf(reader, view, chatId);
+      final (:alone, :groups) = app.runningOf(reader, view, chatId);
       _running = [...alone, ...groups.values.expand((g) => g)];
     }
     // One panel, the first turn waiting on answers, as `TurnQuestions` draws.
@@ -169,11 +168,12 @@ class TurnRunner implements TurnIntents {
   Future<void> running(int id) async {
     if (id < 0 || id >= _running.length) return;
     final thing = _running[id];
-    final detail = thing.detail;
     final opener = openDetail;
-    if (detail != null && opener != null) return opener(detail);
+    if (thing.opens case final app.OpensDetail detail when opener != null) {
+      return opener(detail);
+    }
     final at = context();
-    if (at.mounted) thing.open(at);
+    if (at.mounted) openRunning(at, thing);
   }
 
   @override

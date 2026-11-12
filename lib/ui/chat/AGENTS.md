@@ -788,10 +788,11 @@ on the message, not looked up per turn.
 ## What is running, on screen
 
 `RunningStrip` is one row in `TurnSurface` above the composer. What is on it
-comes from `runningSources`, a `RunningSource` function per kind of thing a
-chat can have running — the browser's tab, background jobs, sub-agents — each
-supplying `RunningThing`s: a label, an icon or none, the group it is
-gathered under, and how to open it. The strip knows nothing of what they
+comes from `runningSources` in `lib/app/running.dart`, a `RunningSource`
+function per kind of thing a chat can have running — the browser's tab,
+background jobs, sub-agents — each supplying `RunningThing`s: a label, the
+group it is gathered under, and what it opens (`RunningOpens`: an activity's
+detail or the browser's tab), which each frontend opens its own way. The strip knows nothing of what they
 are; a new kind is a source added to the list. Things with no group stand
 alone ahead of the groups, which is where the browser's tab goes. It has no
 surface of its own; the pills are the row. It scrolls sideways, and a mouse
@@ -958,9 +959,9 @@ platform's own key code and characters and is read through Flutter's key
 tables into a `KeyDownEvent`, so `browserKeyDown` stays the one mapping to the
 page's keys. The sheet lies over the window, so nothing under it takes input while it is
 up. **A running pill
-opens the native detail**: a job's or a sub-agent's `RunningThing` carries its
-activity and run (`detail`), which `ShellChat` opens in the conversation's
-sheet. **The chapter rail is native**: the chapters (`chaptersOf`, in the
+opens the native detail**: a job's or a sub-agent's `RunningThing` opens an
+`OpensDetail`, its activity and run, which `ShellChat` opens in the
+conversation's sheet. **The chapter rail is native**: the chapters (`chaptersOf`, in the
 core) go with the conversation, and the Swift draws the ticks beside the
 column where the margin beside it has room, against the column, the current
 one read off the row at the top of the view. The jump to the latest sits in

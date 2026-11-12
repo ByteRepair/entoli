@@ -8,39 +8,37 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../../app/settings/spec.dart" show SettingReader;
 import "../../widgets/anchored_menu.dart";
 import "../../widgets/native_surfaces.dart";
 import "../../../core/log.dart";
 import "../../../domain/agent_browser.dart";
 import "../../../providers.dart";
 import "browser_input.dart";
-import "../../../domain/room/room_state.dart" show ChatViewState;
-import "running_pill.dart" show RunningKind, RunningThing;
+import "../../../app/running.dart" show OpensBrowser, browserTabOf;
 
 /// The chat's browser tab and the card that watches it, where there is one to
-/// show. Not on a mirrored chat, whose browser is the other device's.
+/// show.
 ({BrowserTab tab, void Function(BuildContext context) open})? browserOf(
   AgentBrowser browser,
   bool mirrored,
   String chatId,
 ) {
-  // Not `configured`: that reads the disk, this rebuilds per streamed
-  // delta, and a tab with nothing to show draws nothing below anyway.
-  if (!browser.available || mirrored) return null;
-  final tab = browser.tab(chatId);
-  void open(BuildContext context) {
-    if (nativeSurfacesOf(context) case final native?) {
-      return native.openBrowser(
-        tab,
-        onQuit: browser.close,
-        window: !browser.inApp || !tab.trustedInput,
-      );
-    }
-    _openCard(context, browser, tab);
-  }
+  final tab = browserTabOf(browser, mirrored, chatId);
+  if (tab == null) return null;
+  return (tab: tab, open: (context) => openBrowserTab(context, browser, tab));
+}
 
-  return (tab: tab, open: open);
+/// [tab]'s live view: the native shell's where it is up, else the card.
+void openBrowserTab(
+  BuildContext context,
+  AgentBrowser browser,
+  BrowserTab tab,
+) {
+  final at = OpensBrowser(browser, tab);
+  if (nativeSurfacesOf(context) case final native?) {
+    return native.openBrowser(tab, onQuit: browser.close, window: at.window);
+  }
+  _openCard(context, browser, tab);
 }
 
 void _openCard(BuildContext context, AgentBrowser browser, BrowserTab tab) =>
@@ -135,60 +133,6 @@ class BrowserPrompts extends ConsumerWidget {
       },
     );
   }
-}
-
-/// The chat's tab as the running row reads it: the page it is on and whether
-/// it is hidden from the agent, null with no tab open. Rebuilt as the tab
-/// changes, which it says through listenables rather than providers.
-final _browserTabProvider = Provider.autoDispose
-    .family<
-      ({
-        BrowserPage page,
-        BrowserHold? hold,
-        void Function(BuildContext) open,
-      })?,
-      String
-    >((ref, chatId) {
-      final of = browserOf(
-        ref.watch(agentBrowserProvider),
-        ref.watch(isMirroredChatProvider(chatId)),
-        chatId,
-      );
-      if (of == null) return null;
-      final changes = Listenable.merge([of.tab.page, of.tab.hold]);
-      changes.addListener(ref.invalidateSelf);
-      ref.onDispose(() => changes.removeListener(ref.invalidateSelf));
-      final page = of.tab.page.value;
-      if (page == null) return null;
-      return (page: page, hold: of.tab.hold.value, open: of.open);
-    });
-
-/// The chat's browser tab, while one is open: the first of the running pills,
-/// standing alone, opening a live view of the page. The view is the
-/// browser's own screencast, so it shows the page when the browser runs
-/// hidden too.
-List<RunningThing> browserRunning(
-  SettingReader ref,
-  ChatViewState view,
-  String chatId,
-) {
-  final tab = ref.watch(_browserTabProvider(chatId));
-  if (tab == null) return const [];
-  final hold = tab.hold;
-  final where = _where(tab.page);
-  return [
-    RunningThing(
-      kind: RunningKind.browser,
-      name: where,
-      hidden: hold != null,
-      icon: hold == null ? Icons.travel_explore : Icons.visibility_off,
-      label:
-          "Browser · $where"
-          "${hold == null ? "" : " · hidden from the agent"}",
-      tooltip: "Watch the agent's browser",
-      open: tab.open,
-    ),
-  ];
 }
 
 /// A file chooser the page opened, waiting on the user: the agent is not
@@ -415,12 +359,6 @@ class _CredentialPanelState extends State<CredentialPanel> {
 }
 
 /// A page's host, or its title where it has none to show.
-String _where(BrowserPage page) {
-  final host = Uri.tryParse(page.url)?.host ?? "";
-  if (host.isNotEmpty) return host;
-  return page.title.isNotEmpty ? page.title : "blank page";
-}
-
 /// The live view: the page's title and address over its frames, for as long
 /// as the card is open, with the browser's own back, forward and reload, and
 /// the page itself under the user's mouse and keyboard. Listens again when the

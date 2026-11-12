@@ -3,105 +3,34 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../domain/room/room_state.dart" show ChatViewState;
-import "../../../app/mirror_controller.dart" show chatViewProvider;
-import "../../../app/settings/spec.dart" show SettingReader, WidgetReader;
-import "../../../app/transcript/activities/command.dart" show JobActivity;
-import "../../../app/transcript/activities/task.dart" show SubAgentActivity;
-import "../../../app/transcript/activity.dart" show Run, liveMessageOf;
-import "../../../domain/shell_job.dart" show firstLine;
+import "../../../app/running.dart";
+import "../../../app/settings/spec.dart" show WidgetReader;
 import "../activity/activity.dart" show openRunDetail;
 import "../activity/format.dart" show plural;
-import "browser_strip.dart" show browserRunning;
+import "browser_strip.dart" show openBrowserTab;
 import "running_pill.dart";
 
-/// Every kind of thing a chat can have running, in the order the row shows
-/// them: the browser's tab, standing alone, ahead of the groups.
-const runningSources = <RunningSource>[
-  browserRunning,
-  jobsRunning,
-  subAgentsRunning,
-];
-
-/// The background jobs running, a pill each, opening the job's detail.
-List<RunningThing> jobsRunning(
-  SettingReader ref,
-  ChatViewState view,
-  String chatId,
-) => [
-  for (final job in view.runningJobs.values)
-    RunningThing(
-      kind: RunningKind.job,
-      name: firstLine(job.command),
-      group: "background task",
-      label: firstLine(job.command),
-      mono: true,
-      tooltip: "Background job ${job.id}",
-      open: (context) => openRunDetail(
+/// Opens [thing] as the Flutter frontend does: the activity's detail card,
+/// or the browser's live view.
+void openRunning(BuildContext context, RunningThing thing) =>
+    switch (thing.opens) {
+      OpensDetail(:final activity, :final run, :final source) => openRunDetail(
         context,
-        JobActivity(command: job.command, jobId: job.id),
-        Run(chatId: chatId, callId: job.callId),
+        activity,
+        run,
+        source: source,
       ),
-      detail: (
-        activity: JobActivity(command: job.command, jobId: job.id),
-        run: Run(chatId: chatId, callId: job.callId),
-        source: null,
+      OpensBrowser(:final browser, :final tab) => openBrowserTab(
+        context,
+        browser,
+        tab,
       ),
-    ),
-];
+    };
 
-/// The sub-agents still running, a pill each, opening the detail its label
-/// in the reply opens and following the turn the same way.
-List<RunningThing> subAgentsRunning(
-  SettingReader ref,
-  ChatViewState view,
-  String chatId,
-) => [
-  for (final MapEntry(key: replyId, value: agents)
-      in view.runningSubAgents.entries)
-    for (final agent in agents)
-      RunningThing(
-        kind: RunningKind.subAgent,
-        name: agent.agent,
-        group: "sub-agent",
-        label: "@${agent.agent}",
-        tooltip: "Sub-agent @${agent.agent}",
-        // The event's prompt is cut for the pill; the call, followed once it
-        // is written, has all of it.
-        open: (context) => openRunDetail(
-          context,
-          SubAgentActivity(agent: agent.agent, prompt: agent.prompt),
-          Run(chatId: chatId, callId: agent.id),
-          source: chatViewProvider(
-            chatId,
-          ).select((v) => liveMessageOf(v, replyId)),
-        ),
-        detail: (
-          activity: SubAgentActivity(agent: agent.agent, prompt: agent.prompt),
-          run: Run(chatId: chatId, callId: agent.id),
-          source: chatViewProvider(
-            chatId,
-          ).select((v) => liveMessageOf(v, replyId)),
-        ),
-      ),
-];
-
-/// What [chatId] has running, from each of [runningSources] in turn: the
-/// things that stand alone, and the rest gathered by their group.
-({List<RunningThing> alone, Map<String, List<RunningThing>> groups}) runningOf(
-  SettingReader ref,
-  ChatViewState view,
-  String chatId,
-) {
-  final alone = <RunningThing>[];
-  final groups = <String, List<RunningThing>>{};
-  for (final source in runningSources) {
-    for (final thing in source(ref, view, chatId)) {
-      final group = thing.group;
-      group == null ? alone.add(thing) : (groups[group] ??= []).add(thing);
-    }
-  }
-  return (alone: alone, groups: groups);
-}
+/// What a pill shows in place of its spinner: the browser's state.
+IconData? _iconOf(RunningThing thing) => thing.kind == RunningKind.browser
+    ? (thing.hidden ? Icons.visibility_off : Icons.travel_explore)
+    : null;
 
 /// What the chat has running beside the reply, as one row of pills that
 /// scrolls sideways: what each of [runningSources] has, those of a kind
@@ -154,9 +83,9 @@ class _RunningStripState extends ConsumerState<RunningStrip> {
       builder: (context) => RunningPill(
         label: thing.label,
         tooltip: thing.tooltip,
-        icon: thing.icon,
+        icon: _iconOf(thing),
         mono: thing.mono,
-        onPressed: () => thing.open(context),
+        onPressed: () => openRunning(context, thing),
       ),
     );
     return Listener(
