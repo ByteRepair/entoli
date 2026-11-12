@@ -5,7 +5,9 @@ import "../../app/settings/hand_off.dart";
 import "../../core/log.dart";
 import "../bot_avatar/bot_avatar_editor.dart";
 import "cli_sign_in_dialog.dart";
-import "local_model_settings.dart" show AddLocalModelPage;
+import "../../app/pages/add_local_model.dart";
+import "../../app/pages/cli_sign_in.dart";
+import "../app_pages.dart";
 import "paired_device_page.dart";
 import "sync_pairing.dart" show ScanQrPage;
 
@@ -31,13 +33,12 @@ void bindSettingsHandOff(
         }
       }
       if (!context.mounted) return;
-      await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => CliSignInDialog(cli: cli),
-      );
+      final page = CliSignInAppPage(cli);
+      openAppPage(context, page);
+      await page.done;
     }
-    ..addModelByLink = (() => push<void>(const AddLocalModelPage()))
+    ..addModelByLink = (() async =>
+        openAppPage(context, AddLocalModelAppPage()))
     ..pairedDevice = ((id) => push<void>(PairedDevicePage(deviceId: id)))
     ..scanCode = (() => push<String>(const ScanQrPage()))
     ..browseBotAvatars = (() => push<void>(const BotAvatarEditorPage.browse()));

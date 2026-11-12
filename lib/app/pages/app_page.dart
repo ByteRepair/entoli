@@ -1,4 +1,5 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
 import "../settings/controller.dart";
 import "../settings/scope.dart";
@@ -34,6 +35,15 @@ abstract class AppPage {
 
   /// Put on the stack, [app] set: where a page starts what it loads.
   void opened() {}
+
+  late final Ref _ref;
+
+  /// Hears [provider] until the returned subscription is closed: what a page
+  /// waits on outside a pass, a download it started.
+  ProviderSubscription<T> listen<T>(
+    ProviderListenable<T> provider,
+    void Function(T? previous, T next) listener,
+  ) => _ref.listen<T>(provider, listener);
 
   /// Gone from the stack.
   void closed() {}
@@ -146,6 +156,7 @@ class AppPages extends Notifier<List<AppPage>> {
     }
     page
       ..onChanged = ref.notifyListeners
+      .._ref = ref
       ..app = RefReader(ref);
     state = [...state, page];
     page.opened();

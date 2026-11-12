@@ -8,7 +8,8 @@ import "../../app/settings/pages/providers.dart"
     show providerForm, saveProvider;
 import "../../app/settings/spec.dart" show WidgetReader;
 import "form_dialog.dart";
-import "cli_sign_in_dialog.dart";
+import "../../app/pages/cli_sign_in.dart";
+import "../app_pages.dart";
 
 /// Connects [service] the way its user knows it: a CLI is installed and
 /// signed in, and an API is its preset's dialog. Either way it is adopted —
@@ -60,12 +61,9 @@ Future<void> _connectCli(
   // A new entry's id first: its account is kept in a folder named by it.
   final config = existing ?? service.config.copyWith(id: const Uuid().v4());
   final cli = cliProgramOf(programs, config);
-  final ready = await showDialog<bool>(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => CliSignInDialog(cli: cli),
-  );
-  if (ready != true) {
+  final page = CliSignInAppPage(cli);
+  openAppPage(context, page);
+  if (!await page.done) {
     if (existing == null) await _forgetDraft(programs, config.id);
     return;
   }
