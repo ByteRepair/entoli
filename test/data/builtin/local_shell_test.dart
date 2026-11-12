@@ -52,6 +52,12 @@ Future<void> printed(ShellRun run, String piece) async {
   expect((output.value ?? ""), contains(piece));
 }
 
+/// Prints `started`, then sleeps, in a child shell with no INT trap of its
+/// own: a stop that lands between the two, before `sleep` exists, still ends
+/// it as 130. In the session's own shell that gap is the trap's, which eats
+/// the signal and leaves the sleep to the grace's kill.
+const _startedThenSleeps = "sh -c 'echo started; exec sleep 30'";
+
 void main() {
   /// The project workspace and, inside it, the chat's own — what the two
   /// arguments to `start` are on a real run.
@@ -173,7 +179,7 @@ void main() {
     "killing it early reports the interruption rather than an exit code",
     () async {
       final run = LocalShell().start(
-        "echo started; sleep 30",
+        _startedThenSleeps,
         cwd: workspace.path,
         home: home.path,
         timeout: const Duration(seconds: 30),
@@ -245,7 +251,7 @@ void main() {
     );
 
     test("a stop leaves the shell where it was", () async {
-      final run = start("cd sub && echo started; sleep 30");
+      final run = start("cd sub && $_startedThenSleeps");
       await printed(run, "started");
       await run.kill();
 
