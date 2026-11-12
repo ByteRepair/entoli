@@ -994,6 +994,11 @@ abstract class NativeShell {
   /// Asks [request] over the window, answering once it is.
   @async
   DialogAnswer dialog(DialogRequest request);
+
+  /// The camera pointed at a pairing code another screen shows, answering
+  /// the code read; null where it was dismissed or there is no camera.
+  @async
+  String? scanCode();
 }
 
 /// The window's own state, which the client reports.

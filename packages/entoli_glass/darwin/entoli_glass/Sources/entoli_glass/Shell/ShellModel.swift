@@ -43,6 +43,10 @@ import SwiftUI
   /// see `Strip.swift`.
   var strip: StripRequest?
 
+  /// Whether the camera is up for a pairing code, and who waits on it.
+  var scanning = false
+  @ObservationIgnored var scanReply: ((String?) -> Void)?
+
   /// The dialog Dart asked, and who waits on its answer.
   var dialog: DialogRequest?
   @ObservationIgnored var dialogReply: ((DialogAnswer) -> Void)?
@@ -156,6 +160,24 @@ extension ShellModel: NativeShell {
     dialogReply?(DialogAnswer(agreed: false))
     dialogReply = { completion(.success($0)) }
     dialog = request
+  }
+
+  func scanCode(completion: @escaping (Result<String?, Error>) -> Void) {
+    #if os(iOS)
+      scanReply?(nil)
+      scanReply = { completion(.success($0)) }
+      scanning = true
+    #else
+      completion(.success(nil))
+    #endif
+  }
+
+  /// Answers the scan open, with the code read or nothing.
+  func scanned(_ code: String?) {
+    let reply = scanReply
+    scanReply = nil
+    scanning = false
+    reply?(code)
   }
 
   /// Answers the dialog open, and takes it down.

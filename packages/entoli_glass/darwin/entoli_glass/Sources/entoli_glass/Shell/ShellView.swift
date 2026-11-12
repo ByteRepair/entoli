@@ -80,6 +80,12 @@ struct ShellView: View {
       // The app's pages: a chat's settings, the plan, the workspace.
       .modifier(AppPagesPresenter())
       .modifier(DialogPresenter(model: model))
+      #if os(iOS)
+        .sheet(
+          isPresented: Binding(
+            get: { model.scanning }, set: { if !$0 { model.scanned(nil) } })
+        ) { CodeScanner(model: model) }
+      #endif
       // A line said in passing, over everything but voice mode.
       .overlay(alignment: .top) {
         if !model.voice.present { NoticeView(model: model) }

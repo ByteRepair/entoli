@@ -209,11 +209,19 @@ private struct ToolbarAction: View {
 
 extension View {
   @ViewBuilder func navigationSubtitleIfAny(_ subtitle: String?) -> some View {
-    if let subtitle {
-      navigationSubtitle(subtitle)
-    } else {
-      self
-    }
+    #if os(iOS)
+      if let subtitle, #available(iOS 26, *) {
+        navigationSubtitle(subtitle)
+      } else {
+        self
+      }
+    #else
+      if let subtitle {
+        navigationSubtitle(subtitle)
+      } else {
+        self
+      }
+    #endif
   }
 }
 

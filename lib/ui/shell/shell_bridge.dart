@@ -114,8 +114,12 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
 
   @override
   Widget build(BuildContext context) => SettingsHandOffs(
-    // A paired device's page is the native settings' own.
-    own: _settings.bindDevicePage,
+    // A paired device's page is the native settings' own, and the camera
+    // the platform's.
+    own: (handOff) {
+      _settings.bindDevicePage(handOff);
+      handOff.scanCode = NativeShell().scanCode;
+    },
     child: const AppMenuSync(navigate: shellNavigate, child: ChatPage()),
   );
 }
