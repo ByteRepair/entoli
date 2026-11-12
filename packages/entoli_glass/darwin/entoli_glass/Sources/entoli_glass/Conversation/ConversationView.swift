@@ -69,10 +69,14 @@ struct ConversationView: View {
           }
         }
         .scrollTargetLayout()
-        .frame(maxWidth: ShellView.readableWidth)
+        // Sized and placed from the view's whole width, not the content's:
+        // a scroller takes its strip from the content, which moved a
+        // centred column off the composer's line whenever one came.
+        .frame(width: max(0, min(ShellView.readableWidth, width - 32)))
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .frame(maxWidth: .infinity)
+        .padding(.leading, margin)
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
       .scrollPosition(id: $top, anchor: .top)
       .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
@@ -95,7 +99,12 @@ struct ConversationView: View {
       }
       .contentMargins(.bottom, bottom, for: .scrollContent)
       .contentMargins(.bottom, bottom, for: .scrollIndicators)
-      .defaultScrollAnchor(.bottom)
+      // Opened at the end and short ones at the foot; a size change keeps
+      // the end in view only from the end, so opening something above
+      // leaves what is shown where it is rather than scrolling it.
+      .defaultScrollAnchor(.bottom, for: .initialOffset)
+      .defaultScrollAnchor(.bottom, for: .alignment)
+      .defaultScrollAnchor(atEnd ? .bottom : .top, for: .sizeChanges)
       // At the end where what is shown reaches the content's last line. The
       // margin under it is not added: the content's size may already hold
       // it, and adding it twice left the button up at the very bottom.
@@ -197,7 +206,7 @@ private struct SummarySeparator: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       Button {
-        withAnimation(.snappy(duration: 0.2)) { open.toggle() }
+        open.toggle()
       } label: {
         Separator(text: row.text, colour: row.isError ? .red : .secondary)
       }
@@ -205,8 +214,12 @@ private struct SummarySeparator: View {
       if open {
         MarkdownView(blocks: row.body, model: model, tone: row.isError ? .red : nil)
           .padding(.bottom, 8)
+          .transition(.opacity)
       }
     }
+    // Here alone: a window-wide animation moved the scroll view and the
+    // title bar's edge with it, and both flashed.
+    .animation(.snappy(duration: 0.2), value: open)
   }
 }
 

@@ -173,7 +173,7 @@ struct ActivityRunView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       Button {
-        withAnimation(.snappy(duration: 0.2)) { open.toggle() }
+        open.toggle()
       } label: {
         Label(
           open ? "Collapse activities" : "Expand activities",
@@ -187,7 +187,11 @@ struct ActivityRunView: View {
       .frame(maxWidth: .infinity)
       if open {
         ForEach(nodes, id: \.id) { NodeView(node: $0, model: model) }
+          .transition(.opacity)
       }
     }
+    // Here alone: a window-wide animation moved the scroll view and the
+    // title bar's edge with it, and both flashed.
+    .animation(.snappy(duration: 0.2), value: open)
   }
 }
