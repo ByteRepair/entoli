@@ -206,7 +206,7 @@ private struct SummarySeparator: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       Button {
-        open.toggle()
+        withAnimation(.snappy(duration: 0.2)) { open.toggle() }
       } label: {
         Separator(text: row.text, colour: row.isError ? .red : .secondary)
       }
@@ -214,12 +214,8 @@ private struct SummarySeparator: View {
       if open {
         MarkdownView(blocks: row.body, model: model, tone: row.isError ? .red : nil)
           .padding(.bottom, 8)
-          .transition(.opacity)
       }
     }
-    // Here alone: a window-wide animation moved the scroll view and the
-    // title bar's edge with it, and both flashed.
-    .animation(.snappy(duration: 0.2), value: open)
   }
 }
 
