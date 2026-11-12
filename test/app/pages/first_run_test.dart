@@ -6,7 +6,9 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/browser/cdp_browser.dart";
-import "package:agent_chat/domain/agent_browser.dart" show embeddedBrowserId;
+import "package:agent_chat/domain/agent_browser.dart"
+    show EmbeddedBrowser, embeddedBrowserId;
+import "package:agent_chat/domain/download.dart";
 
 import "package:agent_chat/app/first_run.dart";
 import "package:agent_chat/app/pages/app_page.dart";
@@ -246,10 +248,53 @@ void main() {
       expect(settings().agentBrowser, embeddedBrowserId);
     });
 
+    test("the plan's policy says how the bar counts", () {
+      const half = DownloadProgress(received: 50, total: 100);
+      const unpacking = DownloadProgress(
+        received: 0,
+        total: 0,
+        unpacking: true,
+      );
+      const step = HeliumSetup();
+      // The current download alone, nothing to count while it unpacks.
+      expect(const StepProgress().fraction(step, 1, 2, half), 0.5);
+      expect(const StepProgress().fraction(step, 1, 2, unpacking), isNull);
+      // The whole plan: the second of two steps, half fetched.
+      const plan = PlanProgress(unpackShare: 0.5);
+      expect(plan.fraction(step, 1, 2, half), 0.625);
+      expect(plan.fraction(step, 1, 2, unpacking), 0.75);
+      expect(plan.fraction(step, 0, 2, null), 0);
+    });
+
     test("a phone's plan is its Alpine alone", () {
       app = TestApp.create(linuxHost: const ProotLinux("arm64-v8a"));
       final plan = app.container.read(setupPlanProvider);
       expect(plan.steps.single, isA<AlpineSetup>());
     });
   });
+}
+
+/// Helium's download, finishing when [installing] does.
+class FakeHelium implements EmbeddedBrowser {
+  @override
+  String? installedVersion;
+  Completer<void>? installing;
+  var installs = 0;
+
+  @override
+  String? get executable => installedVersion == null ? null : "/helium";
+
+  @override
+  Future<String> latestVersion() async => "1";
+
+  @override
+  Stream<DownloadProgress> install() async* {
+    installs++;
+    yield const DownloadProgress(received: 0, total: 100);
+    await installing?.future;
+    installedVersion = "1";
+  }
+
+  @override
+  Future<void> remove() async => installedVersion = null;
 }
