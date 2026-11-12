@@ -41,8 +41,9 @@ struct ToggleRow: View {
             ? "\(row.title) — Default (\(row.effective ? "on" : "off"))" : row.title,
           detail: row.detail)
       }
-      if row.unsettable && row.on != nil {
+      if row.unsettable {
         ResetMenu(label: nil) { model.say.toggle(id: row.id, on: nil, completion: ignore) }
+          .disabled(row.on == nil)
       }
     }
   }
@@ -128,12 +129,14 @@ struct ChoiceRow: View {
     row.unsettable && row.picked == nil ? "\(row.title) — Default" : row.title
   }
 
-  /// Back to what unset stands for, where this level holds a pick.
+  /// Back to what unset stands for, on every row of a level that inherits:
+  /// dimmed while nothing of this level's is picked.
   @ViewBuilder private var reset: some View {
-    if row.unsettable && row.picked != nil {
+    if row.unsettable {
       ResetMenu(label: row.inheritedLabel) {
         model.say.pick(id: row.id, option: nil, completion: ignore)
       }
+      .disabled(row.picked == nil)
     }
   }
 }
@@ -264,10 +267,11 @@ struct RangeRow: View {
         Spacer()
         Text("\(dragging.map(at) ?? shown)")
           .monospacedDigit().foregroundStyle(.secondary)
-        if row.unsettable && row.value != nil {
+        if row.unsettable {
           ResetMenu(label: row.inherited.map { "\($0)" }) {
             model.say.setNumber(id: row.id, value: nil, completion: ignore)
           }
+          .disabled(row.value == nil)
         }
       }
       Slider(
@@ -708,10 +712,11 @@ struct ModelPickRow: View {
         }
       }
       // A level's own pick, back to the one it inherits.
-      if row.unsettable && row.effective {
+      if row.unsettable {
         ResetMenu(label: row.noneLabel) {
           model.say.setModel(id: row.id, providerId: nil, modelId: nil, completion: ignore)
         }
+        .disabled(!row.effective)
       }
     }
   }

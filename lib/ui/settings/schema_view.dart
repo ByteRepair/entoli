@@ -214,7 +214,7 @@ class SettingRow extends StatelessWidget {
         onChanged: c.set,
         help: c.description,
       )) {
-        final slider when c.unsettable && c.value != null => ResettableField(
+        final slider when c.unsettable => ResettableField(
           onReset: () => c.set(null),
           resetLabel: c.inheritedLabel ?? defaultOptionLabel,
           child: slider,
