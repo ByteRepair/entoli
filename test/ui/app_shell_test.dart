@@ -273,9 +273,8 @@ void main() {
       expect(find.text("Marketplace"), findsNothing);
     }, variant: mac);
 
-    // The SwiftUI frontend's Settings scene puts the platform's own item in
-    // the app menu, which opens the native settings; Dart's would be a
-    // second one.
+    // The SwiftUI frontend's menu has its own Settings item, which opens the
+    // Settings scene's native window; Dart's would be a second one.
     testWidgets("leaves Settings to the Settings scene under SwiftUI", (
       tester,
     ) async {

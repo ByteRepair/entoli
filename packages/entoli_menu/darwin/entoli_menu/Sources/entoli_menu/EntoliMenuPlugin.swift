@@ -49,6 +49,16 @@ public final class MenuModel: NSObject, ObservableObject, NativeMenuBar, Flutter
 
   /// The app's own menus, in order.
   var own: [NativeMenu] { menus.filter { $0.role == .own } }
+
+  /// Whether Dart's menus hold the item [id].
+  func sends(_ id: String) -> Bool {
+    menus.contains { $0.groups.contains { $0.contains { $0.id == id } } }
+  }
+}
+
+/// The platform's Settings item's look.
+func settingsLabel(_ title: String) -> some View {
+  Label(title, systemImage: "gearshape")
 }
 
 /// The menu bar's items, for the app's `.commands`. Each holds its keys as a
@@ -60,19 +70,24 @@ public struct AppCommands: Commands {
   public init(model: MenuModel = .shared) { self.model = model }
 
   public var body: some Commands {
-    // The app's menu: About in About's place, the rest after Settings —
-    // on a Mac the Settings scene's own item, which Dart leaves out of its
-    // list there. iOS's is UIKit's, which opens the Settings app and holds
-    // ⌘, as Dart's does: two items on one shortcut is an exception.
+    // The app's menu: About in About's place, the rest in Settings'. The
+    // platform's own Settings item goes: on a Mac the Settings scene's, which
+    // opens an empty window under the Flutter frontend and sits after Dart's
+    // items, and on iOS UIKit's, which opens the Settings app.
     CommandGroup(replacing: .appInfo) {
       MenuGroups(model: model, groups: Array(model.groups(.app).prefix(1)))
     }
-    let rest = MenuGroups(model: model, groups: Array(model.groups(.app).dropFirst()))
-    #if os(iOS)
-      CommandGroup(replacing: .appSettings) { rest }
-    #else
-      CommandGroup(after: .appSettings) { rest }
-    #endif
+    CommandGroup(replacing: .appSettings) {
+      #if os(macOS)
+        // Dart leaves its Settings out under the SwiftUI frontend, whose
+        // window is the scene's: this opens it, first in the group.
+        if !model.menus.isEmpty && !model.sends("settings") {
+          SettingsLink { settingsLabel("Settings…") }
+            .keyboardShortcut(",")
+        }
+      #endif
+      MenuGroups(model: model, groups: Array(model.groups(.app).dropFirst()))
+    }
     CommandGroup(replacing: .newItem) {
       // A window app's File menu is made only if this has something in it
       // at launch, before Dart has sent anything: a blank item holds the place.
@@ -116,9 +131,16 @@ struct MenuGroups: View {
     ForEach(Array(groups.enumerated()), id: \.offset) { i, group in
       if i > 0 { Divider() }
       ForEach(group, id: \.id) { item in
-        Button(item.title) { model.pick(item.id) }
-          .keyboardShortcut(item.shortcut)
-          .disabled(!item.enabled)
+        Button { model.pick(item.id) } label: {
+          // Settings wears the platform's Settings icon, as its stand-in.
+          if item.id == "settings" {
+            settingsLabel(item.title)
+          } else {
+            Text(item.title)
+          }
+        }
+        .keyboardShortcut(item.shortcut)
+        .disabled(!item.enabled)
       }
     }
   }

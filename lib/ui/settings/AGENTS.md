@@ -77,8 +77,11 @@ is not settings, and stays Flutter's own page everywhere. On a Mac the
 window is the Settings scene's: AppKit's `showSettingsWindow:` opens nothing
 from macOS 14, so a page Dart asks for — About from the menu with the window
 closed — goes through SwiftUI's `openSettings`, which `SettingsWindowOpener`
-in the main window hands the model. The menu's Settings item is the scene's
-own there, and Dart leaves its item out of the app menu.
+in the main window hands the model. The menu's Settings item is a
+`SettingsLink` there, and Dart leaves its item out of the app menu. The
+scene's own item is replaced on both frontends: it sat after Dart's items,
+and under the Flutter frontend opened that window empty. Both items wear the
+scene's gear, first in the group with Profile and Marketplace.
 
 A Mac's settings draw their own page stack (`PageStack`) rather than a
 `NavigationStack`: in a split view's detail column a Mac's stack shows a
