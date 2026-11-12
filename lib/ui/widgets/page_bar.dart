@@ -55,10 +55,11 @@ class PageBar extends ConsumerWidget implements PreferredSizeWidget {
   }
 
   Widget _flutter(BuildContext context) => AppBar(
+    automaticallyImplyLeading: leading != PageLeading.none,
     leading: switch (leading) {
       PageLeading.close => const DiscardButton(),
       PageLeading.back when onBack != null => BackButton(onPressed: onBack),
-      PageLeading.back => null,
+      PageLeading.back || PageLeading.none => null,
     },
     title: subtitle == null
         ? Text(title, overflow: TextOverflow.ellipsis)
@@ -81,7 +82,13 @@ class PageBar extends ConsumerWidget implements PreferredSizeWidget {
 
 /// How a page is left: back to the one under it, or closed, discarding what
 /// it holds (`DiscardGuard` asking first).
-enum PageLeading { back, close }
+enum PageLeading {
+  back,
+  close,
+
+  /// Nothing: a page left only by its own actions.
+  none,
+}
 
 /// One of a page's buttons, said once and drawn by whichever bar the page
 /// has: a button in its [AppBar], or an item of the window's title bar.

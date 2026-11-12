@@ -31,6 +31,10 @@ abstract class AppPage {
   /// What going back asks, where leaving would lose something; null goes.
   SettingConfirm? leaving(SettingReader reader) => null;
 
+  /// Left only by its own actions: no back, no cancel, no swipe. What a
+  /// first launch shows before the app.
+  bool held(SettingReader reader) => false;
+
   /// The app, as the page reads it outside a pass — a load, a save — set
   /// as the page opens.
   late final SettingReader app;

@@ -41,6 +41,13 @@ struct ShellView: View {
       ? model.showSidebar : nil
   }
 
+  /// The first launch's card over the window, which hides the toolbar as
+  /// voice mode does.
+  private var cardUp: Bool {
+    guard let pages = AppPagesModel.shared else { return false }
+    return pages.held && !pages.stack.isEmpty
+  }
+
   /// The browser's view, closed from the sheet's own dismissal too.
   private var browserShown: Binding<Bool> {
     Binding(
@@ -93,7 +100,7 @@ struct ShellView: View {
       // Voice mode is the whole window: nothing of the toolbar's — the title,
       // the new chat and sidebar buttons — stands over it.
       #if os(macOS)
-        .toolbar(model.voice.present ? .hidden : .automatic, for: .windowToolbar)
+        .toolbar(model.voice.present || cardUp ? .hidden : .automatic, for: .windowToolbar)
       #endif
       .preferredColorScheme(model.window.colorScheme)
       #if os(macOS)

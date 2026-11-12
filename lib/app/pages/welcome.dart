@@ -59,9 +59,7 @@ class WelcomeAppPage extends AppPage {
   String get address => "welcome";
 
   @override
-  SettingConfirm? leaving(SettingReader reader) => replay
-      ? null
-      : const SettingConfirm.note("Finish the tour to start using Entoli.");
+  bool held(SettingReader reader) => !replay;
 
   @override
   String title(SettingReader reader) => switch (_step) {

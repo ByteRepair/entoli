@@ -94,10 +94,11 @@ class AppPageView extends ConsumerWidget {
     final reader = WidgetReader(ref);
     final sections = page.sections(reader);
     final leaving = page.leaving(reader);
+    final held = page.held(reader);
     return PopScope(
-      canPop: leaving == null,
+      canPop: leaving == null && !held,
       onPopInvokedWithResult: (popped, _) async {
-        if (popped || leaving == null) return;
+        if (popped || held || leaving == null) return;
         final go = await confirm(
           context,
           title: leaving.title,
@@ -111,6 +112,7 @@ class AppPageView extends ConsumerWidget {
         appBar: PageBar(
           title: page.title(reader),
           subtitle: page.subtitle(reader),
+          leading: held ? PageLeading.none : PageLeading.back,
           actions: [
             for (final (i, action) in page.toolbar(reader).indexed)
               if (action.visible)

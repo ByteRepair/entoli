@@ -109,6 +109,7 @@ final nativeAppPagesProvider = Provider.autoDispose<NativeSettingsPages>((ref) {
         title: page.title(reader),
         subtitle: page.subtitle(reader),
         guarded: page.leaving(reader) != null,
+        held: page.held(reader),
         sections: [for (final s in page.sections(reader)) encode.section(s)],
         toolbar: [
           for (final action in page.toolbar(reader))

@@ -619,6 +619,7 @@ class SettingsPageData {
     this.subtitle,
     this.toolbar = const [],
     this.guarded = false,
+    this.held = false,
   });
 
   SettingsPageKey key;
@@ -640,6 +641,10 @@ class SettingsPageData {
   /// Whether leaving asks first ([SettingsIntents.leavePage]), so it is not
   /// swiped away.
   bool guarded;
+
+  /// Whether it is left only by its own actions: drawn as a card nothing
+  /// dismisses.
+  bool held;
 }
 
 /// Every page this platform offers, as it stands.

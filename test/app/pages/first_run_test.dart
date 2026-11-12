@@ -61,9 +61,9 @@ void main() {
 
     test("on a first launch it cannot be left but by Done", () async {
       final page = open();
-      expect(page.page.leaving(page.reader)?.brief, isTrue);
+      expect(page.page.held(page.reader), isTrue);
       final replay = PageDriver(app, WelcomeAppPage(replay: true));
-      expect(replay.page.leaving(replay.reader), isNull);
+      expect(replay.page.held(replay.reader), isFalse);
     });
 
     test("Done waits for the licence, then opens the welcome chat", () async {

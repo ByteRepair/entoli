@@ -23,6 +23,10 @@ import SwiftUI
 
   var say: SettingsIntents { rows.say }
 
+  /// Whether what is open is left only by its own buttons: the first
+  /// launch's setup and the welcome.
+  var held: Bool { stack.first?.held ?? false }
+
   func page(_ address: String) -> SettingsPageData? {
     stack.first { $0.address == address }
   }
@@ -95,7 +99,7 @@ struct AppPagesSheet: View {
           }
       }
     }
-    .interactiveDismissDisabled(model.stack.first?.guarded ?? false)
+    .interactiveDismissDisabled((model.stack.first?.guarded ?? false) || model.held)
     #if os(macOS)
       .frame(minWidth: 620, idealWidth: 700, minHeight: 520, idealHeight: 680)
     #endif
@@ -109,6 +113,8 @@ struct AppPageView: View {
   let page: SettingsPageData
   var root = false
 
+  /// In the card, which draws the page's bar itself.
+  @Environment(\.appPagesCard) private var card
   @State private var leaving: SettingConfirmData?
 
   /// A file or a web page is the whole of its page, not a row of a form.
@@ -140,15 +146,17 @@ struct AppPageView: View {
       // A page that asks before it goes is left by its own button.
       .navigationBarBackButtonHidden(page.guarded && !root)
       .toolbar {
-        if root || page.guarded {
-          ToolbarItem(placement: .cancellationAction) {
-            Button(page.guarded ? "Cancel" : "Done", action: leave)
+        if !card {
+          if (root && !page.held) || page.guarded {
+            ToolbarItem(placement: .cancellationAction) {
+              Button(page.guarded ? "Cancel" : "Done", action: leave)
+            }
           }
-        }
-        ForEach(Array(page.toolbar.compactMap { $0 }.enumerated()), id: \.element.id) {
-          index, row in
-          ToolbarItem(placement: index == 0 ? .confirmationAction : .primaryAction) {
-            ToolbarAction(model: model.rows, row: row)
+          ForEach(Array(page.toolbar.compactMap { $0 }.enumerated()), id: \.element.id) {
+            index, row in
+            ToolbarItem(placement: index == 0 ? .confirmationAction : .primaryAction) {
+              ToolbarAction(model: model.rows, row: row)
+            }
           }
         }
       }
@@ -242,16 +250,154 @@ struct AppPagesPresenter: ViewModifier {
 
   func body(content: Content) -> some View {
     if let pages = AppPagesModel.shared {
-      content.sheet(
-        isPresented: Binding(
-          get: { here && pages.presented.wrappedValue },
-          set: { pages.presented.wrappedValue = $0 })
-      ) { AppPagesSheet(model: pages) }
+      #if os(macOS)
+        let carded = here && pages.held && !pages.stack.isEmpty
+        content
+          .sheet(
+            isPresented: Binding(
+              get: { here && !pages.held && pages.presented.wrappedValue },
+              set: { pages.presented.wrappedValue = $0 })
+          ) { AppPagesSheet(model: pages) }
+          .overlay {
+            if carded {
+              AppPagesCard(model: pages)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+          }
+          .animation(.smooth(duration: 0.4), value: carded)
+      #else
+        content.sheet(
+          isPresented: Binding(
+            get: { here && pages.presented.wrappedValue },
+            set: { pages.presented.wrappedValue = $0 })
+        ) { AppPagesSheet(model: pages) }
+      #endif
     } else {
       content
     }
   }
 }
+
+extension EnvironmentValues {
+  @Entry var appPagesCard = false
+}
+
+#if os(macOS)
+  /// A held stack, the first launch's setup and the welcome, as a card
+  /// risen from the window's bottom edge over the dimmed window, the way
+  /// Apple's own onboarding comes up. A sheet would drop from the title bar
+  /// and close on Escape; this is left only by its own buttons. It is drawn
+  /// in the window, whose toolbar is hidden under it, so it draws its bar
+  /// itself: the title on top, the page's buttons along the bottom.
+  struct AppPagesCard: View {
+    @Bindable var model: AppPagesModel
+    @State private var leaving: SettingConfirmData?
+    private let shape = RoundedRectangle(cornerRadius: 26, style: .continuous)
+
+    /// The page on top, where it is one of the app's rather than what a row
+    /// pushed.
+    private var top: SettingsPageData? {
+      guard let last = model.rows.path.last else { return model.stack.first }
+      if case .app(let address) = last { return model.page(address) }
+      return nil
+    }
+
+    var body: some View {
+      ZStack {
+        // Nothing behind it answers while it is up.
+        Rectangle().fill(.black.opacity(0.22)).ignoresSafeArea()
+          .contentShape(Rectangle()).onTapGesture {}
+        GeometryReader { space in
+          VStack(spacing: 0) {
+            header
+            NavigationStack(path: model.path) {
+              if let root = model.stack.first {
+                AppPageView(model: model, page: root, root: true)
+                  .navigationDestination(for: SettingsRoute.self) { route in
+                    SettingsDestination(model: model.rows, route: route)
+                  }
+              }
+            }
+            footer
+          }
+          .environment(\.appPagesCard, true)
+          .frame(
+            width: min(680, space.size.width - 32),
+            height: min(720, space.size.height - 32))
+          .background(.windowBackground, in: shape)
+          .clipShape(shape)
+          .overlay(shape.strokeBorder(.separator.opacity(0.5)))
+          .shadow(color: .black.opacity(0.25), radius: 32, y: 12)
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+          .padding(.bottom, 16)
+        }
+      }
+      .alert(
+        leaving?.title ?? "", isPresented: .present($leaving), presenting: leaving
+      ) { ask in
+        Button(ask.confirmLabel ?? "Discard", role: .destructive) {
+          if let address = top?.address { model.close(address) }
+        }
+        Button("Keep Editing", role: .cancel) {}
+      } message: { ask in
+        Text(ask.message)
+      }
+    }
+
+    private var header: some View {
+      HStack(alignment: .firstTextBaseline, spacing: 12) {
+        if !model.rows.path.isEmpty {
+          Button(action: back) { Image(systemName: "chevron.backward") }
+            .modifier(GlassButton())
+            .buttonBorderShape(.circle)
+            .help("Back")
+        }
+        VStack(alignment: .leading, spacing: 2) {
+          if let top {
+            Text(top.title).font(.title2.bold())
+            if let subtitle = top.subtitle {
+              Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+            }
+          }
+        }
+        Spacer(minLength: 0)
+      }
+      .padding(.horizontal, 24)
+      .padding(.top, 22)
+      .padding(.bottom, 8)
+    }
+
+    /// The page's own buttons: the first, its going on, at the trailing
+    /// end and prominent; the rest, going back among them, before it.
+    @ViewBuilder private var footer: some View {
+      let actions = top?.toolbar.compactMap { $0 } ?? []
+      if !actions.isEmpty {
+        HStack(spacing: 12) {
+          ForEach(actions.dropFirst(), id: \.id) { row in
+            ToolbarAction(model: model.rows, row: row).modifier(GlassButton())
+          }
+          Spacer(minLength: 0)
+          ToolbarAction(model: model.rows, row: actions[0])
+            .modifier(GlassButton(prominent: true))
+            .keyboardShortcut(.defaultAction)
+        }
+        .controlSize(.large)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 18)
+      }
+    }
+
+    /// Back from what is on top: a page of the app's asked first, what a
+    /// row pushed simply popped.
+    private func back() {
+      if let address = top?.address, top?.held != true {
+        Task { @MainActor in leaving = await model.leave(address) }
+      } else if top == nil {
+        model.path.wrappedValue = Array(model.rows.path.dropLast())
+      }
+    }
+  }
+#endif
 
 /// A file's text: markdown rendered while it is read, anything else set in
 /// the code face, and an editor while the page says it is being edited,

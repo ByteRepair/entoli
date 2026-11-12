@@ -26,8 +26,7 @@ class SetupAppPage extends AppPage {
 
   /// It is left by finishing it, or by skipping what failed.
   @override
-  SettingConfirm? leaving(SettingReader reader) =>
-      const SettingConfirm.note("Setup carries on by itself.");
+  bool held(SettingReader reader) => true;
 
   @override
   void closed() => _listening?.close();
