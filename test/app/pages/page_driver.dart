@@ -1,5 +1,7 @@
 import "dart:async";
 
+import "package:flutter_riverpod/flutter_riverpod.dart";
+
 import "package:agent_chat/app/pages/app_page.dart";
 import "package:agent_chat/app/settings/controller.dart";
 import "package:agent_chat/app/settings/spec.dart";
@@ -13,7 +15,22 @@ class PageDriver<P extends AppPage> {
   PageDriver(this.app, this.page) {
     _heard = app.container.listen(appPagesProvider, (_, _) => _changed());
     app.container.read(appPagesProvider.notifier).open(page);
+    // Built inside a provider, as the shell builds it, so what the page
+    // watches is held for as long as the page is read.
+    _built = app.container.listen(
+      _sectionsOf(page),
+      (_, _) => _changed(),
+      fireImmediately: true,
+    );
   }
+
+  static final _sectionsOf = Provider.autoDispose
+      .family<List<PageSection>, AppPage>((ref, page) {
+        ref.watch(appPagesProvider);
+        return page.sections(RefReader(ref));
+      });
+
+  late final ProviderSubscription<List<PageSection>> _built;
 
   final TestApp app;
   final P page;
@@ -31,7 +48,7 @@ class PageDriver<P extends AppPage> {
   /// Whether the page is still on the stack.
   bool get open => app.container.read(appPagesProvider).contains(page);
 
-  List<PageSection> get sections => page.sections(reader);
+  List<PageSection> get sections => _built.read();
 
   /// Every controller drawn, a group's children among them.
   List<SettingController> get controllers => [
@@ -88,6 +105,7 @@ class PageDriver<P extends AppPage> {
 
   void close() {
     _heard.close();
+    _built.close();
     if (open) app.container.read(appPagesProvider.notifier).close(page.address);
   }
 }

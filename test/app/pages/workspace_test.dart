@@ -10,7 +10,6 @@ import "package:agent_chat/app/settings/controller.dart";
 import "package:agent_chat/core/formatting.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/workspace.dart";
-import "package:agent_chat/providers.dart";
 
 import "../../fakes.dart";
 import "../../harness.dart";
