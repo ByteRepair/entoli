@@ -131,10 +131,17 @@ final class TextInline extends Inline {
 
 /// A formula inside a sentence.
 final class FormulaInline extends Inline {
-  const FormulaInline({required this.tex, required this.written});
+  const FormulaInline({
+    required this.tex,
+    required this.written,
+    this.display = false,
+  });
 
   final String tex;
   final String written;
+
+  /// Written `$$…$$` mid-sentence: set at display size, still in the line.
+  final bool display;
 }
 
 final class BreakInline extends Inline {
@@ -195,6 +202,13 @@ class _BlockReader {
   void _block(md.Element e, BlockNesting at) {
     final children = e.children ?? const <md.Node>[];
     switch (e.tag) {
+      // The grammar sets a formula on a line of its own as a paragraph
+      // holding nothing but it.
+      case "p"
+          when children.length == 1 &&
+              children.single is md.Element &&
+              (children.single as md.Element).tag == mathDisplayTag:
+        _block(children.single as md.Element, at);
       case "p":
         final inlines = _InlineReader().read(children);
         if (inlines.isNotEmpty) _out.add(ParagraphBlock(at, inlines));
@@ -334,11 +348,12 @@ class _InlineReader {
     switch (node) {
       case md.Text(:final text):
         _text(text, marks, link);
-      case md.Element(tag: mathInlineTag):
+      case md.Element(tag: mathInlineTag || mathDisplayTag):
         _out.add(
           FormulaInline(
             tex: node.attributes[mathTexAttribute] ?? node.textContent,
             written: node.textContent,
+            display: node.tag == mathDisplayTag,
           ),
         );
       case md.Element(tag: "br"):

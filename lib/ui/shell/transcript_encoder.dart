@@ -450,11 +450,12 @@ class TranscriptEncoder {
             strike: marks.contains(InlineMark.strike),
             link: link,
           ),
-        FormulaInline(:final tex, :final written) => wire.InlineSnapshot(
-          kind: wire.InlineKind.formula,
-          text: written,
-          formula: formulas.idOf(tex, display: false),
-        ),
+        FormulaInline(:final tex, :final written, :final display) =>
+          wire.InlineSnapshot(
+            kind: wire.InlineKind.formula,
+            text: written,
+            formula: formulas.idOf(tex, display: display),
+          ),
         BreakInline() => wire.InlineSnapshot(kind: wire.InlineKind.lineBreak),
         ImageInline(:final source, :final alt) => wire.InlineSnapshot(
           kind: wire.InlineKind.image,
