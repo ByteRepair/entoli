@@ -298,7 +298,7 @@ struct SettingRowView: View {
     case .pairing: PairingRow(model: model, row: row)
     case .setup: SetupRow(model: model, row: row)
     case .document: DocumentRow(model: model, row: row).frame(minHeight: 360)
-    case .web: WebRow(row: row).frame(minHeight: 360)
+    case .web: WebRow(model: model, row: row).frame(minHeight: 360)
     }
   }
 

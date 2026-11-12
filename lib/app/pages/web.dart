@@ -11,15 +11,31 @@ class WebAppPage extends AppPage {
   final Uri url;
   final String? label;
 
+  /// Where the view is now, and what that page calls itself.
+  late Uri _at = url;
+  String? _title;
+
   @override
   String get address => "web/$url";
 
   @override
-  String title(SettingReader reader) => label ?? url.host;
+  String title(SettingReader reader) => label ?? _title ?? _at.host;
 
   @override
   List<PageSection> sections(SettingReader reader) => [
-    PageSection("page", "", [WebController(part("page", ""), url: url)]),
+    PageSection("page", "", [
+      WebController(
+        part("page", ""),
+        url: url,
+        onNavigated: (at, title) {
+          final named = (title?.isEmpty ?? true) ? null : title;
+          if (at == _at && named == _title) return;
+          _at = at;
+          _title = named;
+          changed();
+        },
+      ),
+    ]),
   ];
 
   @override
@@ -27,7 +43,7 @@ class WebAppPage extends AppPage {
     ActionController(
       part("copy", "Copy Link"),
       label: "Copy Link",
-      run: () async => SettingNotice("Copied link", copy: "$url"),
+      run: () async => SettingNotice("Copied link", copy: "$_at"),
     ),
   ];
 }

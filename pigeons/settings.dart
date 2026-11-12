@@ -1166,6 +1166,9 @@ abstract class SettingsIntents {
 
   void setText(String id, String text);
 
+  /// A web row landed on [url], a page called [title].
+  void navigated(String id, String url, String? title);
+
   void putEntry(String id, String name, String value, String? replacing);
 
   void removeEntry(String id, String name);

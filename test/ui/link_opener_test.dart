@@ -1,7 +1,6 @@
 import "package:agent_chat/ui/link_opener.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
-import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart";
 
@@ -32,34 +31,35 @@ void main() {
     });
   }
 
+  late TestApp app;
+  tearDown(() => app.dispose());
+
   /// Opens [url] in the in-app browser, and hands back what gets copied out of
   /// it.
   Future<List<String>> openLink(WidgetTester tester, String url) async {
     final copied = clipboard(tester);
-    await tester.pumpWidget(
-      ProviderScope(
-        child: MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => TextButton(
-                onPressed: () => PlatformLinkOpener(
-                  FakeChatStore(),
-                ).open(context, Uri.parse(url)),
-                child: const Text("open"),
-              ),
-            ),
+    app = TestApp.create();
+    await app.pump(
+      tester,
+      Scaffold(
+        body: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => PlatformLinkOpener(
+              FakeChatStore(),
+            ).open(context, Uri.parse(url)),
+            child: const Text("open"),
           ),
         ),
       ),
     );
     await tester.tap(find.text("open"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
     return copied;
   }
 
   Future<void> tapCopyLink(WidgetTester tester) async {
-    await tester.tap(find.byTooltip("Copy link"));
-    await tester.pumpAndSettle();
+    await tester.tap(find.text("Copy Link"));
+    await settleIo(tester);
   }
 
   androidTest("copies the page navigated to, not the link that opened it", (
@@ -68,7 +68,7 @@ void main() {
     final copied = await openLink(tester, "https://example.com/one");
     platform.title = "Two";
     platform.delegate!.onPageFinished!("https://example.com/two");
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     await tapCopyLink(tester);
 
@@ -84,7 +84,7 @@ void main() {
     platform.delegate!.onUrlChange!(
       const UrlChange(url: "https://example.com/three"),
     );
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     await tapCopyLink(tester);
 

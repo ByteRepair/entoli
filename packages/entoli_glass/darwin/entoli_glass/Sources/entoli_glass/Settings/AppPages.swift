@@ -123,7 +123,7 @@ struct AppPageView: View {
       if let row = whole {
         Group {
           if row.kind == .web {
-            WebRow(row: row).ignoresSafeArea(edges: .bottom)
+            WebRow(model: model.rows, row: row).ignoresSafeArea(edges: .bottom)
           } else {
             DocumentRow(model: model.rows, row: row)
           }

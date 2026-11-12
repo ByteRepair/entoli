@@ -619,6 +619,7 @@ final class WebController extends SettingController {
   WebController(
     super.spec, {
     required this.url,
+    this.onNavigated,
     super.title,
     super.description,
     super.footnote,
@@ -627,7 +628,13 @@ final class WebController extends SettingController {
     super.accessory,
   });
 
+  /// Where it starts; the view follows links from here on its own.
   final Uri url;
+
+  final void Function(Uri url, String? title)? onNavigated;
+
+  /// Said by the view each time it lands somewhere, with that page's title.
+  void navigated(Uri url, String? title) => onNavigated?.call(url, title);
 }
 
 /// Something to read rather than set: lines of text, and links out.

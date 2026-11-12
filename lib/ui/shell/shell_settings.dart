@@ -781,6 +781,12 @@ class SettingsBridge implements SettingsIntents {
   };
 
   @override
+  void navigated(String id, String url, String? title) {
+    final at = Uri.tryParse(url);
+    if (at != null) _at<WebController>(id)?.navigated(at, title);
+  }
+
+  @override
   void putEntry(String id, String name, String value, String? replacing) =>
       _at<KeyValuesController>(id)?.put(name, value, replacing: replacing);
 
