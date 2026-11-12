@@ -572,6 +572,42 @@ final class TextController extends SettingController {
   final Future<SettingNotice?> Function(String value) set;
 }
 
+/// A file's text, the whole of a page: shown — markdown rendered, anything
+/// else as code highlighted by its [name] — and, where it can be, edited in
+/// place, each edit said back through [edit] so the page holds the draft.
+final class DocumentController extends SettingController {
+  DocumentController(
+    super.spec, {
+    required this.text,
+    required this.name,
+    this.editing = false,
+    void Function(String text)? onEdit,
+    super.title,
+    super.description,
+    super.footnote,
+    super.enabled,
+    super.visible,
+    super.accessory,
+  }) : _edit = onEdit;
+
+  final String text;
+
+  /// The file's name, which says how it is highlighted.
+  final String name;
+
+  /// Whether it is being edited now rather than read.
+  final bool editing;
+
+  final void Function(String text)? _edit;
+
+  bool get markdown {
+    final lower = name.toLowerCase();
+    return lower.endsWith(".md") || lower.endsWith(".markdown");
+  }
+
+  void edit(String text) => _edit?.call(text);
+}
+
 /// Something to read rather than set: lines of text, and links out.
 final class NoticeController extends SettingController {
   NoticeController(
@@ -826,6 +862,13 @@ final class SkillPage extends TextPage {
   final String name;
   final String? project;
   final String origin;
+}
+
+/// Markdown the page that opens it already holds: a plan task's own plan.
+final class InlinePage extends TextPage {
+  const InlinePage(this.text);
+
+  final String text;
 }
 
 /// What an item action is: [run] by the list, or a face picked by the

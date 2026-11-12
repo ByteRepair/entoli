@@ -11,7 +11,6 @@ import "package:super_sliver_list/super_sliver_list.dart";
 
 import "../../domain/agent_backend.dart";
 import "../../domain/agent_face.dart";
-import "../../domain/chat_meta.dart";
 import "../../domain/models.dart";
 import "../../domain/room/room_state.dart";
 import "../../domain/project.dart";
@@ -292,18 +291,14 @@ class _NewChatState extends ConsumerState<_NewChat> {
   ComposerModel get _model => _session.composer;
   bool get _starting => _session.starting.value;
 
-  Future<void> _openSettings() async {
+  void _openSettings() {
     final session = _session;
-    final picked = await Navigator.of(context).push<ChatMeta>(
-      MaterialPageRoute(
-        builder: (_) => NewChatSettingsPage(
-          initial: session.meta.value,
-          project: ref.read(selectedProjectProvider).project,
-        ),
-      ),
+    openNewChatSettings(
+      context,
+      initial: session.meta.value,
+      project: ref.read(selectedProjectProvider).project,
+      onSave: (meta) => session.meta.value = meta,
     );
-    // Null is a page backed out of rather than saved.
-    if (picked != null) session.meta.value = picked;
   }
 
   Future<void> _send(String text, List<Attachment> attachments) =>

@@ -1,62 +1,15 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../app/plan.dart";
+import "../app_pages.dart";
+import "../../app/pages/plan.dart";
 import "../../domain/plan.dart";
-import "widgets/plan_view.dart";
-import "../widgets/page_bar.dart";
 
 /// Open [chatId]'s plan: the app bar's button, the plan card's and the app's
 /// Chat menu.
-void openPlan(BuildContext context, String chatId) => Navigator.of(
-  context,
-).push(MaterialPageRoute(builder: (_) => PlanPage(chatId: chatId)));
-
-/// The chat's plan on a page of its own: every task with whether it is done,
-/// each opening to the plan written for it. It follows the turn, since the
-/// provider re-reads the file as the conversation grows.
-class PlanPage extends ConsumerWidget {
-  const PlanPage({super.key, required this.chatId});
-
-  final String chatId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final plan = ref.watch(planProvider(chatId));
-    final sections = plan.value;
-    final (done, total) = sectionsProgress(sections ?? const []);
-    return Scaffold(
-      appBar: PageBar(title: "Plan"),
-      body: switch (plan) {
-        AsyncValue(isLoading: true, hasValue: false) => const Center(
-          child: CircularProgressIndicator(),
-        ),
-        _ when sections == null => const Center(
-          child: Text("This chat has no plan."),
-        ),
-        _ => ListView(
-          padding: const EdgeInsets.only(bottom: 24),
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "$done of $total tasks done",
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 8),
-                  LinearProgressIndicator(value: total == 0 ? 0 : done / total),
-                ],
-              ),
-            ),
-            PlanTaskList(sections: sections),
-          ],
-        ),
-      },
-    );
-  }
-}
+void openPlan(BuildContext context, String chatId) =>
+    openAppPage(context, PlanAppPage(chatId));
 
 /// The app bar's way to the plan, there only while the chat has one.
 class PlanButton extends ConsumerWidget {

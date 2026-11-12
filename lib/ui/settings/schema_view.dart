@@ -1,3 +1,4 @@
+import "../widgets/document_view.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -129,6 +130,10 @@ class SettingRow extends StatelessWidget {
       ),
       final GroupController c => _Group(c),
       final TextController c => _Text(c),
+      final DocumentController c => SizedBox(
+        height: 480,
+        child: DocumentView(c),
+      ),
       final NoticeController c => switch (c.hint) {
         UiHint.banner => _Banner(c),
         UiHint.installed || UiHint.field => LabelledField(
@@ -212,6 +217,9 @@ class SettingRow extends StatelessWidget {
 
 /// Runs [c], asking first what it asks: a confirm, a passing note that
 /// stops it, or nothing at all where what it opened was dismissed.
+Future<void> runSettingAction(BuildContext context, ActionController c) =>
+    _run(context, c);
+
 Future<void> _run(BuildContext context, ActionController c) async {
   final ask = await c.confirm();
   if (!context.mounted || !await _agreed(context, ask)) return;
@@ -640,6 +648,24 @@ class _Action extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (c.hint == UiHint.open) {
+      final description = c.description;
+      final icon = settingIcon(c.glyph);
+      return ListTile(
+        leading: icon == null ? null : Icon(icon),
+        title: Text(c.title),
+        subtitle: description == null ? null : Text(description),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (c.label.isNotEmpty) Text(c.label),
+            const Icon(Icons.chevron_right),
+          ],
+        ),
+        enabled: c.enabled,
+        onTap: () => _press(context),
+      );
+    }
     if (c.hint == UiHint.permission) {
       final description = c.description;
       return ListTile(
@@ -1542,6 +1568,17 @@ void openTextPage(BuildContext context, TextPage page) => switch (page) {
       child: AppMark(size: 48),
     ),
     applicationLegalese: madeBy,
+  ),
+  InlinePage(:final text) => Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => Scaffold(
+        appBar: AppBar(),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: SelectableText(text),
+        ),
+      ),
+    ),
   ),
   SkillPage(:final name, :final project, :final origin) =>
     Navigator.of(context).push(

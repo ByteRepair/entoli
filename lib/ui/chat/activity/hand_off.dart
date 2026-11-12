@@ -6,7 +6,8 @@ import "../../../app/transcript/hand_off.dart";
 import "../../../providers.dart";
 import "../../skills/skill_install_preview.dart";
 import "../../widgets/dialogs.dart" show say;
-import "../../widgets/text_file_page.dart";
+import "../../../app/pages/text_file.dart";
+import "../../app_pages.dart";
 import "../plan_page.dart" as plan_page;
 
 /// The conversation's hand-off as the Flutter frontend makes it: a page
@@ -20,11 +21,9 @@ class ContextHandOff implements TranscriptHandOff {
       ProviderScope.containerOf(context, listen: false);
 
   @override
-  Future<void> openFile(String path) => Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      builder: (_) =>
-          TextFilePage(path: path, name: p.basename(path), popsBinary: false),
-    ),
+  Future<void> openFile(String path) async => openAppPage(
+    context,
+    TextFileAppPage(path: path, name: p.basename(path), handsOff: false),
   );
 
   @override

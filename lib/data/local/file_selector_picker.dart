@@ -51,4 +51,10 @@ class FileSelectorFolderPicker implements FolderPicker {
   @override
   Future<String?> pick({required String confirmLabel}) =>
       getDirectoryPath(confirmButtonText: confirmLabel);
+
+  @override
+  Future<List<String>> pickFiles({required String confirmLabel}) async => [
+    for (final file in await openFiles(confirmButtonText: confirmLabel))
+      file.path,
+  ];
 }

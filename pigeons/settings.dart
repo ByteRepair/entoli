@@ -40,6 +40,7 @@ enum SettingKind {
   subpage,
   pairing,
   setup,
+  document,
 }
 
 /// How a row would like to be drawn; a client that cannot honour one draws
@@ -74,6 +75,7 @@ enum SettingHint {
   agents,
   skills,
   botAvatars,
+  open,
 }
 
 /// What an icon beside a setting stands for: the schema's `SettingGlyph`,
@@ -104,6 +106,21 @@ enum SettingIcon {
   computer,
   terminal,
   tune,
+  taskDone,
+  taskActive,
+  taskPending,
+  folder,
+  file,
+  chat,
+  memory,
+  link,
+  skill,
+  agent,
+  edit,
+  globe,
+  check,
+  info,
+  star,
 }
 
 enum SettingTone { plain, good, warning }
@@ -131,6 +148,9 @@ enum SettingsPageKey {
   syncRelay,
   syncTurn,
   onDeviceLlm,
+
+  /// One of the app's pages that is not a setting, named by its address.
+  app,
 }
 
 /// One option of a choice, by its place in the list.
@@ -199,15 +219,18 @@ class SettingItemActionData {
   bool handsOff;
 }
 
-enum TextPageKind { privacyPolicy, licences, skill }
+enum TextPageKind { privacyPolicy, licences, skill, inline }
 
 /// A page of text the app holds; a skill's names it by [name] and [project].
 class TextPageData {
-  TextPageData({required this.kind, this.name, this.project});
+  TextPageData({required this.kind, this.name, this.project, this.text});
 
   TextPageKind kind;
   String? name;
   String? project;
+
+  /// An inline page's markdown.
+  String? text;
 }
 
 class SettingMeterData {
@@ -443,6 +466,9 @@ class SettingRowData {
     this.setUpLabel,
     this.importLabel,
     this.deleteLabel,
+    this.fileName,
+    this.markdown = false,
+    this.editing = false,
   });
 
   String id;
@@ -552,6 +578,11 @@ class SettingRowData {
   String? setUpLabel;
   String? importLabel;
   String? deleteLabel;
+
+  // document: its text is [text], each edit said back by setText
+  String? fileName;
+  bool markdown;
+  bool editing;
 }
 
 class SettingsSectionData {
@@ -575,6 +606,10 @@ class SettingsPageData {
     this.groupStart = false,
     this.openedFrom,
     this.sections = const [],
+    this.address,
+    this.subtitle,
+    this.toolbar = const [],
+    this.guarded = false,
   });
 
   SettingsPageKey key;
@@ -585,6 +620,17 @@ class SettingsPageData {
   /// others.
   SettingsPageKey? openedFrom;
   List<SettingsSectionData?> sections;
+
+  /// An app page's: which it is.
+  String? address;
+  String? subtitle;
+
+  /// The bar's actions, the first the page's own.
+  List<SettingRowData?> toolbar;
+
+  /// Whether leaving asks first ([SettingsIntents.leavePage]), so it is not
+  /// swiped away.
+  bool guarded;
 }
 
 /// Every page this platform offers, as it stands.
@@ -1033,6 +1079,10 @@ abstract class NativeSettings {
   /// no longer paired, or with [readError] where the record could not be
   /// read.
   void device(String id, PairedDeviceData? device, String? readError);
+
+  /// The app's pages open over the window, the first at the bottom; none
+  /// takes them all down.
+  void appPages(List<SettingsPageData> stack);
 }
 
 /// What the client says the user did, by row id. A row inside a group is
@@ -1205,6 +1255,14 @@ abstract class SettingsIntents {
   /// Deletes an import of the user's, answering once it is gone.
   @async
   void deleteBotAvatar(String key);
+
+  /// What leaving app page [address] asks first, or null once it has gone.
+  @async
+  SettingConfirmData? leavePage(String address);
+
+  /// App page [address] gone, whatever it would have asked: the user agreed,
+  /// or it was taken down.
+  void closePage(String address);
 
   /// The text of a page the app holds: the privacy policy, the licences.
   @async

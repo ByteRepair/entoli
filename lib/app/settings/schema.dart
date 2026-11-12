@@ -12,7 +12,7 @@ class SettingsSchema {
     assert(this.settings.length == settings.length, "a setting id is taken");
     for (final s in settings) {
       assert(
-        this.sections.containsKey("${s.path.page.name}/${s.path.section}"),
+        this.sections.containsKey("${s.path.page?.name}/${s.path.section}"),
         "${s.id} is filed under no section",
       );
     }

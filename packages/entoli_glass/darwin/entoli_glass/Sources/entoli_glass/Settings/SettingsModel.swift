@@ -183,6 +183,10 @@ import SwiftUI
     say.deviceShown(id: id, completion: ignore)
   }
 
+  func appPages(stack: [SettingsPageData]) throws {
+    AppPagesModel.shared?.update(stack)
+  }
+
   func device(id: String, device: PairedDeviceData?, readError: String?) throws {
     self.device = ShownDevice(id: id, record: device, readError: readError)
     if opening == id {
@@ -370,4 +374,6 @@ enum SettingsRoute: Hashable {
   case models(OpenedModels)
   /// A paired device's page, by its id.
   case device(String)
+  /// One of the app's pages, by its address.
+  case app(String)
 }

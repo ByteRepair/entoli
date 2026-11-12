@@ -94,6 +94,9 @@ enum UiHint {
   /// The way to every Bot Avatar, where a frontend has a page of its own
   /// for them.
   botAvatars,
+
+  /// A row that opens another page: an action whose run opens an `AppPage`.
+  open,
 }
 
 /// The pages settings is filed under, in the order they are offered. A
@@ -144,8 +147,9 @@ enum SettingsPageId {
   final bool settings;
 }
 
-/// Where a setting is filed: its page, and the section on it.
-typedef SettingPath = ({SettingsPageId page, String section});
+/// Where a setting is filed: its page, and the section on it; no page for
+/// an `AppPage`'s part, which is filed nowhere.
+typedef SettingPath = ({SettingsPageId? page, String section});
 
 /// What a setting reads the rest of the app through: a widget's ref where
 /// a frontend builds its controllers in place, a provider's where they are
@@ -273,4 +277,19 @@ enum SettingGlyph {
   computer,
   terminal,
   tune,
+  taskDone,
+  taskActive,
+  taskPending,
+  folder,
+  file,
+  chat,
+  memory,
+  link,
+  skill,
+  agent,
+  edit,
+  globe,
+  check,
+  info,
+  star,
 }

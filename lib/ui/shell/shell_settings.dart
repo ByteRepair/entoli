@@ -4,6 +4,7 @@ import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../app/pages/app_page.dart";
 import "../../app/settings/controller.dart";
 import "../../app/bot_avatar/library.dart";
 import "../../app/bot_avatar/stage.dart";
@@ -57,46 +58,7 @@ final nativeSettingsProvider = Provider.autoDispose<NativeSettingsPages>((ref) {
   final shown = ref.watch(nativeShownPagesProvider);
   final schema = ref.watch(settingsSchemaProvider);
   final controllers = <String, SettingController>{};
-  final providers = ref.watch(appSettingsProvider).llmProviders;
-  final models = ref.watch(sortedModelsProvider);
-  final listed = models.value ?? const [];
-  final serving = ref.watch(modelProvidersProvider);
-  _ModelField label(ModelPickController c) {
-    final error = modelFieldError(
-      choice: c.choice,
-      role: c.role,
-      loaded: models.hasValue,
-      listed: listed,
-      serving: serving,
-    );
-    return (
-      label: error != null
-          ? missingModelLabel
-          : modelFieldLabel(
-              choice: c.choice,
-              role: c.role,
-              nullLabel: c.nullLabel,
-              defaultOf: c.defaultOf,
-              providers: providers,
-              listed: listed,
-              serving: serving,
-            ),
-      error: error,
-    );
-  }
-
-  final stage = ref.watch(botStageProvider);
-  // A Bot Avatar is drawn live by the client from its rig; a photo is sent.
-  _Face face(({String? project, String name}) agent) =>
-      switch (ref.watch(agentPictureProvider(agent)).value) {
-        AgentPhoto(:final bytes) => (photo: bytes, bot: null, colour: null),
-        AgentBot(:final spec) => (
-          photo: null,
-          bot: stage.keyOf(spec.definition),
-          colour: spec.colour,
-        ),
-        null => (photo: null, bot: null, colour: null),
-      };
+  final encode = _Encoder(ref, controllers);
   final pages = [
     for (final page in SettingsPageId.values)
       if (page.settings && (!page.listed || pageOffered(reader, page)))
@@ -116,20 +78,106 @@ final nativeSettingsProvider = Provider.autoDispose<NativeSettingsPages>((ref) {
                 page,
                 const AppAddress(),
               ))
-                SettingsSectionData(
-                  id: section.spec.id,
-                  title: section.spec.title,
-                  detail: section.description,
-                  rows: [
-                    for (final setting in section.settings)
-                      ..._rows(setting, controllers, label, face),
-                  ],
+                encode.section(
+                  PageSection(
+                    section.spec.id,
+                    section.spec.title,
+                    section.settings,
+                    detail: section.description,
+                  ),
                 ),
           ],
         ),
   ];
   return (snapshot: SettingsSnapshot(pages: pages), controllers: controllers);
 });
+
+/// The app's pages open, each as a settings page drawn over the window, and
+/// their controllers by id.
+final nativeAppPagesProvider = Provider.autoDispose<NativeSettingsPages>((ref) {
+  final reader = RefReader(ref);
+  final open = ref.watch(appPagesProvider);
+  final controllers = <String, SettingController>{};
+  final encode = _Encoder(ref, controllers);
+  final pages = [
+    for (final page in open)
+      SettingsPageData(
+        key: SettingsPageKey.app,
+        address: page.address,
+        title: page.title(reader),
+        subtitle: page.subtitle(reader),
+        guarded: page.leaving(reader) != null,
+        sections: [for (final s in page.sections(reader)) encode.section(s)],
+        toolbar: [
+          for (final action in page.toolbar(reader))
+            if (action.visible) ...encode.rows(action),
+        ],
+      ),
+  ];
+  return (snapshot: SettingsSnapshot(pages: pages), controllers: controllers);
+});
+
+/// Sections as rows, reading what a row draws — a model pick's label, an
+/// agent's face — through the provider's ref, and keeping each controller
+/// sent under its id.
+class _Encoder {
+  _Encoder(this.ref, this.controllers);
+
+  final Ref ref;
+  final Map<String, SettingController> controllers;
+
+  late final _providers = ref.watch(appSettingsProvider).llmProviders;
+  late final _models = ref.watch(sortedModelsProvider);
+  late final _serving = ref.watch(modelProvidersProvider);
+  late final _stage = ref.watch(botStageProvider);
+
+  SettingsSectionData section(PageSection section) => SettingsSectionData(
+    id: section.id,
+    title: section.title,
+    detail: section.detail,
+    rows: [for (final c in section.controllers) ...rows(c)],
+  );
+
+  List<SettingRowData> rows(SettingController c) =>
+      _rows(c, controllers, label, face);
+
+  _ModelField label(ModelPickController c) {
+    final listed = _models.value ?? const [];
+    final error = modelFieldError(
+      choice: c.choice,
+      role: c.role,
+      loaded: _models.hasValue,
+      listed: listed,
+      serving: _serving,
+    );
+    return (
+      label: error != null
+          ? missingModelLabel
+          : modelFieldLabel(
+              choice: c.choice,
+              role: c.role,
+              nullLabel: c.nullLabel,
+              defaultOf: c.defaultOf,
+              providers: _providers,
+              listed: listed,
+              serving: _serving,
+            ),
+      error: error,
+    );
+  }
+
+  /// A Bot Avatar is drawn live by the client from its rig; a photo is sent.
+  _Face face(({String? project, String name}) agent) =>
+      switch (ref.watch(agentPictureProvider(agent)).value) {
+        AgentPhoto(:final bytes) => (photo: bytes, bot: null, colour: null),
+        AgentBot(:final spec) => (
+          photo: null,
+          bot: _stage.keyOf(spec.definition),
+          colour: spec.colour,
+        ),
+        null => (photo: null, bot: null, colour: null),
+      };
+}
 
 /// What a model pick's field reads as, and why it is wrong.
 typedef _ModelField = ({String label, String? error});
@@ -304,6 +352,13 @@ SettingRowData _row(
         ..lines = c.lines
         ..submitLabel = c.submitLabel
         ..clearLabel = c.clearLabel;
+    case DocumentController():
+      row
+        ..kind = SettingKind.document
+        ..text = c.text
+        ..fileName = c.name
+        ..markdown = c.markdown
+        ..editing = c.editing;
     case NoticeController():
       row
         ..kind = SettingKind.notice
@@ -480,6 +535,10 @@ List<FormOptionData> _formOptions(
 TextPageData? _textPage(TextPage? page) => switch (page) {
   null => null,
   PolicyPage() => TextPageData(kind: TextPageKind.privacyPolicy),
+  InlinePage(:final text) => TextPageData(
+    kind: TextPageKind.inline,
+    text: text,
+  ),
   LicencesPage() => TextPageData(kind: TextPageKind.licences),
   SkillPage(:final name, :final project) => TextPageData(
     kind: TextPageKind.skill,
@@ -511,6 +570,11 @@ FormSaveData _refusal(Object e) => switch (e) {
 class SettingsBridge implements SettingsIntents {
   SettingsBridge(this._container) {
     SettingsIntents.setUp(this);
+    _opened = _container.listen<List<AppPage>>(
+      appPagesProvider,
+      (_, open) => _follow(open),
+      fireImmediately: true,
+    );
   }
 
   final ProviderContainer _container;
@@ -536,10 +600,51 @@ class SettingsBridge implements SettingsIntents {
   /// The pages as they change, while the settings are on screen.
   ProviderSubscription<NativeSettingsPages>? _sending;
 
+  late final ProviderSubscription<List<AppPage>> _opened;
+
+  /// The app's pages as they change, while any is open.
+  ProviderSubscription<NativeSettingsPages>? _sendingPages;
+
+  void _follow(List<AppPage> open) {
+    if (open.isEmpty) {
+      _sendingPages?.close();
+      _sendingPages = null;
+      _sendPages(const []);
+      return;
+    }
+    _sendingPages ??= _container.listen<NativeSettingsPages>(
+      nativeAppPagesProvider,
+      (_, pages) => _sendPages(pages.snapshot.pages.nonNulls.toList()),
+      onError: (e, _) => logFailure("pages", "building a page", e),
+      fireImmediately: true,
+    );
+  }
+
+  void _sendPages(List<SettingsPageData> stack) => unawaited(
+    _native.appPages(stack).catchError((Object e) {
+      logFailure("pages", "sending the pages", e);
+    }),
+  );
+
+  AppPages get _pages => _container.read(appPagesProvider.notifier);
+
+  @override
+  Future<SettingConfirmData?> leavePage(String address) async {
+    final page = _pages.find(address);
+    if (page == null) return null;
+    final ask = page.leaving(_reader);
+    if (ask == null) _pages.close(address);
+    return _confirm(ask);
+  }
+
+  @override
+  void closePage(String address) => _pages.close(address);
+
   @override
   void shown(bool on, List<SettingsPageKey?> pages) {
     _container.read(nativeShownPagesProvider.notifier).show({
-      for (final key in pages.nonNulls) SettingsPageId.values.byName(key.name),
+      for (final key in pages.nonNulls)
+        if (key != SettingsPageKey.app) SettingsPageId.values.byName(key.name),
     });
     if (!on) {
       _sending?.close();
@@ -579,13 +684,21 @@ class SettingsBridge implements SettingsIntents {
   );
 
   void close() {
+    _opened.close();
+    _sendingPages?.close();
     shown(false, const []);
     _device.close();
     SettingsIntents.setUp(null);
   }
 
   T? _at<T extends SettingController>(String id) {
-    final c = _container.read(nativeSettingsProvider).controllers[id];
+    final c = _container
+        .read(
+          id.startsWith("page:")
+              ? nativeAppPagesProvider
+              : nativeSettingsProvider,
+        )
+        .controllers[id];
     return c is T ? c : null;
   }
 
@@ -625,7 +738,11 @@ class SettingsBridge implements SettingsIntents {
   }
 
   @override
-  void setText(String id, String text) => _at<TextController>(id)?.set(text);
+  void setText(String id, String text) => switch (_at<SettingController>(id)) {
+    final TextController c => c.set(text),
+    final DocumentController c => c.edit(text),
+    _ => null,
+  };
 
   @override
   void putEntry(String id, String name, String value, String? replacing) =>
@@ -1158,6 +1275,7 @@ class SettingsBridge implements SettingsIntents {
   @override
   Future<String> page(TextPageData opens) async => switch (opens.kind) {
     TextPageKind.privacyPolicy => bundledPrivacyPolicy,
+    TextPageKind.inline => opens.text ?? "",
     TextPageKind.licences => await _licences,
     TextPageKind.skill => await _skill(opens.name ?? "", opens.project),
   };

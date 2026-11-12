@@ -1,0 +1,179 @@
+import "package:flutter_riverpod/flutter_riverpod.dart";
+
+import "../settings/controller.dart";
+import "../settings/scope.dart";
+import "../settings/settings.dart";
+import "../settings/spec.dart";
+
+/// A page of the app's that is not a setting — a chat's settings, the plan,
+/// the workspace, the marketplace — said as data: its title, its sections of
+/// the settings' controllers, what its bar offers and what leaving it asks.
+/// A frontend draws it the way it draws a settings page, and every change
+/// goes through the controllers, so the page's logic is here and nowhere
+/// else. Opened onto [AppPages].
+abstract class AppPage {
+  /// Which page this is among the open ones, and the prefix of every part's
+  /// id: what an intent names it by.
+  String get address;
+
+  String title(SettingReader reader);
+
+  String? subtitle(SettingReader reader) => null;
+
+  List<PageSection> sections(SettingReader reader);
+
+  /// The bar's buttons, the first the page's own (Save, Done, Install).
+  List<ActionController> toolbar(SettingReader reader) => const [];
+
+  /// What going back asks, where leaving would lose something; null goes.
+  SettingConfirm? leaving(SettingReader reader) => null;
+
+  /// The app, as the page reads it outside a pass — a load, a save — set
+  /// as the page opens.
+  late final SettingReader app;
+
+  /// Put on the stack, [app] set: where a page starts what it loads.
+  void opened() {}
+
+  /// Gone from the stack.
+  void closed() {}
+
+  /// Set by the stack while the page is open.
+  void Function()? onChanged;
+
+  /// What the page draws has changed somewhere its reader does not watch:
+  /// its own state, a load landing.
+  void changed() => onChanged?.call();
+
+  /// A part of the page under an id of its own, for a controller to be built
+  /// with. The page builds it; nothing files it in the schema.
+  SettingSpec part(
+    String id,
+    String title, {
+    UiHint hint = UiHint.row,
+    String? description,
+    SettingGlyph? glyph,
+  }) => SettingSpec(
+    id: "page:$address/$id",
+    path: (page: null, section: ""),
+    weight: 0,
+    title: title,
+    hint: hint,
+    description: description,
+    glyph: glyph,
+    build: _unfiled,
+  );
+
+  /// The settings' own [id], built at [scope] on this page under an id of
+  /// the page's: the same rules and words as on the settings page, whatever
+  /// level that spec is filed at there.
+  SettingController shared(
+    SettingReader reader,
+    SettingsScope scope,
+    String id,
+  ) {
+    final spec = reader.read(settingsSchemaProvider).settings[id]!;
+    final here = SettingSpec(
+      id: "page:$address/$id",
+      path: spec.path,
+      weight: spec.weight,
+      title: spec.title,
+      hint: spec.hint,
+      description: spec.description,
+      glyph: spec.glyph,
+      build: spec.build,
+    );
+    return spec.build(SettingContext(reader, scope, here));
+  }
+
+  /// [page] of the settings at [at], as this page's sections, each under
+  /// an id of this page's.
+  List<PageSection> settingsPage(
+    SettingReader reader,
+    SettingsPageId page,
+    ScopeAddress at,
+  ) {
+    final schema = reader.watch(settingsSchemaProvider);
+    final scopes = <ScopeAddress, SettingsScope>{};
+    return [
+      for (final (section, specs) in schema.page(page))
+        if (section.shown?.call(reader) ?? true)
+          PageSection(section.id, section.title, [
+            for (final spec in specs)
+              shared(
+                reader,
+                scopes.putIfAbsent(
+                  spec.at ?? at,
+                  () => scopeAt(reader, spec.at ?? at),
+                ),
+                spec.id,
+              ),
+          ], detail: section.describe?.call(reader) ?? section.description),
+    ];
+  }
+
+  static SettingController _unfiled(SettingContext _) =>
+      throw StateError("a page's part is built by the page");
+}
+
+/// A titled run of a page's controllers.
+class PageSection {
+  const PageSection(this.id, this.title, this.controllers, {this.detail});
+
+  final String id;
+  final String title;
+  final String? detail;
+  final List<SettingController> controllers;
+}
+
+/// The pages open, the first at the bottom: each one opened over the one
+/// before it. The core's, so where a page goes is decided once; a frontend
+/// draws the stack and says when the user leaves one.
+class AppPages extends Notifier<List<AppPage>> {
+  @override
+  List<AppPage> build() => const [];
+
+  AppPage? find(String address) =>
+      state.where((p) => p.address == address).firstOrNull;
+
+  /// Opens [page] over the others; one already open at its address comes to
+  /// the top, the pages over it closing.
+  void open(AppPage page) {
+    final at = state.indexWhere((p) => p.address == page.address);
+    if (at >= 0) {
+      state = _closeFrom(at + 1);
+      return;
+    }
+    page
+      ..onChanged = ref.notifyListeners
+      ..app = RefReader(ref);
+    state = [...state, page];
+    page.opened();
+  }
+
+  /// Closes [address] and every page over it.
+  void close(String address) {
+    final at = state.indexWhere((p) => p.address == address);
+    if (at >= 0) state = _closeFrom(at);
+  }
+
+  /// Closes [page], from inside it: Save, Done.
+  void leave(AppPage page) => close(page.address);
+
+  void closeAll() {
+    if (state.isNotEmpty) state = _closeFrom(0);
+  }
+
+  List<AppPage> _closeFrom(int at) {
+    for (final page in state.sublist(at).reversed) {
+      page
+        ..onChanged = null
+        ..closed();
+    }
+    return state.sublist(0, at);
+  }
+}
+
+final appPagesProvider = NotifierProvider<AppPages, List<AppPage>>(
+  AppPages.new,
+);

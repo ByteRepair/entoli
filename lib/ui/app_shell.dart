@@ -1,3 +1,4 @@
+import "app_pages.dart";
 import "package:flutter/material.dart";
 import "../app/chat_session.dart" show chatSessionHostProvider;
 import "chat_session_host.dart";
@@ -63,13 +64,15 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) => SettingsHandOffs(
-    child: AppMenuSync(
-      child: SidePanelFrame(
-        panel: const Sidebar(),
-        panelWidth: sidebarWidth,
-        shown: ref.watch(sidebarShownProvider),
-        onShow: () => ref.read(sidebarShownProvider.notifier).set(true),
-        child: const ChatPage(),
+    child: AppPagesFollower(
+      child: AppMenuSync(
+        child: SidePanelFrame(
+          panel: const Sidebar(),
+          panelWidth: sidebarWidth,
+          shown: ref.watch(sidebarShownProvider),
+          onShow: () => ref.read(sidebarShownProvider.notifier).set(true),
+          child: const ChatPage(),
+        ),
       ),
     ),
   );

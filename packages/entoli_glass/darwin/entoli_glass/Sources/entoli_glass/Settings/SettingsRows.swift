@@ -359,7 +359,28 @@ struct ActionRow: View {
 
   var body: some View {
     Group {
-      if row.hint == .row || row.hint == .permission {
+      if row.hint == .open {
+        // Opens another page, which Dart pushes over this one.
+        Button(action: press) {
+          HStack {
+            if let icon = row.icon {
+              Label {
+                Titled(title: row.title, detail: row.detail)
+              } icon: {
+                Image(systemName: icon.symbol)
+              }
+            } else {
+              Titled(title: row.title, detail: row.detail)
+            }
+            Spacer(minLength: 4)
+            if let label = row.label { Text(label).foregroundStyle(.secondary) }
+            Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+              .foregroundStyle(.tertiary)
+          }
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+      } else if row.hint == .row || row.hint == .permission {
         HStack {
           if row.hint == .permission, let icon = row.icon {
             Image(systemName: icon.symbol).foregroundStyle(.secondary)

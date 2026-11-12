@@ -18,7 +18,7 @@ import "../../domain/agent_browser.dart" show BrowserTab;
 import "../../providers.dart";
 import "../chat/chat_expiry.dart";
 import "../chat/chat_settings_page.dart"
-    show NewChatSettingsPage, openChatSettings;
+    show openChatSettings, openNewChatSettings;
 import "../chat/plan_page.dart" show openPlan;
 import "../chat/widgets/browser_strip.dart" show browserOf;
 import "../chat/widgets/composer_controller.dart";
@@ -634,18 +634,14 @@ final class _NewChat implements _Screen {
     final context = _shell._context();
     if (to != ChatBarDestination.settings || !context.mounted) return;
     final session = _session;
-    Navigator.of(context)
-        .push<ChatMeta>(
-          MaterialPageRoute(
-            builder: (_) => NewChatSettingsPage(
-              initial: session.meta.value,
-              project: _container.read(selectedProjectProvider).project,
-            ),
-          ),
-        )
-        .then((picked) {
-          if (picked != null && !_closed) session.meta.value = picked;
-        });
+    openNewChatSettings(
+      context,
+      initial: session.meta.value,
+      project: _container.read(selectedProjectProvider).project,
+      onSave: (meta) {
+        if (!_closed) session.meta.value = meta;
+      },
+    );
   }
 
   @override
