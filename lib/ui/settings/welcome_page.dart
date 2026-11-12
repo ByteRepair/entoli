@@ -448,7 +448,7 @@ class _IntroPage extends StatelessWidget {
   }
 }
 
-/// The models a chat can be answered by: a title-only one, which an iOS
+/// The models a chat can be answered by: a short-ask one, which an Apple
 /// device lists before anything is set up, does not open the tour's gate.
 int _agentModels(List<ModelOption>? models) => (models ?? const [])
     .where((m) => !isShortAskModel(m.providerId, m.modelId))

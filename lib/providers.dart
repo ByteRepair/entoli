@@ -12,6 +12,7 @@ import "package:uuid/uuid.dart";
 
 import "app/app_menus.dart";
 import "../core/config.dart";
+import "domain/settings/keys.dart";
 import "domain/settings/setting.dart";
 import "domain/chat_intents.dart";
 import "domain/file_tools.dart" show resolveWorkspacePath;
@@ -667,37 +668,36 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     // may only run once, since `_config` is initialised in it.
     final defaulted = loaded.copy();
     final system = ref.read(installedVoiceModelsProvider.notifier).system;
-    final picks = ref.read(voiceProvider).nativePicks;
-    if (picks != null && system.contains(picks.recognition)) {
-      defaulted.voiceRecognitionModelId ??= picks.recognition;
-    }
-    if (picks != null && system.contains(picks.speech)) {
-      defaulted.voiceSpeechModelId ??= picks.speech;
+    if (ref.read(voiceProvider).nativePicks case final picks?) {
+      if (system.contains(picks.recognition)) {
+        defaulted.voiceRecognitionModelId ??= picks.recognition;
+      }
+      if (system.contains(picks.speech)) {
+        defaulted.voiceSpeechModelId ??= picks.speech;
+      }
     }
     // Apple's model names chats and checks commands where the device has it,
     // the same fill-a-null, unsaved default as the voice engines. Only while
     // no provider is configured: once one is, every save has carried this
     // into the file, so a null after that is the user's Off.
     if (_shortAsks case final apple? when loaded.llmProviders.isEmpty) {
-      if (defaulted.titleProviderId == null) {
-        defaulted
-          ..titleProviderId = apple.providerId
-          ..titleModelId = apple.modelId;
-      }
-      if (defaulted.classifierProviderId == null) {
-        defaulted
-          ..classifierProviderId = apple.providerId
-          ..classifierModelId = apple.modelId;
+      for (final role in _shortAskRoles) {
+        if (defaulted.doc.read(role.provider) == null) {
+          _assign(defaulted, role, apple);
+        }
       }
     }
     return defaulted;
   }
 
   /// What names chats and checks commands by default on this device, where
-  /// it has a model for exactly that: Apple's.
-  ModelChoice? get _shortAsks => ref.read(appleFmProvider) == null
-      ? null
-      : (providerId: appleProviderId, modelId: appleModelId);
+  /// it has a model for exactly that.
+  ModelChoice? get _shortAsks => ref.read(appleFmProvider)?.shortAsks;
+
+  static void _assign(AppSettings s, ModelRoleKeys role, ModelChoice choice) =>
+      s.doc
+        ..set(role.provider, choice.providerId)
+        ..set(role.model, choice.modelId);
 
   /// What a new chat is answered by, or nothing at all.
   Future<void> setDefault(ModelChoice choice) => _update(
@@ -1060,13 +1060,14 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// A new provider becomes what every still-unset role resolves to — the
   /// same `_update` as the save, so it cannot land half done — until the user
   /// picks something themselves. A role the user has already picked is left
-  /// where it is, unless the provider it names is gone; importing a backup
-  /// and other bulk writes stay on [setProviders], which adopts nothing.
+  /// where it is; importing a backup and other bulk writes stay on
+  /// [setProviders], which adopts nothing.
   ///
   /// [adopt] goes further, and is what choosing a service by name means: it
-  /// answers new chats, their titles and the command classifier whatever was
-  /// picked before, each at the provider's own default for the role — the
-  /// model ids are cleared, which is how a role names that default.
+  /// answers new chats whatever was picked before, and titles and the command
+  /// classifier too where the device has no model of its own for them, each
+  /// at the provider's own default for the role — the model ids are cleared,
+  /// which is how a role names that default.
   Future<void> upsertProvider(
     LlmProviderConfig provider, {
     String? setKey,
@@ -1091,29 +1092,10 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
         provider,
       ]);
       if (isNew) {
-        // A role naming a provider since removed answers nothing, so it is
-        // as unset as a null: left there, auto mode would ask for every
-        // command however many providers were added after.
-        bool open(String? id) => id == null || !_reachable(s, id);
-        if (open(s.defaultProviderId)) {
-          s
-            ..defaultProviderId = provider.id
-            ..defaultModelId = null;
-        }
-        if (open(s.titleProviderId)) {
-          s
-            ..titleProviderId = provider.id
-            ..titleModelId = null;
-        }
-        if (open(s.memoryProviderId)) {
-          s
-            ..memoryProviderId = provider.id
-            ..memoryModelId = null;
-        }
-        if (open(s.classifierProviderId)) {
-          s
-            ..classifierProviderId = provider.id
-            ..classifierModelId = null;
+        for (final role in _adoptedRoles) {
+          if (s.doc.read(role.provider) == null) {
+            _assign(s, role, (providerId: provider.id, modelId: null));
+          }
         }
       }
       if (adopt) _answerWith(s, provider.id);
@@ -1121,10 +1103,10 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     ref.invalidate(availableModelsProvider);
   }
 
-  /// [modelId] of [providerId] answering new chats, their titles and the
-  /// command classifier, unless something already answers new chats: what a
-  /// model the user fetched rather than picked fills, so the first one is
-  /// used with nothing more asked.
+  /// [modelId] of [providerId] answering new chats, as [upsertProvider]'s
+  /// `adopt` does, unless something already answers them: what a model the
+  /// user fetched rather than picked fills, so the first one is used with
+  /// nothing more asked.
   Future<void> adoptIfUnset(String providerId, String modelId) async {
     if (state.defaultProviderId != null) return;
     await _update((s) => _answerWith(s, providerId, modelId));
@@ -1133,22 +1115,12 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// Where the device has its own model for titles and verdicts, those two
   /// stay on it: [providerId] takes new chats alone.
   void _answerWith(AppSettings s, String providerId, [String? modelId]) {
-    final short = _shortAsks ?? (providerId: providerId, modelId: modelId);
-    s
-      ..defaultProviderId = providerId
-      ..defaultModelId = modelId
-      ..titleProviderId = short.providerId
-      ..titleModelId = short.modelId
-      ..classifierProviderId = short.providerId
-      ..classifierModelId = short.modelId;
+    final choice = (providerId: providerId, modelId: modelId);
+    _assign(s, _defaultRole, choice);
+    for (final role in _shortAskRoles) {
+      _assign(s, role, _shortAsks ?? choice);
+    }
   }
-
-  /// Whether [id] is a provider a role can reach: one configured, or one the
-  /// device composes itself.
-  static bool _reachable(AppSettings s, String id) =>
-      id == localProviderId ||
-      id == appleProviderId ||
-      s.llmProviders.any((p) => p.id == id);
 
   /// The endpoints the agent can call, written as given. The model list is
   /// rebuilt from them, so it is invalidated here rather than left showing
@@ -1170,7 +1142,18 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
       await secrets.setProviderKey(provider.id, null);
       if (provider.api.isCli) await cliProgramOf(programs, provider).forget();
     }
-    await _update((s) => s.llmProviders = List.unmodifiable(providers));
+    // A role left naming a removed provider answers nothing, and would keep
+    // a provider added later from filling it: auto mode would ask for every
+    // command however many were added after.
+    final gone = {for (final p in removed) p.id};
+    await _update((s) {
+      s.llmProviders = List.unmodifiable(providers);
+      for (final role in _modelRoles) {
+        if (gone.contains(s.doc.read(role.provider))) {
+          _assign(s, role, (providerId: null, modelId: null));
+        }
+      }
+    });
     ref.invalidate(availableModelsProvider);
   }
 
@@ -1200,6 +1183,44 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     await next.save(_config);
   }
 }
+
+/// A setting that names a model: the provider it is on, and its id there.
+typedef ModelRoleKeys = ({Setting<String> provider, Setting<String> model});
+
+const ModelRoleKeys _defaultRole = (
+  provider: SettingKeys.defaultProviderId,
+  model: SettingKeys.defaultModelId,
+);
+
+/// The roles a device's own small model answers where it has one.
+const List<ModelRoleKeys> _shortAskRoles = [
+  (provider: SettingKeys.titleProviderId, model: SettingKeys.titleModelId),
+  (
+    provider: SettingKeys.classifierProviderId,
+    model: SettingKeys.classifierModelId,
+  ),
+];
+
+/// The roles a new provider fills where nothing is picked.
+const List<ModelRoleKeys> _adoptedRoles = [
+  _defaultRole,
+  ..._shortAskRoles,
+  (provider: SettingKeys.memoryProviderId, model: SettingKeys.memoryModelId),
+];
+
+/// Every setting that names a model, cleared when its provider is removed.
+const List<ModelRoleKeys> _modelRoles = [
+  ..._adoptedRoles,
+  (provider: SettingKeys.imageProviderId, model: SettingKeys.imageModelId),
+  (
+    provider: SettingKeys.voiceRecognitionProviderId,
+    model: SettingKeys.voiceRecognitionModelId,
+  ),
+  (
+    provider: SettingKeys.voiceSpeechProviderId,
+    model: SettingKeys.voiceSpeechModelId,
+  ),
+];
 
 final appSettingsProvider = NotifierProvider<AppSettingsNotifier, AppSettings>(
   AppSettingsNotifier.new,

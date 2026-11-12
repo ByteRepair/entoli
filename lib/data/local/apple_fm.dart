@@ -4,6 +4,7 @@ import "package:http/http.dart" as http;
 import "../../domain/local_model.dart";
 import "../../domain/llm_provider.dart";
 import "../../domain/model_budget.dart";
+import "../../domain/models.dart" show ModelChoice;
 import "../builtin/llm/llm_client.dart";
 import "../builtin/llm/providers/provider.dart";
 import "channel_generation.dart";
@@ -107,6 +108,10 @@ class AppleFm {
   );
 
   LlmProvider get endpoint => AppleFmProvider(provider, probe);
+
+  /// What names chats and checks commands by default on this device: this
+  /// model, at its light default.
+  ModelChoice get shortAsks => (providerId: appleProviderId, modelId: null);
 }
 
 class AppleFmProvider extends LlmProvider with KeyFree {

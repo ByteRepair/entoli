@@ -1642,15 +1642,11 @@ class BuiltinBackend implements AgentBackend {
   /// The classifier model, resolved the same way the main model is. Null when
   /// no classifier provider is named. A provider named without a model
   /// resolves to its light default.
-  _Target? _classifierTarget(
-    String? provider,
-    String? model, {
-    bool shortAsk = true,
-  }) => _resolveModel(
+  _Target? _classifierTarget(String? provider, String? model) => _resolveModel(
     model,
     provider,
     defaultOf: LlmProviderConfig.lightDefaultOf,
-    shortAsk: shortAsk,
+    shortAsk: true,
   );
 
   /// The permission classifier on the classifier model; null, and auto mode
@@ -1670,7 +1666,11 @@ class BuiltinBackend implements AgentBackend {
     String? model, {
     required GoalReviewer fallback,
   }) {
-    final target = _classifierTarget(provider, model, shortAsk: false);
+    final target = _resolveModel(
+      model,
+      provider,
+      defaultOf: LlmProviderConfig.lightDefaultOf,
+    );
     if (target == null) return fallback;
     return LlmGoalReviewer(client: target.client, model: target.modelId);
   }

@@ -29,8 +29,8 @@ void main() {
   ModelChoice? reported;
 
   // The Apple system model is listed by the device before anything is set
-  // up; only the title picker offers it.
-  test("a title-only model is offered for the title alone", () {
+  // up; only the short-ask pickers offer it.
+  test("a short-ask model is offered for short asks alone", () {
     const listed = [
       ModelOption(
         providerId: appleProviderId,
