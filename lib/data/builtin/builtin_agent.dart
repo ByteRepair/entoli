@@ -770,20 +770,23 @@ class BuiltinAgent implements Turn {
   /// end, so the stop drops the request rather than waiting for its next word.
   Stream<T> _untilStoppedStream<T>(Stream<T> source) {
     late final StreamSubscription<T> sub;
+    late final StreamSubscription<void> stop;
     late final StreamController<T> out;
+    // The source's cancel is not awaited: that would wait on the request.
+    void end() {
+      unawaited(stop.cancel());
+      unawaited(sub.cancel());
+      unawaited(out.close());
+    }
+
     out = StreamController<T>(
       onListen: () {
-        sub = source.listen(out.add, onError: out.addError, onDone: out.close);
-        unawaited(
-          _stopped.future.then((_) {
-            unawaited(sub.cancel());
-            return out.close();
-          }),
-        );
+        sub = source.listen(out.add, onError: out.addError, onDone: end);
+        stop = _stopped.future.asStream().listen((_) => end());
       },
       onPause: () => sub.pause(),
       onResume: () => sub.resume(),
-      onCancel: () => sub.cancel(),
+      onCancel: end,
     );
     return out.stream;
   }
@@ -1577,7 +1580,8 @@ class BuiltinAgent implements Turn {
           }
           gate.onRateLimited();
           yield RetryEvent(attempt: attempt, message: e.toString());
-          await gate.awaitReady();
+          await untilStopped(gate.awaitReady());
+          if (_cancelled) return;
           // The wall-clock budget governs 429s; don't burn maxAttempts on them.
           attempt++;
           continue;
@@ -1589,7 +1593,10 @@ class BuiltinAgent implements Turn {
           return;
         }
         yield RetryEvent(attempt: attempt, message: e.toString());
-        await Future<void>.delayed(options.retryBackoff * (1 << (attempt - 1)));
+        await untilStopped(
+          Future<void>.delayed(options.retryBackoff * (1 << (attempt - 1))),
+        );
+        if (_cancelled) return;
         attempt++;
       } catch (e, trace) {
         _queryError = (error: e, trace: trace);

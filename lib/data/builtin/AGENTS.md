@@ -553,9 +553,12 @@ turn to forward the killed command's result — the `!` turn's `ShellRunPart`,
 the agent's tool result — and wind down, with no timeout. A turn given up on
 after a grace kept running, and its last write to the chat's session landed
 under the next turn, which then crashed on a session shorter than the one it
-started with. So every wait in a turn answers the stop: the command is killed,
-and a model call is dropped rather than waited on, since a model thinking in
-silence sends no chunk to notice the stop on. A turn being stopped has its own
+started with. So every wait in a turn answers the stop. The stop is a signal
+the turn registers before it does anything, so the agent, the command and the
+sub-agents revived ahead of the agent all hear one sent before they existed.
+The command is killed, and a model call and a retry's wait are dropped rather
+than waited on, since a model thinking in silence sends no chunk to notice the
+stop on. A turn being stopped has its own
 `DoneEvent` swallowed, so it ends once, and aborted.
 
 **Two things outside this file ask the same question**, and both would otherwise

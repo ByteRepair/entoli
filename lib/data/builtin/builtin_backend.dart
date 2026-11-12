@@ -281,8 +281,12 @@ class BuiltinBackend implements AgentBackend {
     final project = settings.project;
     // Registered up front and removed by key in the finally: a parallel
     // round runs several turns of one chat, and a chat-keyed map would drop
-    // the earlier kill.
-    final stopKey = _running.add(chatId, () async {});
+    // the earlier kill. A signal rather than a kill, so whatever the turn
+    // starts hears a stop sent before it existed.
+    final stop = Completer<void>();
+    final stopKey = _running.add(chatId, () async {
+      if (!stop.isCompleted) stop.complete();
+    });
     try {
       // Before the model is resolved, because a `!` turn never needs one: a
       // chat with no provider configured can still run a command.
@@ -291,7 +295,7 @@ class BuiltinBackend implements AgentBackend {
           chatId,
           prompt,
           controller,
-          stopKey,
+          stop.future,
           history: history,
           participant: participant,
           project: project,
@@ -412,6 +416,8 @@ class BuiltinBackend implements AgentBackend {
         tone: settings.tone,
         citations: settings.citations,
       );
+      // Before revival, which runs sub-agents ahead of the agent's own cancel.
+      unawaited(stop.future.then((_) => runner.cancel()));
       final classifier = _resolveClassifier(
         settings.classifierProvider,
         settings.classifierModel,
@@ -679,8 +685,7 @@ class BuiltinBackend implements AgentBackend {
             controller.add(ShellOutputEvent(callId: callId, text: text)),
         onUsage: (usage) => _usage[chatId] = usage.contextTokens,
       );
-      // The real kill replaces the placeholder.
-      if (!_running.replace(stopKey, agent.cancel)) await agent.cancel();
+      unawaited(stop.future.then((_) => agent.cancel()));
 
       final mentions = mentionedAgents(said?.references ?? const []);
       final events = prompt == null
@@ -694,7 +699,6 @@ class BuiltinBackend implements AgentBackend {
       var reply = "";
       var endedDone = false;
       await for (final event in events) {
-        if (controller.isClosed) break;
         if (event is TextDelta) reply += event.text;
         if (event is DoneEvent && !event.aborted) {
           // A stopped turn ends aborted, said on the way out.
@@ -749,10 +753,10 @@ class BuiltinBackend implements AgentBackend {
     } finally {
       _clearApprovals(chatId);
       _clearQuestions(chatId);
-      if (_stopping.remove(controller) && !controller.isClosed) {
+      if (_stopping.remove(controller)) {
         controller.add(const DoneEvent(aborted: true));
       }
-      if (!controller.isClosed) await controller.close();
+      await controller.close();
       _drained.remove(controller)?.complete();
       final open = _controllers[chatId];
       if (open != null && open.remove(controller) && open.isEmpty) {
@@ -784,7 +788,7 @@ class BuiltinBackend implements AgentBackend {
     String chatId,
     Message prompt,
     StreamController<AgentEvent> controller,
-    String stopKey, {
+    Future<void> stopped, {
     required List<Message> history,
     required String participant,
     required String? project,
@@ -812,9 +816,7 @@ class BuiltinBackend implements AgentBackend {
       // respawns where the binds differ.
       readOnly: await _readOnlyFor(chatId, project),
     );
-    // Before the wait, so Stop kills the command rather than only closing the
-    // stream over it.
-    if (!_running.replace(stopKey, run.kill)) await run.kill();
+    unawaited(stopped.then((_) => run.kill()));
     controller.add(StatusEvent(runningCommand));
     _reportOutput(controller, run);
 
@@ -1159,7 +1161,6 @@ class BuiltinBackend implements AgentBackend {
     // Through the event stream like any other result, so the reply on screen
     // and the records in `conv.jsonl` both gain it without a second path.
     for (final result in results) {
-      if (controller.isClosed) break;
       controller.add(ToolResultEvent(result));
     }
     return [
@@ -1178,7 +1179,6 @@ class BuiltinBackend implements AgentBackend {
     String message, {
     StackTrace? trace,
   }) {
-    if (controller.isClosed) return;
     controller.add(ErrorEvent(message, trace: trace?.toString()));
     controller.add(const DoneEvent());
   }
@@ -1864,15 +1864,6 @@ class _RunningTurns extends ValueNotifier<Set<String>> {
     _turns[key] = stop;
     value = chats;
     return key;
-  }
-
-  /// Swaps what [key] stops, without a second publish. False where the turn
-  /// was stopped before it got here: the key is gone, and the caller stops
-  /// what it would have swapped in, since `abort` is waiting on it.
-  bool replace(String key, Future<void> Function() stop) {
-    if (!_turns.containsKey(key)) return false;
-    _turns[key] = stop;
-    return true;
   }
 
   /// The turn [key] registered finished on its own; the chat keeps any
