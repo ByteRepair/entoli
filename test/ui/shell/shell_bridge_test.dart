@@ -14,58 +14,14 @@ void main() {
     test("sends a concern once per change, over the channel", () {
       final shell = FakeNativeShell.install();
       final outbox = ShellOutbox();
-      outbox.window(
-        WindowSnapshot(covered: false, overlaid: false, sidebarShown: true),
-      );
-      outbox.window(
-        WindowSnapshot(covered: false, overlaid: false, sidebarShown: true),
-      );
+      outbox.window(WindowSnapshot(sidebarShown: true));
+      outbox.window(WindowSnapshot(sidebarShown: true));
       expect(shell.sent["window"], hasLength(1));
-      outbox.window(
-        WindowSnapshot(
-          covered: true,
-          overlaid: true,
-          sidebarShown: true,
-          dark: true,
-        ),
-      );
+      outbox.window(WindowSnapshot(sidebarShown: false, dark: true));
       expect(shell.sent["window"], hasLength(2));
-      expect(shell.lastWindow!.covered, isTrue);
+      expect(shell.lastWindow!.sidebarShown, isFalse);
       expect(shell.lastWindow!.dark, isTrue);
     });
-  });
-
-  testWidgets("a page covers the conversation, and a dialog does not", (
-    tester,
-  ) async {
-    final routes = AppRoutes();
-    final navigator = GlobalKey<NavigatorState>();
-    await tester.pumpWidget(
-      MaterialApp(
-        navigatorKey: navigator,
-        navigatorObservers: [routes],
-        home: const SizedBox(),
-      ),
-    );
-    expect(routes.covered.value, isFalse);
-
-    showDialog<void>(
-      context: navigator.currentContext!,
-      builder: (_) => const SizedBox(),
-    );
-    await tester.pumpAndSettle();
-    expect(routes.covered.value, isFalse);
-    navigator.currentState!.pop();
-    await tester.pumpAndSettle();
-
-    navigator.currentState!.push(
-      MaterialPageRoute<void>(builder: (_) => const SizedBox()),
-    );
-    await tester.pumpAndSettle();
-    expect(routes.covered.value, isTrue);
-    navigator.currentState!.pop();
-    await tester.pumpAndSettle();
-    expect(routes.covered.value, isFalse);
   });
 
   group("going back to the conversation", () {
@@ -98,7 +54,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(reached, isTrue);
       expect(routes.depth, 1);
-      expect(routes.covered.value, isFalse);
     });
 
     testWidgets("stops at a page that asks to stay", (tester) async {

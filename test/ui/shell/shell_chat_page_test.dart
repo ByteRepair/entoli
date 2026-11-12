@@ -8,7 +8,6 @@ import "package:agent_chat/ui/app_chrome.dart" show appChromeProvider;
 import "package:agent_chat/ui/shell/shell_app_chrome.dart";
 import "package:agent_chat/ui/chat/chat_chrome.dart" show chatChromeProvider;
 import "package:agent_chat/ui/shell/shell_chat_chrome.dart";
-import "package:agent_chat/ui/shell/shell_page_bar.dart" show drawShellPageBar;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/project.dart" show defaultEmptyChatQuestion;
 import "package:agent_chat/providers.dart" show appSettingsProvider;
@@ -16,9 +15,7 @@ import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/shell/shell_new_chat.dart";
 import "package:agent_chat/ui/shell/shell_answers.dart";
-import "package:agent_chat/ui/shell/shell_window.dart";
 import "package:agent_chat/app/frontend.dart";
-import "package:agent_chat/ui/widgets/page_bar.dart";
 
 import "../../harness.dart";
 import "fake_native_shell.dart";
@@ -44,7 +41,6 @@ void main() {
     tester,
     ProviderScope(
       overrides: [
-        pageBarDrawProvider.overrideWithValue(drawShellPageBar),
         chatChromeProvider.overrideWithValue(const ShellChatChrome()),
         appChromeProvider.overrideWithValue(const ShellAppChrome()),
         frontendProvider.overrideWithValue(
@@ -179,29 +175,6 @@ void main() {
     await settleShell(tester);
     expect(shell.lastTurn?.resume, isNull);
     expect(shell.lastTurn?.approvals, isEmpty);
-  });
-
-  group("the keyboard", () {
-    testWidgets("is not counted twice in the padding", (tester) async {
-      addTearDown(() => shellInsets.value = EdgeInsets.zero);
-      shellInsets.value = const EdgeInsets.only(top: 116, bottom: 384);
-      late MediaQueryData seen;
-      await tester.pumpWidget(
-        MediaQuery(
-          data: const MediaQueryData(viewInsets: EdgeInsets.only(bottom: 328)),
-          child: ShellInsets(
-            child: Builder(
-              builder: (context) {
-                seen = MediaQuery.of(context);
-                return const SizedBox();
-              },
-            ),
-          ),
-        ),
-      );
-      expect(seen.padding, const EdgeInsets.only(top: 116, bottom: 56));
-      expect(seen.viewPadding, const EdgeInsets.only(top: 116, bottom: 384));
-    });
   });
 
   group("an activity's drawer", () {

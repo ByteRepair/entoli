@@ -21,14 +21,18 @@ class FakeNativeShell implements TestNativeShell {
   }
 
   final Map<String, List<Object>> sent = {};
-  final List<ChoiceStrip> strips = [];
-  int? stripAnswer;
+
+  /// The dialogs asked, and what the next one is answered with.
+  final List<DialogRequest> dialogs = [];
+  DialogAnswer dialogAnswer = DialogAnswer();
+
+  /// What the camera reads next; null is a scan dismissed.
+  String? scanned;
 
   T? _last<T>(String concern) => sent[concern]?.last as T?;
   WindowSnapshot? get lastWindow => _last("window");
   SidebarSnapshot? get lastSidebar => _last("sidebar");
   ChatBarSnapshot? get lastChatBar => _last("chatBar");
-  TitleBarSnapshot? get lastPageBar => _last("pageBar");
   ComposerSnapshot? get lastComposer => _last("composer");
   ComposerValueSnapshot? get lastComposerValue => _last("composerValue");
   TurnSnapshot? get lastTurn => _last("turn");
@@ -71,8 +75,6 @@ class FakeNativeShell implements TestNativeShell {
   @override
   void chatBar(ChatBarSnapshot snapshot) => _add("chatBar", snapshot);
   @override
-  void pageBar(TitleBarSnapshot snapshot) => _add("pageBar", snapshot);
-  @override
   void composer(ComposerSnapshot snapshot) => _add("composer", snapshot);
   @override
   void composerValue(ComposerValueSnapshot snapshot) =>
@@ -90,8 +92,11 @@ class FakeNativeShell implements TestNativeShell {
   @override
   void composerFocus(bool focused) => _add("composerFocus", focused);
   @override
-  Future<int?> strip(ChoiceStrip request) async {
-    strips.add(request);
-    return stripAnswer;
+  Future<DialogAnswer> dialog(DialogRequest request) async {
+    dialogs.add(request);
+    return dialogAnswer;
   }
+
+  @override
+  Future<String?> scanCode() async => scanned;
 }
