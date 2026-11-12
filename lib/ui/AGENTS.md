@@ -424,12 +424,10 @@ of the window and the engine paused, so a rename, a pin or a delete made from
 the list never reached it until the user left it. A widget's own
 subscription would not do either, being paused under a page that covers the
 conversation. The open chat's surfaces — its bar, composer, turn
-surface and conversation — are published the same way, by `ShellChat` (see
-"The conversation, natively" in `lib/ui/chat/AGENTS.md`), so the Flutter view
-is out of the window while a chat is open. The new-chat screen's and voice
-mode's stay with the widget answering for them, are sent only while the
-Flutter view is in the window, and read what they send in their own build,
-since a provider watched from a builder beneath one can be missed. The running chats are a listenable, so the snapshots watch
+surface and conversation — the new-chat screen's and voice mode's are
+published the same way, by `ShellChat` (see "The conversation, natively" in
+`lib/ui/chat/AGENTS.md`), so the Flutter view is out of the window whenever
+a chat or the new-chat screen is up and nothing Flutter is over it. The running chats are a listenable, so the snapshots watch
 `busyChatIdsProvider`, its set as a value.
 
 **An intent goes to whoever is on screen**, and what is on screen is the
@@ -583,9 +581,12 @@ windows of their own, so `NSApp.appearance` on macOS and the window's
 
 ### Voice mode, and the glow
 
-`VoicePage` stays a Flutter route, so leaving it is still popping it and the
-session still lives exactly as long as the page; under the shell it draws
-nothing, and the Swift draws voice mode over the whole window from its
+Under the shell voice mode has no page: opening it goes through
+`nativeVoiceOpener`, which the bridge binds to `ShellChat`, and a
+`ShellVoiceSession` keeps the session alive while it is up, starts it, and
+sends voice mode and its turn surface from the app's state; Done, or closing
+it, is leaving, which lets the session go. The Swift draws voice mode over
+the whole window from its
 snapshots. The orb is new here: a mesh gradient of the two voices' colours
 (`Glow.swift`, macOS 15 and iOS 18; a blurred canvas of the same blobs
 before), faded to a soft disc behind the system's clear glass. It drifts

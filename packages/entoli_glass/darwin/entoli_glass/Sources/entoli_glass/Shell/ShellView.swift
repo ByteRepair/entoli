@@ -41,6 +41,13 @@ struct ShellView: View {
       ? model.showSidebar : nil
   }
 
+  /// The browser's view, closed from the sheet's own dismissal too.
+  private var browserShown: Binding<Bool> {
+    Binding(
+      get: { model.browser.present },
+      set: { if !$0 && model.browser.present { model.say.browser.close { _ in } } })
+  }
+
   /// Before the app is up — the welcome tour, first-run setup — the
   /// conversation's column alone, whatever the split view is asked.
   private var shownColumns: Binding<NavigationSplitViewVisibility> {
@@ -69,6 +76,7 @@ struct ShellView: View {
         }
       }
       .animation(.snappy(duration: 0.2), value: model.palette.open)
+      .sheet(isPresented: browserShown) { BrowserSheet(model: model) }
       // A line said in passing, over everything but voice mode.
       .overlay(alignment: .top) {
         if !model.voice.present { NoticeView(model: model) }
@@ -213,7 +221,10 @@ struct ShellView: View {
             .frame(maxWidth: .infinity)
             .transition(.opacity.combined(with: .move(edge: .bottom)))
         }
-        ComposerSlot(composer: model.composer, covered: model.window.covered)
+        // Away while the browser's view is up: what is typed there is the
+        // page's.
+        ComposerSlot(
+          composer: model.composer, covered: model.window.covered || model.browser.present)
         if conversing && !model.composer.present {
           FootBarView(foot: model.foot, say: model.say.foot)
             .frame(maxWidth: ShellView.readableWidth + 16)

@@ -30,6 +30,10 @@ import SwiftUI
   /// a newer one taking its place.
   var notice: Notice?
 
+  /// The agent's browser as the user watches it, and its latest frame.
+  var browser = BrowserViewSnapshot(present: false, title: "", open: false, hidden: false, window: false)
+  var browserFrame: BrowserFrame?
+
   /// What the user did, for Dart to run: one object per surface, each a
   /// method per intent it can send, answered by whichever widget draws that
   /// surface in Dart (`ShellAnswers`).
@@ -115,6 +119,16 @@ extension ShellModel: NativeShell {
   func palette(snapshot: PaletteSnapshot) throws { palette = snapshot }
   func foot(snapshot: ChatFootSnapshot) throws { foot = snapshot }
 
+  func browser(snapshot: BrowserViewSnapshot) throws {
+    browser = snapshot
+    if !snapshot.present { browserFrame = nil }
+  }
+
+  func browserFrame(frame: BrowserFrameSnapshot) throws {
+    guard browser.present, let decoded = BrowserFrame(frame) else { return }
+    browserFrame = decoded
+  }
+
   func notice(message: String) throws {
     let said = Notice(message: message)
     withAnimation(.snappy) { notice = said }
@@ -148,6 +162,7 @@ struct ShellIntents {
   let chatBar: ChatBarPresses
   let pageBar: TitleBarIntents
   let foot: ChatFootIntents
+  let browser: BrowserIntents
 
   init(messenger: FlutterBinaryMessenger) {
     window = WindowEvents(binaryMessenger: messenger)
@@ -160,6 +175,7 @@ struct ShellIntents {
     chatBar = ChatBarPresses(intents: ChatBarIntents(binaryMessenger: messenger))
     pageBar = TitleBarIntents(binaryMessenger: messenger, messageChannelSuffix: "pageBar")
     foot = ChatFootIntents(binaryMessenger: messenger)
+    browser = BrowserIntents(binaryMessenger: messenger)
   }
 }
 

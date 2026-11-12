@@ -32,6 +32,12 @@ class ShellOutbox {
   void palette(PaletteSnapshot snapshot) =>
       _post("palette", snapshot, _shell.palette);
   void foot(ChatFootSnapshot snapshot) => _post("foot", snapshot, _shell.foot);
+  void browser(BrowserViewSnapshot snapshot) =>
+      _post("browser", snapshot, _shell.browser);
+
+  /// A frame of the browser's page: many a second, each new.
+  void browserFrame(BrowserFrameSnapshot frame) =>
+      _watch("browserFrame", _shell.browserFrame(frame));
 
   /// The microphone's level: many times a second, nothing to compare against.
   void voiceLevel(double level) =>

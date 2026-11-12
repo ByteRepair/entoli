@@ -953,6 +953,24 @@ its menu in its own stack, and the conversation runs under the bottom edge,
 padding by what covers it less the menu's height (`ComposerView.menuLift`),
 so the menu opening does not lift the chat.
 
+**The new-chat screen is a `NewChatSession`** (`lib/app/new_chat_session.dart`)
+as an open chat is a `ChatSession`: its composer, the settings the chat it
+makes runs under, whether one is being made, and how the first message makes
+it, shared by the Flutter page and `ShellChat`, which publishes the screen,
+its bar, its composer and what stands in the composer's place while nothing
+is selected. **The browser's view is native too**: `browserOf`'s opener goes
+through `nativeBrowserOpener` under the shell, and a `BrowserWindowSession`
+sends the page's title, address and hold and its frames as they come, and
+runs what the user does in the sheet on the tab. A key arrives as the
+platform's own key code and characters and is read through Flutter's key
+tables into a `KeyDownEvent`, so `browserKeyDown` stays the one mapping to the
+page's keys. The composer steps aside while the view is up. **A running pill
+opens the native detail**: a job's or a sub-agent's `RunningThing` carries its
+activity and run (`detail`), which `ShellChat` opens in the conversation's
+sheet. **The chapter rail is native**: the chapters (`chaptersOf`, in the
+core) go with the conversation, and the Swift draws the ticks beside the
+column, the current one read off the row at the top of the view.
+
 A message's reactions open the strip master drew under the shell, `GlassChoices`
 (`Strip.swift`), now a popover from the action row's smiley.
 

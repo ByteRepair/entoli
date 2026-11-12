@@ -32,6 +32,7 @@ import "shell_new_chat.dart";
 import "shell_outbox.dart";
 import "shell_turn.dart";
 import "shell_voice.dart";
+import "shell_browser.dart";
 import "shell_window.dart" show windowSnapshotProvider;
 import "tracking_reader.dart";
 
@@ -64,6 +65,31 @@ class ShellChat implements ChatBarIntents {
   /// Voice mode, while it is up.
   ShellVoiceSession? _voice;
 
+  /// The browser's view, while it is up.
+  BrowserWindowSession? _browser;
+
+  /// Shows [tab] natively: `nativeBrowserOpener` under the shell.
+  void openBrowser(
+    BrowserTab tab, {
+    required Future<void> Function() onQuit,
+    required bool window,
+  }) {
+    _browser?.dispose();
+    _browser = BrowserWindowSession(
+      tab: tab,
+      outbox: _outbox,
+      answers: _answers,
+      onQuit: onQuit,
+      windowed: window,
+      onClose: closeBrowser,
+    );
+  }
+
+  void closeBrowser() {
+    _browser?.dispose();
+    _browser = null;
+  }
+
   /// Opens voice mode over [chatId], or over no chat yet to be made under
   /// [meta]: `nativeVoiceOpener` under the shell.
   void openVoice(String? chatId, ChatMeta? meta) {
@@ -84,6 +110,8 @@ class ShellChat implements ChatBarIntents {
 
   void _open(String? id) {
     if (_screen != null && _screen!.id == id) return;
+    // The view is of the chat's own tab.
+    closeBrowser();
     _screen?.close();
     _screen = id == null ? _NewChat(this) : _OpenChat(this, id);
   }
@@ -97,6 +125,7 @@ class ShellChat implements ChatBarIntents {
     _answers.voiceOn.removeListener(_turnPass);
     _selection.close();
     closeVoice();
+    closeBrowser();
     _screen?.close();
     _screen = null;
   }

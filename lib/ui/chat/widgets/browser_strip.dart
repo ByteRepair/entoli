@@ -28,16 +28,39 @@ import "running_pill.dart" show RunningKind, RunningThing;
   // delta, and a tab with nothing to show draws nothing below anyway.
   if (!browser.available || mirrored) return null;
   final tab = browser.tab(chatId);
-  void open(BuildContext context) => showDialog<void>(
-    context: context,
-    builder: (_) => BrowserCard(
-      tab: tab,
-      onQuit: browser.close,
-      window: !browser.inApp || !tab.trustedInput,
-    ),
-  );
+  void open(BuildContext context) {
+    final native = nativeBrowserOpener;
+    if (native != null) {
+      return native(
+        tab,
+        onQuit: browser.close,
+        window: !browser.inApp || !tab.trustedInput,
+      );
+    }
+    _openCard(context, browser, tab);
+  }
+
   return (tab: tab, open: open);
 }
+
+/// Where a frontend that shows the browser itself opens it, in place of
+/// [BrowserCard]: the native shell's, which its bridge binds.
+void Function(
+  BrowserTab tab, {
+  required Future<void> Function() onQuit,
+  required bool window,
+})?
+nativeBrowserOpener;
+
+void _openCard(BuildContext context, AgentBrowser browser, BrowserTab tab) =>
+    showDialog<void>(
+      context: context,
+      builder: (_) => BrowserCard(
+        tab: tab,
+        onQuit: browser.close,
+        window: !browser.inApp || !tab.trustedInput,
+      ),
+    );
 
 /// What the chat's browser is waiting on the user for, across the whole bar
 /// above the pills: a file to upload, a sign-in, or the agent's own words for

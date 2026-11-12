@@ -845,6 +845,52 @@ class ChatFootSnapshot {
   CredentialPrompt? credentials;
 }
 
+/// The agent's browser as the user watches it: the page, whether the tab is
+/// open, and whether the agent is held off it. Its frames go apart, many a
+/// second, as `browserFrame`.
+class BrowserViewSnapshot {
+  BrowserViewSnapshot({
+    this.present = false,
+    this.title = "",
+    this.url,
+    this.open = false,
+    this.hidden = false,
+    this.window = false,
+  });
+
+  bool present;
+  String title;
+
+  /// Null once the tab has closed.
+  String? url;
+  bool open;
+
+  /// Held off the agent, by the user or at its asking.
+  bool hidden;
+
+  /// The page can be opened in a window of the browser's own: a user's
+  /// clicks there are a person's, where the view's are a script's.
+  bool window;
+}
+
+/// One frame of the page, in CSS pixels.
+class BrowserFrameSnapshot {
+  BrowserFrameSnapshot({
+    required this.jpeg,
+    required this.width,
+    required this.height,
+  });
+
+  Uint8List jpeg;
+  double width;
+  double height;
+}
+
+enum BrowserPointerAction { move, down, up, wheel }
+
+/// What the view's edit menu does to the page, against the user's clipboard.
+enum BrowserEdit { cut, copy, paste, selectAll }
+
 @HostApi(dartHostTestHandler: "TestNativeShell")
 abstract class NativeShell {
   /// Which frontend draws in the window: this one's chrome, or the Flutter
@@ -867,6 +913,9 @@ abstract class NativeShell {
   /// A line said to the user in passing, where Flutter would show a snack
   /// bar: a failure caught, a thing copied.
   void notice(String message);
+
+  void browser(BrowserViewSnapshot snapshot);
+  void browserFrame(BrowserFrameSnapshot frame);
 
   /// The microphone's level, from 0 to 1: many times a second, with nothing
   /// to compare against.
@@ -1028,6 +1077,39 @@ abstract class ChatFootIntents {
   /// What was typed, field by field, typed into the page by the app.
   void submitCredentials(List<String> values);
   void declineCredentials();
+}
+
+/// What the user did in the browser's view. A key is the platform's own —
+/// its key code and characters — which the app reads as it reads a Flutter
+/// key, so there is one mapping to the page's keys.
+@FlutterApi()
+abstract class BrowserIntents {
+  void close();
+  void back();
+  void forward();
+  void reload();
+  void window();
+  void hide();
+  void unhide();
+  void quit();
+
+  /// At a point of the page in CSS pixels; [button] `left`, `middle`,
+  /// `right` or `none`, [buttons] the held ones (1 left, 2 right, 4 middle),
+  /// [modifiers] the held keys (1 Alt, 2 Ctrl, 4 Meta, 8 Shift).
+  void pointer(
+    BrowserPointerAction action,
+    double x,
+    double y,
+    String button,
+    int buttons,
+    int clickCount,
+    double deltaX,
+    double deltaY,
+    int modifiers,
+  );
+
+  void key(bool down, int keyCode, String? characters, int modifiers);
+  void edit(BrowserEdit action);
 }
 
 @FlutterApi()
