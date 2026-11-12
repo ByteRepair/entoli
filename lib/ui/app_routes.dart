@@ -17,11 +17,16 @@ class AppRoutes extends NavigatorObserver {
   /// nothing: it draws over the page under it.
   final ValueNotifier<bool> covered = ValueNotifier(false);
 
+  /// Anything over the conversation, a dialog or a sheet included: what the
+  /// native shell needs the Flutter view on screen for.
+  final ValueNotifier<bool> overlaid = ValueNotifier(false);
+
   /// Told of every change to [depth].
   final ValueNotifier<int> _depth = ValueNotifier(0);
 
   void _changed() {
     covered.value = _stack.skip(1).any((route) => route is PageRoute);
+    overlaid.value = _stack.length > 1;
     _depth.value = _stack.length;
   }
 

@@ -146,7 +146,7 @@ struct ShellIntents {
 }
 
 extension WindowSnapshot {
-  static let initial = WindowSnapshot(covered: false, sidebarShown: true)
+  static let initial = WindowSnapshot(covered: false, overlaid: false, sidebarShown: true)
 
   var colorScheme: ColorScheme? { dark.map { $0 ? .dark : .light } }
 }

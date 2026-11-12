@@ -56,7 +56,7 @@ void main() {
           data: MediaQuery.of(
             context,
           ).copyWith(padding: EdgeInsets.only(bottom: composer)),
-          child: const ChatPage(),
+          child: const ShellChatHost(child: ChatPage()),
         ),
       ),
     ),
@@ -152,7 +152,7 @@ void main() {
       "list, its title in the toolbar", (tester) async {
     await openChat(tester);
     await pump(tester);
-    await settleIo(tester);
+    await settleShell(tester);
     expect(shell.lastChatBar?.title, "old chat");
     expect(find.byType(SuperListView), findsNothing);
     expect(transcript.conversations.last.order, [
@@ -165,14 +165,14 @@ void main() {
   ) async {
     await openChat(tester, finished: false);
     await pump(tester);
-    await settleIo(tester);
+    await settleShell(tester);
     expect(shell.lastTurn?.resume?.startedAt, isPositive);
   });
 
   testWidgets("a finished chat sends an empty turn surface", (tester) async {
     await openChat(tester);
     await pump(tester);
-    await settleIo(tester);
+    await settleShell(tester);
     expect(shell.lastTurn?.resume, isNull);
     expect(shell.lastTurn?.approvals, isEmpty);
   });
@@ -251,7 +251,7 @@ void main() {
     ) async {
       await openRuns(tester, ["ls"]);
       await pump(tester);
-      await settleIo(tester);
+      await settleShell(tester);
       final node =
           transcript.rows["message:m1"]!.message!.blocks.first.nodes.single;
       expect(node.text, "Used tool: bash");

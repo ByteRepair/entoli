@@ -19,12 +19,21 @@ class _Covered extends Notifier<bool> with ListenableValue<bool> {
 
 final _coveredProvider = NotifierProvider<_Covered, bool>(_Covered.new);
 
+/// Whether any route is over the conversation, a dialog included.
+class _Overlaid extends Notifier<bool> with ListenableValue<bool> {
+  @override
+  bool build() => bridge(ref.watch(appRoutesProvider).overlaid);
+}
+
+final _overlaidProvider = NotifierProvider<_Overlaid, bool>(_Overlaid.new);
+
 /// The window as the shell draws it: whether a page covers the chat, whether
 /// the sidebar is shown, and the appearance the user picked.
 final windowSnapshotProvider = Provider<WindowSnapshot>((ref) {
   final theme = ref.watch(appSettingsProvider.select((s) => s.appTheme));
   return WindowSnapshot(
     covered: ref.watch(_coveredProvider),
+    overlaid: ref.watch(_overlaidProvider),
     sidebarShown: ref.watch(sidebarShownProvider),
     dark: theme == AppTheme.system ? null : theme == AppTheme.dark,
   );

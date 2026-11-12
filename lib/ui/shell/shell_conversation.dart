@@ -10,7 +10,7 @@ import "../../app/bot_avatar/stage.dart" show botStageProvider;
 import "../../app/chat_controller.dart" show TurnDriver;
 import "../../domain/bot_avatar/pose.dart" show BotMood;
 import "../../app/read_aloud.dart";
-import "../../app/settings/spec.dart" show WidgetReader;
+import "../../app/settings/spec.dart" show SettingReader;
 import "../../app/transcript/activity.dart";
 import "../../app/transcript/code.dart";
 import "../../app/transcript/formula.dart";
@@ -28,47 +28,32 @@ import "../../domain/prompt_library.dart" show nameOf;
 import "../../providers.dart";
 import "../chat/activity/hand_off.dart";
 import "../chat/plan_page.dart" as plan_page;
-import "../voice/read_aloud.dart" show readAloud;
 import "faces.dart";
-import "shell_answers.dart";
 import "transcript_encoder.dart";
 
-/// The conversation drawn by the native shell: the core's [Transcript],
-/// sent row by row over `pigeons/transcript.dart`, a row only when it
-/// changed. It draws nothing itself — the list is the Swift's — and answers
-/// what the client says the user did: a node opened, a message's action, a
-/// link. A detail opened from it is the client's page, sent while it is up.
-class ShellConversation extends ConsumerStatefulWidget {
-  const ShellConversation({
-    super.key,
-    required this.chatId,
-    required this.transcript,
-    required this.view,
-    required this.source,
+/// The conversation drawn by the native shell, apart from any widget: the
+/// core's [Transcript], sent row by row over `pigeons/transcript.dart`, a row
+/// only when it changed, and what the client says the user did — a node
+/// opened, a message's action, a link — run here. A detail opened from it is
+/// the client's page, sent while it is up. The open chat's publisher
+/// (`ShellChat`) holds one and calls [publish] whenever what it read changed.
+class ConversationSurface implements wire.TranscriptIntents {
+  ConversationSurface({
+    required this.context,
     required this.onReply,
-    this.driver,
+    required this.republish,
   });
 
-  final String chatId;
-  final Transcript transcript;
-  final ChatViewState view;
-  final ProviderListenable<ChatViewState> source;
+  /// Where a page it opens is pushed.
+  final BuildContext Function() context;
 
   /// Quotes a selected passage into the composer.
   final ValueChanged<Quote> onReply;
 
-  /// What the message rows act through; null for a mirror this device does
-  /// not hold.
-  final TurnDriver? driver;
+  /// Asks for [publish] again: a formula or a face landed, a detail opened.
+  final void Function() republish;
 
-  @override
-  ConsumerState<ShellConversation> createState() => _ShellConversationState();
-}
-
-class _ShellConversationState extends ConsumerState<ShellConversation>
-    implements wire.TranscriptIntents {
   final _client = wire.NativeTranscript();
-  late final ShellAnswers _answers = ref.read(shellAnswersProvider);
 
   /// The rows as last sent, by key, and which chat they were for.
   final _sent = <String, wire.RowSnapshot>{};
@@ -78,8 +63,10 @@ class _ShellConversationState extends ConsumerState<ShellConversation>
   /// Each message's actions as last laid out, by row key.
   final _actions = <String, MessageActions>{};
 
-  late TranscriptEncoder _encoder;
+  TranscriptEncoder? _encoder;
   FormulaSheet? _formulas;
+  SettingReader? _reader;
+  String? _chatId;
 
   /// The detail open, if any, and the node it is of.
   EncodedNode? _open;
@@ -87,66 +74,62 @@ class _ShellConversationState extends ConsumerState<ShellConversation>
   /// Faces by author, drawn once each.
   final _faces = <String, Uint8List?>{};
 
-  @override
-  void initState() {
-    super.initState();
-    _answers.transcript.take(this);
+  /// Takes the conversation off the client.
+  void clear() {
+    _sent.clear();
+    _sentFor = null;
+    _sentDetail = null;
+    _open = null;
+    _send(() => _client.conversation(wire.ConversationSnapshot()));
+    _send(() => _client.detail(wire.DetailSnapshot()));
   }
 
-  @override
-  void dispose() {
-    if (_answers.transcript.release(this)) {
-      _send(() => _client.conversation(wire.ConversationSnapshot()));
-      _send(() => _client.detail(wire.DetailSnapshot()));
-    }
-    super.dispose();
-  }
-
-  void _republish() {
-    if (mounted) setState(() {});
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    _answers.transcript.take(this);
-    final theme = Theme.of(context);
-    final ink = theme.colorScheme.onSurface.toARGB32();
+  /// Sends [transcript] of [chatId] as [view] has it, what it reads watched
+  /// through [reader]: the rows that changed, the formulas typeset since, and
+  /// the open detail. [ink] is the text's colour, which a formula is drawn
+  /// in; [outline] is a face's.
+  void publish(
+    SettingReader reader, {
+    required String chatId,
+    required Transcript transcript,
+    required ChatViewState view,
+    required ProviderListenable<ChatViewState> source,
+    required TurnDriver? driver,
+    required int ink,
+    required Color outline,
+  }) {
+    _reader = reader;
+    _chatId = chatId;
     if (_formulas?.argb != ink) {
       // Another ink is another picture of every formula.
       _formulas = FormulaSheet(
-        ref.read(formulaRendererProvider),
+        reader.read(formulaRendererProvider),
         argb: ink,
-        onReady: _republish,
+        onReady: republish,
       );
       _sent.clear();
     }
-    final reader = WidgetReader(ref);
-    final project = widget.view.chat?.state.project;
-    _encoder = TranscriptEncoder(
+    final project = view.chat?.state.project;
+    final encoder = _encoder = TranscriptEncoder(
       reader: reader,
-      catalog: ref.watch(activityCatalogProvider),
+      catalog: reader.watch(activityCatalogProvider),
       formulas: _formulas!,
-      highlighter: ref.watch(codeHighlighterProvider),
-      resources: ref
+      highlighter: reader.watch(codeHighlighterProvider),
+      resources: reader
           .watch(appConfigProvider)
-          .resourcesDir(widget.chatId, project: project),
+          .resourcesDir(chatId, project: project),
     );
-    final speechReady = ref.watch(speechReadyProvider);
-    final reading = ref.watch(readAloudProvider);
+    final speechReady = reader.watch(speechReadyProvider);
+    final reading = reader.watch(readAloudProvider);
     _actions.clear();
 
     wire.MessageSnapshot message(MessageRow row) {
       final id = row.message.id;
-      final view = widget.view;
-      final actions = MessageActions.of(row, view, widget.driver);
+      final actions = MessageActions.of(row, view, driver);
       _actions[row.key] = actions;
-      return _encoder.message(
+      return encoder.message(
         row.key,
-        MessageLayout(
-          row.message,
-          chatId: widget.chatId,
-          catalog: _encoder.catalog,
-        ),
+        MessageLayout(row.message, chatId: chatId, catalog: encoder.catalog),
         MessageMoment(
           waiting: view.isRunning && row.last,
           status: view.status,
@@ -160,9 +143,10 @@ class _ShellConversationState extends ConsumerState<ShellConversation>
           speaking: reading == id,
         ),
         reactions: row.reactions,
-        source: widget.source.select((v) => liveMessageOf(v, id)),
-        face: _photoOf(row.message, project),
+        source: source.select((v) => liveMessageOf(v, id)),
+        face: _photoOf(reader, row.message, project, outline),
         bot: _botOf(
+          reader,
           row.message,
           project,
           thinking: view.isRunning && row.last,
@@ -171,14 +155,15 @@ class _ShellConversationState extends ConsumerState<ShellConversation>
       );
     }
 
-    if (_sentFor != widget.chatId) {
+    if (_sentFor != chatId) {
       _sent.clear();
-      _sentFor = widget.chatId;
+      _sentFor = chatId;
+      _open = null;
     }
     final order = <String>[];
     final changed = <wire.RowSnapshot>[];
-    for (final row in widget.transcript.rows) {
-      final snapshot = _encoder.row(row, message: message);
+    for (final row in transcript.rows) {
+      final snapshot = encoder.row(row, message: message);
       order.add(row.key);
       if (_sent[row.key] != snapshot) {
         _sent[row.key] = snapshot;
@@ -191,10 +176,10 @@ class _ShellConversationState extends ConsumerState<ShellConversation>
     _send(
       () => _client.conversation(
         wire.ConversationSnapshot(
-          chatId: widget.chatId,
+          chatId: chatId,
           order: order,
           changed: changed,
-          running: widget.view.isRunning,
+          running: view.isRunning,
           reactions: [
             for (final r in Reaction.values)
               wire.ReactionChoice(emoji: r.emoji, name: r.name),
@@ -202,23 +187,22 @@ class _ShellConversationState extends ConsumerState<ShellConversation>
         ),
       ),
     );
-    _publishDetail(reader);
-    return const SizedBox.expand();
+    _publishDetail(reader, encoder);
   }
 
-  void _publishDetail(WidgetReader reader) {
+  void _publishDetail(SettingReader reader, TranscriptEncoder encoder) {
     final open = _open;
     final detail = open?.node.detail(reader, source: open.source);
     final snapshot = detail == null
         ? wire.DetailSnapshot()
-        : _encoder.detail(
+        : encoder.detail(
             detail,
-            nested: (nested) => _encoder.message(
+            nested: (nested) => encoder.message(
               "detail",
               MessageLayout(
                 nested.message,
                 chatId: nested.chatId,
-                catalog: _encoder.catalog,
+                catalog: encoder.catalog,
               ),
               MessageMoment(waiting: nested.running),
               actions: wire.ActionsSnapshot(copy: nested.message.hasText),
@@ -250,10 +234,14 @@ class _ShellConversationState extends ConsumerState<ShellConversation>
     speaking: speaking,
   );
 
-  AgentFace? _faceOf(Message message, String? project) {
+  static AgentFace? _faceOf(
+    SettingReader reader,
+    Message message,
+    String? project,
+  ) {
     final member = nameOf(message.author);
     if (member == null) return null;
-    return ref
+    return reader
         .watch(agentPictureProvider((project: project, name: member)))
         .value;
   }
@@ -262,14 +250,15 @@ class _ShellConversationState extends ConsumerState<ShellConversation>
   /// asking the core for each frame, as the settings' faces are drawn. It
   /// thinks while the reply is being written and idles once it is done.
   ({String key, int colour, int mood, bool live})? _botOf(
+    SettingReader reader,
     Message message,
     String? project, {
     required bool thinking,
     required bool live,
   }) {
-    if (_faceOf(message, project) case AgentBot(:final spec)) {
+    if (_faceOf(reader, message, project) case AgentBot(:final spec)) {
       return (
-        key: ref.read(botStageProvider).keyOf(spec.definition),
+        key: reader.read(botStageProvider).keyOf(spec.definition),
         colour: spec.colour,
         mood: (thinking ? BotMood.thinking : BotMood.idle).index,
         live: live,
@@ -280,57 +269,67 @@ class _ShellConversationState extends ConsumerState<ShellConversation>
 
   /// The author's photo as a picture, where the message names a member who
   /// has one.
-  Uint8List? _photoOf(Message message, String? project) {
-    final face = _faceOf(message, project);
+  Uint8List? _photoOf(
+    SettingReader reader,
+    Message message,
+    String? project,
+    Color outline,
+  ) {
+    final face = _faceOf(reader, message, project);
     if (face is! AgentPhoto) return null;
     final key = "${project ?? ""}/${message.author}/${identityHashCode(face)}";
     if (_faces.containsKey(key)) return _faces[key];
     _faces[key] = null;
-    unawaited(_draw(key, face));
+    unawaited(_draw(key, face, outline));
     return null;
   }
 
-  Future<void> _draw(String key, AgentFace face) async {
+  Future<void> _draw(String key, AgentFace face, Color outline) async {
     final png = await agentFacePng(
       face,
       size: 28,
       pixelRatio: 3,
-      outline: Theme.of(context).colorScheme.outlineVariant,
+      outline: outline,
     );
     _faces[key] = png;
-    _republish();
+    republish();
   }
 
   static void _send(Future<void> Function() sending) => sending().catchError(
     (Object e) => logFailure("shell", "transcript snapshot", e),
   );
 
-  ContextHandOff get _handOff => ContextHandOff(context);
+  ContextHandOff get _handOff => ContextHandOff(context());
 
   @override
   Future<void> open(String node) async {
-    final found = _encoder.nodes[node];
-    if (found == null || !mounted) return;
+    final found = _encoder?.nodes[node];
+    final at = context();
+    if (found == null || !at.mounted) return;
     switch (found.node) {
       case OutputNode(:final open):
         await open(_handOff);
       case PlanNode(:final run):
-        plan_page.openPlan(context, run.chatId);
+        plan_page.openPlan(at, run.chatId);
       case _:
-        setState(() => _open = found);
+        _open = found;
+        republish();
     }
   }
 
   @override
   Future<void> closeDetail() async {
-    if (_open != null) setState(() => _open = null);
+    if (_open == null) return;
+    _open = null;
+    republish();
   }
 
   @override
   Future<void> detailAction(int index) async {
     final open = _open;
-    if (open == null) return;
-    final detail = open.node.detail(WidgetReader(ref), source: open.source);
+    final reader = _reader;
+    if (open == null || reader == null) return;
+    final detail = open.node.detail(reader, source: open.source);
     final run = detail?.actions.elementAtOrNull(index)?.run;
     if (run != null) await run(_handOff);
   }
@@ -362,8 +361,14 @@ class _ShellConversationState extends ConsumerState<ShellConversation>
       case wire.MessageAction.regenerate:
         await _handOff.attempt(actions.regenerate);
       case wire.MessageAction.speak:
-        if (mounted) {
-          await readAloud(context, ref, actions.message.id, markdown);
+        final failed = await _reader
+            ?.read(readAloudProvider.notifier)
+            .toggle(actions.message.id, markdown);
+        final at = context();
+        if (failed != null && at.mounted) {
+          ScaffoldMessenger.maybeOf(
+            at,
+          )?.showSnackBar(SnackBar(content: Text(failed)));
         }
     }
   }
@@ -386,7 +391,9 @@ class _ShellConversationState extends ConsumerState<ShellConversation>
 
   @override
   Future<void> openPlan() async {
-    if (mounted) plan_page.openPlan(context, widget.chatId);
+    final at = context();
+    final chatId = _chatId;
+    if (at.mounted && chatId != null) plan_page.openPlan(at, chatId);
   }
 
   /// A reply's quote carries its author's handle, so the answer is
@@ -395,12 +402,14 @@ class _ShellConversationState extends ConsumerState<ShellConversation>
   Future<void> reply(String row, String text) async {
     final message = _actions[row]?.message;
     if (message == null || text.trim().isEmpty) return;
-    widget.onReply(Quote(text, handle: message.author));
+    onReply(Quote(text, handle: message.author));
   }
 
   @override
   Future<void> openFile(String row, int block, int file) async {
-    final blocks = _encoder.blocks[row];
+    final encoder = _encoder;
+    if (encoder == null) return;
+    final blocks = encoder.blocks[row];
     final at = blocks?.elementAtOrNull(block);
     final files = switch (at) {
       BubbleBlock(:final files) => files,
@@ -410,7 +419,7 @@ class _ShellConversationState extends ConsumerState<ShellConversation>
     };
     final part = files.elementAtOrNull(file);
     if (part == null) return;
-    final path = _encoder.fileSnapshot(part).path;
+    final path = encoder.fileSnapshot(part).path;
     if (path != null) await _handOff.openFile(path);
   }
 }

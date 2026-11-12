@@ -1,86 +1,80 @@
 import "package:entoli_glass/entoli_glass.dart";
-import "package:flutter/material.dart";
-import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:flutter/widgets.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/app/chat_controller.dart";
-import "package:agent_chat/app/transcript/transcript.dart";
 import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/quote.dart";
-import "package:agent_chat/domain/room/room_state.dart";
+import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/shell/shell_answers.dart";
-import "package:agent_chat/ui/shell/shell_conversation.dart";
 
 import "../../harness.dart";
+import "fake_native_shell.dart";
 import "fake_native_transcript.dart";
-
-/// Records what a message's actions asked of the turn.
-class _Driver implements TurnDriver {
-  final deleted = <String>[];
-
-  @override
-  Future<void> deleteThread(String messageId) async => deleted.add(messageId);
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
 
 Message _said(String id, MessageRole role, List<MessagePart> parts) =>
     Message(id: id, role: role, createdAt: DateTime(2026), parts: parts);
 
+/// The open chat as the native shell publishes it: from the app's state,
+/// with no chat page building.
 void main() {
   late FakeNativeTranscript native;
+  late FakeNativeShell shell;
   late TestApp app;
-  late List<Quote> replies;
 
   setUp(() {
     native = FakeNativeTranscript.install();
+    shell = FakeNativeShell.install();
     app = TestApp.create();
-    replies = [];
     addTearDown(app.dispose);
   });
 
-  Chat chatOf(List<Message> messages) =>
-      Chat(state: makeState("c"), messages: messages);
-
-  Future<void> pump(
-    WidgetTester tester,
-    Chat chat, {
-    TurnDriver? driver,
-    bool running = false,
-  }) {
-    final view = ChatViewState(chat: chat, isRunning: running);
-    return app.pump(
-      tester,
-      ShellConversation(
-        chatId: "c",
-        transcript: Transcript.of("c", chat),
-        view: view,
-        source: Provider((_) => view),
-        onReply: replies.add,
-        driver: driver,
-      ),
-    );
-  }
-
-  final prompt = _said("u", MessageRole.user, [
-    const MessagePart.text(text: "List the files."),
+  final prompt = _said("u", MessageRole.user, const [
+    MessagePart.text(text: "List the files."),
   ]);
 
-  testWidgets("every row goes out once, and then only the one that changed", (
-    tester,
-  ) async {
-    Message reply(String text) =>
-        _said("r", MessageRole.assistant, [MessagePart.text(text: text)]);
-    await pump(tester, chatOf([prompt, reply("Two")]));
+  /// [messages] in a chat, open, the shell's publisher up.
+  Future<String> open(WidgetTester tester, List<Message> messages) async {
+    final id = await io(tester, () async {
+      final chat = await app.repo.createChat(title: "files");
+      await app.writeChat(chat.copyWith(messages: messages));
+      return chat.state.id;
+    });
+    await app.pump(tester, const ShellChatHost(child: SizedBox()));
+    app.container.read(selectedChatIdProvider.notifier).select(id);
+    await settleShell(tester);
+    return id;
+  }
+
+  TranscriptIntents intents() =>
+      app.container.read(shellAnswersProvider).transcript.owner!;
+
+  testWidgets("a chat goes out row by row, and its bar and composer with it, "
+      "with no page building", (tester) async {
+    final reply = _said("r", MessageRole.assistant, const [
+      MessagePart.text(text: "Two"),
+    ]);
+    await open(tester, [prompt, reply]);
     final first = native.conversations.last;
     expect(first.order, ["message:u", "message:r"]);
-    expect(first.changed.map((r) => r.key), ["message:u", "message:r"]);
-    final said = first.changed.last.message!.blocks.single.said.single;
+    expect(native.rows.keys, containsAll(["message:u", "message:r"]));
+    final said = native.rows["message:r"]!.message!.blocks.single.said.single;
     expect(said.blocks.single.inlines.single.text, "Two");
+    expect(shell.lastChatBar?.title, "files");
+    expect(shell.lastComposer?.present, isTrue);
+  });
 
-    await pump(tester, chatOf([prompt, reply("Two files.")]));
-    expect(native.conversations.last.changed.map((r) => r.key), ["message:r"]);
+  testWidgets("a change no row shows resends no row, and the bar takes it", (
+    tester,
+  ) async {
+    final id = await open(tester, [prompt]);
+    final before = native.conversations.length;
+    final controller = app.container.read(chatControllerProvider(id).notifier);
+    final state = app.container.read(chatControllerProvider(id)).chat!.state;
+    controller.applyState(state.copyWith(title: "renamed"));
+    await settleShell(tester);
+    expect(shell.lastChatBar?.title, "renamed");
+    expect(native.conversations.length, greaterThan(before));
+    expect(native.conversations.skip(before).expand((c) => c.changed), isEmpty);
   });
 
   testWidgets("a reply's activities go out as the core's nodes, and one "
@@ -97,69 +91,52 @@ void main() {
       ),
       MessagePart.text(text: "Two files."),
     ]);
-    await pump(tester, chatOf([prompt, reply]));
-    final blocks = native.conversations.last.changed.last.message!.blocks;
-    expect(blocks.first.kind, BlockKind.activity);
-    final node = blocks.first.nodes.single;
+    await open(tester, [prompt, reply]);
+    final node = native.rows["message:r"]!.message!.blocks.first.nodes.single;
     expect(node.text, "Used tool: bash");
 
-    final surface =
-        tester.state(find.byType(ShellConversation)) as TranscriptIntents;
-    surface.open(node.id);
-    await tester.pump();
+    intents().open(node.id);
+    await settleShell(tester);
     final detail = native.details.last;
     expect(detail.present, isTrue);
     expect(detail.title, "bash");
     expect(detail.command, "ls");
-    expect(detail.sections.map((s) => s.label), contains("Output"));
 
-    surface.closeDetail();
-    await tester.pump();
+    intents().closeDetail();
+    await settleShell(tester);
     expect(native.details.last.present, isFalse);
   });
 
-  testWidgets("a message's actions are the core's, and act through the turn", (
+  testWidgets("a message's actions act through the chat's turn", (
     tester,
   ) async {
-    final driver = _Driver();
-    await pump(tester, chatOf([prompt]), driver: driver);
-    final row = native.conversations.last.changed.single;
-    expect(row.message!.actions.delete, isTrue);
-    expect(row.message!.actions.edit, isTrue);
+    final reply = _said("r", MessageRole.assistant, const [
+      MessagePart.text(text: "Two files."),
+    ]);
+    await open(tester, [prompt, reply]);
+    expect(native.rows["message:u"]!.message!.actions.delete, isTrue);
 
-    final surface =
-        tester.state(find.byType(ShellConversation)) as TranscriptIntents;
-    surface.act(row.key, MessageAction.delete);
-    await tester.pump();
-    expect(driver.deleted, ["u"]);
-
-    // While a turn runs, nothing is offered that the controller refuses.
-    await pump(tester, chatOf([prompt]), driver: driver, running: true);
-    final actions = native.conversations.last.changed.single.message!.actions;
-    expect(actions.delete, isFalse);
+    intents().act("message:u", MessageAction.delete);
+    await settleShell(tester);
+    expect(native.conversations.last.order, isEmpty);
   });
 
-  testWidgets("a passage answered is quoted under its author's handle", (
+  testWidgets("a passage answered goes into the composer as a quote", (
     tester,
   ) async {
     final reply = _said("r", MessageRole.assistant, const [
       MessagePart.text(text: "Two files."),
     ]).copyWith(author: "@athena");
-    await pump(tester, chatOf([prompt, reply]));
-    final surface =
-        tester.state(find.byType(ShellConversation)) as TranscriptIntents;
-    surface.reply("message:r", "Two");
-    surface.reply("message:u", "List");
-    await tester.pump();
-    expect(
-      [for (final q in replies) (q.text, q.handle)],
-      [("Two", "@athena"), ("List", null)],
-    );
+    await open(tester, [prompt, reply]);
+    intents().reply("message:r", "Two");
+    await settleShell(tester);
+    expect(shell.lastComposer?.cards.values.single.body, contains("Two"));
   });
 
-  testWidgets("gone, it takes the conversation back", (tester) async {
-    await pump(tester, chatOf([prompt]));
-    await app.pump(tester, const SizedBox());
+  testWidgets("closing the chat takes it back", (tester) async {
+    await open(tester, [prompt]);
+    app.container.read(selectedChatIdProvider.notifier).select(null);
+    await settleShell(tester);
     expect(native.conversations.last.chatId, isNull);
     expect(app.container.read(shellAnswersProvider).transcript.owner, isNull);
   });

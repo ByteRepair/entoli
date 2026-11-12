@@ -2,8 +2,8 @@ import "../../../app/running.dart";
 
 export "../../../app/running.dart";
 import "package:flutter/material.dart";
-import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../../app/settings/spec.dart" show SettingReader;
 import "../../../domain/room/room_state.dart" show ChatViewState;
 import "../../fonts.dart";
 
@@ -108,7 +108,7 @@ class RunningThing {
 /// they are.
 typedef RunningSource =
     List<RunningThing> Function(
-      WidgetRef ref,
+      SettingReader ref,
       ChatViewState view,
       String chatId,
     );

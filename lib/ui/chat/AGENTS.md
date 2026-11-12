@@ -924,14 +924,22 @@ text and HTML through the rich clipboard, as Flutter's button does; a link
 goes to the link opener. The detail is a native sheet. An empty chat is sent
 too, and the client says it has no messages.
 
-**The Flutter view stays in the window but is not shown** behind the native
-conversation: opacity nought and no touches, shown only while a Flutter page
-is pushed over the chat or before the app is set up. It cannot leave the
-window, because out of it the engine pauses, and the chat page — which owns
-the chat's controllers and sends this conversation, the composer, the turn
-surface and the chat bar from its build — would send nothing. What Flutter
-still draws on the chat page under the shell — the browser's prompts, a
-setup or offline bar, a mirror's strip — is not seen there now.
+**The open chat is published from the app's state, not a build**
+(`ShellChat`, held by `ShellBridge`): its conversation, bar, turn surface and
+composer, each a pass over a `TrackingReader` — a widget's `ref.watch` with
+no widget, re-running that pass when anything it read changes — so they go
+out with no frame. That is what lets the Flutter view leave the window while
+the conversation is native: it is in it only for a Flutter page or dialog
+over the chat (`WindowSnapshot.overlaid`), the new-chat screen and voice mode,
+whose surfaces are still widgets, and the app before it is set up. The chat's
+composer and how it sends are its `ChatSession` (`lib/app/chat_session.dart`),
+one per chat and shared by both frontends' chat pages; the surfaces' logic is
+plain classes — `ConversationSurface`, `TurnRunner`, `ComposerSurface` — that
+`ShellChat` and the remaining widgets both hold. Under the shell the chat page
+draws nothing for an open chat (`ChatChrome.drawsOpenChat`), and a temporary
+chat's expiry is asked by `ShellChat` (`checkChatExpiry`). What Flutter drew
+on the chat page under the shell — the browser's prompts, a setup or offline
+bar, a mirror's strip — is not on screen there now.
 
 A message's reactions open the strip master drew under the shell, `GlassChoices`
 (`Strip.swift`), now a popover from the action row's smiley.

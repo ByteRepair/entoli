@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../domain/room/room_state.dart" show ChatViewState;
 import "../../../app/mirror_controller.dart" show chatViewProvider;
+import "../../../app/settings/spec.dart" show SettingReader, WidgetReader;
 import "../../../app/transcript/activities/command.dart" show JobActivity;
 import "../../../app/transcript/activities/task.dart" show SubAgentActivity;
 import "../../../app/transcript/activity.dart" show Run, liveMessageOf;
@@ -23,7 +24,7 @@ const runningSources = <RunningSource>[
 
 /// The background jobs running, a pill each, opening the job's detail.
 List<RunningThing> jobsRunning(
-  WidgetRef ref,
+  SettingReader ref,
   ChatViewState view,
   String chatId,
 ) => [
@@ -46,7 +47,7 @@ List<RunningThing> jobsRunning(
 /// The sub-agents still running, a pill each, opening the detail its label
 /// in the reply opens and following the turn the same way.
 List<RunningThing> subAgentsRunning(
-  WidgetRef ref,
+  SettingReader ref,
   ChatViewState view,
   String chatId,
 ) => [
@@ -75,7 +76,7 @@ List<RunningThing> subAgentsRunning(
 /// What [chatId] has running, from each of [runningSources] in turn: the
 /// things that stand alone, and the rest gathered by their group.
 ({List<RunningThing> alone, Map<String, List<RunningThing>> groups}) runningOf(
-  WidgetRef ref,
+  SettingReader ref,
   ChatViewState view,
   String chatId,
 ) {
@@ -136,7 +137,7 @@ class _RunningStripState extends ConsumerState<RunningStrip> {
     final view = widget.view;
     final chatId = view.chat?.state.id;
     if (chatId == null) return const SizedBox.shrink();
-    final (:alone, :groups) = runningOf(ref, view, chatId);
+    final (:alone, :groups) = runningOf(WidgetReader(ref), view, chatId);
     Widget pill(RunningThing thing) => Builder(
       builder: (context) => RunningPill(
         label: thing.label,

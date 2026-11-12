@@ -423,11 +423,13 @@ frame, and an iPhone shows its sidebar exactly when the Flutter view is out
 of the window and the engine paused, so a rename, a pin or a delete made from
 the list never reached it until the user left it. A widget's own
 subscription would not do either, being paused under a page that covers the
-conversation. The surfaces' snapshots — the bars, the composer, the turn,
-the new-chat screen, voice mode — stay with the widget answering for
-them, are on screen only while the Flutter view is, and read what they
-send in their own build, since a provider watched from a builder beneath one
-can be missed. The running chats are a listenable, so the snapshots watch
+conversation. The open chat's surfaces — its bar, composer, turn
+surface and conversation — are published the same way, by `ShellChat` (see
+"The conversation, natively" in `lib/ui/chat/AGENTS.md`), so the Flutter view
+is out of the window while a chat is open. The new-chat screen's and voice
+mode's stay with the widget answering for them, are sent only while the
+Flutter view is in the window, and read what they send in their own build,
+since a provider watched from a builder beneath one can be missed. The running chats are a listenable, so the snapshots watch
 `busyChatIdsProvider`, its set as a value.
 
 **An intent goes to whoever is on screen**, and what is on screen is the

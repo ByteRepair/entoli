@@ -8,6 +8,7 @@ import "../app_menu.dart";
 import "../command_intents.dart";
 import "../commands.dart";
 import "../chat/chat_page.dart";
+import "shell_chat.dart";
 import "shell_palette.dart";
 import "shell_publisher.dart";
 import "../settings/settings_category.dart" show nativeSettingsOpener;
@@ -41,6 +42,9 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
   /// Every settings page, sent to the client's own settings as it changes.
   late final SettingsBridge _settings;
 
+  /// The open chat's surfaces, sent as the app's state changes.
+  late final ShellChat _chat;
+
   /// The bridge the shell's events reach, which is the last one mounted. A
   /// restart builds the next session's before it takes this one down, so the
   /// one going unbinds them only while they are still its own.
@@ -56,6 +60,7 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     final container = ProviderScope.containerOf(context, listen: false);
     _publisher = ShellPublisher(container);
     _settings = SettingsBridge(container);
+    _chat = ShellChat(container, () => context);
     nativeSettingsOpener = _settings.show;
   }
 
@@ -65,6 +70,7 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     _scope.detach(_commands);
     _publisher.close();
     _settings.close();
+    _chat.close();
     if (nativeSettingsOpener == _settings.show) nativeSettingsOpener = null;
     if (identical(_listening, this)) {
       _listening = null;

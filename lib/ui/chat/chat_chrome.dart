@@ -1,10 +1,7 @@
 import "package:flutter/widgets.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
 import "../../app/composer.dart";
-import "../../app/transcript/transcript.dart";
-import "../../domain/quote.dart";
 import "../../domain/room/room_state.dart" show ChatViewState;
 import "../../app/chat_controller.dart" show TurnDriver;
 import "../../domain/models.dart";
@@ -60,18 +57,10 @@ abstract class ChatChrome {
     required bool starting,
   });
 
-  /// The conversation where the frontend draws its own from [transcript];
-  /// null is the page's list. [driver] is what a message's actions act
-  /// through, null for a mirror this device does not hold; [onReply] quotes a
-  /// selected passage into the composer.
-  Widget? conversation({
-    required String chatId,
-    required Transcript transcript,
-    required ChatViewState view,
-    required ProviderListenable<ChatViewState> source,
-    required ValueChanged<Quote> onReply,
-    TurnDriver? driver,
-  }) => null;
+  /// Whether the frontend draws the open chat itself — its conversation,
+  /// bar, turn surface and composer — from the app's state, the page then
+  /// drawing none of it. The native shell's does (`ShellChat`).
+  bool get drawsOpenChat => false;
 }
 
 /// The Flutter frontend's: everything is the page's.

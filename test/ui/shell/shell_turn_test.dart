@@ -53,10 +53,7 @@ void main() {
     driver = _Driver();
   });
 
-  Future<ShellTurnSurfaceState> pump(
-    WidgetTester tester,
-    ChatViewState view,
-  ) async {
+  Future<TurnRunner> pump(WidgetTester tester, ChatViewState view) async {
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
@@ -64,7 +61,9 @@ void main() {
         ),
       ),
     );
-    return tester.state(find.byType(ShellTurnSurface));
+    return tester
+        .state<ShellTurnSurfaceState>(find.byType(ShellTurnSurface))
+        .runner;
   }
 
   testWidgets("a question goes out, and its answers come back", (tester) async {
@@ -180,8 +179,7 @@ void main() {
         ),
       ),
     );
-    ShellTurnSurfaceState answering() =>
-        answers.turn.owner! as ShellTurnSurfaceState;
+    TurnRunner answering() => answers.turn.owner! as TurnRunner;
 
     await show(voiceUp: false);
     await answering().goal(GoalAction.clear);

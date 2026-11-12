@@ -132,22 +132,28 @@ struct ShellView: View {
   }
 
   /// The conversation is native and on screen: a chat is open, and no
-  /// Flutter page or new-chat screen is over it.
+  /// Flutter page, dialog or new-chat screen is over it.
   private var conversing: Bool {
-    model.ready && transcript.present && !model.window.covered && !model.newChat.present
+    model.ready && transcript.present && !model.window.overlaid && !model.newChat.present
   }
 
   private var detail: some View {
     ZStack {
-      // Kept in the window always — out of it, the engine pauses and Dart
-      // sends nothing — but neither seen nor touched while the conversation
-      // is native: only a Flutter page pushed over it, or the app before it
-      // is set up, shows it.
-      FlutterCanvas(flutter: flutter) {
-        StripLayer(model: model)
+      // Out of the window while the conversation is native: what the open
+      // chat shows is published from the app's state, which needs no frame
+      // (`ShellChat`). In it for a Flutter page or dialog over the chat, the
+      // new-chat screen and voice mode, whose surfaces are still widgets, and
+      // the app before it is set up.
+      Group {
+        if conversing {
+          // Holds the place, so the insets below are still measured.
+          Color.clear
+        } else {
+          FlutterCanvas(flutter: flutter) {
+            StripLayer(model: model)
+          }
+        }
       }
-      .opacity(conversing ? 0 : 1)
-      .allowsHitTesting(!conversing)
       .onGeometryChange(for: EdgeInsets.self) { proxy in
         EdgeInsets(
           top: proxy.safeAreaInsets.top, leading: 0, bottom: proxy.safeAreaInsets.bottom,

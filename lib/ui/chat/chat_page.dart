@@ -30,6 +30,8 @@ import "../widgets/scrolling.dart";
 import "chat_chrome.dart";
 import "chat_settings_page.dart";
 import "../../app/chat_controller.dart";
+import "../../app/chat_session.dart";
+import "chat_expiry.dart";
 import "../../app/composer.dart" show ComposerBinding, ComposerModel;
 import "../../app/mirror_controller.dart";
 import "plan_page.dart" show PlanButton;
@@ -844,11 +846,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   /// Inside the native shell: settled at launch, so read once.
   late final ChatChrome _chrome = ref.read(chatChromeProvider);
 
-  final ComposerController _controller = ComposerController();
-  late final ComposerModel _model = ComposerModel(
-    _controller,
-    pick: (kind) => ref.read(attachmentPickerProvider).pick(kind),
-  );
+  /// The chat's session: its composer, and how a message is sent. Watched in
+  /// the build, which keeps it while the page is up.
+  ChatSession get _session => ref.read(chatSessionProvider(widget.chatId));
+  ComposerController get _controller => _session.text as ComposerController;
+  ComposerModel get _model => _session.composer;
 
   /// What a steer taken back is put back into, attachments and all.
   final GlobalKey _composer = GlobalKey();
@@ -971,8 +973,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     _outline.dispose();
     _memoryNotes?.cancel();
     _scroll.removeListener(_readPosition);
-    _model.dispose();
-    _controller.dispose();
     _glide.dispose();
     _list.dispose();
     _scroll.dispose();
@@ -1160,46 +1160,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   /// Ask whether to keep an expired temporary chat (turning its TTL off) or
   /// delete it. The sweep handles non-open chats silently; this is the one
   /// case where the chat being deleted is the one the user is looking at.
-  Future<void> _checkExpiry(BuildContext context, ChatState state) async {
-    if (!state.isExpired()) return;
-    if (!mounted) return;
-    final keep = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text("Temporary chat expired"),
-        content: const Text(
-          "This temporary chat has passed its expiry. Turn temporary chat off "
-          "to keep it, or delete it now.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text("Keep"),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text("Delete"),
-          ),
-        ],
-      ),
-    );
-    if (!mounted) return;
-    final repo = ref.read(chatRepositoryProvider);
-    if (keep == true) {
-      final written = await repo.keepExpiredChat(widget.chatId, state);
-      ref
-          .read(chatControllerProvider(widget.chatId).notifier)
-          .applyState(written);
-    } else {
-      ref.read(selectedChatIdProvider.notifier).select(null);
-      await repo.deleteChat(widget.chatId);
-    }
-    ref.invalidate(chatListProvider);
-  }
+  Future<void> _checkExpiry(BuildContext context, ChatState state) =>
+      checkChatExpiry(context, widget.chatId, state);
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(chatSessionProvider(widget.chatId));
     // A mirrored chat is read through the hub's mirror rather than the local
     // store, so it is a different controller and a different bottom of the
     // page. Everything between those two is the same page — see [_page].
@@ -1216,6 +1182,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       (_, _) => _follow.jumpIfFollowing(),
     );
     final chat = view.chat;
+    // The frontend draws this chat itself, and asks about its expiry.
+    if (_chrome.drawsOpenChat) return const SizedBox.expand();
     if (chat == null) return _waiting();
     _opening(chat);
     // Check expiry once per open: a temporary chat whose window has passed is
@@ -1283,6 +1251,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       }),
     );
     final chat = view.chat;
+    if (_chrome.drawsOpenChat) return const SizedBox.expand();
     if (chat == null) return _waiting();
     _opening(chat);
 
@@ -1437,28 +1406,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       String text,
       List<Attachment> attachments, {
       bool queue = false,
-    }) async {
-      // Something said over an upload waiting on the user is their answer to
-      // it: the page's chooser is cancelled, as dismissing its dialog would,
-      // and the agent is told.
-      final browser = ref.read(agentBrowserProvider);
-      if (browser.available && browser.configured) {
-        browser
-            .tab(widget.chatId)
-            .cancelUpload(
-              why: "The user sent a message instead of choosing a file.",
-            );
-      }
+    }) {
       _follow.attach();
-      try {
-        await driver.send(text, attachments: attachments, queue: queue);
-      } on Undelivered catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(e.message)));
-        }
-      }
+      return _session.send(driver, text, attachments, queue: queue);
     }
 
     return Column(
@@ -1533,16 +1483,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   ) {
     final speechReady = ref.watch(speechReadyProvider);
     final reading = ref.watch(readAloudProvider);
-    // The frontend's own draws an empty chat too.
-    final drawn = _chrome.conversation(
-      chatId: widget.chatId,
-      transcript: transcript,
-      view: view,
-      source: source,
-      onReply: (quote) => _reply(QuoteEmbed(quote)),
-      driver: editing,
-    );
-    if (drawn != null) return drawn;
     if (chat.messages.isEmpty) return whenEmpty;
     // While a turn runs, the controller refuses every edit.
     final mutable = editing != null && !view.isRunning;

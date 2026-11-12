@@ -14,11 +14,20 @@ void main() {
     test("sends a concern once per change, over the channel", () {
       final shell = FakeNativeShell.install();
       final outbox = ShellOutbox();
-      outbox.window(WindowSnapshot(covered: false, sidebarShown: true));
-      outbox.window(WindowSnapshot(covered: false, sidebarShown: true));
+      outbox.window(
+        WindowSnapshot(covered: false, overlaid: false, sidebarShown: true),
+      );
+      outbox.window(
+        WindowSnapshot(covered: false, overlaid: false, sidebarShown: true),
+      );
       expect(shell.sent["window"], hasLength(1));
       outbox.window(
-        WindowSnapshot(covered: true, sidebarShown: true, dark: true),
+        WindowSnapshot(
+          covered: true,
+          overlaid: true,
+          sidebarShown: true,
+          dark: true,
+        ),
       );
       expect(shell.sent["window"], hasLength(2));
       expect(shell.lastWindow!.covered, isTrue);

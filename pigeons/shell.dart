@@ -61,6 +61,10 @@ class WindowSnapshot {
   /// A page is pushed over the conversation: Settings, a chat's settings, a
   /// drawer's page. A dialog is not; it draws over the Flutter view alone.
   bool covered;
+
+  /// Anything is over the conversation, a dialog or a sheet included: the
+  /// Flutter view is needed in the window to draw it.
+  bool overlaid;
   bool sidebarShown;
 
   /// Whether the app is dark; null for the system's appearance.

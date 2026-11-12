@@ -8,6 +8,7 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../../app/settings/spec.dart" show SettingReader;
 import "../../widgets/anchored_menu.dart";
 import "../../../core/log.dart";
 import "../../../domain/agent_browser.dart";
@@ -153,7 +154,7 @@ final _browserTabProvider = Provider.autoDispose
 /// browser's own screencast, so it shows the page when the browser runs
 /// hidden too.
 List<RunningThing> browserRunning(
-  WidgetRef ref,
+  SettingReader ref,
   ChatViewState view,
   String chatId,
 ) {
