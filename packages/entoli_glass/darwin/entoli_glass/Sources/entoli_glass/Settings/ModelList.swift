@@ -80,6 +80,9 @@ struct ModelList: View {
     .searchable(text: $search, prompt: "Search \(cards.count) models")
     .topBar { filters }
     .navigationTitle(data?.title ?? "")
+    // The back button, the title and the search on one row, where a Mac's
+    // sheet otherwise gives the title a row of its own under the search.
+    .toolbarTitleDisplayMode(.inline)
     .toolbar {
       if data?.canAdd == true {
         ToolbarItem(placement: .primaryAction) {
