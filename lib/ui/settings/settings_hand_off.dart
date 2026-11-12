@@ -8,6 +8,7 @@ import "cli_sign_in_dialog.dart";
 import "../../app/pages/add_local_model.dart";
 import "../../app/pages/cli_sign_in.dart";
 import "../app_pages.dart";
+import "settings_category.dart";
 import "paired_device_page.dart";
 import "sync_pairing.dart" show ScanQrPage;
 
@@ -41,7 +42,14 @@ void bindSettingsHandOff(
         openAppPage(context, AddLocalModelAppPage()))
     ..pairedDevice = ((id) => push<void>(PairedDevicePage(deviceId: id)))
     ..scanCode = (() => push<String>(const ScanQrPage()))
-    ..browseBotAvatars = (() => push<void>(const BotAvatarEditorPage.browse()));
+    ..browseBotAvatars = (() => push<void>(const BotAvatarEditorPage.browse()))
+    ..openSettings = ((page) => openSettings(
+      context,
+      category: SettingsCategory.values
+          .where((c) => c.page == page)
+          .firstOrNull,
+      focus: true,
+    ));
 }
 
 /// [child], with the settings' hand-offs bound to this frontend's pages for

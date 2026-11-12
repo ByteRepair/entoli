@@ -1,6 +1,7 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/llm_provider.dart";
+import "spec.dart" show SettingsPageId;
 
 /// What a frontend draws with its own page rather than as a setting: a
 /// program's sign-in, a paired device's page, every Bot Avatar. The frontend
@@ -29,6 +30,10 @@ class SettingsHandOff {
   /// Every Bot Avatar, to look through, import and delete.
   Future<void> Function()? browseBotAvatars;
 
+  /// The settings, at [page] where it names one: what an app page's row
+  /// sends the user to.
+  Future<void> Function(SettingsPageId? page)? openSettings;
+
   /// Unbinds every hook, for a frontend going away.
   void clear() {
     signIn = null;
@@ -37,6 +42,7 @@ class SettingsHandOff {
     pairedDeviceInSettings = false;
     scanCode = null;
     browseBotAvatars = null;
+    openSettings = null;
   }
 }
 

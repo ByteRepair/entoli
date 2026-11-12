@@ -11,6 +11,8 @@ import "../chat/chat_page.dart";
 import "shell_chat.dart";
 import "shell_palette.dart";
 import "shell_publisher.dart";
+import "../../app/pages/welcome.dart" show openFirstRun;
+import "../../app/settings/spec.dart" show ContainerReader;
 import "../settings/settings_category.dart" show nativeSettingsOpener;
 import "../settings/settings_hand_off.dart";
 import "shell_settings.dart";
@@ -71,6 +73,7 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     nativeVoiceOpener = _chat.openVoice;
     nativeBrowserOpener = _chat.openBrowser;
     nativeSettingsOpener = _settings.show;
+    openFirstRun(ContainerReader(container));
   }
 
   @override
@@ -118,7 +121,9 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     // the platform's.
     own: (handOff) {
       _settings.bindDevicePage(handOff);
-      handOff.scanCode = NativeShell().scanCode;
+      handOff
+        ..scanCode = NativeShell().scanCode
+        ..openSettings = _settings.show;
     },
     child: const AppMenuSync(navigate: shellNavigate, child: ChatPage()),
   );

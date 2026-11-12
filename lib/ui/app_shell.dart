@@ -1,3 +1,5 @@
+import "../app/pages/welcome.dart" show openFirstRun;
+import "../app/settings/spec.dart" show WidgetReader;
 import "app_pages.dart";
 import "package:flutter/material.dart";
 import "../app/chat_session.dart" show chatSessionHostProvider;
@@ -36,6 +38,10 @@ class _AppShellState extends ConsumerState<AppShell> {
     HardwareKeyboard.instance.addHandler(_key);
     _scope.attach(_commands);
     _host?.attach(context, ref);
+    // A first launch's setup and tour, over the shell once it is up.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) openFirstRun(WidgetReader(ref));
+    });
   }
 
   /// The chat sessions say and open things over this page.
