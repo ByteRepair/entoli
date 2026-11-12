@@ -16,6 +16,9 @@ import SwiftUI
 
   let rows: SettingsModel
   private(set) var stack: [SettingsPageData] = []
+  /// What the sheet draws: the stack, or as it last stood while the sheet
+  /// closes over it, so nothing in it loses its page as it goes.
+  private(set) var shown: [SettingsPageData] = []
 
   init(messenger: FlutterBinaryMessenger) {
     rows = SettingsModel(messenger: messenger)
@@ -28,16 +31,23 @@ import SwiftUI
   var held: Bool { stack.first?.held ?? false }
 
   func page(_ address: String) -> SettingsPageData? {
-    stack.first { $0.address == address }
+    shown.first { $0.address == address }
   }
 
   func update(_ next: [SettingsPageData]) {
+    // Closed: the sheet goes as it stood, its rows and what they pushed
+    // kept until the next stack opens. Taken away at once, a pushed page lost
+    // its destination and drew the system's warning sign as the sheet went.
+    guard !next.isEmpty else {
+      stack = []
+      return
+    }
     try? rows.settings(snapshot: SettingsSnapshot(pages: next))
-    // A stack closed, or opened anew on another page, keeps nothing a row
-    // pushed: the sheet Escape closed over a model list reopened on it,
-    // blank, its row gone.
+    // Opened anew, or on another page, it keeps nothing a row pushed: the
+    // sheet Escape closed over a model list reopened on it, blank.
     let fresh = stack.first?.address != next.first?.address
     stack = next
+    shown = next
     // Each page over the first is pushed in the order Dart opened them;
     // what a row pushed between them stays, and a page gone takes all over it.
     let opened = next.dropFirst().compactMap(\.address)
@@ -96,7 +106,7 @@ struct AppPagesSheet: View {
 
   var body: some View {
     NavigationStack(path: model.path) {
-      if let root = model.stack.first {
+      if let root = model.shown.first {
         AppPageView(model: model, page: root, root: true)
           .navigationDestination(for: SettingsRoute.self) { route in
             SettingsDestination(model: model.rows, route: route)
