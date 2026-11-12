@@ -14,6 +14,8 @@ struct ConversationView: View {
   var bottom: CGFloat = 0
 
   @State private var atEnd = true
+  /// Whether it all fits with nothing to scroll.
+  @State private var fits = true
 
   /// The row at the top of the view, which says which chapter is being read.
   @State private var top: String?
@@ -61,14 +63,8 @@ struct ConversationView: View {
   var body: some View {
     ScrollViewReader { proxy in
       ScrollView {
-        LazyVStack(alignment: .leading, spacing: 0) {
-          ForEach(model.order, id: \.self) { key in
-            if let row = model.rows[key] {
-              RowView(row: row, model: model).id(key)
-            }
-          }
-        }
-        .scrollTargetLayout()
+        Rows(model: model)
+          .scrollTargetLayout()
         // Placed from the view's whole width, not the content's: a scroller
         // takes its strip from the content, which moved a centred column off
         // the composer's line whenever one came. As wide as it may be up to
@@ -107,11 +103,12 @@ struct ConversationView: View {
       }
       .contentMargins(.bottom, bottom, for: .scrollContent)
       .contentMargins(.bottom, bottom, for: .scrollIndicators)
-      // Opened at the end and short ones at the foot; a size change keeps
-      // the end in view only from the end, so opening something above
-      // leaves what is shown where it is rather than scrolling it.
+      // Opened at the end, and a size change keeps the end in view only from
+      // the end, so opening something above leaves what is shown where it
+      // is. Not `.alignment` to the bottom: holding a chat too short to
+      // scroll at the foot made the title bar's scroll edge flash on and off
+      // as a run in it opened.
       .defaultScrollAnchor(.bottom, for: .initialOffset)
-      .defaultScrollAnchor(.bottom, for: .alignment)
       .defaultScrollAnchor(atEnd ? .bottom : .top, for: .sizeChanges)
       // At the end where what is shown reaches the content's last line. The
       // margin under it is not added: the content's size may already hold
@@ -121,6 +118,15 @@ struct ConversationView: View {
       } action: { _, end in
         atEnd = end
       }
+      // No scroller while there is nothing to scroll. `never`, not
+      // `hidden`: with scroll bars always shown, as with a mouse attached,
+      // `hidden` is overridden and the scroller flashed at a run opened.
+      .onScrollGeometryChange(for: Bool.self) { geometry in
+        geometry.contentSize.height < geometry.containerSize.height - 1
+      } action: { _, short in
+        fits = short
+      }
+      .scrollIndicators(fits ? .never : .automatic)
       #if os(iOS)
         .scrollDismissesKeyboard(.interactively)
       #endif
@@ -305,6 +311,32 @@ struct DetailView: View {
       .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
     } else {
       text.lineSpacing(3)
+    }
+  }
+}
+
+/// The conversation's rows. Up to a few hundred every row is laid out, as
+/// the Flutter app measures them all (`_MeasureAll`): a lazy stack guesses
+/// the height of the rows away from the view, and the scroller started at
+/// the guess and snapped to the truth as they came in. Past that one row's
+/// error no longer moves it, and laying them all out is work nobody sees.
+private struct Rows: View {
+  let model: TranscriptModel
+  private static let measuredUpTo = 400
+
+  var body: some View {
+    if model.order.count <= Self.measuredUpTo {
+      VStack(alignment: .leading, spacing: 0) { rows }
+    } else {
+      LazyVStack(alignment: .leading, spacing: 0) { rows }
+    }
+  }
+
+  private var rows: some View {
+    ForEach(model.order, id: \.self) { key in
+      if let row = model.rows[key] {
+        RowView(row: row, model: model).id(key)
+      }
     }
   }
 }
