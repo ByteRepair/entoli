@@ -138,14 +138,8 @@ class ProfileAppPage extends AppPage {
       _global ? "Profile" : "Project Instructions";
 
   @override
-  SettingConfirm? leaving(SettingReader reader) => _edited
-      ? const SettingConfirm(
-          title: "Discard changes?",
-          message: "What you changed here is not saved.",
-          confirmLabel: "Discard",
-          destructive: true,
-        )
-      : null;
+  SettingConfirm? leaving(SettingReader reader) =>
+      _edited ? AppPage.discardChanges : null;
 
   TextController _field(
     String id,
@@ -168,14 +162,7 @@ class ProfileAppPage extends AppPage {
   @override
   List<PageSection> sections(SettingReader reader) {
     if (!_loaded) {
-      return [
-        PageSection("loading", "", [
-          NoticeController(
-            part("loading", ""),
-            lines: const [NoticeLine("Reading…")],
-          ),
-        ]),
-      ];
+      return [notice("loading", "Reading…")];
     }
     return [
       if (_global)

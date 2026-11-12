@@ -467,7 +467,6 @@ class SettingRowData {
     this.setUpLabel,
     this.importLabel,
     this.deleteLabel,
-    this.fileName,
     this.markdown = false,
     this.editing = false,
     this.webUrl,
@@ -583,7 +582,6 @@ class SettingRowData {
   String? deleteLabel;
 
   // document: its text is [text], each edit said back by setText
-  String? fileName;
   bool markdown;
   bool editing;
 

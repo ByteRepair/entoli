@@ -60,8 +60,6 @@ enum TrailingKind { waiting, liveOutput, retry }
 
 enum NodeKind { label, diff, plan, output }
 
-enum OutputKind { artifact, skill }
-
 enum TextKind { paragraph, heading, code, formula, rule, table }
 
 enum InlineKind { text, formula, lineBreak, image }
@@ -238,7 +236,6 @@ class NodeSnapshot {
     this.tail,
     this.removed = const [],
     this.added = const [],
-    this.output = OutputKind.artifact,
     this.progress,
     this.tasks = const [],
   });
@@ -252,7 +249,6 @@ class NodeSnapshot {
   String? tail;
   List<String> removed;
   List<String> added;
-  OutputKind output;
   String? progress;
   List<PlanTaskSnapshot> tasks;
 }
@@ -391,7 +387,6 @@ class ConversationSnapshot {
     this.chatId,
     this.order = const [],
     this.changed = const [],
-    this.running = false,
     this.reactions = const [],
     this.chapters = const [],
     this.loading = false,
@@ -400,7 +395,6 @@ class ConversationSnapshot {
   String? chatId;
   List<String> order;
   List<RowSnapshot> changed;
-  bool running;
 
   /// The reactions a message can be given, in the order offered.
   List<ReactionChoice> reactions;
@@ -488,8 +482,6 @@ abstract class TranscriptIntents {
   void act(String row, MessageAction action);
   void edit(String row, String text);
   void react(String row, String emoji);
-  void retry(String row);
-  void openPlan();
   void openFile(String row, int block, int file);
 
   /// A passage selected in [row] answered: quoted into the composer.

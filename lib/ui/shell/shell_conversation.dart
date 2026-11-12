@@ -68,13 +68,11 @@ class ConversationSurface implements wire.TranscriptIntents {
   TranscriptEncoder? _encoder;
   FormulaSheet? _formulas;
   SettingReader? _reader;
-  String? _chatId;
 
   /// The detail open, if any, and the node it is of.
   EncodedNode? _open;
 
-  /// Faces by author, drawn once each.
-  final _faces = <String, Uint8List?>{};
+  final _parsed = MarkdownBlocks();
 
   /// [chatId] open with nothing to show yet, while it is read: keeps the
   /// conversation up rather than gone between two chats, which would bring
@@ -117,14 +115,17 @@ class ConversationSurface implements wire.TranscriptIntents {
     List<Chapter> chapters = const [],
   }) {
     _reader = reader;
-    _chatId = chatId;
     if (_formulas?.argb != ink) {
       // Another ink is another picture of every formula.
       _formulas = FormulaSheet(
         reader.read(formulaRendererProvider),
         argb: ink,
-        onReady: republish,
+        onReady: () {
+          _parsed.clear();
+          republish();
+        },
       );
+      _parsed.clear();
       _sent.clear();
     }
     final project = view.chat?.state.project;
@@ -136,6 +137,7 @@ class ConversationSurface implements wire.TranscriptIntents {
       resources: reader
           .watch(appConfigProvider)
           .resourcesDir(chatId, project: project),
+      parsed: _parsed,
     );
     final speechReady = reader.watch(speechReadyProvider);
     final reading = reader.watch(readAloudProvider);
@@ -145,6 +147,7 @@ class ConversationSurface implements wire.TranscriptIntents {
       final id = row.message.id;
       final actions = MessageActions.of(row, view, driver);
       _actions[row.key] = actions;
+      final face = _faceOf(reader, row.message, project);
       return encoder.message(
         row.key,
         MessageLayout(row.message, chatId: chatId, catalog: encoder.catalog),
@@ -162,14 +165,17 @@ class ConversationSurface implements wire.TranscriptIntents {
         ),
         reactions: row.reactions,
         source: source.select((v) => liveMessageOf(v, id)),
-        face: _photoOf(reader, row.message, project, outline),
-        bot: _botOf(
-          reader,
-          row.message,
-          project,
-          thinking: view.isRunning && row.last,
-          live: row.last,
-        ),
+        face: face is AgentPhoto
+            ? _photoOf(reader, row.message, project, outline)
+            : null,
+        bot: face is AgentBot
+            ? _botOf(
+                reader,
+                face,
+                thinking: view.isRunning && row.last,
+                live: row.last,
+              )
+            : null,
       );
     }
 
@@ -188,7 +194,9 @@ class ConversationSurface implements wire.TranscriptIntents {
         changed.add(snapshot);
       }
     }
-    _sent.removeWhere((key, _) => !order.contains(key));
+    _parsed.turn();
+    final kept = order.toSet();
+    _sent.removeWhere((key, _) => !kept.contains(key));
     final pictures = _formulas!.take();
     if (pictures.isNotEmpty) _send(() => _client.formulas(pictures));
     _send(
@@ -197,7 +205,6 @@ class ConversationSurface implements wire.TranscriptIntents {
           chatId: chatId,
           order: order,
           changed: changed,
-          running: view.isRunning,
           reactions: [
             for (final r in Reaction.values)
               wire.ReactionChoice(emoji: r.emoji, name: r.name),
@@ -275,51 +282,35 @@ class ConversationSurface implements wire.TranscriptIntents {
   /// The author's Bot Avatar as the stage's key: the client draws it live,
   /// asking the core for each frame, as the settings' faces are drawn. It
   /// thinks while the reply is being written and idles once it is done.
-  ({String key, int colour, int mood, bool live})? _botOf(
+  ({String key, int colour, int mood, bool live}) _botOf(
     SettingReader reader,
-    Message message,
-    String? project, {
+    AgentBot face, {
     required bool thinking,
     required bool live,
-  }) {
-    if (_faceOf(reader, message, project) case AgentBot(:final spec)) {
-      return (
-        key: reader.read(botStageProvider).keyOf(spec.definition),
-        colour: spec.colour,
-        mood: (thinking ? BotMood.thinking : BotMood.idle).index,
-        live: live,
-      );
-    }
-    return null;
-  }
+  }) => (
+    key: reader.read(botStageProvider).keyOf(face.spec.definition),
+    colour: face.spec.colour,
+    mood: (thinking ? BotMood.thinking : BotMood.idle).index,
+    live: live,
+  );
 
-  /// The author's photo as a picture, where the message names a member who
-  /// has one.
-  Uint8List? _photoOf(
+  /// The author's photo as a picture, null until it is drawn.
+  static Uint8List? _photoOf(
     SettingReader reader,
     Message message,
     String? project,
     Color outline,
-  ) {
-    final face = _faceOf(reader, message, project);
-    if (face is! AgentPhoto) return null;
-    final key = "${project ?? ""}/${message.author}/${identityHashCode(face)}";
-    if (_faces.containsKey(key)) return _faces[key];
-    _faces[key] = null;
-    unawaited(_draw(key, face, outline));
-    return null;
-  }
-
-  Future<void> _draw(String key, AgentFace face, Color outline) async {
-    final png = await agentFacePng(
-      face,
-      size: 28,
-      pixelRatio: 3,
-      outline: outline,
-    );
-    _faces[key] = png;
-    republish();
-  }
+  ) => reader
+      .watch(
+        agentFacePngProvider((
+          project: project,
+          name: nameOf(message.author)!,
+          size: 28,
+          pixelRatio: 3,
+          outline: outline,
+        )),
+      )
+      .value;
 
   static void _send(Future<void> Function() sending) => sending().catchError(
     (Object e) => logFailure("shell", "transcript snapshot", e),
@@ -421,17 +412,6 @@ class ConversationSurface implements wire.TranscriptIntents {
     final actions = _actions[row];
     if (reaction == null || actions == null) return;
     await _handOff.attempt(() => actions.react(reaction));
-  }
-
-  @override
-  Future<void> retry(String row) async =>
-      _handOff.attempt(() async => _actions[row]?.regenerate());
-
-  @override
-  Future<void> openPlan() async {
-    final at = context();
-    final chatId = _chatId;
-    if (at.mounted && chatId != null) plan_page.openPlan(at, chatId);
   }
 
   /// A reply's quote carries its author's handle, so the answer is

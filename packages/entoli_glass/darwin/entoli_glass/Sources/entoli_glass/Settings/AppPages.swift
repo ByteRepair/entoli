@@ -100,24 +100,49 @@ import SwiftUI
   func close(_ address: String) { say.closePage(address: address, completion: ignore) }
 }
 
-/// The sheet the app's pages are drawn in, one navigation stack of them.
-struct AppPagesSheet: View {
-  @Bindable var model: AppPagesModel
+/// The app's pages as one navigation stack, [root] at its foot.
+private struct AppPagesStack: View {
+  let model: AppPagesModel
+  let root: SettingsPageData?
 
   var body: some View {
     NavigationStack(path: model.path) {
-      if let root = model.shown.first {
+      if let root {
         AppPageView(model: model, page: root, root: true)
           .navigationDestination(for: SettingsRoute.self) { route in
             SettingsDestination(model: model.rows, route: route)
           }
       }
     }
+  }
+}
+
+extension View {
+  /// Asks before a page of unsaved edits goes, [close] taking it away.
+  fileprivate func leavingAlert(
+    _ leaving: Binding<SettingConfirmData?>, close: @escaping () -> Void
+  ) -> some View {
+    alert(
+      leaving.wrappedValue?.title ?? "", isPresented: .present(leaving),
+      presenting: leaving.wrappedValue
+    ) { ask in
+      Button(ask.confirmLabel ?? "Discard", role: .destructive, action: close)
+      Button("Keep Editing", role: .cancel) {}
+    } message: { ask in
+      Text(ask.message)
+    }
+  }
+}
+
+/// The sheet the app's pages are drawn in, one navigation stack of them.
+struct AppPagesSheet: View {
+  @Bindable var model: AppPagesModel
+
+  var body: some View {
+    AppPagesStack(model: model, root: model.shown.first)
     .interactiveDismissDisabled((model.stack.first?.guarded ?? false) || model.held)
     #if os(macOS)
       .environment(\.ownBar, true)
-    #endif
-    #if os(macOS)
       .frame(minWidth: 620, idealWidth: 700, minHeight: 520, idealHeight: 680)
     #endif
   }
@@ -177,15 +202,8 @@ struct AppPageView: View {
           }
         }
       }
-      .alert(
-        leaving?.title ?? "", isPresented: .present($leaving), presenting: leaving
-      ) { ask in
-        Button(ask.confirmLabel ?? "Discard", role: .destructive) {
-          if let address = page.address { model.close(address) }
-        }
-        Button("Keep Editing", role: .cancel) {}
-      } message: { ask in
-        Text(ask.message)
+      .leavingAlert($leaving) {
+        if let address = page.address { model.close(address) }
       }
   }
 
@@ -336,14 +354,7 @@ extension EnvironmentValues {
           let height = min(760, space.size.height - 40)
           VStack(spacing: 0) {
             header
-            NavigationStack(path: model.path) {
-              if let root = model.stack.first {
-                AppPageView(model: model, page: root, root: true)
-                  .navigationDestination(for: SettingsRoute.self) { route in
-                    SettingsDestination(model: model.rows, route: route)
-                  }
-              }
-            }
+            AppPagesStack(model: model, root: model.stack.first)
             footer
           }
           .environment(\.appPagesCard, true)
@@ -363,15 +374,8 @@ extension EnvironmentValues {
         try? await Task.sleep(for: .milliseconds(300))
         withAnimation(.spring(duration: 0.55, bounce: 0.12)) { risen = true }
       }
-      .alert(
-        leaving?.title ?? "", isPresented: .present($leaving), presenting: leaving
-      ) { ask in
-        Button(ask.confirmLabel ?? "Discard", role: .destructive) {
-          if let address = top?.address { model.close(address) }
-        }
-        Button("Keep Editing", role: .cancel) {}
-      } message: { ask in
-        Text(ask.message)
+      .leavingAlert($leaving) {
+        if let address = top?.address { model.close(address) }
       }
     }
 

@@ -31,6 +31,14 @@ abstract class AppPage {
   /// What going back asks, where leaving would lose something; null goes.
   SettingConfirm? leaving(SettingReader reader) => null;
 
+  /// [leaving]'s question for a page of unsaved edits.
+  static const discardChanges = SettingConfirm(
+    title: "Discard changes?",
+    message: "What you changed here is not saved.",
+    confirmLabel: "Discard",
+    destructive: true,
+  );
+
   /// Left only by its own actions: no back, no cancel, no swipe. What a
   /// first launch shows before the app.
   bool held(SettingReader reader) => false;
@@ -86,6 +94,16 @@ abstract class AppPage {
     glyph: glyph,
     build: _unfiled,
   );
+
+  /// A section that says [text] and nothing else: a page still loading, or
+  /// what it is about.
+  PageSection notice(
+    String id,
+    String text, {
+    NoticeTone tone = NoticeTone.plain,
+  }) => PageSection(id, "", [
+    NoticeController(part(id, ""), tone: tone, lines: [NoticeLine(text)]),
+  ]);
 
   /// The settings' own [id], built at [scope] on this page under an id of
   /// the page's: the same rules and words as on the settings page, whatever

@@ -1,21 +1,16 @@
 import "../../core/log.dart";
 import "../../data/builtin/memory/store.dart";
+import "../../domain/date_words.dart" show shortDate;
 import "../../domain/project.dart" show ProjectRef;
 import "../../providers.dart";
 import "../settings/controller.dart";
 import "../settings/spec.dart";
 import "app_page.dart";
 
-const _months = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun", //
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-const _weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
 /// A memory's age in words: the year goes with it once it is no longer this
 /// one, because a memory outlives the week reminders are planned for.
 String _when(DateTime at) {
-  final day = "${_weekdays[at.weekday - 1]} ${at.day} ${_months[at.month - 1]}";
+  final day = shortDate(at);
   return at.year == DateTime.now().year ? day : "$day ${at.year}";
 }
 
@@ -78,18 +73,12 @@ class MemoryAppPage extends AppPage {
     final entries = _entries;
     return [
       if (project.device != null)
-        PageSection("device", "", [
-          NoticeController(
-            part("device", ""),
-            tone: frozen ? NoticeTone.warning : NoticeTone.plain,
-            lines: [
-              NoticeLine(
-                "${reader.watch(syncPeersProvider)[project.device]?.name ?? "The device"} "
-                "${frozen ? "is offline; its memories are read only until it is back." : "holds these memories."}",
-              ),
-            ],
-          ),
-        ]),
+        notice(
+          "device",
+          "${reader.watch(syncPeersProvider)[project.device]?.name ?? "The device"} "
+              "${frozen ? "is offline; its memories are read only until it is back." : "holds these memories."}",
+          tone: frozen ? NoticeTone.warning : NoticeTone.plain,
+        ),
       PageSection("search", "", [
         TextController(
           part("search", "Search", hint: UiHint.input),

@@ -389,7 +389,6 @@ SettingRowData _row(
       row
         ..kind = SettingKind.document
         ..text = c.text
-        ..fileName = c.name
         ..markdown = c.markdown
         ..editing = c.editing;
     case NoticeController():

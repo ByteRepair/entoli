@@ -1,12 +1,9 @@
 import "dart:convert";
-import "dart:io";
 import "dart:typed_data";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../core/log.dart";
-import "../../core/platform/platform.dart" as platform;
-import "../../data/prompts/agent_pictures.dart";
 import "../../data/prompts/skill_import.dart";
 import "../../domain/agent_face.dart";
 import "../../domain/app_link.dart" show SharedEntryLink;
@@ -15,6 +12,8 @@ import "../../domain/project.dart" show projectLabel;
 import "../../domain/prompt_library.dart";
 import "../../providers.dart";
 import "../marketplace/groups.dart";
+import "../prompts/agent_files.dart";
+import "../prompts/skill_files.dart";
 import "../marketplace/marketplace.dart";
 import "../settings/controller.dart";
 import "../settings/spec.dart";
@@ -120,30 +119,14 @@ class MarketplaceAppPage extends AppPage {
             ),
           ]),
         ],
-        _ => [
-          PageSection("loading", "", [
-            NoticeController(
-              part("loading", ""),
-              lines: const [NoticeLine("Reading the marketplace…")],
-            ),
-          ]),
-        ],
+        _ => [notice("loading", "Reading the marketplace…")],
       },
     ];
   }
 
   List<PageSection> _lists(List<MarketplaceEntry> all, Set<String> tagged) {
     if (all.isEmpty) {
-      return [
-        PageSection("empty", "", [
-          NoticeController(
-            part("empty", ""),
-            lines: [
-              NoticeLine("The marketplace lists no ${_kind.folder} yet."),
-            ],
-          ),
-        ]),
-      ];
+      return [notice("empty", "The marketplace lists no ${_kind.folder} yet.")];
     }
     final shown = entriesMatching(all, _query, tagged);
     final groups = groupByOrigin(shown);
@@ -357,10 +340,9 @@ mixin InstallsPrompts on AppPage {
   }
 
   SettingConfirm? replacingSkill(SkillPackage package) {
-    final config = app.read(appConfigProvider);
-    if (!Directory(
-      skillDirectory(config, package.name, project: destination),
-    ).existsSync()) {
+    if (!SkillFiles(
+      app.read(appConfigProvider),
+    ).has(package.name, target: destination)) {
       return null;
     }
     return SettingConfirm(
@@ -373,11 +355,10 @@ mixin InstallsPrompts on AppPage {
   }
 
   Future<SettingNotice?> installSkill(SkillPackage package) async {
-    final config = app.read(appConfigProvider);
     final target = destination;
-    await platform.readOnlyDirs
-        .skills(config.promptsDir(CompletionKind.skill, project: target))
-        .write(() => installSkillPackage(config, package, project: target));
+    await SkillFiles(
+      app.read(appConfigProvider),
+    ).install(package, target: target);
     await reloadAllPromptLibraries(app.read);
     pages.leave(
       this,
@@ -514,14 +495,7 @@ class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
       ];
     }
     if (preview == null) {
-      return [
-        PageSection("loading", "", [
-          NoticeController(
-            part("loading", ""),
-            lines: const [NoticeLine("Reading the entry…")],
-          ),
-        ]),
-      ];
+      return [notice("loading", "Reading the entry…")];
     }
     final package = preview.package;
     return [
@@ -609,8 +583,10 @@ class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
         "This agent cannot be installed: its name cannot be a file name.",
       );
     }
-    final config = app.read(appConfigProvider);
-    if (!File(agentFilePath(config, name, project: destination)).existsSync()) {
+    if (!AgentFiles(
+      app.read(appConfigProvider),
+      project: destination,
+    ).has(name)) {
       return null;
     }
     return SettingConfirm(
@@ -626,23 +602,14 @@ class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
   /// with it, or none, so an agent installed over another does not keep the
   /// face of the one it replaced.
   Future<SettingNotice?> _installAgent(EntryPreview preview) async {
-    final config = app.read(appConfigProvider);
     final name = entry.installName;
     final target = destination;
     final picture = preview.picture;
-    await platform.readOnlyDirs
-        .of(config.promptsDir(CompletionKind.agent, project: target))
-        .write(() async {
-          final file = File(agentFilePath(config, name, project: target));
-          await file.create(recursive: true);
-          await file.writeAsString(preview.promptSource!);
-          await writeAgentFace(
-            config,
-            name,
-            picture == null ? null : AgentPhoto(picture),
-            project: target,
-          );
-        });
+    await AgentFiles(app.read(appConfigProvider), project: target).write(
+      name,
+      preview.promptSource!,
+      face: picture == null ? null : AgentPhoto(picture),
+    );
     await reloadAllPromptLibraries(app.read);
     pages.leave(this, saying: installedSnack("Installed", name, target));
     return null;
@@ -689,27 +656,19 @@ class SkillInstallAppPage extends AppPage with InstallsPrompts {
     final package = _package;
     if (_loading || package == null) {
       return [
-        PageSection("state", "", [
-          NoticeController(
-            part("state", ""),
-            lines: [
-              NoticeLine(
-                _loading
-                    ? "Reading the skill…"
-                    : "The skill package could not be read. It may have been "
-                          "deleted with the chat.",
-              ),
-            ],
-          ),
-        ]),
+        notice(
+          "state",
+          _loading
+              ? "Reading the skill…"
+              : "The skill package could not be read. It may have been "
+                    "deleted with the chat.",
+        ),
       ];
     }
     return [
       if (package.description case final description?
           when description.isNotEmpty)
-        PageSection("about", "", [
-          NoticeController(part("about", ""), lines: [NoticeLine(description)]),
-        ]),
+        notice("about", description),
       PageSection("skill", "SKILL.md", [
         DocumentController(
           part("body", "SKILL.md"),

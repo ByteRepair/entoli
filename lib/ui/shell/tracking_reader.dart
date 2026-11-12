@@ -60,6 +60,9 @@ class TrackingReader implements SettingReader {
     _passHeard.add(listenable);
   }
 
+  /// Runs the pass again as a change would, coalesced with any other.
+  void refresh() => _changed();
+
   void _changed() {
     if (_queued || _closed) return;
     _queued = true;

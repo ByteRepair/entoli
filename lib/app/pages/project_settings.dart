@@ -96,10 +96,10 @@ class ProjectSettingsAppPage extends AppPage {
   @override
   List<PageSection> sections(SettingReader reader) {
     if (reader.watch(projectGoneProvider(at))) {
-      return [_say("gone", "This project is no longer on that device.")];
+      return [notice("gone", "This project is no longer on that device.")];
     }
     if (!reader.watch(projectLoadedProvider(at))) {
-      return [_say("loading", "Reading the project's settings…")];
+      return [notice("loading", "Reading the project's settings…")];
     }
     final frozen = reader.watch(projectFrozenProvider(at));
     final builtIn = builtinProjectOf(project);
@@ -109,7 +109,7 @@ class ProjectSettingsAppPage extends AppPage {
     final omada = builtIn?.omada ?? settings.omada;
     final sections = [
       if (remote)
-        _say(
+        notice(
           "device",
           frozen
               ? "${_deviceName(reader)} is offline. These settings can be "
@@ -371,14 +371,6 @@ class ProjectSettingsAppPage extends AppPage {
 
   String _deviceName(SettingReader reader) =>
       reader.watch(syncPeersProvider)[device]?.name ?? "The device";
-
-  PageSection _say(
-    String id,
-    String text, {
-    NoticeTone tone = NoticeTone.plain,
-  }) => PageSection(id, "", [
-    NoticeController(part(id, ""), tone: tone, lines: [NoticeLine(text)]),
-  ]);
 
   /// [section] as it is drawn while the device is away: what is shown, with
   /// nothing to change.

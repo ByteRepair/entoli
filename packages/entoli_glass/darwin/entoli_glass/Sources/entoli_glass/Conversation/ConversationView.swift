@@ -147,13 +147,6 @@ struct ConversationView: View {
       }
       .animation(Self.motion, value: atEnd)
     }
-    .environment(
-      \.openURL,
-      OpenURLAction { url in
-        model.link(url.absoluteString)
-        return .handled
-      }
-    )
     .sheet(isPresented: detailShown) {
       DetailView(model: model)
     }
@@ -305,10 +298,7 @@ struct DetailView: View {
       .foregroundStyle(section.isError ? AnyShapeStyle(.red) : AnyShapeStyle(.primary))
       .textSelection(.enabled)
     if detail.mono {
-      ScrollView(.horizontal) {
-        text.font(.system(size: 12.5, design: .monospaced)).padding(12)
-      }
-      .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
+      OutputBox(padding: 12) { text }
     } else {
       text.lineSpacing(3)
     }

@@ -59,15 +59,11 @@ class WorkspaceAppPage extends AppPage {
     final entries = _entries;
     if (entries == null) {
       return [
-        PageSection("loading", "", [
-          NoticeController(
-            part("loading", ""),
-            tone: _error == null ? NoticeTone.plain : NoticeTone.warning,
-            lines: [
-              NoticeLine(_error == null ? "Reading the folder…" : "$_error"),
-            ],
-          ),
-        ]),
+        notice(
+          "loading",
+          _error == null ? "Reading the folder…" : "$_error",
+          tone: _error == null ? NoticeTone.plain : NoticeTone.warning,
+        ),
       ];
     }
     return [

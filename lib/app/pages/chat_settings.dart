@@ -40,14 +40,8 @@ abstract class ChatSettingsFields extends AppPage {
   );
 
   @override
-  SettingConfirm? leaving(SettingReader reader) => _dirty
-      ? const SettingConfirm(
-          title: "Discard changes?",
-          message: "What you changed here is not saved.",
-          confirmLabel: "Discard",
-          destructive: true,
-        )
-      : null;
+  SettingConfirm? leaving(SettingReader reader) =>
+      _dirty ? AppPage.discardChanges : null;
 
   /// The fields, in their sections.
   List<PageSection> fields(SettingReader reader, {bool pinned = false}) {
@@ -211,32 +205,19 @@ class ChatSettingsAppPage extends ChatSettingsFields {
     final device = _device(reader);
     final frozen = device != null && !device.online;
     if (meta == null) {
-      return [
-        PageSection("loading", "", [
-          NoticeController(
-            part("loading", ""),
-            lines: const [NoticeLine("Reading the chat's settings…")],
-          ),
-        ]),
-      ];
+      return [notice("loading", "Reading the chat's settings…")];
     }
     final workspace = _workspace;
     return [
       if (device != null)
-        PageSection("device", "", [
-          NoticeController(
-            part("device", ""),
-            tone: frozen ? NoticeTone.warning : NoticeTone.plain,
-            lines: [
-              NoticeLine(
-                frozen
-                    ? "${device.name} is offline. These settings can be "
-                          "changed once it is back."
-                    : "This chat lives on ${device.name}.",
-              ),
-            ],
-          ),
-        ]),
+        notice(
+          "device",
+          frozen
+              ? "${device.name} is offline. These settings can be "
+                    "changed once it is back."
+              : "This chat lives on ${device.name}.",
+          tone: frozen ? NoticeTone.warning : NoticeTone.plain,
+        ),
       PageSection("chat", "", [
         ActionController(
           part("id", "Chat ID", description: chatId),
@@ -276,14 +257,7 @@ class ChatSettingsAppPage extends ChatSettingsFields {
       ]),
       ...fields(reader, pinned: _state?.pinned ?? false),
       if (_state?.pinned ?? false)
-        PageSection("pinned", "", [
-          NoticeController(
-            part("pinned", ""),
-            lines: const [
-              NoticeLine("This chat is pinned and cannot be temporary."),
-            ],
-          ),
-        ]),
+        notice("pinned", "This chat is pinned and cannot be temporary."),
       if (!frozen)
         PageSection("delete", "", [
           ActionController(

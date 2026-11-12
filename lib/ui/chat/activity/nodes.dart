@@ -1,9 +1,8 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../../app/plan.dart" show planProvider;
+import "../../../app/plan.dart" show planProgressLine, planProvider;
 import "../../../app/transcript/activity.dart";
-import "../../../domain/plan.dart";
 import "../../fonts.dart";
 import "../plan_page.dart" show openPlan;
 import "../widgets/plan_view.dart" show PlanTaskList;
@@ -179,16 +178,6 @@ class PlanNodeView extends ConsumerWidget {
       ),
     );
   }
-}
-
-/// The line under a plan's title.
-String planProgressLine(List<PlanSection>? sections, {required bool loading}) {
-  if (sections != null) {
-    final (done, total) = sectionsProgress(sections);
-    return "$done of $total tasks done";
-  }
-  // A mirror's first read is a round trip to the home device.
-  return loading ? "Reading the plan…" : "The plan could not be read.";
 }
 
 /// An [OutputNode]: a card the user taps to open what the turn made.

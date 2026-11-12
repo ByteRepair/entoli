@@ -6,7 +6,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 import "package:path/path.dart" as p;
 
-import "../../app/plan.dart" show planProvider;
+import "../../app/plan.dart" show planProgressLine, planProvider;
 import "../../app/settings/spec.dart" show SettingReader;
 import "../../app/transcript/activity.dart";
 import "../../app/transcript/code.dart";
@@ -32,6 +32,9 @@ class FormulaSheet {
 
   final _ids = <(String, bool), int>{};
   final _sent = <int>{};
+
+  /// Asked of the renderer and not landed yet, or failed: not asked again.
+  final _asked = <int>{};
   final _unsent = <wire.FormulaPicture>[];
 
   FormulaStyle _style(bool display) => FormulaStyle(
@@ -49,7 +52,12 @@ class FormulaSheet {
     final style = _style(display);
     final ready = _renderer.ready(tex, style);
     if (ready == null) {
-      _renderer.render(tex, style).then((_) => onReady(), onError: (_) {});
+      if (_asked.add(id)) {
+        _renderer.render(tex, style).then((_) {
+          _asked.remove(id);
+          onReady();
+        }, onError: (_) {});
+      }
       return null;
     }
     _sent.add(id);
@@ -74,6 +82,30 @@ class FormulaSheet {
   }
 }
 
+/// Markdown's wire blocks by text, as the last pass and this one used them,
+/// so what a pass no longer shows is let go. A formula landing changes the
+/// blocks that name it, so [clear] drops the lot then.
+class MarkdownBlocks {
+  var _last = <String, List<wire.TextBlockSnapshot>>{};
+  var _now = <String, List<wire.TextBlockSnapshot>>{};
+
+  List<wire.TextBlockSnapshot> of(
+    String text,
+    List<wire.TextBlockSnapshot> Function() parse,
+  ) => _now[text] ??= _last[text] ?? parse();
+
+  /// Ends a pass: what it did not use goes at the end of the next.
+  void turn() {
+    _last = _now;
+    _now = {};
+  }
+
+  void clear() {
+    _last = {};
+    _now = {};
+  }
+}
+
 /// What a node id names: the node, and the source an open detail of it
 /// follows.
 typedef EncodedNode = ({
@@ -92,6 +124,7 @@ class TranscriptEncoder {
     required this.formulas,
     required this.highlighter,
     required this.resources,
+    required this.parsed,
   });
 
   final SettingReader reader;
@@ -101,6 +134,10 @@ class TranscriptEncoder {
 
   /// Where a chat's attachments are on this device.
   final String resources;
+
+  /// [markdown]'s blocks by text, kept across passes: only the row being
+  /// written is parsed and highlighted again.
+  final MarkdownBlocks parsed;
 
   final nodes = <String, EncodedNode>{};
 
@@ -239,7 +276,6 @@ class TranscriptEncoder {
   wire.SaidSnapshot _said(Said said) => switch (said) {
     ProseSaid(:final markdown, :final caret) => wire.SaidSnapshot(
       blocks: this.markdown(markdown),
-      text: markdown,
       caret: caret,
     ),
     ErrorSaid() => wire.SaidSnapshot(
@@ -292,9 +328,6 @@ class TranscriptEncoder {
             ? wire.TranscriptIcon.artifact
             : wire.TranscriptIcon.skill,
         text: node.label,
-        output: node.kind == OutputKind.artifact
-            ? wire.OutputKind.artifact
-            : wire.OutputKind.skill,
       ),
     };
   }
@@ -304,19 +337,12 @@ class TranscriptEncoder {
   wire.NodeSnapshot _plan(PlanNode node, String id) {
     final plan = reader.watch(planProvider(node.run.chatId));
     final sections = plan.value;
-    final (done, total) = sections == null
-        ? (0, 0)
-        : sectionsProgress(sections);
     return wire.NodeSnapshot(
       id: id,
       kind: wire.NodeKind.plan,
       icon: wire.TranscriptIcon.plan,
       text: node.title,
-      progress: sections != null
-          ? "$done of $total tasks done"
-          : plan.isLoading
-          ? "Reading the plan…"
-          : "The plan could not be read.",
+      progress: planProgressLine(sections, loading: plan.isLoading),
       tasks: [
         for (final section in sections ?? const <PlanSection>[])
           for (final task in section.tasks)
@@ -358,9 +384,12 @@ class TranscriptEncoder {
   );
 
   /// Markdown as blocks, its code tokenised and its formulas by id.
-  List<wire.TextBlockSnapshot> markdown(String text) => [
-    for (final block in MarkdownDocument.parse(text).blocks) _text(block),
-  ];
+  List<wire.TextBlockSnapshot> markdown(String text) => parsed.of(
+    text,
+    () => [
+      for (final block in MarkdownDocument.parse(text).blocks) _text(block),
+    ],
+  );
 
   wire.TextBlockSnapshot _text(MarkdownBlock block) {
     final nesting = block.nesting;

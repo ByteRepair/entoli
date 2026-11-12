@@ -45,9 +45,10 @@ enum ProseBuilder {
       if index > 0 { out.append(NSAttributedString(string: "\n")) }
       let first = index == 0
       switch block.kind {
-      case .code: out.append(code(block, dark: dark, first: first))
+      case .code: out.append(code(block, id: index, dark: dark, first: first))
       case .table:
-        out.append(table(block, model: model, tone: tone, first: first, width: width))
+        out.append(
+          table(block, id: index, model: model, tone: tone, first: first, width: width))
       default:
         let start = out.length
         out.append(line(block, model: model, tone: tone))
@@ -155,10 +156,11 @@ enum ProseBuilder {
   /// A fenced block: a line naming its language, then its lines in the mono
   /// face coloured by their tokens' scopes, inset in a box the view draws.
   /// Lines wrap rather than scroll, a scroll being a selection of its own.
-  private static func code(_ block: TextBlockSnapshot, dark: Bool, first: Bool)
+  /// [id] tells one box from the next; the block's index, so the same text
+  /// builds equal and a view is not laid out again for nothing.
+  private static func code(_ block: TextBlockSnapshot, id: Int, dark: Bool, first: Bool)
     -> NSAttributedString
   {
-    let id = UUID().uuidString
     let inset = indent(block) + pad
     let out = NSMutableAttributedString()
 
@@ -218,7 +220,7 @@ enum ProseBuilder {
   /// aligned as its column says, the grid drawn by the view. A row reads as
   /// a markdown row in a copy, whatever part of it was selected.
   private static func table(
-    _ block: TextBlockSnapshot, model: TranscriptModel, tone: PlatformColor?, first: Bool,
+    _ block: TextBlockSnapshot, id: Int, model: TranscriptModel, tone: PlatformColor?, first: Bool,
     width: CGFloat?
   ) -> NSAttributedString {
     let colour = tone ?? PlatformColor.labelColor
@@ -278,7 +280,6 @@ enum ProseBuilder {
     }
     let rule = "|" + String(repeating: "---|", count: columns)
     let out = NSMutableAttributedString()
-    let id = UUID().uuidString
     for (r, (_, cells)) in built.enumerated() {
       if r > 0 { out.append(NSAttributedString(string: "\n")) }
       let start = out.length
@@ -664,8 +665,7 @@ private let copySymbol = "doc.on.doc"
 
     @objc private func copyCode(_ sender: NSButton) {
       guard sender.tag < decorations.boxes.count else { return }
-      NSPasteboard.general.clearContents()
-      NSPasteboard.general.setString(decorations.boxes[sender.tag].code, forType: .string)
+      copyToPasteboard(decorations.boxes[sender.tag].code)
     }
 
     override func drawBackground(in rect: NSRect) {
@@ -701,8 +701,7 @@ private let copySymbol = "doc.on.doc"
     /// As a reader would paste it: a picture's character pastes as nothing.
     override func copy(_ sender: Any?) {
       guard let selected else { return }
-      NSPasteboard.general.clearContents()
-      NSPasteboard.general.setString(ProseBuilder.plain(selected), forType: .string)
+      copyToPasteboard(ProseBuilder.plain(selected))
     }
 
     @objc func replyToSelection() {
@@ -776,7 +775,7 @@ private let copySymbol = "doc.on.doc"
         let plain = ProseBuilder.plain(textView.attributedText.attributedSubstring(from: range))
         var children: [UIMenuElement] = [
           UIAction(title: "Copy", image: UIImage(systemName: "doc.on.doc")) { _ in
-            UIPasteboard.general.string = plain
+            copyToPasteboard(plain)
           }
         ]
         if let reply = actions.reply {
@@ -806,7 +805,7 @@ private let copySymbol = "doc.on.doc"
           type: .system,
           primaryAction: UIAction(image: UIImage(systemName: copySymbol)) { [weak self] _ in
             guard let self, index < self.decorations.boxes.count else { return }
-            UIPasteboard.general.string = self.decorations.boxes[index].code
+            copyToPasteboard(self.decorations.boxes[index].code)
           })
         button.tintColor = .secondaryLabel
         button.accessibilityLabel = "Copy code"

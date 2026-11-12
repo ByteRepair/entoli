@@ -159,7 +159,7 @@ final class _OpenChat implements _Screen {
     conversation = ConversationSurface(
       context: _shell._context,
       onReply: (quote) => composer.embed(QuoteEmbed(quote)),
-      republish: conversationPass,
+      republish: () => _conversationReader.refresh(),
     );
     turn = TurnRunner(
       context: _shell._context,

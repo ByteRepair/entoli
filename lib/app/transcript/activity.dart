@@ -181,9 +181,6 @@ sealed class ActivityNode {
   final Activity activity;
   final Run run;
 
-  /// Whether tapping it opens a detail page.
-  bool get opens => true;
-
   ActivityDetail? detail(
     SettingReader reader, {
     ProviderListenable<LiveMessage>? source,
@@ -240,9 +237,6 @@ final class PlanNode extends ActivityNode {
   const PlanNode(super.activity, super.run, {required this.title});
 
   final String title;
-
-  @override
-  bool get opens => false;
 }
 
 enum OutputKind { artifact, skill }
@@ -261,9 +255,6 @@ final class OutputNode extends ActivityNode {
   final OutputKind kind;
   final String label;
   final Future<void> Function(TranscriptHandOff handOff) open;
-
-  @override
-  bool get opens => false;
 }
 
 /// A status line under a detail's title: "Running · pid 4001", "Exit code 1".

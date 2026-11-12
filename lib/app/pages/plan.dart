@@ -34,16 +34,10 @@ class PlanAppPage extends AppPage {
     final sections = plan.value;
     if (sections == null) {
       return [
-        PageSection("none", "", [
-          NoticeController(
-            part("none", ""),
-            lines: [
-              NoticeLine(
-                plan.isLoading ? "Reading the plan…" : "This chat has no plan.",
-              ),
-            ],
-          ),
-        ]),
+        notice(
+          "none",
+          plan.isLoading ? "Reading the plan…" : "This chat has no plan.",
+        ),
       ];
     }
     return [

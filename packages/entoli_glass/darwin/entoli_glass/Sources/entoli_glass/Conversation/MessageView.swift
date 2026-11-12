@@ -177,15 +177,9 @@ private struct TrailingView: View {
       }
       .padding(.vertical, 2)
     case .liveOutput:
-      ScrollView(.horizontal) {
-        Text(trailing.line ?? "")
-          .font(.system(size: 12.5, design: .monospaced))
-          .lineLimit(12)
-          .padding(10)
-      }
-      .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
+      OutputBox { Text(trailing.line ?? "").lineLimit(12) }
     case .retry:
-      Button("Retry", systemImage: "arrow.clockwise") { model.retry(row) }
+      Button("Retry", systemImage: "arrow.clockwise") { model.act(row, .regenerate) }
         .buttonStyle(.borderless)
         .foregroundStyle(.red)
     }
@@ -200,12 +194,7 @@ private struct ShellRunView: View {
     VStack(alignment: .leading, spacing: 6) {
       Text("$ \(shell.command)").font(.system(.body, design: .monospaced))
       if !shell.output.isEmpty {
-        ScrollView(.horizontal) {
-          Text(shell.output.trimmingCharacters(in: .newlines))
-            .font(.system(size: 12.5, design: .monospaced))
-            .padding(10)
-        }
-        .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
+        OutputBox { Text(shell.output.trimmingCharacters(in: .newlines)) }
       }
       if let code = shell.exitCode, code != 0 {
         Text("Exit code \(code)").font(.caption).foregroundStyle(.red)
@@ -413,5 +402,19 @@ private struct CappedWidth: Layout {
     let x = trailing ? bounds.maxX - child.width : bounds.minX
     subviews.first?.place(
       at: CGPoint(x: x, y: bounds.minY), proposal: ProposedViewSize(child))
+  }
+}
+
+/// What a command printed: monospaced, scrolled sideways rather than
+/// wrapped, on a tinted box.
+struct OutputBox<Content: View>: View {
+  var padding: CGFloat = 10
+  @ViewBuilder let content: Content
+
+  var body: some View {
+    ScrollView(.horizontal) {
+      content.font(.system(size: 12.5, design: .monospaced)).padding(padding)
+    }
+    .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
   }
 }

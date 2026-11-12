@@ -19,7 +19,6 @@ import SwiftUI
   private(set) var chatId: String?
   private(set) var order: [String] = []
   private(set) var rows: [String: RowSnapshot] = [:]
-  private(set) var running = false
   /// Open but still being read, so an empty list is not an empty chat.
   private(set) var loading = false
   private(set) var reactions: [ReactionChoice] = []
@@ -56,7 +55,6 @@ extension TranscriptModel: NativeTranscript {
       let kept = Set(order)
       rows = rows.filter { kept.contains($0.key) }
     }
-    if running != snapshot.running { running = snapshot.running }
     if loading != snapshot.loading { loading = snapshot.loading }
     if reactions != snapshot.reactions { reactions = snapshot.reactions }
     if chapters != snapshot.chapters { chapters = snapshot.chapters }
@@ -111,8 +109,6 @@ extension TranscriptModel {
   func act(_ row: String, _ action: MessageAction) { say.act(row: row, action: action) { _ in } }
   func edit(_ row: String, _ text: String) { say.edit(row: row, text: text) { _ in } }
   func react(_ row: String, _ emoji: String) { say.react(row: row, emoji: emoji) { _ in } }
-  func retry(_ row: String) { say.retry(row: row) { _ in } }
-  func openPlan() { say.openPlan { _ in } }
   func reply(_ row: String, _ text: String) { say.reply(row: row, text: text) { _ in } }
   func openFile(_ row: String, block: Int, file: Int) {
     say.openFile(row: row, block: Int64(block), file: Int64(file)) { _ in }

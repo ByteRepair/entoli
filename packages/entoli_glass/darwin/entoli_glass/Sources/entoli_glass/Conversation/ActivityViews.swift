@@ -134,7 +134,7 @@ private struct OutputCard: View {
   let model: TranscriptModel
 
   var body: some View {
-    let artifact = node.output == .artifact
+    let artifact = node.icon == .artifact
     Button {
       model.open(node.id)
     } label: {

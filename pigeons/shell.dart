@@ -860,7 +860,6 @@ class DialogRequest {
     this.destructive = false,
     this.initial,
     this.hint,
-    this.helper,
     this.lines = 1,
     this.allowBlank = false,
     this.label,
@@ -882,7 +881,6 @@ class DialogRequest {
   // text and pair: the field's, and a pair's second
   String? initial;
   String? hint;
-  String? helper;
   int lines;
   bool allowBlank;
   String? label;
