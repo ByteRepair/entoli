@@ -8,6 +8,7 @@ import "../providers.dart";
 import "chat_session.dart" show chatSessionHostProvider;
 import "composer.dart";
 import "selection.dart";
+import "settings/spec.dart" show SettingReader;
 
 /// The new-chat screen apart from how it is drawn: its composer, the
 /// settings the chat it makes will run under, whether one is being made, and
@@ -57,29 +58,37 @@ class NewChatSession {
     }
   }
 
-  /// What may be typed at [at]: a composer binding, or null where something
-  /// stands in its place — a project still to be set up, a paired device's
-  /// project that has gone frozen.
-  ComposerBinding? binding(ProjectRef at) {
-    if (starting.value) return null;
+  /// What stands where the composer goes at [at], what it depends on
+  /// watched through [reader]. A paired device's project has its setup and
+  /// its voice on that device.
+  ComposerSlot slot(SettingReader reader, ProjectRef at) {
+    if (starting.value) return const ComposerStarting();
     if (at.device != null) {
-      if (_ref.read(projectFrozenProvider(at))) return null;
-      return ComposerBinding(
+      if (reader.watch(projectFrozenProvider(at))) {
+        return const ComposerViewOnly();
+      }
+      return ComposerReady(
+        ComposerBinding(
+          agentSpeaking: false,
+          onSend: send,
+          onAbort: () {},
+          project: at.project,
+          device: at.device,
+        ),
+      );
+    }
+    if (!reader.watch(setupCompleteProvider(at.project))) {
+      return const ComposerNeedsSetup();
+    }
+    return ComposerReady(
+      ComposerBinding(
         agentSpeaking: false,
         onSend: send,
         onAbort: () {},
         project: at.project,
-        device: at.device,
-      );
-    }
-    if (!_ref.read(setupCompleteProvider(at.project))) return null;
-    return ComposerBinding(
-      agentSpeaking: false,
-      onSend: send,
-      onAbort: () {},
-      project: at.project,
-      onVoice: () =>
-          _ref.read(chatSessionHostProvider).startVoiceChat(meta.value),
+        onVoice: () =>
+            _ref.read(chatSessionHostProvider).startVoiceChat(meta.value),
+      ),
     );
   }
 

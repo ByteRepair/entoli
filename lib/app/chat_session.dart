@@ -9,6 +9,7 @@ import "../providers.dart";
 import "chat_controller.dart";
 import "composer.dart";
 import "mirror_controller.dart";
+import "settings/spec.dart" show SettingReader;
 
 /// What a chat's session asks of the frontend it is drawn in: a field's text
 /// to hold the composer's words, a line said to the user, voice mode opened.
@@ -92,6 +93,26 @@ class ChatSession {
     } on Undelivered catch (e) {
       _ref.read(chatSessionHostProvider).say(e.message);
     }
+  }
+
+  /// What stands where the composer goes for [view], driven through
+  /// [driver], what it depends on watched through [reader].
+  ComposerSlot slot(
+    SettingReader reader,
+    ChatViewState view,
+    TurnDriver? driver, {
+    String? device,
+    void Function()? sent,
+  }) {
+    final chat = view.chat;
+    if (chat == null || driver == null) return const ComposerViewOnly();
+    if (!mirrored && !reader.watch(setupCompleteProvider(chat.state.project))) {
+      return const ComposerNeedsSetup();
+    }
+    if (view.roomPhase == RoomPhase.waitingOnYou) {
+      return const ComposerAnswering();
+    }
+    return ComposerReady(binding(view, driver, device: device, sent: sent));
   }
 
   /// The composer bound to [view]'s turn through [driver]: Send and Queue,

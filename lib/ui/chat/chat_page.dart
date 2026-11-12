@@ -20,7 +20,6 @@ import "../fonts.dart";
 import "../theme.dart";
 import "../selection.dart";
 import "../voice/read_aloud.dart";
-import "../voice/voice_page.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/chip_row.dart";
 import "../widgets/completion_field.dart";
@@ -30,9 +29,17 @@ import "chat_chrome.dart";
 import "chat_settings_page.dart";
 import "../../app/chat_controller.dart";
 import "../../app/chat_session.dart";
+import "../../app/settings/spec.dart" show WidgetReader;
 import "../../app/new_chat_session.dart";
 import "chat_expiry.dart";
-import "../../app/composer.dart" show ComposerBinding, ComposerModel;
+import "../../app/composer.dart"
+    show
+        ComposerAnswering,
+        ComposerModel,
+        ComposerNeedsSetup,
+        ComposerReady,
+        ComposerStarting,
+        ComposerViewOnly;
 import "../../app/mirror_controller.dart";
 import "plan_page.dart" show PlanButton;
 import "../../app/transcript/transcript.dart";
@@ -301,54 +308,28 @@ class _NewChatState extends ConsumerState<_NewChat> {
     );
   }
 
-  Future<void> _send(String text, List<Attachment> attachments) =>
-      _session.send(text, attachments);
-
-  /// The composer, or a "setup required" bar where the project needs setup
-  /// and has not been set up yet. The bar replaces the composer entirely,
-  /// the way `ViewOnlyBar` does for a mirrored chat.
+  /// The composer, or what the session's slot puts in its place.
   Widget _bottomBar() {
-    final at = ref.watch(selectedProjectProvider);
-    final project = at.project;
     final chrome = ref.watch(chatChromeProvider);
-    if (_starting) return const SizedBox.shrink();
-    Widget composer(ComposerBinding binding) => chrome.composer(
-      controller: _controller,
-      model: _model,
-      binding: binding,
+    final slot = _session.slot(
+      WidgetReader(ref),
+      ref.watch(selectedProjectProvider),
     );
+    if (slot is ComposerStarting) return const SizedBox.shrink();
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         // The shell's own composer says it.
         if (!chrome.overPage) const _CommandHint(),
-        if (at.device != null)
-          // A paired device's project: its setup and its voice are that
-          // device's.
-          ref.watch(projectFrozenProvider(at))
-              ? const ViewOnlyBar()
-              : composer(
-                  ComposerBinding(
-                    agentSpeaking: false,
-                    onSend: _send,
-                    onAbort: () {},
-                    project: project,
-                    device: at.device,
-                  ),
-                )
-        else if (ref.watch(setupCompleteProvider(project)))
-          composer(
-            ComposerBinding(
-              agentSpeaking: false,
-              onSend: _send,
-              onAbort: () {},
-              project: project,
-              onVoice: () =>
-                  startVoiceChat(context, ref, meta: _session.meta.value),
-            ),
-          )
-        else
-          const NeedsSetupBar(),
+        switch (slot) {
+          ComposerReady(:final binding) => chrome.composer(
+            controller: _controller,
+            model: _model,
+            binding: binding,
+          ),
+          ComposerViewOnly() => const ViewOnlyBar(),
+          _ => const NeedsSetupBar(),
+        },
       ],
     );
   }
@@ -1165,20 +1146,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
         project: chat.state.project,
         controller: _controller,
       ),
-      bottom: ref.watch(setupCompleteProvider(chat.state.project))
-          ? _turnBar(
-              view: view,
-              driver: notifier,
-              project: chat.state.project,
-              onVoice: () => openVoice(context, ref, widget.chatId),
-              workspace: ref
-                  .watch(appConfigProvider)
-                  .workspaceDir(widget.chatId, project: chat.state.project),
-              workspaceHome: ref
-                  .watch(appConfigProvider)
-                  .projectWorkspaceDir(project: chat.state.project),
-            )
-          : const NeedsSetupBar(),
+      bottom: _turnBar(view: view, driver: notifier),
     );
   }
 
@@ -1228,15 +1196,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       banner: online
           ? MirrorStrip.remote(deviceName: deviceName)
           : MirrorStrip.offline(deviceName: deviceName),
-      bottom: online
-          ? _turnBar(
-              view: view,
-              driver: driver,
-              project: chat.state.project,
-              device: deviceId,
-              workspace: null,
-            )
-          : const ViewOnlyBar(),
+      bottom: _turnBar(
+        view: view,
+        driver: online ? driver : null,
+        device: deviceId,
+      ),
     );
   }
 
@@ -1356,56 +1320,42 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   /// beside it, what the bar's fallback words in the guest's vocabulary.
   Widget _turnBar({
     required ChatViewState view,
-    required TurnDriver driver,
-    required String? project,
+    required TurnDriver? driver,
     String? device,
-    VoidCallback? onVoice,
-    String? workspace,
-    String? workspaceHome,
   }) {
-    Future<void> send(
-      String text,
-      List<Attachment> attachments, {
-      bool queue = false,
-    }) {
-      _follow.attach();
-      return _session.send(driver, text, attachments, queue: queue);
-    }
-
-    return Column(
+    final slot = _session.slot(
+      WidgetReader(ref),
+      view,
+      driver,
+      device: device,
+      sent: _follow.attach,
+    );
+    Widget over(Widget below) => Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         _chrome.turnSurface(
           view: view,
-          driver: driver,
+          driver: driver!,
           onWithdrawn: (said) => _handle?.restore(said),
         ),
-        switch (view.roomPhase) {
-          RoomPhase.waitingOnYou => _chrome.questions(
-            view: view,
-            driver: driver,
-          ),
-          _ => _chrome.composer(
-            key: _composer,
-            controller: _controller,
-            model: _model,
-            binding: ComposerBinding(
-              agentSpeaking: view.roomPhase == RoomPhase.agentSpeaking,
-              onSend: send,
-              onQueue: (text, attachments) =>
-                  send(text, attachments, queue: true),
-              steers: driver.steers,
-              onAbort: driver.abort,
-              project: project,
-              device: device,
-              onVoice: onVoice,
-              workspace: workspace,
-              workspaceHome: workspaceHome,
-            ),
-          ),
-        },
+        below,
       ],
     );
+    return switch (slot) {
+      ComposerReady(:final binding) => over(
+        _chrome.composer(
+          key: _composer,
+          controller: _controller,
+          model: _model,
+          binding: binding,
+        ),
+      ),
+      ComposerAnswering() => over(
+        _chrome.questions(view: view, driver: driver!),
+      ),
+      ComposerNeedsSetup() => const NeedsSetupBar(),
+      ComposerViewOnly() || ComposerStarting() => const ViewOnlyBar(),
+    };
   }
 
   /// A passage being answered, into the composer — or, while a question

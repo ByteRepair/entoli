@@ -769,9 +769,11 @@ button, the empty-chat starter and the running-turn spinner.
 checks a `.setup-complete` marker in the project's directory — and, on the
 guests (Android and iOS), that a rootfs is picked, the same env check the
 settings page's banner asks. Where it is
-false, `_NewChat` and `_local` swap the composer for a `NeedsSetupBar` —
-the same full-swap pattern `ViewOnlyBar` uses for a mirrored chat — with a
-button that opens Settings at the project's category. The turn path no
+false, the session's `ComposerSlot` (`ChatSession.slot`,
+`NewChatSession.slot`) is `ComposerNeedsSetup`, which both frontends draw as
+the setup bar in the composer's place — as `ComposerViewOnly` is drawn for a
+mirrored chat offline — with a button that opens Settings at the project's
+category. The slot is decided once, in the core, for every frontend. The turn path no
 longer creates the rootfs lazily; "Run Setup" owns the full lifecycle.
 
 **A chat moved to another project reloads the controller, and the move

@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/chat_controller.dart" show TurnDriver;
 import "../../app/chat_session.dart";
+import "../../app/composer.dart";
 import "../../app/mirror_controller.dart" show chatViewProvider;
 import "../../app/new_chat_session.dart";
 import "../../domain/chat_meta.dart";
@@ -321,31 +322,24 @@ final class _OpenChat implements _Screen {
     });
   }
 
-  /// Up where the chat can be written to and nothing stands in its place: a
-  /// question the turn waits on, a project still to be set up.
+  /// Up where the session's slot is the composer.
   void composerPass() {
     if (_closed) return;
     _composerReader.pass(() {
       final (:view, :driver) = _state(_composerReader);
-      final chat = view.chat;
-      final ready =
-          chat != null &&
-          driver != null &&
-          view.roomPhase != RoomPhase.waitingOnYou &&
-          (_session.mirrored ||
-              _composerReader.watch(setupCompleteProvider(chat.state.project)));
-      if (!ready) {
-        if (_answers.composer.release(composer)) {
-          _outbox.composer(ComposerSnapshot(present: false));
-        }
-        return;
-      }
       final device = _composerReader
           .watch(remoteChatsProvider)
           .where((c) => c.chatId == id)
           .firstOrNull
           ?.deviceId;
-      composer.bind(_session.binding(view, driver, device: device));
+      final slot = _session.slot(_composerReader, view, driver, device: device);
+      if (slot is! ComposerReady) {
+        if (_answers.composer.release(composer)) {
+          _outbox.composer(ComposerSnapshot(present: false));
+        }
+        return;
+      }
+      composer.bind(slot.binding);
       _answers.composer.take(composer);
       final (:ink, :outline) = _colours(_composerReader);
       _outbox.composer(
@@ -375,11 +369,7 @@ final class _OpenChat implements _Screen {
           .where((c) => c.chatId == id)
           .firstOrNull;
       final mirrored = _session.mirrored;
-      final bar = mirrored
-          ? (driver == null ? FootBar.offline : FootBar.none)
-          : _footReader.watch(setupCompleteProvider(chat.state.project))
-          ? FootBar.none
-          : FootBar.needsSetup;
+      final bar = _barOf(_session.slot(_footReader, view, driver));
       final browser = browserOf(
         _footReader.watch(agentBrowserProvider),
         mirrored,
@@ -580,18 +570,14 @@ final class _NewChat implements _Screen {
   void composerPass() {
     if (_closed) return;
     _composerReader.pass(() {
-      final at = _at(_composerReader);
-      // Watched so a change to either moves the composer.
-      _composerReader.watch(setupCompleteProvider(at.project));
-      if (at.device != null) _composerReader.watch(projectFrozenProvider(at));
-      final binding = _session.binding(at);
-      if (binding == null) {
+      final slot = _session.slot(_composerReader, _at(_composerReader));
+      if (slot is! ComposerReady) {
         if (_answers.composer.release(composer)) {
           _outbox.composer(ComposerSnapshot(present: false));
         }
         return;
       }
-      composer.bind(binding);
+      composer.bind(slot.binding);
       _answers.composer.take(composer);
       final view = WidgetsBinding.instance.platformDispatcher.implicitView!;
       final dark =
@@ -613,15 +599,11 @@ final class _NewChat implements _Screen {
   void footPass() {
     if (_closed) return;
     _footReader.pass(() {
-      final at = _at(_footReader);
-      final bar = at.device != null
-          ? (_footReader.watch(projectFrozenProvider(at))
-                ? FootBar.offline
-                : FootBar.none)
-          : _footReader.watch(setupCompleteProvider(at.project))
-          ? FootBar.none
-          : FootBar.needsSetup;
-      _outbox.foot(ChatFootSnapshot(bar: bar));
+      _outbox.foot(
+        ChatFootSnapshot(
+          bar: _barOf(_session.slot(_footReader, _at(_footReader))),
+        ),
+      );
     });
   }
 
@@ -667,3 +649,10 @@ final class _NewChat implements _Screen {
     _keep.close();
   }
 }
+
+/// What the foot draws in the composer's place for [slot].
+FootBar _barOf(ComposerSlot slot) => switch (slot) {
+  ComposerNeedsSetup() => FootBar.needsSetup,
+  ComposerViewOnly() => FootBar.offline,
+  ComposerReady() || ComposerAnswering() || ComposerStarting() => FootBar.none,
+};
