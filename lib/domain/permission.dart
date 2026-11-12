@@ -74,29 +74,66 @@ abstract class PermissionClassifier {
 
 /// What the user asked a turn for, as the classifier reads it beside a call:
 /// the message the turn opened on as the user typed it (text alone, no
-/// attachments; a sub-agent's is its task), the chat's active goal, and the
-/// plan's task under way. Data the classifier weighs, never instructions it
-/// takes — see the rubric in `LlmClassifier`. Message content, so it is never
-/// put in a log line.
+/// attachments; a sub-agent's is its task), the user's messages before it
+/// since the last compaction ([before]) and those steered in since it
+/// ([after]), the reply that message answers ([answering]), the chat's active
+/// goal, the plan's task under way, and the calls the agent has made since
+/// the last compaction ([calls]). Every tool result and the rest of the
+/// agent's prose are left out, as Claude Code's classifier leaves them: the
+/// prose is the agent arguing its own case, the results are where injected
+/// text arrives. [answering] is the exception because the user read it and
+/// answered it: a "do this" says nothing without the reply it agrees to. Data the classifier weighs, never instructions it takes — see
+/// the rubric in `LlmClassifier`. Message content, so it is never put in a log
+/// line.
 ///
 /// [of] is the one place blankness is decided: each part trimmed, a blank
-/// part null, and no request at all where every part is. Everything past it
-/// reads a part's presence as its having something to say.
+/// part null or dropped, and no request at all where every part is.
+/// Everything past it reads a part's presence as its having something to say.
 class ClassifierRequest {
-  const ClassifierRequest({this.said, this.goal, this.task});
+  const ClassifierRequest({
+    this.said,
+    this.goal,
+    this.task,
+    this.before = const [],
+    this.after = const [],
+    this.calls = const [],
+    this.answering,
+  });
 
-  static ClassifierRequest? of({String? said, String? goal, String? task}) {
+  static ClassifierRequest? of({
+    String? said,
+    String? goal,
+    String? task,
+    Iterable<String?> before = const [],
+    Iterable<String?> after = const [],
+    Iterable<ClassifierCall> calls = const [],
+    String? answering,
+  }) {
     String? kept(String? text) {
       final trimmed = text?.trim();
       return trimmed == null || trimmed.isEmpty ? null : trimmed;
     }
 
+    List<String> keptAll(Iterable<String?> texts) => [
+      for (final text in texts) ?kept(text),
+    ];
+
     final request = ClassifierRequest(
       said: kept(said),
       goal: kept(goal),
       task: kept(task),
+      before: keptAll(before),
+      after: keptAll(after),
+      calls: calls.toList(),
+      answering: kept(answering),
     );
-    return request.said == null && request.goal == null && request.task == null
+    return request.said == null &&
+            request.goal == null &&
+            request.task == null &&
+            request.before.isEmpty &&
+            request.after.isEmpty &&
+            request.calls.isEmpty &&
+            request.answering == null
         ? null
         : request;
   }
@@ -104,7 +141,24 @@ class ClassifierRequest {
   final String? said;
   final String? goal;
   final String? task;
+
+  /// The user's earlier messages, oldest first.
+  final List<String> before;
+
+  /// What the user steered in while the turn ran, oldest first.
+  final List<String> after;
+
+  /// The agent's calls before the one being judged, oldest first.
+  final List<ClassifierCall> calls;
+
+  /// The text of the reply [said] answers: the agent's words, which the user
+  /// read and answered, so what a "yes, do that" agrees to.
+  final String? answering;
 }
+
+/// One call the agent made, as the classifier reads it: the tool and its
+/// arguments, never its result.
+typedef ClassifierCall = ({String tool, String argumentsJson});
 
 /// Always asks. What auto mode falls back to when no classifier model is
 /// configured: every command escalates to the banner, which is the same as

@@ -1,3 +1,5 @@
+import "dart:convert";
+
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
@@ -98,14 +100,94 @@ void main() {
         workspace: "/ws",
         request: ClassifierRequest(said: said, goal: "g" * 5000),
       );
-      final block = LlmClassifier.requestBlock(
-        ClassifierRequest(said: said, goal: "g" * 5000),
-      );
-      expect(block.length, lessThanOrEqualTo(LlmClassifier.requestBudget + 80));
       final prompt = client.sent.single.last.text;
       expect(prompt, contains("the newest line"));
       expect(prompt, isNot(contains("old paste " * 500)));
       expect(prompt, isNot(contains("g" * 600)));
+    });
+
+    test("the budget follows the classifier model's window", () {
+      expect(LlmClassifier.budgetFor(2048), LlmClassifier.minBudget);
+      expect(LlmClassifier.budgetFor(1000000), LlmClassifier.maxBudget);
+      expect(
+        LlmClassifier.budgetFor(null),
+        allOf(
+          greaterThan(LlmClassifier.minBudget),
+          lessThan(LlmClassifier.maxBudget),
+        ),
+        reason: "an unknown model is assumed small, not large",
+      );
+    });
+
+    test("the history fills its budget newest first", () {
+      final request = ClassifierRequest(
+        said: "yes, go ahead",
+        before: [for (var i = 0; i < 40; i++) "message $i ${"x" * 400}"],
+        calls: [
+          for (var i = 0; i < 40; i++)
+            (
+              tool: "bash",
+              argumentsJson: jsonEncode({"command": "step $i ${"y" * 400}"}),
+            ),
+        ],
+      );
+      final budget = LlmClassifier.minBudget;
+      final block = LlmClassifier.requestBlock(request, budget: budget);
+      expect(block.length, lessThanOrEqualTo(budget + 400));
+      expect(block, contains("yes, go ahead"));
+      expect(block, contains("message 39"));
+      expect(block, isNot(contains("message 0 ")));
+      expect(block, contains("step 39"));
+      expect(block, isNot(contains("step 0 ")));
+      expect(block, contains("older messages not shown"));
+      expect(block, contains("older calls not shown"));
+      expect(
+        block.indexOf("message 39"),
+        lessThan(block.indexOf("yes, go ahead")),
+        reason: "the earlier messages come before the turn's, oldest first",
+      );
+    });
+
+    test(
+      "the answered reply rides before the turn's message, its end kept",
+      () {
+        final block = LlmClassifier.requestBlock(
+          ClassifierRequest(
+            said: "do this",
+            answering: "${"background " * 1000}Next I will run npm install.",
+          ),
+          budget: LlmClassifier.maxBudget,
+        );
+        expect(block, contains("The reply this message answers"));
+        expect(block, contains("Next I will run npm install."));
+        expect(block, isNot(contains("background " * 200)));
+        expect(
+          block.indexOf("npm install"),
+          lessThan(block.indexOf("do this")),
+        );
+      },
+    );
+
+    test("an earlier call shows its arguments' start, not all of it", () {
+      final block = LlmClassifier.requestBlock(
+        ClassifierRequest(
+          calls: [
+            (
+              tool: "write",
+              argumentsJson: jsonEncode({
+                "path": "build.py",
+                "content": "import os\n${"z" * 5000}",
+              }),
+            ),
+            (tool: "bash", argumentsJson: jsonEncode({"command": "echo hi"})),
+          ],
+        ),
+        budget: LlmClassifier.maxBudget,
+      );
+      expect(block, contains("build.py"));
+      expect(block, contains("import os"));
+      expect(block, isNot(contains("z" * 1000)));
+      expect(block, contains("- bash: echo hi"));
     });
 
     test("granted directories reach the prompt as writable", () async {

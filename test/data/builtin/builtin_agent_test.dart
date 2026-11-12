@@ -74,6 +74,8 @@ void main() {
     GoalReviewer? goalReviewer,
     bool oneShot = false,
     String? said,
+    List<String> saidBefore = const [],
+    String? answering,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-test");
     // Beside the workspaces, the way the layout keeps `chats/<id>/resources`.
@@ -121,6 +123,8 @@ void main() {
       goalReviewer: goalReviewer,
       oneShot: oneShot,
       said: said,
+      saidBefore: saidBefore,
+      answering: answering,
     );
   }
 
@@ -2508,6 +2512,72 @@ void main() {
         ).read,
       ).run(userMessage("go")).toList();
       expect(classifier.requests.single?.goal, isNull);
+    });
+
+    test(
+      "the earlier messages and the answered reply ride beside the turn's",
+      () async {
+        final classifier = FakeClassifier();
+        await agentOver(
+          FakeLlmClient([
+            [bashCall("npm install")],
+            [finish],
+          ]),
+          approveMode: ApproveMode.auto,
+          classifier: classifier,
+          said: "yes, go ahead",
+          saidBefore: ["set up the project's dependencies", "  "],
+          answering: "I'll run npm install next.",
+        ).run(userMessage("yes, go ahead")).toList();
+        final request = classifier.requests.single!;
+        expect(request.said, "yes, go ahead");
+        expect(request.before, ["set up the project's dependencies"]);
+        expect(request.answering, "I'll run npm install next.");
+      },
+    );
+
+    test("each call is judged knowing the calls made before it", () async {
+      final classifier = FakeClassifier();
+      final client = FakeLlmClient([
+        [bashCall("npm install", id: "c1")],
+        [
+          LlmCompletion(
+            message: LlmMessage(
+              role: LlmRole.assistant,
+              toolCalls: [
+                LlmToolCall(
+                  id: "c2",
+                  name: "bash",
+                  argumentsJson: jsonEncode({"command": "npm run build"}),
+                ),
+                LlmToolCall(
+                  id: "c3",
+                  name: "bash",
+                  argumentsJson: jsonEncode({"command": "npm test"}),
+                ),
+              ],
+            ),
+          ),
+        ],
+        [finish],
+      ]);
+      await agentOver(
+        client,
+        approveMode: ApproveMode.auto,
+        classifier: classifier,
+      ).run(userMessage("build and test it")).toList();
+      List<String> commandsBefore(int i) => [
+        for (final call in classifier.requests[i]?.calls ?? const [])
+          jsonDecode(call.argumentsJson)["command"] as String,
+      ];
+      expect(classifier.requests, hasLength(3));
+      expect(commandsBefore(0), isEmpty);
+      expect(commandsBefore(1), ["npm install"]);
+      expect(
+        commandsBefore(2),
+        ["npm install", "npm run build"],
+        reason: "a call earlier in the same step counts, a later one does not",
+      );
     });
 
     test("a sub-agent's is its task, not the chat's plan", () async {
