@@ -264,12 +264,6 @@ at.
 Giving focus away is the composer's rule; taking it back when the keyboard goes
 is the app's, and is the next section.
 
-The sidebar's new-chat button is, off Apple's platforms, a
-`FloatingActionButton` over the profile and settings tiles, which is the one
-part of the sidebar that is not a list of chats and has room to its right. Not `Scaffold.floatingActionButton`: the
-sidebar is deliberately a `Material`, since an inner `Scaffold` would shadow
-the one holding the drawer.
-
 ## A catalog of things to download
 
 There are two of them: the on-device models, text and voice, and the Linux the

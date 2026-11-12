@@ -188,6 +188,7 @@ void main() {
 
       expect(find.text("No chats in this project yet."), findsOneWidget);
       expect(find.byType(TextField), findsNothing);
+      expect(find.byTooltip("New chat"), findsOneWidget);
     });
 
     testWidgets("typing in the search box leaves only what matches", (
@@ -245,12 +246,16 @@ void main() {
       await pumpBeside(tester);
       await tester.enterText(find.byType(TextField), "shell");
       await tester.pump();
+      // The button beside the field is the one clear; new chat is back after.
+      expect(find.byTooltip("Clear search"), findsOneWidget);
+      expect(find.byTooltip("New chat"), findsNothing);
 
       await tester.tap(find.byTooltip("Clear search"));
       await tester.pump();
 
       expect(find.text("the icon"), findsOneWidget);
       expect(find.text("porting the shell"), findsOneWidget);
+      expect(find.byTooltip("New chat"), findsOneWidget);
     });
   });
 

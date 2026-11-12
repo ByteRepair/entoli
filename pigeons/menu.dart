@@ -18,7 +18,8 @@ import "package:pigeon/pigeon.dart";
 /// which the app's items join, or a menu of the app's own.
 enum NativeMenuRole { app, file, view, help, own }
 
-/// One item: [key] is the character typed with the chord key, lower case.
+/// One item: [key] is the character typed with the chord key, lower case,
+/// and [symbol] the SF Symbol drawn beside the title.
 class NativeMenuItem {
   NativeMenuItem({
     required this.id,
@@ -27,6 +28,7 @@ class NativeMenuItem {
     this.shift = false,
     this.alt = false,
     this.enabled = true,
+    this.symbol,
   });
 
   String id;
@@ -35,6 +37,7 @@ class NativeMenuItem {
   bool shift;
   bool alt;
   bool enabled;
+  String? symbol;
 }
 
 /// One menu: its items in groups, a separator between each.

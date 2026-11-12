@@ -50,7 +50,12 @@ public struct FrontendView: View {
   @ViewBuilder private var frontend: some View {
     switch model.frontend {
     case true?: ShellView(model: model, flutter: flutter)
-    case false?: FlutterPane(controller: flutter).ignoresSafeArea()
+    // On a Mac below the title bar, which Flutter draws nothing for.
+    case false?:
+      FlutterPane(controller: flutter)
+        #if os(iOS)
+          .ignoresSafeArea()
+        #endif
     case nil: Rectangle().fill(.background).ignoresSafeArea()
     }
   }
