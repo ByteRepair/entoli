@@ -23,9 +23,6 @@ struct TurnSurfaceView: View {
   /// Which groups of pills are open: the strip's own, as it is in Flutter.
   @State private var open: Set<String> = []
 
-  /// The task list shows every task: the row's own, as Flutter's is.
-  @State private var todoOpen = false
-
   private var turn: TurnSnapshot { model.turn }
   private var say: TurnIntents { model.say.turn }
 
@@ -49,7 +46,6 @@ struct TurnSurfaceView: View {
     .padding(.horizontal, 8)
     .animation(ComposerView.motion, value: turn)
     .animation(ComposerView.motion, value: open)
-    .animation(ComposerView.motion, value: todoOpen)
   }
 
   // MARK: Resume
@@ -136,16 +132,20 @@ struct TurnSurfaceView: View {
 
   // MARK: Task list
 
+  /// The task list's place in [open], beside the pill groups' kinds.
+  private static let todoKey = "todo list"
+
   /// The latest turn's task list, as Flutter's `TodoStrip` draws it: how
   /// far it is and the task under way, opening to every task.
   private func todoRow(_ todo: TodoSnapshot) -> some View {
     let finished = todo.done == todo.items.count
+    let todoOpen = open.contains(Self.todoKey)
     return VStack(alignment: .leading, spacing: 4) {
       Button {
-        todoOpen.toggle()
+        if todoOpen { open.remove(Self.todoKey) } else { open.insert(Self.todoKey) }
       } label: {
         HStack(spacing: 8) {
-          Image(systemName: finished ? "checkmark.circle" : "checklist")
+          Image(systemName: finished ? "checkmark.circle" : Glyph.checklist.systemImage)
             .foregroundStyle(Color.accentColor)
           (Text("\(todo.done)/\(todo.items.count)  ").foregroundStyle(.secondary)
             + Text(todo.headline))
@@ -348,11 +348,12 @@ extension GoalSnapshot {
 }
 
 extension TodoPhase {
+  /// The plan page's pictures for the same three states.
   var symbol: String {
     switch self {
-    case .completed: "checkmark.circle.fill"
-    case .inProgress: "circle.lefthalf.filled"
-    case .pending: "circle"
+    case .completed: SettingIcon.taskDone.symbol
+    case .inProgress: SettingIcon.taskActive.symbol
+    case .pending: SettingIcon.taskPending.symbol
     }
   }
 

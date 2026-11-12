@@ -150,7 +150,7 @@ Future<List<LlmMessage>> projectionOf(
         role: LlmRole.user,
         text: summarizedTurnText(
           marker.summary,
-          todos: _carriedTodos(messages, from, viewer)?.summary,
+          carried: _carriedTodos(messages, from, viewer)?.carried,
         ),
       ),
     );

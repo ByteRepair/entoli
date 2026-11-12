@@ -1,6 +1,8 @@
 import "package:flutter/material.dart";
 
+import "../../../app/transcript/activities/todo.dart" show TodoWords;
 import "../../../domain/todo.dart";
+import "plan_view.dart" show taskLook;
 
 /// The latest turn's task list, one row above the composer while it has one:
 /// how far it is and the task under way, opening to every task. See "The
@@ -25,7 +27,7 @@ class _TodoStripState extends State<TodoStrip> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final total = list.items.length;
-    final finished = list.unfinished.isEmpty;
+    final finished = list.allDone;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
@@ -75,7 +77,7 @@ class _TodoStripState extends State<TodoStrip> {
           if (_open)
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
-              child: TodoChecklist(list: list),
+              child: _TodoChecklist(list: list),
             ),
         ],
       ),
@@ -84,59 +86,44 @@ class _TodoStripState extends State<TodoStrip> {
 }
 
 /// Every task of [list], each with where it stands: the strip's open half.
-class TodoChecklist extends StatelessWidget {
-  const TodoChecklist({super.key, required this.list});
+class _TodoChecklist extends StatelessWidget {
+  const _TodoChecklist({required this.list});
 
   final TodoList list;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final item in list.items)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  switch (item.status) {
-                    TodoStatus.completed => Icons.check_circle,
-                    TodoStatus.inProgress => Icons.timelapse,
-                    TodoStatus.pending => Icons.radio_button_unchecked,
-                  },
-                  size: 16,
-                  color: switch (item.status) {
-                    TodoStatus.completed => scheme.primary,
-                    TodoStatus.inProgress => scheme.tertiary,
-                    TodoStatus.pending => scheme.outline,
-                  },
-                  semanticLabel: switch (item.status) {
-                    TodoStatus.completed => "Done",
-                    TodoStatus.inProgress => "In progress",
-                    TodoStatus.pending => "To do",
-                  },
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    item.content,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: item.finished ? scheme.onSurfaceVariant : null,
-                      fontWeight: item.status == TodoStatus.inProgress
-                          ? FontWeight.w600
-                          : null,
-                    ),
-                  ),
-                ),
-              ],
+      children: [for (final item in list.items) _row(item, theme)],
+    );
+  }
+
+  Widget _row(TodoItem item, ThemeData theme) {
+    final scheme = theme.colorScheme;
+    final (icon, colour, status) = taskLook(item.status.asPlan, scheme);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: colour, semanticLabel: status),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              item.content,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: item.finished ? scheme.onSurfaceVariant : null,
+                fontWeight: item.status == TodoStatus.inProgress
+                    ? FontWeight.w600
+                    : null,
+              ),
             ),
           ),
-      ],
+        ],
+      ),
     );
   }
 }

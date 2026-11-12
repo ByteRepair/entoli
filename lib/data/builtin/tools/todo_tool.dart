@@ -91,16 +91,16 @@ class TodoTool extends AgentTool {
     yield toolOk(call, list.summary);
   }
 
-  /// A turn that stops with its own list unfinished is told so, the bounded
-  /// number of times the loop allows. Only the list this turn wrote: one an
-  /// earlier turn left is the user's to pick up or not. Once per list: the
-  /// list is let go of as it is said, so a stop after the reminder with the
-  /// list untouched is taken as meant, not sent back a second time.
+  /// A turn that stops with its own list unfinished is told so, once: a stop
+  /// after the reminder is taken as meant. Only the list this turn wrote:
+  /// one an earlier turn left is the user's to pick up or not.
+  @override
+  int get stopNudges => 1;
+
   @override
   Future<String?> beforeStop(Turn turn) async {
     final left = turn.todos?.unfinished ?? const [];
     if (left.isEmpty) return null;
-    turn.todos = null;
     return systemNotification([
       "Your task list still has ${left.length} task(s) not completed:",
       for (final item in left) "- ${item.content}",

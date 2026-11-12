@@ -1,4 +1,5 @@
 import "models.dart";
+import "plan.dart" show PlanTaskStatus;
 import "tool_arg.dart";
 
 const todoToolName = "todo";
@@ -13,6 +14,13 @@ enum TodoStatus {
   const TodoStatus(this.wire);
 
   final String wire;
+
+  /// The plan's state it is drawn as.
+  PlanTaskStatus get asPlan => switch (this) {
+    pending => PlanTaskStatus.pending,
+    inProgress => PlanTaskStatus.inProgress,
+    completed => PlanTaskStatus.done,
+  };
 
   static TodoStatus? fromWire(Object? value) {
     for (final status in values) {
@@ -83,15 +91,13 @@ class TodoList {
   /// The newest list [message] holds, or null where it made no `todo` call
   /// that ran.
   static TodoList? lastOf(Message message) {
-    final failed = {
-      for (final part in message.parts)
-        if (part case ToolResultPart(:final result) when result.returnCode != 0)
-          result.callId,
-    };
+    Map<String, ToolResult>? results;
     for (final part in message.parts.reversed) {
       if (part case ToolCallPart(
         :final toolCall,
-      ) when toolCall.name == todoToolName && !failed.contains(toolCall.id)) {
+      ) when toolCall.name == todoToolName) {
+        results ??= message.toolResults;
+        if ((results[toolCall.id]?.returnCode ?? 0) != 0) continue;
         if (parse(toolCall.argumentsJson) case final list?) return list;
       }
     }
@@ -101,7 +107,7 @@ class TodoList {
   /// Why the model's list cannot stand, or null where it can. One step at a
   /// time is the rule that keeps a step from being passed over unmarked.
   String? get problem {
-    final going = items.where((i) => i.status == TodoStatus.inProgress);
+    final going = _going;
     if (going.length > 1) {
       return "Only one task may be in_progress at a time, and ${going.length} "
           "are. Mark the ones you are not working on now as pending.";
@@ -109,29 +115,28 @@ class TodoList {
     return null;
   }
 
+  Iterable<TodoItem> get _going =>
+      items.where((i) => i.status == TodoStatus.inProgress);
+
   bool get isEmpty => items.isEmpty;
+
+  bool get allDone => done == items.length;
 
   int get done => items.where((i) => i.finished).length;
 
   /// The step under way, where one is.
-  TodoItem? get current =>
-      items.where((i) => i.status == TodoStatus.inProgress).firstOrNull;
+  TodoItem? get current => _going.firstOrNull;
 
   List<TodoItem> get unfinished => [
     for (final item in items)
       if (!item.finished) item,
   ];
 
-  /// The strip's one line: the task under way, or how much is left.
-  String get headline => unfinished.isEmpty
-      ? "All tasks done"
-      : current?.content ?? "${unfinished.length} left";
-
   /// The list as the model reads it back: what is under way and what is
   /// left, so the next step is in the newest part of its context.
   String get summary {
     if (isEmpty) return "The task list is cleared.";
-    if (unfinished.isEmpty) return "All ${items.length} tasks are done.";
+    if (allDone) return "All ${items.length} tasks are done.";
     final pending = [
       for (final item in items)
         if (item.status == TodoStatus.pending) "- ${item.content}",
@@ -142,4 +147,13 @@ class TodoList {
       if (pending.isNotEmpty) ...["Left:", ...pending],
     ].join("\n");
   }
+
+  /// The list as it ends a compaction summary that swallowed it.
+  String get carried =>
+      "Your task list, as you last wrote it with `$todoToolName`:\n$summary";
+}
+
+extension ChatTodos on Chat {
+  /// The task list the chat shows: the latest turn's.
+  TodoList? get todos => TodoList.ofLastTurn(messages);
 }
