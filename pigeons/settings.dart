@@ -471,6 +471,7 @@ class SettingRowData {
     this.markdown = false,
     this.editing = false,
     this.webUrl,
+    this.inheritedPick,
   });
 
   String id;
@@ -588,6 +589,9 @@ class SettingRowData {
 
   // web
   String? webUrl;
+
+  // choice: the option unset stands for, by its place
+  int? inheritedPick;
 }
 
 class SettingsSectionData {

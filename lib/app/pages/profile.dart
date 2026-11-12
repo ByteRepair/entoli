@@ -209,6 +209,7 @@ class ProfileAppPage extends AppPage {
             value: _tone,
             unsettable: !_global,
             inheritedLabel: _global ? null : _appTone.label,
+            inherited: _global ? null : _appTone,
             onSet: (tone) async {
               _set(() => _tone = _global ? tone ?? Tone.none : tone);
               return null;

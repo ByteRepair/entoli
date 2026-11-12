@@ -204,14 +204,23 @@ class SettingRow extends StatelessWidget {
   static Widget _choice<T>(ChoiceController<T> c) => switch (c.hint) {
     UiHint.segmented => _Segmented<T>(c),
     UiHint.swatches || UiHint.corners => _Looks<T>(c),
-    UiHint.levels when c.value != null => LabelledField(
+    // Unset at a level that inherits, it stands where the level above does,
+    // with the reset back to it once this level picks.
+    UiHint.levels when (c.value ?? c.inherited) != null => LabelledField(
       label: c.title,
-      child: ThinkingSlider<T>(
+      child: switch (ThinkingSlider<T>(
         stops: {for (final o in c.options) o.value: o.label},
-        value: c.value as T,
+        value: (c.value ?? c.inherited) as T,
         onChanged: c.set,
         help: c.description,
-      ),
+      )) {
+        final slider when c.unsettable && c.value != null => ResettableField(
+          onReset: () => c.set(null),
+          resetLabel: c.inheritedLabel ?? defaultOptionLabel,
+          child: slider,
+        ),
+        final slider => slider,
+      },
     ),
     // Every other hint is another kind's; a choice is a dropdown.
     _ => _Dropdown<T>(c),

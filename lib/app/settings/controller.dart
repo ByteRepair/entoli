@@ -253,6 +253,7 @@ final class ChoiceController<T> extends SettingController {
     required Future<SettingNotice?> Function(T? value) onSet,
     this.unsettable = false,
     this.inheritedLabel,
+    this.inherited,
     this.noneLabel,
     this.error,
     super.title,
@@ -273,6 +274,10 @@ final class ChoiceController<T> extends SettingController {
   /// The label of what unset stands for — the "Relay" of "Default (Relay)" —
   /// where it stands for an option.
   final String? inheritedLabel;
+
+  /// What unset stands for, where it stands for an option: what a slider
+  /// shows while nothing is picked.
+  final T? inherited;
 
   /// What picking nothing is called where nothing is an answer of its own
   /// rather than an inherited one: "Device language".

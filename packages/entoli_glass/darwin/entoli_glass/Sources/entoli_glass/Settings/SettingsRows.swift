@@ -66,17 +66,29 @@ struct ChoiceRow: View {
 
   var body: some View {
     switch row.hint {
-    case .levels where row.picked != nil:
+    // Unset at a level that inherits, the slider stands where the level
+    // above does, and says so.
+    case .levels where (row.picked ?? row.inheritedPick) != nil:
       VStack(alignment: .leading, spacing: 8) {
-        Text(row.title)
-        ThinkingBar(labels: options.map(\.label), picked: Int(row.picked ?? 0)) { i in
+        HStack {
+          Text(unsetTitle)
+          Spacer()
+          reset
+        }
+        ThinkingBar(
+          labels: options.map(\.label), picked: Int(row.picked ?? row.inheritedPick ?? 0)
+        ) { i in
           picked.wrappedValue = i
         }
         if let detail = row.detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
       }
     case .segmented, .levels:
       VStack(alignment: .leading) {
-        Text(row.title)
+        HStack {
+          Text(unsetTitle)
+          Spacer()
+          reset
+        }
         Picker(row.title, selection: picked) {
           ForEach(Array(options.enumerated()), id: \.offset) { i, o in Text(o.label).tag(i) }
         }
@@ -105,7 +117,22 @@ struct ChoiceRow: View {
         } label: {
           Titled(title: row.title, detail: row.error ?? row.detail)
         }
+        reset
         if let accessory { AccessoryButton(model: model, row: accessory) }
+      }
+    }
+  }
+
+  /// The title, saying where nothing of this level's is picked.
+  private var unsetTitle: String {
+    row.unsettable && row.picked == nil ? "\(row.title) — Default" : row.title
+  }
+
+  /// Back to what unset stands for, where this level holds a pick.
+  @ViewBuilder private var reset: some View {
+    if row.unsettable && row.picked != nil {
+      ResetMenu(label: row.inheritedLabel) {
+        model.say.pick(id: row.id, option: nil, completion: ignore)
       }
     }
   }
@@ -669,13 +696,21 @@ struct ModelPickRow: View {
   let row: SettingRowData
 
   var body: some View {
-    PushRow(model: model, to: .models(OpenedModels(row: row.id))) {
-      VStack(alignment: .leading, spacing: 2) {
-        LabeledContent(row.title, value: row.modelLabel ?? "")
-        if let error = row.error {
-          Text(error).font(.caption).foregroundStyle(.red)
-        } else if let detail = row.detail {
-          Text(detail).font(.caption).foregroundStyle(.secondary)
+    HStack {
+      PushRow(model: model, to: .models(OpenedModels(row: row.id))) {
+        VStack(alignment: .leading, spacing: 2) {
+          LabeledContent(row.title, value: row.modelLabel ?? "")
+          if let error = row.error {
+            Text(error).font(.caption).foregroundStyle(.red)
+          } else if let detail = row.detail {
+            Text(detail).font(.caption).foregroundStyle(.secondary)
+          }
+        }
+      }
+      // A level's own pick, back to the one it inherits.
+      if row.unsettable && row.effective {
+        ResetMenu(label: row.noneLabel) {
+          model.say.setModel(id: row.id, providerId: nil, modelId: nil, completion: ignore)
         }
       }
     }

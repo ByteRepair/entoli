@@ -57,6 +57,7 @@ extension BindSetting on SettingContext {
       value: _value(setting),
       unsettable: _unsettable(setting),
       inheritedLabel: label,
+      inherited: meaning,
       description: description,
       footnote: footnote,
       visible: visible,
@@ -115,8 +116,10 @@ extension BindSetting on SettingContext {
     bool visible = true,
     Future<void> Function(ModelChoice choice)? write,
     ModelChoice? choice,
+    ModelChoice? inherited,
   }) => ModelPickController(
     spec,
+    inherited: inherited,
     choice:
         choice ??
         (providerId: scope.own(keys.provider), modelId: scope.own(keys.model)),

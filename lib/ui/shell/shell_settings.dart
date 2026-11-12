@@ -24,6 +24,7 @@ import "../../domain/bot_avatar/import.dart";
 import "../../domain/bot_avatar/pose.dart";
 import "../../domain/bot_avatar/spec.dart";
 import "../../domain/model_registry.dart" show ModelCatalog;
+import "../../domain/models.dart" show ModelChoice;
 import "../../providers.dart";
 import "../../app/prompts/skill_files.dart";
 import "shell_device.dart";
@@ -150,18 +151,23 @@ class _Encoder {
       listed: listed,
       serving: _serving,
     );
+    String named(ModelChoice choice) => modelFieldLabel(
+      choice: choice,
+      role: c.role,
+      nullLabel: c.nullLabel,
+      defaultOf: c.defaultOf,
+      providers: _providers,
+      listed: listed,
+      serving: _serving,
+    );
+    final unset = c.choice.providerId == null && c.choice.modelId == null;
     return (
       label: error != null
           ? missingModelLabel
-          : modelFieldLabel(
-              choice: c.choice,
-              role: c.role,
-              nullLabel: c.nullLabel,
-              defaultOf: c.defaultOf,
-              providers: _providers,
-              listed: listed,
-              serving: _serving,
-            ),
+          // What Default stands for, where the level inherits one.
+          : unset && c.inherited?.providerId != null
+          ? "${c.nullLabel} (${named(c.inherited!)})"
+          : named(c.choice),
       error: error,
     );
   }
@@ -295,6 +301,12 @@ SettingRowData _row(
         ..picked = index < 0 ? null : index
         ..unsettable = c.unsettable
         ..inheritedLabel = c.inheritedLabel
+        ..inheritedPick = switch (options.indexWhere(
+          (o) => o.value == c.inherited,
+        )) {
+          < 0 => null,
+          final at => at,
+        }
         ..noneLabel = c.noneLabel
         ..error = c.error;
     case SlotsController():
@@ -352,7 +364,11 @@ SettingRowData _row(
         ..kind = SettingKind.modelPick
         ..modelLabel = field.label
         ..error = field.error
-        ..noneLabel = c.nullLabel;
+        ..noneLabel = c.nullLabel
+        // A level that inherits its model: the null entry is Default, and a
+        // pick of the level's own can be reset to it.
+        ..unsettable = c.inherited != null
+        ..effective = c.choice.providerId != null || c.choice.modelId != null;
     case TextController():
       row
         ..kind = SettingKind.text

@@ -62,10 +62,14 @@ abstract class ChatSettingsFields extends AppPage {
       // device may not have.
       if (!mirrored)
         PageSection("model", "Model", [
-          at("model", "LLM", UiHint.dropdown).model((
-            provider: SettingKeys.provider,
-            model: SettingKeys.model,
-          ), nullLabel: "Default"),
+          at("model", "LLM", UiHint.dropdown).model(
+            (provider: SettingKeys.provider, model: SettingKeys.model),
+            nullLabel: "Default",
+            inherited: (
+              providerId: scope.root.resolve(SettingKeys.defaultProviderId),
+              modelId: scope.root.resolve(SettingKeys.defaultModelId),
+            ),
+          ),
           at(
             "thinking",
             "Thinking",
@@ -121,15 +125,16 @@ abstract class ChatSettingsFields extends AppPage {
       for (final MapEntry(key: ttl, value: label) in tempChatTtlLabels.entries)
         SettingOption(ttl, label),
     ];
+    // What `ChatRepository._resolveTempTtl` answers without the chat's own.
+    final inherited =
+        projectTtl ?? builtinProjectOf(project)?.tempChatTtl ?? appTtl;
     return ChoiceController<TempChatTtl>(
       part("ttl", "Delete after", hint: UiHint.dropdown),
       options: options,
       value: scope.own(SettingKeys.tempChatTtl),
       unsettable: true,
-      // What `ChatRepository._resolveTempTtl` answers without the chat's own.
-      inheritedLabel:
-          (projectTtl ?? builtinProjectOf(project)?.tempChatTtl ?? appTtl)
-              .label,
+      inheritedLabel: inherited.label,
+      inherited: inherited,
       onSet: (ttl) async {
         await scope.write(SettingKeys.tempChatTtl, ttl);
         return null;
