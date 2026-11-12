@@ -76,7 +76,10 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     nativeVoiceOpener = _chat.openVoice;
     nativeBrowserOpener = _chat.openBrowser;
     nativeSettingsOpener = _settings.show;
-    openFirstRun(ContainerReader(container));
+    // Opening a page notifies the stack, which a build may not do.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) openFirstRun(ContainerReader(container));
+    });
     _said = container
         .read(appPagesProvider.notifier)
         .said
