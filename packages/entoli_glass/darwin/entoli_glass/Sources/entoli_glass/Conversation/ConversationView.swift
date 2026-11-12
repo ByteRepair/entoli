@@ -96,11 +96,11 @@ struct ConversationView: View {
       .contentMargins(.bottom, bottom, for: .scrollContent)
       .contentMargins(.bottom, bottom, for: .scrollIndicators)
       .defaultScrollAnchor(.bottom)
-      // At the end where the offset is within reach of its last: the content
-      // and the margin under it, less what the view shows.
+      // At the end where what is shown reaches the content's last line. The
+      // margin under it is not added: the content's size may already hold
+      // it, and adding it twice left the button up at the very bottom.
       .onScrollGeometryChange(for: Bool.self) { geometry in
-        geometry.contentOffset.y + geometry.containerSize.height
-          >= geometry.contentSize.height + geometry.contentInsets.bottom - 40
+        geometry.visibleRect.maxY >= geometry.contentSize.height - 40
       } action: { _, end in
         atEnd = end
       }
