@@ -30,6 +30,7 @@ import "../../providers.dart";
 import "../chat/activity/hand_off.dart";
 import "../chat/plan_page.dart" as plan_page;
 import "faces.dart";
+import "markdown_encoder.dart";
 import "transcript_encoder.dart";
 import "../widgets/dialogs.dart" show notify;
 
@@ -132,12 +133,14 @@ class ConversationSurface implements wire.TranscriptIntents {
     final encoder = _encoder = TranscriptEncoder(
       reader: reader,
       catalog: reader.watch(activityCatalogProvider),
-      formulas: _formulas!,
-      highlighter: reader.watch(codeHighlighterProvider),
+      prose: MarkdownEncoder(
+        formulas: _formulas!,
+        highlighter: reader.watch(codeHighlighterProvider),
+        parsed: _parsed,
+      ),
       resources: reader
           .watch(appConfigProvider)
           .resourcesDir(chatId, project: project),
-      parsed: _parsed,
     );
     final speechReady = reader.watch(speechReadyProvider);
     final reading = reader.watch(readAloudProvider);

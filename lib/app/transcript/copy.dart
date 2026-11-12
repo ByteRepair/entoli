@@ -40,26 +40,9 @@ Future<Map<String, PastedFormula>> formulaPicturesOf(
   String markdown,
   FormulaRenderer renderer,
 ) async {
-  final found = <String, (String, bool)>{};
-  void inline(List<Inline> inlines) {
-    for (final i in inlines) {
-      if (i is FormulaInline) found[i.written] = (i.tex, i.display);
-    }
-  }
-
-  for (final block in MarkdownDocument.parse(markdown).blocks) {
-    switch (block) {
-      case FormulaBlock(:final tex, :final written):
-        found[written] = (tex, true);
-      case ParagraphBlock(:final inlines) || HeadingBlock(:final inlines):
-        inline(inlines);
-      case TableBlock(:final header, :final rows):
-        [...header, ...rows.expand((r) => r)].forEach(inline);
-      case _:
-    }
-  }
   final out = <String, PastedFormula>{};
-  for (final MapEntry(key: written, value: (tex, display)) in found.entries) {
+  for (final MapEntry(key: written, value: (:tex, :display))
+      in MarkdownDocument.parse(markdown).formulas.entries) {
     try {
       final image = await renderer.render(
         tex,

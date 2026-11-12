@@ -9,102 +9,11 @@ import "package:path/path.dart" as p;
 import "../../app/plan.dart" show planProgressLine, planProvider;
 import "../../app/settings/spec.dart" show SettingReader;
 import "../../app/transcript/activity.dart";
-import "../../app/transcript/code.dart";
-import "../../app/transcript/formula.dart";
-import "../../app/transcript/markdown.dart";
 import "../../app/transcript/message.dart";
 import "../../app/transcript/transcript.dart";
 import "../../domain/models.dart";
 import "../../domain/plan.dart";
-
-/// The formulas a conversation shows, each under an id of its own and sent
-/// once: a row carries the id, and the client keeps the picture. What is not
-/// typeset yet is asked for, and [onReady] is told when it lands, so the row
-/// is sent again with the picture to hand.
-class FormulaSheet {
-  FormulaSheet(this._renderer, {required this.argb, required this.onReady});
-
-  final CachedFormulaRenderer _renderer;
-  final void Function() onReady;
-
-  /// The ink the theme draws text in; a change of theme is a new sheet.
-  final int argb;
-
-  final _ids = <(String, bool), int>{};
-  final _sent = <int>{};
-
-  /// Asked of the renderer and not landed yet, or failed: not asked again.
-  final _asked = <int>{};
-  final _unsent = <wire.FormulaPicture>[];
-
-  FormulaStyle _style(bool display) => FormulaStyle(
-    display: display,
-    fontSize: display ? 18 : 16,
-    argb: argb,
-    scale: 3,
-  );
-
-  /// [tex]'s id, null until its picture exists.
-  int? idOf(String tex, {required bool display}) {
-    final key = (tex, display);
-    final id = _ids[key] ??= _ids.length + 1;
-    if (_sent.contains(id)) return id;
-    final style = _style(display);
-    final ready = _renderer.ready(tex, style);
-    if (ready == null) {
-      if (_asked.add(id)) {
-        _renderer.render(tex, style).then((_) {
-          _asked.remove(id);
-          onReady();
-        }, onError: (_) {});
-      }
-      return null;
-    }
-    _sent.add(id);
-    _unsent.add(
-      wire.FormulaPicture(
-        id: id,
-        png: ready.png,
-        scale: style.scale,
-        width: ready.width,
-        height: ready.height,
-        baseline: ready.baseline,
-      ),
-    );
-    return id;
-  }
-
-  /// The pictures made since the last call, for the client to keep.
-  List<wire.FormulaPicture> take() {
-    final out = _unsent.toList();
-    _unsent.clear();
-    return out;
-  }
-}
-
-/// Markdown's wire blocks by text, as the last pass and this one used them,
-/// so what a pass no longer shows is let go. A formula landing changes the
-/// blocks that name it, so [clear] drops the lot then.
-class MarkdownBlocks {
-  var _last = <String, List<wire.TextBlockSnapshot>>{};
-  var _now = <String, List<wire.TextBlockSnapshot>>{};
-
-  List<wire.TextBlockSnapshot> of(
-    String text,
-    List<wire.TextBlockSnapshot> Function() parse,
-  ) => _now[text] ??= _last[text] ?? parse();
-
-  /// Ends a pass: what it did not use goes at the end of the next.
-  void turn() {
-    _last = _now;
-    _now = {};
-  }
-
-  void clear() {
-    _last = {};
-    _now = {};
-  }
-}
+import "markdown_encoder.dart";
 
 /// What a node id names: the node, and the source an open detail of it
 /// follows.
@@ -121,23 +30,18 @@ class TranscriptEncoder {
   TranscriptEncoder({
     required this.reader,
     required this.catalog,
-    required this.formulas,
-    required this.highlighter,
+    required this.prose,
     required this.resources,
-    required this.parsed,
   });
 
   final SettingReader reader;
   final ActivityCatalog catalog;
-  final FormulaSheet formulas;
-  final CodeHighlighter highlighter;
+
+  /// The markdown half: blocks, code and formulas.
+  final MarkdownEncoder prose;
 
   /// Where a chat's attachments are on this device.
   final String resources;
-
-  /// [markdown]'s blocks by text, kept across passes: only the row being
-  /// written is parsed and highlighted again.
-  final MarkdownBlocks parsed;
 
   final nodes = <String, EncodedNode>{};
 
@@ -384,120 +288,7 @@ class TranscriptEncoder {
   );
 
   /// Markdown as blocks, its code tokenised and its formulas by id.
-  List<wire.TextBlockSnapshot> markdown(String text) => parsed.of(
-    text,
-    () => [
-      for (final block in MarkdownDocument.parse(text).blocks) _text(block),
-    ],
-  );
-
-  wire.TextBlockSnapshot _text(MarkdownBlock block) {
-    final nesting = block.nesting;
-    final items = [
-      for (final m in nesting.items)
-        wire.MarkerSnapshot(
-          ordered: m.ordered,
-          number: m.number,
-          first: m.first,
-          checked: m.checked,
-        ),
-    ];
-    return switch (block) {
-      ParagraphBlock(:final inlines) => wire.TextBlockSnapshot(
-        quotes: nesting.quotes,
-        items: items,
-        inlines: _inlines(inlines),
-      ),
-      HeadingBlock(:final level, :final inlines) => wire.TextBlockSnapshot(
-        kind: wire.TextKind.heading,
-        quotes: nesting.quotes,
-        items: items,
-        level: level,
-        inlines: _inlines(inlines),
-      ),
-      CodeBlock(:final code, :final language) => wire.TextBlockSnapshot(
-        kind: wire.TextKind.code,
-        quotes: nesting.quotes,
-        items: items,
-        code: code,
-        language: language,
-        tokens: [
-          for (final t in highlighter.tokens(code, language))
-            wire.CodeTokenSnapshot(text: t.text, scope: t.scope),
-        ],
-      ),
-      FormulaBlock(:final tex, :final written) => wire.TextBlockSnapshot(
-        kind: wire.TextKind.formula,
-        quotes: nesting.quotes,
-        items: items,
-        formula: formulas.idOf(tex, display: true),
-        written: written,
-      ),
-      RuleBlock() => wire.TextBlockSnapshot(
-        kind: wire.TextKind.rule,
-        quotes: nesting.quotes,
-        items: items,
-      ),
-      TableBlock(:final header, :final rows, :final align) =>
-        wire.TextBlockSnapshot(
-          kind: wire.TextKind.table,
-          quotes: nesting.quotes,
-          items: items,
-          columns: align.length,
-          align: [
-            for (final a in align)
-              switch (a) {
-                CellAlign.start => wire.CellAlign.start,
-                CellAlign.center => wire.CellAlign.center,
-                CellAlign.end => wire.CellAlign.end,
-              },
-          ],
-          cells: [
-            for (final (c, cell) in header.indexed)
-              wire.CellSnapshot(
-                row: 0,
-                column: c,
-                header: true,
-                inlines: _inlines(cell),
-              ),
-            for (final (r, row) in rows.indexed)
-              for (final (c, cell) in row.indexed)
-                wire.CellSnapshot(
-                  row: r + 1,
-                  column: c,
-                  inlines: _inlines(cell),
-                ),
-          ],
-        ),
-    };
-  }
-
-  List<wire.InlineSnapshot> _inlines(List<Inline> inlines) => [
-    for (final inline in inlines)
-      switch (inline) {
-        TextInline(:final text, :final marks, :final link) =>
-          wire.InlineSnapshot(
-            text: text,
-            bold: marks.contains(InlineMark.bold),
-            italic: marks.contains(InlineMark.italic),
-            code: marks.contains(InlineMark.code),
-            strike: marks.contains(InlineMark.strike),
-            link: link,
-          ),
-        FormulaInline(:final tex, :final written, :final display) =>
-          wire.InlineSnapshot(
-            kind: wire.InlineKind.formula,
-            text: written,
-            formula: formulas.idOf(tex, display: display),
-          ),
-        BreakInline() => wire.InlineSnapshot(kind: wire.InlineKind.lineBreak),
-        ImageInline(:final source, :final alt) => wire.InlineSnapshot(
-          kind: wire.InlineKind.image,
-          text: alt,
-          link: source,
-        ),
-      },
-  ];
+  List<wire.TextBlockSnapshot> markdown(String text) => prose.markdown(text);
 
   static wire.Tint _tint(BubbleTint tint) => switch (tint) {
     BubbleTint.none => wire.Tint.none,

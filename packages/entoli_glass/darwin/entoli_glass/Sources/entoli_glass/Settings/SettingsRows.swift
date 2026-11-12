@@ -680,9 +680,10 @@ struct TextPage: View {
 
   var body: some View {
     ScrollView {
-      MarkdownBlocks(text: text ?? "")
-        .textSelection(.enabled)
-        .frame(maxWidth: .infinity, alignment: .leading)
+      Group {
+        if let text { DocumentMarkdown(text: text) }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
     }
     // Opaque, as a grouped page is: a page sliding in is drawn over the one
@@ -765,89 +766,3 @@ struct PushRow<Label: View>: View {
   }
 }
 
-/// Markdown by its blocks — headings, list items, code fences, paragraphs —
-/// each block's inline syntax left to AttributedString, which reads no
-/// blocks itself.
-struct MarkdownBlocks: View {
-  let text: String
-
-  private enum Block: Hashable {
-    case heading(Int, String)
-    case item(Int, String)
-    case code(String)
-    case paragraph(String)
-  }
-
-  private var blocks: [Block] {
-    var blocks: [Block] = []
-    var paragraph: [String] = []
-    var code: [String]?
-    func flush() {
-      if !paragraph.isEmpty { blocks.append(.paragraph(paragraph.joined(separator: " "))) }
-      paragraph = []
-    }
-    for line in text.components(separatedBy: "\n") {
-      let trimmed = line.trimmingCharacters(in: .whitespaces)
-      if trimmed.hasPrefix("```") {
-        if let open = code {
-          blocks.append(.code(open.joined(separator: "\n")))
-          code = nil
-        } else {
-          flush()
-          code = []
-        }
-      } else if code != nil {
-        code!.append(line)
-      } else if trimmed.isEmpty {
-        flush()
-      } else if let hashes = trimmed.firstIndex(where: { $0 != "#" }), hashes != trimmed.startIndex,
-        trimmed[hashes] == " "
-      {
-        flush()
-        let level = trimmed.distance(from: trimmed.startIndex, to: hashes)
-        blocks.append(.heading(level, String(trimmed[hashes...]).trimmingCharacters(in: .whitespaces)))
-      } else if let marker = ["- ", "* ", "+ "].first(where: trimmed.hasPrefix) {
-        flush()
-        let indent = line.prefix(while: { $0 == " " }).count / 2
-        blocks.append(.item(indent, String(trimmed.dropFirst(marker.count))))
-      } else {
-        paragraph.append(trimmed)
-      }
-    }
-    if let open = code { blocks.append(.code(open.joined(separator: "\n"))) }
-    flush()
-    return blocks
-  }
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-        switch block {
-        case .heading(let level, let words):
-          inline(words).font(level == 1 ? .title2.bold() : level == 2 ? .title3.bold() : .headline)
-            .padding(.top, 4)
-        case .item(let indent, let words):
-          HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text("•")
-            inline(words)
-          }
-          .padding(.leading, CGFloat(indent) * 16)
-        case .code(let source):
-          ScrollView(.horizontal) {
-            Text(source).font(.callout.monospaced()).padding(10)
-          }
-          .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-        case .paragraph(let words):
-          inline(words)
-        }
-      }
-    }
-  }
-
-  private func inline(_ words: String) -> Text {
-    Text(
-      (try? AttributedString(
-        markdown: words, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-        ?? AttributedString(words))
-  }
-}

@@ -18,6 +18,32 @@ class MarkdownDocument {
   static const empty = MarkdownDocument([]);
 
   final List<MarkdownBlock> blocks;
+
+  /// Every formula in it, by its TeX as written, once each: a block on a
+  /// line of its own, or one inside a sentence or a table's cell.
+  Map<String, ({String tex, bool display})> get formulas {
+    final found = <String, ({String tex, bool display})>{};
+    void inline(List<Inline> inlines) {
+      for (final i in inlines) {
+        if (i is FormulaInline) {
+          found[i.written] = (tex: i.tex, display: i.display);
+        }
+      }
+    }
+
+    for (final block in blocks) {
+      switch (block) {
+        case FormulaBlock(:final tex, :final written):
+          found[written] = (tex: tex, display: true);
+        case ParagraphBlock(:final inlines) || HeadingBlock(:final inlines):
+          inline(inlines);
+        case TableBlock(:final header, :final rows):
+          [...header, ...rows.expand((r) => r)].forEach(inline);
+        case _:
+      }
+    }
+    return found;
+  }
 }
 
 /// Where a block sits: [quotes] block quotes deep, inside the list items of

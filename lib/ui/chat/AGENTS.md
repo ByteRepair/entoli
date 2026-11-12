@@ -373,6 +373,15 @@ drawn as chrome a drag does not pick up, numbered on a numbered list. A page
 that built its own `MarkdownBody` got some of that and not the rest — the skill
 pages had no code-block bar, and every page but one re-parsed on each rebuild.
 
+The native frontend has the same rule. Markdown outside the conversation — a
+workspace file, a skill, the privacy policy, the licences — is drawn by
+`DocumentMarkdown`, the reply's `MarkdownView` over blocks the core parsed:
+the Swift asks `DocumentIntents.markdown` with the text and the appearance,
+`ShellDocuments` typesets the formulas, sends their pictures and answers with
+`MarkdownEncoder`'s blocks, the encoder a reply's are made by. Its links go
+back through `DocumentIntents.link` to the app's link opener. A formula's id
+is the process's, not its sheet's, so a document's and a reply's never meet.
+
 `replyStyleSheet` is the whole of the look, and it starts from
 `MarkdownStyleSheet.fromTheme` because most of what that answers is right. What
 gets overridden is where the defaults were written for a document rather than a

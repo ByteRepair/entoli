@@ -25,6 +25,7 @@ import "../../app/settings/spec.dart" show SettingsPageId;
 import "../../domain/agent_browser.dart" show BrowserTab;
 import "../../domain/chat_meta.dart";
 import "../widgets/native_surfaces.dart";
+import "shell_documents.dart";
 import "shell_dialogs.dart";
 
 /// The app under the native shell, in `AppShell`'s place: the Flutter half of
@@ -80,6 +81,7 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
       _settings,
     );
     container.read(nativeSurfacesProvider).bind(_surfaces);
+    DocumentIntents.setUp(ShellDocuments(container, () => context));
     // Opening a page notifies the stack, which a build may not do.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) openFirstRun(ContainerReader(container));
@@ -105,6 +107,7 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     _settings.close();
     _chat.close();
     _container.read(nativeSurfacesProvider).unbind(_surfaces);
+    if (identical(_listening, this)) DocumentIntents.setUp(null);
     if (identical(_listening, this)) {
       _listening = null;
       _bind(null);

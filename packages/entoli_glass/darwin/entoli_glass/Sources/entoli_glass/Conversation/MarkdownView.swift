@@ -11,6 +11,8 @@ struct MarkdownView: View {
   var reply: ((String) -> Void)? = nil
   /// As wide as its words rather than the whole width offered: in a bubble.
   var hugs = false
+  /// Where a link goes; a reply's goes to the conversation.
+  var link: ((URL) -> Void)? = nil
   @Environment(\.colorScheme) private var scheme
   /// The width it is laid out in, which a table fits. Not in a bubble,
   /// whose width is its words': a table fitted to that would narrow it again.
@@ -31,7 +33,7 @@ struct MarkdownView: View {
           key.blocks, model: model, caret: key.caret, tone: key.tone.map { PlatformColor($0) },
           dark: key.dark, width: key.width)
       },
-      actions: ProseActions(reply: reply, link: { model.link($0.absoluteString) }),
+      actions: ProseActions(reply: reply, link: link ?? { model.link($0.absoluteString) }),
       hugs: hugs)
     .onGeometryChange(for: CGFloat?.self) { fits ? $0.size.width : nil } action: { width = $0 }
   }
@@ -57,6 +59,35 @@ struct MarkdownView: View {
         self.key = key
       }
       return built
+    }
+  }
+}
+
+/// Markdown shown outside the conversation — a file, a skill, a page of the
+/// app's — drawn as a reply is: parsed by the core, again for the other
+/// appearance, its links opened by the app.
+struct DocumentMarkdown: View {
+  let text: String
+  @Environment(\.colorScheme) private var scheme
+  @State private var blocks: [TextBlockSnapshot]?
+
+  private struct Asked: Equatable {
+    let text: String
+    let dark: Bool
+  }
+
+  var body: some View {
+    Group {
+      if let model = TranscriptModel.shared, let blocks {
+        MarkdownView(
+          blocks: blocks, model: model, link: { model.documentLink($0.absoluteString) })
+      } else {
+        // Drawn as it is written until the core has parsed it.
+        Text(text).textSelection(.enabled)
+      }
+    }
+    .task(id: Asked(text: text, dark: scheme == .dark)) {
+      blocks = await TranscriptModel.shared?.markdown(text, dark: scheme == .dark)
     }
   }
 }

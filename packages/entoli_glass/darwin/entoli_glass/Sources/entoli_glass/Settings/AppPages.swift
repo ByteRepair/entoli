@@ -461,8 +461,7 @@ struct DocumentRow: View {
         ContentUnavailableView("This file is empty", systemImage: "doc")
       } else if row.markdown {
         ScrollView {
-          MarkdownBlocks(text: row.text ?? "")
-            .textSelection(.enabled)
+          DocumentMarkdown(text: row.text ?? "")
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
         }

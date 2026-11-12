@@ -26,6 +26,7 @@ import "../chat/widgets/composer_controller.dart";
 import "../chat/widgets/composer_embed.dart" show QuoteEmbed;
 import "../selection.dart";
 import "../settings/settings_category.dart";
+import "markdown_encoder.dart" show inkOf;
 import "shell_answers.dart";
 import "shell_composer.dart";
 import "shell_conversation.dart";
@@ -643,7 +644,8 @@ FootBar _barOf(ComposerSlot slot) => switch (slot) {
       reader.watch(windowSnapshotProvider).dark ??
       WidgetsBinding.instance.platformDispatcher.platformBrightness ==
           Brightness.dark;
-  return dark
-      ? (ink: 0xFFE3E2E6, outline: const Color(0xFF938F99))
-      : (ink: 0xFF1A1C1E, outline: const Color(0xFF79747E));
+  return (
+    ink: inkOf(dark: dark),
+    outline: dark ? const Color(0xFF938F99) : const Color(0xFF79747E),
+  );
 }

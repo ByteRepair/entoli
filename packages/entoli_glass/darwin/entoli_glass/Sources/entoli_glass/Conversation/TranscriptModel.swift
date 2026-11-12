@@ -34,9 +34,12 @@ import SwiftUI
   private(set) var formulasLanded = 0
 
   let say: TranscriptIntents
+  /// Markdown outside the conversation: a file, a skill, a page of the app's.
+  let documents: DocumentIntents
 
   init(messenger: FlutterBinaryMessenger) {
     say = TranscriptIntents(binaryMessenger: messenger)
+    documents = DocumentIntents(binaryMessenger: messenger)
   }
 
   var present: Bool { chatId != nil }
@@ -103,6 +106,12 @@ extension TranscriptModel {
   func edit(_ row: String, _ text: String) { say.edit(row: row, text: text) { _ in } }
   func react(_ row: String, _ emoji: String) { say.react(row: row, emoji: emoji) { _ in } }
   func reply(_ row: String, _ text: String) { say.reply(row: row, text: text) { _ in } }
+  /// [text] parsed by the core, its formulas' pictures landed first; nil
+  /// where the call failed.
+  @MainActor func markdown(_ text: String, dark: Bool) async -> [TextBlockSnapshot]? {
+    await entoli_glass.reply { documents.markdown(text: text, dark: dark, completion: $0) }
+  }
+  func documentLink(_ href: String) { documents.link(href: href) { _ in } }
   func openFile(_ row: String, block: Int, file: Int) {
     say.openFile(row: row, block: Int64(block), file: Int64(file)) { _ in }
   }

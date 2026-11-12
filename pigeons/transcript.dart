@@ -487,3 +487,15 @@ abstract class TranscriptIntents {
   /// A passage selected in [row] answered: quoted into the composer.
   void reply(String row, String text);
 }
+
+/// Markdown shown outside the conversation — a file, a skill, a page of the
+/// app's — drawn as a reply is. The core parses it, its formulas typeset and
+/// sent (`NativeTranscript.formulas`) before the blocks come back.
+@FlutterApi()
+abstract class DocumentIntents {
+  @async
+  List<TextBlockSnapshot> markdown(String text, bool dark);
+
+  /// A link tapped in one: opened as the app opens a reply's.
+  void link(String href);
+}
