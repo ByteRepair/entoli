@@ -75,22 +75,28 @@ extension TranscriptModel: NativeTranscript {
 /// A typeset formula, decoded once.
 struct Formula {
   let image: Image
+  /// The same picture for a text view's attachment.
+  let platform: PlatformImage
   let size: CGSize
   /// How far below its top the baseline sits.
   let baseline: CGFloat
 
   init?(_ picture: FormulaPicture) {
-    guard let image = Self.decode(picture.png.data, scale: picture.scale) else { return nil }
-    self.image = image
+    guard let cg = Self.decode(picture.png.data) else { return nil }
+    image = Image(decorative: cg, scale: picture.scale)
+    let points = CGSize(width: picture.width, height: picture.height)
+    #if os(iOS)
+      platform = UIImage(cgImage: cg, scale: picture.scale, orientation: .up)
+    #else
+      platform = NSImage(cgImage: cg, size: points)
+    #endif
     size = CGSize(width: picture.width, height: picture.height)
     baseline = picture.baseline
   }
 
-  private static func decode(_ data: Data, scale: Double) -> Image? {
-    guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-      let cg = CGImageSourceCreateImageAtIndex(source, 0, nil)
-    else { return nil }
-    return Image(decorative: cg, scale: scale)
+  private static func decode(_ data: Data) -> CGImage? {
+    guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+    return CGImageSourceCreateImageAtIndex(source, 0, nil)
   }
 }
 
@@ -105,6 +111,7 @@ extension TranscriptModel {
   func react(_ row: String, _ emoji: String) { say.react(row: row, emoji: emoji) { _ in } }
   func retry(_ row: String) { say.retry(row: row) { _ in } }
   func openPlan() { say.openPlan { _ in } }
+  func reply(_ row: String, _ text: String) { say.reply(row: row, text: text) { _ in } }
   func openFile(_ row: String, block: Int, file: Int) {
     say.openFile(row: row, block: Int64(block), file: Int64(file)) { _ in }
   }

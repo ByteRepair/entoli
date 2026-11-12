@@ -6,6 +6,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/app/chat_controller.dart";
 import "package:agent_chat/app/transcript/transcript.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/quote.dart";
 import "package:agent_chat/domain/room/room_state.dart";
 import "package:agent_chat/ui/shell/shell_answers.dart";
 import "package:agent_chat/ui/shell/shell_conversation.dart";
@@ -30,10 +31,12 @@ Message _said(String id, MessageRole role, List<MessagePart> parts) =>
 void main() {
   late FakeNativeTranscript native;
   late TestApp app;
+  late List<Quote> replies;
 
   setUp(() {
     native = FakeNativeTranscript.install();
     app = TestApp.create();
+    replies = [];
     addTearDown(app.dispose);
   });
 
@@ -54,6 +57,7 @@ void main() {
         transcript: Transcript.of("c", chat),
         view: view,
         source: Provider((_) => view),
+        onReply: replies.add,
         driver: driver,
       ),
     );
@@ -133,6 +137,24 @@ void main() {
     await pump(tester, chatOf([prompt]), driver: driver, running: true);
     final actions = native.conversations.last.changed.single.message!.actions;
     expect(actions.delete, isFalse);
+  });
+
+  testWidgets("a passage answered is quoted under its author's handle", (
+    tester,
+  ) async {
+    final reply = _said("r", MessageRole.assistant, const [
+      MessagePart.text(text: "Two files."),
+    ]).copyWith(author: "@athena");
+    await pump(tester, chatOf([prompt, reply]));
+    final surface =
+        tester.state(find.byType(ShellConversation)) as TranscriptIntents;
+    surface.reply("message:r", "Two");
+    surface.reply("message:u", "List");
+    await tester.pump();
+    expect(
+      [for (final q in replies) (q.text, q.handle)],
+      [("Two", "@athena"), ("List", null)],
+    );
   });
 
   testWidgets("gone, it takes the conversation back", (tester) async {

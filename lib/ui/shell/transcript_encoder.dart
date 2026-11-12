@@ -150,6 +150,7 @@ class TranscriptEncoder {
     required List<String> reactions,
     ProviderListenable<LiveMessage>? source,
     Uint8List? face,
+    ({String key, int colour, int mood, bool live})? bot,
   }) {
     final laid = layout.blocks(reader, moment);
     blocks[key] = laid;
@@ -159,6 +160,10 @@ class TranscriptEncoder {
       speaker: speaker.name,
       tint: _tint(speaker.tint),
       face: face,
+      bot: bot?.key,
+      botColour: bot?.colour,
+      botMood: bot?.mood ?? 0,
+      botLive: bot?.live ?? false,
       blocks: [
         for (final (i, block) in laid.indexed) _block(block, "$key/$i", source),
       ],

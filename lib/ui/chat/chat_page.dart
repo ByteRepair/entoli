@@ -1539,6 +1539,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       transcript: transcript,
       view: view,
       source: source,
+      onReply: (quote) => _reply(QuoteEmbed(quote)),
       driver: editing,
     );
     if (drawn != null) return drawn;

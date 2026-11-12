@@ -4,6 +4,7 @@ import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
 import "../../app/composer.dart";
 import "../../app/transcript/transcript.dart";
+import "../../domain/quote.dart";
 import "../../domain/room/room_state.dart" show ChatViewState;
 import "../../app/chat_controller.dart" show TurnDriver;
 import "../../domain/models.dart";
@@ -61,12 +62,14 @@ abstract class ChatChrome {
 
   /// The conversation where the frontend draws its own from [transcript];
   /// null is the page's list. [driver] is what a message's actions act
-  /// through, null for a mirror this device does not hold.
+  /// through, null for a mirror this device does not hold; [onReply] quotes a
+  /// selected passage into the composer.
   Widget? conversation({
     required String chatId,
     required Transcript transcript,
     required ChatViewState view,
     required ProviderListenable<ChatViewState> source,
+    required ValueChanged<Quote> onReply,
     TurnDriver? driver,
   }) => null;
 }

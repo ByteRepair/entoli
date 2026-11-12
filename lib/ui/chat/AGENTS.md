@@ -931,8 +931,23 @@ state shows.
 A message's reactions open the strip master drew under the shell, `GlassChoices`
 (`Strip.swift`), now a popover from the action row's smiley.
 
-What the native list does not have yet: the chapter rail, selecting a passage
-to reply to it, and a live Bot Avatar (the face is a still).
+**Prose is a text view of the platform's own** (`ProseText.swift`), not
+SwiftUI's `Text`: `.textSelection` offers Apple's whole menu and never says
+what is selected, so Reply could not be on it. A run of prose — paragraphs,
+headings, list items, quotes, formulas — is one `NSTextView` or `UITextView`
+over an attributed string (`ProseBuilder`), so a selection crosses them as
+Flutter's does; a code block or a table breaks the run. Its menu is Copy and
+Reply alone. Both read a formula as its TeX, carried on its attachment, and
+Reply sends the passage back (`reply`), quoted under the author's handle as
+the Flutter selection's Reply quotes it.
+
+**A Bot Avatar is live.** The message carries its key in the core's
+`BotStage` and the native face is the settings' `BotFaceView`, asking for
+each frame over the settings' contract: live on the newest message, thinking
+while it is written, happy for a while when tapped. A photo is still sent as
+a picture.
+
+What the native list does not have yet: the chapter rail.
 
 ## The chat page
 

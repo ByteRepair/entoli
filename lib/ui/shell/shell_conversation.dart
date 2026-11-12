@@ -7,7 +7,9 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
+import "../../app/bot_avatar/stage.dart" show botStageProvider;
 import "../../app/chat_controller.dart" show TurnDriver;
+import "../../domain/bot_avatar/pose.dart" show BotMood;
 import "../../app/read_aloud.dart";
 import "../../app/settings/spec.dart" show WidgetReader;
 import "../../app/transcript/activity.dart";
@@ -20,6 +22,7 @@ import "../../core/platform/rich_clipboard.dart";
 import "../../domain/agent_face.dart";
 import "../../domain/formatted_text.dart";
 import "../../domain/models.dart";
+import "../../domain/quote.dart";
 import "../../domain/reaction.dart";
 import "../../domain/room/room_state.dart" show ChatViewState;
 import "../../domain/prompt_library.dart" show nameOf;
@@ -44,6 +47,7 @@ class ShellConversation extends ConsumerStatefulWidget {
     required this.transcript,
     required this.view,
     required this.source,
+    required this.onReply,
     this.driver,
   });
 
@@ -51,6 +55,9 @@ class ShellConversation extends ConsumerStatefulWidget {
   final Transcript transcript;
   final ChatViewState view;
   final ProviderListenable<ChatViewState> source;
+
+  /// Quotes a selected passage into the composer.
+  final ValueChanged<Quote> onReply;
 
   /// What the message rows act through; null for a mirror this device does
   /// not hold.
@@ -156,7 +163,13 @@ class _ShellConversationState extends ConsumerState<ShellConversation>
         ),
         reactions: row.reactions,
         source: widget.source.select((v) => liveMessageOf(v, id)),
-        face: _faceOf(row.message, project),
+        face: _photoOf(row.message, project),
+        bot: _botOf(
+          row.message,
+          project,
+          thinking: view.isRunning && row.last,
+          live: row.last,
+        ),
       );
     }
 
@@ -250,15 +263,40 @@ class _ShellConversationState extends ConsumerState<ShellConversation>
     speaking: speaking,
   );
 
-  /// The author's face as a picture, where the message names a member.
-  Uint8List? _faceOf(Message message, String? project) {
+  AgentFace? _faceOf(Message message, String? project) {
     final member = nameOf(message.author);
     if (member == null) return null;
-    final face = ref
+    return ref
         .watch(agentPictureProvider((project: project, name: member)))
         .value;
-    if (face == null) return null;
-    final key = "${project ?? ""}/$member/${identityHashCode(face)}";
+  }
+
+  /// The author's Bot Avatar as the stage's key: the client draws it live,
+  /// asking the core for each frame, as the settings' faces are drawn. It
+  /// thinks while the reply is being written and idles once it is done.
+  ({String key, int colour, int mood, bool live})? _botOf(
+    Message message,
+    String? project, {
+    required bool thinking,
+    required bool live,
+  }) {
+    if (_faceOf(message, project) case AgentBot(:final spec)) {
+      return (
+        key: ref.read(botStageProvider).keyOf(spec.definition),
+        colour: spec.colour,
+        mood: (thinking ? BotMood.thinking : BotMood.idle).index,
+        live: live,
+      );
+    }
+    return null;
+  }
+
+  /// The author's photo as a picture, where the message names a member who
+  /// has one.
+  Uint8List? _photoOf(Message message, String? project) {
+    final face = _faceOf(message, project);
+    if (face is! AgentPhoto) return null;
+    final key = "${project ?? ""}/${message.author}/${identityHashCode(face)}";
     if (_faces.containsKey(key)) return _faces[key];
     _faces[key] = null;
     unawaited(_draw(key, face));
@@ -362,6 +400,15 @@ class _ShellConversationState extends ConsumerState<ShellConversation>
   @override
   Future<void> openPlan() async {
     if (mounted) plan_page.openPlan(context, widget.chatId);
+  }
+
+  /// A reply's quote carries its author's handle, so the answer is
+  /// addressed to them; the user's own carries none.
+  @override
+  Future<void> reply(String row, String text) async {
+    final message = _actions[row]?.message;
+    if (message == null || text.trim().isEmpty) return;
+    widget.onReply(Quote(text, handle: message.author));
   }
 
   @override

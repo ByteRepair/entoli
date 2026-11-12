@@ -18,7 +18,13 @@ struct MessageView: View {
     VStack(alignment: alignment, spacing: 2) {
       if let speaker = message.speaker {
         HStack(spacing: 6) {
-          if let face = message.face, let image = FaceImage.of(face.data) {
+          if let bot = message.bot, let settings = SettingsModel.shared {
+            // Live where it is the newest message's, thinking while the
+            // reply is written; a tap makes it happy, as in the Flutter app.
+            BotFaceView(
+              model: settings, key: bot, colour: Int(message.botColour ?? 0), size: 45,
+              mood: Int(message.botMood), live: message.botLive, reactToTap: true)
+          } else if let face = message.face, let image = FaceImage.of(face.data) {
             image.resizable().frame(width: 28, height: 28).clipShape(Circle())
           }
           Text(speaker).font(.caption).foregroundStyle(.secondary)
@@ -26,7 +32,9 @@ struct MessageView: View {
         .padding(.horizontal, 4)
       }
       ForEach(Array(message.blocks.enumerated()), id: \.offset) { index, block in
-        BlockView(row: key, index: index, block: block, model: model, user: message.user)
+        BlockView(
+          row: key, index: index, block: block, model: model, user: message.user,
+          reply: nested ? nil : { model.reply(key, $0) })
       }
       if !nested {
         MessageActionRow(key: key, message: message, model: model, shown: shown)
@@ -60,17 +68,18 @@ private struct BlockView: View {
   let block: BlockSnapshot
   let model: TranscriptModel
   let user: Bool
+  let reply: ((String) -> Void)?
 
   var body: some View {
     switch block.kind {
     case .bubble:
-      Bubble(row: row, index: index, block: block, model: model, user: user)
+      Bubble(row: row, index: index, block: block, model: model, user: user, reply: reply)
     case .steer:
       VStack(alignment: .trailing, spacing: 2) {
         if let heading = block.heading {
           Text(heading).font(.caption).foregroundStyle(.secondary).padding(.trailing, 4)
         }
-        Bubble(row: row, index: index, block: block, model: model, user: true)
+        Bubble(row: row, index: index, block: block, model: model, user: true, reply: reply)
       }
       .frame(maxWidth: .infinity, alignment: .trailing)
     case .activity:
@@ -96,6 +105,7 @@ private struct Bubble: View {
   let block: BlockSnapshot
   let model: TranscriptModel
   let user: Bool
+  let reply: ((String) -> Void)?
 
   var body: some View {
     let content = VStack(alignment: .leading, spacing: 4) {
@@ -103,7 +113,7 @@ private struct Bubble: View {
         Files(row: row, index: index, files: block.files, model: model)
       }
       ForEach(Array(block.said.enumerated()), id: \.offset) { _, said in
-        SaidView(said: said, model: model)
+        SaidView(said: said, model: model, reply: reply)
       }
       ForEach(Array(block.trailing.enumerated()), id: \.offset) { _, trailing in
         TrailingView(row: row, trailing: trailing, model: model)
@@ -136,11 +146,12 @@ private struct Bubble: View {
 private struct SaidView: View {
   let said: SaidSnapshot
   let model: TranscriptModel
+  let reply: ((String) -> Void)?
 
   var body: some View {
     switch said.kind {
     case .prose:
-      MarkdownView(blocks: said.blocks, model: model, caret: said.caret)
+      MarkdownView(blocks: said.blocks, model: model, caret: said.caret, reply: reply)
     case .error:
       Text(said.text).foregroundStyle(.red).textSelection(.enabled)
     case .command:

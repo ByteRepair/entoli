@@ -8,12 +8,37 @@ struct MarkdownView: View {
   let model: TranscriptModel
   var caret = false
   var tone: Color? = nil
+  /// Answers a selected passage; null where there is nothing to answer.
+  var reply: ((String) -> Void)? = nil
+
+  /// Prose as runs, one text view each so a selection crosses paragraphs,
+  /// broken where a code block or a table stands apart.
+  private var runs: [(index: Int, prose: Bool, blocks: [TextBlockSnapshot])] {
+    var out: [(Int, Bool, [TextBlockSnapshot])] = []
+    for (index, block) in blocks.enumerated() {
+      let prose = block.kind != .code && block.kind != .table
+      if prose, let last = out.last, last.1 {
+        out[out.count - 1].2.append(block)
+      } else {
+        out.append((index, prose, [block]))
+      }
+    }
+    return out
+  }
 
   var body: some View {
+    let _ = model.formulasLanded
     VStack(alignment: .leading, spacing: 8) {
-      ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
-        TextBlockView(
-          block: block, model: model, caret: caret && index == blocks.count - 1, tone: tone)
+      ForEach(runs, id: \.index) { run in
+        if run.prose {
+          ProseText(
+            text: ProseBuilder.build(
+              run.blocks, model: model, caret: caret && run.index + run.blocks.count == blocks.count,
+              tone: tone.map { PlatformColor($0) }),
+            actions: ProseActions(reply: reply, link: { model.link($0.absoluteString) }))
+        } else {
+          TextBlockView(block: run.blocks[0], model: model, caret: false, tone: tone)
+        }
       }
     }
   }

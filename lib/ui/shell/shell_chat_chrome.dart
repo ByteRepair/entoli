@@ -9,6 +9,7 @@ import "../../domain/room/room_state.dart" show ChatViewState;
 import "../../app/plan.dart";
 import "../../app/transcript/transcript.dart";
 import "../../domain/models.dart";
+import "../../domain/quote.dart";
 import "../../domain/plan.dart" show sectionsProgress;
 import "../../domain/project.dart";
 import "../chat/chat_chrome.dart";
@@ -92,12 +93,14 @@ class ShellChatChrome extends ChatChrome {
     required Transcript transcript,
     required ChatViewState view,
     required ProviderListenable<ChatViewState> source,
+    required ValueChanged<Quote> onReply,
     TurnDriver? driver,
   }) => ShellConversation(
     chatId: chatId,
     transcript: transcript,
     view: view,
     source: source,
+    onReply: onReply,
     driver: driver,
   );
 }

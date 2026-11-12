@@ -326,6 +326,10 @@ class MessageSnapshot {
     this.speaker,
     this.tint = Tint.none,
     this.face,
+    this.bot,
+    this.botColour,
+    this.botMood = 0,
+    this.botLive = false,
     this.blocks = const [],
     required this.actions,
     this.reactions = const [],
@@ -335,6 +339,15 @@ class MessageSnapshot {
   String? speaker;
   Tint tint;
   Uint8List? face;
+
+  /// A Bot Avatar's key in the core's stage, which the native face asks for
+  /// frames by over the settings' contract; [face] is then null. Its body
+  /// colour, its mood (`BotMood`'s index), and whether it moves: the newest
+  /// message's alone, one avatar moving per chat.
+  String? bot;
+  int? botColour;
+  int botMood;
+  bool botLive;
   List<BlockSnapshot> blocks;
   ActionsSnapshot actions;
   List<String> reactions;
@@ -465,4 +478,7 @@ abstract class TranscriptIntents {
   void retry(String row);
   void openPlan();
   void openFile(String row, int block, int file);
+
+  /// A passage selected in [row] answered: quoted into the composer.
+  void reply(String row, String text);
 }
