@@ -33,13 +33,17 @@ import SwiftUI
 
   func update(_ next: [SettingsPageData]) {
     try? rows.settings(snapshot: SettingsSnapshot(pages: next))
+    // A stack closed, or opened anew on another page, keeps nothing a row
+    // pushed: the sheet Escape closed over a model list reopened on it,
+    // blank, its row gone.
+    let fresh = stack.first?.address != next.first?.address
     stack = next
     // Each page over the first is pushed in the order Dart opened them;
     // what a row pushed between them stays, and a page gone takes all over it.
     let opened = next.dropFirst().compactMap(\.address)
     var kept: [SettingsRoute] = []
     var at = 0
-    for route in rows.path {
+    for route in fresh ? [] : rows.path {
       if case .app(let address) = route {
         guard at < opened.count, opened[at] == address else { break }
         at += 1
@@ -100,6 +104,9 @@ struct AppPagesSheet: View {
       }
     }
     .interactiveDismissDisabled((model.stack.first?.guarded ?? false) || model.held)
+    #if os(macOS)
+      .environment(\.ownBar, true)
+    #endif
     #if os(macOS)
       .frame(minWidth: 620, idealWidth: 700, minHeight: 520, idealHeight: 680)
     #endif
@@ -280,6 +287,10 @@ struct AppPagesPresenter: ViewModifier {
 
 extension EnvironmentValues {
   @Entry var appPagesCard = false
+
+  /// Whether a page draws its own bar rather than the toolbar's: in a Mac's
+  /// sheet, whose toolbar sets the title on a row of its own under its items.
+  @Entry var ownBar = false
 }
 
 #if os(macOS)
