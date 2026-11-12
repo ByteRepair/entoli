@@ -7,6 +7,7 @@ import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/goal.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/room/room_state.dart";
+import "package:agent_chat/domain/todo.dart";
 import "package:agent_chat/app/chat_controller.dart";
 import "package:agent_chat/app/settings/spec.dart" show ContainerReader;
 import "package:agent_chat/ui/shell/shell_answers.dart";
@@ -136,6 +137,25 @@ void main() {
       "call-1",
       ApprovalResponse.alwaysAllowChat,
     ));
+  });
+
+  test("a task list is drawn item by item, with its line", () {
+    expect(todoSnapshotOf(null), isNull);
+    expect(todoSnapshotOf(const TodoList([])), isNull);
+    final todo = todoSnapshotOf(
+      const TodoList([
+        TodoItem("Read it", TodoStatus.completed),
+        TodoItem("Fix it", TodoStatus.inProgress),
+        TodoItem("Test it", TodoStatus.pending),
+      ]),
+    )!;
+    expect(todo.items.map((i) => (i.content, i.phase)), [
+      ("Read it", TodoPhase.completed),
+      ("Fix it", TodoPhase.inProgress),
+      ("Test it", TodoPhase.pending),
+    ]);
+    expect(todo.done, 1);
+    expect(todo.headline, "Fix it");
   });
 
   test("a goal is drawn with where it stands, and the line in full", () {

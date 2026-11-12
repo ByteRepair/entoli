@@ -4,6 +4,7 @@ import "../../../domain/ask.dart";
 import "../../../domain/file_tools.dart";
 import "../../../domain/permission.dart" show ApproveMode;
 import "../../../domain/shell.dart";
+import "../../../domain/todo.dart";
 import "../../../domain/trigger_manager.dart" show TriggerRegistry;
 import "../../../domain/web_search.dart";
 import "../approval_gate.dart";
@@ -61,6 +62,11 @@ abstract interface class Turn {
   /// `add_directory` for, and how often it asked to leave the sandbox in
   /// each.
   GrantNudges get grantNudges;
+
+  /// The task list this turn's `todo` calls last wrote; null until one has,
+  /// so a list an earlier turn left is not this one's to finish.
+  TodoList? get todos;
+  set todos(TodoList? list);
 
   /// Puts questions to the user; one answer per question, null where they
   /// answered nothing.

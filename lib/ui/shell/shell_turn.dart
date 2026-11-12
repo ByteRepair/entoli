@@ -6,6 +6,7 @@ import "package:flutter/material.dart";
 import "../../domain/goal.dart";
 import "../../domain/models.dart";
 import "../../domain/room/room_state.dart";
+import "../../domain/todo.dart";
 import "../../app/chat_controller.dart";
 import "../chat/widgets/approval_banner.dart";
 import "../chat/widgets/running_strip.dart" show openRunning;
@@ -14,7 +15,8 @@ import "../../app/settings/spec.dart" show SettingReader;
 import "glyphs.dart";
 
 /// The turn surface as the shell draws it, apart from any widget: the
-/// snapshot of [view] — the resume offer, the goal, what is running, the says
+/// snapshot of [view] — the resume offer, the goal, the task list, what is
+/// running, the says
 /// the turn has not read, the calls waiting on an answer, the question — and
 /// what the client says back, run through [driver]. Voice mode's session and
 /// the open chat's publisher (`ShellChat`) each hold one.
@@ -65,6 +67,7 @@ class TurnRunner implements TurnIntents {
         : null;
     return TurnSnapshot(
       goal: goalSnapshotOf(chat?.goal),
+      todo: todoSnapshotOf(TodoList.ofLastTurn(chat?.messages ?? const [])),
       resume: chat != null && chat.unfinished && !view.isRunning
           ? ResumeSnapshot(
               startedAt: chat.messages.last.createdAt.millisecondsSinceEpoch,
@@ -206,4 +209,23 @@ GoalSnapshot? goalSnapshotOf(ChatGoal? goal) => goal == null
           GoalStatus.blocked => GoalPhase.blocked,
         },
         reason: goal.reason,
+      );
+
+/// The task list row's snapshot of [list]; null or empty draws none.
+TodoSnapshot? todoSnapshotOf(TodoList? list) => list == null || list.isEmpty
+    ? null
+    : TodoSnapshot(
+        items: [
+          for (final item in list.items)
+            TodoItemSnapshot(
+              content: item.content,
+              phase: switch (item.status) {
+                TodoStatus.pending => TodoPhase.pending,
+                TodoStatus.inProgress => TodoPhase.inProgress,
+                TodoStatus.completed => TodoPhase.completed,
+              },
+            ),
+        ],
+        done: list.done,
+        headline: list.headline,
       );

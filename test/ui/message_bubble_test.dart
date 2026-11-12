@@ -15,6 +15,7 @@ import "package:agent_chat/domain/agent_face.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/todo.dart";
 import "package:agent_chat/domain/quote.dart";
 import "package:agent_chat/domain/reaction.dart";
 import "package:agent_chat/domain/theme_colour.dart";
@@ -576,6 +577,28 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text("git status"), findsOneWidget);
+  });
+
+  testWidgets("a todo call reads as the task it moved to", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [
+        ToolCallPart(
+          toolCall: ToolCall(
+            id: "c1",
+            name: todoToolName,
+            argumentsJson:
+                '{"todos": [{"content": "Read it", "status": "completed"}, '
+                '{"content": "Fix it", "status": "in_progress"}]}',
+          ),
+        ),
+        ToolResultPart(
+          result: ToolResult(callId: "c1", returnCode: 0, output: ""),
+        ),
+      ]),
+    );
+
+    expect(find.text("Task 2 of 2: Fix it"), findsOneWidget);
   });
 
   testWidgets("an answered question reads as the question, not as a tool run", (

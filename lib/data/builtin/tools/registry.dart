@@ -13,6 +13,7 @@ import "plan_tools.dart";
 import "skill_create_tool.dart";
 import "skill_tool.dart";
 import "task_tool.dart";
+import "todo_tool.dart";
 import "trigger_tool.dart";
 import "websearch_tool.dart";
 
@@ -37,6 +38,7 @@ List<AgentTool> agentTools(ToolOffer offer) => [
   PlanNextTool(offer),
   PlanDoneTool(offer),
   PresentPlanTool(offer),
+  TodoTool(offer),
   CreateSkillTool(offer),
   TriggerSetTool(offer),
   TriggerRemoveTool(offer),

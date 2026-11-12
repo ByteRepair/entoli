@@ -753,6 +753,18 @@ the next. A mirrored chat's plan is asked of its home device over the sync
 channel (see "Attachments" in `lib/data/sync/AGENTS.md`), so the same card and
 page draw it at either end.
 
+## The task list, on screen
+
+The latest turn's `todo` list shows above the composer beside the goal's
+row — `TodoStrip` in Flutter, `todoRow` in the native shell, fed by
+`todoSnapshotOf` — done over total and `TodoList.headline`, opening in place
+to every task. It is the list the replies since the last prompt wrote
+(`TodoList.ofLastTurn`), so a new prompt puts it away until that turn writes
+its own — an old list left on screen would claim work the user moved past.
+A finished list stays until then, saying it finished. Each `todo` call in the
+reply is a label (`TodoActivity`) reading as the task it moved to, "Task 2 of
+5: …", opening to the list as that call wrote it; not spoken.
+
 ## A chat whose home device is elsewhere
 
 `MirrorChatController` is the counterpart of `ChatController` for a chat being

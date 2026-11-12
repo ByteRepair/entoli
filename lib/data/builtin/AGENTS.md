@@ -1797,6 +1797,47 @@ be is answered in prose. The skill used to say "any coding task", and a
 approval panel in front of a user who wanted an answer. An unanswered panel
 reads "end the turn, the plan is waiting for Go", never "start".
 
+## The task list (the `todo` tool)
+
+`todo` is the plan's light half: a checklist for work of several steps that
+nobody needs to approve. Claude Code's `TodoWrite` is the model — the same
+`{content, status}` items and wire names, the shape models are trained on.
+The plan is for work the user asked to agree to first (see "When to plan" in
+the coding skill), and before this a turn too small for one showed nothing
+of how far it was.
+
+**Every call is the whole list, and the newest call is the list.** Nothing is
+kept beside the conversation: `TodoList.latestIn` reads it back off the log,
+so a rewind takes it away with its message, a mirror has it with the reply,
+and there is no file for a command to rewrite behind the tool's back. A call
+that was refused wrote nothing.
+
+**The result reads the list back** — what is in progress and what is left —
+rather than "ok". That is half of what the tool is for: each call puts what
+is left in the newest part of the context, where a long turn's original
+request is far behind under command output. One task in progress at a time
+is the one rule enforced, the call refused otherwise, since it is what keeps
+a step from being passed over unmarked.
+
+**A turn that stops with its own list unfinished is told so once**, through
+`beforeStop` beside the plan's. Its own: `Turn.todos` is what this turn's
+calls wrote, null at the start, so a list an earlier turn left does not send
+this one back. Once: the list is let go of as the reminder is said, so a stop
+after it with the list untouched is taken as meant — the description asks
+the model to say in its reply which tasks were left and why. It is the
+model's own report and nothing checks it; the reminder and the open tasks
+still on screen are what keep it honest.
+
+**Compaction carries an open list.** Where the newest list is behind the
+marker, has nothing written after it and still has tasks open, the summary
+message ends with it as `TodoList.summary` words it (`_carriedTodos` in the
+projection), since the summarizer's prose would only paraphrase it. Only the
+viewer's own replies' lists, as a peer's tool calls are never projected.
+
+Under an approved plan the description points at `plan_done` instead, so the
+two never track the same work. Offered where the plan is: not to a
+sub-agent.
+
 ## Memory
 
 What the settings page calls Memory is two subsystems under one category:
