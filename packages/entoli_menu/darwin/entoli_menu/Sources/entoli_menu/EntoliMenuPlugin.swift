@@ -62,13 +62,17 @@ public struct AppCommands: Commands {
   public var body: some Commands {
     // The app's menu: About in About's place, the rest after Settings —
     // on a Mac the Settings scene's own item, which Dart leaves out of its
-    // list there.
+    // list there. iOS's is UIKit's, which opens the Settings app and holds
+    // ⌘, as Dart's does: two items on one shortcut is an exception.
     CommandGroup(replacing: .appInfo) {
       MenuGroups(model: model, groups: Array(model.groups(.app).prefix(1)))
     }
-    CommandGroup(after: .appSettings) {
-      MenuGroups(model: model, groups: Array(model.groups(.app).dropFirst()))
-    }
+    let rest = MenuGroups(model: model, groups: Array(model.groups(.app).dropFirst()))
+    #if os(iOS)
+      CommandGroup(replacing: .appSettings) { rest }
+    #else
+      CommandGroup(after: .appSettings) { rest }
+    #endif
     CommandGroup(replacing: .newItem) {
       // A window app's File menu is made only if this has something in it
       // at launch, before Dart has sent anything: a blank item holds the place.
