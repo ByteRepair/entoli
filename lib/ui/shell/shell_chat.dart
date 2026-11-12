@@ -217,18 +217,6 @@ final class _OpenChat implements _Screen {
     return (view: view, driver: _session.driver);
   }
 
-  /// The text's ink and a face's outline, by the window's appearance: the
-  /// shell's colours rather than a theme's, there being no build to read one.
-  ({int ink, Color outline}) _colours(TrackingReader reader) {
-    final dark =
-        reader.watch(windowSnapshotProvider).dark ??
-        WidgetsBinding.instance.platformDispatcher.platformBrightness ==
-            Brightness.dark;
-    return dark
-        ? (ink: 0xFFE3E2E6, outline: const Color(0xFF938F99))
-        : (ink: 0xFF1A1C1E, outline: const Color(0xFF79747E));
-  }
-
   void conversationPass() {
     if (_closed) return;
     _conversationReader.pass(() {
@@ -247,7 +235,7 @@ final class _OpenChat implements _Screen {
         final context = _shell._context();
         if (context.mounted) checkChatExpiry(context, id, chat.state);
       }
-      final (:ink, :outline) = _colours(_conversationReader);
+      final (:ink, :outline) = _shellColours(_conversationReader);
       conversation.publish(
         _conversationReader,
         chatId: id,
@@ -335,7 +323,7 @@ final class _OpenChat implements _Screen {
       }
       composer.bind(slot.binding);
       _answers.composer.take(composer);
-      final (:ink, :outline) = _colours(_composerReader);
+      final (:ink, :outline) = _shellColours(_composerReader);
       _outbox.composer(
         composer.snapshot(
           _composerReader,
@@ -575,15 +563,11 @@ final class _NewChat implements _Screen {
       composer.bind(slot.binding);
       _answers.composer.take(composer);
       final view = WidgetsBinding.instance.platformDispatcher.implicitView!;
-      final dark =
-          _composerReader.watch(windowSnapshotProvider).dark ??
-          WidgetsBinding.instance.platformDispatcher.platformBrightness ==
-              Brightness.dark;
       _outbox.composer(
         composer.snapshot(
           _composerReader,
           pixelRatio: view.devicePixelRatio,
-          outline: dark ? const Color(0xFF938F99) : const Color(0xFF79747E),
+          outline: _shellColours(_composerReader).outline,
         ),
       );
     });
@@ -651,3 +635,15 @@ FootBar _barOf(ComposerSlot slot) => switch (slot) {
   ComposerViewOnly() => FootBar.offline,
   ComposerReady() || ComposerAnswering() || ComposerStarting() => FootBar.none,
 };
+
+/// The text's ink and a face's outline, by the window's appearance: the
+/// shell's colours rather than a theme's, there being no build to read one.
+({int ink, Color outline}) _shellColours(TrackingReader reader) {
+  final dark =
+      reader.watch(windowSnapshotProvider).dark ??
+      WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+          Brightness.dark;
+  return dark
+      ? (ink: 0xFFE3E2E6, outline: const Color(0xFF938F99))
+      : (ink: 0xFF1A1C1E, outline: const Color(0xFF79747E));
+}

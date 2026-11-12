@@ -145,3 +145,30 @@ BrowserKey browserKeyUp(BrowserKey down, {required int modifiers}) =>
       keyCode: down.keyCode,
       modifiers: modifiers,
     );
+
+/// The editing a page's menu offers, against the user's clipboard rather
+/// than the page's: what the Flutter card and the native sheet both send.
+extension BrowserEditing on BrowserTab {
+  /// The page's selection onto the user's clipboard. Asked before anything
+  /// else is sent, so a cut sent after still finds it selected.
+  Future<void> copySelection() async {
+    final selected = await selectedText();
+    if (selected != null) {
+      await Clipboard.setData(ClipboardData(text: selected));
+    }
+  }
+
+  /// The user's clipboard typed at the caret.
+  Future<void> pasteClipboard() async {
+    final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    if (text != null && text.isNotEmpty) await insertText(text);
+  }
+
+  /// Press and release the platform's shortcut for [letter], with the
+  /// editing command it names.
+  Future<void> pressShortcut(String letter, {required bool mac}) async {
+    final down = browserShortcut(letter, mac: mac);
+    await key(down);
+    await key(browserKeyUp(down, modifiers: down.modifiers));
+  }
+}

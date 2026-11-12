@@ -24,7 +24,7 @@ struct MessageView: View {
             BotFaceView(
               model: settings, key: bot, colour: Int(message.botColour ?? 0), size: 45,
               mood: Int(message.botMood), live: message.botLive, reactToTap: true)
-          } else if let face = message.face, let image = FaceImage.of(face.data) {
+          } else if let face = message.face, let image = Image(picture: face.data) {
             image.resizable().frame(width: 28, height: 28).clipShape(Circle())
           }
           Text(speaker).font(.caption).foregroundStyle(.secondary)
@@ -47,16 +47,6 @@ struct MessageView: View {
       .onHover { shown = $0 }
     #else
       .onTapGesture { shown.toggle() }
-    #endif
-  }
-}
-
-private enum FaceImage {
-  static func of(_ data: Data) -> Image? {
-    #if os(iOS)
-      UIImage(data: data).map { Image(uiImage: $0) }
-    #else
-      NSImage(data: data).map { Image(nsImage: $0) }
     #endif
   }
 }

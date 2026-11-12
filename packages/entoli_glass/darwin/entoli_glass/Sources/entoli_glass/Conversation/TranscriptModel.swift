@@ -1,4 +1,3 @@
-import ImageIO
 import SwiftUI
 
 #if os(iOS)
@@ -82,21 +81,15 @@ struct Formula {
   let baseline: CGFloat
 
   init?(_ picture: FormulaPicture) {
-    guard let cg = Self.decode(picture.png.data) else { return nil }
+    guard let cg = decodedImage(picture.png.data) else { return nil }
     image = Image(decorative: cg, scale: picture.scale)
-    let points = CGSize(width: picture.width, height: picture.height)
+    size = CGSize(width: picture.width, height: picture.height)
     #if os(iOS)
       platform = UIImage(cgImage: cg, scale: picture.scale, orientation: .up)
     #else
-      platform = NSImage(cgImage: cg, size: points)
+      platform = NSImage(cgImage: cg, size: size)
     #endif
-    size = CGSize(width: picture.width, height: picture.height)
     baseline = picture.baseline
-  }
-
-  private static func decode(_ data: Data) -> CGImage? {
-    guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
-    return CGImageSourceCreateImageAtIndex(source, 0, nil)
   }
 }
 

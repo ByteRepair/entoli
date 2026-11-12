@@ -488,33 +488,12 @@ class _BrowserCardState extends State<BrowserCard> {
     return _mac ? keys.isMetaPressed : keys.isControlPressed;
   }
 
-  /// The page's selection onto the user's clipboard. Asked before anything
-  /// else is sent, so a cut sent after still finds it selected.
-  void _copySelection() {
-    final text = widget.tab.selectedText();
-    _send(() async {
-      final selected = await text;
-      if (selected != null) {
-        await Clipboard.setData(ClipboardData(text: selected));
-      }
-    });
-  }
+  void _copySelection() => _send(widget.tab.copySelection);
 
-  /// The user's clipboard typed at the caret, the page's not being theirs.
-  void _paste() => _send(() async {
-    final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
-    if (text != null && text.isNotEmpty) await widget.tab.insertText(text);
-  });
+  void _paste() => _send(widget.tab.pasteClipboard);
 
-  /// Press and release the platform's shortcut for [letter], with the
-  /// editing command it names.
-  void _shortcutKey(String letter) {
-    final down = browserShortcut(letter, mac: _mac);
-    _send(() async {
-      await widget.tab.key(down);
-      await widget.tab.key(browserKeyUp(down, modifiers: down.modifiers));
-    });
-  }
+  void _shortcutKey(String letter) =>
+      _send(() => widget.tab.pressShortcut(letter, mac: _mac));
 
   /// The menu a right click or a held finger opens: what the page's own
   /// would offer for editing, against the user's clipboard. Chrome draws its

@@ -85,14 +85,6 @@ protocol ComposerEditor: AnyObject {
   /// The faces the menu showed last, by their PNG bytes.
   @ObservationIgnored private var faces: [Data: Image] = [:]
 
-  private static func image(_ png: Data) -> Image? {
-    #if os(iOS)
-      UIImage(data: png).map { Image(uiImage: $0) }
-    #else
-      NSImage(data: png).map { Image(nsImage: $0) }
-    #endif
-  }
-
   func apply(_ next: ComposerSnapshot) {
     guard next != look else { return }
     let restyle = next.mode != look.mode || next.cards != look.cards
@@ -105,7 +97,7 @@ protocol ComposerEditor: AnyObject {
     pictures = Dictionary(
       uniqueKeysWithValues: next.menu.enumerated().compactMap { row, item in
         guard let png = item.picture?.data else { return nil }
-        guard let image = decoded[png] ?? faces[png] ?? Self.image(png) else { return nil }
+        guard let image = decoded[png] ?? faces[png] ?? Image(picture: png) else { return nil }
         decoded[png] = image
         return (row, image)
       })

@@ -1,3 +1,4 @@
+import ImageIO
 import SwiftUI
 
 #if os(iOS)
@@ -14,6 +15,25 @@ func copyToPasteboard(_ text: String) {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(text, forType: .string)
   #endif
+}
+
+/// [data] — a PNG, a JPEG — decoded, or nil where it is not a picture.
+func decodedImage(_ data: Data) -> CGImage? {
+  guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+  return CGImageSourceCreateImageAtIndex(source, 0, nil)
+}
+
+extension Image {
+  /// [data] as the platform's image reads it, at the size it says it is.
+  init?(picture data: Data) {
+    #if os(iOS)
+      guard let image = UIImage(data: data) else { return nil }
+      self.init(uiImage: image)
+    #else
+      guard let image = NSImage(data: data) else { return nil }
+      self.init(nsImage: image)
+    #endif
+  }
 }
 
 /// A search's words: what is found holds every one of them, in any order.

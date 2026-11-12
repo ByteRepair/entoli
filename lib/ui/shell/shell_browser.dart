@@ -174,7 +174,7 @@ class BrowserWindowSession implements BrowserIntents {
     if (shortcut &&
         (event.logicalKey == LogicalKeyboardKey.keyC ||
             event.logicalKey == LogicalKeyboardKey.keyX)) {
-      _copySelection();
+      _send(tab.copySelection);
     }
     final pressed = browserKeyDown(
       event,
@@ -209,44 +209,19 @@ class BrowserWindowSession implements BrowserIntents {
     );
   }
 
-  /// The page's selection onto the user's clipboard. Asked before anything
-  /// else is sent, so a cut sent after still finds it selected.
-  void _copySelection() {
-    final text = tab.selectedText();
-    _send(() async {
-      final selected = await text;
-      if (selected != null) {
-        await Clipboard.setData(ClipboardData(text: selected));
-      }
-    });
-  }
-
   @override
   void edit(BrowserEdit action) {
     switch (action) {
       case BrowserEdit.paste:
-        _send(() async {
-          final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
-          if (text != null && text.isNotEmpty) await tab.insertText(text);
-        });
+        _send(tab.pasteClipboard);
       case BrowserEdit.copy:
-        _copySelection();
+        _send(tab.copySelection);
       case BrowserEdit.cut:
-        _copySelection();
-        _shortcutKey("x");
+        _send(tab.copySelection);
+        _send(() => tab.pressShortcut("x", mac: _mac));
       case BrowserEdit.selectAll:
-        _shortcutKey("a");
+        _send(() => tab.pressShortcut("a", mac: _mac));
     }
-  }
-
-  /// Press and release the platform's shortcut for [letter], with the
-  /// editing command it names.
-  void _shortcutKey(String letter) {
-    final down = browserShortcut(letter, mac: _mac);
-    _send(() async {
-      await tab.key(down);
-      await tab.key(browserKeyUp(down, modifiers: down.modifiers));
-    });
   }
 
   void dispose() {

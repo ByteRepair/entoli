@@ -1,4 +1,3 @@
-import ImageIO
 import SwiftUI
 
 #if os(iOS)
@@ -14,9 +13,7 @@ struct BrowserFrame {
   let page: CGSize
 
   init?(_ frame: BrowserFrameSnapshot) {
-    guard let source = CGImageSourceCreateWithData(frame.jpeg.data as CFData, nil),
-      let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
-    else { return nil }
+    guard let image = decodedImage(frame.jpeg.data) else { return nil }
     self.image = image
     page = CGSize(width: frame.width, height: frame.height)
   }
