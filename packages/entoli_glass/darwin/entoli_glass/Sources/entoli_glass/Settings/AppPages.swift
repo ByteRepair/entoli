@@ -225,11 +225,28 @@ extension View {
   }
 }
 
-/// Presents the app's pages over the window while any is open.
+/// Presents the app's pages while any is open: over the window, or on iOS
+/// over the settings sheet while it is up, a sheet being presented only from
+/// the one on top.
 struct AppPagesPresenter: ViewModifier {
+  /// Whether this is the settings sheet's presenter rather than the window's.
+  var inSettings = false
+
+  private var here: Bool {
+    #if os(iOS)
+      (SettingsModel.shared?.presented ?? false) == inSettings
+    #else
+      !inSettings
+    #endif
+  }
+
   func body(content: Content) -> some View {
     if let pages = AppPagesModel.shared {
-      content.sheet(isPresented: pages.presented) { AppPagesSheet(model: pages) }
+      content.sheet(
+        isPresented: Binding(
+          get: { here && pages.presented.wrappedValue },
+          set: { pages.presented.wrappedValue = $0 })
+      ) { AppPagesSheet(model: pages) }
     } else {
       content
     }

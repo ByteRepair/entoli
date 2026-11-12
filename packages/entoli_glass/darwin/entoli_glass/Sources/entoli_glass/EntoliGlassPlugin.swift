@@ -74,6 +74,8 @@ public struct FrontendView: View {
       content.sheet(isPresented: $settings.presented) {
         // A page's room on an iPad, the whole screen on a phone.
         SettingsRoot(model: settings).presentationSizing(.page)
+          // A page opened from a setting comes up over the settings.
+          .modifier(AppPagesPresenter(inSettings: true))
       }
     }
   }
