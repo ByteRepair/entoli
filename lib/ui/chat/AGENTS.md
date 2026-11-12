@@ -757,7 +757,7 @@ page draw it at either end.
 
 The latest turn's `todo` list shows above the composer beside the goal's
 row — `TodoStrip` in Flutter, `todoRow` in the native shell, fed by
-`todoSnapshotOf` — done over total and `TodoList.headline`, opening in place
+`todoSnapshotOf` — done over total and the core's `TodoWords.headline`, opening in place
 to every task. It is the list the replies since the last prompt wrote
 (`TodoList.ofLastTurn`), so a new prompt puts it away until that turn writes
 its own — an old list left on screen would claim work the user moved past.

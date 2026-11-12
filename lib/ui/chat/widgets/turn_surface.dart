@@ -60,7 +60,7 @@ class TurnSurface extends StatelessWidget {
           ),
         if (chat != null) BrowserPrompts(chatId: chat.state.id),
         GoalStrip(goal: chat?.goal, onCommand: notifier.send),
-        TodoStrip(list: TodoList.ofLastTurn(chat?.messages ?? const [])),
+        TodoStrip(list: chat?.todos),
         RunningStrip(view: view),
         SteerStrip(
           steering: view.steering,

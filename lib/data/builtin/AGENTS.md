@@ -1822,16 +1822,17 @@ a step from being passed over unmarked.
 **A turn that stops with its own list unfinished is told so once**, through
 `beforeStop` beside the plan's. Its own: `Turn.todos` is what this turn's
 calls wrote, null at the start, so a list an earlier turn left does not send
-this one back. Once: the list is let go of as the reminder is said, so a stop
-after it with the list untouched is taken as meant — the description asks
+this one back. Once: the loop keeps a budget per tool (`stopNudges`, the
+plan's two, the list's one) inside its own, so a stop after the reminder is
+taken as meant — the description asks
 the model to say in its reply which tasks were left and why. It is the
 model's own report and nothing checks it; the reminder and the open tasks
 still on screen are what keep it honest.
 
 **Compaction carries an open list.** Where the newest list is behind the
 marker, has nothing written after it and still has tasks open, the summary
-message ends with it as `TodoList.summary` words it (`_carriedTodos` in the
-projection), since the summarizer's prose would only paraphrase it. Only the
+message ends with it as `TodoList.carried` words it (`_carriedTodos` in the
+projection, through the summary's generic `carried` text), since the summarizer's prose would only paraphrase it. Only the
 viewer's own replies' lists, as a peer's tool calls are never projected.
 
 Under an approved plan the description points at `plan_done` instead, so the

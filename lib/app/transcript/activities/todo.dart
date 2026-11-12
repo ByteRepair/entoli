@@ -22,20 +22,11 @@ final class TodoActivity extends ToolActivity {
   ActivityNode node(SettingReader reader, Run run) {
     final list = _listOf(run);
     if (list == null) return super.node(reader, run);
-    final total = list.items.length;
-    final current = list.current;
     return LabelNode(
       this,
       run,
       glyph: TranscriptGlyph.plan,
-      text: list.isEmpty
-          ? "Cleared the task list"
-          : list.unfinished.isEmpty
-          ? "All $total tasks done"
-          : current != null
-          ? "Task ${list.items.indexOf(current) + 1} of $total: "
-                "${current.content}"
-          : "Task list: ${list.done} of $total done",
+      text: list.label,
       busy: run.going && run.result == null,
     );
   }
@@ -62,4 +53,22 @@ final class TodoActivity extends ToolActivity {
       ],
     );
   }
+}
+
+/// How the frontends word a task list.
+extension TodoWords on TodoList {
+  /// A `todo` call's label: the task it moved to.
+  String get label => switch (current) {
+    _ when isEmpty => "Cleared the task list",
+    _ when allDone => "All ${items.length} tasks done",
+    final current? =>
+      "Task ${items.indexOf(current) + 1} of ${items.length}: "
+          "${current.content}",
+    null => "Task list: $done of ${items.length} done",
+  };
+
+  /// The row above the composer: the task under way, or how much is left.
+  String get headline => allDone
+      ? "All tasks done"
+      : current?.content ?? "${items.length - done} left";
 }

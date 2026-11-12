@@ -45,19 +45,7 @@ class _PlanTaskTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final (icon, colour, status) = switch (task.status) {
-      PlanTaskStatus.done => (Icons.check_circle, scheme.primary, "Done"),
-      PlanTaskStatus.inProgress => (
-        Icons.timelapse,
-        scheme.tertiary,
-        "In progress",
-      ),
-      PlanTaskStatus.pending => (
-        Icons.radio_button_unchecked,
-        scheme.outline,
-        "To do",
-      ),
-    };
+    final (icon, colour, status) = taskLook(task.status, scheme);
     final title = Text("${task.index}. ${task.text}");
     final leading = Tooltip(
       message: status,
@@ -86,3 +74,20 @@ class _PlanTaskTile extends StatelessWidget {
     );
   }
 }
+
+/// How a task's state is drawn, a plan's or a task list's: its icon, colour
+/// and the word for it.
+(IconData, Color, String) taskLook(PlanTaskStatus status, ColorScheme scheme) =>
+    switch (status) {
+      PlanTaskStatus.done => (Icons.check_circle, scheme.primary, "Done"),
+      PlanTaskStatus.inProgress => (
+        Icons.timelapse,
+        scheme.tertiary,
+        "In progress",
+      ),
+      PlanTaskStatus.pending => (
+        Icons.radio_button_unchecked,
+        scheme.outline,
+        "To do",
+      ),
+    };
