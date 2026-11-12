@@ -921,12 +921,17 @@ opened is its detail, sent while it is up and redrawn as it follows its turn
 (a card instead opens what it stands for, the plan opens its Flutter page);
 a message's action runs through its `MessageActions`; copy writes the formatted
 text and HTML through the rich clipboard, as Flutter's button does; a link
-goes to the link opener. The detail is a native sheet. The Flutter view stays
-in the window for the pages pushed over the conversation and for the strip
-Flutter still draws above the composer — the browser's prompts, a setup or
-offline bar — whose height goes with the snapshot (`flutterBottom`) so the
-native list leaves it clear. An empty chat is not sent, and Flutter's empty
-state shows.
+goes to the link opener. The detail is a native sheet. An empty chat is sent
+too, and the client says it has no messages.
+
+**The Flutter view stays in the window but is not shown** behind the native
+conversation: opacity nought and no touches, shown only while a Flutter page
+is pushed over the chat or before the app is set up. It cannot leave the
+window, because out of it the engine pauses, and the chat page — which owns
+the chat's controllers and sends this conversation, the composer, the turn
+surface and the chat bar from its build — would send nothing. What Flutter
+still draws on the chat page under the shell — the browser's prompts, a
+setup or offline bar, a mirror's strip — is not seen there now.
 
 A message's reactions open the strip master drew under the shell, `GlassChoices`
 (`Strip.swift`), now a popover from the action row's smiley.
@@ -937,10 +942,11 @@ what is selected, so Reply could not be on it. A run of prose — paragraphs,
 headings, list items, quotes, formulas, code blocks and tables — is one
 `NSTextView` or `UITextView` over an attributed string (`ProseBuilder`), so a
 selection crosses all of it as Flutter's does. Code and tables are in it
-rather than beside it because a view beside it is a selection of its own: on
-a Mac they are AppKit's text blocks (a shaded box, a bordered table), which
-UIKit has not, so a phone shades the code's glyphs and sets a table's cells
-apart by tabs; code wraps rather than scrolls, a scroll being a selection
+rather than beside it because a view beside it is a selection of its own;
+what the text cannot draw — a code block's rounded box and copy button, a
+table's grid, a quote's bar — the builder marks on the string and the view
+draws behind it (`ProseDecorations`, TextKit 1's geometry, which both
+platforms share). Code wraps rather than scrolls, a scroll being a selection
 apart too. Its menu is Copy and Reply alone. Both read a formula as its TeX,
 carried on its attachment, and code inside its fence, and
 Reply sends the passage back (`reply`), quoted under the author's handle as

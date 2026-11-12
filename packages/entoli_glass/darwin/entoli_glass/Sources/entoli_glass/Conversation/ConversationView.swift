@@ -30,6 +30,11 @@ struct ConversationView: View {
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity)
       }
+      .overlay {
+        if model.order.isEmpty {
+          Text("No messages yet").foregroundStyle(.secondary)
+        }
+      }
       .defaultScrollAnchor(.bottom)
       .onScrollGeometryChange(for: Bool.self) { geometry in
         geometry.contentOffset.y + geometry.containerSize.height

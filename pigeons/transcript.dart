@@ -376,16 +376,12 @@ class RowSnapshot {
 
 /// The conversation: every row's key in order, and the rows that changed
 /// since the last snapshot of the same chat — a client keeps the rest.
-/// [flutterBottom] is how much of the foot Flutter still draws above the
-/// composer — the browser's prompts, a setup bar — which the conversation
-/// leaves clear.
 class ConversationSnapshot {
   ConversationSnapshot({
     this.chatId,
     this.order = const [],
     this.changed = const [],
     this.running = false,
-    this.flutterBottom = 0,
     this.reactions = const [],
   });
 
@@ -393,7 +389,6 @@ class ConversationSnapshot {
   List<String> order;
   List<RowSnapshot> changed;
   bool running;
-  double flutterBottom;
 
   /// The reactions a message can be given, in the order offered.
   List<ReactionChoice> reactions;

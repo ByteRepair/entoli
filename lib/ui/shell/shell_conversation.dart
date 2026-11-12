@@ -1,5 +1,4 @@
 import "dart:async";
-import "dart:math" as math;
 import "dart:typed_data";
 
 import "package:entoli_glass/entoli_glass.dart" as wire;
@@ -32,7 +31,6 @@ import "../chat/plan_page.dart" as plan_page;
 import "../voice/read_aloud.dart" show readAloud;
 import "faces.dart";
 import "shell_answers.dart";
-import "shell_window.dart" show shellInsets;
 import "transcript_encoder.dart";
 
 /// The conversation drawn by the native shell: the core's [Transcript],
@@ -197,7 +195,6 @@ class _ShellConversationState extends ConsumerState<ShellConversation>
           order: order,
           changed: changed,
           running: widget.view.isRunning,
-          flutterBottom: _flutterBottom(context),
           reactions: [
             for (final r in Reaction.values)
               wire.ReactionChoice(emoji: r.emoji, name: r.name),
@@ -207,16 +204,6 @@ class _ShellConversationState extends ConsumerState<ShellConversation>
     );
     _publishDetail(reader);
     return const SizedBox.expand();
-  }
-
-  /// What Flutter still draws at the foot, over the shell's own insets.
-  double _flutterBottom(BuildContext context) {
-    final media = MediaQuery.of(context);
-    final shell = math.max(
-      0,
-      shellInsets.value.bottom - media.viewInsets.bottom,
-    );
-    return math.max(0, media.padding.bottom - shell);
   }
 
   void _publishDetail(WidgetReader reader) {

@@ -160,16 +160,6 @@ void main() {
     ]);
   });
 
-  testWidgets("what Flutter still draws at the foot is said, the composer "
-      "not counted in it", (tester) async {
-    addTearDown(() => shellInsets.value = EdgeInsets.zero);
-    shellInsets.value = const EdgeInsets.only(bottom: 80);
-    await openChat(tester);
-    await pump(tester, composer: 80);
-    await settleIo(tester);
-    expect(transcript.conversations.last.flutterBottom, 0);
-  });
-
   testWidgets("an interrupted turn's offer to carry on goes to the shell", (
     tester,
   ) async {

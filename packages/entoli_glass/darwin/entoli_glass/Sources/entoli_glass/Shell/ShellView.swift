@@ -131,11 +131,23 @@ struct ShellView: View {
     .toolbar(removing: model.ready ? nil : .sidebarToggle)
   }
 
+  /// The conversation is native and on screen: a chat is open, and no
+  /// Flutter page or new-chat screen is over it.
+  private var conversing: Bool {
+    model.ready && transcript.present && !model.window.covered && !model.newChat.present
+  }
+
   private var detail: some View {
     ZStack {
+      // Kept in the window always — out of it, the engine pauses and Dart
+      // sends nothing — but neither seen nor touched while the conversation
+      // is native: only a Flutter page pushed over it, or the app before it
+      // is set up, shows it.
       FlutterCanvas(flutter: flutter) {
         StripLayer(model: model)
       }
+      .opacity(conversing ? 0 : 1)
+      .allowsHitTesting(!conversing)
       .onGeometryChange(for: EdgeInsets.self) { proxy in
         EdgeInsets(
           top: proxy.safeAreaInsets.top, leading: 0, bottom: proxy.safeAreaInsets.bottom,
@@ -147,12 +159,9 @@ struct ShellView: View {
         // which Dart's `ShellInsets` takes out.
         .ignoresSafeArea(.keyboard)
       #endif
-      // Over the Flutter view, which keeps the pages pushed over the
-      // conversation and the strip it still draws at the foot — left clear.
-      if transcript.present && !model.window.covered && !model.newChat.present {
+      if conversing {
         ConversationView(model: transcript)
           .background(.background)
-          .padding(.bottom, transcript.flutterBottom)
           .transition(.opacity)
       }
       // Beside the Flutter view rather than over it, so it keeps to the

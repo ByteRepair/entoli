@@ -20,7 +20,6 @@ import SwiftUI
   private(set) var order: [String] = []
   private(set) var rows: [String: RowSnapshot] = [:]
   private(set) var running = false
-  private(set) var flutterBottom: CGFloat = 0
   private(set) var reactions: [ReactionChoice] = []
   var detail = DetailSnapshot(
     present: false, title: "", statusError: false, sections: [], actions: [], mono: false,
@@ -39,7 +38,7 @@ import SwiftUI
     say = TranscriptIntents(binaryMessenger: messenger)
   }
 
-  var present: Bool { chatId != nil && !order.isEmpty }
+  var present: Bool { chatId != nil }
 }
 
 extension TranscriptModel: NativeTranscript {
@@ -55,8 +54,6 @@ extension TranscriptModel: NativeTranscript {
       rows = rows.filter { kept.contains($0.key) }
     }
     if running != snapshot.running { running = snapshot.running }
-    let bottom = CGFloat(snapshot.flutterBottom)
-    if flutterBottom != bottom { flutterBottom = bottom }
     if reactions != snapshot.reactions { reactions = snapshot.reactions }
   }
 

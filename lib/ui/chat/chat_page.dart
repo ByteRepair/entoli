@@ -1533,7 +1533,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   ) {
     final speechReady = ref.watch(speechReadyProvider);
     final reading = ref.watch(readAloudProvider);
-    if (chat.messages.isEmpty) return whenEmpty;
+    // The frontend's own draws an empty chat too.
     final drawn = _chrome.conversation(
       chatId: widget.chatId,
       transcript: transcript,
@@ -1543,6 +1543,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       driver: editing,
     );
     if (drawn != null) return drawn;
+    if (chat.messages.isEmpty) return whenEmpty;
     // While a turn runs, the controller refuses every edit.
     final mutable = editing != null && !view.isRunning;
     return Stack(
