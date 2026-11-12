@@ -4,7 +4,7 @@ import "../data/builtin/llm/hosted_models.dart";
 import "../data/builtin/llm/providers/provider.dart"
     show LlmProvider, resolveIn;
 import "../domain/llm_provider.dart";
-import "../domain/local_model.dart" show isTitleOnlyModel;
+import "../domain/local_model.dart" show isShortAskModel;
 import "../domain/model_capability.dart";
 import "../domain/model_registry.dart";
 import "../domain/models.dart";
@@ -76,8 +76,8 @@ List<CatalogEntry> catalogEntries(
     if (role.chat)
       for (final o in listed)
         if (!known.contains((o.providerId, o.modelId)) &&
-            (role == ModelRole.title ||
-                !isTitleOnlyModel(o.providerId, o.modelId)))
+            (role == ModelRole.shortAsk ||
+                !isShortAskModel(o.providerId, o.modelId)))
           _listedEntry(o),
   ]..sort((a, b) {
     final byName = a.info.displayName.toLowerCase().compareTo(
