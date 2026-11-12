@@ -67,14 +67,11 @@ public struct AppCommands: Commands {
     CommandGroup(replacing: .appInfo) {
       MenuGroups(model: model, groups: Array(model.groups(.app).prefix(1)))
     }
+    let rest = MenuGroups(model: model, groups: Array(model.groups(.app).dropFirst()))
     #if os(iOS)
-      CommandGroup(replacing: .appSettings) {
-        MenuGroups(model: model, groups: Array(model.groups(.app).dropFirst()))
-      }
+      CommandGroup(replacing: .appSettings) { rest }
     #else
-      CommandGroup(after: .appSettings) {
-        MenuGroups(model: model, groups: Array(model.groups(.app).dropFirst()))
-      }
+      CommandGroup(after: .appSettings) { rest }
     #endif
     CommandGroup(replacing: .newItem) {
       // A window app's File menu is made only if this has something in it
