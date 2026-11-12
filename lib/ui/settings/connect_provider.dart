@@ -6,6 +6,7 @@ import "../../data/builtin/llm/providers/presets.dart";
 import "../../providers.dart";
 import "../../app/settings/pages/providers.dart"
     show providerForm, saveProvider;
+import "../../app/settings/cli_account.dart";
 import "../../app/settings/spec.dart" show WidgetReader;
 import "form_dialog.dart";
 import "cli_sign_in_dialog.dart";
@@ -59,12 +60,20 @@ Future<void> _connectCli(
       .firstOrNull;
   // A new entry's id first: its account is kept in a folder named by it.
   final config = existing ?? service.config.copyWith(id: const Uuid().v4());
-  final cli = cliProgramOf(programs, config);
-  final ready = await showDialog<bool>(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => CliSignInDialog(cli: cli),
+  final account = CliAccount(
+    ProviderScope.containerOf(context, listen: false),
+    config,
   );
+  final bool? ready;
+  try {
+    ready = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => CliSignInDialog(account: account),
+    );
+  } finally {
+    account.dispose();
+  }
   if (ready != true) {
     if (existing == null) await _forgetDraft(programs, config.id);
     return;

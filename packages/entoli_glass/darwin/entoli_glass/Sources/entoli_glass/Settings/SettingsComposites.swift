@@ -207,6 +207,18 @@ struct CollectionRow: View {
   }
 }
 
+extension View {
+  /// A text editor framed as a field, as a form's other fields are, rather
+  /// than a bare white block.
+  func editorBox(minHeight: CGFloat) -> some View {
+    scrollContentBackground(.hidden)
+      .padding(4)
+      .frame(minHeight: minHeight)
+      .background(.background.secondary, in: RoundedRectangle(cornerRadius: 6))
+      .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.separator))
+  }
+}
+
 /// A form Dart makes for an item: asked again after every answer, since a
 /// question may come and go with another.
 struct FormSheet: View {
@@ -216,8 +228,9 @@ struct FormSheet: View {
   /// Saves it, or says why it could not.
   let save: ([String?: String?]) async -> FormSaveData?
 
-  /// Signs in the program it names; afresh where asked to.
-  var signIn: (([String?: String?], Bool) async -> Void)?
+  /// The collection item whose form it is, for the account of the program
+  /// it names.
+  var account: (model: SettingsModel, id: String, index: Int?)?
 
   /// Told it was left unsaved.
   var dismissed: (([String?: String?]) -> Void)?
@@ -226,7 +239,7 @@ struct FormSheet: View {
   init(model: SettingsModel, id: String, index: Int?) {
     load = { await model.form(id, index, $0) }
     save = { await model.submit(id, index, $0) }
-    signIn = { await model.formSignIn(id, index, $0, again: $1) }
+    account = (model, id, index)
     dismissed = {
       model.say.formDismissed(
         id: id, index: index.map(Int64.init), answers: $0, completion: ignore)
@@ -338,7 +351,7 @@ struct FormSheet: View {
       VStack(alignment: .leading, spacing: 2) {
         if part.lines > 1 {
           Text(part.label ?? "").font(.caption).foregroundStyle(.secondary)
-          TextEditor(text: binding(key)).frame(minHeight: CGFloat(part.lines) * 18)
+          TextEditor(text: binding(key)).editorBox(minHeight: CGFloat(part.lines) * 18)
         } else {
           #if os(iOS)
             // An iOS field's label is only its placeholder, gone once filled
@@ -364,7 +377,7 @@ struct FormSheet: View {
     case .prompt:
       VStack(alignment: .leading, spacing: 2) {
         Text(part.label ?? "").font(.caption).foregroundStyle(.secondary)
-        TextEditor(text: binding(key)).frame(minHeight: CGFloat(part.lines) * 18)
+        TextEditor(text: binding(key)).editorBox(minHeight: CGFloat(part.lines) * 18)
         if let hint = part.hint, binding(key).wrappedValue.isEmpty {
           Text(hint).font(.caption).foregroundStyle(.tertiary)
         }
@@ -403,17 +416,15 @@ struct FormSheet: View {
     case .entries:
       VStack(alignment: .leading, spacing: 2) {
         Text(part.label ?? "").font(.caption).foregroundStyle(.secondary)
-        TextEditor(text: binding(key)).font(.body.monospaced()).frame(minHeight: 70)
-        Text(part.hint ?? "").font(.caption).foregroundStyle(.secondary)
+        TextEditor(text: binding(key)).font(.body.monospaced()).editorBox(minHeight: 70)
         helper(part)
       }
       .disabled(!part.enabled)
     case .signIn:
-      HStack {
-        Text(part.label ?? "")
-        Spacer()
-        Button("Sign in…") { Task { @MainActor in await signIn?(answers, false) } }
-        Button("Sign in again…") { Task { @MainActor in await signIn?(answers, true) } }
+      if let account {
+        CliAccountRow(model: account.model)
+          .task(id: part.id) { account.model.openCliAccount(account.id, account.index, answers) }
+          .onDisappear { account.model.closeCliAccount() }
       }
     case .date:
       DatePicker(

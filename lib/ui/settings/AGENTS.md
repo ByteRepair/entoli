@@ -213,11 +213,14 @@ configured adopts that entry rather than adding a second. The first
 on-device model downloaded fills those roles where nothing answers yet
 (`ModelDownloads.landed`), so Local Model needs no picking either.
 The provider form is the way to sign in outside the tour: a CLI's entry asks
-`FormSignIn`, which Flutter draws as `CliAccountSection` — whether the account
-in the entry's own folder is signed in, Sign in where it is not, and Sign in
-again where it is, which signs the program out first so the sign-in is a new
-one, perhaps another account — and the native form as the two buttons, run
-through the `signIn` hand-off.
+`FormSignIn`: whether the account in the entry's own folder is signed in,
+Sign in where it is not, and Sign in again where it is, which signs the
+program out first so the sign-in is a new one, perhaps another account. The
+steps are `CliAccount` (`app/settings/cli_account.dart`), which both
+frontends draw: Flutter as `CliAccountSection` and `CliSignInDialog`, the
+native form as `CliAccountRow` and a sheet over the form, through
+`ShellCliAccount`. The native sheet opens the page in the browser as soon as
+the program names it, since that is where the user has to go next.
 `DefaultsSection` is drawn only where models are reachable and nothing
 answers new chats — a setup from before this — which is the one case Next
 would otherwise wait on with nothing to press. The extras page is optional throughout: a row into each extra, a row

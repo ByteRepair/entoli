@@ -31,6 +31,9 @@ class _FakeNativeSettings implements TestNativeSettings {
   @override
   void device(String id, PairedDeviceData? device, String? readError) =>
       devices.add((id, device, readError));
+
+  @override
+  void cliAccount(CliAccountData account) {}
 }
 
 void main() {
