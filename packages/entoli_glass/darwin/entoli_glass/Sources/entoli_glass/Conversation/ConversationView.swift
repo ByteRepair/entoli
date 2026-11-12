@@ -78,7 +78,13 @@ struct ConversationView: View {
         .padding(.leading, margin)
         .frame(maxWidth: .infinity, alignment: .leading)
       }
-      .scrollPosition(id: $top, anchor: .top)
+      // Which rows are shown, from the first layout on: a scroll position
+      // is only said once the user scrolls, so the rail lit nothing as a
+      // chat opened.
+      .onScrollTargetVisibilityChange(idType: String.self, threshold: 0.01) { shown in
+        let seen = Set(shown)
+        top = model.order.first { seen.contains($0) }
+      }
       .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
       .overlay(alignment: .trailing) {
         if railFits && model.chapters.count > 1 {
