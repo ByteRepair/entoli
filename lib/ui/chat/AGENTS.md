@@ -140,19 +140,11 @@ thinking block's drawer and every run's. A `bash` drawer sets the command apart 
 message is, keeps what else the call was given as its Arguments, and says
 the exit code in the status line.
 
-**Under the native shell the drawer is a page.** The composer there is the
-shell's, over the one Flutter view a sheet is drawn in, so a sheet came up
-under it. A pushed page is what the shell already steps its composer and
-turn surface aside for, and its `PageBar` is the window's title bar, so
-`openActivityCard` pushes `ActivityCard` as a page while Liquid Glass is
-on: the title and actions in the window's bar, its back the way out, the
-status line and the spinner at the top of the body. A sub-agent's activity
-opened from its transcript is a page over that one. Everywhere else it stays
-the sheet — Android's idiom for this. The actions are the core's
-`DetailAction`s, data rather than buttons, since a page's bar may be the
-window's. What opens this page under the shell now is a running pill: a node
-in the conversation opens the native detail instead (see "The conversation,
-natively").
+**Under the native shell the drawer is the conversation's detail sheet**:
+a node opens it, and so does a running pill (see "The conversation,
+natively"). The actions are the core's `DetailAction`s, data rather than
+buttons, which is what lets the native sheet draw them. Everywhere else it is
+the Flutter sheet — Android's idiom for this.
 
 **And it streams.** A label is the wrong thing to hold an open drawer's
 content: it is rebuilt per delta, folded into a collapsed run when its block
@@ -737,7 +729,8 @@ A `present_plan` call is drawn as the plan it put to the user (`PresentPlanUI`):
 every task with whether it is done, each opening to its details as markdown.
 It is not a slim activity label, since the plan is what the turn stopped to
 show. The bar carries a checklist button beside the running-turn spinner for
-as long as the chat has a plan, and it opens `PlanPage`, the same list with
+as long as the chat has a plan, and it opens the plan's `AppPage`, the same
+list with
 the progress over it.
 
 Both read `PLAN.md` off the chat's workspace through `planProvider`, not off
@@ -826,7 +819,7 @@ has the command, "Running · pid" under the title, Stop beside the close
 button, and the end of the log as it grows (re-read every half second while
 the file changes). Ended, it says how, from the log's `jobEnded` call event
 (see "The conversation log" in `lib/domain/AGENTS.md`), with the last lines
-the chat kept and an Open log button to the whole log in `TextFilePage`,
+the chat kept and an Open log button to the whole log in `TextFileAppPage`,
 disabled once the workspace no longer has the file and absent on a mirror,
 whose workspace is elsewhere. Lost, it ended with the app, or on a mirror,
 where only ends arrive, it is "not heard from". What marks a call as a job
@@ -918,7 +911,7 @@ picture lands; a row carries the id. An author's face is drawn once
 
 **What the user does comes back by key and id** (`TranscriptIntents`): a node
 opened is its detail, sent while it is up and redrawn as it follows its turn
-(a card instead opens what it stands for, the plan opens its Flutter page);
+(a card instead opens what it stands for, the plan opens its page);
 a message's action runs through its `MessageActions`; copy writes the formatted
 text and HTML through the rich clipboard, as Flutter's button does; a link
 goes to the link opener. The detail is a native sheet. An empty chat is sent
@@ -928,10 +921,7 @@ too, and the client says it has no messages.
 (`ShellChat`, held by `ShellBridge`): its conversation, bar, turn surface and
 composer, each a pass over a `TrackingReader` — a widget's `ref.watch` with
 no widget, re-running that pass when anything it read changes — so they go
-out with no frame. That is what lets the Flutter view leave the window while
-the conversation is native: it is in it only for a Flutter page or dialog
-over the chat (`WindowSnapshot.overlaid`), the new-chat screen and voice mode,
-whose surfaces are still widgets, and the app before it is set up. The chat's
+out with no frame, the engine's view drawing nothing. The chat's
 composer and how it sends are its `ChatSession` (`lib/app/chat_session.dart`),
 one per chat and shared by both frontends' chat pages; the surfaces' logic is
 plain classes — `ConversationSurface`, `TurnRunner`, `ComposerSurface` — that
@@ -947,7 +937,7 @@ and the sign-in typed into native fields, each sent once, by
 `ChatFootIntents`, and kept nowhere else. A line said in passing — what
 Flutter shows as a snack bar — goes through `notify` (`widgets/dialogs.dart`),
 which under the shell is the window's own notice (`NativeShell.notice`, a
-glass capsule under the title bar), the Flutter view not being there to show
+glass capsule under the title bar), there being no Flutter view to show
 one. **The composer's menu lies over the chat**: the composer is master's,
 its menu in its own stack, and the conversation runs under the bottom edge,
 padding by what covers it less the menu's height (`ComposerView.menuLift`),
@@ -1000,7 +990,6 @@ each frame over the settings' contract: live on the newest message, thinking
 while it is written, happy for a while when tapped. A photo is still sent as
 a picture.
 
-What the native list does not have yet: the chapter rail.
 
 ## The chat page
 
@@ -1087,20 +1076,22 @@ picked, nothing selected is the new-chat screen for that project, its question
 and starters that device's, and the first message asks the device to make the
 chat.
 
-`NewChatSettingsPage` is the settings of a chat that does not exist yet: the
-model, the approve mode, the memory switch and the TTL, which are values and
-need nothing to hang on. Save pops a `ChatMeta` back rather than writing a
-file, and `_NewChat` holds it until `createChat` spends it. It edits a copy,
-so a page backed out of leaves the screen with what it had.
+`NewChatSettingsAppPage` (`lib/app/pages/chat_settings.dart`) is the
+settings of a chat that does not exist yet: the model, the approve mode, the
+memory switch and the TTL, which are values and need nothing to hang on.
+Save hands a `ChatMeta` back rather than writing a file, and the new-chat
+session holds it until `createChat` spends it. It edits a copy, so a page
+backed out of leaves the screen with what it had.
 
-**A page of its own rather than a mode of `ChatSettingsPage`**, and `_NewChat`
+**A page of its own rather than a mode of `ChatSettingsAppPage`** — the two
+share their fields through `ChatSettingsFields` — and the session's state
 state rather than a provider — both for the same reason. Folded into the chat's
 own page it was five null checks and two `!`s through a page whose subject
 ordinarily exists, which is the shape this change spent its effort removing
 from the repository; and held in a provider the settings outlive the screen,
 staying armed to land on whatever chat is created next, in whatever project.
-The three fields are already standalone widgets, so the page that composes them
-is thirty lines.
+The fields are the base both pages extend, so the new chat's adds nothing
+but its Save.
 
 `_EmptyChat` is the body of both empty screens — `_NewChat`'s, and a chat that
 exists with nothing said in it yet, which is what voice mode and a trigger can

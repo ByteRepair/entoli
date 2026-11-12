@@ -73,7 +73,8 @@ iOS). The layers, each knowing only the one below it:
 While the SwiftUI frontend is up, `openSettings` opens the native settings
 rather than the Flutter page — its bridge sets `nativeSettingsOpener` — and
 the Flutter settings page is not shown over the native UI. The welcome tour
-is not settings, and stays Flutter's own page everywhere. On a Mac the
+is not settings: it is an `AppPage` (see `lib/app/pages/AGENTS.md`), drawn
+by whichever frontend is up, and Settings' Welcome opens it. On a Mac the
 window is the Settings scene's: AppKit's `showSettingsWindow:` opens nothing
 from macOS 14, so a page Dart asks for — About from the menu with the window
 closed — goes through SwiftUI's `openSettings`, which `SettingsWindowOpener`
@@ -121,9 +122,14 @@ A model picker is the catalog page in both: the native one is sent the
 quick picks and every model's card whole (`ModelPickerData`), and adding or
 editing a model is the core's `ModelForm`, asked as any form is.
 
-The chat and project settings pages are still Flutter on every platform and
-still built by hand: their fields read and write through a `ChatScope` or a
-`ProjectScope` rather than reaching for each level themselves.
+The chat and project settings pages are `AppPage`s (see
+`lib/app/pages/AGENTS.md`): sections of these same controllers over a
+`ChatScope` or a `ProjectScope`, a setting's own spec built at that level
+where the page shows one (`AppPage.shared`), so both frontends draw them and
+neither holds a copy. Every row of a level that inherits carries its reset,
+dimmed while nothing of the level's is set, and a choice shows where it
+stands unset (`ChoiceController.inherited`) — the thinking slider at the
+level above's answer.
 
 ## Setting overrides
 
@@ -170,17 +176,13 @@ Providers, On-device, LLMs** (the app and the plumbing that answers a chat);
 Repair** (where commands run); **Sync, Data** (the device and all of it at
 once); and **Welcome, About** (the app rather than anything it does), last.
 **Welcome** is the
-tour rather than a list of sections — `welcome_page.dart`, not this file — so
-`_categoryBody` renders it whole where every other category is its schema
-page (below). It is the first-run screen too: a `WelcomeGate` wrapper in the home chain
-(around the shell, under the `Incoming*` wrappers, so what they open stays above
-the tour) shows `WelcomePage` instead of the shell while `licenceAccepted` in
-`settings.json` is still false, and the tour's Done writes the flag through the
-notifier, which swaps the shell in. The tour is the home content, not a route
-over it, so the back key cannot skip it and there is no back arrow; the tour
-also runs embedded here and has nothing of its own to leave. Ahead of it,
-`InitialSetupGate` shows `SetupPage` over the device's `SetupPlan` while the
-tour is unseen and a step of it is not done. A plan is what a platform hands
+tour rather than a list of sections: an `AppPage`, `WelcomeAppPage`
+(`lib/app/pages/welcome.dart`), which the category opens. It is the first-run
+screen too: `openFirstRun`, which both frontends ask as they start, opens it
+over the app while `licenceAccepted` in `settings.json` is still false, and
+on a first launch it cannot be left but by its Done, which writes the flag.
+Ahead of it, `SetupAppPage` runs over the device's `SetupPlan`
+(`lib/app/first_run.dart`) while a step of it is not done. A plan is what a platform hands
 the one setup screen: its `SetupStep`s in order and a `SetupProgress` — the
 bar's policy. `setupPlanProvider` is where each platform submits its plan: where a
 Linux can run (proot on Android, the emulator on iOS) Alpine as the terminal,
@@ -200,12 +202,12 @@ there. The intro says what the app is, a short list under the name rather than
 a slide per point. The model page holds Next until some model is reachable and
 a default is picked, and picks nothing itself: its rows are the services a
 plan someone pays for answers through (`welcomeProviders`), then Local Model
-and Advanced. A service is connected by `connectService`
-(`connect_provider.dart`) as its kind is — a CLI installed if Entoli has no
-copy of it, which is the one place a program is installed (no first-run step
-does it ahead of time), and signed in if it is not (`CliSignInDialog` in `cli_sign_in_dialog.dart`: the program's own
-sign-in run, the page it prints opened from the dialog, a code the page shows
-pasted back), an API in the provider form started on its preset
+and Advanced. A service is connected as its kind is — a CLI by `connectCli`,
+installed if Entoli has no copy of it, which is the one place a program is
+installed (no first-run step does it ahead of time), and signed in if it is
+not (`CliSignInAppPage`: the program's own sign-in run, the page it prints
+opened from a link on it, a code the page shows pasted back), an API in the
+provider form started on its preset
 (`providerForm` and `saveProvider` beside the Providers page's spec) — and
 adopted, answering new
 chats, titles and the classifier at its own defaults; connecting one already
@@ -218,8 +220,8 @@ in the entry's own folder is signed in, Sign in where it is not, and Sign in
 again where it is, which signs the program out first so the sign-in is a new
 one, perhaps another account — and the native form as the two buttons, run
 through the `signIn` hand-off.
-`DefaultsSection` is drawn only where models are reachable and nothing
-answers new chats — a setup from before this — which is the one case Next
+The default and title model pickers are drawn only where models are
+reachable and nothing answers new chats — a setup from before this — which is the one case Next
 would otherwise wait on with nothing to press. The extras page is optional throughout: a row into each extra, a row
 dropped where its category is not offered. Memory is not among them, its own
 page's switch being the one place it is turned on, nor is anything already on
@@ -229,7 +231,7 @@ phones' WebView on by default. The
 last page says AI can make mistakes and holds Done behind a checkbox taking
 responsibility for what the user lets it do, at the end of the AGPL text
 (`bundledLicence`, embedded from `LICENSE` by `tool/gen_licence.dart`), so
-reaching it means scrolling past the licence. The tick frees Done; Done is what
+reaching it means passing the licence. The tick frees Done; Done is what
 stores it, as `licenceAccepted`, the flag both gates read. It replaced
 `welcomeSeen`, so an install from before walks the tour once more. Unticking on
 a replay confirms, clears it and restarts the app (`AppRestart`), which stops

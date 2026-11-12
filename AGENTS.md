@@ -30,7 +30,10 @@ named in a cross-reference is findable from this list.
   and the editor
 - `lib/ui/sidebar/AGENTS.md` — The sidebar's list, Pinned chats, A chat's row
   menu
-- `lib/ui/marketplace/AGENTS.md` — The marketplace page
+- `lib/app/pages/AGENTS.md` — The app's pages: every page that is not a
+  setting as an `AppPage` of the settings' controllers, the core's stack of
+  them, and how each frontend draws it
+- `lib/app/marketplace/AGENTS.md` — The marketplace page
 - `lib/data/builtin/AGENTS.md` — The agent loop, Tools, Running the commands, Background
   jobs, Running a command yourself, Approvals, Questions, Sub-agents, Their own transcripts,
    Carrying one on, Web search, The browser, Images, Skills, The plan, Memory

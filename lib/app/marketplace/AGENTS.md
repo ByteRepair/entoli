@@ -1,34 +1,29 @@
 # The marketplace page
 
-`MarketplacePage` is what the sidebar's Marketplace tile opens: the site's
-entries over Skills and Agents tabs. Tapping an entry opens
-`MarketplaceEntryPreviewPage`, which previews and installs it.
+`MarketplaceAppPage` (`lib/app/pages/marketplace.dart`, an `AppPage` both
+frontends draw) is what the sidebar's Marketplace tile opens: the site's
+entries, Skills or Agents picked above them. Tapping an entry opens
+`MarketplaceEntryAppPage`, which previews and installs it.
 
-The list is organized, and the organizing is `marketplace_groups.dart`, pure
-and tested without widgets. The site's own entries come first, each half
+The list is organized, and the organizing is `groups.dart`, pure
+and tested on its own. The site's own entries come first, each half
 alphabetical, and the remote half sits under an "External" heading — drawn
 only where both halves have something, a heading that separates nothing being
-no heading at all. The kinds that are tabs are one `_tabs` const in the page,
-which the TabBar's labels (`kind.label`), the tab pages and the filter icon's
-kind all read — one fact, the way `CompletionKind.folder` is held. A toolbar
-box searches — name and description alike, over the entries the fetch already
+no heading at all. A search row searches — name and description alike, over the entries the fetch already
 holds, nothing re-read off disk; the needle is the sidebar's
 `searchNeedle` (`domain/chat_search.dart`), the one shared rule for what a typed query compares as, and
 the lowercased name and description the match reads are `late final` on the
-entry, once per entry rather than once per keystroke — and the filter icon
-opens the tab's tag picker. Both filter the list in the order it is drawn
+entry, once per entry rather than once per keystroke — and the Tags row
+opens the section's tag picker. Both filter the list in the order it is drawn
 rather than re-ordering it — a description-only match keeps the alphabetical
-row it belongs in. The ticks are a **per-tab** `ValueNotifier` the page owns
-— the picker page ticks into it, so popping back is already filtered — and
-passing means carrying **every** tag ticked: the intersection, where an
-empty set filters nothing. Search and tags hold together, and a no-match
-result is `Nothing("Nothing matches here.")`, distinct from the empty-index
-line. The tag picker (`marketplace_tags.dart`) lists the tab's tags with
-each one's entry count, and Clear when anything is ticked; over a tab whose
-list has not landed it is never opened, the press saying "The tab has not
-loaded yet." The search box and the heading row are the sidebar's:
-`SearchField` and `ListHeading`, shared once the project palette made a third
-caller.
+row it belongs in. The ticks are a **per-section** set the page owns — the
+picker page (`MarketplaceTagsAppPage`) ticks into it, so going back is
+already filtered — and passing means carrying **every** tag ticked: the
+intersection, where an empty set filters nothing. Search and tags hold
+together, and a no-match result says "Nothing matches here.", distinct from
+the empty-index line. The picker lists the section's tags with each one's
+entry count, and Clear when anything is ticked; the row that opens it is
+dead while the list has not landed.
 
 The list is the site's `index.json` per section
 (`byterepair.github.io/entoli-marketplace`). The URL is
@@ -109,17 +104,10 @@ either install's refusal both read, so a dead button is never shown for an
 entry the press would refuse on, and never withheld from one it wouldn't. The
 same holds for an agent whose PROMPT.md is missing or has nothing in it.
 
-The preview loads in state like `SkillInstallPreviewPage` does rather than in
-a `FutureProvider`, and for one reason beyond habit: the README is held as a
-string and rendered in `_Body` at build — a load that started in `initState`
-would reach `Theme.of` before the first build, the exception an inherited
-widget read across the init gap throws.
-
-The failure pane is `Unreachable`, one widget the list's tab and the preview
-share, built on the shared `EmptyPane` (icon, title, the error as the detail
-line, the Try-again action), so the feature has one rendering of "could not
-reach" rather than two that drift, and carries the failure the page caught —
-a timeout is not a 500.
+The preview loads when its page opens and holds what it fetched, as the
+skill-install page does. A failure to reach the site is said with what was
+caught — a timeout is not a 500 — beside Try Again, on the list and on the
+preview alike.
 
 ## Installing
 
@@ -150,21 +138,8 @@ does not, so an agent installed over another does not keep the face of the
 one it replaced. The library reload after it is what refreshes the face:
 `agentPictureProvider` watches the project's library.
 
-The destination is `InstallDestination` at the body's end, `Global` default —
-the same widget the skill-install preview page carries, so every install
-route offers the same list.
-
-The keep-alive mixin on `_EntryList` is worth saying why: TabBarView unmounts
-the tab that has settled off-screen, and with the provider `autoDispose` that
-unmounting disposed the fetch, so every flip re-ran the fetch and flashed the
-spinner over a list the visit already had. `AutomaticKeepAliveClientMixin`
-keeps both tabs mounted for the route's life; popping it disposes both, which
-is the reopen-re-fetches rule, preserved.
-
-Two shared widgets carry pieces of the rendering: the bottom bar is
-`InstallBar` (lib/ui/widgets/install_bar.dart), the same button the
-skill-install preview page shows, and the package-files list is
-`PackageFileList` from the same file, which the skill view and the
-skill-install preview also read — the skill view being the one that passes
-`sizeOf` for its size column. Snackbar lines go through the shared `say`,
-not a local messenger call.
+The destination is the page's last row, `Global` default — `InstallsPrompts`,
+the mixin the skill-install page shares, so every install route offers the
+same list, asks the same replace question and lands the same way. Install is
+the page's bar action; what it says once the page has closed goes through
+the stack's `saying`.

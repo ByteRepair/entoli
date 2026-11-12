@@ -1,9 +1,12 @@
 # The workspace explorer
 
 A workspace is where the agent's work lands, and until now the only way to see
-it was to leave the app. `WorkspaceTile` on the chat and project settings pages
-opens `WorkspacePage` over one folder — the chat's own `workspace/` or the
-project's shared one, resolved by the page that knows which it is.
+it was to leave the app. A row on the chat and project settings pages opens
+`WorkspaceAppPage` (`lib/app/pages/workspace.dart`, an `AppPage` both
+frontends draw) over one folder — the chat's own `workspace/` or the
+project's shared one, resolved by the page that knows which it is. A folder
+inside opens as a page of its own over it, so back climbs the way the taps
+went down, and its bar says where it sits under the root.
 
 The default project's is reached from the sidebar instead, from the slot beside
 the project switcher that a named project fills with its settings gear. The
@@ -22,14 +25,15 @@ Listing, making a folder and deleting (`listWorkspace`, `createFolder`,
 `deleteEntries`) are the same code on every platform and are offered wherever the explorer is. A typed
 folder name is sanitised by `safeRelativePath` like anything else joined onto a
 workspace — `../` is a name a folder can be asked for. Deleting looks each path
-up rather than trusting what the listing said it was, since a selection is held
-as paths and the listing under it is re-read.
+up rather than trusting what the listing said it was, and asks first; it, and
+sharing where there is a share sheet, are actions on an entry's own row.
 
-A text file is the one thing a tap does not leave the app for. `TextFilePage`
-(`lib/ui/widgets/`, since the profile page opens linked instruction files in
-it too) reads it off the disk the listing came from, so it is one page on
-every platform. It opens as a preview: markdown rendered
-with the reply's style sheet, anything else in `re_editor`'s `CodeEditor`,
+A text file is the one thing a tap does not leave the app for.
+`TextFileAppPage` (`lib/app/pages/text_file.dart`, opened by the profile for
+linked instruction files too) reads it off the disk the listing came from and
+holds the draft, so the rules are one page's on every platform; its text is a
+`DocumentController`. It opens as a preview: markdown rendered, anything else
+as code — in Flutter `re_editor`'s `CodeEditor` (`DocumentView`),
 read-only and highlighted by the grammar `grammarOfFile` picks from the name —
 the same thirty-one `CodeBlockBuilder` registers, found by a grammar's alias the
 way a fence names one. Edit turns the editor writable (markdown switches to its
@@ -52,11 +56,9 @@ half the explorer can answer without a read. Not `package:mime` for that half:
 its table has no entry for `py`, `go`, `yaml`, `ts`, `kt`, `rb` or most of what
 a coding agent writes, and it calls `rs` an XML dialect. The bytes settle the
 rest: `readTextHead` returns null for a NUL byte or a decode that fails, and the
-viewer pops `true` to send the file back out to the explorer's hand-off, so a
-`.log` the agent wrote as a gzip ends up where it would have gone anyway. The
-hand-off stays the explorer's rather than the viewer's because the explorer is
-what will still be on screen to say so if it fails. The app bar keeps that route
-out for the files that *are* text, since a `.md` is often wanted in a real
+viewer closes and hands the file off itself, so a `.log` the agent wrote as a
+gzip ends up where it would have gone anyway. The bar keeps that route out
+for the files that *are* text, since a `.md` is often wanted in a real
 editor.
 
 `textViewLimit` (256 KB) is where the page stops showing a file. A workspace
@@ -78,11 +80,11 @@ answered both would carry an `if (Platform.isAndroid)` in every member, and
 every future member too.
 
 - **Desktop** has a file manager and a registry of viewers, and `url_launcher`
-  reaches both: `reveal` opens the current folder (the app bar's button) and
+  reaches both: `reveal` opens the current folder (the bar's button) and
   `open` opens a file, which is the same call on a different path. It needs no
   chooser of its own — the file manager is already pointed at the workspace —
-  and it has no share sheet, so a selection there is only ever deleted.
-- **Android** has the share sheet, both ways. `export` sends a selection through
+  and it has no share sheet, so an entry there is only ever deleted.
+- **Android** has the share sheet, both ways. `export` sends an entry through
   `Intent.createChooser`, so every app on the device is on offer rather than a
   default winning silently; `open` is an `ACTION_VIEW`. Files come back in the
   same way, and only that way: another app shares to Entoli. It is not the only
@@ -90,21 +92,14 @@ every future member too.
   app, for the other app to browse rather than be handed something. Both are
   below.
 
-`canShare` is false on a platform with no share sheet to hand a selection to,
-which is what takes the Share button off the desktop toolbar — selecting itself
-stays, since deleting is the filesystem's rather than a route out of the app.
+`canShare` is false on a platform with no share sheet to hand an entry to,
+which is what takes Share off a desktop's rows — Delete stays, since deleting
+is the filesystem's rather than a route out of the app.
 
-A selection replaces the browsing actions rather than sitting beside them: the
-app bar is the filesystem's verbs on what is picked, and the FAB stays the route
-out of the app, which is the one thing a platform can be without.
-
-A share sheet does not take a folder, so a selection with one in it goes as a
-single zip, written straight to the staging directory by `zipTo`
-(`lib/data/zip.dart`, the walker a backup streams through too).
-Several plain files stay several, which is what `ACTION_SEND_MULTIPLE` is for. A
-selection is one folder's — leaving the folder clears it — which is what lets
-Android's staging directory stay flat, and why nothing checks for two files of
-the same name in it.
+A share sheet does not take a folder, so a folder goes as a single zip,
+written straight to the staging directory by `zipTo` (`lib/data/zip.dart`,
+the walker a backup streams through too), which is what lets Android's
+staging directory stay flat.
 
 Coming the other way, an `IncomingFile` is deliberately **not** its bytes. A
 batch arrives with as many files as its source chose to send and then waits on
