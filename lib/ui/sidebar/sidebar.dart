@@ -1,10 +1,8 @@
 import "dart:async";
 
-import "package:flutter/cupertino.dart" show CupertinoIcons;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../core/platform/form_factor.dart";
 import "../../domain/chat_search.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
@@ -89,7 +87,6 @@ class _SidebarState extends ConsumerState<Sidebar> {
   @override
   Widget build(BuildContext context) {
     final selected = ref.watch(selectedProjectProvider);
-    final scheme = Theme.of(context).colorScheme;
     // The list the query was written against has just been replaced, the same
     // reason switching clears the selected chat. Kept, it would answer a
     // project the user has left with "nothing matches".
@@ -126,16 +123,6 @@ class _SidebarState extends ConsumerState<Sidebar> {
                 children: [
                   const Expanded(child: _ProjectMenu()),
                   ..._projectButtons(context, ref, selected),
-                  // Apple's apps put compose at the top of the list it adds
-                  // to, a plain glyph in the accent colour — Notes, Mail,
-                  // Messages — rather than anything filled or floating.
-                  if (isApple)
-                    IconButton(
-                      icon: const Icon(CupertinoIcons.square_pencil),
-                      color: scheme.primary,
-                      tooltip: "New chat",
-                      onPressed: () => openNewChat(context, ref),
-                    ),
                 ],
               ),
             ),
@@ -153,29 +140,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
                     ),
             ),
             // The menu bar holds the app's pages where it is always on screen,
-            // and compose is in the header on Apple's platforms, which leaves
-            // nothing at the bottom.
-            if (!menuBarAlwaysShown) ...[
-              const Divider(height: 1),
-              if (isApple)
-                pages
-              else
-                Stack(
-                  alignment: Alignment.centerRight,
-                  children: [
-                    pages,
-                    Padding(
-                      padding: const EdgeInsets.only(right: 16),
-                      child: FloatingActionButton(
-                        heroTag: null,
-                        tooltip: "New chat",
-                        onPressed: () => openNewChat(context, ref),
-                        child: const Icon(Icons.add),
-                      ),
-                    ),
-                  ],
-                ),
-            ],
+            // which leaves nothing at the bottom.
+            if (!menuBarAlwaysShown) ...[const Divider(height: 1), pages],
           ],
         ),
       ),
@@ -184,6 +150,52 @@ class _SidebarState extends ConsumerState<Sidebar> {
 }
 
 const _noMatch = "No chat's title matches that.";
+
+/// [list] under the search field, whose round button is new chat while the
+/// field is empty and clear once it holds anything. With no [list] — no chats
+/// to search — the field goes and the button stays, being where a new chat is
+/// made, over [nothing].
+class _Searchable extends ConsumerWidget {
+  const _Searchable({required this.search, required this.nothing, this.list});
+
+  final TextEditingController search;
+  final String nothing;
+  final Widget? list;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    Widget button(bool empty) => empty
+        ? IconButton.filled(
+            icon: const Icon(Icons.add),
+            tooltip: "New chat",
+            visualDensity: VisualDensity.standard,
+            onPressed: () => openNewChat(context, ref),
+          )
+        : IconButton.filledTonal(
+            icon: const Icon(Icons.close),
+            tooltip: "Clear search",
+            visualDensity: VisualDensity.standard,
+            onPressed: search.clear,
+          );
+    final list = this.list;
+    return Column(
+      children: [
+        if (list == null)
+          Padding(
+            padding: SearchField.inset,
+            child: Align(alignment: Alignment.centerRight, child: button(true)),
+          )
+        else
+          SearchField(
+            controller: search,
+            hint: "Search chats",
+            trailing: button,
+          ),
+        Expanded(child: list ?? Nothing(nothing)),
+      ],
+    );
+  }
+}
 
 /// This device's chats in the project being shown. Its own widget so that
 /// [chatListProvider] — which re-reads every chat's `state.json` when it is
@@ -212,16 +224,12 @@ class _LocalChatList extends ConsumerWidget {
             final chats = all
                 .where((c) => c.project == project && !c.isExpired())
                 .toList();
-            if (chats.isEmpty) {
-              return const Nothing("No chats in this project yet.");
-            }
-            return Column(
-              children: [
-                SearchField(controller: search, hint: "Search chats"),
-                Expanded(
-                  child: _ChatList(chats: chats, query: query),
-                ),
-              ],
+            return _Searchable(
+              search: search,
+              nothing: "No chats in this project yet.",
+              list: chats.isEmpty
+                  ? null
+                  : _ChatList(chats: chats, query: query),
             );
           },
           loading: () => const Center(child: CircularProgressIndicator()),
@@ -262,55 +270,51 @@ class _RemoteChatList extends ConsumerWidget {
             )
             .toList()
           ..sort((a, b) => b.state.updatedAt.compareTo(a.state.updatedAt));
-    if (chats.isEmpty) {
-      return const Nothing("Nothing mirrored from this device yet.");
-    }
-    return Column(
-      children: [
-        SearchField(controller: search, hint: "Search chats"),
-        Expanded(
-          child: ValueListenableBuilder<String>(
-            valueListenable: query,
-            builder: (context, text, _) {
-              final needle = searchNeedle(text);
-              final matching = chats
-                  .where((entry) => titleMatches(entry.state, needle))
-                  .toList();
-              if (matching.isEmpty) {
-                return const Nothing(_noMatch);
-              }
-              return ListView.builder(
-                itemCount: matching.length,
-                itemBuilder: (context, i) {
-                  final entry = matching[i];
-                  // Per row, so tapping one rebuilds the two tiles that
-                  // changed rather than re-filtering and re-sorting the list.
-                  return Consumer(
-                    builder: (context, ref, _) => _ChatTile(
-                      chat: entry.state,
-                      mutable: entry.online,
-                      remote: true,
-                      selected: ref.watch(
-                        selectedChatIdProvider.select(
-                          (id) => id == entry.chatId,
+    return _Searchable(
+      search: search,
+      nothing: "Nothing mirrored from this device yet.",
+      list: chats.isEmpty
+          ? null
+          : ValueListenableBuilder<String>(
+              valueListenable: query,
+              builder: (context, text, _) {
+                final needle = searchNeedle(text);
+                final matching = chats
+                    .where((entry) => titleMatches(entry.state, needle))
+                    .toList();
+                if (matching.isEmpty) {
+                  return const Nothing(_noMatch);
+                }
+                return ListView.builder(
+                  itemCount: matching.length,
+                  itemBuilder: (context, i) {
+                    final entry = matching[i];
+                    // Per row, so tapping one rebuilds the two tiles that
+                    // changed rather than re-filtering and re-sorting the list.
+                    return Consumer(
+                      builder: (context, ref, _) => _ChatTile(
+                        chat: entry.state,
+                        mutable: entry.online,
+                        remote: true,
+                        selected: ref.watch(
+                          selectedChatIdProvider.select(
+                            (id) => id == entry.chatId,
+                          ),
                         ),
-                      ),
-                      subtitle: entry.online
-                          ? null
-                          : Text(
-                              "offline",
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.error,
+                        subtitle: entry.online
+                            ? null
+                            : Text(
+                                "offline",
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.error,
+                                ),
                               ),
-                            ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
     );
   }
 }

@@ -24,6 +24,13 @@ there whenever the project has chats in it — it goes with them, not with the
 results, or a search that matched nothing would take away the only way to undo
 itself.
 
+The field has no clear button of its own. The round button at its end is new
+chat while the field is empty and clear once it holds anything, so the row's
+one button is always the thing the user most likely wants next. An empty
+project has no field and keeps the button, being where its first chat is made.
+It is the same on Apple's platforms: a compose glyph in the header put new chat
+apart from the list it adds to.
+
 The query is a `ValueNotifier` the list listens to rather than `setState` on the
 sidebar: a keystroke changes the list, and the project switcher above it has no
 business rebuilding to answer one. It holds the *text* rather than the field's
@@ -69,22 +76,16 @@ and `off` is the honest answer for a chat that was just unpinned.
 
 ## The bottom block
 
-Profile, Marketplace and Settings are the tiles under the list, and the new-chat
-FAB floats over them — the one part of the sidebar that is not a list of chats
-and has room to its right (see "Shared UI"). The tiles are plain `ListTile`s
-that push their pages; see `lib/ui/marketplace/AGENTS.md` for what
-Marketplace's opens onto.
+Profile, Marketplace and Settings are the tiles under the list: plain
+`ListTile`s that push their pages; see `lib/ui/marketplace/AGENTS.md` for what
+Marketplace's opens onto. New chat is the round button beside the search field,
+above.
 
-On Apple's platforms (`isApple`) the new chat is not the FAB but a compose
-glyph — `CupertinoIcons.square_pencil` in the primary colour — at the end of
-the header row beside the project's buttons, where Notes, Mail and Messages
-put theirs: a filled tile or a floating button is Material's answer, and read
-as a foreign control in a Mac or iPad sidebar. Where the menu bar is always on
-screen — macOS, `menuBarAlwaysShown` — the app menu holds Profile,
-Marketplace and Settings and the tiles are not drawn either, so nothing is
-under the list. iPadOS keeps the tiles: its menu bar hides until asked for and
-is not there at all without a pointer. See "The app's commands" in
-`lib/ui/AGENTS.md`.
+Where the menu bar is always on screen — macOS, `menuBarAlwaysShown` — the
+app menu holds Profile, Marketplace and Settings and the tiles are not drawn,
+so nothing is under the list. iPadOS keeps the tiles: its menu bar hides until
+asked for and is not there at all without a pointer. See "The app's commands"
+in `lib/ui/AGENTS.md`.
 
 ## A chat's row menu
 

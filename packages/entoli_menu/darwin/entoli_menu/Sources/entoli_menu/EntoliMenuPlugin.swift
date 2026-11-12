@@ -60,19 +60,15 @@ public struct AppCommands: Commands {
   public init(model: MenuModel = .shared) { self.model = model }
 
   public var body: some Commands {
-    // The app's menu: About in About's place, the rest after Settings —
-    // on a Mac the Settings scene's own item, which Dart leaves out of its
-    // list there. iOS's is UIKit's, which opens the Settings app and holds
-    // ⌘, as Dart's does: two items on one shortcut is an exception.
+    // The app's menu: About in About's place, the rest in Settings'. Dart's
+    // Settings replaces the platform's: iOS's opens the Settings app, and a
+    // Mac's scene item is removed in the Runner.
     CommandGroup(replacing: .appInfo) {
       MenuGroups(model: model, groups: Array(model.groups(.app).prefix(1)))
     }
-    let rest = MenuGroups(model: model, groups: Array(model.groups(.app).dropFirst()))
-    #if os(iOS)
-      CommandGroup(replacing: .appSettings) { rest }
-    #else
-      CommandGroup(after: .appSettings) { rest }
-    #endif
+    CommandGroup(replacing: .appSettings) {
+      MenuGroups(model: model, groups: Array(model.groups(.app).dropFirst()))
+    }
     CommandGroup(replacing: .newItem) {
       // A window app's File menu is made only if this has something in it
       // at launch, before Dart has sent anything: a blank item holds the place.
@@ -116,9 +112,15 @@ struct MenuGroups: View {
     ForEach(Array(groups.enumerated()), id: \.offset) { i, group in
       if i > 0 { Divider() }
       ForEach(group, id: \.id) { item in
-        Button(item.title) { model.pick(item.id) }
-          .keyboardShortcut(item.shortcut)
-          .disabled(!item.enabled)
+        Button { model.pick(item.id) } label: {
+          if let symbol = item.symbol {
+            Label(item.title, systemImage: symbol)
+          } else {
+            Text(item.title)
+          }
+        }
+        .keyboardShortcut(item.shortcut)
+        .disabled(!item.enabled)
       }
     }
   }

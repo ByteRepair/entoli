@@ -39,7 +39,10 @@ struct EntoliApp: App {
     .windowToolbarStyle(.unified)
     .commands { AppCommands() }
     // The settings, as the platform's own window, built from what Dart sends.
+    // Its menu item is `AppCommands`' own: replacing `.appSettings` does not
+    // take the scene's away.
     Settings { SettingsWindow() }
+      .commandsRemoved()
   }
 }
 
