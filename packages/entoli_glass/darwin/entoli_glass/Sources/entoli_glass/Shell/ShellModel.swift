@@ -24,6 +24,7 @@ import SwiftUI
   var newChat = NewChatSnapshot.initial
   var voice = VoiceSnapshot.initial
   var palette = PaletteSnapshot.initial
+  var foot = ChatFootSnapshot(deviceOffline: false, bar: .none)
 
   /// What the user did, for Dart to run: one object per surface, each a
   /// method per intent it can send, answered by whichever widget draws that
@@ -108,6 +109,7 @@ extension ShellModel: NativeShell {
   func newChat(snapshot: NewChatSnapshot) throws { newChat = snapshot }
   func voice(snapshot: VoiceSnapshot) throws { voice = snapshot }
   func palette(snapshot: PaletteSnapshot) throws { palette = snapshot }
+  func foot(snapshot: ChatFootSnapshot) throws { foot = snapshot }
 
   func voiceLevel(level: Double) throws { voiceLevel.set(level) }
 
@@ -131,6 +133,7 @@ struct ShellIntents {
   /// The chat's title bar, and a Flutter page's: one view draws both.
   let chatBar: ChatBarPresses
   let pageBar: TitleBarIntents
+  let foot: ChatFootIntents
 
   init(messenger: FlutterBinaryMessenger) {
     window = WindowEvents(binaryMessenger: messenger)
@@ -142,6 +145,7 @@ struct ShellIntents {
     voice = VoiceIntents(binaryMessenger: messenger)
     chatBar = ChatBarPresses(intents: ChatBarIntents(binaryMessenger: messenger))
     pageBar = TitleBarIntents(binaryMessenger: messenger, messageChannelSuffix: "pageBar")
+    foot = ChatFootIntents(binaryMessenger: messenger)
   }
 }
 

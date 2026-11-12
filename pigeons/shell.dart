@@ -783,6 +783,68 @@ class ChoiceStrip {
 /// What the app tells the client. A snapshot is a concern's whole state and
 /// replaces what the client held for it; the app sends one only when it
 /// changed.
+/// What sits where the composer does when there is nothing to type into.
+enum FootBar {
+  none,
+
+  /// The project requires setup first; Settings is where it is run.
+  needsSetup,
+
+  /// The chat's home device is away: a snapshot that has stopped moving.
+  offline,
+}
+
+/// A field a sign-in asks for, by its label.
+class CredentialField {
+  CredentialField({required this.label, this.secret = false});
+
+  String label;
+  bool secret;
+}
+
+/// The agent's browser asking to sign in: why, and the fields. What is typed
+/// is the client's until it is sent, once, by `submitCredentials`.
+class CredentialPrompt {
+  CredentialPrompt({required this.reason, this.fields = const []});
+
+  String reason;
+  List<CredentialField> fields;
+}
+
+/// The agent's browser asking for a file to upload to [host]: the user picks
+/// it with the system's own chooser, and sends it by `upload`.
+class UploadPrompt {
+  UploadPrompt({this.host = "", this.multiple = false});
+
+  String host;
+  bool multiple;
+}
+
+/// The open chat's edges: the paired device it lives on, over the top; and
+/// over the composer what the browser waits on — a sign-in, a file, the
+/// agent's words for what to do in the page — or, in the composer's place,
+/// why there is none.
+class ChatFootSnapshot {
+  ChatFootSnapshot({
+    this.device,
+    this.deviceOffline = false,
+    this.bar = FootBar.none,
+    this.hold,
+    this.upload,
+    this.credentials,
+  });
+
+  /// The paired device a mirrored chat lives on; null for this device's.
+  String? device;
+  bool deviceOffline;
+  FootBar bar;
+
+  /// What the agent needs done in the page, as the button that opens it.
+  String? hold;
+  UploadPrompt? upload;
+  CredentialPrompt? credentials;
+}
+
 @HostApi(dartHostTestHandler: "TestNativeShell")
 abstract class NativeShell {
   /// Which frontend draws in the window: this one's chrome, or the Flutter
@@ -800,6 +862,7 @@ abstract class NativeShell {
   void newChat(NewChatSnapshot snapshot);
   void voice(VoiceSnapshot snapshot);
   void palette(PaletteSnapshot snapshot);
+  void foot(ChatFootSnapshot snapshot);
 
   /// The microphone's level, from 0 to 1: many times a second, with nothing
   /// to compare against.
@@ -944,6 +1007,25 @@ abstract class ChatBarIntents {
 }
 
 /// The title bar of a Flutter page over the conversation.
+/// What the user did at the open chat's edges.
+@FlutterApi()
+abstract class ChatFootIntents {
+  /// Settings, where a project's setup is run.
+  void openSetup();
+
+  /// The browser's live view of the page.
+  void watchPage();
+
+  void cancelUpload();
+
+  /// The files the system's chooser picked, by path, given to the page.
+  void upload(List<String> paths);
+
+  /// What was typed, field by field, typed into the page by the app.
+  void submitCredentials(List<String> values);
+  void declineCredentials();
+}
+
 @FlutterApi()
 abstract class TitleBarIntents {
   void back();

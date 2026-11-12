@@ -21,6 +21,8 @@ class TrackingReader implements SettingReader {
 
   var _watching = <ProviderSubscription<Object?>>[];
   var _pass = <ProviderSubscription<Object?>>[];
+  var _heard = <Listenable>[];
+  var _passHeard = <Listenable>[];
   final _listening = <Listenable>[];
   bool _queued = false;
   bool _closed = false;
@@ -29,13 +31,18 @@ class TrackingReader implements SettingReader {
   /// heard from.
   T pass<T>(T Function() build) {
     _pass = [];
+    _passHeard = [];
     try {
       return build();
     } finally {
       for (final old in _watching) {
         old.close();
       }
+      for (final old in _heard) {
+        old.removeListener(_changed);
+      }
       _watching = _pass;
+      _heard = _passHeard;
     }
   }
 
@@ -44,6 +51,13 @@ class TrackingReader implements SettingReader {
   void listen(Listenable listenable) {
     listenable.addListener(_changed);
     _listening.add(listenable);
+  }
+
+  /// Hears [listenable] for this pass alone, as [watch] hears a provider:
+  /// something the pass found, which the next pass may not.
+  void hear(Listenable listenable) {
+    listenable.addListener(_changed);
+    _passHeard.add(listenable);
   }
 
   void _changed() {
@@ -75,7 +89,7 @@ class TrackingReader implements SettingReader {
     for (final sub in [..._watching, ..._pass]) {
       sub.close();
     }
-    for (final l in _listening) {
+    for (final l in [..._listening, ..._heard, ..._passHeard]) {
       l.removeListener(_changed);
     }
     _listening.clear();

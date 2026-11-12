@@ -10,13 +10,17 @@ import "../../app/transcript/transcript.dart";
 import "../../domain/plan.dart" show sectionsProgress;
 import "../../domain/project.dart";
 import "../../domain/room/room_state.dart";
+import "../../core/log.dart";
+import "../../domain/agent_browser.dart" show BrowserTab;
 import "../../providers.dart";
 import "../chat/chat_expiry.dart";
 import "../chat/chat_settings_page.dart" show openChatSettings;
 import "../chat/plan_page.dart" show openPlan;
+import "../chat/widgets/browser_strip.dart" show browserOf;
 import "../chat/widgets/composer_controller.dart";
 import "../chat/widgets/composer_embed.dart" show QuoteEmbed;
 import "../selection.dart";
+import "../settings/settings_category.dart";
 import "shell_answers.dart";
 import "shell_composer.dart";
 import "shell_conversation.dart";
@@ -104,12 +108,16 @@ class _OpenChat {
     _turnReader = TrackingReader(_container, turnPass);
     _composerReader = TrackingReader(_container, composerPass)
       ..listen(composer.shape);
+    foot = _FootRunner(_shell._context);
+    _footReader = TrackingReader(_container, footPass);
     _answers.transcript.take(conversation);
     _answers.chatBar.take(_shell);
+    _answers.foot.take(foot);
     conversationPass();
     barPass();
     turnPass();
     composerPass();
+    footPass();
   }
 
   final ShellChat _shell;
@@ -128,6 +136,8 @@ class _OpenChat {
   late final TrackingReader _barReader;
   late final TrackingReader _turnReader;
   late final TrackingReader _composerReader;
+  late final _FootRunner foot;
+  late final TrackingReader _footReader;
 
   bool _closed = false;
   bool _expiryChecked = false;
@@ -265,6 +275,65 @@ class _OpenChat {
     });
   }
 
+  /// The chat's edges: the device a mirror lives on, what stands in the
+  /// composer's place, and what the browser waits on the user for.
+  void footPass() {
+    if (_closed) return;
+    _footReader.pass(() {
+      final (:view, :driver) = _state(_footReader);
+      final chat = view.chat;
+      if (chat == null) return;
+      final remote = _footReader
+          .watch(remoteChatsProvider)
+          .where((c) => c.chatId == id)
+          .firstOrNull;
+      final mirrored = _session.mirrored;
+      final bar = mirrored
+          ? (driver == null ? FootBar.offline : FootBar.none)
+          : _footReader.watch(setupCompleteProvider(chat.state.project))
+          ? FootBar.none
+          : FootBar.needsSetup;
+      final browser = browserOf(
+        _footReader.watch(agentBrowserProvider),
+        mirrored,
+        id,
+      );
+      foot.browser = browser;
+      final tab = browser?.tab;
+      if (tab != null) {
+        _footReader
+          ..hear(tab.hold)
+          ..hear(tab.credentialRequest)
+          ..hear(tab.uploadRequest);
+      }
+      final upload = tab?.uploadRequest.value;
+      final credentials = tab?.credentialRequest.value;
+      _outbox.foot(
+        ChatFootSnapshot(
+          device: mirrored ? remote?.deviceName ?? "the home device" : null,
+          deviceOffline: mirrored && !(remote?.online ?? false),
+          bar: bar,
+          hold: tab?.hold.value?.reason,
+          upload: upload == null
+              ? null
+              : UploadPrompt(
+                  host: Uri.tryParse(upload.url)?.host ?? "",
+                  multiple: upload.multiple,
+                ),
+          credentials: credentials == null
+              ? null
+              : CredentialPrompt(
+                  reason: credentials.reason,
+                  fields: [
+                    for (final f in credentials.fields)
+                      CredentialField(label: f.label, secret: f.secret),
+                  ],
+                ),
+        ),
+      );
+    });
+  }
+
   void close() {
     _closed = true;
     for (final reader in [
@@ -272,6 +341,7 @@ class _OpenChat {
       _barReader,
       _turnReader,
       _composerReader,
+      _footReader,
     ]) {
       reader.close();
     }
@@ -281,7 +351,56 @@ class _OpenChat {
     }
     if (_answers.turn.release(turn)) _outbox.turn(TurnSnapshot());
     _answers.chatBar.release(_shell);
+    if (_answers.foot.release(foot)) _outbox.foot(ChatFootSnapshot());
     composer.dispose();
     _keep.close();
   }
+}
+
+/// What the user does at the open chat's edges, run over the bridge's
+/// context: Settings for a project's setup, the browser's page and what it
+/// waits on.
+class _FootRunner implements ChatFootIntents {
+  _FootRunner(this._context);
+
+  final BuildContext Function() _context;
+
+  /// The chat's browser tab and its live view, as the last pass found it.
+  ({BrowserTab tab, void Function(BuildContext context) open})? browser;
+
+  @override
+  void openSetup() {
+    final context = _context();
+    if (context.mounted) {
+      openSettings(context, category: SettingsCategory.byteRepair, focus: true);
+    }
+  }
+
+  @override
+  void watchPage() {
+    final context = _context();
+    if (context.mounted) browser?.open(context);
+  }
+
+  @override
+  void cancelUpload() => browser?.tab.cancelUpload();
+
+  @override
+  void upload(List<String> paths) {
+    final tab = browser?.tab;
+    if (tab == null || paths.isEmpty) return;
+    tab.submitUpload(paths).catchError((Object e) {
+      logFailure("browser", "files could not be given to the page", e);
+    });
+  }
+
+  @override
+  void submitCredentials(List<String> values) {
+    browser?.tab.submitCredentials(values).catchError((Object e) {
+      logFailure("browser", "a sign-in could not be typed in", e);
+    });
+  }
+
+  @override
+  void declineCredentials() => browser?.tab.declineCredentials();
 }

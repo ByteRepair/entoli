@@ -31,6 +31,7 @@ class ShellOutbox {
   void voice(VoiceSnapshot snapshot) => _post("voice", snapshot, _shell.voice);
   void palette(PaletteSnapshot snapshot) =>
       _post("palette", snapshot, _shell.palette);
+  void foot(ChatFootSnapshot snapshot) => _post("foot", snapshot, _shell.foot);
 
   /// The microphone's level: many times a second, nothing to compare against.
   void voiceLevel(double level) =>

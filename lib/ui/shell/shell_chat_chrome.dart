@@ -12,7 +12,6 @@ import "../../domain/project.dart";
 import "../chat/chat_chrome.dart";
 import "../chat/chat_settings_page.dart" show openChatSettings;
 import "../chat/plan_page.dart" show openPlan;
-import "../chat/widgets/browser_strip.dart" show BrowserPrompts;
 import "../chat/widgets/composer_controller.dart";
 import "shell_composer.dart";
 import "shell_new_chat.dart";
@@ -47,13 +46,8 @@ class ShellChatChrome extends ChatChrome {
     required ChatViewState view,
     required TurnDriver driver,
     ValueChanged<Draft>? onWithdrawn,
-  }) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      ShellTurnSurface(view: view, notifier: driver, onWithdrawn: onWithdrawn),
-      if (view.chat case final chat?) BrowserPrompts(chatId: chat.state.id),
-    ],
-  );
+  }) =>
+      ShellTurnSurface(view: view, notifier: driver, onWithdrawn: onWithdrawn);
 
   @override
   Widget questions({required ChatViewState view, required TurnDriver driver}) =>

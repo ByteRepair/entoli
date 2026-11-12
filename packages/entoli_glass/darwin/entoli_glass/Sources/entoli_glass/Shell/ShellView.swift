@@ -167,6 +167,7 @@ struct ShellView: View {
       #endif
       if conversing {
         ConversationView(model: transcript)
+          .safeAreaInset(edge: .top, spacing: 0) { DeviceBanner(foot: model.foot) }
           .background(.background)
           .transition(.opacity)
       }
@@ -180,6 +181,12 @@ struct ShellView: View {
     }
     .safeAreaInset(edge: .bottom, spacing: 0) {
       VStack(spacing: 0) {
+        if conversing {
+          BrowserPromptsView(foot: model.foot, say: model.say.foot)
+            .frame(maxWidth: ShellView.readableWidth + 16)
+            .frame(maxWidth: .infinity)
+            .transition(.opacity.combined(with: .move(edge: .bottom)))
+        }
         if !model.turn.isEmpty && !model.window.covered {
           TurnSurfaceView(model: model)
             .padding(.top, 6)
@@ -188,8 +195,14 @@ struct ShellView: View {
             .transition(.opacity.combined(with: .move(edge: .bottom)))
         }
         ComposerSlot(composer: model.composer, covered: model.window.covered)
+        if conversing && !model.composer.present {
+          FootBarView(foot: model.foot, say: model.say.foot)
+            .frame(maxWidth: ShellView.readableWidth + 16)
+            .frame(maxWidth: .infinity)
+        }
       }
       .animation(ComposerView.motion, value: model.turn.isEmpty)
+      .animation(ComposerView.motion, value: model.foot)
     }
     .windowBar(model, toList: toList)
     .welcome(!model.ready)

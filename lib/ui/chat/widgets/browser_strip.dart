@@ -19,7 +19,7 @@ import "running_pill.dart" show RunningKind, RunningThing;
 
 /// The chat's browser tab and the card that watches it, where there is one to
 /// show. Not on a mirrored chat, whose browser is the other device's.
-({BrowserTab tab, void Function(BuildContext context) open})? _browserOf(
+({BrowserTab tab, void Function(BuildContext context) open})? browserOf(
   AgentBrowser browser,
   bool mirrored,
   String chatId,
@@ -49,7 +49,7 @@ class BrowserPrompts extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final of = _browserOf(
+    final of = browserOf(
       ref.watch(agentBrowserProvider),
       ref.watch(isMirroredChatProvider(chatId)),
       chatId,
@@ -135,7 +135,7 @@ final _browserTabProvider = Provider.autoDispose
       })?,
       String
     >((ref, chatId) {
-      final of = _browserOf(
+      final of = browserOf(
         ref.watch(agentBrowserProvider),
         ref.watch(isMirroredChatProvider(chatId)),
         chatId,

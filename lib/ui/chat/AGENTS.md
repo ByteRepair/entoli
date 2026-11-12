@@ -937,9 +937,15 @@ one per chat and shared by both frontends' chat pages; the surfaces' logic is
 plain classes — `ConversationSurface`, `TurnRunner`, `ComposerSurface` — that
 `ShellChat` and the remaining widgets both hold. Under the shell the chat page
 draws nothing for an open chat (`ChatChrome.drawsOpenChat`), and a temporary
-chat's expiry is asked by `ShellChat` (`checkChatExpiry`). What Flutter drew
-on the chat page under the shell — the browser's prompts, a setup or offline
-bar, a mirror's strip — is not on screen there now.
+chat's expiry is asked by `ShellChat` (`checkChatExpiry`). The chat's edges are a
+surface of their own (`ChatFootSnapshot`): the paired device a mirror lives
+on, as a strip over the conversation; what stands in the composer's place —
+a project still to be set up, a home device gone away; and what the agent's
+browser waits on, over the turn surface — the button that opens the page, a
+file to upload, a sign-in. The file is picked with the system's own chooser
+and the sign-in typed into native fields, each sent once, by
+`ChatFootIntents`, and kept nowhere else. Flutter's snackbars raised from a
+chat are not seen while its view is out of the window.
 
 A message's reactions open the strip master drew under the shell, `GlassChoices`
 (`Strip.swift`), now a popover from the action row's smiley.

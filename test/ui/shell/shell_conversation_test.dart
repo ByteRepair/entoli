@@ -133,6 +133,27 @@ void main() {
     expect(shell.lastComposer?.cards.values.single.body, contains("Two"));
   });
 
+  // Byte Repair requires setup: until it is done the bar stands where the
+  // composer would, and nothing can be sent.
+  testWidgets("a chat in a project still to be set up has the bar in the "
+      "composer's place", (tester) async {
+    final chat = await io(tester, () => app.seedChat(project: "byte-repair"));
+    await app.pump(tester, const ShellChatHost(child: SizedBox()));
+    app.container.read(selectedChatIdProvider.notifier).select(chat.state.id);
+    await settleShell(tester);
+    expect(shell.lastFoot?.bar, FootBar.needsSetup);
+    expect(shell.lastComposer?.present ?? false, isFalse);
+  });
+
+  testWidgets("a chat of this device's has no device banner and no bar", (
+    tester,
+  ) async {
+    await open(tester, [prompt]);
+    expect(shell.lastFoot?.device, isNull);
+    expect(shell.lastFoot?.bar, FootBar.none);
+    expect(shell.lastFoot?.upload, isNull);
+  });
+
   testWidgets("closing the chat takes it back", (tester) async {
     await open(tester, [prompt]);
     app.container.read(selectedChatIdProvider.notifier).select(null);

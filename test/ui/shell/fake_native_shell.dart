@@ -35,6 +35,7 @@ class FakeNativeShell implements TestNativeShell {
   NewChatSnapshot? get lastNewChat => _last("newChat");
   VoiceSnapshot? get lastVoice => _last("voice");
   PaletteSnapshot? get lastPalette => _last("palette");
+  ChatFootSnapshot? get lastFoot => _last("foot");
   List<double> get levels => [...?sent["voiceLevel"]?.cast<double>()];
 
   final _arrivals = StreamController<(String, Object)>.broadcast(sync: true);
@@ -54,6 +55,8 @@ class FakeNativeShell implements TestNativeShell {
 
   @override
   void shell(bool on) {}
+  @override
+  void foot(ChatFootSnapshot snapshot) => _add("foot", snapshot);
   @override
   void window(WindowSnapshot snapshot) => _add("window", snapshot);
   @override
