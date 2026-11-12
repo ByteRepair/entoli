@@ -763,11 +763,10 @@ class SettingsBridge implements SettingsIntents {
 
   @override
   void setNumber(String id, int? value) {
-    final c = _container.read(nativeSettingsProvider).controllers[id];
-    switch (c) {
-      case RangeController():
+    switch (_at<SettingController>(id)) {
+      case final RangeController c:
         c.set(value);
-      case NumberController():
+      case final NumberController c:
         c.set(value ?? c.fallback);
       default:
     }

@@ -47,6 +47,7 @@ class _FakeNativeSettings implements TestNativeSettings {
 /// A page with one toggle, which leaving asks about once it is flipped.
 class _Page extends AppPage {
   bool on = false;
+  int count = 1;
 
   @override
   String get address => "test";
@@ -74,6 +75,17 @@ class _Page extends AppPage {
           on = value ?? false;
           changed();
           return null;
+        },
+      ),
+      NumberController(
+        part("count", "Count"),
+        value: count,
+        fallback: 1,
+        min: 1,
+        max: 9,
+        onSet: (value) async {
+          count = value;
+          changed();
         },
       ),
     ]),
@@ -271,13 +283,23 @@ void main() {
       final sent = native.stacks.last.single;
       expect(sent.key, SettingsPageKey.app);
       expect(sent.address, "test");
-      final row = sent.sections.single!.rows.single!;
+      final row = sent.sections.single!.rows.first!;
       expect(row.id, "page:test/flip");
 
       bridge.toggle(row.id, true);
       await settleIo(tester);
       expect(page.on, isTrue);
       expect(native.stacks.last.single.guarded, isTrue);
+    });
+
+    testWidgets("a number on a page is set by its intent", (tester) async {
+      final page = _Page();
+      app.container.read(appPagesProvider.notifier).open(page);
+      await settleIo(tester);
+
+      bridge.setNumber("page:test/count", 4);
+      await settleIo(tester);
+      expect(page.count, 4);
     });
 
     testWidgets("leaving asks what the page asks, and closing takes it", (
