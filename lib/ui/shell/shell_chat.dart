@@ -5,6 +5,8 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../app/chat_controller.dart" show TurnDriver;
 import "../../app/chat_session.dart";
 import "../../app/mirror_controller.dart" show chatViewProvider;
+import "../../app/new_chat_session.dart";
+import "../../domain/chat_meta.dart";
 import "../../app/plan.dart";
 import "../../app/transcript/chapters.dart";
 import "../../app/transcript/transcript.dart";
@@ -15,7 +17,8 @@ import "../../core/log.dart";
 import "../../domain/agent_browser.dart" show BrowserTab;
 import "../../providers.dart";
 import "../chat/chat_expiry.dart";
-import "../chat/chat_settings_page.dart" show openChatSettings;
+import "../chat/chat_settings_page.dart"
+    show NewChatSettingsPage, openChatSettings;
 import "../chat/plan_page.dart" show openPlan;
 import "../chat/widgets/browser_strip.dart" show browserOf;
 import "../chat/widgets/composer_controller.dart";
@@ -25,8 +28,10 @@ import "../settings/settings_category.dart";
 import "shell_answers.dart";
 import "shell_composer.dart";
 import "shell_conversation.dart";
+import "shell_new_chat.dart";
 import "shell_outbox.dart";
 import "shell_turn.dart";
+import "shell_voice.dart";
 import "shell_window.dart" show windowSnapshotProvider;
 import "tracking_reader.dart";
 
@@ -54,40 +59,60 @@ class ShellChat implements ChatBarIntents {
   late final ShellAnswers _answers = _container.read(shellAnswersProvider);
   late final ProviderSubscription<String?> _selection;
 
-  _OpenChat? _chat;
+  _Screen? _screen;
+
+  /// Voice mode, while it is up.
+  ShellVoiceSession? _voice;
+
+  /// Opens voice mode over [chatId], or over no chat yet to be made under
+  /// [meta]: `nativeVoiceOpener` under the shell.
+  void openVoice(String? chatId, ChatMeta? meta) {
+    _voice?.close();
+    _voice = ShellVoiceSession(
+      _container,
+      chatId: chatId,
+      meta: meta,
+      context: _context,
+      onDone: closeVoice,
+    );
+  }
+
+  void closeVoice() {
+    _voice?.close();
+    _voice = null;
+  }
 
   void _open(String? id) {
-    if (_chat?.id == id) return;
-    _chat?.close();
-    _chat = id == null ? null : _OpenChat(this, id);
+    if (_screen != null && _screen!.id == id) return;
+    _screen?.close();
+    _screen = id == null ? _NewChat(this) : _OpenChat(this, id);
   }
 
-  void _turnPass() => _chat?.turnPass();
+  void _turnPass() => _screen?.turnPass();
 
   @override
-  void open(ChatBarDestination to) {
-    final id = _chat?.id;
-    final context = _context();
-    if (id == null || !context.mounted) return;
-    switch (to) {
-      case ChatBarDestination.plan:
-        openPlan(context, id);
-      case ChatBarDestination.settings:
-        openChatSettings(context, id);
-    }
-  }
+  void open(ChatBarDestination to) => _screen?.openBar(to);
 
   void close() {
     _answers.voiceOn.removeListener(_turnPass);
     _selection.close();
-    _chat?.close();
-    _chat = null;
+    closeVoice();
+    _screen?.close();
+    _screen = null;
   }
+}
+
+/// What `ShellChat` draws now: an open chat, or the new-chat screen.
+sealed class _Screen {
+  String? get id;
+  void turnPass();
+  void openBar(ChatBarDestination to);
+  void close();
 }
 
 /// One chat while it is open: its session kept, a surface each, and a
 /// reader each that republishes that surface alone.
-class _OpenChat {
+final class _OpenChat implements _Screen {
   _OpenChat(this._shell, this.id) {
     _keep = _container.listen(chatSessionProvider(id), (_, _) {});
     final session = _keep.read();
@@ -130,6 +155,7 @@ class _OpenChat {
   }
 
   final ShellChat _shell;
+  @override
   final String id;
 
   ProviderContainer get _container => _shell._container;
@@ -226,7 +252,20 @@ class _OpenChat {
     });
   }
 
+  @override
+  void openBar(ChatBarDestination to) {
+    final context = _shell._context();
+    if (!context.mounted) return;
+    switch (to) {
+      case ChatBarDestination.plan:
+        openPlan(context, id);
+      case ChatBarDestination.settings:
+        openChatSettings(context, id);
+    }
+  }
+
   /// Stands down while voice mode is up, whose own turn surface is drawn.
+  @override
   void turnPass() {
     if (_closed) return;
     if (_answers.voiceOn.value) {
@@ -344,6 +383,7 @@ class _OpenChat {
     });
   }
 
+  @override
   void close() {
     _closed = true;
     for (final reader in [
@@ -413,4 +453,181 @@ class _FootRunner implements ChatFootIntents {
 
   @override
   void declineCredentials() => browser?.tab.declineCredentials();
+}
+
+/// The new-chat screen while nothing is selected: its body, its bar, its
+/// composer and what stands in the composer's place, from the
+/// [NewChatSession] the Flutter page shares.
+final class _NewChat implements _Screen {
+  _NewChat(this._shell) {
+    _keep = _container.listen(newChatSessionProvider, (_, _) {});
+    final session = _session = _keep.read();
+    final controller = session.text as ComposerController;
+    composer = ComposerSurface(
+      outbox: _outbox,
+      model: session.composer,
+      controller: controller,
+      clipboardFiles: () => _container.read(clipboardFilesProvider).read(),
+    );
+    screen = NewChatRunner(_container, controller: controller);
+    _screenReader = TrackingReader(_container, screenPass)
+      ..listen(session.starting);
+    _barReader = TrackingReader(_container, barPass)..listen(session.meta);
+    _composerReader = TrackingReader(_container, composerPass)
+      ..listen(composer.shape)
+      ..listen(session.starting);
+    _footReader = TrackingReader(_container, footPass);
+    _answers.newChat.take(screen);
+    _answers.chatBar.take(_shell);
+    _answers.foot.take(_foot);
+    // The open chat's, gone with it.
+    _shell._outbox.turn(TurnSnapshot());
+    screenPass();
+    barPass();
+    composerPass();
+    footPass();
+  }
+
+  final ShellChat _shell;
+  @override
+  String? get id => null;
+
+  ProviderContainer get _container => _shell._container;
+  ShellOutbox get _outbox => _shell._outbox;
+  ShellAnswers get _answers => _shell._answers;
+
+  late final ProviderSubscription<NewChatSession> _keep;
+  late final NewChatSession _session;
+  late final ComposerSurface composer;
+  late final NewChatRunner screen;
+  late final _foot = _FootRunner(_shell._context);
+  late final TrackingReader _screenReader;
+  late final TrackingReader _barReader;
+  late final TrackingReader _composerReader;
+  late final TrackingReader _footReader;
+  bool _closed = false;
+
+  ProjectRef _at(TrackingReader reader) =>
+      reader.watch(selectedProjectProvider);
+
+  void screenPass() {
+    if (_closed) return;
+    _screenReader.pass(() {
+      _outbox.newChat(
+        screen.snapshot(
+          _screenReader,
+          _at(_screenReader),
+          starting: _session.starting.value,
+        ),
+      );
+    });
+  }
+
+  void barPass() {
+    if (_closed) return;
+    _barReader.pass(() {
+      final at = _at(_barReader);
+      _outbox.chatBar(
+        ChatBarSnapshot(
+          draft: true,
+          project: at.project == null ? null : projectLabel(at.project),
+          settings: at.device == null,
+        ),
+      );
+    });
+  }
+
+  void composerPass() {
+    if (_closed) return;
+    _composerReader.pass(() {
+      final at = _at(_composerReader);
+      // Watched so a change to either moves the composer.
+      _composerReader.watch(setupCompleteProvider(at.project));
+      if (at.device != null) _composerReader.watch(projectFrozenProvider(at));
+      final binding = _session.binding(at);
+      if (binding == null) {
+        if (_answers.composer.release(composer)) {
+          _outbox.composer(ComposerSnapshot(present: false));
+        }
+        return;
+      }
+      composer.bind(binding);
+      _answers.composer.take(composer);
+      final view = WidgetsBinding.instance.platformDispatcher.implicitView!;
+      final dark =
+          _composerReader.watch(windowSnapshotProvider).dark ??
+          WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+              Brightness.dark;
+      _outbox.composer(
+        composer.snapshot(
+          _composerReader,
+          pixelRatio: view.devicePixelRatio,
+          outline: dark ? const Color(0xFF938F99) : const Color(0xFF79747E),
+        ),
+      );
+    });
+  }
+
+  /// What stands in the composer's place: a project to set up, a paired
+  /// device's project gone frozen.
+  void footPass() {
+    if (_closed) return;
+    _footReader.pass(() {
+      final at = _at(_footReader);
+      final bar = at.device != null
+          ? (_footReader.watch(projectFrozenProvider(at))
+                ? FootBar.offline
+                : FootBar.none)
+          : _footReader.watch(setupCompleteProvider(at.project))
+          ? FootBar.none
+          : FootBar.needsSetup;
+      _outbox.foot(ChatFootSnapshot(bar: bar));
+    });
+  }
+
+  @override
+  void turnPass() {}
+
+  /// The bar's settings: what the chat this screen makes will run under.
+  @override
+  void openBar(ChatBarDestination to) {
+    final context = _shell._context();
+    if (to != ChatBarDestination.settings || !context.mounted) return;
+    final session = _session;
+    Navigator.of(context)
+        .push<ChatMeta>(
+          MaterialPageRoute(
+            builder: (_) => NewChatSettingsPage(
+              initial: session.meta.value,
+              project: _container.read(selectedProjectProvider).project,
+            ),
+          ),
+        )
+        .then((picked) {
+          if (picked != null && !_closed) session.meta.value = picked;
+        });
+  }
+
+  @override
+  void close() {
+    _closed = true;
+    for (final reader in [
+      _screenReader,
+      _barReader,
+      _composerReader,
+      _footReader,
+    ]) {
+      reader.close();
+    }
+    if (_answers.newChat.release(screen)) {
+      _outbox.newChat(NewChatSnapshot(present: false));
+    }
+    if (_answers.composer.release(composer)) {
+      _outbox.composer(ComposerSnapshot(present: false));
+    }
+    _answers.chatBar.release(_shell);
+    if (_answers.foot.release(_foot)) _outbox.foot(ChatFootSnapshot());
+    composer.dispose();
+    _keep.close();
+  }
 }

@@ -62,12 +62,22 @@ Future<bool> _haveModels(BuildContext context, WidgetRef ref) async {
   return false;
 }
 
-Future<void> _push(BuildContext context, String? chatId, {ChatMeta? meta}) =>
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => VoicePage(chatId: chatId, meta: meta),
-      ),
-    );
+/// Where a frontend that draws voice mode itself opens it, in place of
+/// [VoicePage]: the native shell's, which its bridge binds.
+void Function(String? chatId, ChatMeta? meta)? nativeVoiceOpener;
+
+Future<void> _push(BuildContext context, String? chatId, {ChatMeta? meta}) {
+  final native = nativeVoiceOpener;
+  if (native != null) {
+    native(chatId, meta);
+    return Future.value();
+  }
+  return Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => VoicePage(chatId: chatId, meta: meta),
+    ),
+  );
+}
 
 /// Voice mode: an orb for what the microphone hears and five scrolling lines
 /// of what has been said, over the chat that was already open. It is a view,

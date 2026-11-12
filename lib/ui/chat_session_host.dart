@@ -3,6 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../app/chat_session.dart";
 import "../app/composer.dart" show ComposerText;
+import "../domain/chat_meta.dart";
 import "chat/widgets/composer_controller.dart";
 import "voice/voice_page.dart" as voice;
 import "widgets/dialogs.dart" show notify;
@@ -35,5 +36,12 @@ class RootChatSessionHost implements ChatSessionHost {
     final root = _root;
     if (root == null || !root.context.mounted) return;
     voice.openVoice(root.context, root.ref, chatId);
+  }
+
+  @override
+  void startVoiceChat(ChatMeta meta) {
+    final root = _root;
+    if (root == null || !root.context.mounted) return;
+    voice.startVoiceChat(root.context, root.ref, meta: meta);
   }
 }

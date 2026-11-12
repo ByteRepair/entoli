@@ -1,25 +1,17 @@
-import "package:entoli_glass/entoli_glass.dart" show VoicePhase;
 import "package:flutter/material.dart";
-import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/ui/app_chrome.dart" show appChromeProvider;
-import "package:agent_chat/ui/shell/shell_app_chrome.dart";
-import "package:agent_chat/ui/chat/chat_chrome.dart" show chatChromeProvider;
-import "package:agent_chat/ui/shell/shell_chat_chrome.dart";
-import "package:agent_chat/ui/shell/shell_page_bar.dart" show drawShellPageBar;
-import "package:agent_chat/ui/widgets/page_bar.dart" show pageBarDrawProvider;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/ui/shell/shell_voice.dart";
-import "package:agent_chat/app/voice_controller.dart";
 import "package:agent_chat/ui/voice/voice_page.dart";
-import "package:agent_chat/app/frontend.dart";
 
 import "../../harness.dart";
 import "fake_native_shell.dart";
+import "fake_native_transcript.dart" show settleShell;
+import "package:agent_chat/ui/shell/shell_answers.dart";
 
-/// Voice mode under the native shell: the page draws nothing of its own and
-/// sends the shell the session, the transcript and the turn.
+/// Voice mode under the native shell: no page, a session that sends the
+/// shell the voice, the transcript and the turn.
 void main() {
   late TestApp app;
   late FakeNativeShell native;
@@ -30,21 +22,32 @@ void main() {
   });
   tearDown(() => app.dispose());
 
-  Widget shell(Widget child) => ProviderScope(
-    overrides: [
-      pageBarDrawProvider.overrideWithValue(drawShellPageBar),
-      chatChromeProvider.overrideWithValue(const ShellChatChrome()),
-      appChromeProvider.overrideWithValue(const ShellAppChrome()),
-      frontendProvider.overrideWithValue(
-        const FrontendChoice(current: Frontend.swiftUI, native: true),
+  /// Voice mode over [chatId], opened as the shell's bridge opens it.
+  Future<ShellVoiceSession> open(WidgetTester tester, String? chatId) async {
+    late BuildContext context;
+    await app.pump(
+      tester,
+      Builder(
+        builder: (c) {
+          context = c;
+          return const SizedBox();
+        },
       ),
-    ],
-    child: child,
-  );
+    );
+    late ShellVoiceSession session;
+    session = ShellVoiceSession(
+      app.container,
+      chatId: chatId,
+      meta: null,
+      context: () => context,
+      onDone: () => session.close(),
+    );
+    addTearDown(session.close);
+    return session;
+  }
 
-  testWidgets("the page sends the chat's title, its lines and its turn", (
-    tester,
-  ) async {
+  testWidgets("voice mode sends the chat's title, its lines and its turn, "
+      "with no page behind it", (tester) async {
     final chat = await io(tester, () async {
       final made = await app.repo.createChat(title: "Walk");
       final full = made.copyWith(
@@ -66,44 +69,26 @@ void main() {
       await app.writeChat(full, finished: false);
       return full;
     });
-    await app.pump(
-      tester,
-      shell(VoicePage(chatId: chat.state.id)),
-      settle: false,
-    );
-    for (var i = 0; i < 20 && native.lastTurn?.resume == null; i++) {
-      await io(tester, () async {});
-      await tester.pump(const Duration(milliseconds: 50));
-    }
+    await open(tester, chat.state.id);
+    await settleShell(tester);
 
-    expect(find.byType(Scaffold), findsNothing, reason: "the shell draws it");
+    expect(find.byType(VoicePage), findsNothing);
     final voice = native.lastVoice!;
     expect(voice.present, isTrue);
     expect(voice.title, "Walk");
     expect(voice.lines.map((l) => l.text), containsAll(["go on", "Half a"]));
     expect(native.lastTurn?.resume?.startedAt, isPositive);
+    expect(app.container.read(shellAnswersProvider).voiceOn.value, isTrue);
   });
 
-  testWidgets("the microphone's level goes as it moves", (tester) async {
-    final level = ValueNotifier(0.0);
-    addTearDown(level.dispose);
-    await app.pump(
-      tester,
-      shell(
-        Consumer(
-          builder: (context, ref, _) => ShellVoice(
-            voice: VoiceViewState(status: VoiceStatus.listening, level: level),
-            controller: ref.read(voiceControllerProvider(null).notifier),
-            onDone: () {},
-          ),
-        ),
-      ),
-      settle: false,
-    );
-    expect(native.lastVoice?.status, VoicePhase.listening);
+  testWidgets("Done leaves voice mode", (tester) async {
+    final session = await open(tester, null);
+    await settleShell(tester);
+    expect(native.lastVoice?.present, isTrue);
 
-    level.value = 0.5;
-    level.value = 0.9;
-    expect(native.levels, [0.5, 0.9]);
+    session.done();
+    await tester.pump();
+    expect(native.lastVoice?.present, isFalse);
+    expect(app.container.read(shellAnswersProvider).voiceOn.value, isFalse);
   });
 }

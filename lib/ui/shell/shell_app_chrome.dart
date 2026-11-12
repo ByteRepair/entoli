@@ -7,7 +7,6 @@ import "../../domain/theme_colour.dart";
 import "../app_chrome.dart";
 import "../theme.dart";
 import "shell_popup.dart";
-import "shell_voice.dart";
 import "shell_window.dart" show ShellInsets;
 
 /// The native shell's app: the window is SwiftUI's, the Flutter view inside
@@ -40,15 +39,14 @@ class ShellAppChrome extends AppChrome {
     ).then((at) => at == null ? null : Reaction.values.elementAtOrNull(at));
   }
 
-  /// Voice mode over the whole window, drawn by the shell; the route stays,
-  /// so leaving is still popping it and the session still lives as long as
-  /// the page.
+  /// Never a page under the shell: voice mode opens through
+  /// `nativeVoiceOpener` as a `ShellVoiceSession`, with no route behind it.
   @override
   Widget? voice({
     required VoiceViewState voice,
     required VoiceController controller,
     required VoidCallback onDone,
-  }) => ShellVoice(voice: voice, controller: controller, onDone: onDone);
+  }) => null;
 }
 
 /// Apple's look, whatever was picked: the defaults, which are the iOS /

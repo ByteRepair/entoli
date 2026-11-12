@@ -18,6 +18,7 @@ import "shell_sidebar.dart";
 import "shell_window.dart";
 import "shell_outbox.dart";
 import "../widgets/dialogs.dart" show nativeNotice;
+import "../voice/voice_page.dart" show nativeVoiceOpener;
 
 /// The app under the native shell, in `AppShell`'s place: the Flutter half of
 /// a window SwiftUI owns. It asks the Swift to take the window, sends it the
@@ -64,6 +65,7 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     _settings = SettingsBridge(container);
     _chat = ShellChat(container, () => context);
     nativeNotice = container.read(shellOutboxProvider).notice;
+    nativeVoiceOpener = _chat.openVoice;
     nativeSettingsOpener = _settings.show;
   }
 
@@ -74,7 +76,10 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     _publisher.close();
     _settings.close();
     _chat.close();
-    if (identical(_listening, this)) nativeNotice = null;
+    if (identical(_listening, this)) {
+      nativeNotice = null;
+      nativeVoiceOpener = null;
+    }
     if (nativeSettingsOpener == _settings.show) nativeSettingsOpener = null;
     if (identical(_listening, this)) {
       _listening = null;

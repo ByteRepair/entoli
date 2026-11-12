@@ -141,15 +141,21 @@ struct ShellView: View {
     model.ready && transcript.present && !model.window.overlaid && !model.newChat.present
   }
 
+  /// Nothing on screen needs the Flutter view: a chat or the new-chat screen
+  /// is up, both published from the app's state, and no Flutter page or
+  /// dialog is over them.
+  private var flutterAway: Bool {
+    model.ready && !model.window.overlaid && (transcript.present || model.newChat.present)
+  }
+
   private var detail: some View {
     ZStack {
-      // Out of the window while the conversation is native: what the open
-      // chat shows is published from the app's state, which needs no frame
-      // (`ShellChat`). In it for a Flutter page or dialog over the chat, the
-      // new-chat screen and voice mode, whose surfaces are still widgets, and
-      // the app before it is set up.
+      // Out of the window while a chat or the new-chat screen is up: both are
+      // published from the app's state, which needs no frame (`ShellChat`).
+      // In it for a Flutter page or dialog over them, and the app before it
+      // is set up.
       Group {
-        if conversing {
+        if flutterAway {
           // Holds the place, so the insets below are still measured.
           Color.clear
         } else {

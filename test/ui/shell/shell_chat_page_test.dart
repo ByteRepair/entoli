@@ -104,7 +104,9 @@ void main() {
   ) async {
     await pump(tester);
     final first = shell.lastNewChat!.projects.first;
-    final screen = tester.state<ShellNewChatState>(find.byType(ShellNewChat));
+    final screen =
+        app.container.read(shellAnswersProvider).newChat.owner!
+            as NewChatRunner;
 
     await screen.pick(null, first.project);
     await tester.pump();
@@ -142,7 +144,9 @@ void main() {
 
   testWidgets("a starter types its trigger into the composer", (tester) async {
     await pump(tester);
-    final screen = tester.state<ShellNewChatState>(find.byType(ShellNewChat));
+    final screen =
+        app.container.read(shellAnswersProvider).newChat.owner!
+            as NewChatRunner;
     screen.starter(ComposerTrigger.agent, "scout");
     await tester.pump();
     expect(shell.lastComposerValue?.text, "@scout ");

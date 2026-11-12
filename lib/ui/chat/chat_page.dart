@@ -31,6 +31,7 @@ import "chat_chrome.dart";
 import "chat_settings_page.dart";
 import "../../app/chat_controller.dart";
 import "../../app/chat_session.dart";
+import "../../app/new_chat_session.dart";
 import "chat_expiry.dart";
 import "../../app/composer.dart" show ComposerBinding, ComposerModel;
 import "../../app/mirror_controller.dart";
@@ -284,72 +285,29 @@ class _NewChat extends ConsumerStatefulWidget {
 }
 
 class _NewChatState extends ConsumerState<_NewChat> {
-  final ComposerController _controller = ComposerController();
-  late final ComposerModel _model = ComposerModel(
-    _controller,
-    pick: (kind) => ref.read(attachmentPickerProvider).pick(kind),
-  );
-
-  /// What the chat this screen makes will run its first turn under. Held here
-  /// rather than in a provider so that it dies with the screen: armed
-  /// app-wide it would land on whatever chat happened to be created next,
-  /// including one started from somewhere else entirely.
-  ChatMeta _meta = ChatMeta();
-
-  /// A chat being made on a paired device, until it has answered.
-  bool _starting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    ref.listenManual(newChatPromptProvider, (_, prompt) {
-      if (prompt == null) return;
-      _controller.message = prompt;
-      // Cleared after the frame: a provider is not written while one builds.
-      Future(() {
-        if (mounted) ref.read(newChatPromptProvider.notifier).set(null);
-      });
-    }, fireImmediately: true);
-  }
-
-  @override
-  void dispose() {
-    _model.dispose();
-    _controller.dispose();
-    super.dispose();
-  }
+  /// The screen's session: its composer, its settings, and how the first
+  /// message makes a chat. Watched in the build, which keeps it.
+  NewChatSession get _session => ref.read(newChatSessionProvider);
+  ComposerController get _controller => _session.text as ComposerController;
+  ComposerModel get _model => _session.composer;
+  bool get _starting => _session.starting.value;
 
   Future<void> _openSettings() async {
+    final session = _session;
     final picked = await Navigator.of(context).push<ChatMeta>(
       MaterialPageRoute(
         builder: (_) => NewChatSettingsPage(
-          initial: _meta,
+          initial: session.meta.value,
           project: ref.read(selectedProjectProvider).project,
         ),
       ),
     );
     // Null is a page backed out of rather than saved.
-    if (picked != null && mounted) setState(() => _meta = picked);
+    if (picked != null) session.meta.value = picked;
   }
 
-  /// The composer has already cleared itself, so a chat that could not be made
-  /// would take the message with it silently. Put it back instead — the reason
-  /// is logged, and this is the only thing left on screen to say so.
-  Future<void> _send(String text, List<Attachment> attachments) async {
-    setState(() => _starting = true);
-    final made = await startChatWith(
-      ref,
-      text,
-      attachments: attachments,
-      meta: _meta,
-    );
-    if (!mounted) return;
-    setState(() => _starting = false);
-    if (!made) {
-      _controller.message = text;
-      notify(context, "Could not start a chat.");
-    }
-  }
+  Future<void> _send(String text, List<Attachment> attachments) =>
+      _session.send(text, attachments);
 
   /// The composer, or a "setup required" bar where the project needs setup
   /// and has not been set up yet. The bar replaces the composer entirely,
@@ -390,7 +348,8 @@ class _NewChatState extends ConsumerState<_NewChat> {
               onSend: _send,
               onAbort: () {},
               project: project,
-              onVoice: () => startVoiceChat(context, ref, meta: _meta),
+              onVoice: () =>
+                  startVoiceChat(context, ref, meta: _session.meta.value),
             ),
           )
         else
@@ -401,8 +360,18 @@ class _NewChatState extends ConsumerState<_NewChat> {
 
   @override
   Widget build(BuildContext context) {
-    final at = ref.watch(selectedProjectProvider);
+    final session = ref.watch(newChatSessionProvider);
     final chrome = ref.watch(chatChromeProvider);
+    // The frontend draws this screen itself.
+    if (chrome.drawsOpenChat) return const SizedBox.expand();
+    return ListenableBuilder(
+      listenable: session.starting,
+      builder: (context, _) => _screen(context, chrome),
+    );
+  }
+
+  Widget _screen(BuildContext context, ChatChrome chrome) {
+    final at = ref.watch(selectedProjectProvider);
     return Scaffold(
       appBar: chrome.overPage
           ? null

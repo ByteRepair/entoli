@@ -2,6 +2,7 @@ import "package:flutter/foundation.dart" show ChangeNotifier;
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
+import "../domain/chat_meta.dart";
 import "../domain/models.dart";
 import "../domain/room/room_state.dart";
 import "../providers.dart";
@@ -18,6 +19,9 @@ abstract interface class ChatSessionHost {
   void say(String message);
 
   void openVoice(String chatId);
+
+  /// Voice mode with no chat yet, the first word making one under [meta].
+  void startVoiceChat(ChatMeta meta);
 }
 
 final chatSessionHostProvider = Provider<ChatSessionHost>(
