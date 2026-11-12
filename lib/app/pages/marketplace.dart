@@ -374,15 +374,17 @@ mixin InstallsPrompts on AppPage {
     );
   }
 
-  Future<SettingNotice> installSkill(SkillPackage package) async {
+  Future<SettingNotice?> installSkill(SkillPackage package) async {
     final config = app.read(appConfigProvider);
     final target = destination;
     await platform.readOnlyDirs
         .skills(config.promptsDir(CompletionKind.skill, project: target))
         .write(() => installSkillPackage(config, package, project: target));
     await reloadAllPromptLibraries(app.read);
-    app.read(appPagesProvider.notifier).leave(this);
-    return SettingNotice(installedSnack("Installed", package.name, target));
+    app
+        .read(appPagesProvider.notifier)
+        .leave(this, saying: installedSnack("Installed", package.name, target));
+    return null;
   }
 
   /// What a package holds besides its SKILL.md.
@@ -623,7 +625,7 @@ class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
   /// The settings' import shape, aimed at the site's files: the face goes
   /// with it, or none, so an agent installed over another does not keep the
   /// face of the one it replaced.
-  Future<SettingNotice> _installAgent(EntryPreview preview) async {
+  Future<SettingNotice?> _installAgent(EntryPreview preview) async {
     final config = app.read(appConfigProvider);
     final name = entry.installName;
     final target = destination;
@@ -642,8 +644,10 @@ class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
           );
         });
     await reloadAllPromptLibraries(app.read);
-    app.read(appPagesProvider.notifier).leave(this);
-    return SettingNotice(installedSnack("Installed", name, target));
+    app
+        .read(appPagesProvider.notifier)
+        .leave(this, saying: installedSnack("Installed", name, target));
+    return null;
   }
 }
 

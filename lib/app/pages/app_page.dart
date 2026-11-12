@@ -1,3 +1,5 @@
+import "dart:async";
+
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
@@ -141,7 +143,16 @@ class PageSection {
 /// draws the stack and says when the user leaves one.
 class AppPages extends Notifier<List<AppPage>> {
   @override
-  List<AppPage> build() => const [];
+  List<AppPage> build() {
+    ref.onDispose(_said.close);
+    return const [];
+  }
+
+  final _said = StreamController<String>.broadcast();
+
+  /// What a page that closed itself had to say — "Installed x." — for the
+  /// frontend to say in passing, the page that would have said it gone.
+  Stream<String> get said => _said.stream;
 
   AppPage? find(String address) =>
       state.where((p) => p.address == address).firstOrNull;
@@ -168,8 +179,11 @@ class AppPages extends Notifier<List<AppPage>> {
     if (at >= 0) state = _closeFrom(at);
   }
 
-  /// Closes [page], from inside it: Save, Done.
-  void leave(AppPage page) => close(page.address);
+  /// Closes [page], from inside it: Save, Done; [saying] what it did.
+  void leave(AppPage page, {String? saying}) {
+    close(page.address);
+    if (saying != null) _said.add(saying);
+  }
 
   void closeAll() {
     if (state.isNotEmpty) state = _closeFrom(0);

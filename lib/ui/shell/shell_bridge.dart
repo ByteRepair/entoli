@@ -1,3 +1,5 @@
+import "dart:async";
+
 import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
@@ -11,6 +13,7 @@ import "../chat/chat_page.dart";
 import "shell_chat.dart";
 import "shell_palette.dart";
 import "shell_publisher.dart";
+import "../../app/pages/app_page.dart" show appPagesProvider;
 import "../../app/pages/welcome.dart" show openFirstRun;
 import "../../app/settings/spec.dart" show ContainerReader;
 import "../settings/settings_category.dart" show nativeSettingsOpener;
@@ -74,11 +77,19 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     nativeBrowserOpener = _chat.openBrowser;
     nativeSettingsOpener = _settings.show;
     openFirstRun(ContainerReader(container));
+    _said = container
+        .read(appPagesProvider.notifier)
+        .said
+        .listen(container.read(shellOutboxProvider).notice);
   }
+
+  /// What a page that closed itself had to say, in passing.
+  late final StreamSubscription<String> _said;
 
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_key);
+    _said.cancel();
     _scope.detach(_commands);
     _publisher.close();
     _settings.close();

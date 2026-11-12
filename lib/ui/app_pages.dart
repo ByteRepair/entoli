@@ -1,3 +1,5 @@
+import "dart:async";
+
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -38,6 +40,17 @@ class _AppPagesFollowerState extends ConsumerState<AppPagesFollower> {
   void initState() {
     super.initState();
     ref.listenManual(appPagesProvider, (_, open) => _follow(open));
+    _said = ref.read(appPagesProvider.notifier).said.listen((message) {
+      if (mounted) notify(context, message);
+    });
+  }
+
+  late final StreamSubscription<String> _said;
+
+  @override
+  void dispose() {
+    _said.cancel();
+    super.dispose();
   }
 
   void _follow(List<AppPage> open) {
