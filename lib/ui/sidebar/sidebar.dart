@@ -151,65 +151,48 @@ class _SidebarState extends ConsumerState<Sidebar> {
 
 const _noMatch = "No chat's title matches that.";
 
-/// The search field and the round button at its end: new chat while the field
-/// is empty, clear once it holds anything. A project with no chats has no
-/// field, but keeps the button, being where a new chat is made.
-class _SearchRow extends ConsumerWidget {
-  const _SearchRow({
-    required this.search,
-    required this.query,
-    this.field = true,
-  });
+/// [list] under the search field, whose round button is new chat while the
+/// field is empty and clear once it holds anything. With no [list] — no chats
+/// to search — the field goes and the button stays, being where a new chat is
+/// made, over [nothing].
+class _Searchable extends ConsumerWidget {
+  const _Searchable({required this.search, required this.nothing, this.list});
 
   final TextEditingController search;
-  final ValueNotifier<String> query;
-  final bool field;
-
-  static Widget _gap(Widget button) =>
-      Padding(padding: const EdgeInsets.only(left: 8), child: button);
+  final String nothing;
+  final Widget? list;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final button = ValueListenableBuilder<String>(
-      valueListenable: query,
-      builder: (context, text, _) {
-        if (text.isNotEmpty) {
-          return _gap(
-            IconButton.filledTonal(
-              icon: const Icon(Icons.close),
-              tooltip: "Clear search",
-              visualDensity: VisualDensity.standard,
-              onPressed: search.clear,
-            ),
-          );
-        }
-        return _gap(
-          IconButton.filled(
+    Widget button(bool empty) => empty
+        ? IconButton.filled(
             icon: const Icon(Icons.add),
             tooltip: "New chat",
             visualDensity: VisualDensity.standard,
             onPressed: () => openNewChat(context, ref),
+          )
+        : IconButton.filledTonal(
+            icon: const Icon(Icons.close),
+            tooltip: "Clear search",
+            visualDensity: VisualDensity.standard,
+            onPressed: search.clear,
+          );
+    final list = this.list;
+    return Column(
+      children: [
+        if (list == null)
+          Padding(
+            padding: SearchField.inset,
+            child: Align(alignment: Alignment.centerRight, child: button(true)),
+          )
+        else
+          SearchField(
+            controller: search,
+            hint: "Search chats",
+            trailing: button,
           ),
-        );
-      },
-    );
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: field
-                ? SearchField(
-                    controller: search,
-                    hint: "Search chats",
-                    padding: EdgeInsets.zero,
-                    clearButton: false,
-                  )
-                : const SizedBox.shrink(),
-          ),
-          button,
-        ],
-      ),
+        Expanded(child: list ?? Nothing(nothing)),
+      ],
     );
   }
 }
@@ -241,23 +224,12 @@ class _LocalChatList extends ConsumerWidget {
             final chats = all
                 .where((c) => c.project == project && !c.isExpired())
                 .toList();
-            if (chats.isEmpty) {
-              return Column(
-                children: [
-                  _SearchRow(search: search, query: query, field: false),
-                  const Expanded(
-                    child: Nothing("No chats in this project yet."),
-                  ),
-                ],
-              );
-            }
-            return Column(
-              children: [
-                _SearchRow(search: search, query: query),
-                Expanded(
-                  child: _ChatList(chats: chats, query: query),
-                ),
-              ],
+            return _Searchable(
+              search: search,
+              nothing: "No chats in this project yet.",
+              list: chats.isEmpty
+                  ? null
+                  : _ChatList(chats: chats, query: query),
             );
           },
           loading: () => const Center(child: CircularProgressIndicator()),
@@ -298,62 +270,51 @@ class _RemoteChatList extends ConsumerWidget {
             )
             .toList()
           ..sort((a, b) => b.state.updatedAt.compareTo(a.state.updatedAt));
-    if (chats.isEmpty) {
-      return Column(
-        children: [
-          _SearchRow(search: search, query: query, field: false),
-          const Expanded(
-            child: Nothing("Nothing mirrored from this device yet."),
-          ),
-        ],
-      );
-    }
-    return Column(
-      children: [
-        _SearchRow(search: search, query: query),
-        Expanded(
-          child: ValueListenableBuilder<String>(
-            valueListenable: query,
-            builder: (context, text, _) {
-              final needle = searchNeedle(text);
-              final matching = chats
-                  .where((entry) => titleMatches(entry.state, needle))
-                  .toList();
-              if (matching.isEmpty) {
-                return const Nothing(_noMatch);
-              }
-              return ListView.builder(
-                itemCount: matching.length,
-                itemBuilder: (context, i) {
-                  final entry = matching[i];
-                  // Per row, so tapping one rebuilds the two tiles that
-                  // changed rather than re-filtering and re-sorting the list.
-                  return Consumer(
-                    builder: (context, ref, _) => _ChatTile(
-                      chat: entry.state,
-                      mutable: entry.online,
-                      remote: true,
-                      selected: ref.watch(
-                        selectedChatIdProvider.select(
-                          (id) => id == entry.chatId,
+    return _Searchable(
+      search: search,
+      nothing: "Nothing mirrored from this device yet.",
+      list: chats.isEmpty
+          ? null
+          : ValueListenableBuilder<String>(
+              valueListenable: query,
+              builder: (context, text, _) {
+                final needle = searchNeedle(text);
+                final matching = chats
+                    .where((entry) => titleMatches(entry.state, needle))
+                    .toList();
+                if (matching.isEmpty) {
+                  return const Nothing(_noMatch);
+                }
+                return ListView.builder(
+                  itemCount: matching.length,
+                  itemBuilder: (context, i) {
+                    final entry = matching[i];
+                    // Per row, so tapping one rebuilds the two tiles that
+                    // changed rather than re-filtering and re-sorting the list.
+                    return Consumer(
+                      builder: (context, ref, _) => _ChatTile(
+                        chat: entry.state,
+                        mutable: entry.online,
+                        remote: true,
+                        selected: ref.watch(
+                          selectedChatIdProvider.select(
+                            (id) => id == entry.chatId,
+                          ),
                         ),
-                      ),
-                      subtitle: entry.online
-                          ? null
-                          : Text(
-                              "offline",
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.error,
+                        subtitle: entry.online
+                            ? null
+                            : Text(
+                                "offline",
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.error,
+                                ),
                               ),
-                            ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
     );
   }
 }

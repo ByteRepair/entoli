@@ -264,10 +264,6 @@ at.
 Giving focus away is the composer's rule; taking it back when the keyboard goes
 is the app's, and is the next section.
 
-The sidebar's new-chat button is the round button at
-the end of its search field; see "The sidebar's list" in
-`lib/ui/sidebar/AGENTS.md`.
-
 ## A catalog of things to download
 
 There are two of them: the on-device models, text and voice, and the Linux the

@@ -4,19 +4,22 @@ import "package:flutter/material.dart";
 /// entries and the project palette's choices. The clear button comes and goes
 /// with whether the controller holds anything, listened to here so the field is
 /// not rebuilt from above for it — and only when that flips, not on every caret
-/// move the controller also reports. [clearButton] off is for a caller that
-/// puts its own beside the field, as the sidebar does.
+/// move the controller also reports. [trailing] is drawn beside the field from
+/// the same flag, in place of the clear button.
 class SearchField extends StatefulWidget {
   const SearchField({
     super.key,
     required this.controller,
     required this.hint,
-    this.padding = const EdgeInsets.fromLTRB(12, 0, 12, 8),
+    this.padding = inset,
     this.autofocus = false,
     this.textInputAction = TextInputAction.search,
     this.onSubmitted,
-    this.clearButton = true,
+    this.trailing,
   });
+
+  /// The default [padding], for a caller lining something up with the field.
+  static const inset = EdgeInsets.fromLTRB(12, 0, 12, 8);
 
   final TextEditingController controller;
   final String hint;
@@ -24,7 +27,7 @@ class SearchField extends StatefulWidget {
   final bool autofocus;
   final TextInputAction textInputAction;
   final ValueChanged<String>? onSubmitted;
-  final bool clearButton;
+  final Widget Function(bool empty)? trailing;
 
   @override
   State<SearchField> createState() => _SearchFieldState();
@@ -62,42 +65,52 @@ class _SearchFieldState extends State<SearchField> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: widget.padding,
-      child: TextField(
-        controller: widget.controller,
-        autofocus: widget.autofocus,
-        textInputAction: widget.textInputAction,
-        onSubmitted: widget.onSubmitted,
-        style: theme.textTheme.bodyMedium,
-        decoration: InputDecoration(
-          isDense: true,
-          filled: true,
-          fillColor: theme.colorScheme.surfaceContainerHighest,
-          hintText: widget.hint,
-          prefixIcon: const Icon(Icons.search, size: 20),
-          prefixIconConstraints: const BoxConstraints(
-            minWidth: 40,
-            minHeight: 36,
-          ),
-          suffixIcon: _empty || !widget.clearButton
-              ? null
-              : IconButton(
-                  icon: const Icon(Icons.close, size: 18),
-                  tooltip: "Clear search",
-                  onPressed: widget.controller.clear,
-                ),
-          suffixIconConstraints: const BoxConstraints(
-            minWidth: 36,
-            minHeight: 36,
-          ),
-          contentPadding: const EdgeInsets.symmetric(vertical: 10),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(24),
-            borderSide: BorderSide.none,
-          ),
+    final trailing = widget.trailing;
+    final field = TextField(
+      controller: widget.controller,
+      autofocus: widget.autofocus,
+      textInputAction: widget.textInputAction,
+      onSubmitted: widget.onSubmitted,
+      style: theme.textTheme.bodyMedium,
+      decoration: InputDecoration(
+        isDense: true,
+        filled: true,
+        fillColor: theme.colorScheme.surfaceContainerHighest,
+        hintText: widget.hint,
+        prefixIcon: const Icon(Icons.search, size: 20),
+        prefixIconConstraints: const BoxConstraints(
+          minWidth: 40,
+          minHeight: 36,
+        ),
+        suffixIcon: _empty || trailing != null
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.close, size: 18),
+                tooltip: "Clear search",
+                onPressed: widget.controller.clear,
+              ),
+        suffixIconConstraints: const BoxConstraints(
+          minWidth: 36,
+          minHeight: 36,
+        ),
+        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(24),
+          borderSide: BorderSide.none,
         ),
       ),
+    );
+    return Padding(
+      padding: widget.padding,
+      child: trailing == null
+          ? field
+          : Row(
+              children: [
+                Expanded(child: field),
+                const SizedBox(width: 8),
+                trailing(_empty),
+              ],
+            ),
     );
   }
 }
