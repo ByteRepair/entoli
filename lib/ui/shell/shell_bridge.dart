@@ -16,16 +16,16 @@ import "shell_publisher.dart";
 import "../../app/pages/app_page.dart" show appPagesProvider;
 import "../../app/pages/welcome.dart" show openFirstRun;
 import "../../app/settings/spec.dart" show ContainerReader;
-import "../settings/settings_category.dart" show nativeSettingsOpener;
 import "../settings/settings_hand_off.dart";
 import "shell_settings.dart";
 import "shell_sidebar.dart";
 import "shell_window.dart";
 import "shell_outbox.dart";
-import "../widgets/dialogs.dart" show nativeDialogs, nativeNotice;
+import "../../app/settings/spec.dart" show SettingsPageId;
+import "../../domain/agent_browser.dart" show BrowserTab;
+import "../../domain/chat_meta.dart";
+import "../widgets/native_surfaces.dart";
 import "shell_dialogs.dart";
-import "../voice/voice_page.dart" show nativeVoiceOpener;
-import "../chat/widgets/browser_strip.dart" show nativeBrowserOpener;
 
 /// The app under the native shell, in `AppShell`'s place: the Flutter half of
 /// a window SwiftUI owns. It asks the Swift to take the window, sends it the
@@ -67,15 +67,19 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     _scope.attach(_commands);
     _listening = this;
     _bind(this);
-    final container = ProviderScope.containerOf(context, listen: false);
+    final container = _container = ProviderScope.containerOf(
+      context,
+      listen: false,
+    );
     _publisher = ShellPublisher(container);
     _settings = SettingsBridge(container);
     _chat = ShellChat(container, () => context);
-    nativeNotice = container.read(shellOutboxProvider).notice;
-    nativeDialogs = ShellDialogs();
-    nativeVoiceOpener = _chat.openVoice;
-    nativeBrowserOpener = _chat.openBrowser;
-    nativeSettingsOpener = _settings.show;
+    _surfaces = _ShellSurfaces(
+      container.read(shellOutboxProvider).notice,
+      _chat,
+      _settings,
+    );
+    container.read(nativeSurfacesProvider).bind(_surfaces);
     // Opening a page notifies the stack, which a build may not do.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) openFirstRun(ContainerReader(container));
@@ -85,6 +89,9 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
         .said
         .listen(container.read(shellOutboxProvider).notice);
   }
+
+  late final ProviderContainer _container;
+  late final _ShellSurfaces _surfaces;
 
   /// What a page that closed itself had to say, in passing.
   late final StreamSubscription<String> _said;
@@ -97,13 +104,7 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     _publisher.close();
     _settings.close();
     _chat.close();
-    if (identical(_listening, this)) {
-      nativeNotice = null;
-      nativeDialogs = null;
-      nativeVoiceOpener = null;
-      nativeBrowserOpener = null;
-    }
-    if (nativeSettingsOpener == _settings.show) nativeSettingsOpener = null;
+    _container.read(nativeSurfacesProvider).unbind(_surfaces);
     if (identical(_listening, this)) {
       _listening = null;
       _bind(null);
@@ -166,4 +167,33 @@ Future<void> shellNavigate(Commands c, Destination to) async {
         Destination.projectSettings:
       await flutterNavigate(c, to);
   }
+}
+
+/// Notices, dialogs, voice, the browser and Settings as the shell draws them.
+final class _ShellSurfaces implements NativeSurfaces {
+  _ShellSurfaces(this._notice, this._chat, this._settings);
+
+  final void Function(String) _notice;
+  final ShellChat _chat;
+  final SettingsBridge _settings;
+
+  @override
+  final NativeDialogs dialogs = ShellDialogs();
+
+  @override
+  void notice(String message) => _notice(message);
+
+  @override
+  void openVoice(String? chatId, ChatMeta? meta) =>
+      _chat.openVoice(chatId, meta);
+
+  @override
+  void openBrowser(
+    BrowserTab tab, {
+    required Future<void> Function() onQuit,
+    required bool window,
+  }) => _chat.openBrowser(tab, onQuit: onQuit, window: window);
+
+  @override
+  Future<void> openSettings(SettingsPageId? page) => _settings.show(page);
 }

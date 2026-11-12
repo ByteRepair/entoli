@@ -951,7 +951,7 @@ makes runs under, whether one is being made, and how the first message makes
 it, shared by the Flutter page and `ShellChat`, which publishes the screen,
 its bar, its composer and what stands in the composer's place while nothing
 is selected. **The browser's view is native too**: `browserOf`'s opener goes
-through `nativeBrowserOpener` under the shell, and a `BrowserWindowSession`
+through the container's `NativeSurfaces` under the shell, and a `BrowserWindowSession`
 sends the page's title, address and hold and its frames as they come, and
 runs what the user does in the sheet on the tab. A key arrives as the
 platform's own key code and characters and is read through Flutter's key

@@ -529,7 +529,7 @@ windows of their own, so `NSApp.appearance` on macOS and the window's
 ### Voice mode, and the glow
 
 Under the shell voice mode has no page: opening it goes through
-`nativeVoiceOpener`, which the bridge binds to `ShellChat`, and a
+the container's `NativeSurfaces`, which the bridge binds to `ShellChat`, and a
 `ShellVoiceSession` keeps the session alive while it is up, starts it, and
 sends voice mode and its turn surface from the app's state; Done, or closing
 it, is leaving, which lets the session go. The Swift draws voice mode over

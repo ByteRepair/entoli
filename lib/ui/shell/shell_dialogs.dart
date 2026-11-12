@@ -1,6 +1,6 @@
 import "package:entoli_glass/entoli_glass.dart";
 
-import "../widgets/dialogs.dart";
+import "../widgets/native_surfaces.dart";
 
 /// The app's dialogs as the platform's own alerts, over the window: what
 /// `dialogs.dart`'s helpers ask while the shell is up.

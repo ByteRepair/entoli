@@ -4,6 +4,7 @@ import "package:flutter/material.dart";
 
 import "../../core/platform/rich_clipboard.dart";
 import "../../domain/project.dart";
+import "native_surfaces.dart";
 import "text_input.dart";
 
 /// Put [text] on the clipboard and say so. Copying is silent otherwise — the
@@ -20,15 +21,11 @@ Future<void> copyToClipboard(
   notify(context, said);
 }
 
-/// Where a line said to the user goes in place of a snack bar: the native
-/// shell's own notice, which its bridge binds, there being no Flutter view on
-/// screen under a native chat to show one in.
-void Function(String message)? nativeNotice;
-
 /// Says [message] in passing: a snack bar, or the native shell's notice.
 void notify(BuildContext context, String message) {
-  final native = nativeNotice;
-  if (native != null) return native(message);
+  if (nativeSurfacesOf(context) case final native?) {
+    return native.notice(message);
+  }
   ScaffoldMessenger.maybeOf(
     context,
   )?.showSnackBar(SnackBar(content: Text(message)));
@@ -38,8 +35,9 @@ void notify(BuildContext context, String message) {
 /// for a caught failure, hoisted so they stop duplicating it. Selectable, so
 /// it can be copied into an issue.
 void say(BuildContext context, Object error) {
-  final native = nativeNotice;
-  if (native != null) return native("$error");
+  if (nativeSurfacesOf(context) case final native?) {
+    return native.notice("$error");
+  }
   ScaffoldMessenger.of(
     context,
   ).showSnackBar(SnackBar(content: SelectableText("$error")));
@@ -56,42 +54,6 @@ void catchAndSay(BuildContext context, Future<void> Function() work) =>
       }),
     );
 
-/// A frontend that draws the app's dialogs itself — the native shell's
-/// alerts — set by it, so every helper here asks there instead.
-abstract interface class NativeDialogs {
-  Future<int?> choose(String title, List<String> choices, {int? picked});
-
-  Future<String?> text({
-    required String title,
-    required String initial,
-    required String confirmLabel,
-    String? hint,
-    String? helper,
-    int lines,
-    bool allowBlank,
-  });
-
-  Future<({String name, String value})?> pair({
-    required String title,
-    required String nameLabel,
-    required String valueLabel,
-    String name,
-    String value,
-  });
-
-  Future<void> tell({required String title, required String message});
-
-  Future<bool> confirm({
-    required String title,
-    required String message,
-    String? confirmLabel,
-    String? cancelLabel,
-    bool destructive,
-  });
-}
-
-NativeDialogs? nativeDialogs;
-
 /// Ask which project something belongs under. The answer is wrapped because
 /// the default project is null as well, and a dismissed dialog must not read
 /// as picking it.
@@ -100,7 +62,7 @@ Future<({String? project})?> pickProject(
   required List<String?> projects,
   String? current,
 }) async {
-  if (nativeDialogs case final native?) {
+  if (nativeSurfacesOf(context)?.dialogs case final native?) {
     final at = await native.choose(
       "Move to project",
       [for (final p in projects) projectLabel(p)],
@@ -157,7 +119,7 @@ Future<String?> promptForText(
   int maxLines = 1,
   bool allowBlank = false,
 }) {
-  if (nativeDialogs case final native?) {
+  if (nativeSurfacesOf(context)?.dialogs case final native?) {
     return native.text(
       title: title,
       initial: initial,
@@ -216,7 +178,7 @@ Future<({String name, String value})?> promptForPair(
   String name = "",
   String value = "",
 }) {
-  if (nativeDialogs case final native?) {
+  if (nativeSurfacesOf(context)?.dialogs case final native?) {
     return native.pair(
       title: title,
       nameLabel: nameLabel,
@@ -274,7 +236,7 @@ Future<void> tell(
   required String title,
   required String message,
 }) =>
-    nativeDialogs?.tell(title: title, message: message) ??
+    nativeSurfacesOf(context)?.dialogs.tell(title: title, message: message) ??
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -300,7 +262,7 @@ Future<bool> confirm(
   bool destructive = false,
   bool dismissible = true,
 }) async {
-  if (nativeDialogs case final native?) {
+  if (nativeSurfacesOf(context)?.dialogs case final native?) {
     return native.confirm(
       title: title,
       message: message,

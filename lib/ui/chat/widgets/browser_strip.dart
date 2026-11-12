@@ -10,6 +10,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../app/settings/spec.dart" show SettingReader;
 import "../../widgets/anchored_menu.dart";
+import "../../widgets/native_surfaces.dart";
 import "../../../core/log.dart";
 import "../../../domain/agent_browser.dart";
 import "../../../providers.dart";
@@ -29,9 +30,8 @@ import "running_pill.dart" show RunningKind, RunningThing;
   if (!browser.available || mirrored) return null;
   final tab = browser.tab(chatId);
   void open(BuildContext context) {
-    final native = nativeBrowserOpener;
-    if (native != null) {
-      return native(
+    if (nativeSurfacesOf(context) case final native?) {
+      return native.openBrowser(
         tab,
         onQuit: browser.close,
         window: !browser.inApp || !tab.trustedInput,
@@ -42,15 +42,6 @@ import "running_pill.dart" show RunningKind, RunningThing;
 
   return (tab: tab, open: open);
 }
-
-/// Where a frontend that shows the browser itself opens it, in place of
-/// [BrowserCard]: the native shell's, which its bridge binds.
-void Function(
-  BrowserTab tab, {
-  required Future<void> Function() onQuit,
-  required bool window,
-})?
-nativeBrowserOpener;
 
 void _openCard(BuildContext context, AgentBrowser browser, BrowserTab tab) =>
     showDialog<void>(

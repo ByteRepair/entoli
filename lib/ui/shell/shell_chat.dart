@@ -68,7 +68,7 @@ class ShellChat implements ChatBarIntents {
   /// The browser's view, while it is up.
   BrowserWindowSession? _browser;
 
-  /// Shows [tab] natively: `nativeBrowserOpener` under the shell.
+  /// Shows [tab] natively: `NativeSurfaces.openBrowser` under the shell.
   void openBrowser(
     BrowserTab tab, {
     required Future<void> Function() onQuit,
@@ -91,7 +91,7 @@ class ShellChat implements ChatBarIntents {
   }
 
   /// Opens voice mode over [chatId], or over no chat yet to be made under
-  /// [meta]: `nativeVoiceOpener` under the shell.
+  /// [meta]: `NativeSurfaces.openVoice` under the shell.
   void openVoice(String? chatId, ChatMeta? meta) {
     _voice?.close();
     _voice = ShellVoiceSession(

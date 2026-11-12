@@ -71,7 +71,7 @@ iOS). The layers, each knowing only the one below it:
   should not pay for, nor resend on every download tick.
 
 While the SwiftUI frontend is up, `openSettings` opens the native settings
-rather than the Flutter page — its bridge sets `nativeSettingsOpener` — and
+rather than the Flutter page — its bridge binds the container's `NativeSurfaces` — and
 the Flutter settings page is not shown over the native UI. The welcome tour
 is not settings: it is an `AppPage` (see `lib/app/pages/AGENTS.md`), drawn
 by whichever frontend is up, and Settings' Welcome opens it. On a Mac the

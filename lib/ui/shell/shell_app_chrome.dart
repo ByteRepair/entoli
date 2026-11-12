@@ -24,7 +24,7 @@ class ShellAppChrome extends AppChrome {
       null;
 
   /// Never a page under the shell: voice mode opens through
-  /// `nativeVoiceOpener` as a `ShellVoiceSession`, with no route behind it.
+  /// `NativeSurfaces.openVoice` as a `ShellVoiceSession`, with no route behind it.
   @override
   Widget? voice({
     required VoiceViewState voice,

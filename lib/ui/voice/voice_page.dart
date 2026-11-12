@@ -10,6 +10,7 @@ import "../chat/widgets/turn_surface.dart";
 import "../settings/settings_category.dart";
 import "../app_chrome.dart";
 import "../widgets/dialogs.dart";
+import "../widgets/native_surfaces.dart";
 import "../widgets/nav_drawer.dart";
 import "transcript.dart";
 import "../../app/voice_controller.dart";
@@ -62,14 +63,9 @@ Future<bool> _haveModels(BuildContext context, WidgetRef ref) async {
   return false;
 }
 
-/// Where a frontend that draws voice mode itself opens it, in place of
-/// [VoicePage]: the native shell's, which its bridge binds.
-void Function(String? chatId, ChatMeta? meta)? nativeVoiceOpener;
-
 Future<void> _push(BuildContext context, String? chatId, {ChatMeta? meta}) {
-  final native = nativeVoiceOpener;
-  if (native != null) {
-    native(chatId, meta);
+  if (nativeSurfacesOf(context) case final native?) {
+    native.openVoice(chatId, meta);
     return Future.value();
   }
   return Navigator.of(context).push(
