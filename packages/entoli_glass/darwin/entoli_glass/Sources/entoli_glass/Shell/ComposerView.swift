@@ -312,12 +312,7 @@ struct ComposerView: View {
 
   private func cwdRow(_ cwd: String) -> some View {
     Button {
-      #if os(iOS)
-        UIPasteboard.general.string = cwd
-      #else
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(cwd, forType: .string)
-      #endif
+      copyToPasteboard(cwd)
     } label: {
       HStack(spacing: 8) {
         Image(systemName: "terminal")

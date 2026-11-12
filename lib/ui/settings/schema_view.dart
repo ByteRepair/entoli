@@ -1,11 +1,9 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "package:flutter/services.dart";
-
+import "../../core/platform/rich_clipboard.dart";
 import "../../app/settings/controller.dart";
 import "../skills/skill_view.dart";
-import "../../domain/agent_face.dart";
 import "../../domain/bot_avatar/spec.dart";
 import "../bot_avatar/bot_avatar_editor.dart";
 import "../widgets/agent_picture.dart";
@@ -25,9 +23,8 @@ import "../widgets/catalog.dart";
 import "../widgets/settings_warning_banner.dart";
 import "../widgets/page_bar.dart";
 import "byte_repair_settings.dart";
-import "../../app/settings/pages/triggers.dart" show triggerPermissionsProvider;
 import "form_dialog.dart";
-import "provider_usage_view.dart";
+import "setting_icons.dart";
 import "sync_pairing.dart";
 import "../widgets/choice.dart";
 import "../widgets/dialogs.dart";
@@ -145,18 +142,6 @@ class SettingRow extends StatelessWidget {
         UiHint.card => _Card(c),
         _ => _Notice(c),
       },
-      final CollectionController c when c.hint == UiHint.providers => c.typed(
-        <V>(c) =>
-            _Collection<V>(c, detail: (item) => ProviderUsageView(item.id!)),
-      ),
-      // The permissions above them are asked again each time the app comes
-      // back from the system's settings.
-      final CollectionController c when c.hint == UiHint.triggers => _OnResume(
-        () => ProviderScope.containerOf(
-          context,
-        ).invalidate(triggerPermissionsProvider),
-        child: c.typed(<V>(c) => _Collection<V>(c)),
-      ),
       final CollectionController c => c.typed(<V>(c) => _Collection<V>(c)),
       final PairingController c => PairingControls(flow: c.flow),
       final SubpageController c => ListTile(
@@ -229,20 +214,27 @@ class SettingRow extends StatelessWidget {
 /// stops it, or nothing at all where what it opened was dismissed.
 Future<void> _run(BuildContext context, ActionController c) async {
   final ask = await c.confirm();
-  if (!context.mounted) return;
-  if (ask != null) {
-    if (ask.cancelled) return;
-    if (ask.brief) return say(context, ask.message);
-    final yes = await confirm(
-      context,
-      title: ask.title,
-      message: ask.message,
-      confirmLabel: ask.confirmLabel,
-      destructive: ask.destructive,
-    );
-    if (!yes || !context.mounted) return;
+  if (!context.mounted || !await _agreed(context, ask)) return;
+  if (context.mounted) await _tell(context, c.run());
+}
+
+/// Whether what [ask] asks was agreed to: a confirm said yes to, or nothing
+/// asked; a passing note, or a cancelled ask, is no.
+Future<bool> _agreed(BuildContext context, SettingConfirm? ask) async {
+  if (ask == null) return true;
+  if (ask.cancelled) return false;
+  if (ask.brief) {
+    say(context, ask.message);
+    return false;
   }
-  await _tell(context, c.run());
+  return await confirm(
+        context,
+        title: ask.title,
+        message: ask.message,
+        confirmLabel: ask.confirmLabel,
+        destructive: ask.destructive,
+      ) &&
+      context.mounted;
 }
 
 /// Says what a change had to say, where it said anything: in a dialog where
@@ -251,7 +243,7 @@ Future<void> _tell(BuildContext context, Future<SettingNotice?> change) async {
   final notice = await change;
   if (notice == null || !context.mounted) return;
   if (notice.copy case final text?) {
-    await Clipboard.setData(ClipboardData(text: text));
+    await writeClipboard(ClipboardContent(plain: text));
     if (!context.mounted) return;
   }
   final title = notice.title;
@@ -259,42 +251,13 @@ Future<void> _tell(BuildContext context, Future<SettingNotice?> change) async {
   await tell(context, title: title, message: notice.message);
 }
 
-IconData? _icon(SettingGlyph? glyph) => switch (glyph) {
-  SettingGlyph.deleteForever => Icons.delete_forever,
-  SettingGlyph.play => Icons.play_circle_outline,
-  SettingGlyph.stop => Icons.stop_circle_outlined,
-  SettingGlyph.warning => Icons.warning_amber_rounded,
-  SettingGlyph.shield => Icons.shield_outlined,
-  SettingGlyph.person => Icons.person_outline,
-  SettingGlyph.code => Icons.code,
-  SettingGlyph.privacy => Icons.privacy_tip_outlined,
-  SettingGlyph.licence => Icons.balance_outlined,
-  // Drawn as the app's own mark, not an icon.
-  SettingGlyph.add => Icons.add,
-  SettingGlyph.download => Icons.download,
-  SettingGlyph.upload => Icons.upload_file,
-  SettingGlyph.notificationsOff => Icons.notifications_off_outlined,
-  SettingGlyph.alarmOff => Icons.alarm_off_outlined,
-  SettingGlyph.schedule => Icons.event_outlined,
-  SettingGlyph.countdown => Icons.timer_outlined,
-  SettingGlyph.files => Icons.description_outlined,
-  SettingGlyph.online => Icons.circle,
-  SettingGlyph.connecting || SettingGlyph.offline => Icons.circle_outlined,
-  SettingGlyph.failed => Icons.error_outline,
-  SettingGlyph.cloud => Icons.cloud_outlined,
-  SettingGlyph.computer => Icons.computer,
-  SettingGlyph.terminal => Icons.terminal,
-  SettingGlyph.tune => Icons.tune,
-  SettingGlyph.appMark || null => null,
-};
-
 /// A setting's accessory, as the icon button at its end.
 Widget? _accessory(BuildContext context, SettingController c) {
   final action = c.accessory;
   if (action == null) return null;
   return IconButton(
     onPressed: action.enabled ? () => _tell(context, action.run()) : null,
-    icon: Icon(_icon(action.glyph) ?? Icons.more_horiz),
+    icon: Icon(settingIcon(action.glyph) ?? Icons.more_horiz),
     tooltip: action.label,
   );
 }
@@ -680,7 +643,7 @@ class _Action extends StatelessWidget {
     if (c.hint == UiHint.permission) {
       final description = c.description;
       return ListTile(
-        leading: Icon(_icon(c.glyph)),
+        leading: Icon(settingIcon(c.glyph)),
         title: Text(c.title),
         subtitle: description == null ? null : Text(description),
         trailing: const Icon(Icons.chevron_right),
@@ -699,7 +662,7 @@ class _Action extends StatelessWidget {
       );
     }
     final colors = Theme.of(context).colorScheme;
-    final icon = _icon(c.glyph);
+    final icon = settingIcon(c.glyph);
     final style = c.destructive
         ? FilledButton.styleFrom(
             backgroundColor: colors.error,
@@ -890,7 +853,7 @@ class _Banner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SettingsWarningBanner(
-    icon: _icon(c.glyph) ?? Icons.info_outline,
+    icon: settingIcon(c.glyph) ?? Icons.info_outline,
     color: _toneColour(context, c.tone),
     text: c.lines.map((l) => l.text).join("\n"),
   );
@@ -1081,9 +1044,9 @@ class _Info extends ConsumerWidget {
           ListTile(
             leading: row.glyph == SettingGlyph.appMark
                 ? const AppMark(size: 40)
-                : _icon(row.glyph) == null
+                : settingIcon(row.glyph) == null
                 ? null
-                : Icon(_icon(row.glyph)),
+                : Icon(settingIcon(row.glyph)),
             title: Text(row.title),
             subtitle: row.subtitle == null ? null : Text(row.subtitle!),
             trailing: row.link != null
@@ -1209,14 +1172,14 @@ class _Buttons extends StatelessWidget {
               if (child case final ActionController action when action.visible)
                 action.secondary
                     ? OutlinedButton.icon(
-                        icon: Icon(_icon(action.glyph)),
+                        icon: Icon(settingIcon(action.glyph)),
                         label: Text(action.label),
                         onPressed: action.enabled
                             ? () => _run(context, action)
                             : null,
                       )
                     : FilledButton.icon(
-                        icon: Icon(_icon(action.glyph)),
+                        icon: Icon(settingIcon(action.glyph)),
                         label: Text(action.label),
                         onPressed: action.enabled
                             ? () => _run(context, action)
@@ -1353,37 +1316,24 @@ class _DragSliderState extends State<_DragSlider> {
   }
 }
 
-/// The action a list taking pictures offers on each row that takes one.
-const _photo = "\u0000photo";
-
-/// The action a list taking Bot Avatars offers on each row that takes one.
-const _bot = "\u0000bot";
-
 /// The items as rows, each with what [CollectionItem] says of it: its state
 /// at a glance, its words and what went wrong, the switch that arms it, what
 /// can be done to it, and a tap that edits it through its form; and the
 /// button that adds one.
 class _Collection<T> extends StatelessWidget {
-  const _Collection(this.c, {this.detail});
+  const _Collection(this.c);
 
   final CollectionController<T> c;
 
-  /// What a row draws under its words beyond them: a provider's allowances.
-  final Widget Function(CollectionItem item)? detail;
-
   Future<void> _act(BuildContext context, int index, ItemAction action) async {
-    if (action.id == _photo) return _picture(context, index);
-    if (action.id == _bot) return _botAvatar(context, index, c.rows[index]);
-    if (action.confirm case final ask?) {
-      final yes = await confirm(
-        context,
-        title: ask.title,
-        message: ask.message,
-        confirmLabel: ask.confirmLabel,
-        destructive: ask.destructive,
-      );
-      if (!yes || !context.mounted) return;
+    switch (action.kind) {
+      case ItemActionKind.photo:
+        return _picture(context, index);
+      case ItemActionKind.botAvatar:
+        return _botAvatar(context, index, c.rows[index]);
+      case ItemActionKind.run:
     }
+    if (!await _agreed(context, action.confirm) || !context.mounted) return;
     await _tell(context, c.act(index, action.id));
   }
 
@@ -1401,16 +1351,9 @@ class _Collection<T> extends StatelessWidget {
             child: mutedParagraph(context, c.emptyLabel!),
           ),
         for (final (index, row) in rows.indexed)
-          if ([
-                if (c.takesImages && row.takesImage)
-                  const ItemAction(_photo, "Upload photo"),
-                if (c.takesBotAvatars && row.takesImage)
-                  const ItemAction(_bot, "Bot Avatar…"),
-                ...row.actions,
-              ]
-              case final actions)
+          if (c.actionsOf(row) case final actions)
             ListTile(
-              leading: switch ((row.face, _icon(row.glyph))) {
+              leading: switch ((row.face, settingIcon(row.glyph))) {
                 // Live, and happy at a tap: a row scrolled out of view is not
                 // painted, which stops its ticker until it is back.
                 ((:final project, :final name)?, _) => AgentPicture(
@@ -1484,11 +1427,11 @@ class _Collection<T> extends StatelessWidget {
                 ],
               ),
             ),
-        if (c.editable)
+        if (c.editable && c.addLabel != null)
           AddButtonRow(
             child: OutlinedButton.icon(
               icon: const Icon(Icons.add),
-              label: Text(c.addLabel),
+              label: Text(c.addLabel!),
               onPressed: () => editItem(context, c),
             ),
           ),
@@ -1526,12 +1469,7 @@ class _Collection<T> extends StatelessWidget {
     if (!context.mounted) return;
     final spec = await Navigator.of(context).push<BotAvatarSpec>(
       MaterialPageRoute(
-        builder: (_) => BotAvatarEditorPage(
-          initial: switch (worn) {
-            AgentBot(:final spec) => spec,
-            _ => null,
-          },
-        ),
+        builder: (_) => BotAvatarEditorPage(initial: worn?.bot),
       ),
     );
     if (spec != null) await c.setBotAvatar(index, spec);
@@ -1552,9 +1490,10 @@ class _Collection<T> extends StatelessWidget {
   }
 
   Widget? _words(BuildContext context, CollectionItem row) {
-    final more = detail?.call(row);
     final error = row.error;
-    if (row.subtitle == null && error == null && more == null) return null;
+    if (row.subtitle == null && error == null && row.meters.isEmpty) {
+      return null;
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1564,42 +1503,26 @@ class _Collection<T> extends StatelessWidget {
             error,
             style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
-        ?more,
+        for (final meter in row.meters)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(meter.text),
+                if (meter.fraction case final fraction?) ...[
+                  const SizedBox(height: 2),
+                  LinearProgressIndicator(
+                    value: fraction,
+                    semanticsLabel: meter.text,
+                  ),
+                ],
+              ],
+            ),
+          ),
       ],
     );
   }
-}
-
-/// [child], running [onResume] each time the app comes back to the front.
-class _OnResume extends StatefulWidget {
-  const _OnResume(this.onResume, {required this.child});
-
-  final VoidCallback onResume;
-  final Widget child;
-
-  @override
-  State<_OnResume> createState() => _OnResumeState();
-}
-
-class _OnResumeState extends State<_OnResume> {
-  late final _lifecycle = AppLifecycleListener(
-    onResume: () => widget.onResume(),
-  );
-
-  @override
-  void initState() {
-    super.initState();
-    _lifecycle;
-  }
-
-  @override
-  void dispose() {
-    _lifecycle.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.child;
 }
 
 /// Opens [page] over the settings.

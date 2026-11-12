@@ -6,7 +6,8 @@ import "../../data/builtin/llm/providers/provider.dart" show LlmProvider;
 import "../../domain/llm_provider.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
-import "../../app/model_picker.dart" show modelFieldLabel, modelName;
+import "../../app/model_picker.dart"
+    show missingModelLabel, modelFieldError, modelFieldLabel, modelName;
 import "model_catalog_page.dart";
 import "resettable_field.dart";
 
@@ -72,18 +73,13 @@ class ModelPicker extends ConsumerWidget {
     final listed = models.value ?? const <ModelOption>[];
     final serving = ref.watch(modelProvidersProvider);
     final none = choice.providerId == null && choice.modelId == null;
-    // A provider named and not here — removed from Settings, or a device's
-    // model this one has not got. Said, in the turn error's words, rather
-    // than read as the null entry: a turn on it fails, and the field must
-    // not claim it would run on something else.
-    // Only once the list is in, so a field opened before it is not briefly
-    // an error.
-    final missing =
-        !role.voice &&
-        models.hasValue &&
-        choice.providerId != null &&
-        !serving.any((p) => p.id == choice.providerId) &&
-        !listed.any((m) => m.providerId == choice.providerId);
+    final missing = modelFieldError(
+      choice: choice,
+      role: role,
+      loaded: models.hasValue,
+      listed: listed,
+      serving: serving,
+    );
     final nullEntry = inherited == null
         ? nullLabel
         : "$nullLabel (${modelName(providers, listed, inherited!)})";
@@ -118,14 +114,14 @@ class ModelPicker extends ConsumerWidget {
                 ? helperOffText ?? _inheritedHelper(providers, listed)
                 : null,
             helperMaxLines: 3,
-            errorText: missing
-                ? missingProviderMessage(choice.modelId, choice.providerId!)
-                : null,
+            errorText: missing,
             errorMaxLines: 2,
             suffixIcon: const Icon(Icons.chevron_right),
           ),
           child: Text(
-            missing ? "Select New Model" : _label(providers, listed, serving),
+            missing != null
+                ? missingModelLabel
+                : _label(providers, listed, serving),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),

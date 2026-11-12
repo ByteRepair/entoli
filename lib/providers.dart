@@ -1416,6 +1416,18 @@ class AppHidden extends Notifier<bool> {
   void set(bool hidden) => state = hidden;
 }
 
+/// How many times the app has come back to the front, written beside
+/// [appHiddenProvider]: what a reading the user may have changed in the
+/// system's settings meanwhile watches, to be asked again.
+final appResumesProvider = NotifierProvider<AppResumes, int>(AppResumes.new);
+
+class AppResumes extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void resumed() => state++;
+}
+
 /// The app's clock, read as "now" by whatever needs a swappable time. The
 /// system clock in production; tests override it with [Clock.fixed] so a
 /// feature that judges dates against "now" — the reminder feature today — is

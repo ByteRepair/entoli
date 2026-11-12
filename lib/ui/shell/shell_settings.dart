@@ -3,8 +3,6 @@ import "dart:async";
 import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:flutter_riverpod/misc.dart"
-    show ProviderListenable, ProviderOrFamily;
 
 import "../../app/settings/controller.dart";
 import "../../app/bot_avatar/library.dart";
@@ -51,25 +49,41 @@ class NativeShownPages extends Notifier<Set<SettingsPageId>> {
 }
 
 /// The pages this platform offers, the shown ones built through the
-/// provider's ref and rebuilt whenever anything one reads changes. Welcome
-/// is the tour, not settings, and stays the app's own page.
+/// provider's ref and rebuilt whenever anything one reads changes. A page
+/// not of settings, the tour, stays the app's own.
 final nativeSettingsProvider = Provider.autoDispose<NativeSettingsPages>((ref) {
   final reader = RefReader(ref);
   final shown = ref.watch(nativeShownPagesProvider);
   final schema = ref.watch(settingsSchemaProvider);
   final controllers = <String, SettingController>{};
   final providers = ref.watch(appSettingsProvider).llmProviders;
-  final listed = ref.watch(sortedModelsProvider).value ?? const [];
+  final models = ref.watch(sortedModelsProvider);
+  final listed = models.value ?? const [];
   final serving = ref.watch(modelProvidersProvider);
-  String label(ModelPickController c) => modelFieldLabel(
-    choice: c.choice,
-    role: c.role,
-    nullLabel: c.nullLabel,
-    defaultOf: c.defaultOf,
-    providers: providers,
-    listed: listed,
-    serving: serving,
-  );
+  _ModelField label(ModelPickController c) {
+    final error = modelFieldError(
+      choice: c.choice,
+      role: c.role,
+      loaded: models.hasValue,
+      listed: listed,
+      serving: serving,
+    );
+    return (
+      label: error != null
+          ? missingModelLabel
+          : modelFieldLabel(
+              choice: c.choice,
+              role: c.role,
+              nullLabel: c.nullLabel,
+              defaultOf: c.defaultOf,
+              providers: providers,
+              listed: listed,
+              serving: serving,
+            ),
+      error: error,
+    );
+  }
+
   final stage = ref.watch(botStageProvider);
   // A Bot Avatar is drawn live by the client from its rig; a photo is sent.
   _Face face(({String? project, String name}) agent) =>
@@ -84,8 +98,7 @@ final nativeSettingsProvider = Provider.autoDispose<NativeSettingsPages>((ref) {
       };
   final pages = [
     for (final page in SettingsPageId.values)
-      if (page != SettingsPageId.welcome &&
-          (!page.listed || pageOffered(reader, page)))
+      if (page.settings && (!page.listed || pageOffered(reader, page)))
         SettingsPageData(
           key: SettingsPageKey.values.byName(page.name),
           title: page.title,
@@ -114,6 +127,9 @@ final nativeSettingsProvider = Provider.autoDispose<NativeSettingsPages>((ref) {
   return (snapshot: SettingsSnapshot(pages: pages), controllers: controllers);
 });
 
+/// What a model pick's field reads as, and why it is wrong.
+typedef _ModelField = ({String label, String? error});
+
 /// An agent's face: a photo's bytes, or a Bot Avatar as the stage's key and
 /// its colour; all null for none, or not read yet.
 typedef _Face = ({Uint8List? photo, String? bot, int? colour});
@@ -123,7 +139,7 @@ typedef _Face = ({Uint8List? photo, String? bot, int? colour});
 List<SettingRowData> _rows(
   SettingController c,
   Map<String, SettingController> controllers,
-  String Function(ModelPickController c) label,
+  _ModelField Function(ModelPickController c) label,
   _Face Function(({String? project, String name}) agent) face, {
   String? parent,
   bool accessory = false,
@@ -184,7 +200,7 @@ SettingOptionData _option(SettingOption option) => SettingOptionData(
 
 SettingRowData _row(
   SettingController c,
-  String Function(ModelPickController c) label,
+  _ModelField Function(ModelPickController c) label,
   _Face Function(({String? project, String name}) agent) face, {
   String? parent,
   bool accessory = false,
@@ -268,9 +284,11 @@ SettingRowData _row(
         ..unit = c.unit
         ..prompt = c.prompt;
     case ModelPickController():
+      final field = label(c);
       row
         ..kind = SettingKind.modelPick
-        ..modelLabel = label(c)
+        ..modelLabel = field.label
+        ..error = field.error
         ..noneLabel = c.nullLabel;
     case TextController():
       row
@@ -308,14 +326,21 @@ SettingRowData _row(
                 opens: _textPage(item.opens),
                 tap: item.tap,
                 badge: item.badge,
+                meters: [
+                  for (final meter in item.meters)
+                    SettingMeterData(
+                      text: meter.text,
+                      fraction: meter.fraction,
+                    ),
+                ],
                 editable: item.editable,
-                takesImage: item.takesImage,
                 image: face?.photo,
                 bot: face?.bot,
                 botColour: face?.colour,
                 actions: [
-                  for (final action in item.actions)
+                  for (final action in c.actionsOf(item))
                     SettingItemActionData(
+                      kind: SettingActionKind.values.byName(action.kind.name),
                       id: action.id,
                       label: action.label,
                       enabled: action.enabled,
@@ -330,8 +355,6 @@ SettingRowData _row(
         ..removeLabel = c.removeLabel
         ..removable = c.removable
         ..editable = c.editable
-        ..takesImages = c.takesImages
-        ..takesBotAvatars = c.takesBotAvatars
         ..emptyItems = c.emptyLabel;
     case CatalogController():
       row
@@ -487,7 +510,7 @@ class SettingsBridge implements SettingsIntents {
   }
 
   final ProviderContainer _container;
-  late final _reader = _ContainerReader(_container);
+  late final _reader = ContainerReader(_container);
   final _native = NativeSettings();
 
   /// The pages as they change, while the settings are on screen.
@@ -894,7 +917,6 @@ class SettingsBridge implements SettingsIntents {
     if (c == null) {
       return ModelPickerData(
         title: "Choose a model",
-        noun: "model",
         quick: const [],
         models: const [],
         favourites: const [],
@@ -916,8 +938,7 @@ class SettingsBridge implements SettingsIntents {
     );
     final index = {for (final (i, e) in entries.indexed) e.ref: i};
     return ModelPickerData(
-      title: "Choose ${c.role.article} ${c.role.noun}",
-      noun: c.role.noun,
+      title: pickerTitle(c.role),
       fetched: ModelCatalog.notifier.value.fetched != null,
       canAdd: providers.isNotEmpty,
       chat: c.role.chat,
@@ -939,6 +960,7 @@ class SettingsBridge implements SettingsIntents {
             providerName: e.providerName,
             modelId: e.info.id,
             name: e.info.displayName,
+            searched: e.searched,
             hue: providerHue(e.providerName),
             context: e.info.context == null
                 ? null
@@ -1065,10 +1087,7 @@ class SettingsBridge implements SettingsIntents {
       _container.read(botAvatarPresetsProvider.future),
       _container.read(importedBotAvatarsProvider.future),
     ).wait;
-    final initial = switch (face) {
-      AgentBot(:final spec) => spec,
-      _ => null,
-    };
+    final initial = face?.bot;
     final entries = botAvatarEntries(presets, imported, initial: initial);
     return BotAvatarsData(
       entries: [
@@ -1122,28 +1141,14 @@ class SettingsBridge implements SettingsIntents {
     TextPageKind.skill => await _skill(opens.name ?? "", opens.project),
   };
 
-  /// A skill as its view page tells it: what it is for, what its folder is
-  /// wrong about, its instructions, and its other files.
-  Future<String> _skill(String name, String? project) async {
-    final detail = await skillDetail(
+  Future<String> _skill(String name, String? project) async => skillMarkdown(
+    name,
+    await skillDetail(
       _container.read(appConfigProvider),
       name,
       project: project,
-    );
-    if (detail == null) {
-      return "The skill's files could not be read. It may have been removed.";
-    }
-    final md = detail.skillMd;
-    return [
-      "# $name",
-      ?md?.description,
-      if (detail.problems.isNotEmpty)
-        "**Not loaded:** ${detail.problems.join("; ")}",
-      ?md?.body,
-      if (detail.files.isNotEmpty)
-        "**Files**\n\n${[for (final (path, bytes) in detail.files) "- $path (${formatSize(bytes.length)})"].join("\n")}",
-    ].join("\n\n");
-  }
+    ),
+  );
 
   /// Every library the app is built on, and its licence, as text: read
   /// once, the registry being fixed for the life of the process.
@@ -1159,21 +1164,4 @@ class SettingsBridge implements SettingsIntents {
     }
     return parts.join("\n\n———\n\n");
   }
-}
-
-/// The container as a [SettingReader], for the core's helpers an intent
-/// calls.
-final class _ContainerReader implements SettingReader {
-  const _ContainerReader(this.container);
-
-  final ProviderContainer container;
-
-  @override
-  T watch<T>(ProviderListenable<T> provider) => container.read(provider);
-
-  @override
-  T read<T>(ProviderListenable<T> provider) => container.read(provider);
-
-  @override
-  void invalidate(ProviderOrFamily provider) => container.invalidate(provider);
 }

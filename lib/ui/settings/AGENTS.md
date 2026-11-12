@@ -65,8 +65,10 @@ iOS). The layers, each knowing only the one below it:
   `pigeons/settings.dart`, a row's id naming its controller in what the
   client says back; and the SwiftUI under `packages/entoli_glass/.../Settings/`.
   The pages are sent only while the client says they are on screen
-  (`shown`), and first built then: they read what only the settings show,
-  each provider's usage among it, which a launch should not pay for.
+  (`shown`), and only the ones it draws with their rows — the page picked
+  and those pushed over it, the rest as titles: a page reads what only it
+  shows, each provider's usage among it, which a page nobody is looking at
+  should not pay for, nor resend on every download tick.
 
 While the SwiftUI frontend is up, `openSettings` opens the native settings
 rather than the Flutter page — its bridge sets `nativeSettingsOpener` — and

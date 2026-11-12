@@ -86,7 +86,7 @@ class _SkillViewPageState extends ConsumerState<SkillViewPage> {
           child: Padding(
             padding: const EdgeInsets.all(32),
             child: Text(
-              "The skill's files could not be read. It may have been removed.",
+              skillUnreadable,
               style: theme.textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),

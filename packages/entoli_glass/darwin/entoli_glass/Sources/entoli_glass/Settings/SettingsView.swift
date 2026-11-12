@@ -205,7 +205,6 @@ extension SettingIcon {
     case .play: "play.circle"
     case .stop: "stop.circle"
     case .warning: "exclamationmark.triangle"
-    case .shield: "checkmark.shield"
     case .appMark: "app"
     case .person: "person"
     case .code: "chevron.left.forwardslash.chevron.right"
@@ -251,16 +250,10 @@ struct Asking: ViewModifier {
     content
       // A notice carrying a link has it put on the clipboard as it is said.
       .onChange(of: notice?.copy) { _, copy in
-        guard let copy else { return }
-        #if os(macOS)
-          NSPasteboard.general.clearContents()
-          NSPasteboard.general.setString(copy, forType: .string)
-        #else
-          UIPasteboard.general.string = copy
-        #endif
+        if let copy { copyToPasteboard(copy) }
       }
       .alert(
-        confirm?.title ?? "", isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }),
+        confirm?.title ?? "", isPresented: .present($confirm),
         presenting: confirm
       ) { ask in
         if let label = ask.confirmLabel {
@@ -274,7 +267,7 @@ struct Asking: ViewModifier {
       }
       .alert(
         notice?.title ?? notice?.message ?? "",
-        isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } }),
+        isPresented: .present($notice),
         presenting: notice
       ) { _ in
         Button("OK", role: .cancel) {}

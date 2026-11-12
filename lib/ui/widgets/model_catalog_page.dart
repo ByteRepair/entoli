@@ -86,9 +86,7 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
   }
 
   bool _matches(CatalogEntry e, List<String> words) {
-    final hay = "${e.info.displayName} ${e.info.id} ${e.providerName}"
-        .toLowerCase();
-    return words.every(hay.contains) &&
+    return words.every(e.searched.contains) &&
         (!_reasoning || e.info.reasoning) &&
         (!_seesImages || e.info.readsImages) &&
         (_provider == null || e.providerId == _provider);
@@ -176,7 +174,7 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
         final starred = view.starred;
         return Scaffold(
           appBar: PageBar(
-            title: "Choose ${widget.role.article} ${widget.role.noun}",
+            title: pickerTitle(widget.role),
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(112),
               child: _Readable(

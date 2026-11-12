@@ -14,9 +14,10 @@ const _page = SettingsPageId.triggers;
 
 /// What the system says of the two permissions a trigger leans on. The rows
 /// lead to the system's settings, where the answers can change while the app
-/// is behind, so a frontend asks again when it comes back.
+/// is behind, so they are asked again each time it comes back.
 final triggerPermissionsProvider =
     FutureProvider<({bool notifications, bool exact})>((ref) async {
+      ref.watch(appResumesProvider);
       final alarms = ref.watch(reminderAlarmsProvider);
       return (
         notifications: await alarms.notificationsAllowed(),

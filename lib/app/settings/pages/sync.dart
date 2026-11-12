@@ -143,7 +143,7 @@ final syncSettings = [
     path: (page: _page, section: "paired"),
     weight: 0,
     title: "Paired devices",
-    hint: UiHint.devices,
+    hint: UiHint.row,
     build: (c) {
       // One source for both membership and status, so a device paired while
       // the page is open appears on it.

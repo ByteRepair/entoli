@@ -266,7 +266,6 @@ final onDeviceSettings = [
       return CollectionController<LocalLlmState>(
         c.spec,
         items: running,
-        addLabel: "",
         removable: false,
         emptyLabel: "Nothing loaded. The first chat to ask for one loads it.",
         describe: (state) {

@@ -1,6 +1,7 @@
 import "../../../core/log.dart";
 import "../../../data/builtin/llm/providers/presets.dart";
 import "../../../domain/llm_provider.dart";
+import "../../../domain/provider_usage.dart" show UsageWindow;
 import "../../../providers.dart";
 import "package:uuid/uuid.dart";
 
@@ -114,7 +115,7 @@ final providerSettings = [
     path: (page: _page, section: "providers"),
     weight: 0,
     title: "Providers",
-    hint: UiHint.providers,
+    hint: UiHint.row,
     glyph: SettingGlyph.add,
     build: (c) {
       final providers = c.ref.watch(appSettingsProvider).llmProviders;
@@ -129,14 +130,18 @@ final providerSettings = [
         describe: (provider) => CollectionItem(
           provider.displayName,
           id: provider.id,
-          // What it has spent of its allowance, where it says.
-          subtitle: [
-            _status(c, provider),
+          subtitle: _status(c, provider),
+          // What it has spent of its allowance, where it says: nothing at
+          // all while it is asked, or where the provider says nothing.
+          meters: [
             for (final usage
                 in c.ref.watch(providerUsageProvider(provider.id)).value ??
                     const [])
-              describeUsage(usage, now),
-          ].join("\n"),
+              ItemMeter(
+                describeUsage(usage, now),
+                fraction: usage is UsageWindow ? usage.fraction : null,
+              ),
+          ],
           removeLabel: "Remove ${provider.displayName}",
         ),
         form: (provider) => _ConfigForm(form(provider)),

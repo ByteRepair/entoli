@@ -7,10 +7,7 @@ struct TriggersView: View {
   let model: SettingsModel
   let row: SettingRowData
   @State private var editing: CollectionRow.Editing?
-  @State private var confirm: SettingConfirmData?
-  /// The trigger and action [confirm] asks about.
-  @State private var pending: (index: Int, action: String)?
-  @State private var notice: SettingNoticeData?
+  @StateObject private var acting = ItemActing()
 
   var body: some View {
     let items = row.items.compactMap { $0 }
@@ -18,26 +15,26 @@ struct TriggersView: View {
       ForEach(Array(items.enumerated()), id: \.offset) { index, item in
         card(item, index)
       }
-      Button {
-        editing = CollectionRow.Editing(index: nil)
-      } label: {
-        // A list row tints its images with the accent, which on the
-        // prominent button is the button itself.
-        Label(row.addLabel ?? "Add trigger", systemImage: "plus")
-          .foregroundStyle(.white)
-          .frame(maxWidth: .infinity)
-          .padding(.vertical, 6)
+      if let add = row.addLabel {
+        Button {
+          editing = CollectionRow.Editing(index: nil)
+        } label: {
+          // A list row tints its images with the accent, which on the
+          // prominent button is the button itself.
+          Label(add, systemImage: "plus")
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+        }
+        .glassButton(prominent: true)
       }
-      .glassButton(prominent: true)
     }
     .listRowBackground(Color.clear)
     .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
     .sheet(item: $editing) { editing in
       FormSheet(model: model, id: row.id, index: editing.index)
     }
-    .asking($confirm, $notice) {
-      if let pending { act(pending.index, pending.action) }
-    }
+    .asking($acting.confirm, $acting.notice) { acting.agreed(model, row.id) }
   }
 
   private func card(_ item: SettingItemData, _ index: Int) -> some View {
@@ -54,7 +51,7 @@ struct TriggersView: View {
       }
       Spacer(minLength: 8)
       Toggle(
-        "", isOn: Binding(get: { item.on ?? false }, set: { _ in act(index, "toggle") })
+        "", isOn: Binding(get: { item.on ?? false }, set: { _ in acting.run(model, row.id, index, "toggle") })
       )
       .labelsHidden()
     }
@@ -68,18 +65,9 @@ struct TriggersView: View {
     .contextMenu {
       ForEach(item.actions.compactMap { $0 }, id: \.id) { action in
         Button(action.label, role: action.destructive ? .destructive : nil) {
-          if let ask = action.confirm {
-            pending = (index, action.id)
-            confirm = ask
-          } else {
-            act(index, action.id)
-          }
+          acting.act(model, row.id, index, action)
         }
       }
     }
-  }
-
-  private func act(_ index: Int, _ action: String) {
-    Task { @MainActor in notice = await model.itemAction(row.id, index, action) }
   }
 }

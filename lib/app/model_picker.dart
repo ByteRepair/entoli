@@ -28,7 +28,14 @@ class CatalogEntry {
   final bool custom;
 
   ModelRef get ref => (providerId: providerId, modelId: info.id);
+
+  /// What a search's words are looked for in, lower-cased.
+  String get searched =>
+      "${info.displayName} ${info.id} $providerName".toLowerCase();
 }
+
+/// A picker's page title: "Choose an image model".
+String pickerTitle(ModelRole role) => "Choose ${role.article} ${role.noun}";
 
 /// What a picker offers: each provider's models that [role] can use — the
 /// on-device one's, then the configured ones' from the catalog — then whatever
@@ -221,3 +228,26 @@ pickerView({
                   "deployment can be added by hand.",
   );
 }
+
+/// Why a model pick's field is wrong: the provider it names is not here —
+/// removed from settings, or a device's model this one has not got — said
+/// in the turn error's words, since a turn on it fails and the field must
+/// not claim it would run on something else. Only once the list [loaded],
+/// so a field opened before it is not briefly an error.
+String? modelFieldError({
+  required ModelChoice choice,
+  required ModelRole role,
+  required bool loaded,
+  required List<ModelOption> listed,
+  required List<LlmProvider> serving,
+}) {
+  final id = choice.providerId;
+  if (role.voice || !loaded || id == null) return null;
+  if (serving.any((p) => p.id == id) || listed.any((m) => m.providerId == id)) {
+    return null;
+  }
+  return missingProviderMessage(choice.modelId, id);
+}
+
+/// What a field whose [modelFieldError] says its provider is gone reads as.
+const missingModelLabel = "Select New Model";

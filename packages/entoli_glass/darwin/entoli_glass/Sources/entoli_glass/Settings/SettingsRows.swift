@@ -335,7 +335,7 @@ struct KeyValuesRow: View {
     }
     .alert(
       alertTitle,
-      isPresented: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })
+      isPresented: .present($editing)
     ) {
       TextField("Name", text: $name)
       TextField("Value", text: $value)
@@ -651,7 +651,11 @@ struct ModelPickRow: View {
     PushRow(model: model, to: .models(OpenedModels(row: row.id))) {
       VStack(alignment: .leading, spacing: 2) {
         LabeledContent(row.title, value: row.modelLabel ?? "")
-        if let detail = row.detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
+        if let error = row.error {
+          Text(error).font(.caption).foregroundStyle(.red)
+        } else if let detail = row.detail {
+          Text(detail).font(.caption).foregroundStyle(.secondary)
+        }
       }
     }
   }

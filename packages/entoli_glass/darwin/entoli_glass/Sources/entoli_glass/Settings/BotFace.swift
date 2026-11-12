@@ -24,8 +24,13 @@ struct BotFaceView: View {
 
   @StateObject private var driver = BotFaceDriver()
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  /// Whether it is scrolled into view: a list's faces all sit in one row,
+  /// which stays drawn while most of them are out of sight.
+  @State private var seen = true
 
-  private var moving: Bool { !reduceMotion && !thumbnail && (live || driver.reacting) }
+  private var moving: Bool {
+    !reduceMotion && !thumbnail && seen && (live || driver.reacting)
+  }
 
   var body: some View {
     // Drawn when a frame lands; the timeline only asks for the next, so the
@@ -42,6 +47,7 @@ struct BotFaceView: View {
       }
     }
     .frame(width: size, height: size)
+    .modifier(ScrolledIntoView(seen: $seen))
     .background {
       // Where the face is in its window, for the pointer it follows.
       GeometryReader { geometry in
@@ -286,5 +292,19 @@ extension FlutterStandardTypedData {
   /// A Float64List's numbers.
   var doubles: [Double] {
     data.withUnsafeBytes { Array($0.bindMemory(to: Double.self)) }
+  }
+}
+
+/// [seen] kept to whether the view is scrolled into sight, where the system
+/// says; always seen before macOS 15 and iOS 18.
+private struct ScrolledIntoView: ViewModifier {
+  @Binding var seen: Bool
+
+  func body(content: Content) -> some View {
+    if #available(iOS 18, macOS 15, *) {
+      content.onScrollVisibilityChange(threshold: 0.01) { seen = $0 }
+    } else {
+      content
+    }
   }
 }

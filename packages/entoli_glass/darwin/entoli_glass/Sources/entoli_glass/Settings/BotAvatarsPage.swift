@@ -71,7 +71,7 @@ struct BotAvatarsPage: View {
       }
     }
     .alert(
-      notice ?? "", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })
+      notice ?? "", isPresented: .present($notice)
     ) {
       Button("OK", role: .cancel) {}
     }

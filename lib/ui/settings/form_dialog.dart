@@ -6,13 +6,13 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/settings/controller.dart";
-import "../../app/settings/spec.dart" show SettingGlyph;
 import "../../providers.dart";
 import "../widgets/discard_guard.dart";
 import "../widgets/environment_section.dart";
 import "../widgets/page_bar.dart";
 import "../widgets/prompt_field.dart";
 import "cli_sign_in_dialog.dart" show CliAccountSection;
+import "setting_icons.dart";
 
 /// [form] as a dialog, or as a page of its own where it is one: its
 /// questions drawn again after every answer, Save held while it has a
@@ -106,7 +106,6 @@ class _FormPage extends StatelessWidget {
     message: session.form.discard ?? "Throw away these edits?",
     child: _FormBody(
       session,
-      page: true,
       builder: (context, fields, _, save) => Scaffold(
         appBar: PageBar(title: session.form.title, actions: [save]),
         body: ListView(padding: const EdgeInsets.all(16), children: [fields]),
@@ -118,10 +117,9 @@ class _FormPage extends StatelessWidget {
 /// The fields, and the Save that goes with them: a button in a dialog, the
 /// bar's action on a page.
 class _FormBody extends ConsumerStatefulWidget {
-  const _FormBody(this.session, {required this.builder, this.page = false});
+  const _FormBody(this.session, {required this.builder});
 
   final _Session session;
-  final bool page;
 
   /// The form around [fields]: [button] is Save in a dialog, [action] the
   /// same on a page's bar.
@@ -435,7 +433,7 @@ class _Cards extends StatelessWidget {
             leading: CircleAvatar(
               backgroundColor: colors.secondaryContainer,
               foregroundColor: colors.onSecondaryContainer,
-              child: Icon(_glyph(option)),
+              child: Icon(settingIcon(option.glyph) ?? Icons.cloud_outlined),
             ),
             title: Text(option.label),
             subtitle: Column(
@@ -460,13 +458,6 @@ class _Cards extends StatelessWidget {
       ],
     );
   }
-
-  static IconData _glyph(FormOption option) => switch (option.glyph) {
-    SettingGlyph.terminal => Icons.terminal,
-    SettingGlyph.computer => Icons.computer,
-    SettingGlyph.tune => Icons.tune,
-    _ => Icons.cloud_outlined,
-  };
 }
 
 class _Tag extends StatelessWidget {

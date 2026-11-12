@@ -609,7 +609,7 @@ final class CollectionController<T> extends SettingController {
   CollectionController(
     super.spec, {
     required this.items,
-    required this.addLabel,
+    this.addLabel,
     Future<void> Function(List<T> items)? onSet,
     required this.describe,
     this.form,
@@ -633,7 +633,9 @@ final class CollectionController<T> extends SettingController {
        _onBotAvatar = botAvatar;
 
   final List<T> items;
-  final String addLabel;
+
+  /// What adding one is called, where items are added through [form].
+  final String? addLabel;
   final String removeLabel;
 
   /// Whether an item can be removed from its row.
@@ -648,16 +650,23 @@ final class CollectionController<T> extends SettingController {
   final Future<void> Function(int, Uint8List)? _onImage;
   final Future<void> Function(int, BotAvatarSpec)? _onBotAvatar;
 
-  /// Whether an item can wear a Bot Avatar, which a frontend picks with its
-  /// own page of them.
-  bool get takesBotAvatars => _onBotAvatar != null;
+  /// [item]'s actions: setting its face, where the list and the item take
+  /// one, then its own.
+  List<ItemAction> actionsOf(CollectionItem item) => [
+    if (_onImage != null && item.takesImage)
+      const ItemAction("photo", "Upload photo", kind: ItemActionKind.photo),
+    if (_onBotAvatar != null && item.takesImage)
+      const ItemAction(
+        "botAvatar",
+        "Bot Avatar…",
+        kind: ItemActionKind.botAvatar,
+      ),
+    ...item.actions,
+  ];
 
   /// Sets the item at [index]'s face to [spec].
   Future<void> setBotAvatar(int index, BotAvatarSpec spec) async =>
       _onBotAvatar?.call(index, spec);
-
-  /// Whether an item's picture can be set from a PNG the user picked.
-  bool get takesImages => _onImage != null;
 
   /// Sets the item at [index]'s picture to [png].
   Future<void> setImage(int index, Uint8List png) async =>
@@ -733,9 +742,14 @@ class CollectionItem {
     this.face,
     this.editable = true,
     this.takesImage = true,
+    this.meters = const [],
   });
 
   final String title;
+
+  /// What it has spent, a line each under its words: a provider's
+  /// allowances.
+  final List<ItemMeter> meters;
 
   /// What removing it is called, where the list's own word is not enough.
   final String? removeLabel;
@@ -780,6 +794,15 @@ class CollectionItem {
   final String? tap;
 }
 
+/// One thing an item has spent, said; [fraction] of it gone where it is
+/// measured against something, a balance having nothing to fill.
+class ItemMeter {
+  const ItemMeter(this.text, {this.fraction});
+
+  final String text;
+  final double? fraction;
+}
+
 /// A page of text the app holds, which a row opens: each frontend draws it
 /// from what the app holds.
 sealed class TextPage {
@@ -805,6 +828,11 @@ final class SkillPage extends TextPage {
   final String origin;
 }
 
+/// What an item action is: [run] by the list, or a face picked by the
+/// frontend — a photo for [CollectionController.setImage], a Bot Avatar for
+/// [CollectionController.setBotAvatar].
+enum ItemActionKind { run, photo, botAvatar }
+
 /// Something done to one item from its row: connect, disconnect, revoke.
 class ItemAction {
   const ItemAction(
@@ -814,12 +842,17 @@ class ItemAction {
     this.destructive = false,
     this.confirm,
     this.handsOff = false,
+    this.kind = ItemActionKind.run,
   });
 
   final String id;
   final String label;
   final bool enabled;
   final bool destructive;
+
+  /// Whether the list runs it, or the frontend does it with a picker of its
+  /// own and hands the list what was picked.
+  final ItemActionKind kind;
 
   /// Whether it opens a page of the Flutter app's, which a frontend drawing
   /// the settings itself steps aside for.

@@ -14,10 +14,7 @@ struct CollectionRow: View {
   let model: SettingsModel
   let row: SettingRowData
   @State private var editing: Editing?
-  @State private var confirm: SettingConfirmData?
-  /// The item and action [confirm] asks about.
-  @State private var pending: (index: Int, action: String)?
-  @State private var notice: SettingNoticeData?
+  @StateObject private var acting = ItemActing()
   @State private var picking: Int?
   @State private var photo: PhotosPickerItem?
 
@@ -58,6 +55,13 @@ struct CollectionRow: View {
             if let error = item.error {
               Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
+            ForEach(Array(item.meters.compactMap { $0 }.enumerated()), id: \.offset) { _, meter in
+              VStack(alignment: .leading, spacing: 2) {
+                Text(meter.text).font(.caption).foregroundStyle(.secondary)
+                if let fraction = meter.fraction { ProgressView(value: fraction) }
+              }
+              .padding(.top, 4)
+            }
           }
           // An item with a page of its own opens it from its words; the
           // chevron ends the row, after its actions.
@@ -71,7 +75,7 @@ struct CollectionRow: View {
           } else if let tap = item.tap, let action = actions.first(where: { $0.id == tap }) {
             // A row that runs an action of its own when tapped: a device's
             // page.
-            Button { act(index, action) } label: {
+            Button { acting.act(model, row.id, index, action) } label: {
               words.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -84,30 +88,25 @@ struct CollectionRow: View {
           }
           if let on = item.on {
             Toggle(
-              "", isOn: Binding(get: { on }, set: { _ in run(index, "toggle") })
+              "", isOn: Binding(get: { on }, set: { _ in acting.run(model, row.id, index, "toggle") })
             ).labelsHidden()
           }
           let editable = row.editable && item.editable
-          let pictured = row.takesImages && item.takesImage
-          let botted = row.takesBotAvatars && item.takesImage
-          if actions.count >= 2 || pictured || botted {
+          if actions.count >= 2 || actions.contains(where: { $0.kind != .run }) {
             // One control for the lot, Edit and Remove included, so a row
             // never ends in a strip of buttons.
             Menu {
               if editable {
                 Button("Edit") { editing = Editing(index: index) }
               }
-              if pictured {
-                Button("Choose photo…") { picking = index }
-              }
-              if botted {
-                Button("Bot Avatar…") {
-                  model.push(.avatars(OpenedAvatars(agent: item.title, row: row.id, index: index)))
-                }
-              }
               ForEach(actions, id: \.id) { action in
                 Button(action.label, role: action.destructive ? .destructive : nil) {
-                  act(index, action)
+                  switch action.kind {
+                  case .photo: picking = index
+                  case .botAvatar:
+                    model.push(.avatars(OpenedAvatars(agent: item.title, row: row.id, index: index)))
+                  case .run: acting.act(model, row.id, index, action)
+                  }
                 }
                 .disabled(!action.enabled)
               }
@@ -124,7 +123,7 @@ struct CollectionRow: View {
           } else {
             ForEach(actions, id: \.id) { action in
               Button(action.label, role: action.destructive ? .destructive : nil) {
-                act(index, action)
+                acting.act(model, row.id, index, action)
               }
               .buttonStyle(.borderless)
               .disabled(!action.enabled)
@@ -177,24 +176,34 @@ struct CollectionRow: View {
         picking = nil
       }
     }
-    .asking($confirm, $notice) {
-      if let pending { run(pending.index, pending.action) }
-    }
+    .asking($acting.confirm, $acting.notice) { acting.agreed(model, row.id) }
   }
+}
 
-  private func act(_ index: Int, _ action: SettingItemActionData) {
+/// What running an item's action holds: the confirm it waits on, the item
+/// and action that confirm is for, and what the action said.
+@MainActor final class ItemActing: ObservableObject {
+  @Published var confirm: SettingConfirmData?
+  @Published var notice: SettingNoticeData?
+  private var pending: (index: Int, action: String)?
+
+  func act(_ model: SettingsModel, _ row: String, _ index: Int, _ action: SettingItemActionData) {
     if let ask = action.confirm {
       pending = (index, action.id)
       confirm = ask
     } else {
       // A page the Flutter app opens over the conversation: out of its way.
       if action.handsOff { model.stepAside() }
-      run(index, action.id)
+      run(model, row, index, action.id)
     }
   }
 
-  private func run(_ index: Int, _ action: String) {
-    Task { @MainActor in notice = await model.itemAction(row.id, index, action) }
+  func run(_ model: SettingsModel, _ row: String, _ index: Int, _ action: String) {
+    Task { @MainActor in notice = await model.itemAction(row, index, action) }
+  }
+
+  func agreed(_ model: SettingsModel, _ row: String) {
+    if let pending { run(model, row, pending.index, pending.action) }
   }
 }
 
@@ -288,7 +297,7 @@ struct FormSheet: View {
     .onDisappear { if !saved { dismissed?(answers) } }
     #if os(macOS)
       .fileImporter(
-        isPresented: Binding(get: { picking != nil }, set: { if !$0 { picking = nil } }),
+        isPresented: .present($picking),
         allowedContentTypes: [.item]
       ) { result in
         if let key = picking, case .success(let url) = result {
@@ -712,7 +721,7 @@ struct PairingRow: View {
     .sheet(isPresented: Binding(get: { row.pairing != nil }, set: { if !$0 { op(.cancel) } })) {
       if let pairing = row.pairing { PairingSheet(pairing: pairing, op: op) }
     }
-    .sheet(isPresented: Binding(get: { invite != nil }, set: { if !$0 { invite = nil } })) {
+    .sheet(isPresented: .present($invite)) {
       NavigationStack {
         Form {
           Text("Send this to the other device, then paste its reply below.")

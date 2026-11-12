@@ -627,12 +627,17 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       },
       // What a turn failure notification is gated on, written where the state
       // is known for the app's whole life rather than asked per chat.
-      onStateChange: (state) => ref
-          .read(appHiddenProvider.notifier)
-          .set(
-            state == AppLifecycleState.hidden ||
-                state == AppLifecycleState.detached,
-          ),
+      onStateChange: (state) {
+        ref
+            .read(appHiddenProvider.notifier)
+            .set(
+              state == AppLifecycleState.hidden ||
+                  state == AppLifecycleState.detached,
+            );
+        if (state == AppLifecycleState.resumed) {
+          ref.read(appResumesProvider.notifier).resumed();
+        }
+      },
     );
   }
 

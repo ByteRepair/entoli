@@ -124,8 +124,7 @@ void main() {
       // brought back to the foreground: the page needs to re-read rather than
       // keep what it first asked.
       alarms.exact = true;
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      app.container.read(appResumesProvider.notifier).resumed();
       await settleIo(tester);
 
       expect(find.text("Exact times are not granted"), findsNothing);

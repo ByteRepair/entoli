@@ -103,7 +103,7 @@ struct SidebarView: View {
         }
       #endif
     }
-    .alert("Rename chat", isPresented: present($renaming)) {
+    .alert("Rename chat", isPresented: .present($renaming)) {
       TextField("Chat title", text: $title)
       Button("Rename") {
         if let row = renaming { model.say.sidebar.rename(id: row.id, title: title) { _ in } }
@@ -111,7 +111,7 @@ struct SidebarView: View {
       Button("Cancel", role: .cancel) {}
     }
     .alert(
-      "Delete chat?", isPresented: present($deleting),
+      "Delete chat?", isPresented: .present($deleting),
       presenting: deleting
     ) { row in
       Button("Delete", role: .destructive) { model.say.sidebar.delete(id: row.id) { _ in } }
@@ -167,10 +167,6 @@ struct SidebarView: View {
     }
     Divider()
     Button("Delete…", role: .destructive) { deleting = row }
-  }
-
-  private func present<T>(_ value: Binding<T?>) -> Binding<Bool> {
-    Binding(get: { value.wrappedValue != nil }, set: { if !$0 { value.wrappedValue = nil } })
   }
 }
 

@@ -64,17 +64,11 @@ enum UiHint {
   /// A paragraph between fields.
   paragraph,
 
-  /// Devices, each with its state and what can be done to it.
-  devices,
-
   /// Actions side by side in a row.
   buttons,
 
   /// The service it would be best to start with, while nothing answers.
   recommended,
-
-  /// The endpoints models come from, each with what it has spent.
-  providers,
 
   /// The models loaded now, with what they take up.
   running,
@@ -120,7 +114,7 @@ enum SettingsPageId {
   byteRepair("Byte Repair"),
   sync("Sync", groupStart: true),
   data("Data"),
-  welcome("Welcome", groupStart: true),
+  welcome("Welcome", groupStart: true, settings: false),
   shortcuts("Shortcuts"),
   about("About"),
 
@@ -133,6 +127,7 @@ enum SettingsPageId {
     this.title, {
     this.groupStart = false,
     this.listed = true,
+    this.settings = true,
   });
 
   final String title;
@@ -140,6 +135,10 @@ enum SettingsPageId {
 
   /// Whether it is offered among the pages, rather than opened from a row.
   final bool listed;
+
+  /// Whether it is made of settings, rather than a page of the app's own
+  /// filed among them: the tour.
+  final bool settings;
 }
 
 /// Where a setting is filed: its page, and the section on it.
@@ -195,6 +194,23 @@ final class WidgetReader implements SettingReader {
   }
 }
 
+/// A container as a [SettingReader], for the core's helpers run outside a
+/// build: [watch] only reads, there being nothing to rebuild.
+final class ContainerReader implements SettingReader {
+  const ContainerReader(this.container);
+
+  final ProviderContainer container;
+
+  @override
+  T watch<T>(ProviderListenable<T> provider) => container.read(provider);
+
+  @override
+  T read<T>(ProviderListenable<T> provider) => container.read(provider);
+
+  @override
+  void invalidate(ProviderOrFamily provider) => container.invalidate(provider);
+}
+
 /// A titled part of a page. Its [describe] and [shown] read state, so a
 /// section can say something different, or nothing at all, where the
 /// platform has nothing for it.
@@ -233,7 +249,6 @@ enum SettingGlyph {
   play,
   stop,
   warning,
-  shield,
   appMark,
   person,
   code,

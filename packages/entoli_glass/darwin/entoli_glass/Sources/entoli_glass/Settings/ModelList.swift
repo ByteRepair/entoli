@@ -11,10 +11,9 @@ struct ModelList: View {
   let row: SettingRowData
 
   @State private var data: ModelPickerData?
-  /// [data]'s models, and what a search matches each by, kept apart from the
-  /// body: a search redraws it on every key.
+  /// [data]'s models, kept apart from the body: a search redraws it on
+  /// every key.
   @State private var cards: [ModelCardData] = []
-  @State private var haystacks: [String] = []
   @State private var search = ""
   @State private var reasoning = false
   @State private var seesImages = false
@@ -32,18 +31,35 @@ struct ModelList: View {
 
   private var shown: [ModelCardData] {
     let words = search.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
-    return zip(cards, haystacks).filter { card, hay in
-      words.allSatisfy(hay.contains)
+    return cards.filter { card in
+      words.allSatisfy(card.searched.contains)
         && (!reasoning || card.reasoning)
         && (!seesImages || card.readsImages)
         && (provider == nil || card.providerId == provider)
-    }.map(\.0)
+    }
+  }
+
+  /// Stars [card] or takes its star away, here as Dart does it, rather than
+  /// asking for every card again over one.
+  private func star(_ card: ModelCardData) {
+    model.say.toggleFavourite(
+      providerId: card.providerId, modelId: card.modelId, completion: ignore)
+    guard
+      let i = cards.firstIndex(where: {
+        $0.providerId == card.providerId && $0.modelId == card.modelId
+      })
+    else { return }
+    cards[i].favourite.toggle()
+    if cards[i].favourite {
+      data?.favourites.append(Int64(i))
+    } else {
+      data?.favourites.removeAll { $0 == Int64(i) }
+    }
   }
 
   private func show(_ next: ModelPickerData?) {
     data = next
     cards = next?.models.compactMap { $0 } ?? []
-    haystacks = cards.map { "\($0.name) \($0.modelId) \($0.providerName)".lowercased() }
   }
 
   // A grouped Form rather than a List: a Mac's List sizes rows of varying
@@ -78,7 +94,7 @@ struct ModelList: View {
     }
     .alert(
       "Delete \(deleting?.name ?? "")?",
-      isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+      isPresented: .present($deleting),
       presenting: deleting
     ) { card in
       Button("Delete", role: .destructive) {
@@ -197,9 +213,7 @@ struct ModelList: View {
             Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.accentColor)
           }
           Button {
-            model.say.toggleFavourite(
-              providerId: card.providerId, modelId: card.modelId, completion: ignore)
-            reload()
+            star(card)
           } label: {
             Image(systemName: card.favourite ? "star.fill" : "star")
               .foregroundStyle(card.favourite ? Color.accentColor : .secondary)
@@ -226,9 +240,7 @@ struct ModelList: View {
     .listRowBackground(card.selected ? Color.accentColor.opacity(0.12) : nil)
     .contextMenu {
       Button(card.favourite ? "Remove from favourites" : "Add to favourites") {
-        model.say.toggleFavourite(
-          providerId: card.providerId, modelId: card.modelId, completion: ignore)
-        reload()
+        star(card)
       }
       if card.custom {
         Button("Edit") { editing = Editing(providerId: card.providerId, modelId: card.modelId) }

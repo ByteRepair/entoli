@@ -63,10 +63,8 @@ enum SettingHint {
   info,
   input,
   paragraph,
-  devices,
   buttons,
   recommended,
-  providers,
   running,
   models,
   setup,
@@ -84,7 +82,6 @@ enum SettingIcon {
   play,
   stop,
   warning,
-  shield,
   appMark,
   person,
   code,
@@ -173,10 +170,14 @@ class SettingLineData {
   String? url;
 }
 
+/// The core's `ItemActionKind`, name for name.
+enum SettingActionKind { run, photo, botAvatar }
+
 class SettingItemActionData {
   SettingItemActionData({
     required this.id,
     required this.label,
+    this.kind = SettingActionKind.run,
     this.enabled = true,
     this.destructive = false,
     this.confirm,
@@ -185,6 +186,9 @@ class SettingItemActionData {
 
   String id;
   String label;
+
+  /// Run by Dart, or a face this side picks: a photo, a Bot Avatar.
+  SettingActionKind kind;
   bool enabled;
   bool destructive;
   SettingConfirmData? confirm;
@@ -205,6 +209,15 @@ class TextPageData {
   String? project;
 }
 
+class SettingMeterData {
+  SettingMeterData({required this.text, this.fraction});
+
+  String text;
+
+  /// How much of it is gone, 0 to 1; none for a balance.
+  double? fraction;
+}
+
 /// One item of a collection, by its place in the list.
 class SettingItemData {
   SettingItemData({
@@ -222,10 +235,13 @@ class SettingItemData {
     this.tap,
     this.badge,
     this.editable = true,
-    this.takesImage = true,
+    this.meters = const [],
   });
 
   String title;
+
+  /// What it has spent, a line each under its words.
+  List<SettingMeterData?> meters;
   String? subtitle;
   String? error;
   SettingIcon? icon;
@@ -254,9 +270,6 @@ class SettingItemData {
 
   /// Whether it is edited through the list's form.
   bool editable;
-
-  /// Whether its picture can be set, where the list takes pictures.
-  bool takesImage;
 
   List<SettingItemActionData?> actions;
 }
@@ -412,8 +425,6 @@ class SettingRowData {
     this.removeLabel,
     this.removable = true,
     this.editable = false,
-    this.takesImages = false,
-    this.takesBotAvatars = false,
     this.emptyItems,
     this.catalog = const [],
     this.info = const [],
@@ -511,11 +522,6 @@ class SettingRowData {
   /// Whether items are added and edited through a form.
   bool editable;
 
-  /// Whether an item's picture can be set from one the user picks.
-  bool takesImages;
-
-  /// Whether an item can wear a Bot Avatar the user picks.
-  bool takesBotAvatars;
   String? emptyItems;
 
   // catalog
@@ -810,6 +816,7 @@ class ModelCardData {
     required this.providerName,
     required this.modelId,
     required this.name,
+    required this.searched,
     this.hue = 0,
     this.context,
     this.price,
@@ -828,6 +835,9 @@ class ModelCardData {
   String providerName;
   String modelId;
   String name;
+
+  /// What a search's words are looked for in, lower-cased.
+  String searched;
 
   /// The hue of the provider's monogram, 0 to 359.
   int hue;
@@ -864,7 +874,6 @@ class ModelProviderData {
 class ModelPickerData {
   ModelPickerData({
     required this.title,
-    required this.noun,
     required this.quick,
     required this.models,
     required this.favourites,
@@ -879,8 +888,6 @@ class ModelPickerData {
   /// The page's title: "Choose an image model".
   String title;
 
-  /// What one of its models is called: "image model".
-  String noun;
   List<ModelQuickData?> quick;
   List<ModelCardData?> models;
 
