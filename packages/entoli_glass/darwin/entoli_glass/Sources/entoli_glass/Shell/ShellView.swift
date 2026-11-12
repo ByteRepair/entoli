@@ -221,10 +221,7 @@ struct ShellView: View {
             .frame(maxWidth: .infinity)
             .transition(.opacity.combined(with: .move(edge: .bottom)))
         }
-        // Away while the browser's view is up: what is typed there is the
-        // page's.
-        ComposerSlot(
-          composer: model.composer, covered: model.window.covered || model.browser.present)
+        ComposerSlot(composer: model.composer, covered: model.window.covered)
         if conversing && !model.composer.present {
           FootBarView(foot: model.foot, say: model.say.foot)
             .frame(maxWidth: ShellView.readableWidth + 16)

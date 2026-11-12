@@ -964,7 +964,8 @@ sends the page's title, address and hold and its frames as they come, and
 runs what the user does in the sheet on the tab. A key arrives as the
 platform's own key code and characters and is read through Flutter's key
 tables into a `KeyDownEvent`, so `browserKeyDown` stays the one mapping to the
-page's keys. The composer steps aside while the view is up. **A running pill
+page's keys. The sheet lies over the window, so nothing under it takes input while it is
+up. **A running pill
 opens the native detail**: a job's or a sub-agent's `RunningThing` carries its
 activity and run (`detail`), which `ShellChat` opens in the conversation's
 sheet. **The chapter rail is native**: the chapters (`chaptersOf`, in the
