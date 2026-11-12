@@ -73,8 +73,8 @@ void main() {
         "bash",
         '{"command": "git clone https://example.com/r ~/src/r"}',
         workspace: "/ws",
-        request: const ClassifierRequest(
-          said: "clone the repo into ~/src",
+        request: ClassifierRequest(
+          asked: Asked(said: "clone the repo into ~/src"),
           goal: "set up the project",
           task: "clone it",
         ),
@@ -98,7 +98,10 @@ void main() {
         "bash",
         '{"command": "ls"}',
         workspace: "/ws",
-        request: ClassifierRequest(said: said, goal: "g" * 5000),
+        request: ClassifierRequest(
+          asked: Asked(said: said),
+          goal: "g" * 5000,
+        ),
       );
       final prompt = client.sent.single.last.text;
       expect(prompt, contains("the newest line"));
@@ -121,8 +124,10 @@ void main() {
 
     test("the history fills its budget newest first", () {
       final request = ClassifierRequest(
-        said: "yes, go ahead",
-        before: [for (var i = 0; i < 40; i++) "message $i ${"x" * 400}"],
+        asked: Asked(
+          said: "yes, go ahead",
+          earlier: [for (var i = 0; i < 40; i++) "message $i ${"x" * 400}"],
+        ),
         calls: [
           for (var i = 0; i < 40; i++)
             (
@@ -139,8 +144,7 @@ void main() {
       expect(block, isNot(contains("message 0 ")));
       expect(block, contains("step 39"));
       expect(block, isNot(contains("step 0 ")));
-      expect(block, contains("older messages not shown"));
-      expect(block, contains("older calls not shown"));
+      expect("older not shown".allMatches(block), hasLength(2));
       expect(
         block.indexOf("message 39"),
         lessThan(block.indexOf("yes, go ahead")),
@@ -153,8 +157,10 @@ void main() {
       () {
         final block = LlmClassifier.requestBlock(
           ClassifierRequest(
-            said: "do this",
-            answering: "${"background " * 1000}Next I will run npm install.",
+            asked: Asked(
+              said: "do this",
+              answering: "${"background " * 1000}Next I will run npm install.",
+            ),
           ),
           budget: LlmClassifier.maxBudget,
         );
@@ -167,6 +173,34 @@ void main() {
         );
       },
     );
+
+    test("the messages render the same however many calls follow", () {
+      // What keeps the prompt's head a prefix a provider's cache can reuse.
+      ClassifierRequest after(int calls) => ClassifierRequest(
+        asked: Asked(
+          said: "do it",
+          earlier: [for (var i = 0; i < 20; i++) "message $i ${"x" * 300}"],
+        ),
+        calls: [
+          for (var i = 0; i < calls; i++)
+            (
+              tool: "bash",
+              argumentsJson: jsonEncode({"command": "step $i ${"y" * 300}"}),
+            ),
+        ],
+      );
+      String head(int calls) {
+        final block = LlmClassifier.requestBlock(
+          after(calls),
+          budget: LlmClassifier.minBudget,
+        );
+        final end = block.indexOf("The agent's calls");
+        return (end < 0 ? block : block.substring(0, end)).trimRight();
+      }
+
+      expect(head(1), head(0));
+      expect(head(30), head(0));
+    });
 
     test("an earlier call shows its arguments' start, not all of it", () {
       final block = LlmClassifier.requestBlock(

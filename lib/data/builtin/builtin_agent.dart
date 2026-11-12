@@ -246,29 +246,13 @@ class BuiltinAgent implements Turn {
     this.claimInstruction,
     this.goal,
     this.goalReviewer,
-    this.said,
-    this.saidBefore = const [],
-    this.answering,
-  });
+    Asked? asked,
+  }) : asked = asked ?? Asked();
 
-  /// The text of the message this turn opened on, as the user typed it — a
-  /// sub-agent's, its task — for the classifier's account of what was asked.
-  /// The caller's to say, since it holds the message: the session holds only
-  /// its projection, dressed, and a resumed turn has no prompt at all. Null
-  /// where nobody said.
-  final String? said;
-
-  /// The text of the user's messages before [said] since the last
-  /// compaction, oldest first, for the classifier: what a "yes, go ahead"
-  /// agrees to. The caller's, from the log, for the reason [said] is: the
-  /// session holds them dressed, a `/skill` expanded and a file's bytes
-  /// inlined, and the classifier is to read what the user typed.
-  final List<String> saidBefore;
-
-  /// The text of the reply [said] answers, for the classifier, from the log
-  /// for the reason [saidBefore] is. Null where the turn answers none: a
-  /// chat's first message, a sub-agent's task.
-  final String? answering;
+  /// What the user asked this turn for, for the classifier. The caller's to
+  /// say, since it holds the log: the session holds only its projection,
+  /// dressed, and a resumed turn has no prompt at all.
+  final Asked asked;
 
   /// The chat's goal, read at each stop; null for a turn that keeps none — a
   /// sub-agent's, or a test's. The turn never writes it: what a review finds
@@ -727,49 +711,39 @@ class BuiltinAgent implements Turn {
     request: _classifierRequest,
   );
 
-  /// What the classifier is told the user asked for, judging [callId]:
-  /// [said] with [saidBefore] and what was steered in since, the chat's
-  /// active goal, the plan's task under way, and the calls made before this
-  /// one. The plan is the chat's own and a one-shot agent does not keep it
-  /// (the plan tools are not offered there), so a sub-agent's request is its
-  /// task and its own calls.
+  /// The judge's inputs for [callId]. The plan is the chat's own and a
+  /// one-shot agent does not keep it (the plan tools are not offered there),
+  /// so a sub-agent's request is its task and its own calls.
   Future<ClassifierRequest?> _classifierRequest(String callId) async =>
       ClassifierRequest.of(
-        said: said,
-        before: saidBefore,
-        after: _steeredIn,
-        answering: answering,
+        asked: _asked,
         goal: _standingGoal()?.objective,
         task: oneShot ? null : await _planTask(),
         calls: _callsBefore(callId),
       );
 
-  /// The calls the model made before [callId]: the session's, which is every
-  /// step since the last compaction but the one running, then the running
-  /// step's up to [callId]. By id, since a step a rebuild has already put in
-  /// the session is in both.
+  /// [asked], with what the user steered into the running turn.
+  late Asked _asked = asked;
+
+  /// The session's calls, every step since the last compaction but the one
+  /// running, then the running step's up to [callId]. By id, since a step a
+  /// rebuild has already put in the session is in both.
   List<ClassifierCall> _callsBefore(String callId) {
     final seen = <String>{};
-    final calls = <ClassifierCall>[];
-    for (final call in [
-      for (final m in session.messages)
-        if (m.role == LlmRole.assistant) ...m.toolCalls,
-      ..._stepCalls,
-    ]) {
-      if (call.id == callId) break;
-      if (seen.add(call.id)) {
-        calls.add((tool: call.name, argumentsJson: call.argumentsJson));
-      }
-    }
-    return calls;
+    return [
+          for (final m in session.messages)
+            if (m.role == LlmRole.assistant) ...m.toolCalls,
+          ..._stepCalls,
+        ]
+        .takeWhile((call) => call.id != callId)
+        .where((call) => seen.add(call.id))
+        .map((call) => (tool: call.name, argumentsJson: call.argumentsJson))
+        .toList();
   }
 
-  /// The calls of the step being run, which the session holds only once the
-  /// next request is built.
+  /// The running step's calls, which the session holds only once the next
+  /// request is built.
   List<LlmToolCall> _stepCalls = const [];
-
-  /// The text of what the user steered into this turn, oldest first.
-  final List<String> _steeredIn = [];
 
   /// The plan's task in progress, read once and kept until a call that can
   /// write the plan has run: every classifier call of a turn asks, and the
@@ -933,7 +907,7 @@ class BuiltinAgent implements Turn {
         // A plan read in an earlier turn is not this one's, nor what was
         // steered into it.
         _planTaskHeld = null;
-        _steeredIn.clear();
+        _asked = asked;
         _stepCalls = const [];
         final said = TurnRecorder.parts();
         final from = session.messages.length;
@@ -1198,7 +1172,7 @@ class BuiltinAgent implements Turn {
       _images.addAll(images);
     }
     for (final s in said) {
-      _steeredIn.add(s.plainText);
+      _asked = _asked.steer(s.plainText);
       yield SteerEvent(s);
     }
   }

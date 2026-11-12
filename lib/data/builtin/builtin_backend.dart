@@ -549,29 +549,11 @@ class BuiltinBackend implements AgentBackend {
       // message that started it.
       final said =
           prompt ?? history.lastWhereOrNull((m) => m.role == MessageRole.user);
-      // What else the classifier reads of the log, the user's earlier words
-      // and the reply theirs answers. By id rather than `cut`: the revival
-      // above may have replaced the history the index was taken from.
-      final since = compactions.isEmpty
-          ? history
-          : history.skip(
-              history.indexWhere(
-                    (m) => m.id == compactions.last.upToMessageId,
-                  ) +
-                  1,
-            );
-      final before = said == null
-          ? history
-          : history.takeWhile((m) => m.id != said.id);
       final agent = BuiltinAgent(
-        said: said?.plainText,
-        saidBefore: [
-          for (final m in since)
-            if (m.role == MessageRole.user && m.id != said?.id) m.plainText,
-        ],
-        answering: before
-            .lastWhereOrNull((m) => m.role == MessageRole.assistant)
-            ?.plainText,
+        asked: Asked.fromLog(
+          history.skip(verbatimFrom(history, compactions).from),
+          said,
+        ),
         session: session,
         viewer: participant,
         agent: AgentDefinition.of(file),

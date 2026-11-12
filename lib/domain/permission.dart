@@ -1,4 +1,11 @@
-import "models.dart" show PermissionDecision, PermissionTier, ToolApproval;
+import "models.dart"
+    show
+        Message,
+        MessageParts,
+        MessageRole,
+        PermissionDecision,
+        PermissionTier,
+        ToolApproval;
 import "safe_command.dart" show SegmentReach, profileSegment, readsOnly;
 import "shell.dart" show bashToolName, pathInside;
 import "shell_command_analysis.dart" show ShellCommandAnalysis, plainCommand;
@@ -72,92 +79,111 @@ abstract class PermissionClassifier {
   });
 }
 
-/// What the user asked a turn for, as the classifier reads it beside a call:
-/// the message the turn opened on as the user typed it (text alone, no
-/// attachments; a sub-agent's is its task), the user's messages before it
-/// since the last compaction ([before]) and those steered in since it
-/// ([after]), the reply that message answers ([answering]), the chat's active
-/// goal, the plan's task under way, and the calls the agent has made since
-/// the last compaction ([calls]). Every tool result and the rest of the
-/// agent's prose are left out, as Claude Code's classifier leaves them: the
-/// prose is the agent arguing its own case, the results are where injected
-/// text arrives. [answering] is the exception because the user read it and
-/// answered it: a "do this" says nothing without the reply it agrees to. Data the classifier weighs, never instructions it takes — see
-/// the rubric in `LlmClassifier`. Message content, so it is never put in a log
-/// line.
+/// What the user asked a turn for, in the words they typed: the message the
+/// turn opened on ([said]; a sub-agent's is its task), their messages before
+/// it, the reply it answers, and what they steered in while it ran. Read off
+/// the log rather than the session, where a `/skill` is expanded and a
+/// file's bytes inlined.
 ///
-/// [of] is the one place blankness is decided: each part trimmed, a blank
-/// part null or dropped, and no request at all where every part is.
-/// Everything past it reads a part's presence as its having something to say.
-class ClassifierRequest {
-  const ClassifierRequest({
-    this.said,
-    this.goal,
-    this.task,
-    this.before = const [],
-    this.after = const [],
-    this.calls = const [],
-    this.answering,
-  });
-
-  static ClassifierRequest? of({
+/// [answering] is the one piece of the agent's prose the classifier reads:
+/// the user read it and answered it, and a "do this" says nothing without it.
+/// Every text is trimmed and a blank one dropped here, so a part's presence
+/// past this point means it has something to say.
+class Asked {
+  Asked({
     String? said,
+    Iterable<String> earlier = const [],
+    String? answering,
+    Iterable<String> steered = const [],
+  }) : said = _kept(said),
+       earlier = earlier.map(_kept).nonNulls.toList(),
+       answering = _kept(answering),
+       steered = steered.map(_kept).nonNulls.toList();
+
+  /// From [since], the log after the last compaction, up to [said]: a
+  /// resumed turn's [said] is in it, a new turn's is not yet.
+  factory Asked.fromLog(Iterable<Message> since, Message? said) {
+    final before = since.takeWhile((m) => m.id != said?.id).toList();
+    return Asked(
+      said: said?.plainText,
+      earlier: [
+        for (final m in before)
+          if (m.role == MessageRole.user) m.plainText,
+      ],
+      answering: before.reversed
+          .where((m) => m.role == MessageRole.assistant)
+          .firstOrNull
+          ?.plainText,
+    );
+  }
+
+  final String? said;
+  final List<String> earlier;
+  final String? answering;
+  final List<String> steered;
+
+  Asked steer(String text) => Asked(
+    said: said,
+    earlier: earlier,
+    answering: answering,
+    steered: [...steered, text],
+  );
+
+  bool get isEmpty =>
+      said == null && answering == null && earlier.isEmpty && steered.isEmpty;
+
+  static String? _kept(String? text) {
+    final trimmed = text?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
+}
+
+/// What the classifier reads beside a call: what was [asked], the chat's
+/// active goal, the plan's task under way, and the calls the agent made
+/// before this one, their arguments alone. Tool results are left out, as
+/// Claude Code's classifier leaves them, being where injected text arrives.
+/// Data the classifier weighs, never instructions it takes — see the rubric
+/// in `LlmClassifier`. Message content, so it is never put in a log line.
+class ClassifierRequest {
+  ClassifierRequest({
+    Asked? asked,
     String? goal,
     String? task,
-    Iterable<String?> before = const [],
-    Iterable<String?> after = const [],
-    Iterable<ClassifierCall> calls = const [],
-    String? answering,
+    this.calls = const [],
+  }) : asked = asked ?? Asked(),
+       goal = Asked._kept(goal),
+       task = Asked._kept(task);
+
+  /// Null where there is nothing to say.
+  static ClassifierRequest? of({
+    Asked? asked,
+    String? goal,
+    String? task,
+    List<ClassifierCall> calls = const [],
   }) {
-    String? kept(String? text) {
-      final trimmed = text?.trim();
-      return trimmed == null || trimmed.isEmpty ? null : trimmed;
-    }
-
-    List<String> keptAll(Iterable<String?> texts) => [
-      for (final text in texts) ?kept(text),
-    ];
-
     final request = ClassifierRequest(
-      said: kept(said),
-      goal: kept(goal),
-      task: kept(task),
-      before: keptAll(before),
-      after: keptAll(after),
-      calls: calls.toList(),
-      answering: kept(answering),
+      asked: asked,
+      goal: goal,
+      task: task,
+      calls: calls,
     );
-    return request.said == null &&
+    return request.asked.isEmpty &&
             request.goal == null &&
             request.task == null &&
-            request.before.isEmpty &&
-            request.after.isEmpty &&
-            request.calls.isEmpty &&
-            request.answering == null
+            calls.isEmpty
         ? null
         : request;
   }
 
-  final String? said;
+  final Asked asked;
   final String? goal;
   final String? task;
 
-  /// The user's earlier messages, oldest first.
-  final List<String> before;
-
-  /// What the user steered in while the turn ran, oldest first.
-  final List<String> after;
-
-  /// The agent's calls before the one being judged, oldest first.
+  /// Oldest first.
   final List<ClassifierCall> calls;
-
-  /// The text of the reply [said] answers: the agent's words, which the user
-  /// read and answered, so what a "yes, do that" agrees to.
-  final String? answering;
 }
 
-/// One call the agent made, as the classifier reads it: the tool and its
-/// arguments, never its result.
+/// One call the agent made, as the classifier reads it: never its result.
 typedef ClassifierCall = ({String tool, String argumentsJson});
 
 /// Always asks. What auto mode falls back to when no classifier model is

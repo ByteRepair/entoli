@@ -199,7 +199,7 @@ class SubAgentRunner implements SubAgents {
       readOnlyDirs: readOnlyDirs,
       webSearch: webSearch,
       rateLimitGate: rateLimitGate,
-      said: task,
+      asked: Asked(said: task),
     );
     final recorder = callId == null ? null : await _recorderFor(callId);
 

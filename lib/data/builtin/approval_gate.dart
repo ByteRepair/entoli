@@ -520,7 +520,9 @@ class ApprovalGate {
     // turn, clearing its banner and rewriting the session under it.
     final (policy, asked) = await (
       permissions(),
-      request?.call(call.id) ?? Future<ClassifierRequest?>.value(),
+      // NoClassifier reads none of it.
+      (classifier == null ? null : request?.call(call.id)) ??
+          Future<ClassifierRequest?>.value(),
     ).wait;
     final decision = await Future.any([
       (classifier ?? const NoClassifier()).classify(
