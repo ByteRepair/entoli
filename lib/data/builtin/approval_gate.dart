@@ -80,8 +80,9 @@ class ApprovalGate {
 
   /// What the user asked the turn for, read at each classifier call — every
   /// one, so the judge has one set of inputs whatever brought the call to
-  /// it. Null where the turn keeps nothing to say.
-  final Future<ClassifierRequest?> Function()? request;
+  /// it — given the id of the call being judged, so the calls before it can
+  /// be told. Null where the turn keeps nothing to say.
+  final Future<ClassifierRequest?> Function(String callId)? request;
 
   Future<StandingPermissions>? _callPolicy;
 
@@ -519,7 +520,9 @@ class ApprovalGate {
     // turn, clearing its banner and rewriting the session under it.
     final (policy, asked) = await (
       permissions(),
-      request?.call() ?? Future<ClassifierRequest?>.value(),
+      // NoClassifier reads none of it.
+      (classifier == null ? null : request?.call(call.id)) ??
+          Future<ClassifierRequest?>.value(),
     ).wait;
     final decision = await Future.any([
       (classifier ?? const NoClassifier()).classify(

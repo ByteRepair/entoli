@@ -550,7 +550,10 @@ class BuiltinBackend implements AgentBackend {
       final said =
           prompt ?? history.lastWhereOrNull((m) => m.role == MessageRole.user);
       final agent = BuiltinAgent(
-        said: said?.plainText,
+        asked: Asked.fromLog(
+          history.skip(verbatimFrom(history, compactions).from),
+          said,
+        ),
         session: session,
         viewer: participant,
         agent: AgentDefinition.of(file),
@@ -1654,7 +1657,11 @@ class BuiltinBackend implements AgentBackend {
   PermissionClassifier? _resolveClassifier(String? provider, String? model) {
     final target = _classifierTarget(provider, model);
     if (target == null) return null;
-    return LlmClassifier(client: target.client, model: target.modelId);
+    return LlmClassifier(
+      client: target.client,
+      model: target.modelId,
+      context: target.info?.context,
+    );
   }
 
   /// Who reviews a goal at a stop: the classifier model where one is named —
