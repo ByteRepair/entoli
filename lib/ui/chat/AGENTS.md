@@ -815,7 +815,7 @@ so a mirrored chat draws none.
 ### Background jobs, in the reply
 
 The `bash` call that started a job is drawn as the job (`JobActivity`, from
-`BashUI.view`), by its `JobState` from `ChatViewState.jobOf`: running, ended,
+`BashActivity`), by its `JobState` from `ChatViewState.jobOf`: running, ended,
 or lost. Running, the label says "Running in the background" and the drawer
 has the command, "Running · pid" under the title, Stop beside the close
 button, and the end of the log as it grows (re-read every half second while
