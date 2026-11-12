@@ -1056,6 +1056,7 @@ class CliAccountData {
     required this.step,
     required this.plan,
     required this.program,
+    required this.signingIn,
     this.progress,
     this.page,
     this.failure,
@@ -1068,6 +1069,9 @@ class CliAccountData {
 
   /// The program's name, for the row and the install.
   String program;
+
+  /// Whether a sign-in is under way or has failed, which the sheet shows.
+  bool signingIn;
 
   /// An install's, 0 to 1; none while it cannot say.
   double? progress;

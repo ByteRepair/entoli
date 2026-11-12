@@ -8,22 +8,15 @@ import "../../app/settings/cli_account.dart";
 import "../../domain/llm_provider.dart";
 import "../../providers.dart";
 
-/// Installs [config]'s program where Entoli has no copy of it, asks it
-/// whether it is signed in, and where it is not, runs its sign-in: the page
-/// it prints is shown here to open, and a code the page shows can be pasted
-/// back. Pops true once the program says it is signed in, false when
-/// cancelled. Where [account] is given, that one is signed in, [again] out of
-/// its account first.
+/// Installs [account]'s program where Entoli has no copy of it, asks it
+/// whether it is signed in, and where it is not, runs its sign-in — out of
+/// its account first where [again]: the page it prints is shown here to
+/// open, and a code the page shows can be pasted back. Pops true once the
+/// program says it is signed in, false when cancelled.
 class CliSignInDialog extends ConsumerStatefulWidget {
-  const CliSignInDialog({
-    super.key,
-    required this.config,
-    this.account,
-    this.again = false,
-  });
+  const CliSignInDialog({super.key, required this.account, this.again = false});
 
-  final LlmProviderConfig config;
-  final CliAccount? account;
+  final CliAccount account;
   final bool again;
 
   @override
@@ -31,19 +24,13 @@ class CliSignInDialog extends ConsumerStatefulWidget {
 }
 
 class _CliSignInDialogState extends ConsumerState<CliSignInDialog> {
-  late final CliAccount _account =
-      widget.account ??
-      CliAccount(
-        ProviderScope.containerOf(context, listen: false),
-        widget.config,
-      );
   final _code = TextEditingController();
-  var _finished = false;
+
+  CliAccount get _account => widget.account;
 
   @override
   void initState() {
     super.initState();
-    _account.addListener(_changed);
     // After the first frame: starting a download is a provider write, which
     // may not happen while the tree builds.
     WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_run()));
@@ -52,35 +39,25 @@ class _CliSignInDialogState extends ConsumerState<CliSignInDialog> {
   @override
   void dispose() {
     _code.dispose();
-    _account.removeListener(_changed);
-    if (widget.account == null) _account.dispose();
     super.dispose();
   }
 
-  void _changed() {
-    if (mounted) setState(() {});
-  }
-
+  /// A cancelled run returns false, so only a sign-in that landed pops here.
   Future<void> _run() async {
-    if (await _account.signIn(again: widget.again)) _finish(true);
-  }
-
-  void _finish(bool signedIn) {
-    // Once only: a sign-in can land while a cancel is still on its way out.
-    if (_finished) return;
-    _finished = true;
-    if (mounted) Navigator.pop(context, signedIn);
+    if (await _account.signIn(again: widget.again) && mounted) {
+      Navigator.pop(context, true);
+    }
   }
 
   void _cancel() {
     unawaited(_account.cancel());
-    _finish(false);
+    Navigator.pop(context, false);
   }
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return AlertDialog(
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: _account,
+    builder: (context, _) => AlertDialog(
       title: Text("Sign in to ${_account.plan}"),
       content: SizedBox(
         width: 420,
@@ -100,7 +77,7 @@ class _CliSignInDialogState extends ConsumerState<CliSignInDialog> {
           CliStarting() => const _Busy("Starting the sign-in…"),
           CliFailed(:final reason) => Text(
             reason,
-            style: TextStyle(color: theme.colorScheme.error),
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
           CliChecking() ||
           CliSignedIn() ||
@@ -115,8 +92,8 @@ class _CliSignInDialogState extends ConsumerState<CliSignInDialog> {
             child: const Text("Try again"),
           ),
       ],
-    );
-  }
+    ),
+  );
 }
 
 class _Busy extends StatelessWidget {
@@ -216,7 +193,7 @@ class CliAccountSection extends ConsumerStatefulWidget {
 }
 
 class _CliAccountSectionState extends ConsumerState<CliAccountSection> {
-  late final CliAccount _account = CliAccount(
+  late final _account = CliAccount(
     ProviderScope.containerOf(context, listen: false),
     widget.config,
   );
@@ -224,7 +201,6 @@ class _CliAccountSectionState extends ConsumerState<CliAccountSection> {
   @override
   void initState() {
     super.initState();
-    _account.addListener(_changed);
     unawaited(_account.check());
   }
 
@@ -234,55 +210,51 @@ class _CliAccountSectionState extends ConsumerState<CliAccountSection> {
     super.dispose();
   }
 
-  void _changed() {
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _signIn({bool again = false}) async {
-    await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => CliSignInDialog(
-        config: widget.config,
-        account: _account,
-        again: again,
-      ),
-    );
-  }
+  Future<void> _signIn({bool again = false}) => showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => CliSignInDialog(account: _account, again: again),
+  );
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return switch (_account.stage) {
-      CliSignedIn() => Row(
-        children: [
-          Icon(Icons.check_circle, color: scheme.primary),
-          const SizedBox(width: 12),
-          Expanded(child: Text("Signed in to your ${_account.plan} account")),
-          TextButton(
-            onPressed: () => _signIn(again: true),
-            child: const Text("Sign in again"),
-          ),
-        ],
-      ),
-      CliSignedOut() => Row(
-        children: [
-          Icon(Icons.account_circle_outlined, color: scheme.onSurfaceVariant),
-          const SizedBox(width: 12),
-          const Expanded(child: Text("Not signed in")),
-          FilledButton.tonal(onPressed: _signIn, child: const Text("Sign in")),
-        ],
-      ),
-      _ => const Row(
-        children: [
-          SizedBox.square(
-            dimension: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-          SizedBox(width: 12),
-          Text("Checking the sign-in…"),
-        ],
-      ),
-    };
+    return ListenableBuilder(
+      listenable: _account,
+      builder: (context, _) => switch (_account.stage) {
+        CliSignedIn() => Row(
+          children: [
+            Icon(Icons.check_circle, color: scheme.primary),
+            const SizedBox(width: 12),
+            Expanded(child: Text("Signed in to your ${_account.plan} account")),
+            TextButton(
+              onPressed: () => _signIn(again: true),
+              child: const Text("Sign in again"),
+            ),
+          ],
+        ),
+        CliSignedOut() => Row(
+          children: [
+            Icon(Icons.account_circle_outlined, color: scheme.onSurfaceVariant),
+            const SizedBox(width: 12),
+            const Expanded(child: Text("Not signed in")),
+            FilledButton.tonal(
+              onPressed: _signIn,
+              child: const Text("Sign in"),
+            ),
+          ],
+        ),
+        _ => const Row(
+          children: [
+            SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 12),
+            Text("Checking the sign-in…"),
+          ],
+        ),
+      },
+    );
   }
 }

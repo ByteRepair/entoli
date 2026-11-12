@@ -14,18 +14,18 @@ struct CliAccountRow: View {
         Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
         Text("Signed in to your \(account?.plan ?? "") account")
         Spacer()
-        Button("Sign in Again…") { op(.signInAgain) }
+        Button("Sign in Again…") { model.cliAccountOp(.signInAgain) }
       case .signedOut:
         Image(systemName: "person.crop.circle.badge.exclamationmark")
           .foregroundStyle(.secondary)
         Text("Not signed in")
         Spacer()
-        Button("Sign In…") { op(.signIn) }.buttonStyle(.borderedProminent)
+        Button("Sign In…") { model.cliAccountOp(.signIn) }.buttonStyle(.borderedProminent)
       case nil, .checking:
         ProgressView().controlSize(.small)
         Text("Checking the sign-in…").foregroundStyle(.secondary)
         Spacer()
-      case .installing, .starting, .waiting, .failed:
+      default:
         ProgressView().controlSize(.small)
         Text("Signing in…").foregroundStyle(.secondary)
         Spacer()
@@ -33,23 +33,10 @@ struct CliAccountRow: View {
     }
     .sheet(
       isPresented: Binding(
-        get: { account?.step.signingIn ?? false },
-        set: { if !$0 { op(.cancel) } })
+        get: { account?.signingIn ?? false },
+        set: { if !$0 { model.cliAccountOp(.cancel) } })
     ) {
       CliSignInSheet(model: model)
-    }
-  }
-
-  private func op(_ op: CliAccountOp) {
-    model.say.cliAccountOp(op: op, completion: ignore)
-  }
-}
-
-extension CliAccountStep {
-  var signingIn: Bool {
-    switch self {
-    case .installing, .starting, .waiting, .failed: true
-    case .checking, .signedIn, .signedOut: false
     }
   }
 }
@@ -84,9 +71,9 @@ private struct CliSignInSheet: View {
       }
       HStack {
         Spacer()
-        Button("Cancel", role: .cancel) { op(.cancel) }.keyboardShortcut(.cancelAction)
+        Button("Cancel", role: .cancel) { model.cliAccountOp(.cancel) }.keyboardShortcut(.cancelAction)
         if account?.step == .failed {
-          Button("Try Again") { op(.signIn) }
+          Button("Try Again") { model.cliAccountOp(.signIn) }
             .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
         }
       }
@@ -134,9 +121,5 @@ private struct CliSignInSheet: View {
   private func send() {
     model.say.cliAccountCode(code: code, completion: ignore)
     code = ""
-  }
-
-  private func op(_ op: CliAccountOp) {
-    model.say.cliAccountOp(op: op, completion: ignore)
   }
 }

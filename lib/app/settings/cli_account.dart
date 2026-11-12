@@ -91,13 +91,15 @@ class CliAccount extends ChangeNotifier {
 
   CliSignIn? _signIn;
 
-  /// Bumped by each run and by [cancel], so a run overtaken stops moving
-  /// the stage.
+  /// Bumped by each run, by [cancel] and by [dispose], so a run overtaken
+  /// stops moving the stage.
   var _run = 0;
   var _disposed = false;
 
-  void _show(CliAccountStage stage) {
-    if (_disposed) return;
+  /// [stage] shown, where [run] is still the latest.
+  void _show(int run, CliAccountStage stage) {
+    // A cancel's check can outlive the account.
+    if (run != _run || _disposed) return;
     _stage = stage;
     notifyListeners();
   }
@@ -105,16 +107,14 @@ class CliAccount extends ChangeNotifier {
   /// Asks the program whether it is signed in.
   Future<void> check() async {
     final run = ++_run;
-    _show(const CliChecking());
+    _show(run, const CliChecking());
     var signedIn = false;
     try {
       signedIn = cli.installed && await cli.signedIn();
     } catch (e) {
       logFailure("cli", "asking ${cli.config.displayName} its sign-in", e);
     }
-    if (run == _run) {
-      _show(signedIn ? const CliSignedIn() : const CliSignedOut());
-    }
+    _show(run, signedIn ? const CliSignedIn() : const CliSignedOut());
   }
 
   /// Installs the program where needed and signs it in; where [again], out
@@ -124,7 +124,7 @@ class CliAccount extends ChangeNotifier {
     final run = ++_run;
     try {
       if (again) {
-        _show(const CliChecking());
+        _show(run, const CliChecking());
         try {
           await cli.signOut();
         } catch (e) {
@@ -133,23 +133,22 @@ class CliAccount extends ChangeNotifier {
       }
       if (!cli.installed) await _install(run);
       if (run != _run) return false;
-      _show(const CliChecking());
+      _show(run, const CliChecking());
       if (await cli.signedIn()) {
-        if (run == _run) _show(const CliSignedIn());
+        _show(run, const CliSignedIn());
         return run == _run;
       }
       if (run != _run) return false;
-      _show(const CliStarting());
+      _show(run, const CliStarting());
       final signIn = _signIn = await CliSignIn.start(cli);
-      if (run != _run || _disposed) {
+      if (run != _run) {
         unawaited(signIn.cancel());
         return false;
       }
       // The page may be named again, a better one: the one the program asked
       // to open, which signs in with no code to paste.
       void named() {
-        final page = signIn.page.value;
-        if (run == _run && page != null) _show(CliWaiting(page));
+        if (signIn.page.value case final page?) _show(run, CliWaiting(page));
       }
 
       named();
@@ -161,16 +160,16 @@ class CliAccount extends ChangeNotifier {
         signIn.page.removeListener(named);
         if (_signIn == signIn) _signIn = null;
       }
-      if (run != _run) return false;
       _show(
+        run,
         done
             ? const CliSignedIn()
             : CliFailed(signIn.failure ?? "The sign-in did not finish."),
       );
-      return done;
+      return done && run == _run;
     } catch (e) {
       logFailure("cli", "connecting ${cli.config.displayName} failed", e);
-      if (run == _run) _show(CliFailed("$e"));
+      _show(run, CliFailed("$e"));
       return false;
     }
   }
@@ -198,7 +197,7 @@ class CliAccount extends ChangeNotifier {
     final done = Completer<void>();
     void landed(DownloadState state) {
       if (done.isCompleted) return;
-      if (run == _run) _show(CliInstalling(state.active[id]));
+      _show(run, CliInstalling(state.active[id]));
       final failure = state.failures[id];
       if (failure != null) {
         done.completeError(failure);
@@ -214,7 +213,7 @@ class CliAccount extends ChangeNotifier {
       cliDownloadsProvider,
       (_, state) => landed(state),
     );
-    _show(const CliInstalling(null));
+    _show(run, const CliInstalling(null));
     _container.read(cliDownloadsProvider.notifier).install(cli);
     landed(_container.read(cliDownloadsProvider));
     try {

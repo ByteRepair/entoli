@@ -774,13 +774,14 @@ class SettingsBridge implements SettingsIntents {
               kind: FormPartKind.entries,
               id: part.id,
               label: part.label,
-              hint: FormEntries.format,
-              helper: part.helper,
+              helper: [part.helper, FormEntries.format].nonNulls.join(" "),
               enabled: part.enabled,
             ),
+            // By the program, so the row asks again only when the API
+            // picked changes, not on every keystroke in the name.
             FormSignIn(:final config) => FormPartData(
               kind: FormPartKind.signIn,
-              label: config.displayName,
+              id: config.api.name,
             ),
             FormDate() => FormPartData(
               kind: FormPartKind.date,

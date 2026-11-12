@@ -56,44 +56,35 @@ class ShellCliAccount {
   void _send() {
     final account = _account;
     if (account == null) return;
-    final data = switch (account.stage) {
-      CliChecking() => _data(account, CliAccountStep.checking),
-      CliSignedIn() => _data(account, CliAccountStep.signedIn),
-      CliSignedOut() => _data(account, CliAccountStep.signedOut),
-      CliInstalling(:final progress) => _data(
-        account,
-        CliAccountStep.installing,
-        progress: progress?.bar,
-      ),
-      CliStarting() => _data(account, CliAccountStep.starting),
-      CliWaiting(:final page) => _data(
-        account,
-        CliAccountStep.waiting,
-        page: "$page",
-      ),
-      CliFailed(:final reason) => _data(
-        account,
-        CliAccountStep.failed,
-        failure: reason,
-      ),
-    };
+    final stage = account.stage;
+    final data = CliAccountData(
+      step: switch (stage) {
+        CliChecking() => CliAccountStep.checking,
+        CliSignedIn() => CliAccountStep.signedIn,
+        CliSignedOut() => CliAccountStep.signedOut,
+        CliInstalling() => CliAccountStep.installing,
+        CliStarting() => CliAccountStep.starting,
+        CliWaiting() => CliAccountStep.waiting,
+        CliFailed() => CliAccountStep.failed,
+      },
+      plan: account.plan,
+      program: account.cli.config.displayName,
+      signingIn: stage.signingIn,
+      progress: switch (stage) {
+        CliInstalling(:final progress) => progress?.bar,
+        _ => null,
+      },
+      page: switch (stage) {
+        CliWaiting(:final page) => "$page",
+        _ => null,
+      },
+      failure: switch (stage) {
+        CliFailed(:final reason) => reason,
+        _ => null,
+      },
+    );
     _native.cliAccount(data).catchError((Object e) {
       logFailure("settings", "sending the program's account", e);
     });
   }
-
-  static CliAccountData _data(
-    CliAccount account,
-    CliAccountStep step, {
-    double? progress,
-    String? page,
-    String? failure,
-  }) => CliAccountData(
-    step: step,
-    plan: account.plan,
-    program: account.cli.config.displayName,
-    progress: progress,
-    page: page,
-    failure: failure,
-  );
 }

@@ -514,7 +514,7 @@ struct TextEditSheet: View {
     NavigationStack {
       Form {
         if lines > 1 {
-          TextEditor(text: $text).frame(minHeight: CGFloat(lines) * 22)
+          TextEditor(text: $text).editorBox(minHeight: CGFloat(lines) * 22)
         } else {
           TextField(title, text: $text)
         }

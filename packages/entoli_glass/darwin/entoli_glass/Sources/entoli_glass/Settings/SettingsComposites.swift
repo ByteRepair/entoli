@@ -228,9 +228,9 @@ struct FormSheet: View {
   /// Saves it, or says why it could not.
   let save: ([String?: String?]) async -> FormSaveData?
 
-  /// Watches the account of the program it names, which [account] draws.
-  var openAccount: (([String?: String?]) -> Void)?
-  var account: SettingsModel?
+  /// The collection item whose form it is, for the account of the program
+  /// it names.
+  var account: (model: SettingsModel, id: String, index: Int?)?
 
   /// Told it was left unsaved.
   var dismissed: (([String?: String?]) -> Void)?
@@ -239,8 +239,7 @@ struct FormSheet: View {
   init(model: SettingsModel, id: String, index: Int?) {
     load = { await model.form(id, index, $0) }
     save = { await model.submit(id, index, $0) }
-    openAccount = { model.openCliAccount(id, index, $0) }
-    account = model
+    account = (model, id, index)
     dismissed = {
       model.say.formDismissed(
         id: id, index: index.map(Int64.init), answers: $0, completion: ignore)
@@ -418,19 +417,14 @@ struct FormSheet: View {
       VStack(alignment: .leading, spacing: 2) {
         Text(part.label ?? "").font(.caption).foregroundStyle(.secondary)
         TextEditor(text: binding(key)).font(.body.monospaced()).editorBox(minHeight: 70)
-        if part.error == nil, refused?.field != part.id, let helper = part.helper {
-          Text("\(helper) \(part.hint ?? "")").font(.caption).foregroundStyle(.secondary)
-        } else {
-          helper(part)
-        }
+        helper(part)
       }
       .disabled(!part.enabled)
     case .signIn:
       if let account {
-        // Asked again where the program changes with the API picked.
-        CliAccountRow(model: account)
-          .task(id: part.label) { openAccount?(answers) }
-          .onDisappear { account.closeCliAccount() }
+        CliAccountRow(model: account.model)
+          .task(id: part.id) { account.model.openCliAccount(account.id, account.index, answers) }
+          .onDisappear { account.model.closeCliAccount() }
       }
     case .date:
       DatePicker(

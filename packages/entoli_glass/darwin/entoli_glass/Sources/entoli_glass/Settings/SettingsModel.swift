@@ -293,6 +293,10 @@ extension SettingsModel {
     say.openCliAccount(id: id, index: index.map(Int64.init), answers: answers, completion: ignore)
   }
 
+  func cliAccountOp(_ op: CliAccountOp) {
+    say.cliAccountOp(op: op, completion: ignore)
+  }
+
   func closeCliAccount() {
     cliAccount = nil
     say.closeCliAccount(completion: ignore)
