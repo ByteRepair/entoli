@@ -89,7 +89,7 @@ struct ConversationView: View {
       }
       .animation(Self.motion, value: railFits)
       .overlay {
-        if model.order.isEmpty {
+        if model.order.isEmpty && !model.loading {
           Text("No messages yet").foregroundStyle(.secondary)
         }
       }

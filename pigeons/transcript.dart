@@ -394,6 +394,7 @@ class ConversationSnapshot {
     this.running = false,
     this.reactions = const [],
     this.chapters = const [],
+    this.loading = false,
   });
 
   String? chatId;
@@ -406,6 +407,9 @@ class ConversationSnapshot {
 
   /// The chapter rail's ticks, oldest first.
   List<ChapterSnapshot> chapters;
+
+  /// The chat is open but still being read: no rows yet, and none missing.
+  bool loading;
 }
 
 /// A reaction on offer: what is drawn, and what it is called.

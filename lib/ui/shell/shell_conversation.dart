@@ -76,6 +76,21 @@ class ConversationSurface implements wire.TranscriptIntents {
   /// Faces by author, drawn once each.
   final _faces = <String, Uint8List?>{};
 
+  /// [chatId] open with nothing to show yet, while it is read: keeps the
+  /// conversation up rather than gone between two chats, which would bring
+  /// the Flutter view back into the window for a moment.
+  void loading(String chatId) {
+    if (_sentFor == chatId) return;
+    _sent.clear();
+    _sentFor = chatId;
+    _open = null;
+    _send(
+      () => _client.conversation(
+        wire.ConversationSnapshot(chatId: chatId, loading: true),
+      ),
+    );
+  }
+
   /// Takes the conversation off the client.
   void clear() {
     _sent.clear();

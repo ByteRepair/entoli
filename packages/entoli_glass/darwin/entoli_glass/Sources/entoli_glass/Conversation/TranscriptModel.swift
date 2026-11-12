@@ -20,6 +20,8 @@ import SwiftUI
   private(set) var order: [String] = []
   private(set) var rows: [String: RowSnapshot] = [:]
   private(set) var running = false
+  /// Open but still being read, so an empty list is not an empty chat.
+  private(set) var loading = false
   private(set) var reactions: [ReactionChoice] = []
   private(set) var chapters: [ChapterSnapshot] = []
   var detail = DetailSnapshot(
@@ -55,6 +57,7 @@ extension TranscriptModel: NativeTranscript {
       rows = rows.filter { kept.contains($0.key) }
     }
     if running != snapshot.running { running = snapshot.running }
+    if loading != snapshot.loading { loading = snapshot.loading }
     if reactions != snapshot.reactions { reactions = snapshot.reactions }
     if chapters != snapshot.chapters { chapters = snapshot.chapters }
   }

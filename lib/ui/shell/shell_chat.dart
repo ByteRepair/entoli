@@ -112,7 +112,9 @@ class ShellChat implements ChatBarIntents {
     if (_screen != null && _screen!.id == id) return;
     // The view is of the chat's own tab.
     closeBrowser();
-    _screen?.close();
+    // From one chat to another the conversation is handed over rather than
+    // taken down, so it never leaves the screen between them.
+    _screen?.close(handingOver: id != null);
     _screen = id == null ? _NewChat(this) : _OpenChat(this, id);
   }
 
@@ -136,7 +138,9 @@ sealed class _Screen {
   String? get id;
   void turnPass();
   void openBar(ChatBarDestination to);
-  void close();
+
+  /// [handingOver] is a chat opening next, which takes the conversation.
+  void close({bool handingOver = false});
 }
 
 /// One chat while it is open: its session kept, a surface each, and a
@@ -232,7 +236,12 @@ final class _OpenChat implements _Screen {
     _conversationReader.pass(() {
       final (:view, :driver) = _state(_conversationReader);
       final chat = view.chat;
-      if (chat == null) return;
+      if (chat == null) {
+        if (_answers.transcript.owner == conversation) {
+          conversation.loading(id);
+        }
+        return;
+      }
       // Asked here, there being no page building to ask from while the
       // Flutter view is out of the window.
       if (!_expiryChecked) {
@@ -413,7 +422,7 @@ final class _OpenChat implements _Screen {
   }
 
   @override
-  void close() {
+  void close({bool handingOver = false}) {
     _closed = true;
     for (final reader in [
       _conversationReader,
@@ -424,7 +433,9 @@ final class _OpenChat implements _Screen {
     ]) {
       reader.close();
     }
-    if (_answers.transcript.release(conversation)) conversation.clear();
+    if (_answers.transcript.release(conversation) && !handingOver) {
+      conversation.clear();
+    }
     if (_answers.composer.release(composer)) {
       _outbox.composer(ComposerSnapshot(present: false));
     }
@@ -638,7 +649,7 @@ final class _NewChat implements _Screen {
   }
 
   @override
-  void close() {
+  void close({bool handingOver = false}) {
     _closed = true;
     for (final reader in [
       _screenReader,
