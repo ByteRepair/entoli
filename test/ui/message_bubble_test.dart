@@ -489,6 +489,37 @@ void main() {
     expect(find.text("/workspace"), findsOneWidget);
   });
 
+  testWidgets("a command's label is what the call said it does", (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [
+        ToolCallPart(
+          toolCall: ToolCall(
+            id: "c1",
+            name: "bash",
+            argumentsJson:
+                '{"command": "git status", "description": "Show working '
+                'tree status"}',
+            argumentsText: "git status",
+          ),
+        ),
+        ToolResultPart(
+          result: ToolResult(callId: "c1", returnCode: 0, output: "clean"),
+        ),
+      ]),
+    );
+
+    expect(find.text("Show working tree status"), findsOneWidget);
+    expect(find.text("Used tool: bash"), findsNothing);
+
+    await tester.tap(find.text("Show working tree status"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("git status"), findsOneWidget);
+  });
+
   testWidgets("an answered question reads as the question, not as a tool run", (
     tester,
   ) async {

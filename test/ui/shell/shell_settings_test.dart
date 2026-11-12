@@ -39,6 +39,9 @@ class _FakeNativeSettings implements TestNativeSettings {
 
   @override
   void appPages(List<SettingsPageData> stack) => stacks.add(stack);
+
+  @override
+  void cliAccount(CliAccountData account) {}
 }
 
 /// A page with one toggle, which leaving asks about once it is flipped.

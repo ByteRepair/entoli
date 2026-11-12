@@ -40,6 +40,10 @@ abstract class AppPage {
 
   late final Ref _ref;
 
+  /// The container the page's stack is in, for a model of the app's that
+  /// takes one.
+  ProviderContainer get container => _ref.container;
+
   /// The stack the page is on: what it opens another page onto, and leaves.
   late final AppPages pages;
 

@@ -5,7 +5,7 @@ import "../../core/log.dart";
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../data/licence_data.dart";
 import "../../domain/chat_log.dart";
-import "../../domain/local_model.dart" show isTitleOnlyModel;
+import "../../domain/local_model.dart" show isShortAskModel;
 import "../../domain/models.dart";
 import "../../domain/project.dart";
 import "../../providers.dart";
@@ -74,11 +74,11 @@ class WelcomeAppPage extends AppPage {
   @override
   String? subtitle(SettingReader reader) => "${_step + 1} of $_steps";
 
-  /// What answers a chat: a title-only model, which an iOS device lists
+  /// What answers a chat: a short-ask model, which an Apple device lists
   /// before anything is set up, does not count.
   int _models(SettingReader reader) =>
       (reader.watch(availableModelsProvider).value ?? const [])
-          .where((m) => !isTitleOnlyModel(m.providerId, m.modelId))
+          .where((m) => !isShortAskModel(m.providerId, m.modelId))
           .length;
 
   /// The model step holds the tour until some model is reachable and new
@@ -449,7 +449,7 @@ Future<void> connectCli(
       .firstOrNull;
   // A new entry's id first: its account is kept in a folder named by it.
   final config = existing ?? service.config.copyWith(id: const Uuid().v4());
-  final page = CliSignInAppPage(cliProgramOf(programs, config));
+  final page = CliSignInAppPage(config);
   pages.open(page);
   if (!await page.done) {
     // A new entry given up on: its folders under every program go.

@@ -1,129 +1,56 @@
 import "dart:async";
 
-import "../../core/log.dart";
-import "../../data/builtin/llm/providers/cli_sign_in.dart";
-import "../../data/builtin/llm/providers/presets.dart";
-import "../../domain/download.dart";
-import "../downloads/cli_downloads.dart";
+import "../../domain/llm_provider.dart";
+import "../settings/cli_account.dart";
 import "../settings/controller.dart";
 import "../settings/spec.dart";
 import "app_page.dart";
 
-/// Where a program's sign-in stands.
-sealed class _Stage {
-  const _Stage();
-}
-
-final class _Installing extends _Stage {
-  const _Installing(this.progress);
-
-  final DownloadProgress? progress;
-}
-
-final class _Checking extends _Stage {
-  const _Checking();
-}
-
-final class _SigningIn extends _Stage {
-  const _SigningIn(this.signIn);
-
-  final CliSignIn signIn;
-}
-
-final class _Failed extends _Stage {
-  const _Failed(this.reason);
-
-  final String reason;
-}
-
-/// A program's own sign-in, run for a provider that is a CLI: installed
-/// first where it is not, then its sign-in page opened in the browser and,
-/// where the page shows a code instead, the code pasted back. It carries on
-/// by itself once the user has signed in; [done] says whether they did.
+/// A program's sign-in, for a provider that is a CLI, as a page of the
+/// app's: its `CliAccount` run through — the program installed where Entoli
+/// has no copy, its own sign-in started, the page it prints offered, a code
+/// pasted back — and the page gone once the program says it is signed in.
+/// [done] says whether it was.
 class CliSignInAppPage extends AppPage {
-  CliSignInAppPage(this.cli);
+  CliSignInAppPage(this.config, {this.again = false});
 
-  final CliProvider cli;
+  final LlmProviderConfig config;
 
-  _Stage _stage = const _Checking();
-  String _code = "";
+  /// Out of the account first, so the sign-in is a new one.
+  final bool again;
+
+  late final CliAccount _account;
   final _done = Completer<bool>();
 
   /// Whether the user signed in, once the page is gone.
   Future<bool> get done => _done.future;
 
   @override
-  String get address => "cli-sign-in/${cli.workFolder}";
+  String get address => "cli-sign-in/${config.id}";
 
   @override
-  void opened() => unawaited(_run());
-
-  void _show(_Stage stage) {
-    _stage = stage;
-    changed();
+  void opened() {
+    _account = CliAccount(container, config)..addListener(changed);
+    _start();
   }
 
-  Future<void> _run() async {
-    try {
-      if (!cli.installed) await _install();
-      _show(const _Checking());
-      if (await cli.signedIn()) return _finish(true);
-      final signIn = await CliSignIn.start(cli);
-      if (_done.isCompleted) return unawaited(signIn.cancel());
-      _show(_SigningIn(signIn));
-      signIn.page.addListener(changed);
-      try {
-        if (await signIn.result) return _finish(true);
-      } finally {
-        signIn.page.removeListener(changed);
-      }
-      _show(_Failed(signIn.failure ?? "The sign-in did not finish."));
-    } catch (e) {
-      logFailure("cli", "connecting ${cli.config.displayName} failed", e);
-      _show(_Failed("$e"));
-    }
-  }
-
-  Future<void> _install() async {
-    final id = cli.workFolder;
-    final finished = Completer<void>();
-    final sub = listen(cliDownloadsProvider, (_, state) {
-      if (finished.isCompleted) return;
-      _show(_Installing(state.active[id]));
-      final failure = state.failures[id];
-      if (failure != null) {
-        finished.completeError(failure);
-      } else if (!state.active.containsKey(id) && cli.installed) {
-        finished.complete();
-      }
-    });
-    _show(const _Installing(null));
-    app.read(cliDownloadsProvider.notifier).install(cli);
-    try {
-      await finished.future;
-    } finally {
-      sub.close();
-    }
-  }
-
-  void _finish(bool signedIn) {
-    if (_done.isCompleted) return;
-    _done.complete(signedIn);
-    pages.leave(this);
-  }
+  void _start() => unawaited(
+    _account.signIn(again: again).then((signedIn) {
+      if (!signedIn || _done.isCompleted) return;
+      _done.complete(true);
+      pages.leave(this);
+    }),
+  );
 
   @override
   void closed() {
-    final stage = _stage;
-    if (stage is _SigningIn) unawaited(stage.signIn.cancel());
-    if (stage is _Installing) {
-      app.read(cliDownloadsProvider.notifier).cancel(cli.workFolder);
-    }
+    _account.removeListener(changed);
+    unawaited(_account.cancel().whenComplete(_account.dispose));
     if (!_done.isCompleted) _done.complete(false);
   }
 
   @override
-  String title(SettingReader reader) => "Sign In to ${cli.planName}";
+  String title(SettingReader reader) => "Sign In to ${_account.plan}";
 
   NoticeController _line(String id, String text, {bool error = false}) =>
       NoticeController(
@@ -134,68 +61,66 @@ class CliSignInAppPage extends AppPage {
 
   @override
   List<PageSection> sections(SettingReader reader) => [
-    PageSection("stage", "", switch (_stage) {
-      _Installing(:final progress) => [
+    PageSection("stage", "", switch (_account.stage) {
+      CliInstalling(:final progress) => [
         _line(
           "installing",
           progress?.bar == null
-              ? "Installing ${cli.config.displayName}…"
-              : "Installing ${cli.config.displayName}… "
+              ? "Installing ${_account.cli.config.displayName}…"
+              : "Installing ${_account.cli.config.displayName}… "
                     "${(progress!.bar! * 100).round()}%",
         ),
       ],
-      _Checking() => [_line("checking", "Checking whether you are signed in…")],
-      _SigningIn(:final signIn) => switch (signIn.page.value) {
-        null => [_line("starting", "Starting the sign-in…")],
-        final page => [
-          _line(
-            "how",
-            "Sign in with your ${cli.planName} account in your browser. This "
-                "page carries on by itself once you have.",
-          ),
-          InfoController(
-            part("open", "Sign-in page", hint: UiHint.info),
-            rows: [
-              InfoRow(
-                "Open the Sign-in Page",
-                subtitle: "$page",
-                link: page,
-                glyph: SettingGlyph.globe,
-              ),
-            ],
-          ),
-          ActionController(
-            part("copy", "Copy the Link"),
-            label: "Copy the Link",
-            secondary: true,
-            run: () async => SettingNotice("Copied link", copy: "$page"),
-          ),
-          TextController(
-            part(
-              "code",
-              "Code",
-              hint: UiHint.input,
-              description: "If the page shows a code instead, paste it here.",
+      CliChecking() || CliSignedIn() || CliSignedOut() => [
+        _line("checking", "Checking whether you are signed in…"),
+      ],
+      CliStarting() => [_line("starting", "Starting the sign-in…")],
+      CliWaiting(:final page) => [
+        _line(
+          "how",
+          "Sign in with your ${_account.plan} account in your browser. This "
+              "page carries on by itself once you have.",
+        ),
+        InfoController(
+          part("open", "Sign-in page", hint: UiHint.info),
+          rows: [
+            InfoRow(
+              "Open the Sign-in Page",
+              subtitle: "$page",
+              link: page,
+              glyph: SettingGlyph.globe,
             ),
-            value: _code,
-            prompt: "Code",
-            submitLabel: "Send",
-            onSet: (code) async {
-              _code = code;
-              signIn.answer(code);
-              return null;
-            },
+          ],
+        ),
+        ActionController(
+          part("copy", "Copy the Link"),
+          label: "Copy the Link",
+          secondary: true,
+          run: () async => SettingNotice("Copied link", copy: "$page"),
+        ),
+        TextController(
+          part(
+            "code",
+            "Code",
+            hint: UiHint.input,
+            description: "If the page shows a code instead, paste it here.",
           ),
-        ],
-      },
-      _Failed(:final reason) => [
+          value: "",
+          prompt: "Code",
+          submitLabel: "Send",
+          onSet: (code) async {
+            _account.answer(code);
+            return null;
+          },
+        ),
+      ],
+      CliFailed(:final reason) => [
         _line("failed", reason, error: true),
         ActionController(
           part("retry", "Try Again"),
           label: "Try Again",
           run: () async {
-            _show(const _Checking());
-            unawaited(_run());
+            _start();
             return null;
           },
         ),

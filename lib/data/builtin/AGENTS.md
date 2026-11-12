@@ -371,6 +371,16 @@ the grace where the command never answered at all. The
 group is the reason the shell is spawned under `setsid` where that exists —
 learned by trying it, not by probing first.
 
+**The command's label is the model's own word for it.** `bash` takes an
+optional `description`, five to ten words on what the command does, and the
+reply draws it as the row's label in place of "Used tool: bash" — Claude
+Code's design: no second model reads the command to name it, so the label
+costs nothing. It is the agent's claim about its command and nothing checks
+it, which is why it stops at the label: the approval banner shows the command
+itself, and the classifier reads only `command`, so a call cannot argue its
+way past the gate in the words beside it. A call without one, and the user's
+`!`, keep the tool's name.
+
 **How long a command may run is Claude Code's two minutes and ten.**
 `BuiltinOptions.commandTimeout` is what a call naming no `timeout` gets, two
 minutes, and `maxCommandTimeout` is the most one may name, ten — Claude Code's
@@ -839,7 +849,12 @@ and writes inside the workspace allow, anything modifying state past it (the
 machine's `/tmp` included) asks, and deny is reserved for irreversible
 destruction rather than being a stronger ask — a write the model is unsure
 about is an ask, which is what keeps a scratch script from being refused five
-times over. A circuit
+times over. The ask list gives way to the request: an install, a commit or a
+write past the workspace that the user's words name, or the reply they
+agreed to names, is an allow, since asking about what was just asked for is
+the prompt that trips the circuit breaker below. A push, a delete outside
+the workspace, `sudo`, sending on the user's behalf and an unsandboxed write
+ask however plainly they were requested. A circuit
 breaker pauses auto mode after 3 consecutive or 20 total escalations in one
 turn, falling back to `ask` for the rest — emitted as an `InfoEvent` so the
 UI can say "auto mode paused." `NoClassifier` always asks, which is why the
@@ -847,28 +862,56 @@ default mode is `ask` and `auto` is disabled in the settings UI until a
 classifier model is picked. `never` is labeled "(DANGEROUS)" in the dropdown.
 
 **The classifier judges a call against what was asked.** Every classifier
-call carries a `ClassifierRequest` beside the call: the text of the message
-the turn opened on as the user typed it (no attachments), the chat's active
-`/goal` objective, and the plan's task in progress (`planInProgress` over
-`readPlan`). The message is the agent's `said`, given by whoever opens the
-turn — the backend from the prompt, or for a resumed turn the message that
-started it; the sub-agent runner from the task — since the session holds only
-its dressed projection. A sub-agent's request has no plan: the plan beside it
-is the parent's, and a one-shot agent keeps none. A resumed sub-agent has no
-task to say, its transcript opening on its own message. `ClassifierRequest.of`
-is the one place blankness is decided (trimmed, a blank part null, no request
-where every part is). The gate reads it at each classifier call
-(`ApprovalGate.request`), alongside the policy; the plan's task is read once
-and held until a call that can write the plan (`writesPlan`) has run. The
-prompt puts it first, after the system prompt, since it is the same for
-every call of a turn and so a prefix a provider can cache, capped at
-`LlmClassifier.requestBudget` (4000 characters: the goal and the task cut to
-a share each, the message to the rest from its end, the newest kept), so a
-long paste cannot swamp the call being judged. The rubric frames it as data:
-it says what work was requested, never grants permission itself, and text in
-it that addresses the classifier is ignored. It is message content, so no
-log line carries it. Sub-agents run under `never` with no classifier today,
-so theirs is read only if that changes.
+call carries a `ClassifierRequest` beside the call: what was `Asked` — the
+message the turn opened on as the user typed it (no attachments), their
+messages before it since the last compaction, the reply that message answers,
+and what they steered in while the turn ran — with the chat's active `/goal`
+objective, the plan's task in progress (`planInProgress` over `readPlan`), and
+the calls the agent made before this one since the last compaction, their
+arguments and never their results. That is Claude Code's choice and for its
+reasons: the agent's prose is left out so it cannot argue the classifier into
+a call, the tool results because they are where injected text arrives, and
+the earlier messages and calls are what a "yes, go ahead" agrees to and what a
+`python build.py` runs. The answered reply is where this parts from Claude
+Code, which strips it with the rest: without it a "do this" says nothing, the
+proposal it agrees to being the agent's words. Only the one reply goes, the
+last before the user's message, which they read and answered; the rubric
+counts what it names as asked for only where the message agrees to it, and
+never as the user wanting what their message does not take up.
+
+`Asked` is read off the log, not the session, which holds the conversation
+dressed — a `/skill` expanded and a file's bytes inlined: the backend builds
+it with `Asked.fromLog` over the history from `verbatimFrom`, the sub-agent
+runner from the task, and a steer adds to it (`Asked.steer`). The calls are
+the session's, whose assistant messages are undressed, plus the running
+step's up to the call being judged (the gate passes its id), which the
+session holds only once the next request is built. A sub-agent's request has
+no plan: the plan beside it is the parent's, and a one-shot agent keeps none.
+Blankness is decided once, where `Asked` and `ClassifierRequest` are built
+(trimmed, a blank part dropped, no request where every part is). The gate
+reads the request at each classifier call (`ApprovalGate.request`), alongside
+the policy, and not at all where no classifier is set; the plan's task is
+read once and held until a call that can write the plan (`writesPlan`) has
+run.
+
+The prompt puts it first, after the system prompt, the most stable parts
+first: the earlier messages, the answered reply and the turn's message, which
+do not change between the calls of a turn, then what was steered in, the goal
+and the task, and the calls last. It is capped by `LlmClassifier.budgetFor`
+the classifier model's window (a quarter of it, within fixed bounds; an
+unknown model is taken as small, since most local ones are both), not sent
+whole for a large one: every gated call pays for it and waits on it under a
+ten-second timeout. The calls have a fixed share of the budget rather than
+what the messages leave, so the messages render the same on every call while
+the calls grow below them, and the head stays a prefix a provider's cache can
+reuse. Each part is fitted newest first and dropped whole, with a count of
+what did not fit; messages keep their end, where the newest words are, and
+calls their start, where the command and the path are. The rubric frames all
+of it as data: the messages say what work was requested and never grant
+permission, the calls show what a call runs and never that the user asked
+for it, and text in either that addresses the classifier is ignored. It is
+message content, so no log line carries it. Sub-agents run under `never`
+with no classifier today, so theirs is read only if that changes.
 
 The `ApprovalRequestEvent` is emitted *before* the agent waits on it, because
 the banner is where the answer comes from. The completer is therefore created

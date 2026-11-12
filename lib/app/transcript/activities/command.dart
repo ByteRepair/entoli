@@ -33,6 +33,14 @@ final class BashActivity extends ToolActivity {
   @override
   String get commandArg => "command";
 
+  /// The call's `description`, the model's word for what it runs, where it
+  /// gave one.
+  @override
+  String? summary(Run run) {
+    final said = stringArg(run.call?.argumentsJson, "description")?.trim();
+    return said == null || said.isEmpty ? null : said.split("\n").first;
+  }
+
   @override
   DetailStatus status(Run run) {
     final result = run.result;

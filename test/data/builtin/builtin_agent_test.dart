@@ -73,7 +73,7 @@ void main() {
     GoalReader? goal,
     GoalReviewer? goalReviewer,
     bool oneShot = false,
-    String? said,
+    Asked? asked,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-test");
     // Beside the workspaces, the way the layout keeps `chats/<id>/resources`.
@@ -120,7 +120,7 @@ void main() {
       goal: goal,
       goalReviewer: goalReviewer,
       oneShot: oneShot,
-      said: said,
+      asked: asked,
     );
   }
 
@@ -2483,12 +2483,12 @@ void main() {
           approveMode: ApproveMode.auto,
           classifier: classifier,
           goal: FakeGoal(const ChatGoal(objective: "ship the release")).read,
-          said: "run the test suite",
+          asked: Asked(said: "run the test suite"),
         );
         planUnderWay(agent);
         await agent.run(userMessage("run the test suite")).toList();
         final request = classifier.requests.single!;
-        expect(request.said, "run the test suite");
+        expect(request.asked.said, "run the test suite");
         expect(request.goal, "ship the release");
         expect(request.task, "run the tests");
       },
@@ -2510,6 +2510,50 @@ void main() {
       expect(classifier.requests.single?.goal, isNull);
     });
 
+    test("each call is judged knowing the calls made before it", () async {
+      final classifier = FakeClassifier();
+      final client = FakeLlmClient([
+        [bashCall("npm install", id: "c1")],
+        [
+          LlmCompletion(
+            message: LlmMessage(
+              role: LlmRole.assistant,
+              toolCalls: [
+                LlmToolCall(
+                  id: "c2",
+                  name: "bash",
+                  argumentsJson: jsonEncode({"command": "npm run build"}),
+                ),
+                LlmToolCall(
+                  id: "c3",
+                  name: "bash",
+                  argumentsJson: jsonEncode({"command": "npm test"}),
+                ),
+              ],
+            ),
+          ),
+        ],
+        [finish],
+      ]);
+      await agentOver(
+        client,
+        approveMode: ApproveMode.auto,
+        classifier: classifier,
+      ).run(userMessage("build and test it")).toList();
+      List<String> commandsBefore(int i) => [
+        for (final call in classifier.requests[i]?.calls ?? const [])
+          jsonDecode(call.argumentsJson)["command"] as String,
+      ];
+      expect(classifier.requests, hasLength(3));
+      expect(commandsBefore(0), isEmpty);
+      expect(commandsBefore(1), ["npm install"]);
+      expect(
+        commandsBefore(2),
+        ["npm install", "npm run build"],
+        reason: "a call earlier in the same step counts, a later one does not",
+      );
+    });
+
     test("a sub-agent's is its task, not the chat's plan", () async {
       // A sub-agent is a one-shot agent over the chat's own workspace, run
       // on its task; the plan beside it is the parent's.
@@ -2522,12 +2566,12 @@ void main() {
         approveMode: ApproveMode.auto,
         classifier: classifier,
         oneShot: true,
-        said: "find why the build fails",
+        asked: Asked(said: "find why the build fails"),
       );
       planUnderWay(agent);
       await agent.run(userMessage("find why the build fails")).toList();
       final request = classifier.requests.single!;
-      expect(request.said, "find why the build fails");
+      expect(request.asked.said, "find why the build fails");
       expect(request.task, isNull);
     });
   });

@@ -650,7 +650,9 @@ a row is. The layers, each knowing only the one below:
   `ToolActivity`**: the node and detail, what voice mode says of a call
   (`spoken`, null for nothing) and the approval banner's glyph and question.
   `toolActivityFor` gives every other name the defaults ("Used x", "Allow
-  x?"). `BashActivity` sets the command apart with the exit code under it and
+  x?"). `BashActivity` sets the command apart with the exit code under it, labels
+  it with the call's `description` where the model gave one (see "The
+  command's label" in `lib/data/builtin/AGENTS.md`), and
   is the job once a call started one (`JobActivity`); `TaskActivity` is a
   `SubAgentActivity`, whose detail holds the sub-agent's own transcript;
   the web tools show the query or URL. `JobActivity` and `SubAgentActivity`

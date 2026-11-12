@@ -246,15 +246,13 @@ class BuiltinAgent implements Turn {
     this.claimInstruction,
     this.goal,
     this.goalReviewer,
-    this.said,
-  });
+    Asked? asked,
+  }) : asked = asked ?? Asked();
 
-  /// The text of the message this turn opened on, as the user typed it — a
-  /// sub-agent's, its task — for the classifier's account of what was asked.
-  /// The caller's to say, since it holds the message: the session holds only
-  /// its projection, dressed, and a resumed turn has no prompt at all. Null
-  /// where nobody said.
-  final String? said;
+  /// What the user asked this turn for, for the classifier. The caller's to
+  /// say, since it holds the log: the session holds only its projection,
+  /// dressed, and a resumed turn has no prompt at all.
+  final Asked asked;
 
   /// The chat's goal, read at each stop; null for a turn that keeps none — a
   /// sub-agent's, or a test's. The turn never writes it: what a review finds
@@ -713,15 +711,39 @@ class BuiltinAgent implements Turn {
     request: _classifierRequest,
   );
 
-  /// What the classifier is told the user asked for: [said], the chat's
-  /// active goal, and the plan's task under way. The plan is the chat's own
-  /// and a one-shot agent does not keep it (the plan tools are not offered
-  /// there), so a sub-agent's request is its task alone.
-  Future<ClassifierRequest?> _classifierRequest() async => ClassifierRequest.of(
-    said: said,
-    goal: _standingGoal()?.objective,
-    task: oneShot ? null : await _planTask(),
-  );
+  /// The judge's inputs for [callId]. The plan is the chat's own and a
+  /// one-shot agent does not keep it (the plan tools are not offered there),
+  /// so a sub-agent's request is its task and its own calls.
+  Future<ClassifierRequest?> _classifierRequest(String callId) async =>
+      ClassifierRequest.of(
+        asked: _asked,
+        goal: _standingGoal()?.objective,
+        task: oneShot ? null : await _planTask(),
+        calls: _callsBefore(callId),
+      );
+
+  /// [asked], with what the user steered into the running turn.
+  late Asked _asked = asked;
+
+  /// The session's calls, every step since the last compaction but the one
+  /// running, then the running step's up to [callId]. By id, since a step a
+  /// rebuild has already put in the session is in both.
+  List<ClassifierCall> _callsBefore(String callId) {
+    final seen = <String>{};
+    return [
+          for (final m in session.messages)
+            if (m.role == LlmRole.assistant) ...m.toolCalls,
+          ..._stepCalls,
+        ]
+        .takeWhile((call) => call.id != callId)
+        .where((call) => seen.add(call.id))
+        .map((call) => (tool: call.name, argumentsJson: call.argumentsJson))
+        .toList();
+  }
+
+  /// The running step's calls, which the session holds only once the next
+  /// request is built.
+  List<LlmToolCall> _stepCalls = const [];
 
   /// The plan's task in progress, read once and kept until a call that can
   /// write the plan has run: every classifier call of a turn asks, and the
@@ -882,8 +904,11 @@ class BuiltinAgent implements Turn {
   /// the conversation, projected.
   Stream<AgentEvent> Function() _recorded(Stream<AgentEvent> Function() turn) =>
       () async* {
-        // A plan read in an earlier turn is not this one's.
+        // A plan read in an earlier turn is not this one's, nor what was
+        // steered into it.
         _planTaskHeld = null;
+        _asked = asked;
+        _stepCalls = const [];
         final said = TurnRecorder.parts();
         final from = session.messages.length;
         void sayWhatWasSaid() {
@@ -1147,6 +1172,7 @@ class BuiltinAgent implements Turn {
       _images.addAll(images);
     }
     for (final s in said) {
+      _asked = _asked.steer(s.plainText);
       yield SteerEvent(s);
     }
   }
@@ -1251,6 +1277,7 @@ class BuiltinAgent implements Turn {
   /// waits for the fan-out. The session messages are answered in the calls' original
   /// order regardless, so the tool results pair up.
   Stream<AgentEvent> _executeAll(List<LlmToolCall> calls) async* {
+    _stepCalls = calls;
     final tools = {for (final tool in _tools) tool.name: tool};
     final batches = <AgentTool, List<LlmToolCall>>{};
     for (final call in calls) {

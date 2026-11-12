@@ -52,6 +52,15 @@ String safeCut(String text, int end) {
   return text.substring(0, last >= 0xD800 && last <= 0xDBFF ? at - 1 : at);
 }
 
+/// The last [count] UTF-16 code units of [text], one fewer where the cut
+/// would split a surrogate pair: [safeCut] from the other end.
+String safeTail(String text, int count) {
+  final at = (text.length - count).clamp(0, text.length);
+  if (at == 0 || at == text.length) return text.substring(at);
+  final first = text.codeUnitAt(at);
+  return text.substring(first >= 0xDC00 && first <= 0xDFFF ? at + 1 : at);
+}
+
 /// "1 chat", "3 chats".
 String plural(int count, String unit) => "$count $unit${count == 1 ? "" : "s"}";
 

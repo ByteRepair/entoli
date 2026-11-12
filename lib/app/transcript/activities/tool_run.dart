@@ -33,21 +33,22 @@ abstract class ToolActivity extends Activity {
   /// The line under the detail's title.
   DetailStatus? status(Run run) => null;
 
+  /// The label in place of the tool's name, where the call said what it was
+  /// doing.
+  String? summary(Run run) => null;
+
   @override
   ActivityNode node(SettingReader reader, Run run) {
     final name = run.call?.name;
     final result = run.result;
     final verb = result == null ? "Using tool" : "Used tool";
     final outcome = result?.permissionOutcome;
+    final said = summary(run) ?? (name == null ? verb : "$verb: $name");
     return LabelNode(
       this,
       run,
       glyph: TranscriptGlyph.terminal,
-      text: name == null
-          ? verb
-          : outcome == null
-          ? "$verb: $name"
-          : "$verb: $name — $outcome",
+      text: name == null || outcome == null ? said : "$said — $outcome",
       isError: run.failed || (result?.violations.isNotEmpty ?? false),
       busy: run.going && result == null,
     );

@@ -59,6 +59,7 @@ import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/domain/project.dart" show ProjectRef;
 import "package:agent_chat/data/builtin/llm/providers/presets.dart"
     show CliProvider;
+import "package:agent_chat/data/local/apple_fm.dart" show AppleFm;
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/app/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
@@ -206,6 +207,7 @@ class TestApp {
     AgentBrowser Function(AppConfig config)? browser,
     FrontendChoice frontend = const FrontendChoice(),
     List<CliProvider>? clis,
+    AppleFm? appleFm,
   }) {
     final config = tempConfig();
     seedCatalog(testProviderModels);
@@ -271,6 +273,7 @@ class TestApp {
           ...transcriptOverrides,
           shellProvider.overrideWithValue(shell ?? _defaultShell(linuxHost)),
           appConfigProvider.overrideWithValue(config),
+          if (appleFm != null) appleFmProvider.overrideWithValue(appleFm),
           // Installed and signed in unless a test says otherwise, and running
           // nothing either way.
           cliProgramsProvider.overrideWithValue(

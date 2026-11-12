@@ -205,8 +205,9 @@ plan someone pays for answers through (`welcomeProviders`), then Local Model
 and Advanced. A service is connected as its kind is — a CLI by `connectCli`,
 installed if Entoli has no copy of it, which is the one place a program is
 installed (no first-run step does it ahead of time), and signed in if it is
-not (`CliSignInAppPage`: the program's own sign-in run, the page it prints
-opened from a link on it, a code the page shows pasted back), an API in the
+not (`CliSignInAppPage` over a `CliAccount`: the program's own sign-in run,
+the page it prints opened from a link on it, a code the page shows pasted
+back), an API in the
 provider form started on its preset
 (`providerForm` and `saveProvider` beside the Providers page's spec) — and
 adopted, answering new
@@ -215,11 +216,15 @@ configured adopts that entry rather than adding a second. The first
 on-device model downloaded fills those roles where nothing answers yet
 (`ModelDownloads.landed`), so Local Model needs no picking either.
 The provider form is the way to sign in outside the tour: a CLI's entry asks
-`FormSignIn`, which Flutter draws as `CliAccountSection` — whether the account
-in the entry's own folder is signed in, Sign in where it is not, and Sign in
-again where it is, which signs the program out first so the sign-in is a new
-one, perhaps another account — and the native form as the two buttons, run
-through the `signIn` hand-off.
+`FormSignIn`: whether the account in the entry's own folder is signed in,
+Sign in where it is not, and Sign in again where it is, which signs the
+program out first so the sign-in is a new one, perhaps another account. The
+steps are `CliAccount` (`app/settings/cli_account.dart`), which every place
+that signs a program in draws: Flutter's form as `CliAccountSection`, the
+native form as `CliAccountRow` and a sheet over the form, through
+`ShellCliAccount`, and the tour's connect as `CliSignInAppPage`. The native
+sheet opens the page in the browser as soon as the program names it, since
+that is where the user has to go next.
 The default and title model pickers are drawn only where models are
 reachable and nothing answers new chats — a setup from before this — which is the one case Next
 would otherwise wait on with nothing to press. The extras page is optional throughout: a row into each extra, a row
