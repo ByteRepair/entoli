@@ -261,7 +261,7 @@ struct AppPagesPresenter: ViewModifier {
           .overlay {
             if carded {
               AppPagesCard(model: pages)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .transition(.asymmetric(insertion: .identity, removal: .move(edge: .bottom).combined(with: .opacity)))
             }
           }
           .animation(.smooth(duration: 0.4), value: carded)
@@ -292,7 +292,11 @@ extension EnvironmentValues {
   struct AppPagesCard: View {
     @Bindable var model: AppPagesModel
     @State private var leaving: SettingConfirmData?
-    private let shape = RoundedRectangle(cornerRadius: 26, style: .continuous)
+    /// Up from below the window's edge once it is in the window, so it
+    /// rises at launch too, where it is there from the first frame.
+    @State private var risen = false
+    private let shape = UnevenRoundedRectangle(
+      topLeadingRadius: 26, topTrailingRadius: 26, style: .continuous)
 
     /// The page on top, where it is one of the app's rather than what a row
     /// pushed.
@@ -305,9 +309,10 @@ extension EnvironmentValues {
     var body: some View {
       ZStack {
         // Nothing behind it answers while it is up.
-        Rectangle().fill(.black.opacity(0.22)).ignoresSafeArea()
+        Rectangle().fill(.black.opacity(risen ? 0.25 : 0)).ignoresSafeArea()
           .contentShape(Rectangle()).onTapGesture {}
         GeometryReader { space in
+          let height = min(760, space.size.height - 40)
           VStack(spacing: 0) {
             header
             NavigationStack(path: model.path) {
@@ -321,16 +326,21 @@ extension EnvironmentValues {
             footer
           }
           .environment(\.appPagesCard, true)
-          .frame(
-            width: min(680, space.size.width - 32),
-            height: min(720, space.size.height - 32))
+          .frame(width: min(720, space.size.width - 48), height: height)
           .background(.windowBackground, in: shape)
           .clipShape(shape)
           .overlay(shape.strokeBorder(.separator.opacity(0.5)))
-          .shadow(color: .black.opacity(0.25), radius: 32, y: 12)
+          .shadow(color: .black.opacity(0.2), radius: 24, y: -2)
+          // Flush with the window's bottom edge, and below it until risen.
+          .offset(y: risen ? 0 : height + 60)
           .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-          .padding(.bottom, 16)
         }
+        .ignoresSafeArea(edges: .bottom)
+      }
+      // A beat first: at launch it appears before the window is on screen.
+      .task {
+        try? await Task.sleep(for: .milliseconds(300))
+        withAnimation(.spring(duration: 0.55, bounce: 0.12)) { risen = true }
       }
       .alert(
         leaving?.title ?? "", isPresented: .present($leaving), presenting: leaving
