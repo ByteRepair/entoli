@@ -94,7 +94,7 @@ class MarketplaceAppPage extends AppPage {
                 kind: _kind,
                 tags: tagsOf(listed.value!),
                 ticked: tagged,
-                onChanged: changed,
+                onTicked: changed,
               ),
             );
             return null;
@@ -189,13 +189,15 @@ class MarketplaceTagsAppPage extends AppPage {
     required this.kind,
     required this.tags,
     required this.ticked,
-    required this.onChanged,
+    required this.onTicked,
   });
 
   final CompletionKind kind;
   final List<(String, int)> tags;
   final Set<String> ticked;
-  final void Function() onChanged;
+
+  /// Told as a tag is ticked, so the list behind redraws.
+  final void Function() onTicked;
 
   @override
   String get address => "marketplace-tags/${kind.name}";
@@ -223,7 +225,7 @@ class MarketplaceTagsAppPage extends AppPage {
               ticked.remove(tag);
             }
             changed();
-            onChanged();
+            onTicked();
             return null;
           },
         ),
@@ -239,7 +241,7 @@ class MarketplaceTagsAppPage extends AppPage {
         run: () async {
           ticked.clear();
           changed();
-          onChanged();
+          onTicked();
           return null;
         },
       ),
@@ -401,13 +403,14 @@ class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
   MarketplaceEntryAppPage({
     required this.kind,
     required this.entry,
-    EntryPreview? preview,
-  }) : _preview = preview;
+    this.preview,
+  });
 
   final CompletionKind kind;
   final MarketplaceEntry entry;
 
-  EntryPreview? _preview;
+  /// What was fetched, or what a link carried whole.
+  EntryPreview? preview;
   String? _failure;
 
   @override
@@ -415,7 +418,7 @@ class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
 
   @override
   void opened() {
-    if (_preview == null) _load();
+    if (preview == null) _load();
   }
 
   Future<void> _load() async {
@@ -459,7 +462,7 @@ class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
       } else if (body != null) {
         source = utf8.decode(body, allowMalformed: true);
       }
-      _preview = EntryPreview(
+      preview = EntryPreview(
         readme: readme == null
             ? null
             : utf8.decode(readme, allowMalformed: true),
@@ -474,7 +477,7 @@ class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
     } on MarketplacePackageProblem catch (e) {
       // The page read fine; there is just nothing to install.
       logFailure("marketplace", "${entry.slug}'s listing is stale", e);
-      _preview = EntryPreview(packageProblem: "$e");
+      preview = EntryPreview(packageProblem: "$e");
     } catch (e) {
       logFailure("marketplace", "could not fetch ${entry.slug}'s preview", e);
       _failure = "$e";
@@ -490,7 +493,7 @@ class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
 
   @override
   List<PageSection> sections(SettingReader reader) {
-    final preview = _preview;
+    final preview = this.preview;
     if (_failure case final failure?) {
       return [
         PageSection("failed", "Could not reach the marketplace", [
@@ -574,7 +577,7 @@ class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
 
   @override
   List<ActionController> toolbar(SettingReader reader) {
-    final preview = _preview;
+    final preview = this.preview;
     if (preview == null || !preview.installable(kind)) return const [];
     return [
       ActionController(
@@ -668,8 +671,9 @@ class SkillInstallAppPage extends AppPage with InstallsPrompts {
       final bytes = await app
           .read(chatStoreProvider)
           .readSkillInstall(chatId, installId);
-      if (bytes != null)
+      if (bytes != null) {
         _package = parseSkillPackage(Uint8List.fromList(bytes));
+      }
     } catch (_) {
       _package = null;
     }

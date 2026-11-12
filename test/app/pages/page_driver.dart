@@ -35,7 +35,7 @@ class PageDriver<P extends AppPage> {
   final TestApp app;
   final P page;
 
-  late final _heard;
+  late final ProviderSubscription<List<AppPage>> _heard;
   Completer<void>? _next;
 
   void _changed() {
