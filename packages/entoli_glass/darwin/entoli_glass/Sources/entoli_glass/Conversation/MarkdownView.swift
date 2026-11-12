@@ -10,6 +10,8 @@ struct MarkdownView: View {
   var tone: Color? = nil
   /// Answers a selected passage; null where there is nothing to answer.
   var reply: ((String) -> Void)? = nil
+  /// As wide as its words rather than the whole width offered: in a bubble.
+  var hugs = false
   @Environment(\.colorScheme) private var scheme
 
   var body: some View {
@@ -18,7 +20,8 @@ struct MarkdownView: View {
       text: ProseBuilder.build(
         blocks, model: model, caret: caret, tone: tone.map { PlatformColor($0) },
         dark: scheme == .dark),
-      actions: ProseActions(reply: reply, link: { model.link($0.absoluteString) }))
+      actions: ProseActions(reply: reply, link: { model.link($0.absoluteString) }),
+      hugs: hugs)
   }
 }
 

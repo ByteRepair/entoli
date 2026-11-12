@@ -495,6 +495,7 @@ private let copySymbol = "doc.on.doc"
   struct ProseText: NSViewRepresentable {
     let text: NSAttributedString
     let actions: ProseActions
+    var hugs = false
 
     func makeNSView(context: Context) -> ProseTextView {
       let view = ProseTextView(usingTextLayoutManager: false)
@@ -526,7 +527,8 @@ private let copySymbol = "doc.on.doc"
       guard let container = view.textContainer, let layout = view.layoutManager else { return nil }
       container.containerSize = CGSize(width: width, height: .greatestFiniteMagnitude)
       layout.ensureLayout(for: container)
-      return CGSize(width: width, height: ceil(layout.usedRect(for: container).height))
+      let used = layout.usedRect(for: container)
+      return CGSize(width: hugs ? min(width, ceil(used.width)) : width, height: ceil(used.height))
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(actions: actions) }
@@ -635,6 +637,7 @@ private let copySymbol = "doc.on.doc"
   struct ProseText: UIViewRepresentable {
     let text: NSAttributedString
     let actions: ProseActions
+    var hugs = false
 
     func makeUIView(context: Context) -> ProseUITextView {
       let view = ProseUITextView(usingTextLayoutManager: false)
@@ -663,7 +666,13 @@ private let copySymbol = "doc.on.doc"
     {
       let width = proposal.width ?? 320
       let size = view.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
-      return CGSize(width: width, height: ceil(size.height))
+      var used = width
+      if hugs {
+        view.textContainer.size = CGSize(width: width, height: .greatestFiniteMagnitude)
+        view.layoutManager.ensureLayout(for: view.textContainer)
+        used = min(width, ceil(view.layoutManager.usedRect(for: view.textContainer).width))
+      }
+      return CGSize(width: used, height: ceil(size.height))
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(actions: actions) }

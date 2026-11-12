@@ -113,21 +113,18 @@ private struct Bubble: View {
         Files(row: row, index: index, files: block.files, model: model)
       }
       ForEach(Array(block.said.enumerated()), id: \.offset) { _, said in
-        SaidView(said: said, model: model, reply: reply)
+        SaidView(said: said, model: model, reply: reply, hugs: Self.fill(block.tint) != nil)
       }
       ForEach(Array(block.trailing.enumerated()), id: \.offset) { _, trailing in
         TrailingView(row: row, trailing: trailing, model: model)
       }
     }
     if let fill = Self.fill(block.tint) {
-      content
-        .padding(10)
-        .background(fill, in: RoundedRectangle(cornerRadius: 12))
-        .containerRelativeFrame(.horizontal, alignment: user ? .trailing : .leading) { width, _ in
-          width * 0.8
-        }
-        .fixedSize(horizontal: true, vertical: false)
-        .frame(maxWidth: .infinity, alignment: user ? .trailing : .leading)
+      CappedWidth(fraction: 0.8, trailing: user) {
+        content
+          .padding(10)
+          .background(fill, in: RoundedRectangle(cornerRadius: 12))
+      }
     } else {
       content.frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -147,11 +144,14 @@ private struct SaidView: View {
   let said: SaidSnapshot
   let model: TranscriptModel
   let reply: ((String) -> Void)?
+  /// In a bubble, which is as wide as what it says.
+  var hugs = false
 
   var body: some View {
     switch said.kind {
     case .prose:
-      MarkdownView(blocks: said.blocks, model: model, caret: said.caret, reply: reply)
+      MarkdownView(
+        blocks: said.blocks, model: model, caret: said.caret, reply: reply, hugs: hugs)
     case .error:
       Text(said.text).foregroundStyle(.red).textSelection(.enabled)
     case .command:
@@ -386,5 +386,32 @@ private struct EditSheet: View {
         }
     }
     .frame(minWidth: 480, minHeight: 320)
+  }
+}
+
+/// Its one child at most [fraction] of the width it is offered — the reading
+/// column, not the window — as wide as it asks within that, and held to the
+/// trailing edge for [trailing]: a prompt's bubble.
+private struct CappedWidth: Layout {
+  let fraction: CGFloat
+  let trailing: Bool
+
+  private func childSize(_ subviews: Subviews, width: CGFloat?) -> CGSize {
+    subviews.first?.sizeThatFits(ProposedViewSize(width: width.map { $0 * fraction }, height: nil))
+      ?? .zero
+  }
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    let child = childSize(subviews, width: proposal.width)
+    return CGSize(width: proposal.width ?? child.width, height: child.height)
+  }
+
+  func placeSubviews(
+    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+  ) {
+    let child = childSize(subviews, width: bounds.width)
+    let x = trailing ? bounds.maxX - child.width : bounds.minX
+    subviews.first?.place(
+      at: CGPoint(x: x, y: bounds.minY), proposal: ProposedViewSize(child))
   }
 }
