@@ -173,6 +173,10 @@ import SwiftUI
 
   private(set) var device: ShownDevice?
 
+  /// The open form's program account, as Dart last sent it; none until it
+  /// has asked the program.
+  private(set) var cliAccount: CliAccountData?
+
   /// A device page asked for and not yet pushed: it waits for its record,
   /// or it would slide in empty and fill once it had stopped.
   @ObservationIgnored private var opening: String?
@@ -281,19 +285,17 @@ extension SettingsModel {
     }
   }
 
-  /// The program a collection's form names signed in, the app's window
-  /// brought forward for the sign-in it draws.
-  func formSignIn(_ id: String, _ index: Int?, _ answers: [String?: String?], again: Bool)
-    async
-  {
-    #if os(macOS)
-      NSApp.windows.first { $0.isVisible && !($0.identifier?.rawValue ?? "").contains("Settings") }?
-        .makeKeyAndOrderFront(nil)
-    #endif
-    _ = await reply {
-      say.formSignIn(
-        id: id, index: index.map(Int64.init), answers: answers, again: again, completion: $0)
-    }
+  func cliAccount(account: CliAccountData) throws { cliAccount = account }
+
+  /// Watches the account of the program form [id]'s sign-in names.
+  func openCliAccount(_ id: String, _ index: Int?, _ answers: [String?: String?]) {
+    cliAccount = nil
+    say.openCliAccount(id: id, index: index.map(Int64.init), answers: answers, completion: ignore)
+  }
+
+  func closeCliAccount() {
+    cliAccount = nil
+    say.closeCliAccount(completion: ignore)
   }
 
   func text(of opens: TextPageData) async -> String {

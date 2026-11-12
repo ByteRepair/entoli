@@ -59,11 +59,10 @@ Future<void> _connectCli(
       .firstOrNull;
   // A new entry's id first: its account is kept in a folder named by it.
   final config = existing ?? service.config.copyWith(id: const Uuid().v4());
-  final cli = cliProgramOf(programs, config);
   final ready = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
-    builder: (_) => CliSignInDialog(cli: cli),
+    builder: (_) => CliSignInDialog(config: config),
   );
   if (ready != true) {
     if (existing == null) await _forgetDraft(programs, config.id);

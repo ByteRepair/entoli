@@ -1033,7 +1033,51 @@ abstract class NativeSettings {
   /// no longer paired, or with [readError] where the record could not be
   /// read.
   void device(String id, PairedDeviceData? device, String? readError);
+
+  /// The open form's program account as it now stands, while its sign-in
+  /// row is shown.
+  void cliAccount(CliAccountData account);
 }
+
+/// Where a CLI program's account stands: the core's `CliAccountStage`, name
+/// for name.
+enum CliAccountStep {
+  checking,
+  signedIn,
+  signedOut,
+  installing,
+  starting,
+  waiting,
+  failed,
+}
+
+class CliAccountData {
+  CliAccountData({
+    required this.step,
+    required this.plan,
+    required this.program,
+    this.progress,
+    this.page,
+    this.failure,
+  });
+
+  CliAccountStep step;
+
+  /// What the account is called: "Claude", "ChatGPT".
+  String plan;
+
+  /// The program's name, for the row and the install.
+  String program;
+
+  /// An install's, 0 to 1; none while it cannot say.
+  double? progress;
+
+  /// The page to sign in on, while waiting.
+  String? page;
+  String? failure;
+}
+
+enum CliAccountOp { signIn, signInAgain, cancel }
 
 /// What the client says the user did, by row id. A row inside a group is
 /// named by its own id. The answers that wait return what the client shows
@@ -1097,14 +1141,16 @@ abstract class SettingsIntents {
     Map<String?, String?> answers,
   );
 
-  /// The program the form's sign-in names, signed in; afresh where [again].
-  @async
-  void formSignIn(
-    String id,
-    int? index,
-    Map<String?, String?> answers,
-    bool again,
-  );
+  /// Watches the account of the program the form's sign-in names, as
+  /// [answers] stand, sent by `cliAccount` until [closeCliAccount].
+  void openCliAccount(String id, int? index, Map<String?, String?> answers);
+
+  void cliAccountOp(CliAccountOp op);
+
+  /// A code the sign-in page showed, pasted back.
+  void cliAccountCode(String code);
+
+  void closeCliAccount();
 
   /// The form left unsaved, as [answers] stood.
   void formDismissed(String id, int? index, Map<String?, String?> answers);

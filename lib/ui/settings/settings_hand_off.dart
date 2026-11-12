@@ -2,9 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/settings/hand_off.dart";
-import "../../core/log.dart";
 import "../bot_avatar/bot_avatar_editor.dart";
-import "cli_sign_in_dialog.dart";
 import "local_model_settings.dart" show AddLocalModelPage;
 import "paired_device_page.dart";
 import "sync_pairing.dart" show ScanQrPage;
@@ -21,22 +19,6 @@ void bindSettingsHandOff(
   Future<T?> push<T>(Widget page) =>
       Navigator.of(context).push<T>(MaterialPageRoute(builder: (_) => page));
   handOff
-    ..signIn = (config, {again = false}) async {
-      final cli = programFor(ref, config);
-      if (again) {
-        try {
-          await cli.signOut();
-        } catch (e) {
-          logFailure("cli", "signing ${cli.config.displayName} out", e);
-        }
-      }
-      if (!context.mounted) return;
-      await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => CliSignInDialog(cli: cli),
-      );
-    }
     ..addModelByLink = (() => push<void>(const AddLocalModelPage()))
     ..pairedDevice = ((id) => push<void>(PairedDevicePage(deviceId: id)))
     ..scanCode = (() => push<String>(const ScanQrPage()))

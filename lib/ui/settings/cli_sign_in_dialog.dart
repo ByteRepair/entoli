@@ -4,67 +4,46 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../core/log.dart";
-import "../../data/builtin/llm/providers/cli_sign_in.dart";
-import "../../data/builtin/llm/providers/presets.dart";
-import "../../domain/download.dart";
+import "../../app/settings/cli_account.dart";
 import "../../domain/llm_provider.dart";
 import "../../providers.dart";
-import "../../app/downloads/cli_downloads.dart";
 
-/// Where a sign-in has got to.
-sealed class _Stage {
-  const _Stage();
-}
-
-class _Installing extends _Stage {
-  const _Installing(this.progress);
-
-  final DownloadProgress? progress;
-}
-
-class _Checking extends _Stage {
-  const _Checking();
-}
-
-class _SigningIn extends _Stage {
-  const _SigningIn(this.signIn, this.page);
-
-  final CliSignIn signIn;
-
-  /// Null until the program prints it.
-  final Uri? page;
-}
-
-class _Failed extends _Stage {
-  const _Failed(this.reason);
-
-  final String reason;
-}
-
-/// Installs [cli] where Entoli has no copy of it, asks it whether it is
-/// signed in, and where it is not, runs its sign-in: the page it prints is
-/// shown here to open, and a code the page shows can be pasted back. Pops
-/// true once the program says it is signed in, false when cancelled.
+/// Installs [config]'s program where Entoli has no copy of it, asks it
+/// whether it is signed in, and where it is not, runs its sign-in: the page
+/// it prints is shown here to open, and a code the page shows can be pasted
+/// back. Pops true once the program says it is signed in, false when
+/// cancelled. Where [account] is given, that one is signed in, [again] out of
+/// its account first.
 class CliSignInDialog extends ConsumerStatefulWidget {
-  const CliSignInDialog({super.key, required this.cli});
+  const CliSignInDialog({
+    super.key,
+    required this.config,
+    this.account,
+    this.again = false,
+  });
 
-  final CliProvider cli;
+  final LlmProviderConfig config;
+  final CliAccount? account;
+  final bool again;
 
   @override
   ConsumerState<CliSignInDialog> createState() => _CliSignInDialogState();
 }
 
 class _CliSignInDialogState extends ConsumerState<CliSignInDialog> {
-  _Stage _stage = const _Checking();
+  late final CliAccount _account =
+      widget.account ??
+      CliAccount(
+        ProviderScope.containerOf(context, listen: false),
+        widget.config,
+      );
   final _code = TextEditingController();
   var _finished = false;
-
-  CliProvider get _cli => widget.cli;
 
   @override
   void initState() {
     super.initState();
+    _account.addListener(_changed);
     // After the first frame: starting a download is a provider write, which
     // may not happen while the tree builds.
     WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_run()));
@@ -73,90 +52,28 @@ class _CliSignInDialogState extends ConsumerState<CliSignInDialog> {
   @override
   void dispose() {
     _code.dispose();
-    final stage = _stage;
-    if (stage is _SigningIn) unawaited(stage.signIn.cancel());
+    _account.removeListener(_changed);
+    if (widget.account == null) _account.dispose();
     super.dispose();
   }
 
-  void _show(_Stage stage) {
-    if (mounted) setState(() => _stage = stage);
+  void _changed() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _run() async {
-    try {
-      if (!_cli.installed) await _install();
-      if (!mounted) return;
-      _show(const _Checking());
-      if (await _cli.signedIn()) return _finish(true);
-      final signIn = await CliSignIn.start(_cli);
-      if (!mounted) return unawaited(signIn.cancel());
-      _show(_SigningIn(signIn, signIn.page.value));
-      // The page may be named again, a better one: the one the program asked
-      // to open, which signs in with no code to paste.
-      void named() {
-        final stage = _stage;
-        if (stage is _SigningIn && stage.signIn == signIn) {
-          _show(_SigningIn(signIn, signIn.page.value));
-        }
-      }
-
-      signIn.page.addListener(named);
-      try {
-        if (await signIn.result) return _finish(true);
-      } finally {
-        signIn.page.removeListener(named);
-      }
-      _show(_Failed(signIn.failure ?? "The sign-in did not finish."));
-    } catch (e) {
-      logFailure("cli", "connecting ${_cli.config.displayName} failed", e);
-      _show(_Failed("$e"));
-    }
+    if (await _account.signIn(again: widget.again)) _finish(true);
   }
 
-  /// Through the shared downloads, so two sign-ins never fetch the program
-  /// twice, and done once it is on disk.
-  Future<void> _install() async {
-    final id = _cli.workFolder;
-    final done = Completer<void>();
-    final sub = ref.listenManual(cliDownloadsProvider, (_, state) {
-      if (done.isCompleted) return;
-      _show(_Installing(state.active[id]));
-      final failure = state.failures[id];
-      if (failure != null) {
-        done.completeError(failure);
-      } else if (!state.active.containsKey(id) && _cli.installed) {
-        done.complete();
-      }
-    });
-    _show(const _Installing(null));
-    ref.read(cliDownloadsProvider.notifier).install(_cli);
-    try {
-      await done.future;
-    } finally {
-      sub.close();
-    }
-  }
-
-  /// Out of [_SigningIn] first, so closing does not stop a program that
-  /// has already finished.
   void _finish(bool signedIn) {
-    // Once only: [_run] can pop on success while [_cancel] is still awaiting
-    // [CliSignIn.cancel], and its own pop after would find the navigator empty.
+    // Once only: a sign-in can land while a cancel is still on its way out.
     if (_finished) return;
     _finished = true;
-    _stage = const _Checking();
     if (mounted) Navigator.pop(context, signedIn);
   }
 
-  Future<void> _cancel() async {
-    final stage = _stage;
-    // Stopped behind the dialog rather than before it closes: a program that
-    // does not take its SIGTERM is given seconds more, and the user who
-    // cancelled is not kept waiting on it.
-    if (stage is _SigningIn) unawaited(stage.signIn.cancel());
-    if (stage is _Installing) {
-      ref.read(cliDownloadsProvider.notifier).cancel(_cli.workFolder);
-    }
+  void _cancel() {
+    unawaited(_account.cancel());
     _finish(false);
   }
 
@@ -164,38 +81,37 @@ class _CliSignInDialogState extends ConsumerState<CliSignInDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return AlertDialog(
-      title: Text("Sign in to ${_cli.planName}"),
+      title: Text("Sign in to ${_account.plan}"),
       content: SizedBox(
         width: 420,
-        child: switch (_stage) {
-          _Installing(:final progress) => _Busy(
-            "Installing ${_cli.config.displayName}…",
+        child: switch (_account.stage) {
+          CliInstalling(:final progress) => _Busy(
+            "Installing ${_account.cli.config.displayName}…",
             value: progress?.bar,
           ),
-          _Checking() => const _Busy("Checking whether you are signed in…"),
-          _SigningIn(page: null) => const _Busy("Starting the sign-in…"),
-          _SigningIn(:final signIn, page: final Uri page) => _SignInPage(
-            plan: _cli.planName,
+          CliWaiting(:final page) => _SignInPage(
+            plan: _account.plan,
             page: page,
             code: _code,
             onOpen: () =>
                 ref.read(linkOpenerProvider).openSignIn(context, page),
-            onCode: () => signIn.answer(_code.text),
+            onCode: () => _account.answer(_code.text),
           ),
-          _Failed(:final reason) => Text(
+          CliStarting() => const _Busy("Starting the sign-in…"),
+          CliFailed(:final reason) => Text(
             reason,
             style: TextStyle(color: theme.colorScheme.error),
           ),
+          CliChecking() ||
+          CliSignedIn() ||
+          CliSignedOut() => const _Busy("Checking whether you are signed in…"),
         },
       ),
       actions: [
         TextButton(onPressed: _cancel, child: const Text("Cancel")),
-        if (_stage is _Failed)
+        if (_account.stage is CliFailed)
           FilledButton(
-            onPressed: () {
-              _show(const _Checking());
-              unawaited(_run());
-            },
+            onPressed: () => unawaited(_run()),
             child: const Text("Try again"),
           ),
       ],
@@ -286,10 +202,6 @@ class _SignInPage extends StatelessWidget {
   }
 }
 
-/// [cliProgramOf] over this app's programs.
-CliProvider programFor(WidgetRef ref, LlmProviderConfig config) =>
-    cliProgramOf(ref.read(cliProgramsProvider), config);
-
 /// The sign-in of [config]'s program where a provider on it is set up:
 /// whether the account in the entry's own folder is signed in, as the
 /// program says itself, and the way to sign it in — [CliSignInDialog], the
@@ -304,61 +216,64 @@ class CliAccountSection extends ConsumerStatefulWidget {
 }
 
 class _CliAccountSectionState extends ConsumerState<CliAccountSection> {
-  /// Null while the program is being asked; false also where it is not
-  /// there to ask, signing in being what installs it.
-  bool? _signedIn;
-
-  late final CliProvider _cli = programFor(ref, widget.config);
+  late final CliAccount _account = CliAccount(
+    ProviderScope.containerOf(context, listen: false),
+    widget.config,
+  );
 
   @override
   void initState() {
     super.initState();
-    unawaited(_check());
+    _account.addListener(_changed);
+    unawaited(_account.check());
   }
 
-  Future<void> _check() async {
-    if (mounted) setState(() => _signedIn = null);
-    var signedIn = false;
-    try {
-      signedIn = _cli.installed && await _cli.signedIn();
-    } catch (e) {
-      logFailure("cli", "asking ${_cli.config.displayName} its sign-in", e);
-    }
-    if (mounted) setState(() => _signedIn = signedIn);
+  @override
+  void dispose() {
+    _account.dispose();
+    super.dispose();
   }
 
-  Future<void> _signIn() async {
-    final done = await showDialog<bool>(
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _signIn({bool again = false}) async {
+    await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => CliSignInDialog(cli: _cli),
+      builder: (_) => CliSignInDialog(
+        config: widget.config,
+        account: _account,
+        again: again,
+      ),
     );
-    if (done == true) {
-      if (mounted) setState(() => _signedIn = true);
-    } else {
-      await _check();
-    }
-  }
-
-  /// Out of the account first, so the sign-in that follows is a new one
-  /// rather than the program saying it already is. Given up on, it stays
-  /// signed out, and says so.
-  Future<void> _signInAgain() async {
-    setState(() => _signedIn = null);
-    try {
-      await _cli.signOut();
-    } catch (e) {
-      logFailure("cli", "signing ${_cli.config.displayName} out", e);
-    }
-    if (mounted) await _signIn();
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final plan = _cli.planName;
-    return switch (_signedIn) {
-      null => const Row(
+    return switch (_account.stage) {
+      CliSignedIn() => Row(
+        children: [
+          Icon(Icons.check_circle, color: scheme.primary),
+          const SizedBox(width: 12),
+          Expanded(child: Text("Signed in to your ${_account.plan} account")),
+          TextButton(
+            onPressed: () => _signIn(again: true),
+            child: const Text("Sign in again"),
+          ),
+        ],
+      ),
+      CliSignedOut() => Row(
+        children: [
+          Icon(Icons.account_circle_outlined, color: scheme.onSurfaceVariant),
+          const SizedBox(width: 12),
+          const Expanded(child: Text("Not signed in")),
+          FilledButton.tonal(onPressed: _signIn, child: const Text("Sign in")),
+        ],
+      ),
+      _ => const Row(
         children: [
           SizedBox.square(
             dimension: 18,
@@ -366,25 +281,6 @@ class _CliAccountSectionState extends ConsumerState<CliAccountSection> {
           ),
           SizedBox(width: 12),
           Text("Checking the sign-in…"),
-        ],
-      ),
-      true => Row(
-        children: [
-          Icon(Icons.check_circle, color: scheme.primary),
-          const SizedBox(width: 12),
-          Expanded(child: Text("Signed in to your $plan account")),
-          TextButton(
-            onPressed: _signInAgain,
-            child: const Text("Sign in again"),
-          ),
-        ],
-      ),
-      false => Row(
-        children: [
-          Icon(Icons.account_circle_outlined, color: scheme.onSurfaceVariant),
-          const SizedBox(width: 12),
-          const Expanded(child: Text("Not signed in")),
-          FilledButton.tonal(onPressed: _signIn, child: const Text("Sign in")),
         ],
       ),
     };

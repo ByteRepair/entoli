@@ -25,6 +25,7 @@ import "../../domain/bot_avatar/spec.dart";
 import "../../domain/model_registry.dart" show ModelCatalog;
 import "../../providers.dart";
 import "../../app/prompts/skill_files.dart";
+import "shell_cli_account.dart";
 import "shell_device.dart";
 
 /// Every page the native settings offer, as rows, and the controller each
@@ -517,6 +518,7 @@ class SettingsBridge implements SettingsIntents {
   late final _reader = ContainerReader(_container);
   final _native = NativeSettings();
   late final _device = ShellDevicePage(_container, _native);
+  late final _cliAccount = ShellCliAccount(_container, _native);
 
   /// Binds [handOff]'s paired device to the client's own page of it.
   void bindDevicePage(SettingsHandOff handOff) => handOff
@@ -840,19 +842,23 @@ class SettingsBridge implements SettingsIntents {
   }
 
   @override
-  Future<void> formSignIn(
-    String id,
-    int? index,
-    Map<String?, String?> answers,
-    bool again,
-  ) async {
-    final form = _formOf(id, index);
-    final now = _answersOf(answers);
-    final signIn = form?.fields(now).whereType<FormSignIn>().firstOrNull;
-    final hook = _container.read(settingsHandOffProvider).signIn;
-    if (signIn == null || hook == null) return;
-    await hook(signIn.config, again: again);
+  void openCliAccount(String id, int? index, Map<String?, String?> answers) {
+    final signIn = _formOf(
+      id,
+      index,
+    )?.fields(_answersOf(answers)).whereType<FormSignIn>().firstOrNull;
+    if (signIn == null) return _cliAccount.close();
+    _cliAccount.open(signIn.config);
   }
+
+  @override
+  void cliAccountOp(CliAccountOp op) => _cliAccount.act(op);
+
+  @override
+  void cliAccountCode(String code) => _cliAccount.answer(code);
+
+  @override
+  void closeCliAccount() => _cliAccount.close();
 
   @override
   void formDismissed(String id, int? index, Map<String?, String?> answers) =>
