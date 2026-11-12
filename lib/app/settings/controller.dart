@@ -776,6 +776,7 @@ class CollectionItem {
     this.tap,
     this.badge,
     this.face,
+    this.bot,
     this.editable = true,
     this.takesImage = true,
     this.meters = const [],
@@ -817,6 +818,9 @@ class CollectionItem {
 
   /// The agent whose face leads the row.
   final ({String? project, String name})? face;
+
+  /// A Bot Avatar that leads the row itself, worn by no agent yet.
+  final BotAvatarSpec? bot;
 
   /// Whether it is edited through the list's form: an entry of another
   /// level's is shown and not changed.

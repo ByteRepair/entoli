@@ -1,3 +1,4 @@
+import "../bot_avatar/bot_avatar_view.dart";
 import "../widgets/document_view.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -1380,6 +1381,11 @@ class _Collection<T> extends StatelessWidget {
           if (c.actionsOf(row) case final actions)
             ListTile(
               leading: switch ((row.face, settingIcon(row.glyph))) {
+                _ when row.bot != null => BotAvatarView(
+                  spec: row.bot!,
+                  size: 40,
+                  reactToTap: true,
+                ),
                 // Live, and happy at a tap: a row scrolled out of view is not
                 // painted, which stops its ticker until it is back.
                 ((:final project, :final name)?, _) => AgentPicture(

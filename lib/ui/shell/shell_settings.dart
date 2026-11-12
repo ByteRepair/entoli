@@ -167,7 +167,18 @@ class _Encoder {
   }
 
   /// A Bot Avatar is drawn live by the client from its rig; a photo is sent.
-  _Face face(({String? project, String name}) agent) =>
+  /// [who] is an agent, or a Bot Avatar itself.
+  _Face face(Object who) => switch (who) {
+    BotAvatarSpec(:final definition, :final colour) => (
+      photo: null,
+      bot: _stage.keyOf(definition),
+      colour: colour,
+    ),
+    final ({String? project, String name}) agent => _agentFace(agent),
+    _ => (photo: null, bot: null, colour: null),
+  };
+
+  _Face _agentFace(({String? project, String name}) agent) =>
       switch (ref.watch(agentPictureProvider(agent)).value) {
         AgentPhoto(:final bytes) => (photo: bytes, bot: null, colour: null),
         AgentBot(:final spec) => (
@@ -192,7 +203,7 @@ List<SettingRowData> _rows(
   SettingController c,
   Map<String, SettingController> controllers,
   _ModelField Function(ModelPickController c) label,
-  _Face Function(({String? project, String name}) agent) face, {
+  _Face Function(Object who) face, {
   String? parent,
   bool accessory = false,
 }) {
@@ -253,7 +264,7 @@ SettingOptionData _option(SettingOption option) => SettingOptionData(
 SettingRowData _row(
   SettingController c,
   _ModelField Function(ModelPickController c) label,
-  _Face Function(({String? project, String name}) agent) face, {
+  _Face Function(Object who) face, {
   String? parent,
   bool accessory = false,
 }) {
@@ -368,8 +379,11 @@ SettingRowData _row(
         ]
         ..tone = _tone(c.tone);
     case CollectionController():
-      _Face? faceOf(CollectionItem item) =>
-          item.face == null ? null : face(item.face!);
+      _Face? faceOf(CollectionItem item) => switch ((item.bot, item.face)) {
+        (final bot?, _) => face(bot),
+        (null, final agent?) => face(agent),
+        _ => null,
+      };
       row
         ..kind = SettingKind.collection
         ..items = [

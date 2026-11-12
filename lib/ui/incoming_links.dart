@@ -6,7 +6,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../core/log.dart";
 import "../domain/app_link.dart";
 import "../providers.dart";
-import "bot_avatar/bot_avatar_install.dart";
+import "../app/pages/bot_avatar_install.dart";
 import "../app/pages/marketplace.dart";
 import "app_pages.dart";
 import "selection.dart";
@@ -53,8 +53,6 @@ class _IncomingLinksState extends ConsumerState<IncomingLinks> {
     }
     if (!mounted) return;
     final navigator = Navigator.of(context);
-    void push(Widget page) =>
-        navigator.push(MaterialPageRoute<void>(builder: (_) => page));
     switch (link) {
       case NewChatLink(:final prompt):
         navigator.popUntil((r) => r.isFirst);
@@ -69,7 +67,7 @@ class _IncomingLinksState extends ConsumerState<IncomingLinks> {
           MarketplaceEntryAppPage(kind: kind, entry: entry, preview: preview),
         );
       case AvatarLink(:final import):
-        push(BotAvatarInstallPage(import: import));
+        openAppPage(context, BotAvatarInstallAppPage(import));
       case InstallLink(:final kind, :final slug):
         // The provider logs a failed fetch; a missing slug is this one's.
         final entries = await ref
