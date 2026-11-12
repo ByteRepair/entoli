@@ -28,7 +28,7 @@ void main() {
   final channel = ChannelMock(appleChannel);
   final asked = channel.asked;
   final incoming = channel.incoming;
-  final breathe = channel.breathe;
+  final until = channel.until;
   final outgoing = channel.outgoing;
 
   setUp(channel.install);
@@ -44,7 +44,7 @@ void main() {
             outputLimit: LlmOutputLimit(length: 2048, capped: capped),
           )
           .toList();
-      await breathe();
+      await until("generate");
 
       final generate = outgoing("generate");
       expect(generate["maxTokens"], sent);
@@ -57,7 +57,7 @@ void main() {
     final reply = AppleFmClient(const AppleFmProbe("available")).stream(const [
       LlmMessage(role: LlmRole.user, text: "hello"),
     ], model: appleModelId).toList();
-    await breathe();
+    await until("generate");
 
     final id = outgoing("generate")["id"];
     await incoming("text", {"id": id, "text": "Hello"});
@@ -82,7 +82,7 @@ void main() {
     final reply = AppleFmClient(const AppleFmProbe("available")).stream(const [
       LlmMessage(role: LlmRole.user, text: "hello"),
     ], model: appleModelId).toList();
-    await breathe();
+    await until("generate");
 
     final id = outgoing("generate")["id"];
     await incoming("reasoning", {"id": id, "text": "The user "});
@@ -114,7 +114,7 @@ void main() {
           ],
         )
         .toList();
-    await breathe();
+    await until("generate");
 
     final id = outgoing("generate")["id"];
     expect(outgoing("generate")["tools"], isNotEmpty);
@@ -160,7 +160,7 @@ void main() {
         LlmMessage(role: LlmRole.tool, toolCallId: "c0", text: "its size"),
         LlmMessage(role: LlmRole.user, text: "and now?"),
       ], model: appleModelId).toList();
-      await breathe();
+      await until("generate");
 
       final request = outgoing("generate");
       expect(request["instructions"], "sys one\n\nsys two");
@@ -189,7 +189,7 @@ void main() {
       ),
       LlmMessage(role: LlmRole.tool, toolCallId: "c0", text: "its size"),
     ], model: appleModelId).toList();
-    await breathe();
+    await until("generate");
 
     expect(
       outgoing("generate")["prompt"],
@@ -209,7 +209,7 @@ void main() {
         isA<LlmException>().having((e) => e.retryable, "retryable", true),
       ),
     );
-    await breathe();
+    await until("generate");
     final id = outgoing("generate")["id"];
     await incoming("error", {
       "id": id,
@@ -231,7 +231,7 @@ void main() {
             .having((e) => e.message, "message", contains("Compact")),
       ),
     );
-    await breathe();
+    await until("generate");
     final id = outgoing("generate")["id"];
     await incoming("error", {"id": id, "code": "context", "message": ""});
     await expectation;

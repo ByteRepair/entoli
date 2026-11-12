@@ -1,3 +1,5 @@
+import "dart:async";
+
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 
@@ -15,6 +17,9 @@ class ChannelMock {
   /// Every call Dart made, in order.
   final asked = <MethodCall>[];
 
+  /// Each call as it is made, for [until] to wait on.
+  final _calls = StreamController<MethodCall>.broadcast(sync: true);
+
   /// What a call is answered with; throwing is how Swift refuses one.
   Object? Function(MethodCall call) answer = (_) => null;
 
@@ -23,6 +28,7 @@ class ChannelMock {
       .defaultBinaryMessenger
       .setMockMethodCallHandler(channel, (call) async {
         asked.add(call);
+        _calls.add(call);
         return answer(call);
       });
 
@@ -43,23 +49,15 @@ class ChannelMock {
         );
     // The delivery's chain is microtasks through the broadcast; one zero
     // timer is the flush.
-    await breathe();
+    await Future<void>.delayed(Duration.zero);
   }
 
-  /// One breathing round before a request has reached the mock at all: an
-  /// async* generator starts on the next microtask, not eagerly.
-  Future<void> breathe() => Future<void>.delayed(Duration.zero);
-
-  /// Breathes until Dart has called [method], for a request that sits behind
-  /// other channel round trips.
+  /// Until Dart has called [method], for a request that sits behind other
+  /// channel round trips and real file I/O: waited on as the call itself,
+  /// since no count of event-loop turns covers a loaded machine's disk.
   Future<void> until(String method) async {
-    for (
-      var i = 0;
-      i < 20 && !asked.any((call) => call.method == method);
-      i++
-    ) {
-      await breathe();
-    }
+    if (asked.any((call) => call.method == method)) return;
+    await _calls.stream.firstWhere((call) => call.method == method);
   }
 
   /// The one call to [method], as its arguments.
