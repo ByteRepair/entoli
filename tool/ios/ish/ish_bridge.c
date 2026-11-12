@@ -28,6 +28,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <poll.h>
+#include <signal.h>
 #include <sys/stat.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -141,6 +142,11 @@ void ish_boot(const char *rootfs_dir) {
     // the app's own boot mounts `<root>/data`: fakefs_mount asserts the
     // source ends in "data" and derives the sibling meta.db from it. What
     // callers hand this bridge is the rootfs directory itself.
+
+    // Guest pipes and sockets are host fds, so a guest writing to a closed
+    // reader (`curl ... | head`) raises SIGPIPE on the app itself and kills
+    // it. errno_map already delivers the guest its own SIGPIPE from EPIPE.
+    signal(SIGPIPE, SIG_IGN);
     char data_dir[PATH_MAX];
     snprintf(data_dir, sizeof(data_dir), "%s/data", rootfs_dir);
     if (mount_root(&fakefs, data_dir) < 0) {
