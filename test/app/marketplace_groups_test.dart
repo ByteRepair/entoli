@@ -1,7 +1,7 @@
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/ui/marketplace/marketplace.dart";
-import "package:agent_chat/ui/marketplace/marketplace_groups.dart";
+import "package:agent_chat/app/marketplace/marketplace.dart";
+import "package:agent_chat/app/marketplace/groups.dart";
 
 /// A site's-own entry, under [name] with [tags], as the section index names
 /// one — no location, which is what the grouping reads.

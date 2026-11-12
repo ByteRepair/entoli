@@ -40,6 +40,9 @@ abstract class AppPage {
 
   late final Ref _ref;
 
+  /// The stack the page is on: what it opens another page onto, and leaves.
+  late final AppPages pages;
+
   /// Hears [provider] until the returned subscription is closed: what a page
   /// waits on outside a pass, a download it started.
   ProviderSubscription<T> listen<T>(
@@ -166,11 +169,17 @@ class AppPages extends Notifier<List<AppPage>> {
       return;
     }
     page
-      ..onChanged = ref.notifyListeners
+      ..onChanged = _notify
       .._ref = ref
+      ..pages = this
       ..app = RefReader(ref);
     state = [...state, page];
     page.opened();
+  }
+
+  /// A page's load still running says nothing to a stack that is gone.
+  void _notify() {
+    if (ref.mounted) ref.notifyListeners();
   }
 
   /// Closes [address] and every page over it.

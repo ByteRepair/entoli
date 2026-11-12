@@ -1,6 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/ui/marketplace/marketplace.dart";
+import "package:agent_chat/app/marketplace/marketplace.dart";
 
 MarketplaceLocation location(Map<String, Object?> json) =>
     MarketplaceLocation.fromJson("upstream/x", json);
