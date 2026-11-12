@@ -69,10 +69,12 @@ struct ConversationView: View {
           }
         }
         .scrollTargetLayout()
-        // Sized and placed from the view's whole width, not the content's:
-        // a scroller takes its strip from the content, which moved a
-        // centred column off the composer's line whenever one came.
-        .frame(width: max(0, min(ShellView.readableWidth, width - 32)))
+        // Placed from the view's whole width, not the content's: a scroller
+        // takes its strip from the content, which moved a centred column off
+        // the composer's line whenever one came. As wide as it may be up to
+        // the reading width, so it narrows with the window; a fixed width
+        // held the scroll view, and the width read off it, where they were.
+        .frame(maxWidth: ShellView.readableWidth)
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .padding(.leading, margin)
