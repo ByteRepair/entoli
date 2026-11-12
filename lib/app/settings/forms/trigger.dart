@@ -143,10 +143,12 @@ class TriggerForm extends SettingForm<Trigger> {
         FileSource(:final paths) => paths.join("\n"),
         _ => "",
       },
-      "events": (switch (source) {
-        FileSource(:final events) => events,
-        _ => const FileSource(paths: []).events,
-      }).map((e) => e.name).join(","),
+      "events": FormMulti.encode(
+        (switch (source) {
+          FileSource(:final events) => events,
+          _ => const FileSource(paths: []).events,
+        }).map((e) => e.name),
+      ),
       "member": trigger?.member ?? "",
       "prompt": trigger?.prompt ?? "",
       "project": trigger?.project ?? "",
@@ -165,7 +167,7 @@ class TriggerForm extends SettingForm<Trigger> {
           if (line.trim().isNotEmpty) line.trim(),
       ],
       events: {
-        for (final name in a["events"]!.split(","))
+        for (final name in FormMulti.decode(a["events"]))
           ?FileEvent.values.asNameMap()[name],
       },
     ),
@@ -211,9 +213,10 @@ class TriggerForm extends SettingForm<Trigger> {
           ),
         ],
         "file" => [
-          FormList(
+          FormText(
             "paths",
             "Paths",
+            lines: 3,
             hint: "project:notes.md",
             helper:
                 "One a line, as the file tools read them: in the chat's "

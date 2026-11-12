@@ -1,5 +1,4 @@
 import "dart:async";
-import "dart:convert";
 
 import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/foundation.dart";
@@ -36,11 +35,27 @@ typedef NativeSettingsPages = ({
   Map<String, SettingController> controllers,
 });
 
-/// The pages this platform offers, built through the provider's ref and
-/// rebuilt whenever anything one reads changes. Welcome is the tour, not
-/// settings, and stays the app's own page.
-final nativeSettingsProvider = Provider<NativeSettingsPages>((ref) {
+/// The pages the native settings draw now; the rest are sent as titles.
+final nativeShownPagesProvider =
+    NotifierProvider<NativeShownPages, Set<SettingsPageId>>(
+      NativeShownPages.new,
+    );
+
+class NativeShownPages extends Notifier<Set<SettingsPageId>> {
+  @override
+  Set<SettingsPageId> build() => const {};
+
+  void show(Set<SettingsPageId> pages) {
+    if (!setEquals(pages, state)) state = pages;
+  }
+}
+
+/// The pages this platform offers, the shown ones built through the
+/// provider's ref and rebuilt whenever anything one reads changes. Welcome
+/// is the tour, not settings, and stays the app's own page.
+final nativeSettingsProvider = Provider.autoDispose<NativeSettingsPages>((ref) {
   final reader = RefReader(ref);
+  final shown = ref.watch(nativeShownPagesProvider);
   final schema = ref.watch(settingsSchemaProvider);
   final controllers = <String, SettingController>{};
   final providers = ref.watch(appSettingsProvider).llmProviders;
@@ -77,21 +92,22 @@ final nativeSettingsProvider = Provider<NativeSettingsPages>((ref) {
           groupStart: page.groupStart,
           listed: page.listed,
           sections: [
-            for (final section in buildPage(
-              reader,
-              schema,
-              page,
-              const AppAddress(),
-            ))
-              SettingsSectionData(
-                id: section.spec.id,
-                title: section.spec.title,
-                detail: section.description,
-                rows: [
-                  for (final setting in section.settings)
-                    ..._rows(setting, controllers, label, face),
-                ],
-              ),
+            if (shown.contains(page))
+              for (final section in buildPage(
+                reader,
+                schema,
+                page,
+                const AppAddress(),
+              ))
+                SettingsSectionData(
+                  id: section.spec.id,
+                  title: section.spec.title,
+                  detail: section.description,
+                  rows: [
+                    for (final setting in section.settings)
+                      ..._rows(setting, controllers, label, face),
+                  ],
+                ),
           ],
         ),
   ];
@@ -289,10 +305,7 @@ SettingRowData _row(
                 icon: _icon(item.glyph),
                 tone: _tone(item.tone),
                 on: item.on,
-                opens: switch (item.opens) {
-                  final SkillPage page => _skillPage(page),
-                  null => null,
-                },
+                opens: _textPage(item.opens),
                 tap: item.tap,
                 badge: item.badge,
                 editable: item.editable,
@@ -359,7 +372,7 @@ SettingRowData _row(
               keyShift: info.keys?.shift ?? false,
               keyAlt: info.keys?.alt ?? false,
               link: info.link?.toString(),
-              opens: info.opens?.name,
+              opens: _textPage(info.opens),
             ),
         ];
     case SubpageController():
@@ -406,9 +419,24 @@ SettingRowData _row(
   return row;
 }
 
-List<FormOptionData> _formOptions(List<FormOption> options) => [
+/// [options] as sent; a multi's [picked] each with its flip.
+List<FormOptionData> _formOptions(
+  List<FormOption> options, {
+  FormMulti? multi,
+  Set<String> picked = const {},
+}) => [
   for (final option in options)
     FormOptionData(
+      picked: picked.contains(option.answer),
+      flipped: multi == null
+          ? null
+          : FormMulti.encode(
+              multi.toggled(
+                picked,
+                option.answer,
+                !picked.contains(option.answer),
+              ),
+            ),
       answer: option.answer,
       label: option.label,
       help: option.help,
@@ -422,11 +450,16 @@ List<FormOptionData> _formOptions(List<FormOption> options) => [
     ),
 ];
 
-const _skillOpens = "skill:";
-
-/// [page] as the name the client asks its text by.
-String _skillPage(SkillPage page) =>
-    "$_skillOpens${jsonEncode([page.project, page.name])}";
+TextPageData? _textPage(TextPage? page) => switch (page) {
+  null => null,
+  PolicyPage() => TextPageData(kind: TextPageKind.privacyPolicy),
+  LicencesPage() => TextPageData(kind: TextPageKind.licences),
+  SkillPage(:final name, :final project) => TextPageData(
+    kind: TextPageKind.skill,
+    name: name,
+    project: project,
+  ),
+};
 
 /// [answers] as the client sends them, every key a string.
 Map<String, String> _answersOf(Map<String?, String?> answers) => {
@@ -440,6 +473,7 @@ FormSaveData _refusal(Object e) => switch (e) {
     field: e.field,
     anyway: e.anyway,
     anywayLabel: e.anywayLabel,
+    yes: formYes,
   ),
   _ => FormSaveData(message: "$e"),
 };
@@ -460,7 +494,10 @@ class SettingsBridge implements SettingsIntents {
   ProviderSubscription<NativeSettingsPages>? _sending;
 
   @override
-  void shown(bool on) {
+  void shown(bool on, List<SettingsPageKey?> pages) {
+    _container.read(nativeShownPagesProvider.notifier).show({
+      for (final key in pages.nonNulls) SettingsPageId.values.byName(key.name),
+    });
     if (!on) {
       _sending?.close();
       _sending = null;
@@ -499,7 +536,7 @@ class SettingsBridge implements SettingsIntents {
   );
 
   void close() {
-    shown(false);
+    shown(false, const []);
     SettingsIntents.setUp(null);
   }
 
@@ -673,6 +710,8 @@ class SettingsBridge implements SettingsIntents {
               kind: FormPartKind.fold,
               id: part.id,
               label: part.label,
+              on: part.open(now),
+              flipped: part.open(now) ? "" : formYes,
             ),
             FormConsent() => FormPartData(
               kind: FormPartKind.consent,
@@ -682,11 +721,14 @@ class SettingsBridge implements SettingsIntents {
               accept: part.accept,
               linkLabel: part.link?.$1,
               url: part.link?.$2.toString(),
+              on: part.given(now),
+              flipped: formYes,
             ),
             FormEntries() => FormPartData(
               kind: FormPartKind.entries,
               id: part.id,
               label: part.label,
+              hint: FormEntries.format,
               helper: part.helper,
               enabled: part.enabled,
             ),
@@ -707,24 +749,7 @@ class SettingsBridge implements SettingsIntents {
               helper: part.helper,
               enabled: part.enabled,
             ),
-            FormList() => FormPartData(
-              kind: FormPartKind.list,
-              id: part.id,
-              label: part.label,
-              hint: part.hint,
-              helper: part.helper,
-              error: part.error,
-              enabled: part.enabled,
-            ),
-            FormMulti() => FormPartData(
-              kind: FormPartKind.multi,
-              id: part.id,
-              label: part.label,
-              error: part.error,
-              options: _formOptions(part.options),
-              enabled: part.enabled,
-              all: part.all,
-            ),
+            FormMulti() => _multi(part, FormMulti.decode(now[part.id])),
             FormNote(:final text) => FormPartData(
               kind: FormPartKind.note,
               label: text,
@@ -733,6 +758,19 @@ class SettingsBridge implements SettingsIntents {
       ],
     );
   }
+
+  static FormPartData _multi(FormMulti part, Set<String> picked) =>
+      FormPartData(
+        kind: FormPartKind.multi,
+        id: part.id,
+        label: part.label,
+        error: part.error,
+        options: _formOptions(part.options, multi: part, picked: picked),
+        enabled: part.enabled,
+        all: part.all,
+        on: part.allOn(picked),
+        flipped: FormMulti.encode(part.withAll(picked, !part.allOn(picked))),
+      );
 
   /// The form a collection's item at [index], or a new one, is edited
   /// through.
@@ -1078,16 +1116,10 @@ class SettingsBridge implements SettingsIntents {
   }
 
   @override
-  Future<String> page(String opens) async => switch (opens) {
-    "privacyPolicy" => bundledPrivacyPolicy,
-    "licences" => await _licences(),
-    final skill when skill.startsWith(_skillOpens) => switch (jsonDecode(
-      skill.substring(_skillOpens.length),
-    )) {
-      [final String? project, final String name] => await _skill(name, project),
-      _ => "",
-    },
-    _ => "",
+  Future<String> page(TextPageData opens) async => switch (opens.kind) {
+    TextPageKind.privacyPolicy => bundledPrivacyPolicy,
+    TextPageKind.licences => await _licences,
+    TextPageKind.skill => await _skill(opens.name ?? "", opens.project),
   };
 
   /// A skill as its view page tells it: what it is for, what its folder is
@@ -1113,8 +1145,11 @@ class SettingsBridge implements SettingsIntents {
     ].join("\n\n");
   }
 
-  /// Every library the app is built on, and its licence, as text.
-  static Future<String> _licences() async {
+  /// Every library the app is built on, and its licence, as text: read
+  /// once, the registry being fixed for the life of the process.
+  static final Future<String> _licences = _readLicences();
+
+  static Future<String> _readLicences() async {
     final parts = <String>[];
     await for (final entry in LicenseRegistry.licenses) {
       parts.add(

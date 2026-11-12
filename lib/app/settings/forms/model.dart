@@ -73,18 +73,17 @@ class ModelForm extends SettingForm<ModelDraft> {
         ModelInfo() => ModelRole.text.name,
         null => role.voice ? role.name : ModelRole.text.name,
       },
-      "caps": [
+      "caps": FormMulti.encode([
         if (m?.toolCall ?? role == ModelRole.agent) "toolCall",
         if (m?.reasoning ?? false) "reasoning",
         if (m?.readsImages ?? false) "readsImages",
         if (m?.readsPdfs ?? false) "readsPdfs",
         if (m?.makesImages ?? role == ModelRole.image) "makesImages",
-      ].join(","),
+      ]),
     };
   }
 
-  Set<String> _capsOf(Map<String, String> a) =>
-      {...a["caps"]!.split(",")}..remove("");
+  Set<String> _capsOf(Map<String, String> a) => FormMulti.decode(a["caps"]);
 
   static String? _notNumber(String text, {bool decimal = false}) =>
       text.trim().isEmpty ||

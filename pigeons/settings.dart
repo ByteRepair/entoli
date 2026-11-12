@@ -194,6 +194,17 @@ class SettingItemActionData {
   bool handsOff;
 }
 
+enum TextPageKind { privacyPolicy, licences, skill }
+
+/// A page of text the app holds; a skill's names it by [name] and [project].
+class TextPageData {
+  TextPageData({required this.kind, this.name, this.project});
+
+  TextPageKind kind;
+  String? name;
+  String? project;
+}
+
 /// One item of a collection, by its place in the list.
 class SettingItemData {
   SettingItemData({
@@ -229,8 +240,8 @@ class SettingItemData {
   String? bot;
   int? botColour;
 
-  /// A page of the app's that tells more of it, its text asked by this name.
-  String? opens;
+  /// A page of the app's that tells more of it.
+  TextPageData? opens;
 
   /// Whether it is armed, where its row carries a switch.
   bool? on;
@@ -310,8 +321,8 @@ class SettingInfoData {
 
   String? link;
 
-  /// A page of the app's own it opens: "privacyPolicy", "licences".
-  String? opens;
+  /// A page of the app's own it opens.
+  TextPageData? opens;
 }
 
 /// A pairing in flight.
@@ -614,7 +625,6 @@ enum FormPartKind {
   choice,
   date,
   duration,
-  list,
   multi,
   note,
   prompt,
@@ -647,6 +657,8 @@ class FormPartData {
     this.accept,
     this.linkLabel,
     this.all = false,
+    this.on = false,
+    this.flipped,
   });
 
   FormPartKind kind;
@@ -691,6 +703,11 @@ class FormPartData {
   /// A multi's label is a switch over all its options: on while each kind
   /// has one picked, and switched on, each kind's first.
   bool all;
+
+  /// A fold open, a consent given, a multi's [all] switch on; and what a
+  /// tap on it answers.
+  bool on;
+  String? flipped;
 }
 
 class FormTagData {
@@ -709,6 +726,8 @@ class FormOptionData {
     this.icon,
     this.tags = const [],
     this.kind,
+    this.picked = false,
+    this.flipped,
   });
 
   String answer;
@@ -721,6 +740,11 @@ class FormOptionData {
   /// What it is underneath: in a multi, picking one unpicks the others of
   /// its kind.
   String? kind;
+
+  /// A multi's: whether it is picked, and the field's answer once it is
+  /// flipped.
+  bool picked;
+  String? flipped;
 }
 
 /// Why a form's Save was refused: said on [field] where it names one, with
@@ -732,12 +756,17 @@ class FormSaveData {
     this.field,
     this.anyway,
     this.anywayLabel,
+    this.yes,
   });
 
   String message;
   String? field;
+
+  /// Where saving the same again is allowed: the answer set to [yes] for it,
+  /// and what Save is then called.
   String? anyway;
   String? anywayLabel;
+  String? yes;
 }
 
 /// A form as it stands for [answers]: the fields to ask, and what stops it
@@ -951,11 +980,13 @@ abstract class NativeSettings {
 /// next: a confirm, a notice, a form.
 @FlutterApi()
 abstract class SettingsIntents {
-  /// Whether the settings are on screen. The pages are sent only while they
-  /// are, and first built when they first are: they read what only the
-  /// settings show — each provider's usage, the skills on disk, the browsers
-  /// installed — which a launch that never opens them should not pay for.
-  void shown(bool on);
+  /// Whether the settings are on screen, and which of their pages are drawn:
+  /// the one picked and those pushed over it. Every page is sent while they
+  /// are up, but only [pages] with their rows — a page reads what only it
+  /// shows (each provider's usage, the skills on disk, the browsers
+  /// installed, a model's download), which a page nobody is looking at
+  /// should not pay for, nor resend on every tick.
+  void shown(bool on, List<SettingsPageKey> pages);
 
   void toggle(String id, bool? on);
 
@@ -1108,5 +1139,5 @@ abstract class SettingsIntents {
 
   /// The text of a page the app holds: the privacy policy, the licences.
   @async
-  String page(String opens);
+  String page(TextPageData opens);
 }

@@ -605,7 +605,7 @@ struct InfoRow: View {
 /// A page of text to push: what a link names to open.
 struct OpenedText: Hashable {
   let title: String
-  let opens: String
+  let opens: TextPageData
 }
 
 extension Color {
@@ -623,7 +623,7 @@ extension Color {
 struct TextPage: View {
   let model: SettingsModel
   let title: String
-  let opens: String
+  let opens: TextPageData
   @State private var text: String?
 
   var body: some View {

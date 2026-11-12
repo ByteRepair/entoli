@@ -1067,24 +1067,7 @@ class _Info extends ConsumerWidget {
       ref.read(linkOpenerProvider).open(context, link);
       return;
     }
-    switch (row.opens) {
-      case InfoPage.privacyPolicy:
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const PrivacyPolicyPage()));
-      case InfoPage.licences:
-        showLicensePage(
-          context: context,
-          applicationName: appTitle,
-          applicationVersion: ref.read(appVersionProvider),
-          applicationIcon: const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: AppMark(size: 48),
-          ),
-          applicationLegalese: madeBy,
-        );
-      case null:
-    }
+    if (row.opens case final page?) openTextPage(context, page);
   }
 
   @override
@@ -1560,16 +1543,8 @@ class _Collection<T> extends StatelessWidget {
     if (c.editable && row.editable) {
       return () => editItem(context, c, index: index);
     }
-    if (row.opens case final SkillPage page) {
-      return () => Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => SkillViewPage(
-            name: page.name,
-            project: page.project,
-            origin: page.origin,
-          ),
-        ),
-      );
+    if (row.opens case final page?) {
+      return () => openTextPage(context, page);
     }
     final tap = row.actions.where((a) => a.id == row.tap).firstOrNull;
     if (tap != null) return () => _act(context, index, tap);
@@ -1626,3 +1601,30 @@ class _OnResumeState extends State<_OnResume> {
   @override
   Widget build(BuildContext context) => widget.child;
 }
+
+/// Opens [page] over the settings.
+void openTextPage(BuildContext context, TextPage page) => switch (page) {
+  PolicyPage() => Navigator.of(
+    context,
+  ).push(MaterialPageRoute<void>(builder: (_) => const PrivacyPolicyPage())),
+  LicencesPage() => showLicensePage(
+    context: context,
+    applicationName: appTitle,
+    applicationVersion: ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(appVersionProvider),
+    applicationIcon: const Padding(
+      padding: EdgeInsets.symmetric(vertical: 8),
+      child: AppMark(size: 48),
+    ),
+    applicationLegalese: madeBy,
+  ),
+  SkillPage(:final name, :final project, :final origin) =>
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            SkillViewPage(name: name, project: project, origin: origin),
+      ),
+    ),
+};

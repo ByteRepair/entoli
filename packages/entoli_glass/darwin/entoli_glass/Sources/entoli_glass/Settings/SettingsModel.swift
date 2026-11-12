@@ -81,6 +81,14 @@ public final class SettingsModel: ObservableObject, NativeSettings {
     #endif
   }
 
+  /// The pages drawn: the one picked and every one pushed over it.
+  var drawn: [SettingsPageKey] {
+    [page].compactMap { $0 }
+      + path.compactMap {
+        if case .page(let key) = $0 { key } else { nil }
+      }
+  }
+
   /// The pages offered among the others, rather than opened from a row.
   var listed: [SettingsPageData] { pages.filter(\.listed) }
 
@@ -199,7 +207,7 @@ extension SettingsModel {
     }
   }
 
-  func text(of opens: String) async -> String {
+  func text(of opens: TextPageData) async -> String {
     await reply(or: "") { say.page(opens: opens, completion: $0) }
   }
 

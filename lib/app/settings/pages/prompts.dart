@@ -158,17 +158,17 @@ class AgentForm extends SettingForm<PromptDocument> {
     "description": agent?.description ?? "",
     "instructions": agent?.body ?? "",
     for (final group in ToolGroup.values)
-      "tools.${group.name}": [
+      "tools.${group.name}": FormMulti.encode([
         for (final tool in _grantable)
           if (tool.group == group && _initialTools.contains(tool.id)) tool.id,
-      ].join(","),
+      ]),
   };
 
   Set<String> _tools(Map<String, String> a) {
     final picked = <String>{};
     final names = <String>{};
     for (final group in ToolGroup.values) {
-      for (final id in (a["tools.${group.name}"] ?? "").split(",")) {
+      for (final id in FormMulti.decode(a["tools.${group.name}"])) {
         final tool = _grantable.where((t) => t.id == id).firstOrNull;
         // Two tools of one name are one tool worded two ways: the first
         // picked stands.

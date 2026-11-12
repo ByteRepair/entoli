@@ -125,7 +125,7 @@ void main() {
       expect(f.fields(google).whereType<FormText>(), isEmpty);
       expect(f.problem(google), "");
 
-      final agreed = {...google, consent.id: "yes"};
+      final agreed = {...google, consent.id: formYes};
       expect(f.fields(agreed).whereType<FormConsent>(), isEmpty);
       expect(
         f.fields(agreed).whereType<FormText>().map((t) => t.id),
@@ -150,7 +150,7 @@ void main() {
         isNot(contains("baseUrl")),
       );
 
-      final open = {...ollama, "advanced": "open"};
+      final open = {...ollama, "advanced": formYes};
       final baseUrl = f
           .fields(open)
           .whereType<FormText>()

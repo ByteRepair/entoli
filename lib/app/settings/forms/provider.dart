@@ -91,10 +91,7 @@ class ProviderForm extends SettingForm<ProviderDraft> {
     "modelsEndpoint": provider?.modelsEndpoint ?? "",
     "catalogId": provider?.catalogId ?? "",
     "command": provider?.command ?? "",
-    "env": [
-      for (final MapEntry(:key, :value) in (provider?.env ?? const {}).entries)
-        "$key=$value",
-    ].join("\n"),
+    "env": FormEntries.encode(provider?.env ?? const {}),
     "advanced": "",
   };
 
@@ -120,7 +117,7 @@ class ProviderForm extends SettingForm<ProviderDraft> {
 
   /// Agreeing to a free tier's cost is wanted before anything else.
   static bool _owed(LlmProvider? preset, Map<String, String> a) =>
-      preset?.terms?.freeTier != null && a[_consent(preset!)] != "yes";
+      preset?.terms?.freeTier != null && a[_consent(preset!)] != formYes;
 
   @override
   List<FormFieldSpec> fields(Map<String, String> a) {
@@ -145,7 +142,7 @@ class ProviderForm extends SettingForm<ProviderDraft> {
         if (terms != null && !_api(a).isCli) ...[
           ..._plain(a, preset!, terms),
           const FormFold("advanced", "Advanced"),
-          if (a["advanced"] == "open") ..._technical(a, preset),
+          if (a["advanced"] == formYes) ..._technical(a, preset),
         ] else
           ..._technical(a, preset),
       ],
@@ -389,11 +386,7 @@ class ProviderForm extends SettingForm<ProviderDraft> {
               base?.defaultLightModelId ?? cli.defaultLightModelId,
           customModels: provider?.customModels ?? const [],
           command: command.isEmpty ? null : command,
-          env: {
-            for (final line in a["env"]!.split("\n"))
-              if (line.indexOf("=") case final at when at > 0)
-                line.substring(0, at).trim(): line.substring(at + 1),
-          },
+          env: FormEntries.decode(a["env"]),
         ),
         // A program holds its own sign-in; whatever was stored stays put.
         setKey: null,

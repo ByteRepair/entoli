@@ -1,5 +1,7 @@
 import "dart:async";
 
+import "package:flutter/foundation.dart";
+
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../core/formatting.dart";
@@ -201,7 +203,14 @@ class RunningUsageWatch extends Notifier<RunningUsage?> {
     final sum = each.isEmpty
         ? null
         : each.values.fold(0, (total, one) => total + one.bytes);
-    if (ref.mounted) state = (total: footprint ?? sum, each: each);
+    final total = footprint ?? sum;
+    final was = state;
+    // A tick that measured the same leaves the pages showing it alone.
+    if (!ref.mounted ||
+        was != null && was.total == total && mapEquals(was.each, each)) {
+      return;
+    }
+    state = (total: total, each: each);
   }
 }
 

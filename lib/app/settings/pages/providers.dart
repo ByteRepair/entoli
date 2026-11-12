@@ -193,7 +193,7 @@ Future<void> saveProvider(
   final notifier = ref.read(appSettingsProvider.notifier);
   final draft = form.build(answers);
   final key = draft.setKey;
-  if (key != null && key.isNotEmpty && answers["anyway"] != "yes") {
+  if (key != null && key.isNotEmpty && answers["anyway"] != formYes) {
     bool? accepted;
     try {
       accepted = await ref.read(keyCheckProvider)(draft.config, key);

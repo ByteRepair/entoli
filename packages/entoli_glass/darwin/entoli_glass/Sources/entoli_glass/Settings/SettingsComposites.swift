@@ -267,7 +267,7 @@ struct FormSheet: View {
           Button(refused?.anywayLabel ?? "Save") {
             Task { @MainActor in
               var now = answers
-              if let anyway = refused?.anyway { now[anyway] = "yes" }
+              if let anyway = refused?.anyway { now[anyway] = refused?.yes }
               if let answer = await save(now) {
                 refused = answer
               } else {
@@ -375,11 +375,10 @@ struct FormSheet: View {
         }
       }
     case .fold:
-      let open = binding(key).wrappedValue == "open"
       Button {
-        binding(key).wrappedValue = open ? "" : "open"
+        binding(key).wrappedValue = part.flipped ?? ""
       } label: {
-        Label(part.label ?? "", systemImage: open ? "chevron.down" : "chevron.right")
+        Label(part.label ?? "", systemImage: part.on ? "chevron.down" : "chevron.right")
       }
       .buttonStyle(.borderless)
     case .consent:
@@ -390,13 +389,13 @@ struct FormSheet: View {
         if let url = part.url.flatMap(URL.init(string:)) {
           Link(part.linkLabel ?? "", destination: url)
         }
-        Button(part.accept ?? "", role: .destructive) { binding(key).wrappedValue = "yes" }
+        Button(part.accept ?? "", role: .destructive) { binding(key).wrappedValue = part.flipped ?? "" }
       }
     case .entries:
       VStack(alignment: .leading, spacing: 2) {
         Text(part.label ?? "").font(.caption).foregroundStyle(.secondary)
         TextEditor(text: binding(key)).font(.body.monospaced()).frame(minHeight: 70)
-        Text("One NAME=value a line.").font(.caption).foregroundStyle(.secondary)
+        Text(part.hint ?? "").font(.caption).foregroundStyle(.secondary)
         helper(part)
       }
       .disabled(!part.enabled)
@@ -428,15 +427,6 @@ struct FormSheet: View {
         ) {
           LabeledContent(part.label ?? "", value: Self.spoken(minutes))
         }
-        helper(part)
-      }
-      .disabled(!part.enabled)
-    case .list:
-      VStack(alignment: .leading, spacing: 2) {
-        Text(part.label ?? "").font(.caption).foregroundStyle(.secondary)
-        TextEditor(text: binding(key))
-          .font(.body.monospaced())
-          .frame(minHeight: 70)
         helper(part)
       }
       .disabled(!part.enabled)
@@ -511,42 +501,17 @@ struct FormSheet: View {
     }
   }
 
+  /// The picks are Dart's to work out: each option, and the switch over
+  /// all, comes with the answer a tap on it sets.
   @ViewBuilder private func multi(_ part: FormPartData) -> some View {
     let key = part.id ?? ""
-    let picked = Set(((answers[key] ?? nil) ?? "").split(separator: ",").map(String.init))
     let options = part.options.compactMap { $0 }
-    let kind = { (o: FormOptionData) in o.kind ?? o.answer }
-    let write = { (next: Set<String>) in
-      binding(key).wrappedValue = next.sorted().joined(separator: ",")
-    }
-    // Options of one kind are one thing worded two ways: picking one
-    // unpicks the others.
-    let toggle = { (answer: String) in
-      guard let option = options.first(where: { $0.answer == answer }) else { return }
-      if picked.contains(answer) {
-        write(picked.subtracting([answer]))
-      } else {
-        let others = options.filter { kind($0) == kind(option) }.map(\.answer)
-        write(picked.subtracting(others).union([answer]))
-      }
-    }
-    let allOn = options.allSatisfy { o in
-      options.contains { kind($0) == kind(o) && picked.contains($0.answer) }
-    }
+    let flip = { (answer: String?) in binding(key).wrappedValue = answer ?? "" }
     VStack(alignment: .leading, spacing: 6) {
       if part.all {
         Toggle(
           part.label ?? "",
-          isOn: Binding(
-            get: { allOn },
-            set: { on in
-              var next = picked.subtracting(options.map(\.answer))
-              if on {
-                var kinds = Set<String>()
-                for o in options where kinds.insert(kind(o)).inserted { next.insert(o.answer) }
-              }
-              write(next)
-            })
+          isOn: Binding(get: { part.on }, set: { _ in flip(part.flipped) })
         )
         .font(.headline)
       } else {
@@ -556,7 +521,7 @@ struct FormSheet: View {
         // Options that say what they are: a switch each, with its words.
         ForEach(options, id: \.answer) { option in
           Toggle(
-            isOn: Binding(get: { picked.contains(option.answer) }, set: { _ in toggle(option.answer) })
+            isOn: Binding(get: { option.picked }, set: { _ in flip(option.flipped) })
           ) {
             Titled(title: option.label, detail: option.help)
           }
@@ -564,11 +529,11 @@ struct FormSheet: View {
       } else {
         FlowLayout(spacing: 8, centred: false) {
           ForEach(options, id: \.answer) { option in
-            let on = picked.contains(option.answer)
+            let on = option.picked
             // A plain capsule rather than a glass button: switching a glass
             // button's style rebuilds it, which stalled every tap.
             Button {
-              toggle(option.answer)
+              flip(option.flipped)
             } label: {
               Text(option.label).font(.callout).lineLimit(1)
                 .foregroundStyle(on ? Color.white : Color.primary)

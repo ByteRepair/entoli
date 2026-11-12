@@ -759,7 +759,7 @@ class CollectionItem {
   final bool? on;
 
   /// A page of the app's that tells more of it.
-  final ItemPage? opens;
+  final TextPage? opens;
 
   /// A word set beside it: where an entry not of this level came from,
   /// "Bundled", "Inherited".
@@ -780,14 +780,24 @@ class CollectionItem {
   final String? tap;
 }
 
-/// A page of the app's an item opens.
-sealed class ItemPage {
-  const ItemPage();
+/// A page of text the app holds, which a row opens: each frontend draws it
+/// from what the app holds.
+sealed class TextPage {
+  const TextPage();
+}
+
+final class PolicyPage extends TextPage {
+  const PolicyPage();
+}
+
+/// The libraries the app is built on, and their licences.
+final class LicencesPage extends TextPage {
+  const LicencesPage();
 }
 
 /// A skill as its view page tells it: [origin] is where it came from, or
 /// "Not loaded".
-final class SkillPage extends ItemPage {
+final class SkillPage extends TextPage {
   const SkillPage(this.name, {required this.origin, this.project});
 
   final String name;
@@ -954,17 +964,23 @@ final class FormLink extends FormFieldSpec {
   final bool prominent;
 }
 
-/// The fields after it folded away until it is opened: answered "open", or
+/// What a part answers once switched on or agreed to: a fold opened, a
+/// consent given, a refused save made anyway.
+const formYes = "yes";
+
+/// The fields after it folded away until it is opened: answered [formYes], or
 /// nothing while shut. Which fields it holds is the form's to say.
 final class FormFold extends FormFieldSpec {
   const FormFold(this.id, this.label);
 
   final String id;
   final String label;
+
+  bool open(Map<String, String> answers) => answers[id] == formYes;
 }
 
 /// Something the user has to agree to before the rest is asked: answered
-/// "yes" once they do.
+/// [formYes] once they do.
 final class FormConsent extends FormFieldSpec {
   const FormConsent(
     this.id, {
@@ -983,6 +999,8 @@ final class FormConsent extends FormFieldSpec {
 
   /// Where the terms behind it are read, and what that is called.
   final (String, Uri)? link;
+
+  bool given(Map<String, String> answers) => answers[id] == formYes;
 }
 
 /// Names and their values, one `NAME=value` a line: what a program runs
@@ -994,6 +1012,19 @@ final class FormEntries extends FormFieldSpec {
   final String label;
   final String? helper;
   final bool enabled;
+
+  /// How the answer is typed, where it is typed as text.
+  static const format = "One NAME=value a line.";
+
+  static Map<String, String> decode(String? answer) => {
+    for (final line in (answer ?? "").split("\n"))
+      if (line.indexOf("=") case final at when at > 0)
+        line.substring(0, at).trim(): line.substring(at + 1),
+  };
+
+  static String encode(Map<String, String> entries) => [
+    for (final MapEntry(:key, :value) in entries.entries) "$key=$value",
+  ].join("\n");
 }
 
 /// [config]'s program signed in, from inside the form: where its account
@@ -1006,7 +1037,7 @@ final class FormSignIn extends FormFieldSpec {
 
 /// Why a Save was refused, thrown by a submit: said on [field], with Save
 /// turned into [anywayLabel] where saving the same again is allowed — the
-/// answer [anyway] then set "yes", and cleared once [field] changes.
+/// answer [anyway] then set [formYes], and cleared once [field] changes.
 class FormRefusal implements Exception {
   const FormRefusal(this.field, this.message, {this.anyway, this.anywayLabel});
 
@@ -1038,25 +1069,6 @@ final class FormDuration extends FormFieldSpec {
   final bool enabled;
 }
 
-/// Several lines, each an entry: paths to watch. Answered one a line.
-final class FormList extends FormFieldSpec {
-  const FormList(
-    this.id,
-    this.label, {
-    this.hint,
-    this.helper,
-    this.error,
-    this.enabled = true,
-  });
-
-  final String id;
-  final String label;
-  final String? hint;
-  final String? helper;
-  final String? error;
-  final bool enabled;
-}
-
 /// Any of [options], answered as their answers joined by commas. Options of
 /// one [FormOption.kind] are one thing worded two ways: picking one unpicks
 /// the others. With [all], the label is a switch over the lot: on while each
@@ -1077,6 +1089,13 @@ final class FormMulti extends FormFieldSpec {
   final String? error;
   final bool enabled;
   final bool all;
+
+  static Set<String> decode(String? answer) => {
+    for (final pick in (answer ?? "").split(","))
+      if (pick.isNotEmpty) pick,
+  };
+
+  static String encode(Iterable<String> picks) => picks.join(",");
 
   String _kind(FormOption option) => option.kind ?? option.answer;
 
@@ -1284,12 +1303,8 @@ class InfoRow {
   final Uri? link;
 
   /// A page of the app's own it opens.
-  final InfoPage? opens;
+  final TextPage? opens;
 }
-
-/// The pages an info row can open, each drawn by the frontend from what the
-/// app holds: the policy's text, the libraries' licences.
-enum InfoPage { privacyPolicy, licences }
 
 /// Pairing another device, through [flow], which a frontend's own screens
 /// drive step by step; [activity] is the pairing in flight as it stood when

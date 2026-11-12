@@ -175,7 +175,7 @@ class _FormBodyState extends ConsumerState<_FormBody> {
 
   Future<void> _save() async {
     if (_saving || _form.problem(_answers) != null) return;
-    if (_anyway case (final answer, _)) _answers[answer] = "yes";
+    if (_anyway case (final answer, _)) _answers[answer] = formYes;
     setState(() {
       _saving = true;
       _refused = null;
@@ -344,30 +344,21 @@ class _FormBodyState extends ConsumerState<_FormBody> {
         child: TextButton.icon(
           style: TextButton.styleFrom(padding: EdgeInsets.zero),
           icon: Icon(
-            _answers[id] == "open" ? Icons.expand_less : Icons.expand_more,
+            field.open(_answers) ? Icons.expand_less : Icons.expand_more,
           ),
           label: Text(label),
-          onPressed: () => _answer(id, _answers[id] == "open" ? "" : "open"),
+          onPressed: () => _answer(id, field.open(_answers) ? "" : formYes),
         ),
       ),
       FormConsent() => _Consent(
         field: field,
         onOpen: _open,
-        onAccept: () => _answer(field.id, "yes"),
+        onAccept: () => _answer(field.id, formYes),
       ),
       FormEntries() => EnvironmentSection(
-        env: {
-          for (final line in (_answers[field.id] ?? "").split("\n"))
-            if (line.indexOf("=") case final at when at > 0)
-              line.substring(0, at): line.substring(at + 1),
-        },
+        env: FormEntries.decode(_answers[field.id]),
         description: field.helper ?? "",
-        onSaved: (env) async => _answer(
-          field.id,
-          [
-            for (final MapEntry(:key, :value) in env.entries) "$key=$value",
-          ].join("\n"),
-        ),
+        onSaved: (env) async => _answer(field.id, FormEntries.encode(env)),
       ),
       // Keyed by the program, so switching the API asks the other one.
       FormSignIn(:final config) => CliAccountSection(
@@ -391,27 +382,10 @@ class _FormBodyState extends ConsumerState<_FormBody> {
         ),
         onChanged: (text) => _answer(field.id, text),
       ),
-      FormList() => TextField(
-        controller: _text(field.id),
-        enabled: field.enabled,
-        minLines: 2,
-        maxLines: null,
-        decoration: InputDecoration(
-          labelText: field.label,
-          hintText: field.hint,
-          helperText: field.helper,
-          helperMaxLines: 3,
-          errorText: field.error,
-        ),
-        onChanged: (text) => _answer(field.id, text),
-      ),
       FormMulti() => _Multi(
         field: field,
-        picked: {
-          for (final answer in (_answers[field.id] ?? "").split(","))
-            if (answer.isNotEmpty) answer,
-        },
-        onChanged: (picked) => _answer(field.id, picked.join(",")),
+        picked: FormMulti.decode(_answers[field.id]),
+        onChanged: (picked) => _answer(field.id, FormMulti.encode(picked)),
       ),
     };
   }

@@ -55,13 +55,13 @@ final aboutSettings = [
           const InfoRow(
             "Privacy policy",
             glyph: SettingGlyph.privacy,
-            opens: InfoPage.privacyPolicy,
+            opens: const PolicyPage(),
           ),
           const InfoRow(
             "Open source libraries",
             subtitle: "Everything Entoli is built on, and its licence.",
             glyph: SettingGlyph.licence,
-            opens: InfoPage.licences,
+            opens: const LicencesPage(),
           ),
         ],
       );

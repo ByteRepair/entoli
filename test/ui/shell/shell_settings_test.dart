@@ -1,21 +1,33 @@
+import "package:agent_chat/app/settings/spec.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/app_theme.dart";
 import "package:agent_chat/ui/shell/shell_settings.dart";
 import "package:entoli_glass/entoli_glass.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "../../harness.dart";
 
 void main() {
   late TestApp app;
+  // Held, so the pages are built once a test rather than on every read.
+  late ProviderSubscription<NativeSettingsPages> pages;
 
   // Sync's rows read the hub, which a default test app has none of.
-  setUp(() async => app = TestApp.create(hub: await testSyncHub()));
-  tearDown(() => app.dispose());
+  setUp(() async {
+    app = TestApp.create(hub: await testSyncHub());
+    app.container
+        .read(nativeShownPagesProvider.notifier)
+        .show(SettingsPageId.values.toSet());
+    pages = app.container.listen(nativeSettingsProvider, (_, _) {});
+  });
+  tearDown(() {
+    pages.close();
+    app.dispose();
+  });
 
   List<SettingRowData> rowsOf(SettingsPageKey key) => [
-    for (final page
-        in app.container.read(nativeSettingsProvider).snapshot.pages)
+    for (final page in pages.read().snapshot.pages)
       if (page!.key == key)
         for (final section in page.sections) ...section!.rows.nonNulls,
   ];
@@ -23,14 +35,18 @@ void main() {
   testWidgets("every page the platform offers is sent, Welcome left out", (
     tester,
   ) async {
-    final keys = [
-      for (final page
-          in app.container.read(nativeSettingsProvider).snapshot.pages)
-        page!.key,
-    ];
+    final keys = [for (final page in pages.read().snapshot.pages) page!.key];
     expect(keys, contains(SettingsPageKey.general));
     expect(keys, contains(SettingsPageKey.syncRelay));
     expect(keys, isNot(contains(SettingsPageKey.welcome)));
+  });
+
+  testWidgets("a page not drawn is sent with no rows", (tester) async {
+    app.container.read(nativeShownPagesProvider.notifier).show({
+      SettingsPageId.general,
+    });
+    expect(rowsOf(SettingsPageKey.general), isNotEmpty);
+    expect(rowsOf(SettingsPageKey.llms), isEmpty);
   });
 
   testWidgets("a row says what its controller holds", (tester) async {
@@ -53,16 +69,6 @@ void main() {
     expect(rows[at].kind, SettingKind.group);
     expect(rows[at + 1].id, "autoCompact.on");
     expect(rows[at + 1].parent, "autoCompact");
-  });
-
-  testWidgets("nothing is built until the settings are shown", (tester) async {
-    final bridge = SettingsBridge(app.container);
-    addTearDown(bridge.close);
-    expect(app.container.exists(nativeSettingsProvider), isFalse);
-
-    bridge.shown(true);
-    expect(app.container.exists(nativeSettingsProvider), isTrue);
-    await settleIo(tester);
   });
 
   testWidgets("an intent naming a row sets what its controller sets", (

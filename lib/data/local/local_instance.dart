@@ -225,6 +225,13 @@ class LocalUsage {
 
   final int bytes;
   final int? tokens;
+
+  @override
+  bool operator ==(Object other) =>
+      other is LocalUsage && other.bytes == bytes && other.tokens == tokens;
+
+  @override
+  int get hashCode => Object.hash(bytes, tokens);
 }
 
 /// What differs between the engines that run downloaded models: how a model
