@@ -1,4 +1,3 @@
-import "package:flutter/cupertino.dart" show CupertinoIcons;
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -293,16 +292,15 @@ void main() {
       expect(menus.shown, contains("Profile…"));
     }, variant: mac);
 
-    testWidgets("leaves the new chat to a compose button in the sidebar's "
-        "header", (tester) async {
+    testWidgets("puts new chat beside the sidebar's search, as elsewhere", (
+      tester,
+    ) async {
       await pumpMac(tester);
 
-      expect(find.byType(FloatingActionButton), findsNothing);
-      expect(find.text("New chat"), findsNothing);
       expect(
         find.descendant(
           of: find.byType(Sidebar),
-          matching: find.byIcon(CupertinoIcons.square_pencil),
+          matching: find.byTooltip("New chat"),
         ),
         findsOneWidget,
       );

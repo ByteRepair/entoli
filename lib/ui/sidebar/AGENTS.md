@@ -28,8 +28,8 @@ The field has no clear button of its own. The round button at its end is new
 chat while the field is empty and clear once it holds anything, so the row's
 one button is always the thing the user most likely wants next. An empty
 project has no field and keeps the button, being where its first chat is made.
-On Apple's platforms compose is in the header (see "The bottom block"), so the
-button there is only ever the clear.
+It is the same on Apple's platforms: a compose glyph in the header put new chat
+apart from the list it adds to.
 
 The query is a `ValueNotifier` the list listens to rather than `setState` on the
 sidebar: a keystroke changes the list, and the project switcher above it has no
@@ -81,16 +81,11 @@ Profile, Marketplace and Settings are the tiles under the list: plain
 Marketplace's opens onto. New chat is the round button beside the search field,
 above.
 
-On Apple's platforms (`isApple`) the new chat is not that button but a compose
-glyph — `CupertinoIcons.square_pencil` in the primary colour — at the end of
-the header row beside the project's buttons, where Notes, Mail and Messages
-put theirs: a filled tile or a floating button is Material's answer, and read
-as a foreign control in a Mac or iPad sidebar. Where the menu bar is always on
-screen — macOS, `menuBarAlwaysShown` — the app menu holds Profile,
-Marketplace and Settings and the tiles are not drawn either, so nothing is
-under the list. iPadOS keeps the tiles: its menu bar hides until asked for and
-is not there at all without a pointer. See "The app's commands" in
-`lib/ui/AGENTS.md`.
+Where the menu bar is always on screen — macOS, `menuBarAlwaysShown` — the
+app menu holds Profile, Marketplace and Settings and the tiles are not drawn,
+so nothing is under the list. iPadOS keeps the tiles: its menu bar hides until
+asked for and is not there at all without a pointer. See "The app's commands"
+in `lib/ui/AGENTS.md`.
 
 ## A chat's row menu
 

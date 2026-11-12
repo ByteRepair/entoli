@@ -264,7 +264,7 @@ at.
 Giving focus away is the composer's rule; taking it back when the keyboard goes
 is the app's, and is the next section.
 
-The sidebar's new-chat button is, off Apple's platforms, the round button at
+The sidebar's new-chat button is the round button at
 the end of its search field; see "The sidebar's list" in
 `lib/ui/sidebar/AGENTS.md`.
 

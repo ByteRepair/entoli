@@ -1,6 +1,5 @@
 import "dart:async";
 
-import "package:flutter/cupertino.dart" show CupertinoIcons;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -89,7 +88,6 @@ class _SidebarState extends ConsumerState<Sidebar> {
   @override
   Widget build(BuildContext context) {
     final selected = ref.watch(selectedProjectProvider);
-    final scheme = Theme.of(context).colorScheme;
     // The list the query was written against has just been replaced, the same
     // reason switching clears the selected chat. Kept, it would answer a
     // project the user has left with "nothing matches".
@@ -126,16 +124,6 @@ class _SidebarState extends ConsumerState<Sidebar> {
                 children: [
                   const Expanded(child: _ProjectMenu()),
                   ..._projectButtons(context, ref, selected),
-                  // Apple's apps put compose at the top of the list it adds
-                  // to, a plain glyph in the accent colour — Notes, Mail,
-                  // Messages — rather than anything filled or floating.
-                  if (isApple)
-                    IconButton(
-                      icon: const Icon(CupertinoIcons.square_pencil),
-                      color: scheme.primary,
-                      tooltip: "New chat",
-                      onPressed: () => openNewChat(context, ref),
-                    ),
                 ],
               ),
             ),
@@ -165,9 +153,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
 const _noMatch = "No chat's title matches that.";
 
 /// The search field and the round button at its end: new chat while the field
-/// is empty, clear once it holds anything. Apple's platforms have compose in
-/// the header, so there the button is only ever the clear. A project with no
-/// chats has no field, but keeps the button, being where a new chat is made.
+/// is empty, clear once it holds anything. A project with no chats has no
+/// field, but keeps the button, being where a new chat is made.
 class _SearchRow extends ConsumerWidget {
   const _SearchRow({
     required this.search,
@@ -197,7 +184,6 @@ class _SearchRow extends ConsumerWidget {
             ),
           );
         }
-        if (isApple) return const SizedBox.shrink();
         return _gap(
           IconButton.filled(
             icon: const Icon(Icons.add),
