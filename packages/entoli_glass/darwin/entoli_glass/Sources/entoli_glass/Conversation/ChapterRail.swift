@@ -46,19 +46,20 @@ struct ChapterRail: View {
   private func tick(_ chapter: ChapterSnapshot, at i: Int, pitch: CGFloat) -> some View {
     let lit = current == i
     let hot = hovered == i
+    // Against the column, which it sits beside.
     return HStack(spacing: 4) {
-      Spacer(minLength: 0)
+      Capsule()
+        .frame(width: lit || hot ? 18 : 12, height: 2)
       if chapter.threads > 1 {
         Image(systemName: "arrow.triangle.branch").font(.system(size: 8))
       }
-      Capsule()
-        .frame(width: lit || hot ? 18 : 12, height: 2)
+      Spacer(minLength: 0)
     }
     .foregroundStyle(
       lit ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary.opacity(hot ? 0.9 : 0.45))
     )
     .frame(height: pitch)
-    .padding(.trailing, 12)
+    .padding(.leading, 8)
     .contentShape(Rectangle())
     .onHover { hovered = $0 ? i : (hovered == i ? nil : hovered) }
     .help(

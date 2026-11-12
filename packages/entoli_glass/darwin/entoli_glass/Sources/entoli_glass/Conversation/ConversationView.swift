@@ -25,9 +25,24 @@ struct ConversationView: View {
   /// The column and its padding, as laid out below.
   private static let column = ShellView.readableWidth + 32
 
+  /// The margin beside the column on each side.
+  private var margin: CGFloat { max(0, (width - Self.column) / 2) }
+
   /// The rail only where the margin beside the column holds it, so it never
   /// lies over what the column shows.
-  private var railFits: Bool { (width - Self.column) / 2 >= ChapterRail.width }
+  private var railFits: Bool { margin >= ChapterRail.width }
+
+  /// What comes and goes beside the column, as the new-chat screen's
+  /// question comes and goes.
+  private static let appear = AnyTransition.asymmetric(insertion: .opacity, removal: .lift)
+  private static let motion = Animation.easeOut(duration: 0.35)
+
+  /// The jump button: in the margin beside the column where it has room,
+  /// else inside the column's corner.
+  private static let jumpSize: CGFloat = 36
+  private var jumpInset: CGFloat {
+    margin >= Self.jumpSize + 16 ? margin - Self.jumpSize - 8 : 16
+  }
 
   private var detailShown: Binding<Bool> {
     Binding(
@@ -62,13 +77,17 @@ struct ConversationView: View {
       .scrollPosition(id: $top, anchor: .top)
       .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
       .overlay(alignment: .trailing) {
-        if railFits {
+        if railFits && model.chapters.count > 1 {
           ChapterRail(chapters: model.chapters, current: current) { chapter in
             withAnimation(.smooth) { proxy.scrollTo(chapter.row, anchor: .top) }
           }
+          // Against the column, in the margin beside it.
+          .padding(.trailing, margin - ChapterRail.width)
           .padding(.bottom, bottom)
+          .transition(Self.appear)
         }
       }
+      .animation(Self.motion, value: railFits)
       .overlay {
         if model.order.isEmpty {
           Text("No messages yet").foregroundStyle(.secondary)
@@ -77,9 +96,11 @@ struct ConversationView: View {
       .contentMargins(.bottom, bottom, for: .scrollContent)
       .contentMargins(.bottom, bottom, for: .scrollIndicators)
       .defaultScrollAnchor(.bottom)
+      // At the end where the offset is within reach of its last: the content
+      // and the margin under it, less what the view shows.
       .onScrollGeometryChange(for: Bool.self) { geometry in
         geometry.contentOffset.y + geometry.containerSize.height
-          >= geometry.contentSize.height - 40
+          >= geometry.contentSize.height + geometry.contentInsets.bottom - 40
       } action: { _, end in
         atEnd = end
       }
@@ -96,11 +117,12 @@ struct ConversationView: View {
           .buttonStyle(.plain)
           .glassCircle()
           .help("Jump to latest")
-          .padding(16)
-          .padding(.bottom, bottom)
-          .transition(.opacity)
+          .padding(.trailing, jumpInset)
+          .padding(.bottom, bottom + 12)
+          .transition(Self.appear)
         }
       }
+      .animation(Self.motion, value: atEnd)
     }
     .environment(
       \.openURL,
