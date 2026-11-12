@@ -51,7 +51,10 @@ void main() {
 
     expect(offered(ModelRole.agent), ["qwen"]);
     expect(offered(ModelRole.text), ["qwen"]);
-    expect(offered(ModelRole.title), unorderedEquals([appleModelId, "qwen"]));
+    expect(
+      offered(ModelRole.shortAsk),
+      unorderedEquals([appleModelId, "qwen"]),
+    );
   });
 
   test("a voice role offers its own kind, and what is on the device", () {

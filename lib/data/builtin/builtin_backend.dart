@@ -20,7 +20,7 @@ import "../../domain/chat_log.dart" show replayTree;
 import "../../domain/chat_store.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/llm_provider.dart";
-import "../../domain/local_model.dart" show isTitleOnlyModel;
+import "../../domain/local_model.dart" show isShortAskModel;
 import "../../domain/model_capability.dart";
 import "../../domain/models.dart";
 import "../../domain/model_registry.dart";
@@ -319,10 +319,10 @@ class BuiltinBackend implements AgentBackend {
               // another device): the id is all that is left to name it by.
               : endpoint == null
               ? missingProviderMessage(settings.model, provider)
-              : isTitleOnlyModel(provider, settings.model)
-              ? "The Apple on-device model only names chats: its context "
-                    "is too small for the agent. Pick another model for "
-                    "this chat."
+              : isShortAskModel(provider, settings.model)
+              ? "The Apple on-device model only names chats and checks "
+                    "commands: its context is too small for the agent. Pick "
+                    "another model for this chat."
               : "${endpoint.config.name} has no default model. Pick a model "
                     "for this chat.",
         );
@@ -1197,7 +1197,7 @@ class BuiltinBackend implements AgentBackend {
       model,
       provider,
       defaultOf: LlmProviderConfig.lightDefaultOf,
-      title: true,
+      shortAsk: true,
     );
     if (target == null) return null;
     try {
@@ -1603,16 +1603,16 @@ class BuiltinBackend implements AgentBackend {
   /// roles. None is None: a provider without that field leaves nothing to
   /// answer with, which is the caller's error, not a guess from a model list.
   ///
-  /// [title] is the title's ask, the one role a title-only model answers
-  /// ([isTitleOnlyModel]); everything else resolves one to nothing, so a
-  /// setting written before the gate leaves its feature off rather than
-  /// compacting on every turn.
+  /// [shortAsk] is a title's or a verdict's ask, the roles a short-ask model
+  /// answers ([isShortAskModel]); everything else resolves one to nothing,
+  /// so a setting naming one leaves its feature off rather than compacting
+  /// on every turn.
   _Target? _resolveModel(
     String? model,
     String? provider, {
     String? Function(LlmProviderConfig) defaultOf =
         LlmProviderConfig.chatDefaultOf,
-    bool title = false,
+    bool shortAsk = false,
   }) {
     if (provider == null) return null;
     final endpoint = registry.providerFor(provider);
@@ -1620,7 +1620,7 @@ class BuiltinBackend implements AgentBackend {
     final config = endpoint.config;
     final modelId = model ?? defaultOf(config);
     if (modelId == null || modelId.isEmpty) return null;
-    if (!title && isTitleOnlyModel(provider, modelId)) return null;
+    if (!shortAsk && isShortAskModel(provider, modelId)) return null;
     final client = registry.clientOf(endpoint);
     final info = endpoint.modelInfo(modelId);
     // Here rather than at each request: everything that asks the model
@@ -1642,10 +1642,15 @@ class BuiltinBackend implements AgentBackend {
   /// The classifier model, resolved the same way the main model is. Null when
   /// no classifier provider is named. A provider named without a model
   /// resolves to its light default.
-  _Target? _classifierTarget(String? provider, String? model) => _resolveModel(
+  _Target? _classifierTarget(
+    String? provider,
+    String? model, {
+    bool shortAsk = true,
+  }) => _resolveModel(
     model,
     provider,
     defaultOf: LlmProviderConfig.lightDefaultOf,
+    shortAsk: shortAsk,
   );
 
   /// The permission classifier on the classifier model; null, and auto mode
@@ -1658,13 +1663,14 @@ class BuiltinBackend implements AgentBackend {
 
   /// Who reviews a goal at a stop: the classifier model where one is named —
   /// a small fast model, as Claude Code's reviewer is — else [fallback], the
-  /// turn's own model, as OpenCode's is.
+  /// turn's own model, as OpenCode's is. A short-ask classifier is the
+  /// fallback's too: a digest of the conversation is no short ask.
   GoalReviewer _goalReviewer(
     String? provider,
     String? model, {
     required GoalReviewer fallback,
   }) {
-    final target = _classifierTarget(provider, model);
+    final target = _classifierTarget(provider, model, shortAsk: false);
     if (target == null) return fallback;
     return LlmGoalReviewer(client: target.client, model: target.modelId);
   }

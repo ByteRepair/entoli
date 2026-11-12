@@ -480,12 +480,13 @@ const localProviderId = "on-device";
 const appleProviderId = "apple-foundation";
 const appleModelId = "apple-foundation-model";
 
-/// Whether [modelId] at [providerId] may only name chats: the Apple system
-/// model. Its 8,192-token window is mostly the agent's own prompt and tools —
-/// about 6k before the first message — so every turn would open with a
-/// compaction, and a sub-agent or a memory pass would fare no better; a title
-/// is one short ask. A null model id is the provider's default, the system
-/// model.
-bool isTitleOnlyModel(String? providerId, String? modelId) =>
+/// Whether [modelId] at [providerId] may only answer short asks — a chat's
+/// title and a command's verdict: the Apple system model. Its 8,192-token
+/// window is mostly the agent's own prompt and tools — about 6k before the
+/// first message — so every turn would open with a compaction, and a
+/// sub-agent, a memory pass or a goal review would fare no better; a title or
+/// a verdict is one short ask. A null model id is the provider's default, the
+/// system model.
+bool isShortAskModel(String? providerId, String? modelId) =>
     providerId == appleProviderId &&
     (modelId == null || modelId == appleModelId);

@@ -59,7 +59,7 @@ final llmSettings = [
       (provider: SettingKeys.titleProviderId, model: SettingKeys.titleModelId),
       nullLabel: "Off",
       defaultOf: LlmProviderConfig.lightDefaultOf,
-      role: ModelRole.title,
+      role: ModelRole.shortAsk,
     ),
   ),
   SettingSpec(
@@ -129,7 +129,7 @@ final llmSettings = [
       ),
       nullLabel: "Off",
       defaultOf: LlmProviderConfig.lightDefaultOf,
-      role: ModelRole.text,
+      role: ModelRole.shortAsk,
     ),
   ),
   // How many times a failed turn is carried on before it is left failed.

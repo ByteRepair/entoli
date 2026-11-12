@@ -7,7 +7,7 @@ import "package:uuid/uuid.dart";
 
 import "../../core/log.dart";
 import "../../domain/chat_log.dart";
-import "../../domain/local_model.dart" show isTitleOnlyModel;
+import "../../domain/local_model.dart" show isShortAskModel;
 import "../../domain/models.dart";
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/project.dart";
@@ -451,7 +451,7 @@ class _IntroPage extends StatelessWidget {
 /// The models a chat can be answered by: a title-only one, which an iOS
 /// device lists before anything is set up, does not open the tour's gate.
 int _agentModels(List<ModelOption>? models) => (models ?? const [])
-    .where((m) => !isTitleOnlyModel(m.providerId, m.modelId))
+    .where((m) => !isShortAskModel(m.providerId, m.modelId))
     .length;
 
 /// Where the model runs: a service by the name its user knows it by, which

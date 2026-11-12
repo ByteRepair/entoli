@@ -103,6 +103,7 @@ class AppleFm {
     // rather than need.
     baseUrl: "",
     defaultModelId: appleModelId,
+    defaultLightModelId: appleModelId,
   );
 
   LlmProvider get endpoint => AppleFmProvider(provider, probe);

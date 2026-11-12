@@ -665,18 +665,39 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     // adds is never a sentinel, so watching the set would rebuild these
     // settings every time a model was fetched or deleted — and this `build`
     // may only run once, since `_config` is initialised in it.
+    final defaulted = loaded.copy();
     final system = ref.read(installedVoiceModelsProvider.notifier).system;
     final picks = ref.read(voiceProvider).nativePicks;
-    if (system.isEmpty || picks == null) return loaded;
-    final defaulted = loaded.copy();
-    if (system.contains(picks.recognition)) {
+    if (picks != null && system.contains(picks.recognition)) {
       defaulted.voiceRecognitionModelId ??= picks.recognition;
     }
-    if (system.contains(picks.speech)) {
+    if (picks != null && system.contains(picks.speech)) {
       defaulted.voiceSpeechModelId ??= picks.speech;
+    }
+    // Apple's model names chats and checks commands where the device has it,
+    // the same fill-a-null, unsaved default as the voice engines. Only while
+    // no provider is configured: once one is, every save has carried this
+    // into the file, so a null after that is the user's Off.
+    if (_shortAsks case final apple? when loaded.llmProviders.isEmpty) {
+      if (defaulted.titleProviderId == null) {
+        defaulted
+          ..titleProviderId = apple.providerId
+          ..titleModelId = apple.modelId;
+      }
+      if (defaulted.classifierProviderId == null) {
+        defaulted
+          ..classifierProviderId = apple.providerId
+          ..classifierModelId = apple.modelId;
+      }
     }
     return defaulted;
   }
+
+  /// What names chats and checks commands by default on this device, where
+  /// it has a model for exactly that: Apple's.
+  ModelChoice? get _shortAsks => ref.read(appleFmProvider) == null
+      ? null
+      : (providerId: appleProviderId, modelId: appleModelId);
 
   /// What a new chat is answered by, or nothing at all.
   Future<void> setDefault(ModelChoice choice) => _update(
@@ -1036,11 +1057,11 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// the stored key, `""` clears it, a string stores it — written before the
   /// state change whose rebuild reads the store.
   ///
-  /// The first provider ever configured becomes what every still-unset role
-  /// resolves to — the same `_update` as the save, so it cannot land half
-  /// done — until the user picks something themselves. A role the user has
-  /// already picked is left where it is; importing a backup and other bulk
-  /// writes stay on [setProviders], which adopts nothing.
+  /// A new provider becomes what every still-unset role resolves to — the
+  /// same `_update` as the save, so it cannot land half done — until the user
+  /// picks something themselves. A role the user has already picked is left
+  /// where it is, unless the provider it names is gone; importing a backup
+  /// and other bulk writes stay on [setProviders], which adopts nothing.
   ///
   /// [adopt] goes further, and is what choosing a service by name means: it
   /// answers new chats, their titles and the command classifier whatever was
@@ -1065,17 +1086,36 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     final existing = state.llmProviders;
     final isNew = existing.every((p) => p.id != provider.id);
     await _update((s) {
-      s
-        ..llmProviders = List.unmodifiable([
-          ...existing.where((p) => p.id != provider.id),
-          provider,
-        ])
-        ..defaultProviderId =
-            s.defaultProviderId ?? (isNew ? provider.id : null)
-        ..titleProviderId = s.titleProviderId ?? (isNew ? provider.id : null)
-        ..memoryProviderId = s.memoryProviderId ?? (isNew ? provider.id : null)
-        ..classifierProviderId =
-            s.classifierProviderId ?? (isNew ? provider.id : null);
+      s.llmProviders = List.unmodifiable([
+        ...existing.where((p) => p.id != provider.id),
+        provider,
+      ]);
+      if (isNew) {
+        // A role naming a provider since removed answers nothing, so it is
+        // as unset as a null: left there, auto mode would ask for every
+        // command however many providers were added after.
+        bool open(String? id) => id == null || !_reachable(s, id);
+        if (open(s.defaultProviderId)) {
+          s
+            ..defaultProviderId = provider.id
+            ..defaultModelId = null;
+        }
+        if (open(s.titleProviderId)) {
+          s
+            ..titleProviderId = provider.id
+            ..titleModelId = null;
+        }
+        if (open(s.memoryProviderId)) {
+          s
+            ..memoryProviderId = provider.id
+            ..memoryModelId = null;
+        }
+        if (open(s.classifierProviderId)) {
+          s
+            ..classifierProviderId = provider.id
+            ..classifierModelId = null;
+        }
+      }
       if (adopt) _answerWith(s, provider.id);
     });
     ref.invalidate(availableModelsProvider);
@@ -1090,15 +1130,25 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     await _update((s) => _answerWith(s, providerId, modelId));
   }
 
-  static void _answerWith(AppSettings s, String providerId, [String? modelId]) {
+  /// Where the device has its own model for titles and verdicts, those two
+  /// stay on it: [providerId] takes new chats alone.
+  void _answerWith(AppSettings s, String providerId, [String? modelId]) {
+    final short = _shortAsks ?? (providerId: providerId, modelId: modelId);
     s
       ..defaultProviderId = providerId
       ..defaultModelId = modelId
-      ..titleProviderId = providerId
-      ..titleModelId = modelId
-      ..classifierProviderId = providerId
-      ..classifierModelId = modelId;
+      ..titleProviderId = short.providerId
+      ..titleModelId = short.modelId
+      ..classifierProviderId = short.providerId
+      ..classifierModelId = short.modelId;
   }
+
+  /// Whether [id] is a provider a role can reach: one configured, or one the
+  /// device composes itself.
+  static bool _reachable(AppSettings s, String id) =>
+      id == localProviderId ||
+      id == appleProviderId ||
+      s.llmProviders.any((p) => p.id == id);
 
   /// The endpoints the agent can call, written as given. The model list is
   /// rebuilt from them, so it is invalidated here rather than left showing
