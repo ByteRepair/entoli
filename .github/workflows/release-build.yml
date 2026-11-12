@@ -324,6 +324,14 @@ jobs:
         run: |
           set -euo pipefail
           flutter build ipa --release --build-number="$VERSION_CODE" --no-codesign
+          # The export re-signs with the entitlements the app is already
+          # signed with, and an unsigned archive has none: an ad-hoc signature
+          # carries Runner.entitlements through. Nested code first, since
+          # signing the app checks it.
+          app=build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
+          find "$app/Frameworks" -maxdepth 1 \( -name '*.framework' -o -name '*.dylib' \) \
+            -exec codesign --force --sign - {} \;
+          codesign --force --sign - --entitlements ios/Runner/Runner.entitlements "$app"
           key="$RUNNER_TEMP/AuthKey_$API_KEY_ID.p8"
           printf '%s' "$API_KEY_P8" | base64 -D -o "$key"
           options="$RUNNER_TEMP/ExportOptions.plist"
@@ -340,6 +348,13 @@ jobs:
           built="$(ls build/ios/ipa/*.ipa 2>/dev/null | head -1 || true)"
           if [ -z "$built" ]; then
             echo "::error::The export produced no ipa"
+            exit 1
+          fi
+          check="$RUNNER_TEMP/ipa-check"
+          unzip -q "$built" -d "$check"
+          if ! codesign -d --entitlements - --xml "$check/Payload/Runner.app" 2>/dev/null |
+            grep -q increased-memory-limit; then
+            echo "::error::The exported ipa lost Runner.entitlements"
             exit 1
           fi
           mkdir -p dist

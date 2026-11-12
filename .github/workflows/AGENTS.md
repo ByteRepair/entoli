@@ -105,9 +105,12 @@ unsigned, then `xcodebuild -exportArchive -allowProvisioningUpdates` signs
 the export with the App Store Connect API key, Apple handing back (or
 creating) a cloud-managed distribution certificate and an App Store profile.
 Unsigned is deliberate: an archive signed on a fresh runner would mint an
-Apple Development certificate every run, and the team caps those. It holds
-because the Runner target carries no entitlements file; one added later
-wants checking that the export still applies it. The export options are
+Apple Development certificate every run, and the team caps those. The cost
+is the entitlements: the export re-signs with what the app is already signed
+with, and an unsigned archive has nothing, so `Runner.entitlements` is put on
+by an ad-hoc signature between the two (nested code first), and the job fails
+if the exported ipa does not carry it. v8.1.1 shipped without it, which left
+an iPhone at its default memory cap and offered no on-device model. The export options are
 `tool/ios/ExportOptions.plist` — the file an upload from a Mac uses, so the
 two cannot drift — with its `destination` switched from `upload` to
 `export`, since here the ipa goes to disk and the `testflight` job uploads
