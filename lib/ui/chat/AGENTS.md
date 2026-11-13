@@ -1270,7 +1270,9 @@ press.
 of the column, the one being read picked out, the first line of each on hover.
 It is laid over the margin rather than beside the column, so the column stays
 centred whether it is there or not, and it is drawn only where the margin has
-room for it — `_ReadableColumn`'s `side`. A chapter is a prompt and the turn
+room for it — `_ReadableColumn`'s `side` — and only with two chapters or
+more (`railShown`), as the native rail: one prompt has nowhere to jump to.
+A chapter is a prompt and the turn
 under it, so a branch anywhere in that turn — an edit at the prompt, a
 regenerate under it — puts a fork beside its tick (`chaptersOf`, off
 `Chat.branches`). A steer is a chapter too, with a tick of its own: it is

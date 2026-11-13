@@ -20,6 +20,10 @@ typedef Chapter = ({
   int threads,
 });
 
+/// Whether [chapters] are drawn as a rail: one prompt has nowhere to jump
+/// to. The native rail asks the same, `chapters.count > 1`.
+bool railShown(List<Chapter> chapters) => chapters.length > 1;
+
 /// The chapters of the thread being read: every prompt, and every steer said
 /// over a turn, oldest first; not a command the user ran. A turn is the prompt and what answered it, up
 /// to the next prompt, so a branch at any message in it marks the prompt's
