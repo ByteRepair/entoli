@@ -18,6 +18,9 @@ class DesktopFileHandoff implements FileHandoff {
   bool get canReveal => true;
 
   @override
+  String get fileManager => "File Manager";
+
+  @override
   bool get canShare => false;
 
   @override

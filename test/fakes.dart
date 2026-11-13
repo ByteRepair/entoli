@@ -559,6 +559,9 @@ class FakeReminderAlarms implements ReminderAlarms {
 class FakeFileHandoff implements FileHandoff {
   FakeFileHandoff({this.canReveal = false, this.canShare = false});
 
+  @override
+  String get fileManager => "File Manager";
+
   /// A desktop: a file manager and a viewer, nothing else.
   factory FakeFileHandoff.desktop() => FakeFileHandoff(canReveal: true);
 

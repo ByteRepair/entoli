@@ -145,7 +145,11 @@ class WorkspaceAppPage extends AppPage {
     return [
       if (handoff.canReveal)
         ActionController(
-          part("reveal", "Show in File Manager", glyph: SettingGlyph.folder),
+          part(
+            "reveal",
+            "Show in ${handoff.fileManager}",
+            glyph: SettingGlyph.folder,
+          ),
           run: () async {
             await handoff.reveal(dir);
             return null;

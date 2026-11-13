@@ -543,6 +543,63 @@ the owner may always do and the guest's root otherwise would. Checked with
 `clang -fsyntax-only` against the pinned tree; nothing here runs iOS, so the
 behaviour is untested on a device.
 
+## The workspaces in the Files app
+
+Android's `WorkspaceProvider` (see "The workspaces in the Files app" in
+`android/AGENTS.md`) has a twin here: `ios/WorkspaceProvider/`, a File
+Provider extension (`NSFileProviderReplicatedExtension`) that puts the same
+tree under "Entoli" in Files' Locations. The root is every project; a project
+holds its Workspace and, by title, the folder each of its chats works in.
+`chats/` is left out of the workspace's own listing, since an item has one
+parent and the chats are already under the project; two chats of one title
+get their id's first eight characters, Files keeping one name per folder.
+
+**The data directory lives in the App Group** (`group.io.byterepair.entoli`),
+because the extension is a process of its own and sees nothing of the app's
+container. `dataDir()` asks `path_provider_foundation` for the group's
+container and, once, renames a `Documents/entoli` from before into it: one
+volume, so a rename, where a copy would be gigabytes of rootfs. It is not an
+entry in `migrations.dart`, which moves things under the data directory; this
+moves the directory itself, before `AppConfig` exists. Where the rename fails
+the app runs from Documents and Files shows nothing until a launch where it
+lands. Both targets carry the group's entitlement, so the group has to exist
+for the team in the developer portal; the release job ad-hoc signs the
+extension with its own before the export, as it does the app.
+
+**Read-only in the workspace, if not in Files' copy of it.** A replicated
+extension's items live in a copy the system keeps, and on the iOS 27
+simulator that copy cannot be filled from items whose capabilities forbid
+writing: the system locks them, then fails to set their metadata
+(`cannotSetMetadata`, EPERM), and Files shows an empty folder. Read-only POSIX
+flags fail the same way, at the download. So folders allow adding and files
+allow writing, and the extension refuses the rest: `createItem` answers
+`excludedFromSync`, keeping what a user adds on the device and out of the
+workspace; `modifyItem` answers with the workspace's own item and has changed
+contents fetched again, so an edit made through Files is put back;
+`deleteItem` answers `deletionRejected`, which restores the item. A device's
+fileproviderd may lock read-only items without trouble, which would let the
+capabilities say read-only; that is for the device run to try.
+
+**Nothing tells the extension a workspace changed**, since the agent's
+commands write straight to the disk. So the working set is computed:
+`KnownFolders` keeps, in the extension's own container, every folder the
+system has listed and the version of each child it was given, and a pass over
+the working set lists those again and reports the difference. The app signals
+it when it goes to the background, which is when Files is about to be opened,
+and before Show in Files.
+
+**Show in Files** is `IosFileHandoff` over `agent_chat/files`, answered by
+`FilesChannel.swift`: it opens `shareddocuments://` at the path of the
+folder's user-visible URL, the nearest folder the tree holds
+(`WorkspaceNode.of`), falling back to the provider's root.
+`WorkspaceTree.swift` is compiled into the Runner as well for that.
+
+A new location is added switched off, and Files asks to turn it on at the
+first tap. The domain is added on every launch, a no-op where it is there.
+On the simulator a domain outlives the app's uninstall, and one removed and
+re-added in quick succession can be left user-disabled and hidden from Files;
+a different domain id is the way out there, a reinstall is not.
+
 ## Triggers
 
 iOS refuses the process wake every other scheduling clock is — AlarmManager,

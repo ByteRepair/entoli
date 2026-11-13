@@ -58,7 +58,8 @@ class IncomingStaged extends IncomingFile {
 /// because the platforms answer differently rather than partially:
 ///
 /// - Desktop opens a file in the viewer it is registered with, and shows a
-///   folder in the file manager. It has no share sheet and needs no chooser of
+///   folder in the file manager. iOS does too, its file manager being the
+///   Files app, which reaches the workspaces through a File Provider. It has no share sheet and needs no chooser of
 ///   its own — the file manager is already pointed at the workspace.
 /// - Android opens a file with an `ACTION_VIEW` intent, sends a selection out
 ///   through the share sheet, and takes files in the same way: another app
@@ -67,8 +68,10 @@ abstract interface class FileHandoff {
   /// Open [path] in whatever this platform views that kind of file with.
   Future<void> open(String path);
 
-  /// Show [dir] in the platform's file manager.
+  /// Show [dir] in the platform's file manager, which is called
+  /// [fileManager] there.
   bool get canReveal;
+  String get fileManager;
   Future<void> reveal(String dir);
 
   /// Hand [paths] to the rest of the device through the share sheet. It does

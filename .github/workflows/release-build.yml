@@ -331,6 +331,9 @@ jobs:
           app=build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
           find "$app/Frameworks" -maxdepth 1 \( -name '*.framework' -o -name '*.dylib' \) \
             -exec codesign --force --sign - {} \;
+          codesign --force --sign - \
+            --entitlements ios/WorkspaceProvider/WorkspaceProvider.entitlements \
+            "$app/PlugIns/WorkspaceProvider.appex"
           codesign --force --sign - --entitlements ios/Runner/Runner.entitlements "$app"
           key="$RUNNER_TEMP/AuthKey_$API_KEY_ID.p8"
           printf '%s' "$API_KEY_P8" | base64 -D -o "$key"
@@ -355,6 +358,12 @@ jobs:
           if ! codesign -d --entitlements - --xml "$check/Payload/Runner.app" 2>/dev/null |
             grep -q increased-memory-limit; then
             echo "::error::The exported ipa lost Runner.entitlements"
+            exit 1
+          fi
+          if ! codesign -d --entitlements - --xml \
+            "$check/Payload/Runner.app/PlugIns/WorkspaceProvider.appex" 2>/dev/null |
+            grep -q group.io.byterepair.entoli; then
+            echo "::error::The exported ipa lost WorkspaceProvider.entitlements"
             exit 1
           fi
           mkdir -p dist

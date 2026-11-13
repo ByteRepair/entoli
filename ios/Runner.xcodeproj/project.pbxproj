@@ -27,6 +27,11 @@
 		FC942E4D954581A69F70C2AB /* IshCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = E2AD518B0A99A053D1A7C29F /* IshCore.xcframework */; };
 		F01CE0000000000000000A11 /* GenerationChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000000A10 /* GenerationChannel.swift */; };
 		F01CE0000000000000000A13 /* MlxChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000000A12 /* MlxChannel.swift */; };
+		F01CE0000000000000F00001 /* WorkspaceProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000F00011 /* WorkspaceProvider.swift */; };
+		F01CE0000000000000F00002 /* WorkspaceTree.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000F00012 /* WorkspaceTree.swift */; };
+		F01CE0000000000000F00003 /* WorkspaceTree.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000F00012 /* WorkspaceTree.swift */; };
+		F01CE0000000000000F00004 /* FilesChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000F00014 /* FilesChannel.swift */; };
+		F01CE0000000000000F00005 /* WorkspaceProvider.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000F00015 /* WorkspaceProvider.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -36,6 +41,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 97C146ED1CF9000F007C117D;
 			remoteInfo = Runner;
+		};
+		F01CE0000000000000F00023 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F01CE0000000000000F00025;
+			remoteInfo = WorkspaceProvider;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -49,6 +61,17 @@
 				F01CE1A00000000000000042 /* EntoliMLX.xcframework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F01CE0000000000000F00022 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				F01CE0000000000000F00005 /* WorkspaceProvider.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -81,6 +104,13 @@
 		F01CE00000000000000000E0 /* BrowserChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserChannel.swift; sourceTree = "<group>"; };
 		F01CE0000000000000000A10 /* GenerationChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationChannel.swift; sourceTree = "<group>"; };
 		F01CE0000000000000000A12 /* MlxChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MlxChannel.swift; sourceTree = "<group>"; };
+		F01CE0000000000000F00011 /* WorkspaceProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceProvider.swift; sourceTree = "<group>"; };
+		F01CE0000000000000F00012 /* WorkspaceTree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceTree.swift; sourceTree = "<group>"; };
+		F01CE0000000000000F00013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F01CE0000000000000F00014 /* FilesChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesChannel.swift; sourceTree = "<group>"; };
+		F01CE0000000000000F00015 /* WorkspaceProvider.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WorkspaceProvider.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		F01CE0000000000000F00016 /* WorkspaceProvider.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WorkspaceProvider.entitlements; sourceTree = "<group>"; };
+		F01CE0000000000000F00017 /* WorkspaceProvider.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = WorkspaceProvider.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -91,6 +121,13 @@
 				78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */,
 				F01CE1A00000000000000041 /* EntoliMLX.xcframework in Frameworks */,
 				FC942E4D954581A69F70C2AB /* IshCore.xcframework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F01CE0000000000000F00027 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -124,6 +161,7 @@
 				97C146F01CF9000F007C117D /* Runner */,
 				97C146EF1CF9000F007C117D /* Products */,
 				331C8082294A63A400263BE5 /* RunnerTests */,
+				F01CE0000000000000F00021 /* WorkspaceProvider */,
 				E2AD518B0A99A053D1A7C29F /* IshCore.xcframework */,
 				F01CE1A00000000000000040 /* EntoliMLX.xcframework */,
 			);
@@ -134,6 +172,7 @@
 			children = (
 				97C146EE1CF9000F007C117D /* Runner.app */,
 				331C8081294A63A400263BE5 /* RunnerTests.xctest */,
+				F01CE0000000000000F00015 /* WorkspaceProvider.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -155,11 +194,24 @@
 				F01CE0000000000000000A12 /* MlxChannel.swift */,
 				F01CE0000000000000000A10 /* GenerationChannel.swift */,
 				F01CE00000000000000000E0 /* BrowserChannel.swift */,
+				F01CE0000000000000F00014 /* FilesChannel.swift */,
 				E1D2B33A4C5D6E7F8A90B1C2 /* RemindersPlugin.swift */,
 				E1D2B33C4C5D6E7F8A90B1C2 /* RemindersShared.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
 			path = Runner;
+			sourceTree = "<group>";
+		};
+		F01CE0000000000000F00021 /* WorkspaceProvider */ = {
+			isa = PBXGroup;
+			children = (
+				F01CE0000000000000F00011 /* WorkspaceProvider.swift */,
+				F01CE0000000000000F00012 /* WorkspaceTree.swift */,
+				F01CE0000000000000F00013 /* Info.plist */,
+				F01CE0000000000000F00016 /* WorkspaceProvider.entitlements */,
+				F01CE0000000000000F00017 /* WorkspaceProvider.xcconfig */,
+			);
+			path = WorkspaceProvider;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -191,11 +243,13 @@
 				97C146EB1CF9000F007C117D /* Frameworks */,
 				97C146EC1CF9000F007C117D /* Resources */,
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
+				F01CE0000000000000F00022 /* Embed Foundation Extensions */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				F01CE0000000000000F00024 /* PBXTargetDependency */,
 			);
 			name = Runner;
 			packageProductDependencies = (
@@ -204,6 +258,22 @@
 			productName = Runner;
 			productReference = 97C146EE1CF9000F007C117D /* Runner.app */;
 			productType = "com.apple.product-type.application";
+		};
+		F01CE0000000000000F00025 /* WorkspaceProvider */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F01CE0000000000000F0002B /* Build configuration list for PBXNativeTarget "WorkspaceProvider" */;
+			buildPhases = (
+				F01CE0000000000000F00026 /* Sources */,
+				F01CE0000000000000F00027 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WorkspaceProvider;
+			productName = WorkspaceProvider;
+			productReference = F01CE0000000000000F00015 /* WorkspaceProvider.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -222,6 +292,9 @@
 					97C146ED1CF9000F007C117D = {
 						CreatedOnToolsVersion = 7.3.1;
 						LastSwiftMigration = 1100;
+					};
+					F01CE0000000000000F00025 = {
+						CreatedOnToolsVersion = 27.0;
 					};
 				};
 			};
@@ -243,6 +316,7 @@
 			targets = (
 				97C146ED1CF9000F007C117D /* Runner */,
 				331C8080294A63A400263BE5 /* RunnerTests */,
+				F01CE0000000000000F00025 /* WorkspaceProvider */,
 			);
 		};
 /* End PBXProject section */
@@ -326,6 +400,17 @@
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				E1D2B33B4C5D6E7F8A90B1C2 /* RemindersPlugin.swift in Sources */,
 				E1D2B33D4C5D6E7F8A90B1C2 /* RemindersShared.swift in Sources */,
+				F01CE0000000000000F00003 /* WorkspaceTree.swift in Sources */,
+				F01CE0000000000000F00004 /* FilesChannel.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F01CE0000000000000F00026 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F01CE0000000000000F00001 /* WorkspaceProvider.swift in Sources */,
+				F01CE0000000000000F00002 /* WorkspaceTree.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -336,6 +421,11 @@
 			isa = PBXTargetDependency;
 			target = 97C146ED1CF9000F007C117D /* Runner */;
 			targetProxy = 331C8085294A63A400263BE5 /* PBXContainerItemProxy */;
+		};
+		F01CE0000000000000F00024 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F01CE0000000000000F00025 /* WorkspaceProvider */;
+			targetProxy = F01CE0000000000000F00023 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -659,6 +749,86 @@
 			};
 			name = Release;
 		};
+		F01CE0000000000000F00028 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F01CE0000000000000F00017 /* WorkspaceProvider.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = WorkspaceProvider/WorkspaceProvider.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = F9K3SJ2FD4;
+				INFOPLIST_FILE = WorkspaceProvider/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = io.byterepair.entoli.WorkspaceProvider;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		F01CE0000000000000F00029 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F01CE0000000000000F00017 /* WorkspaceProvider.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = WorkspaceProvider/WorkspaceProvider.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = F9K3SJ2FD4;
+				INFOPLIST_FILE = WorkspaceProvider/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = io.byterepair.entoli.WorkspaceProvider;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		F01CE0000000000000F0002A /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F01CE0000000000000F00017 /* WorkspaceProvider.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = WorkspaceProvider/WorkspaceProvider.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = F9K3SJ2FD4;
+				INFOPLIST_FILE = WorkspaceProvider/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = io.byterepair.entoli.WorkspaceProvider;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Profile;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -688,6 +858,16 @@
 				97C147061CF9000F007C117D /* Debug */,
 				97C147071CF9000F007C117D /* Release */,
 				249021D4217E4FDB00AE95B9 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F01CE0000000000000F0002B /* Build configuration list for PBXNativeTarget "WorkspaceProvider" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F01CE0000000000000F00028 /* Debug */,
+				F01CE0000000000000F00029 /* Release */,
+				F01CE0000000000000F0002A /* Profile */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
