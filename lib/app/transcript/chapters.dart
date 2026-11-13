@@ -21,7 +21,7 @@ typedef Chapter = ({
 });
 
 /// The chapters of the thread being read: every prompt, and every steer said
-/// over a turn, oldest first. A turn is the prompt and what answered it, up
+/// over a turn, oldest first; not a command the user ran. A turn is the prompt and what answered it, up
 /// to the next prompt, so a branch at any message in it marks the prompt's
 /// chapter.
 List<Chapter> chaptersOf(Chat chat) {
@@ -32,6 +32,8 @@ List<Chapter> chaptersOf(Chat chat) {
     if (!drawnAsRow(message)) continue;
     final threads = chat.threadsAt(message.id).length;
     if (message.role == MessageRole.user) {
+      // A command the user ran is not something said to the agent.
+      if (message.parts.every((p) => p is ShellRunPart)) continue;
       prompt = chapters.length;
       chapters.add((
         id: message.id,

@@ -17,8 +17,13 @@ struct ConversationView: View {
   /// Whether it all fits with nothing to scroll.
   @State private var fits = true
 
-  /// The row at the top of the view, which says which chapter is being read.
-  @State private var top: String?
+  /// Each chapter's row's top edge against the top of the view, as it was
+  /// last laid out: which chapter is being read.
+  @State private var chapterTops: [String: CGFloat] = [:]
+  /// Scrolled to the very end, with no slack.
+  @State private var atBottom = true
+  /// The chapter being read, as `readChapter` last found it.
+  @State private var current: Int?
 
   /// How wide the conversation is, which says whether the margin beside the
   /// column has room for the chapter rail.
@@ -52,19 +57,36 @@ struct ConversationView: View {
       set: { if !$0 { model.closeDetail() } })
   }
 
-  /// The last chapter at or above the top of the view.
-  private var current: Int? {
-    guard let top, let at = model.order.firstIndex(of: top) else { return nil }
-    let index = Dictionary(
-      model.order.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
-    return model.chapters.lastIndex { (index[$0.row] ?? .max) <= at }
+  /// Which chapter the view is in, as the Flutter page reads it
+  /// (`_readChapter`): from the prompts laid out, against the top of the
+  /// view — the scroll view's own, under the title bar, as the Flutter list
+  /// scrolls under it too. One laid out below the top means the one before
+  /// it is being read; none laid out at all leaves the answer where it was.
+  private func readChapter() {
+    let chapters = model.chapters
+    // At the end the last prompt can be too near the bottom ever to reach
+    // the top, and it is the one being read.
+    if !chapters.isEmpty && atBottom {
+      current = chapters.count - 1
+      return
+    }
+    var at: Int?
+    for (i, chapter) in chapters.enumerated() {
+      guard let top = chapterTops[chapter.row] else { continue }
+      if top <= 24 {
+        at = i
+      } else {
+        if at == nil { at = i == 0 ? 0 : i - 1 }
+        break
+      }
+    }
+    if let at { current = at }
   }
 
   var body: some View {
     ScrollViewReader { proxy in
       ScrollView {
-        Rows(model: model)
-          .scrollTargetLayout()
+        Rows(model: model) { row, top in chapterTops[row] = top }
         // Placed from the view's whole width, not the content's: a scroller
         // takes its strip from the content, which moved a centred column off
         // the composer's line whenever one came. As wide as it may be up to
@@ -76,14 +98,14 @@ struct ConversationView: View {
         .padding(.leading, margin)
         .frame(maxWidth: .infinity, alignment: .leading)
       }
-      // Which rows are shown, from the first layout on: a scroll position
-      // is only said once the user scrolls, so the rail lit nothing as a
-      // chat opened.
-      .onScrollTargetVisibilityChange(idType: String.self, threshold: 0.01) { shown in
-        let seen = Set(shown)
-        top = model.order.first { seen.contains($0) }
-      }
       .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+      .onChange(of: chapterTops) { readChapter() }
+      .onChange(of: atBottom) { readChapter() }
+      .onChange(of: model.chapters) { readChapter() }
+      .onChange(of: model.chatId) {
+        chapterTops = [:]
+        current = nil
+      }
       .overlay(alignment: .trailing) {
         if railFits && model.chapters.count > 1 {
           ChapterRail(chapters: model.chapters, current: current) { chapter in
@@ -117,6 +139,11 @@ struct ConversationView: View {
         geometry.visibleRect.maxY >= geometry.contentSize.height - 40
       } action: { _, end in
         atEnd = end
+      }
+      .onScrollGeometryChange(for: Bool.self) { geometry in
+        geometry.visibleRect.maxY >= geometry.contentSize.height - 1
+      } action: { _, end in
+        atBottom = end
       }
       // No scroller while there is nothing to scroll. `never`, not
       // `hidden`: with scroll bars always shown, as with a mouse attached,
@@ -312,6 +339,11 @@ struct DetailView: View {
 /// error no longer moves it, and laying them all out is work nobody sees.
 private struct Rows: View {
   let model: TranscriptModel
+  /// A chapter's row's top against the view's, as it is laid out and as the
+  /// view scrolls: from the first layout on, where a scroll position is said
+  /// only once the user scrolls. A lazy stack's rows away from the view say
+  /// nothing until they come near.
+  let chapterTop: (String, CGFloat) -> Void
   private static let measuredUpTo = 400
 
   var body: some View {
@@ -323,10 +355,29 @@ private struct Rows: View {
   }
 
   private var rows: some View {
-    ForEach(model.order, id: \.self) { key in
+    let chapters = Set(model.chapters.map(\.row))
+    return ForEach(model.order, id: \.self) { key in
       if let row = model.rows[key] {
         RowView(row: row, model: model).id(key)
+          .modifier(TopReport(key: key, reports: chapters.contains(key), report: chapterTop))
       }
+    }
+  }
+}
+
+/// [report] of the row's top against the view's, where it [reports].
+private struct TopReport: ViewModifier {
+  let key: String
+  let reports: Bool
+  let report: (String, CGFloat) -> Void
+
+  func body(content: Content) -> some View {
+    if reports {
+      content.onGeometryChange(for: CGFloat.self) { $0.frame(in: .scrollView).minY } action: {
+        report(key, $0)
+      }
+    } else {
+      content
     }
   }
 }

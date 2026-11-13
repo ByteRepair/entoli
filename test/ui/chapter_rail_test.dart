@@ -39,6 +39,31 @@ void main() {
     expect(chapters.map((c) => c.threads), [2, 3, 1]);
   });
 
+  test("a command the user ran is not a chapter", () {
+    final chat = Chat(
+      state: makeState("c"),
+      messages: [
+        _said("u1", MessageRole.user, "first"),
+        _said("a1", MessageRole.assistant, "reply"),
+        Message(
+          id: "run",
+          role: MessageRole.user,
+          createdAt: DateTime(2026),
+          parts: const [
+            MessagePart.shellRun(
+              command: "git status",
+              returnCode: 0,
+              output: "",
+            ),
+          ],
+        ),
+        _said("u2", MessageRole.user, "second"),
+      ],
+    );
+
+    expect(chaptersOf(chat).map((c) => c.id), ["u1", "u2"]);
+  });
+
   testWidgets("a branched chapter is marked, and says how many threads", (
     tester,
   ) async {
