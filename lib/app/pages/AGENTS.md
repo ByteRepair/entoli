@@ -24,8 +24,8 @@ under the page's id, so its rules and its words are said once; and
 `settingsPage` is a whole settings page at a level, a project's skills or
 agents. Two kinds were added for these pages: `DocumentController`, a
 file's text as the whole of a page, edited in place with each edit said back,
-and `WebController`, a web page. `CollectionItem.bot` leads a row with a Bot
-Avatar of its own.
+and `WebController`, a web page. A `CollectionItem`'s `RowFace` says who
+leads its row: an agent in their face, or a Bot Avatar of its own.
 
 **The stack is the core's.** `AppPages` (`appPagesProvider`) holds the pages
 open, the first at the bottom: `open` puts one over the others (one already

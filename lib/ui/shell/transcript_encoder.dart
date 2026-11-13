@@ -2,11 +2,9 @@ import "dart:io";
 import "dart:typed_data";
 
 import "package:entoli_glass/entoli_glass.dart" as wire;
-import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 import "package:path/path.dart" as p;
 
-import "../../app/plan.dart" show planProgressLine, planProvider;
 import "../../app/settings/spec.dart" show SettingReader;
 import "../../app/transcript/activity.dart";
 import "../../app/transcript/message.dart";
@@ -32,7 +30,8 @@ class TranscriptEncoder {
     required this.catalog,
     required this.prose,
     required this.resources,
-  });
+    Set<String>? present,
+  }) : _present = present ?? {};
 
   final SettingReader reader;
   final ActivityCatalog catalog;
@@ -43,17 +42,20 @@ class TranscriptEncoder {
   /// Where a chat's attachments are on this device.
   final String resources;
 
+  /// The attachments found on disk, kept across passes: one is written once
+  /// and locked, so it is not looked for again on every streamed event.
+  final Set<String> _present;
+
   final nodes = <String, EncodedNode>{};
 
   /// Each message's blocks as last laid out, by row key, which an intent
   /// naming a file finds it by.
   final blocks = <String, List<MessageBlock>>{};
 
-  wire.RowSnapshot row(
-    TranscriptRow row, {
-    required wire.MessageSnapshot Function(MessageRow row) message,
-  }) => switch (row) {
-    MessageRow() => wire.RowSnapshot(key: row.key, message: message(row)),
+  /// A row that is not a message — a mode line, a compaction, a goal — as
+  /// the client draws it; null for a message, which [message] encodes.
+  wire.RowSnapshot? row(TranscriptRow row) => switch (row) {
+    MessageRow() => null,
     ModeRow() => wire.RowSnapshot(
       key: row.key,
       kind: wire.RowKind.mode,
@@ -63,13 +65,13 @@ class TranscriptEncoder {
       key: row.key,
       kind: wire.RowKind.compaction,
       text: CompactionRow.text,
-      body: markdown(summary),
+      body: prose.markdown(summary),
     ),
     CompactionFailedRow(:final reason) => wire.RowSnapshot(
       key: row.key,
       kind: wire.RowKind.compactionFailed,
       text: CompactionFailedRow.text,
-      body: markdown(reason),
+      body: prose.markdown(reason),
       isError: true,
     ),
     GoalRow() => wire.RowSnapshot(
@@ -179,7 +181,7 @@ class TranscriptEncoder {
 
   wire.SaidSnapshot _said(Said said) => switch (said) {
     ProseSaid(:final markdown, :final caret) => wire.SaidSnapshot(
-      blocks: this.markdown(markdown),
+      blocks: prose.markdown(markdown),
       caret: caret,
     ),
     ErrorSaid() => wire.SaidSnapshot(
@@ -197,7 +199,11 @@ class TranscriptEncoder {
     return wire.FileSnapshot(
       name: file.filename,
       mime: file.mimeType,
-      path: File(path).existsSync() ? path : null,
+      path:
+          _present.contains(path) ||
+              File(path).existsSync() && _present.add(path)
+          ? path
+          : null,
     );
   }
 
@@ -232,31 +238,27 @@ class TranscriptEncoder {
             ? wire.TranscriptIcon.artifact
             : wire.TranscriptIcon.skill,
         text: node.label,
+        output: wire.OutputKind.values.byName(node.kind.name),
+        caption: node.kind.caption,
       ),
     };
   }
 
-  /// Read through the reader as the Flutter card reads it, so the row is
-  /// sent again as the plan moves.
-  wire.NodeSnapshot _plan(PlanNode node, String id) {
-    final plan = reader.watch(planProvider(node.run.chatId));
-    final sections = plan.value;
-    return wire.NodeSnapshot(
-      id: id,
-      kind: wire.NodeKind.plan,
-      icon: wire.TranscriptIcon.plan,
-      text: node.title,
-      progress: planProgressLine(sections, loading: plan.isLoading),
-      tasks: [
-        for (final section in sections ?? const <PlanSection>[])
-          for (final task in section.tasks)
-            wire.PlanTaskSnapshot(
-              title: task.text,
-              done: task.status == PlanTaskStatus.done,
-            ),
-      ],
-    );
-  }
+  wire.NodeSnapshot _plan(PlanNode node, String id) => wire.NodeSnapshot(
+    id: id,
+    kind: wire.NodeKind.plan,
+    icon: wire.TranscriptIcon.plan,
+    text: node.title,
+    progress: node.progress,
+    tasks: [
+      for (final section in node.sections ?? const <PlanSection>[])
+        for (final task in section.tasks)
+          wire.PlanTaskSnapshot(
+            title: task.text,
+            done: task.status == PlanTaskStatus.done,
+          ),
+    ],
+  );
 
   /// A detail as the client draws it, a nested transcript's nodes under
   /// ids of their own.
@@ -287,17 +289,7 @@ class TranscriptEncoder {
     transcript: detail.transcript == null ? null : nested(detail.transcript!),
   );
 
-  /// Markdown as blocks, its code tokenised and its formulas by id.
-  List<wire.TextBlockSnapshot> markdown(String text) => prose.markdown(text);
-
-  static wire.Tint _tint(BubbleTint tint) => switch (tint) {
-    BubbleTint.none => wire.Tint.none,
-    BubbleTint.prompt => wire.Tint.prompt,
-    BubbleTint.command => wire.Tint.command,
-    BubbleTint.notice => wire.Tint.notice,
-    BubbleTint.tool => wire.Tint.tool,
-    BubbleTint.system => wire.Tint.system,
-  };
+  static wire.Tint _tint(BubbleTint tint) => wire.Tint.values.byName(tint.name);
 
   /// Name for name: the wire's enum is the core's.
   static wire.TranscriptIcon icon(TranscriptGlyph glyph) =>

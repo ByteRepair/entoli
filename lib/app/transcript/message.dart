@@ -1,3 +1,4 @@
+import "../../domain/bot_avatar/pose.dart" show BotMood;
 import "../../domain/models.dart";
 import "../../domain/shell.dart" show shellBypassCommand;
 import "../../domain/system_notification.dart";
@@ -172,6 +173,9 @@ class MessageMoment {
 
   /// Whether a failed turn here offers Retry.
   final bool canRetry;
+
+  /// What its author's Bot Avatar does: thinks while it is being written.
+  BotMood get mood => waiting ? BotMood.thinking : BotMood.idle;
 }
 
 /// A message split the way it reads: everything the model did as activities

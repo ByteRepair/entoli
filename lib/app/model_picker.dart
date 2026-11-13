@@ -1,3 +1,4 @@
+import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:collection/collection.dart";
 
 import "../data/builtin/llm/hosted_models.dart";
@@ -8,8 +9,14 @@ import "../domain/local_model.dart" show isShortAskModel;
 import "../domain/model_capability.dart";
 import "../domain/model_registry.dart";
 import "../domain/models.dart";
-import "../providers.dart" show refOf;
+import "../providers.dart"
+    show
+        appSettingsProvider,
+        modelProvidersProvider,
+        refOf,
+        sortedModelsProvider;
 import "model_role.dart";
+import "settings/spec.dart" show SettingReader;
 
 /// One model a picker can offer, with the provider it is reached through.
 class CatalogEntry {
@@ -251,3 +258,71 @@ String? modelFieldError({
 
 /// What a field whose [modelFieldError] says its provider is gone reads as.
 const missingModelLabel = "Select New Model";
+
+/// A model pick as its field reads in every frontend: what it says, what is
+/// wrong with it, what its entry storing nothing is called, and the line
+/// naming what that entry stands for while it is picked.
+class ModelField {
+  const ModelField._({
+    required this.label,
+    required this.error,
+    required this.nullEntry,
+    required this.using,
+  });
+
+  /// [choice] as the app's providers and models stand, watched through
+  /// [reader]. [inherited] is what storing nothing resolves to above.
+  factory ModelField.watch(
+    SettingReader reader, {
+    required ModelChoice choice,
+    required ModelRole role,
+    required String nullLabel,
+    String? Function(LlmProviderConfig) defaultOf =
+        LlmProviderConfig.chatDefaultOf,
+    ModelChoice? inherited,
+  }) {
+    final providers = reader.watch(
+      appSettingsProvider.select((s) => s.llmProviders),
+    );
+    final models = reader.watch(sortedModelsProvider);
+    final listed = models.value ?? const <ModelOption>[];
+    final serving = reader.watch(modelProvidersProvider);
+    final error = modelFieldError(
+      choice: choice,
+      role: role,
+      loaded: models.hasValue,
+      listed: listed,
+      serving: serving,
+    );
+    final standsFor = inherited == null
+        ? null
+        : modelName(providers, listed, inherited);
+    final unset = choice.providerId == null && choice.modelId == null;
+    return ModelField._(
+      label: error != null
+          ? missingModelLabel
+          : modelFieldLabel(
+              choice: choice,
+              role: role,
+              nullLabel: nullLabel,
+              defaultOf: defaultOf,
+              providers: providers,
+              listed: listed,
+              serving: serving,
+            ),
+      error: error,
+      nullEntry: standsFor == null ? nullLabel : "$nullLabel ($standsFor)",
+      using: unset && standsFor != null ? "Using $standsFor" : null,
+    );
+  }
+
+  final String label;
+  final String? error;
+  final String nullEntry;
+
+  /// What the null entry stands for, while it is the one picked.
+  final String? using;
+
+  /// The field in one line, for a frontend with no line under it.
+  String get reads => using == null ? label : nullEntry;
+}

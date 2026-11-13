@@ -617,6 +617,9 @@ private let copySymbol = "doc.on.doc"
     func updateNSView(_ view: ProseTextView, context: Context) {
       view.actions = actions
       context.coordinator.actions = actions
+      // The builder hands back the same string while nothing changed.
+      guard context.coordinator.shown !== text else { return }
+      context.coordinator.shown = text
       if view.textStorage?.isEqual(to: text) != true {
         view.textStorage?.setAttributedString(text)
         view.decorate()
@@ -638,6 +641,8 @@ private let copySymbol = "doc.on.doc"
 
     final class Coordinator: NSObject, NSTextViewDelegate {
       var actions: ProseActions
+      /// The string last put in the view.
+      var shown: NSAttributedString?
       init(actions: ProseActions) { self.actions = actions }
 
       func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
@@ -756,6 +761,9 @@ private let copySymbol = "doc.on.doc"
 
     func updateUIView(_ view: ProseUITextView, context: Context) {
       context.coordinator.actions = actions
+      // The builder hands back the same string while nothing changed.
+      guard context.coordinator.shown !== text else { return }
+      context.coordinator.shown = text
       if !view.attributedText.isEqual(to: text) {
         view.attributedText = text
         view.setNeedsLayout()
@@ -780,6 +788,8 @@ private let copySymbol = "doc.on.doc"
 
     final class Coordinator: NSObject, UITextViewDelegate {
       var actions: ProseActions
+      /// The string last put in the view.
+      var shown: NSAttributedString?
       init(actions: ProseActions) { self.actions = actions }
 
       func textView(

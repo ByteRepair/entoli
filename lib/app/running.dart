@@ -1,6 +1,5 @@
 import "package:flutter/foundation.dart" show Listenable;
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
 import "../domain/agent_browser.dart";
 import "../domain/room/room_state.dart" show ChatViewState;
@@ -11,29 +10,14 @@ import "settings/spec.dart" show SettingReader;
 import "transcript/activities/command.dart" show JobActivity;
 import "transcript/activities/task.dart" show SubAgentActivity;
 import "transcript/activity.dart"
-    show Activity, LiveMessage, Run, liveMessageOf;
+    show Opens, OpensDetail, Run, TranscriptHandOff, liveMessageOf;
 
 /// What a chat has running beside the reply: the browser's tab, a
 /// background job, a sub-agent. Each frontend words and draws its own.
 enum RunningKind { browser, job, subAgent }
 
-/// What opening a running thing opens, which each frontend does its own way.
-sealed class RunningOpens {
-  const RunningOpens();
-}
-
-/// The activity behind it and the run it is, an open detail of it following
-/// [source].
-final class OpensDetail extends RunningOpens {
-  const OpensDetail(this.activity, this.run, {this.source});
-
-  final Activity activity;
-  final Run run;
-  final ProviderListenable<LiveMessage>? source;
-}
-
 /// The chat's browser tab, watched live.
-final class OpensBrowser extends RunningOpens {
+final class OpensBrowser implements Opens {
   const OpensBrowser(this.browser, this.tab);
 
   final AgentBrowser browser;
@@ -42,6 +26,10 @@ final class OpensBrowser extends RunningOpens {
   /// In a window of its own rather than over the chat: a browser not in the
   /// app's, or a tab whose input is not to be trusted to the card.
   bool get window => !browser.inApp || !tab.trustedInput;
+
+  @override
+  Future<void> open(TranscriptHandOff handOff) =>
+      handOff.openBrowser(browser, tab);
 }
 
 /// One thing a chat has running beside the reply.
@@ -72,7 +60,7 @@ class RunningThing {
   final String label;
   final String tooltip;
   final bool mono;
-  final RunningOpens opens;
+  final Opens opens;
 }
 
 /// A kind of thing a chat can have running: what [chatId] has of it now,
@@ -200,11 +188,7 @@ List<RunningThing> subAgentsRunning(
 
 /// What [chatId] has running, from each of [runningSources] in turn: the
 /// things that stand alone, and the rest gathered by their group.
-({List<RunningThing> alone, Map<String, List<RunningThing>> groups}) runningOf(
-  SettingReader ref,
-  ChatViewState view,
-  String chatId,
-) {
+RunningNow runningOf(SettingReader ref, ChatViewState view, String chatId) {
   final alone = <RunningThing>[];
   final groups = <String, List<RunningThing>>{};
   for (final source in runningSources) {
@@ -213,5 +197,20 @@ List<RunningThing> subAgentsRunning(
       group == null ? alone.add(thing) : (groups[group] ??= []).add(thing);
     }
   }
-  return (alone: alone, groups: groups);
+  return RunningNow(alone, groups);
+}
+
+/// What a chat has running: what stands alone, and the rest gathered by
+/// group, each group's things in the order its source gave them.
+class RunningNow {
+  const RunningNow(this.alone, this.groups);
+
+  final List<RunningThing> alone;
+  final Map<String, List<RunningThing>> groups;
+
+  /// Every one in the order shown: standing alone first, then each group.
+  List<RunningThing> get ordered => [
+    ...alone,
+    for (final things in groups.values) ...things,
+  ];
 }

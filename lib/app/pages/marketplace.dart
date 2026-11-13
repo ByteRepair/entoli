@@ -103,21 +103,12 @@ class MarketplaceAppPage extends AppPage {
       ...switch (listed) {
         AsyncValue(hasValue: true, :final value?) => _lists(value, tagged),
         AsyncValue(:final error?) => [
-          PageSection("failed", "Could not reach the marketplace", [
-            NoticeController(
-              part("failed", ""),
-              tone: NoticeTone.warning,
-              lines: [NoticeLine("$error")],
-            ),
-            ActionController(
-              part("retry", "Try Again"),
-              label: "Try Again",
-              run: () async {
-                app.invalidate(marketplaceEntriesProvider(_kind));
-                return null;
-              },
-            ),
-          ]),
+          failed(
+            "Could not reach the marketplace",
+            error,
+            retry: () async =>
+                app.invalidate(marketplaceEntriesProvider(_kind)),
+          ),
         ],
         _ => [notice("loading", "Reading the marketplace…")],
       },
@@ -191,11 +182,7 @@ class MarketplaceTagsAppPage extends AppPage {
   @override
   List<PageSection> sections(SettingReader reader) => [
     PageSection("tags", "", [
-      if (tags.isEmpty)
-        NoticeController(
-          part("none", ""),
-          lines: const [NoticeLine("Nothing here carries a tag.")],
-        ),
+      if (tags.isEmpty) noticeRow("none", "Nothing here carries a tag."),
       for (final (tag, count) in tags)
         ToggleController(
           part("tag-$tag", tag, hint: UiHint.toggle, description: "$count"),
@@ -220,7 +207,6 @@ class MarketplaceTagsAppPage extends AppPage {
     if (ticked.isNotEmpty)
       ActionController(
         part("clear", "Clear"),
-        label: "Clear",
         run: () async {
           ticked.clear();
           changed();
@@ -476,23 +462,7 @@ class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
   List<PageSection> sections(SettingReader reader) {
     final preview = this.preview;
     if (_failure case final failure?) {
-      return [
-        PageSection("failed", "Could not reach the marketplace", [
-          NoticeController(
-            part("failed", ""),
-            tone: NoticeTone.warning,
-            lines: [NoticeLine(failure)],
-          ),
-          ActionController(
-            part("retry", "Try Again"),
-            label: "Try Again",
-            run: () async {
-              await _load();
-              return null;
-            },
-          ),
-        ]),
-      ];
+      return [failed("Could not reach the marketplace", failure, retry: _load)];
     }
     if (preview == null) {
       return [notice("loading", "Reading the entry…")];
@@ -516,22 +486,14 @@ class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
           ],
         ),
         if (preview.packageProblem case final problem?)
-          NoticeController(
-            part("problem", ""),
-            tone: NoticeTone.warning,
-            lines: [NoticeLine(problem)],
-          ),
+          noticeRow("problem", problem, tone: NoticeTone.warning),
         if (kind == CompletionKind.agent &&
             preview.packageProblem == null &&
             !preview.installable(kind))
-          NoticeController(
-            part("noPrompt", ""),
+          noticeRow(
+            "noPrompt",
+            "This agent cannot be installed: there is no prompt in it.",
             tone: NoticeTone.warning,
-            lines: const [
-              NoticeLine(
-                "This agent cannot be installed: there is no prompt in it.",
-              ),
-            ],
           ),
       ]),
       if (preview.readme case final readme? when readme.trim().isNotEmpty)
@@ -556,7 +518,6 @@ class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
     return [
       ActionController(
         part("install", "Install"),
-        label: "Install",
         confirm: () async => switch (kind) {
           CompletionKind.skill => replacingSkill(preview.package!),
           CompletionKind.agent => _replacingAgent(),
@@ -686,7 +647,6 @@ class SkillInstallAppPage extends AppPage with InstallsPrompts {
     if (_package case final package?)
       ActionController(
         part("install", "Install"),
-        label: "Install",
         confirm: () async => replacingSkill(package),
         run: () => installSkill(package),
       ),

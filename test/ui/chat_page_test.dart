@@ -1041,14 +1041,15 @@ void main() {
       },
     );
 
-    testWidgets("an existing chat with one prompt has its tick on open", (
+    testWidgets("an existing chat with two prompts has their ticks on open", (
       tester,
     ) async {
       useWindow(tester, const Size(1400, 900));
-      final chat = await seedLongChat(tester, messages: 2);
+      final chat = await seedLongChat(tester, messages: 4);
       await open(tester, chat.state.id);
 
       expect(find.byTooltip("line 0"), findsOneWidget);
+      expect(find.byTooltip("line 2"), findsOneWidget);
     });
 
     testWidgets("is gone where the margin has no room for it", (tester) async {

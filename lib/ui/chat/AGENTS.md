@@ -673,11 +673,15 @@ a row is. The layers, each knowing only the one below:
   rather than a kind of activity, as the settings' controllers are kinds of
   behaviour: `LabelNode` (the one muted line, a thought's tail streaming
   under it), `DiffNode` (a small write or edit as its lines), `PlanNode`,
-  `OutputNode` (a card that opens what it stands for through the
-  frontend's `TranscriptHandOff`). A node knows its activity and run, so
-  opening it needs nothing else: `node.detail(reader, source:)` is the
-  `ActivityDetail` — title, glyph, command, status, sections, actions, and a
-  sub-agent's `NestedTranscript`. A new node kind is a compile error in every
+  `OutputNode` (a card for what the turn made). A node knows its activity
+  and run, and what pressing it opens: `node.open(handOff, source:)` goes
+  through the frontend's `TranscriptHandOff` — the plan's page for a
+  `PlanNode`, the artifact or skill for an `OutputNode`, and otherwise an
+  `OpensDetail`, whose `detail(reader)` is the `ActivityDetail` — title,
+  glyph, command, status, sections, actions, and a sub-agent's
+  `NestedTranscript`. A running pill opens the same way (`Opens`), so no
+  frontend switches over what a press opens. A `PlanNode` carries the plan
+  as the file has it and its progress line, read where the node is built. A new node kind is a compile error in every
   frontend until it draws it. Glyphs are `TranscriptGlyph`s, which each
   frontend maps to its own pictures.
 - **The layout** (`message.dart`). `MessageLayout.blocks(reader, moment)` is
@@ -707,9 +711,10 @@ a row is. The layers, each knowing only the one below:
   (`nestedTranscriptViewProvider`).
 
 **The Flutter frontend** draws all of it in `activity/`: `ActivityNodeView`
-switches over the nodes (`nodes.dart`), `openActivityDetail` opens a node's
-`ActivityCard`, which follows its source while it is open, and
-`ContextHandOff` is the hand-off over the context of what was tapped.
+switches over the nodes (`nodes.dart`) and hands each press to the node, and
+`ContextHandOff` (`card.dart`) is the hand-off over the context of what was
+tapped, opening a detail as an `ActivityCard` that follows its source while
+it is open.
 `MessageBubble` keeps its public shape and lays its message out through
 `MessageLayout`, re-laid only when it is handed another message.
 
@@ -728,8 +733,7 @@ resume and its clear, each sent as the `/goal` command it is. **Where it
 moved** is a `GoalMarkRow` in the conversation for each `goal` record, after
 the message it names: an activity label in the reply's gutter, "Goal set: …",
 "Goal paused: …", "Goal met: …", and "Goal answered: …" for a command that
-changed nothing, opening the same kind of drawer every activity has (a sheet,
-a page under the native shell). The drawer says the state the goal was left
+changed nothing, opening the same kind of drawer every activity has. The drawer says the state the goal was left
 in, why — the user's pause, the reviewer's verdict — and the goal prompt as
 the model was given it. Off the log, so a restart
 draws the same rows and a rewind takes them away with their message.
@@ -814,8 +818,9 @@ on the message, not looked up per turn.
 comes from `runningSources` in `lib/app/running.dart`, a `RunningSource`
 function per kind of thing a chat can have running — the browser's tab,
 background jobs, sub-agents — each supplying `RunningThing`s: a label, the
-group it is gathered under, and what it opens (`RunningOpens`: an activity's
-detail or the browser's tab), which each frontend opens its own way. The strip knows nothing of what they
+group it is gathered under, and what it opens (`Opens`: an activity's
+detail or the browser's tab), which opens itself through the frontend's
+hand-off. The strip knows nothing of what they
 are; a new kind is a source added to the list. Things with no group stand
 alone ahead of the groups, which is where the browser's tab goes. It has no
 surface of its own; the pills are the row. It scrolls sideways, and a mouse
@@ -920,9 +925,9 @@ the agent's call says so.
 
 Under the native shell the conversation is SwiftUI's
 (`packages/entoli_glass/.../Conversation/`), drawn from the same transcript
-over its own contract, `pigeons/transcript.dart`. `ChatChrome.conversation`
-is the seam: the Flutter chrome draws the list, `ShellChatChrome` puts
-`ShellConversation` there, which draws nothing and sends.
+over its own contract, `pigeons/transcript.dart`. `drawsOpenChatProvider`
+is the seam: false, the chat page draws the list; true, it draws nothing and
+`ShellChat` sends.
 
 **A row goes when it changed.** `TranscriptEncoder` turns each core row into
 its snapshot — markdown as the core's flat blocks (`MarkdownDocument`, read
@@ -952,7 +957,7 @@ composer and how it sends are its `ChatSession` (`lib/app/chat_session.dart`),
 one per chat and shared by both frontends' chat pages; the surfaces' logic is
 plain classes — `ConversationSurface`, `TurnRunner`, `ComposerSurface` — that
 `ShellChat` and the remaining widgets both hold. Under the shell the chat page
-draws nothing for an open chat (`ChatChrome.drawsOpenChat`), and a temporary
+draws nothing for an open chat (`drawsOpenChatProvider`), and a temporary
 chat's expiry is asked by `ShellChat` (`checkChatExpiry`). The chat's edges are a
 surface of their own (`ChatFootSnapshot`): the paired device a mirror lives
 on, as a strip over the conversation; what stands in the composer's place —
@@ -979,12 +984,17 @@ through the container's `NativeSurfaces` under the shell, and a `BrowserWindowSe
 sends the page's title, address and hold and its frames as they come, and
 runs what the user does in the sheet on the tab. A key arrives as the
 platform's own key code and characters and is read through Flutter's key
-tables into a `KeyDownEvent`, so `browserKeyDown` stays the one mapping to the
-page's keys. The sheet lies over the window, so nothing under it takes input while it is
+tables into a `KeyDownEvent` and routed by the same `BrowserKeyboard` the
+Flutter card uses, so what paste, copy and cut do and `browserKeyDown`'s
+mapping to the page's keys are written once. The sheet lies over the window, so nothing under it takes input while it is
 up. **A running pill
 opens the native detail**: a job's or a sub-agent's `RunningThing` opens an
-`OpensDetail`, its activity and run, which `ShellChat` opens in the
-conversation's sheet. **The chapter rail is native**: the chapters (`chaptersOf`, in the
+`OpensDetail`, its activity and run, through the conversation's hand-off,
+which opens it in the conversation's sheet. **A message row is encoded only
+when it changed** (`MessageRows`): each is built under a reader of its own,
+so what only it read re-encodes it alone, and one whose message and inputs
+are as they were is not laid out or compared again; the Swift observes each
+row on its own (`RowEntry`), so only that row redraws. **The chapter rail is native**: the chapters (`chaptersOf`, in the
 core) go with the conversation, and the Swift draws the ticks beside the
 column where the margin beside it has room, against the column, the current
 one read off the row at the top of the view. The jump to the latest sits in
@@ -1271,7 +1281,9 @@ press.
 of the column, the one being read picked out, the first line of each on hover.
 It is laid over the margin rather than beside the column, so the column stays
 centred whether it is there or not, and it is drawn only where the margin has
-room for it — `_ReadableColumn`'s `side`. A chapter is a prompt and the turn
+room for it — `_ReadableColumn`'s `side` — and only with two chapters or
+more (`railShown`), as the native rail: one prompt has nowhere to jump to.
+A chapter is a prompt and the turn
 under it, so a branch anywhere in that turn — an edit at the prompt, a
 regenerate under it — puts a fork beside its tick (`chaptersOf`, off
 `Chat.branches`). A steer is a chapter too, with a tick of its own: it is

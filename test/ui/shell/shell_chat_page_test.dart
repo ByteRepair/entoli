@@ -6,8 +6,7 @@ import "package:super_sliver_list/super_sliver_list.dart";
 
 import "package:agent_chat/ui/app_chrome.dart" show appChromeProvider;
 import "package:agent_chat/ui/shell/shell_app_chrome.dart";
-import "package:agent_chat/ui/chat/chat_chrome.dart" show chatChromeProvider;
-import "package:agent_chat/ui/shell/shell_chat_chrome.dart";
+import "package:agent_chat/ui/chat/chat_chrome.dart" show drawsOpenChatProvider;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/project.dart" show defaultEmptyChatQuestion;
 import "package:agent_chat/providers.dart" show appSettingsProvider;
@@ -41,7 +40,7 @@ void main() {
     tester,
     ProviderScope(
       overrides: [
-        chatChromeProvider.overrideWithValue(const ShellChatChrome()),
+        drawsOpenChatProvider.overrideWithValue(true),
         appChromeProvider.overrideWithValue(const ShellAppChrome()),
         frontendProvider.overrideWithValue(
           const FrontendChoice(current: Frontend.swiftUI, native: true),

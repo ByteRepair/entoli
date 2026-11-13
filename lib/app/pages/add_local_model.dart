@@ -104,7 +104,6 @@ class AddLocalModelAppPage extends AppPage {
   List<ActionController> toolbar(SettingReader reader) => [
     ActionController(
       part("download", "Download"),
-      label: "Download",
       enabled: _ready,
       run: () async {
         String? optional(String text) =>

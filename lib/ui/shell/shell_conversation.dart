@@ -27,10 +27,10 @@ import "../../domain/reaction.dart";
 import "../../domain/room/room_state.dart" show ChatViewState;
 import "../../domain/prompt_library.dart" show nameOf;
 import "../../providers.dart";
-import "../chat/activity/hand_off.dart";
-import "../chat/plan_page.dart" as plan_page;
+import "../chat/activity/card.dart" show ContextHandOff;
 import "faces.dart";
 import "markdown_encoder.dart";
+import "message_rows.dart";
 import "transcript_encoder.dart";
 import "../widgets/dialogs.dart" show notify;
 
@@ -41,11 +41,12 @@ import "../widgets/dialogs.dart" show notify;
 /// the client's page, sent while it is up. The open chat's publisher
 /// (`ShellChat`) holds one and calls [publish] whenever what it read changed.
 class ConversationSurface implements wire.TranscriptIntents {
-  ConversationSurface({
+  ConversationSurface(
+    ProviderContainer container, {
     required this.context,
     required this.onReply,
     required this.republish,
-  });
+  }) : _rows = MessageRows(container, republish: republish);
 
   /// Where a page it opens is pushed.
   final BuildContext Function() context;
@@ -71,18 +72,22 @@ class ConversationSurface implements wire.TranscriptIntents {
   SettingReader? _reader;
 
   /// The detail open, if any, and the node it is of.
-  EncodedNode? _open;
+  OpensDetail? _open;
 
   final _parsed = MarkdownBlocks();
+
+  /// The message rows as last encoded, kept while what they read holds.
+  final MessageRows _rows;
+
+  /// The open chat's attachments found on disk.
+  final _present = <String>{};
 
   /// [chatId] open with nothing to show yet, while it is read: keeps the
   /// conversation up rather than gone between two chats, which would bring
   /// the Flutter view back into the window for a moment.
   void loading(String chatId) {
     if (_sentFor == chatId) return;
-    _sent.clear();
-    _sentFor = chatId;
-    _open = null;
+    _reset(chatId);
     _send(
       () => _client.conversation(
         wire.ConversationSnapshot(chatId: chatId, loading: true),
@@ -90,12 +95,18 @@ class ConversationSurface implements wire.TranscriptIntents {
     );
   }
 
+  void _reset(String? chatId) {
+    _sent.clear();
+    _rows.clear();
+    _present.clear();
+    _sentFor = chatId;
+    _open = null;
+  }
+
   /// Takes the conversation off the client.
   void clear() {
-    _sent.clear();
-    _sentFor = null;
+    _reset(null);
     _sentDetail = null;
-    _open = null;
     _send(() => _client.conversation(wire.ConversationSnapshot()));
     _send(() => _client.detail(wire.DetailSnapshot()));
   }
@@ -122,77 +133,96 @@ class ConversationSurface implements wire.TranscriptIntents {
         reader.read(formulaRendererProvider),
         argb: ink,
         onReady: () {
-          _parsed.clear();
+          _parsed.landed();
+          _rows.formulaLanded();
           republish();
         },
       );
       _parsed.clear();
       _sent.clear();
+      _rows.clear();
     }
     final project = view.chat?.state.project;
-    final encoder = _encoder = TranscriptEncoder(
-      reader: reader,
-      catalog: reader.watch(activityCatalogProvider),
-      prose: MarkdownEncoder(
-        formulas: _formulas!,
-        highlighter: reader.watch(codeHighlighterProvider),
-        parsed: _parsed,
-      ),
-      resources: reader
-          .watch(appConfigProvider)
-          .resourcesDir(chatId, project: project),
+    final catalog = reader.watch(activityCatalogProvider);
+    final prose = MarkdownEncoder(
+      formulas: _formulas!,
+      highlighter: reader.watch(codeHighlighterProvider),
+      parsed: _parsed,
     );
+    final resources = reader
+        .watch(appConfigProvider)
+        .resourcesDir(chatId, project: project);
+    TranscriptEncoder encoderOver(SettingReader reader) => TranscriptEncoder(
+      reader: reader,
+      catalog: catalog,
+      prose: prose,
+      resources: resources,
+      present: _present,
+    );
+    final encoder = _encoder = encoderOver(reader);
     final speechReady = reader.watch(speechReadyProvider);
     final reading = reader.watch(readAloudProvider);
     _actions.clear();
 
-    wire.MessageSnapshot message(MessageRow row) {
+    /// [row], encoded again only where it changed: its own reader watches
+    /// what its layout and face read.
+    wire.RowSnapshot? message(MessageRow row) {
       final id = row.message.id;
       final actions = MessageActions.of(row, view, driver);
       _actions[row.key] = actions;
-      final face = _faceOf(reader, row.message, project);
-      return encoder.message(
-        row.key,
-        MessageLayout(row.message, chatId: chatId, catalog: encoder.catalog),
-        MessageMoment(
-          waiting: view.isRunning && row.last,
-          status: view.status,
-          notice: view.retry,
-          shellOutput: view.shellOutput[id],
-          canRetry: actions.canRegenerate,
+      final moment = row.moment(view, driver);
+      final wireActions = _actionsOf(
+        actions,
+        speak: speechReady && row.message.hasText,
+        speaking: reading == id,
+      );
+      return _rows.encode(
+        row,
+        (
+          last: row.last,
+          reactions: row.reactions.join("\n"),
+          waiting: moment.waiting,
+          // Said only beside the spinner, so a row not waiting ignores them.
+          status: moment.waiting ? moment.status : null,
+          notice: moment.waiting ? moment.notice : null,
+          shellOutput: moment.shellOutput,
+          canRetry: moment.canRetry,
+          actions: wireActions,
+          outline: outline,
+          catalog: catalog,
+          prose: prose.highlighter,
+          resources: resources,
         ),
-        actions: _actionsOf(
-          actions,
-          speak: speechReady && row.message.hasText,
-          speaking: reading == id,
-        ),
-        reactions: row.reactions,
-        source: source.select((v) => liveMessageOf(v, id)),
-        face: face is AgentPhoto
-            ? _photoOf(reader, row.message, project, outline)
-            : null,
-        bot: face is AgentBot
-            ? _botOf(
-                reader,
-                face,
-                thinking: view.isRunning && row.last,
-                live: row.last,
-              )
-            : null,
+        formulas: _formulas!,
+        encoder: encoderOver,
+        build: (encoder, reader) {
+          final face = row.face(reader, project: project);
+          return encoder.message(
+            row.key,
+            MessageLayout(row.message, chatId: chatId, catalog: catalog),
+            moment,
+            actions: wireActions,
+            reactions: row.reactions,
+            source: source.select((v) => liveMessageOf(v, id)),
+            face: face is AgentPhoto
+                ? _photoOf(reader, row.message, project, outline)
+                : null,
+            bot: face is AgentBot
+                ? _botOf(reader, face, mood: moment.mood, live: row.last)
+                : null,
+          );
+        },
       );
     }
 
-    if (_sentFor != chatId) {
-      _sent.clear();
-      _sentFor = chatId;
-      _open = null;
-    }
+    if (_sentFor != chatId) _reset(chatId);
     final order = <String>[];
     final changed = <wire.RowSnapshot>[];
     for (final row in transcript.rows) {
-      final snapshot = encoder.row(row, message: message);
       order.add(row.key);
-      if (_sent[row.key] != snapshot) {
+      final snapshot = row is MessageRow ? message(row) : encoder.row(row);
+      // Null is a message row kept as it was last sent.
+      if (snapshot != null && _sent[row.key] != snapshot) {
         _sent[row.key] = snapshot;
         changed.add(snapshot);
       }
@@ -200,6 +230,7 @@ class ConversationSurface implements wire.TranscriptIntents {
     _parsed.turn();
     final kept = order.toSet();
     _sent.removeWhere((key, _) => !kept.contains(key));
+    _rows.keep(kept);
     final pictures = _formulas!.take();
     if (pictures.isNotEmpty) _send(() => _client.formulas(pictures));
     _send(
@@ -215,7 +246,7 @@ class ConversationSurface implements wire.TranscriptIntents {
           chapters: [
             for (final c in chapters)
               wire.ChapterSnapshot(
-                row: "message:${c.row}",
+                row: MessageRow.keyOf(c.row),
                 preview: c.preview,
                 threads: c.threads,
               ),
@@ -227,8 +258,7 @@ class ConversationSurface implements wire.TranscriptIntents {
   }
 
   void _publishDetail(SettingReader reader, TranscriptEncoder encoder) {
-    final open = _open;
-    final detail = open?.node.detail(reader, source: open.source);
+    final detail = _open?.detail(reader);
     final snapshot = detail == null
         ? wire.DetailSnapshot()
         : encoder.detail(
@@ -263,24 +293,13 @@ class ConversationSurface implements wire.TranscriptIntents {
     delete: actions.canDelete,
     deleteQuestion: actions.deleteQuestion.message,
     edit: actions.canEdit,
-    editText: actions.markdown,
+    // Only what can be edited needs its text: a user's message.
+    editText: actions.canEdit ? actions.markdown : "",
     regenerate: actions.canRegenerate,
     react: actions.canReact,
     speak: speak,
     speaking: speaking,
   );
-
-  static AgentFace? _faceOf(
-    SettingReader reader,
-    Message message,
-    String? project,
-  ) {
-    final member = nameOf(message.author);
-    if (member == null) return null;
-    return reader
-        .watch(agentPictureProvider((project: project, name: member)))
-        .value;
-  }
 
   /// The author's Bot Avatar as the stage's key: the client draws it live,
   /// asking the core for each frame, as the settings' faces are drawn. It
@@ -288,12 +307,12 @@ class ConversationSurface implements wire.TranscriptIntents {
   ({String key, int colour, int mood, bool live}) _botOf(
     SettingReader reader,
     AgentBot face, {
-    required bool thinking,
+    required BotMood mood,
     required bool live,
   }) => (
     key: reader.read(botStageProvider).keyOf(face.spec.definition),
     colour: face.spec.colour,
-    mood: (thinking ? BotMood.thinking : BotMood.idle).index,
+    mood: mood.index,
     live: live,
   );
 
@@ -319,35 +338,20 @@ class ConversationSurface implements wire.TranscriptIntents {
     (Object e) => logFailure("shell", "transcript snapshot", e),
   );
 
-  ContextHandOff get _handOff => ContextHandOff(context());
+  /// The hand-off this conversation's presses go through: Flutter's, but
+  /// with a detail opened as the client's own page.
+  TranscriptHandOff get handOff => _ShellHandOff(context(), this);
 
   @override
   Future<void> open(String node) async {
-    final found = _encoder?.nodes[node];
-    final at = context();
-    if (found == null || !at.mounted) return;
-    switch (found.node) {
-      case OutputNode(:final open):
-        await open(_handOff);
-      case PlanNode(:final run):
-        plan_page.openPlan(at, run.chatId);
-      case _:
-        _open = found;
-        republish();
-    }
+    final found = _rows.node(node) ?? _encoder?.nodes[node];
+    if (found == null || !context().mounted) return;
+    await found.node.open(handOff, source: found.source);
   }
 
-  /// Opens [activity]'s detail for [run], following [source]: a running
-  /// pill's job or sub-agent, which has no node in the conversation.
-  void openRun(
-    Activity activity,
-    Run run, {
-    ProviderListenable<LiveMessage>? source,
-  }) {
-    _open = (
-      node: LabelNode(activity, run, glyph: TranscriptGlyph.terminal, text: ""),
-      source: source,
-    );
+  /// Opens [detail] as the client's page, sent while it is up.
+  void _openDetail(OpensDetail detail) {
+    _open = detail;
     republish();
   }
 
@@ -363,13 +367,13 @@ class ConversationSurface implements wire.TranscriptIntents {
     final open = _open;
     final reader = _reader;
     if (open == null || reader == null) return;
-    final detail = open.node.detail(reader, source: open.source);
+    final detail = open.detail(reader);
     final run = detail?.actions.elementAtOrNull(index)?.run;
-    if (run != null) await run(_handOff);
+    if (run != null) await run(handOff);
   }
 
   @override
-  Future<void> link(String href) => _handOff.openLink(href);
+  Future<void> link(String href) => handOff.openLink(href);
 
   @override
   Future<void> act(String row, wire.MessageAction action) async {
@@ -390,13 +394,13 @@ class ConversationSurface implements wire.TranscriptIntents {
       case wire.MessageAction.copyRaw:
         await writeClipboard(ClipboardContent(plain: markdown));
       case wire.MessageAction.previous:
-        await _handOff.attempt(() => actions.step(-1));
+        await handOff.attempt(() => actions.step(-1));
       case wire.MessageAction.next:
-        await _handOff.attempt(() => actions.step(1));
+        await handOff.attempt(() => actions.step(1));
       case wire.MessageAction.delete:
-        await _handOff.attempt(actions.delete);
+        await handOff.attempt(actions.delete);
       case wire.MessageAction.regenerate:
-        await _handOff.attempt(actions.regenerate);
+        await handOff.attempt(actions.regenerate);
       case wire.MessageAction.speak:
         final failed = await _reader
             ?.read(readAloudProvider.notifier)
@@ -410,14 +414,14 @@ class ConversationSurface implements wire.TranscriptIntents {
 
   @override
   Future<void> edit(String row, String text) async =>
-      _handOff.attempt(() async => _actions[row]?.edit(text));
+      handOff.attempt(() async => _actions[row]?.edit(text));
 
   @override
   Future<void> react(String row, String emoji) async {
     final reaction = Reaction.values.where((r) => r.emoji == emoji).firstOrNull;
     final actions = _actions[row];
     if (reaction == null || actions == null) return;
-    await _handOff.attempt(() => actions.react(reaction));
+    await handOff.attempt(() => actions.react(reaction));
   }
 
   /// A reply's quote carries its author's handle, so the answer is
@@ -433,7 +437,7 @@ class ConversationSurface implements wire.TranscriptIntents {
   Future<void> openFile(String row, int block, int file) async {
     final encoder = _encoder;
     if (encoder == null) return;
-    final blocks = encoder.blocks[row];
+    final blocks = _rows.blocks(row);
     final at = blocks?.elementAtOrNull(block);
     final files = switch (at) {
       BubbleBlock(:final files) => files,
@@ -444,6 +448,16 @@ class ConversationSurface implements wire.TranscriptIntents {
     final part = files.elementAtOrNull(file);
     if (part == null) return;
     final path = encoder.fileSnapshot(part).path;
-    if (path != null) await _handOff.openFile(path);
+    if (path != null) await handOff.openFile(path);
   }
+}
+
+class _ShellHandOff extends ContextHandOff {
+  const _ShellHandOff(super.context, this._surface);
+
+  final ConversationSurface _surface;
+
+  @override
+  Future<void> openDetail(OpensDetail detail) async =>
+      _surface._openDetail(detail);
 }

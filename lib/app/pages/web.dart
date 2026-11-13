@@ -43,7 +43,6 @@ class WebAppPage extends AppPage {
   List<ActionController> toolbar(SettingReader reader) => [
     ActionController(
       part("copy", "Copy Link"),
-      label: "Copy Link",
       run: () async => SettingNotice("Copied link", copy: "$_at"),
     ),
   ];

@@ -218,54 +218,23 @@ struct AppPageView: View {
 private struct ToolbarAction: View {
   let model: SettingsModel
   let row: SettingRowData
-  @State private var confirm: SettingConfirmData?
-  @State private var notice: SettingNoticeData?
 
   var body: some View {
-    Button(role: row.destructive ? .destructive : nil, action: press) {
-      if let icon = row.icon {
-        Label(row.label ?? row.title, systemImage: icon.symbol)
-      } else {
-        Text(row.label ?? row.title)
-      }
+    ActionPress(model: model, row: row, role: row.destructive ? .destructive : nil) {
+      ActionLabel(row: row)
     }
     .disabled(!row.enabled || row.busy)
     .help(row.detail ?? row.label ?? row.title)
-    .asking($confirm, $notice) { run() }
-  }
-
-  private func press() {
-    Task { @MainActor in
-      guard let ask = await model.ask(row.id) else { return run() }
-      if ask.cancelled { return }
-      if ask.brief {
-        notice = SettingNoticeData(title: nil, message: ask.message)
-        return
-      }
-      confirm = ask
-    }
-  }
-
-  private func run() {
-    Task { @MainActor in notice = await model.run(row.id) }
   }
 }
 
 extension View {
   @ViewBuilder func navigationSubtitleIfAny(_ subtitle: String?) -> some View {
-    #if os(iOS)
-      if let subtitle, #available(iOS 26, *) {
-        navigationSubtitle(subtitle)
-      } else {
-        self
-      }
-    #else
-      if let subtitle {
-        navigationSubtitle(subtitle)
-      } else {
-        self
-      }
-    #endif
+    if let subtitle, #available(iOS 26, *) {
+      navigationSubtitle(subtitle)
+    } else {
+      self
+    }
   }
 }
 

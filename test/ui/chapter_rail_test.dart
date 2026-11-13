@@ -88,7 +88,9 @@ void main() {
     expect(find.byTooltip("second\n2 threads branch here"), findsOneWidget);
   });
 
-  testWidgets("one prompt still has its tick", (tester) async {
+  testWidgets("one prompt has no rail, having nowhere to jump to", (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         home: ChapterRail(
@@ -99,7 +101,7 @@ void main() {
       ),
     );
 
-    expect(find.byTooltip("first"), findsOneWidget);
+    expect(find.byTooltip("first"), findsNothing);
   });
 
   test("a steer is a chapter in the reply it was read into", () {

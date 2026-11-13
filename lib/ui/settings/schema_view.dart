@@ -1392,14 +1392,14 @@ class _Collection<T> extends StatelessWidget {
           if (c.actionsOf(row) case final actions)
             ListTile(
               leading: switch ((row.face, settingIcon(row.glyph))) {
-                _ when row.bot != null => BotAvatarView(
-                  spec: row.bot!,
+                (AvatarRowFace(:final spec), _) => BotAvatarView(
+                  spec: spec,
                   size: 40,
                   reactToTap: true,
                 ),
                 // Live, and happy at a tap: a row scrolled out of view is not
                 // painted, which stops its ticker until it is back.
-                ((:final project, :final name)?, _) => AgentPicture(
+                (AgentRowFace(:final project, :final name), _) => AgentPicture(
                   name: name,
                   project: project,
                   animate: true,
@@ -1503,12 +1503,12 @@ class _Collection<T> extends StatelessWidget {
     int index,
     CollectionItem row,
   ) async {
-    final face = row.face;
-    final worn = face == null
-        ? null
-        : await ProviderScope.containerOf(
-            context,
-          ).read(agentPictureProvider(face).future);
+    final worn = switch (row.face) {
+      AgentRowFace(:final agent) => await ProviderScope.containerOf(
+        context,
+      ).read(agentPictureProvider(agent).future),
+      _ => null,
+    };
     if (!context.mounted) return;
     final spec = await Navigator.of(context).push<BotAvatarSpec>(
       MaterialPageRoute(

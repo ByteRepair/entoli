@@ -1,6 +1,6 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../../domain/builtin_project.dart" show builtinProjectOf;
+import "../../../domain/builtin_project.dart" show inheritedTempTtl;
 import "../../../domain/date_words.dart" show describeFire, shortDate;
 import "../../../domain/models.dart" show CompletionKind;
 import "../../../domain/project.dart";
@@ -135,9 +135,11 @@ final triggerSettings = [
         // As a new chat's resolves it, minus the chat's own value.
         inheritedTtl: (project) {
           final key = project.isEmpty ? null : project;
-          return c.ref.read(projectSettingsProvider(key)).tempChatTtl ??
-              builtinProjectOf(key)?.tempChatTtl ??
-              c.ref.read(appSettingsProvider).tempChatTtl;
+          return inheritedTempTtl(
+            key,
+            own: c.ref.read(projectSettingsProvider(key)).tempChatTtl,
+            app: c.ref.read(appSettingsProvider).tempChatTtl,
+          );
         },
         members: (project) => c.ref
             .read(promptLibraryProvider(project.isEmpty ? null : project))

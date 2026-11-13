@@ -24,6 +24,10 @@ class FormulaSheet {
   final _ids = <(String, bool), int>{};
   final _sent = <int>{};
 
+  /// How many times [idOf] has answered null: a parse that moved it has a
+  /// formula still to land.
+  int misses = 0;
+
   /// Asked of the renderer and not landed yet, or failed: not asked again.
   final _asked = <int>{};
   final _unsent = <wire.FormulaPicture>[];
@@ -43,6 +47,7 @@ class FormulaSheet {
     final style = _style(display);
     final ready = _renderer.ready(tex, style);
     if (ready == null) {
+      misses++;
       if (_asked.add(id)) {
         _renderer.render(tex, style).then((_) {
           _asked.remove(id);
@@ -67,15 +72,14 @@ class FormulaSheet {
 
   /// Every formula in [markdown] typeset, so that encoding it after has all
   /// their ids. One that cannot be typeset is drawn as its TeX.
-  Future<void> typeset(String markdown) async {
+  Future<void> typeset(String markdown) => Future.wait([
     for (final (:tex, :display) in MarkdownDocument.parse(
       markdown,
-    ).formulas.values) {
-      try {
-        await _renderer.render(tex, _style(display));
-      } catch (_) {}
-    }
-  }
+    ).formulas.values)
+      Future.sync(
+        () => _renderer.render(tex, _style(display)),
+      ).then((_) {}, onError: (_) {}),
+  ]);
 
   /// The pictures made since the last call, for the client to keep.
   List<wire.FormulaPicture> take() {
@@ -86,26 +90,46 @@ class FormulaSheet {
 }
 
 /// Markdown's wire blocks by text, as the last pass and this one used them,
-/// so what a pass no longer shows is let go. A formula landing changes the
-/// blocks that name it, so [clear] drops the lot then.
+/// so what a pass no longer shows is let go. A formula landing changes only
+/// the blocks still waiting on one, which [landed] drops.
 class MarkdownBlocks {
   var _last = <String, List<wire.TextBlockSnapshot>>{};
   var _now = <String, List<wire.TextBlockSnapshot>>{};
+  final _pending = <String>{};
 
+  /// [text]'s blocks, [parse]d where not kept; [parse] says whether a
+  /// formula in it is still to land.
   List<wire.TextBlockSnapshot> of(
     String text,
-    List<wire.TextBlockSnapshot> Function() parse,
-  ) => _now[text] ??= _last[text] ?? parse();
+    (List<wire.TextBlockSnapshot>, bool pending) Function() parse,
+  ) {
+    final kept = _now[text] ?? _last[text];
+    if (kept != null) return _now[text] = kept;
+    final (blocks, pending) = parse();
+    if (pending) _pending.add(text);
+    return _now[text] = blocks;
+  }
 
   /// Ends a pass: what it did not use goes at the end of the next.
   void turn() {
     _last = _now;
     _now = {};
+    _pending.retainWhere(_last.containsKey);
+  }
+
+  /// A formula landed: the texts waiting on one are parsed again.
+  void landed() {
+    for (final text in _pending) {
+      _last.remove(text);
+      _now.remove(text);
+    }
+    _pending.clear();
   }
 
   void clear() {
     _last = {};
     _now = {};
+    _pending.clear();
   }
 }
 
@@ -128,12 +152,13 @@ class MarkdownEncoder {
   final MarkdownBlocks _parsed;
 
   /// Markdown as blocks, its code tokenised and its formulas by id.
-  List<wire.TextBlockSnapshot> markdown(String text) => _parsed.of(
-    text,
-    () => [
+  List<wire.TextBlockSnapshot> markdown(String text) => _parsed.of(text, () {
+    final misses = formulas.misses;
+    final blocks = [
       for (final block in MarkdownDocument.parse(text).blocks) _text(block),
-    ],
-  );
+    ];
+    return (blocks, formulas.misses != misses);
+  });
 
   wire.TextBlockSnapshot _text(MarkdownBlock block) {
     final nesting = block.nesting;
@@ -188,14 +213,7 @@ class MarkdownEncoder {
           quotes: nesting.quotes,
           items: items,
           columns: align.length,
-          align: [
-            for (final a in align)
-              switch (a) {
-                CellAlign.start => wire.CellAlign.start,
-                CellAlign.center => wire.CellAlign.center,
-                CellAlign.end => wire.CellAlign.end,
-              },
-          ],
+          align: [for (final a in align) wire.CellAlign.values.byName(a.name)],
           cells: [
             for (final (c, cell) in header.indexed)
               wire.CellSnapshot(

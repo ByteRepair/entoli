@@ -332,7 +332,6 @@ class ProfileAppPage extends AppPage {
         ),
         ActionController(
           part("add", "Link Files…", glyph: SettingGlyph.add),
-          label: "Link Files…",
           run: () async {
             final picked = await app
                 .read(folderPickerProvider)
@@ -356,13 +355,11 @@ class ProfileAppPage extends AppPage {
   List<ActionController> toolbar(SettingReader reader) => [
     ActionController(
       part("save", "Save"),
-      label: "Save",
       enabled: _loaded && !_saving,
       run: _save,
     ),
     ActionController(
       part("clear", "Clear"),
-      label: "Clear",
       enabled: _loaded && !_saving,
       run: () async {
         _set(() {

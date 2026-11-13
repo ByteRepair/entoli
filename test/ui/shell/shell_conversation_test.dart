@@ -110,6 +110,35 @@ void main() {
     expect(native.details.last.present, isFalse);
   });
 
+  testWidgets("a row kept from an earlier pass still opens its nodes", (
+    tester,
+  ) async {
+    const call = ToolCall(
+      id: "c1",
+      name: "bash",
+      argumentsJson: '{"command":"ls"}',
+    );
+    final reply = _said("r", MessageRole.assistant, const [
+      MessagePart.toolCall(toolCall: call),
+      MessagePart.toolResult(
+        result: ToolResult(callId: "c1", returnCode: 0, output: "a\nb"),
+      ),
+    ]);
+    final id = await open(tester, [prompt, reply]);
+    final node = native.rows["message:r"]!.message!.blocks.first.nodes.single;
+    // A pass that changes no row keeps every one as it was encoded.
+    final before = native.conversations.length;
+    final controller = app.container.read(chatControllerProvider(id).notifier);
+    final state = app.container.read(chatControllerProvider(id)).chat!.state;
+    controller.applyState(state.copyWith(title: "renamed"));
+    await settleShell(tester);
+    expect(native.conversations.skip(before).expand((c) => c.changed), isEmpty);
+
+    intents().open(node.id);
+    await settleShell(tester);
+    expect(native.details.last.title, "bash");
+  });
+
   testWidgets("a message's actions act through the chat's turn", (
     tester,
   ) async {

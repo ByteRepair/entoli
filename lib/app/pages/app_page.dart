@@ -3,6 +3,7 @@ import "dart:async";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
+import "../../domain/temp_chat_ttl.dart";
 import "../settings/controller.dart";
 import "../settings/scope.dart";
 import "../settings/settings.dart";
@@ -85,7 +86,7 @@ abstract class AppPage {
     String? description,
     SettingGlyph? glyph,
   }) => SettingSpec(
-    id: "page:$address/$id",
+    id: "$_parts$address/$id",
     path: (page: null, section: ""),
     weight: 0,
     title: title,
@@ -101,9 +102,83 @@ abstract class AppPage {
     String id,
     String text, {
     NoticeTone tone = NoticeTone.plain,
-  }) => PageSection(id, "", [
-    NoticeController(part(id, ""), tone: tone, lines: [NoticeLine(text)]),
+  }) => PageSection(id, "", [noticeRow(id, text, tone: tone)]);
+
+  /// A row that says [text].
+  NoticeController noticeRow(
+    String id,
+    String text, {
+    NoticeTone tone = NoticeTone.plain,
+  }) => NoticeController(part(id, ""), tone: tone, lines: [NoticeLine(text)]);
+
+  /// A section saying what failed, [title] and [error], with a way to try
+  /// again.
+  PageSection failed(
+    String title,
+    Object error, {
+    required Future<void> Function() retry,
+  }) => PageSection("failed", title, [
+    noticeRow("failed", "$error", tone: NoticeTone.warning),
+    ActionController(
+      part("retry", "Try Again"),
+      run: () async {
+        await retry();
+        return null;
+      },
+    ),
   ]);
+
+  /// A row that opens [page] over this one.
+  SettingController opener(
+    String id,
+    String title,
+    AppPage Function() page, {
+    String? description,
+    String label = "",
+    SettingGlyph? glyph,
+  }) => ActionController(
+    part(id, title, hint: UiHint.open, description: description, glyph: glyph),
+    label: label,
+    run: () async {
+      pages.open(page());
+      return null;
+    },
+  );
+
+  /// Where a mirrored [what] lives, and that it cannot be changed while
+  /// [device] is offline.
+  PageSection deviceNotice(
+    String what,
+    String device, {
+    required bool online,
+  }) => notice(
+    "device",
+    online
+        ? "This $what lives on $device."
+        : "$device is offline. These settings can be changed once it is "
+              "back.",
+    tone: online ? NoticeTone.plain : NoticeTone.warning,
+  );
+
+  /// How long a temporary chat lives, unset standing for [inherited].
+  ChoiceController<TempChatTtl> tempTtlChoice(
+    String title, {
+    required TempChatTtl? value,
+    required TempChatTtl inherited,
+    required Future<void> Function(TempChatTtl? ttl) onSet,
+  }) => ChoiceController<TempChatTtl>(
+    part("ttl", title, hint: UiHint.dropdown),
+    options: [
+      for (final ttl in TempChatTtl.values) SettingOption(ttl, ttl.label),
+    ],
+    value: value,
+    unsettable: true,
+    inherited: inherited,
+    onSet: (ttl) async {
+      await onSet(ttl);
+      return null;
+    },
+  );
 
   /// The settings' own [id], built at [scope] on this page under an id of
   /// the page's: the same rules and words as on the settings page, whatever
@@ -114,17 +189,9 @@ abstract class AppPage {
     String id,
   ) {
     final spec = reader.read(settingsSchemaProvider).settings[id]!;
-    final here = SettingSpec(
-      id: "page:$address/$id",
-      path: spec.path,
-      weight: spec.weight,
-      title: spec.title,
-      hint: spec.hint,
-      description: spec.description,
-      glyph: spec.glyph,
-      build: spec.build,
+    return spec.build(
+      SettingContext(reader, scope, spec.withId("$_parts$address/$id")),
     );
-    return spec.build(SettingContext(reader, scope, here));
   }
 
   /// [page] of the settings at [at], as this page's sections, each under
@@ -152,6 +219,12 @@ abstract class AppPage {
           ], detail: section.describe?.call(reader) ?? section.description),
     ];
   }
+
+  /// What every part's id starts with, apart from the settings' own.
+  static const _parts = "page:";
+
+  /// Whether [id] names a part of an app page rather than a setting.
+  static bool owns(String id) => id.startsWith(_parts);
 
   static SettingController _unfiled(SettingContext _) =>
       throw StateError("a page's part is built by the page");

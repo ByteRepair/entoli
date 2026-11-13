@@ -107,22 +107,13 @@ class TextFileAppPage extends AppPage {
     if (content.truncated) {
       return [
         PageSection("large", "Too large to show here", [
-          NoticeController(
-            part("large", ""),
-            lines: [
-              NoticeLine(
-                "Files over ${formatSize(textViewLimit)} open in another app.",
-              ),
-            ],
+          noticeRow(
+            "large",
+            "Files over ${formatSize(textViewLimit)} open in another app.",
           ),
-          ActionController(
-            part("open", "Open in Another App"),
-            label: "Open in Another App",
-            run: _handOff,
-          ),
+          ActionController(part("open", "Open in Another App"), run: _handOff),
           ActionController(
             part("copy", "Copy Text"),
-            label: "Copy Text",
             secondary: true,
             run: _copy,
           ),
@@ -151,12 +142,7 @@ class TextFileAppPage extends AppPage {
   List<ActionController> toolbar(SettingReader reader) => [
     if (_content != null && !_tooLarge) ...[
       if (_editing)
-        ActionController(
-          part("save", "Save"),
-          label: "Save",
-          enabled: _dirty,
-          run: _save,
-        ),
+        ActionController(part("save", "Save"), enabled: _dirty, run: _save),
       ActionController(
         part("mode", _editing ? "Preview" : "Edit"),
         label: _editing ? "Preview" : "Edit",
@@ -169,11 +155,7 @@ class TextFileAppPage extends AppPage {
       ),
       ActionController(part("copy", "Copy"), label: "Copy", run: _copy),
     ],
-    ActionController(
-      part("open", "Open in Another App"),
-      label: "Open in Another App",
-      run: _handOff,
-    ),
+    ActionController(part("open", "Open in Another App"), run: _handOff),
   ];
 
   /// A plain write rather than through a rename: a rename makes a new file,

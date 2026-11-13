@@ -94,10 +94,7 @@ class MemoryAppPage extends AppPage {
       ]),
       PageSection("entries", "", [
         if (entries == null)
-          NoticeController(
-            part("loading", ""),
-            lines: const [NoticeLine("Reading the memories…")],
-          )
+          noticeRow("loading", "Reading the memories…")
         else
           CollectionController<MemoryEntry>(
             part("entries", "Memories", hint: UiHint.info),

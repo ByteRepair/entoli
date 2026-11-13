@@ -563,7 +563,6 @@ class TestApp {
           createdAt: DateTime(2026),
           parts: [TextPart(text: markdown)],
         ),
-        isWaiting: false,
       ),
     ),
     brightness: brightness,

@@ -47,9 +47,8 @@ class BotAvatarInstallAppPage extends AppPage {
           removable: false,
           describe: (d) => CollectionItem(
             d.name,
-            bot: BotAvatarSpec(
-              definition: d,
-              colour: BotPalette.ownColour(d.id),
+            face: AvatarRowFace(
+              BotAvatarSpec(definition: d, colour: BotPalette.ownColour(d.id)),
             ),
             editable: false,
             takesImage: false,
@@ -69,7 +68,6 @@ class BotAvatarInstallAppPage extends AppPage {
     if (import case BotAvatarImported(:final definitions))
       ActionController(
         part("install", "Install"),
-        label: "Install",
         run: () async {
           await app.read(importedBotAvatarsProvider.notifier).add(definitions);
           pages.leave(

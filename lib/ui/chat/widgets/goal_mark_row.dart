@@ -28,10 +28,6 @@ class GoalMarkRow extends StatelessWidget {
   );
 }
 
-/// [row]'s detail: a sheet, or a page under the native shell, as every
-/// activity's is.
+/// [row]'s detail, a sheet as every activity's is.
 Future<void> openGoalMark(BuildContext context, GoalRow row) =>
-    openActivityCard(
-      context,
-      (page) => ActivityCard(detail: row.detail, page: page),
-    );
+    showActivityCard<void>(context, (_) => ActivityCard(detail: row.detail));

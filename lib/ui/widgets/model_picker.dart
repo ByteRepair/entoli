@@ -2,12 +2,11 @@ import "package:collection/collection.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../data/builtin/llm/providers/provider.dart" show LlmProvider;
 import "../../domain/llm_provider.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
-import "../../app/model_picker.dart"
-    show missingModelLabel, modelFieldError, modelFieldLabel, modelName;
+import "../../app/model_picker.dart" show ModelField;
+import "../../app/settings/spec.dart" show WidgetReader;
 import "model_catalog_page.dart";
 import "resettable_field.dart";
 
@@ -69,20 +68,15 @@ class ModelPicker extends ConsumerWidget {
     final providers = ref.watch(
       appSettingsProvider.select((s) => s.llmProviders),
     );
-    final models = ref.watch(sortedModelsProvider);
-    final listed = models.value ?? const <ModelOption>[];
-    final serving = ref.watch(modelProvidersProvider);
-    final none = choice.providerId == null && choice.modelId == null;
-    final missing = modelFieldError(
+    final field = ModelField.watch(
+      WidgetReader(ref),
       choice: choice,
       role: role,
-      loaded: models.hasValue,
-      listed: listed,
-      serving: serving,
+      nullLabel: nullLabel,
+      defaultOf: defaultOf,
+      inherited: inherited,
     );
-    final nullEntry = inherited == null
-        ? nullLabel
-        : "$nullLabel (${modelName(providers, listed, inherited!)})";
+    final none = choice.providerId == null && choice.modelId == null;
     final defaultEntry = _defaultEntry(providers, defaultOf);
     return ResettableField(
       resetLabel: defaultEntry == null
@@ -100,7 +94,7 @@ class ModelPicker extends ConsumerWidget {
             MaterialPageRoute(
               builder: (_) => ModelCatalogPage(
                 choice: choice,
-                nullEntry: nullEntry,
+                nullEntry: field.nullEntry,
                 defaultOf: defaultOf,
                 role: role,
               ),
@@ -110,18 +104,14 @@ class ModelPicker extends ConsumerWidget {
         },
         child: InputDecorator(
           decoration: InputDecoration(
-            helperText: none
-                ? helperOffText ?? _inheritedHelper(providers, listed)
-                : null,
+            helperText: none ? helperOffText ?? field.using : null,
             helperMaxLines: 3,
-            errorText: missing,
+            errorText: field.error,
             errorMaxLines: 2,
             suffixIcon: const Icon(Icons.chevron_right),
           ),
           child: Text(
-            missing != null
-                ? missingModelLabel
-                : _label(providers, listed, serving),
+            field.label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -129,27 +119,6 @@ class ModelPicker extends ConsumerWidget {
       ),
     );
   }
-
-  String? _inheritedHelper(
-    List<LlmProviderConfig> providers,
-    List<ModelOption> listed,
-  ) => inherited == null
-      ? null
-      : "Using ${modelName(providers, listed, inherited!)}";
-
-  String _label(
-    List<LlmProviderConfig> providers,
-    List<ModelOption> listed,
-    List<LlmProvider> serving,
-  ) => modelFieldLabel(
-    choice: choice,
-    role: role,
-    nullLabel: nullLabel,
-    defaultOf: defaultOf,
-    providers: providers,
-    listed: listed,
-    serving: serving,
-  );
 }
 
 /// The first provider whose Default entry the catalog shows, or null when

@@ -380,60 +380,79 @@ struct KeyValuesRow: View {
   }
 }
 
-/// Something done rather than set: asked first where it asks, said after
-/// where it has something to say.
+/// Something done rather than set, drawn as its hint asks.
 struct ActionRow: View {
   let model: SettingsModel
   let row: SettingRowData
+
+  var body: some View {
+    if row.hint == .open {
+      // Opens another page, which Dart pushes over this one.
+      ActionPress(model: model, row: row) {
+        HStack {
+          if let icon = row.icon {
+            Label {
+              Titled(title: row.title, detail: row.detail)
+            } icon: {
+              Image(systemName: icon.symbol)
+            }
+          } else {
+            Titled(title: row.title, detail: row.detail)
+          }
+          Spacer(minLength: 4)
+          if let label = row.label { Text(label).foregroundStyle(.secondary) }
+          Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+            .foregroundStyle(.tertiary)
+        }
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+    } else if row.hint == .row || row.hint == .permission {
+      HStack {
+        if row.hint == .permission, let icon = row.icon {
+          Image(systemName: icon.symbol).foregroundStyle(.secondary)
+        }
+        Titled(title: row.title, detail: row.detail)
+        Spacer()
+        ActionPress(model: model, row: row) { Text(row.label ?? row.title) }
+      }
+    } else {
+      ActionPress(model: model, row: row, role: row.destructive ? .destructive : nil) {
+        ActionLabel(row: row)
+      }
+    }
+  }
+}
+
+/// An action's words, with its icon where it has one.
+struct ActionLabel: View {
+  let row: SettingRowData
+
+  var body: some View {
+    if let icon = row.icon {
+      Label(row.label ?? row.title, systemImage: icon.symbol)
+    } else {
+      Text(row.label ?? row.title)
+    }
+  }
+}
+
+/// A button for [row]'s action: asked first where it asks, said after
+/// where it has something to say.
+struct ActionPress<Content: View>: View {
+  let model: SettingsModel
+  let row: SettingRowData
+  var role: ButtonRole? = nil
+  @ViewBuilder let label: () -> Content
   @State private var confirm: SettingConfirmData?
   @State private var notice: SettingNoticeData?
 
   var body: some View {
-    Group {
-      if row.hint == .open {
-        // Opens another page, which Dart pushes over this one.
-        Button(action: press) {
-          HStack {
-            if let icon = row.icon {
-              Label {
-                Titled(title: row.title, detail: row.detail)
-              } icon: {
-                Image(systemName: icon.symbol)
-              }
-            } else {
-              Titled(title: row.title, detail: row.detail)
-            }
-            Spacer(minLength: 4)
-            if let label = row.label { Text(label).foregroundStyle(.secondary) }
-            Image(systemName: "chevron.right").font(.caption.weight(.semibold))
-              .foregroundStyle(.tertiary)
-          }
-          .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-      } else if row.hint == .row || row.hint == .permission {
-        HStack {
-          if row.hint == .permission, let icon = row.icon {
-            Image(systemName: icon.symbol).foregroundStyle(.secondary)
-          }
-          Titled(title: row.title, detail: row.detail)
-          Spacer()
-          Button(row.label ?? row.title, action: press)
-        }
-      } else {
-        Button(role: row.destructive ? .destructive : nil, action: press) {
-          if let icon = row.icon {
-            Label(row.label ?? row.title, systemImage: icon.symbol)
-          } else {
-            Text(row.label ?? row.title)
-          }
-        }
-      }
-    }
-    .asking($confirm, $notice) { run() }
+    Button(role: role, action: press, label: label)
+      .asking($confirm, $notice) { run() }
   }
 
-  func press() {
+  private func press() {
     Task { @MainActor in
       guard let ask = await model.ask(row.id) else { return run() }
       if ask.cancelled { return }
@@ -445,7 +464,7 @@ struct ActionRow: View {
     }
   }
 
-  func run() {
+  private func run() {
     Task { @MainActor in notice = await model.run(row.id) }
   }
 }

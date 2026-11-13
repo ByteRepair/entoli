@@ -134,7 +134,7 @@ private struct OutputCard: View {
   let model: TranscriptModel
 
   var body: some View {
-    let artifact = node.icon == .artifact
+    let artifact = node.output == .artifact
     Button {
       model.open(node.id)
     } label: {
@@ -143,7 +143,7 @@ private struct OutputCard: View {
           .frame(width: 40, height: 40)
           .background(.white.opacity(0.15), in: Circle())
         VStack(alignment: .leading, spacing: 2) {
-          Text(artifact ? "Artifact" : "Skill").font(.caption.weight(.semibold)).opacity(0.75)
+          Text(node.caption).font(.caption.weight(.semibold)).opacity(0.75)
           Text(node.text).font(.subheadline.weight(.semibold)).lineLimit(1)
         }
         Spacer(minLength: 8)

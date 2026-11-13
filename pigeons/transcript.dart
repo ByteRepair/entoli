@@ -60,6 +60,9 @@ enum TrailingKind { waiting, liveOutput, retry }
 
 enum NodeKind { label, diff, plan, output }
 
+/// The core's `OutputKind`, name for name.
+enum OutputKind { artifact, skill }
+
 enum TextKind { paragraph, heading, code, formula, rule, table }
 
 enum InlineKind { text, formula, lineBreak, image }
@@ -238,6 +241,8 @@ class NodeSnapshot {
     this.added = const [],
     this.progress,
     this.tasks = const [],
+    this.output = OutputKind.artifact,
+    this.caption = "",
   });
 
   String id;
@@ -251,6 +256,10 @@ class NodeSnapshot {
   List<String> added;
   String? progress;
   List<PlanTaskSnapshot> tasks;
+
+  /// An output node's kind, and the words its card is headed with.
+  OutputKind output;
+  String caption;
 }
 
 class ShellRunSnapshot {

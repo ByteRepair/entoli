@@ -392,9 +392,7 @@ class _BrowserCardState extends State<BrowserCard> {
   int? _opened;
   final _focus = FocusNode(debugLabel: "browser viewport");
 
-  /// The presses still held, by physical key, so a release names the key the
-  /// press did: a key's character is not reported on its way up.
-  final _held = <PhysicalKeyboardKey, BrowserKey>{};
+  late final _keys = BrowserKeyboard(() => widget.tab);
 
   /// The button a press went down with, which the release reports though the
   /// event no longer holds it.
@@ -488,38 +486,20 @@ class _BrowserCardState extends State<BrowserCard> {
     return _mac ? keys.isMetaPressed : keys.isControlPressed;
   }
 
-  void _copySelection() => _send(widget.tab.copySelection);
-
-  void _paste() => _send(widget.tab.pasteClipboard);
-
-  void _shortcutKey(String letter) =>
-      _send(() => widget.tab.pressShortcut(letter, mac: _mac));
-
   /// The menu a right click or a held finger opens: what the page's own
   /// would offer for editing, against the user's clipboard. Chrome draws its
   /// menu nowhere a hidden browser or the screencast could show it.
   Future<void> _menu(Offset global) async {
-    final choice = await showMenuAt<String>(context, global, const [
-      PopupMenuItem(value: "cut", child: Text("Cut")),
-      PopupMenuItem(value: "copy", child: Text("Copy")),
-      PopupMenuItem(value: "paste", child: Text("Paste")),
+    final choice = await showMenuAt<PageEdit>(context, global, const [
+      PopupMenuItem(value: PageEdit.cut, child: Text("Cut")),
+      PopupMenuItem(value: PageEdit.copy, child: Text("Copy")),
+      PopupMenuItem(value: PageEdit.paste, child: Text("Paste")),
       PopupMenuDivider(),
-      PopupMenuItem(value: "selectAll", child: Text("Select all")),
+      PopupMenuItem(value: PageEdit.selectAll, child: Text("Select all")),
     ]);
     if (!mounted || choice == null) return;
     _focus.requestFocus();
-    switch (choice) {
-      case "cut":
-        _copySelection();
-        _shortcutKey("x");
-      case "copy":
-        _copySelection();
-        _shortcutKey("c");
-      case "paste":
-        _paste();
-      case "selectAll":
-        _shortcutKey("a");
-    }
+    _keys.edit(choice);
   }
 
   void _wheel(Offset at, Offset delta) => _send(
@@ -717,34 +697,15 @@ class _BrowserCardState extends State<BrowserCard> {
   /// included, which would otherwise move focus or close the card.
   KeyEventResult _key(FocusNode node, KeyEvent event) {
     if (event is KeyUpEvent) {
-      final down = _held.remove(event.physicalKey);
-      if (down != null) {
-        _send(() => widget.tab.key(browserKeyUp(down, modifiers: _modifiers)));
-      }
-      return KeyEventResult.handled;
+      _keys.up(event.physicalKey, modifiers: _modifiers);
+    } else {
+      _keys.down(
+        event.physicalKey,
+        event,
+        modifiers: _modifiers,
+        shortcut: _shortcut,
+      );
     }
-    final shortcut = _shortcut;
-    // Paste is the user's clipboard, not the page's.
-    if (shortcut && event.logicalKey == LogicalKeyboardKey.keyV) {
-      if (event is KeyDownEvent) _paste();
-      return KeyEventResult.handled;
-    }
-    // Copy and cut fill the user's clipboard too, and still reach the page,
-    // whose own handlers (an editor drawn on a canvas) may be all there is.
-    if (shortcut &&
-        event is KeyDownEvent &&
-        (event.logicalKey == LogicalKeyboardKey.keyC ||
-            event.logicalKey == LogicalKeyboardKey.keyX)) {
-      _copySelection();
-    }
-    final key = browserKeyDown(
-      event,
-      modifiers: _modifiers,
-      shortcut: shortcut,
-    );
-    if (key == null) return KeyEventResult.handled;
-    _held[event.physicalKey] = key;
-    _send(() => widget.tab.key(key));
     return KeyEventResult.handled;
   }
 

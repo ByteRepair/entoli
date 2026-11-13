@@ -8,6 +8,7 @@ import "../../app/chat_controller.dart";
 import "../voice/transcript.dart";
 import "../../app/voice_controller.dart";
 import "../../domain/chat_meta.dart";
+import "../chat/activity/card.dart" show ContextHandOff;
 import "tracking_reader.dart";
 import "shell_outbox.dart";
 import "shell_answers.dart";
@@ -32,7 +33,10 @@ class ShellVoiceSession implements VoiceIntents {
     required this.onDone,
   }) : _provider = voiceControllerProvider(chatId) {
     _keep = _container.listen(_provider, (_, _) {});
-    _turn = TurnRunner(context: context, onWithdrawn: null);
+    _turn = TurnRunner(
+      handOff: () => ContextHandOff(context()),
+      onWithdrawn: null,
+    );
     _reader = TrackingReader(_container, _pass);
     _answers.voice.take(this);
     _controller.start(meta: meta);

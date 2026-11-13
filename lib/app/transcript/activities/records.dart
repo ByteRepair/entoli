@@ -141,7 +141,7 @@ final class ArtifactActivity extends Activity {
       run,
       kind: OutputKind.artifact,
       label: title.isEmpty ? "View artifact" : title,
-      open: (handOff) => handOff.openArtifact(
+      opens: (handOff) => handOff.openArtifact(
         run.chatId,
         artifactId,
         entryFile: entryFile,
@@ -168,7 +168,7 @@ final class SkillInstallActivity extends Activity {
       run,
       kind: OutputKind.skill,
       label: title.isEmpty ? "Install skill" : title,
-      open: (handOff) => handOff.installSkill(run.chatId, installId),
+      opens: (handOff) => handOff.installSkill(run.chatId, installId),
     );
   }
 }

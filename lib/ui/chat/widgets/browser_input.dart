@@ -1,5 +1,9 @@
+import "dart:async";
+
+import "package:flutter/foundation.dart";
 import "package:flutter/services.dart";
 
+import "../../../core/log.dart";
 import "../../../domain/agent_browser.dart";
 
 /// The keys that insert nothing, or something other than their label, by the
@@ -171,4 +175,77 @@ extension BrowserEditing on BrowserTab {
     await key(down);
     await key(browserKeyUp(down, modifiers: down.modifiers));
   }
+}
+
+/// The editing a page's menu offers.
+enum PageEdit { cut, copy, paste, selectAll }
+
+/// The user's keys and edits at a page, routed the same in every frontend:
+/// paste is the user's clipboard, copy and cut fill it and still reach the
+/// page, whose own handlers (an editor drawn on a canvas) may be all there
+/// is, and every other key is the page's. A press is held under the id its
+/// frontend names the key by, so its release names the key the press did:
+/// a key's character is not reported on its way up.
+class BrowserKeyboard {
+  BrowserKeyboard(this._tab);
+
+  final BrowserTab Function() _tab;
+  final _held = <Object, BrowserKey>{};
+
+  static bool get mac => defaultTargetPlatform == TargetPlatform.macOS;
+
+  /// [event] pressed, or repeating, on key [id]; [shortcut] is whether the
+  /// platform's shortcut modifier is held.
+  void down(
+    Object id,
+    KeyEvent event, {
+    required int modifiers,
+    required bool shortcut,
+  }) {
+    final letter = event.logicalKey;
+    if (shortcut && letter == LogicalKeyboardKey.keyV) {
+      if (event is KeyDownEvent) edit(PageEdit.paste);
+      return;
+    }
+    if (shortcut &&
+        event is KeyDownEvent &&
+        (letter == LogicalKeyboardKey.keyC ||
+            letter == LogicalKeyboardKey.keyX)) {
+      _send(_tab().copySelection);
+    }
+    final key = browserKeyDown(event, modifiers: modifiers, shortcut: shortcut);
+    if (key == null) return;
+    _held[id] = key;
+    _send(() => _tab().key(key));
+  }
+
+  /// Key [id] released.
+  void up(Object id, {required int modifiers}) {
+    final down = _held.remove(id);
+    if (down != null) {
+      _send(() => _tab().key(browserKeyUp(down, modifiers: modifiers)));
+    }
+  }
+
+  void edit(PageEdit action) {
+    final tab = _tab();
+    switch (action) {
+      case PageEdit.cut:
+        _send(tab.copySelection);
+        _send(() => tab.pressShortcut("x", mac: mac));
+      case PageEdit.copy:
+        _send(tab.copySelection);
+        _send(() => tab.pressShortcut("c", mac: mac));
+      case PageEdit.paste:
+        _send(tab.pasteClipboard);
+      case PageEdit.selectAll:
+        _send(() => tab.pressShortcut("a", mac: mac));
+    }
+  }
+
+  static void _send(Future<void> Function() send) => unawaited(
+    send().catchError((Object e) {
+      logFailure("browser", "input to the page failed", e);
+    }),
+  );
 }

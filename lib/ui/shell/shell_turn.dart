@@ -10,8 +10,9 @@ import "../../app/transcript/activities/todo.dart" show TodoWords;
 import "../../domain/todo.dart";
 import "../../app/chat_controller.dart";
 import "../chat/widgets/approval_banner.dart";
-import "../chat/widgets/running_strip.dart" show openRunning;
+import "../../app/transcript/activity.dart" show TranscriptHandOff;
 import "../../app/approvals.dart";
+import "../../app/turn_surface.dart";
 import "../../app/settings/spec.dart" show SettingReader;
 import "glyphs.dart";
 
@@ -21,18 +22,10 @@ import "glyphs.dart";
 /// the question — and what the client says back, run through [driver]. Voice mode's session and
 /// the open chat's publisher (`ShellChat`) each hold one.
 class TurnRunner implements TurnIntents {
-  TurnRunner({
-    required this.context,
-    required this.onWithdrawn,
-    this.openDetail,
-  });
+  TurnRunner({required this.handOff, required this.onWithdrawn});
 
-  /// Opens a running thing's detail the frontend's own way, where it has
-  /// one: the native conversation's sheet.
-  final void Function(app.OpensDetail detail)? openDetail;
-
-  /// Where a running pill opens its page.
-  final BuildContext Function() context;
+  /// What a running pill opens its page through.
+  final TranscriptHandOff Function() handOff;
 
   /// A say taken back, put back into the composer; null where there is none.
   final ValueChanged<Draft>? onWithdrawn;
@@ -54,26 +47,21 @@ class TurnRunner implements TurnIntents {
     _driver = driver;
     final chat = view.chat;
     final chatId = chat?.state.id;
-    // Standing alone first, as the Flutter strip draws them.
-    if (chatId == null) {
-      _running = const [];
-    } else {
-      final (:alone, :groups) = app.runningOf(reader, view, chatId);
-      _running = [...alone, ...groups.values.expand((g) => g)];
-    }
-    // One panel, the first turn waiting on answers, as `TurnQuestions` draws.
-    final asked = view.roomPhase == RoomPhase.waitingOnYou
-        ? view.questions.values.expand((q) => q).firstOrNull
-        : null;
+    final surface = TurnSurfaceModel(view);
+    _running = chatId == null
+        ? const []
+        : app.runningOf(reader, view, chatId).ordered;
+    final asked = surface.asked;
     return TurnSnapshot(
       goal: goalSnapshotOf(chat?.goal),
       todo: todoSnapshotOf(chat?.todos),
-      resume: chat != null && chat.unfinished && !view.isRunning
-          ? ResumeSnapshot(
-              startedAt: chat.messages.last.createdAt.millisecondsSinceEpoch,
-              notice: view.unfinishedNotice,
-            )
-          : null,
+      resume: switch (surface.resume) {
+        (:final startedAt, :final notice) => ResumeSnapshot(
+          startedAt: startedAt.millisecondsSinceEpoch,
+          notice: notice,
+        ),
+        null => null,
+      },
       running: [
         for (final (i, thing) in _running.indexed)
           RunningSnapshot(
@@ -97,8 +85,7 @@ class TurnRunner implements TurnIntents {
       ],
       withdrawable: onWithdrawn != null,
       approvals: [
-        for (final approvals in view.approvals.values)
-          for (final approval in approvals) _approval(approval, driver),
+        for (final approval in surface.approvals) _approval(approval, driver),
       ],
       question: asked == null
           ? null
@@ -141,13 +128,7 @@ class TurnRunner implements TurnIntents {
   @override
   Future<void> running(int id) async {
     if (id < 0 || id >= _running.length) return;
-    final thing = _running[id];
-    final opener = openDetail;
-    if (thing.opens case final app.OpensDetail detail when opener != null) {
-      return opener(detail);
-    }
-    final at = context();
-    if (at.mounted) openRunning(at, thing);
+    await _running[id].opens.open(handOff());
   }
 
   @override

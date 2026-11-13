@@ -3,7 +3,6 @@ import "../../domain/chat_meta.dart";
 import "../../domain/models.dart";
 import "../../domain/model_options.dart" show reasoningEffortLabels;
 import "../../domain/settings/keys.dart";
-import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
 import "../chat_controller.dart";
 import "../chat_edits.dart";
@@ -110,31 +109,18 @@ abstract class ChatSettingsFields extends AppPage {
     ];
   }
 
-  SettingController _ttl(SettingReader reader, ChatScope scope) {
-    final projectTtl = reader
-        .watch(projectSettingsProvider(project))
-        .tempChatTtl;
-    final appTtl = reader.watch(appSettingsProvider).tempChatTtl;
-    final options = [
-      for (final MapEntry(key: ttl, value: label) in tempChatTtlLabels.entries)
-        SettingOption(ttl, label),
-    ];
-    // What `ChatRepository._resolveTempTtl` answers without the chat's own.
-    final inherited =
-        projectTtl ?? builtinProjectOf(project)?.tempChatTtl ?? appTtl;
-    return ChoiceController<TempChatTtl>(
-      part("ttl", "Delete after", hint: UiHint.dropdown),
-      options: options,
-      value: scope.own(SettingKeys.tempChatTtl),
-      unsettable: true,
-      inheritedLabel: inherited.label,
-      inherited: inherited,
-      onSet: (ttl) async {
-        await scope.write(SettingKeys.tempChatTtl, ttl);
-        return null;
-      },
-    );
-  }
+  SettingController _ttl(SettingReader reader, ChatScope scope) =>
+      tempTtlChoice(
+        "Delete after",
+        value: scope.own(SettingKeys.tempChatTtl),
+        // What `ChatRepository._resolveTempTtl` answers without the chat's own.
+        inherited: inheritedTempTtl(
+          project,
+          own: reader.watch(projectSettingsProvider(project)).tempChatTtl,
+          app: reader.watch(appSettingsProvider).tempChatTtl,
+        ),
+        onSet: (ttl) => scope.write(SettingKeys.tempChatTtl, ttl),
+      );
 }
 
 /// [chatId]'s settings: what it is and where its files are, the fields,
@@ -193,12 +179,8 @@ class ChatSettingsAppPage extends ChatSettingsFields {
   @override
   String title(SettingReader reader) => "Chat Settings";
 
-  ({String name, bool online})? _device(SettingReader reader) {
-    for (final c in reader.watch(remoteChatsProvider)) {
-      if (c.chatId == chatId) return (name: c.deviceName, online: c.online);
-    }
-    return null;
-  }
+  MirrorHome? _device(SettingReader reader) =>
+      reader.watch(mirrorHomeProvider(chatId));
 
   @override
   List<PageSection> sections(SettingReader reader) {
@@ -210,14 +192,7 @@ class ChatSettingsAppPage extends ChatSettingsFields {
     final workspace = _workspace;
     return [
       if (device != null)
-        notice(
-          "device",
-          frozen
-              ? "${device.name} is offline. These settings can be "
-                    "changed once it is back."
-              : "This chat lives on ${device.name}.",
-          tone: frozen ? NoticeTone.warning : NoticeTone.plain,
-        ),
+        deviceNotice("chat", device.name, online: device.online),
       PageSection("chat", "", [
         ActionController(
           part("id", "Chat ID", description: chatId),
@@ -225,34 +200,18 @@ class ChatSettingsAppPage extends ChatSettingsFields {
           run: () async => SettingNotice("Copied chat ID", copy: chatId),
         ),
         if (workspace != null)
-          ActionController(
-            part(
-              "workspace",
-              "Chat workspace",
-              hint: UiHint.open,
-              glyph: SettingGlyph.folder,
-            ),
-            label: "",
-            run: () async {
-              pages.open(
-                WorkspaceAppPage(root: workspace, owner: "Chat workspace"),
-              );
-              return null;
-            },
+          opener(
+            "workspace",
+            "Chat workspace",
+            () => WorkspaceAppPage(root: workspace, owner: "Chat workspace"),
+            glyph: SettingGlyph.folder,
           ),
-        ActionController(
-          part(
-            "context",
-            "Context",
-            hint: UiHint.open,
-            description: "What fills the model's window",
-            glyph: SettingGlyph.info,
-          ),
-          label: "",
-          run: () async {
-            pages.open(ContextAppPage(chatId, project: project));
-            return null;
-          },
+        opener(
+          "context",
+          "Context",
+          () => ContextAppPage(chatId, project: project),
+          description: "What fills the model's window",
+          glyph: SettingGlyph.info,
         ),
       ]),
       ...fields(reader, pinned: _state?.pinned ?? false),
@@ -262,7 +221,6 @@ class ChatSettingsAppPage extends ChatSettingsFields {
         PageSection("delete", "", [
           ActionController(
             part("delete", "Delete Chat", hint: UiHint.button),
-            label: "Delete Chat",
             destructive: true,
             confirm: () async => const SettingConfirm(
               title: "Delete chat?",
@@ -291,7 +249,6 @@ class ChatSettingsAppPage extends ChatSettingsFields {
     return [
       ActionController(
         part("save", "Save"),
-        label: "Save",
         enabled: meta != null && !_saving && !frozen,
         run: _save,
       ),
@@ -351,7 +308,6 @@ class NewChatSettingsAppPage extends ChatSettingsFields {
   List<ActionController> toolbar(SettingReader reader) => [
     ActionController(
       part("save", "Save"),
-      label: "Save",
       run: () async {
         onSave(meta);
         pages.leave(this);

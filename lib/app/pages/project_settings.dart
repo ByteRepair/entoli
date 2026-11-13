@@ -5,7 +5,6 @@ import "../../domain/models.dart";
 import "../../domain/project.dart";
 import "../../domain/settings/keys.dart";
 import "../../domain/shell.dart" show isTildePath;
-import "../../domain/temp_chat_ttl.dart";
 import "../../domain/tristate.dart";
 import "../../domain/work_folders.dart";
 import "../../providers.dart";
@@ -77,22 +76,6 @@ class ProjectSettingsAppPage extends AppPage {
             .where((c) => c.project == project)
             .length;
 
-  SettingController _open(
-    String id,
-    String title,
-    AppPage Function() page, {
-    String? description,
-    String label = "",
-    SettingGlyph? glyph,
-  }) => ActionController(
-    part(id, title, hint: UiHint.open, description: description, glyph: glyph),
-    label: label,
-    run: () async {
-      pages.open(page());
-      return null;
-    },
-  );
-
   @override
   List<PageSection> sections(SettingReader reader) {
     if (reader.watch(projectGoneProvider(at))) {
@@ -108,15 +91,7 @@ class ProjectSettingsAppPage extends AppPage {
     final settings = reader.watch(projectSettingsOf(at));
     final omada = builtIn?.omada ?? settings.omada;
     final sections = [
-      if (remote)
-        notice(
-          "device",
-          frozen
-              ? "${_deviceName(reader)} is offline. These settings can be "
-                    "changed once it is back."
-              : "This project lives on ${_deviceName(reader)}.",
-          tone: frozen ? NoticeTone.warning : NoticeTone.plain,
-        ),
+      if (remote) deviceNotice("project", _deviceName(reader), online: !frozen),
       PageSection("project", "", [
         ActionController(
           part("name", "Project name", description: project),
@@ -164,7 +139,6 @@ class ProjectSettingsAppPage extends AppPage {
                 "Use the Default Question",
                 glyph: SettingGlyph.tune,
               ),
-              label: "Use the Default Question",
               enabled: settings.description != null,
               run: () async {
                 await app
@@ -181,7 +155,7 @@ class ProjectSettingsAppPage extends AppPage {
             },
           ),
         if (!remote)
-          _open(
+          opener(
             "workspace",
             "Workspace",
             () => WorkspaceAppPage(
@@ -206,7 +180,7 @@ class ProjectSettingsAppPage extends AppPage {
         if (!remote &&
             (builtIn?.bundledInstructions == null ||
                 builtIn?.includesUserInstructions == true))
-          _open(
+          opener(
             "instructions",
             "Instructions",
             () => ProfileAppPage(project: project),
@@ -219,7 +193,7 @@ class ProjectSettingsAppPage extends AppPage {
             glyph: SettingGlyph.edit,
           ),
         for (final kind in CompletionKind.values)
-          _open(
+          opener(
             kind.name,
             kind.label,
             () => SettingsAppPage(
@@ -282,7 +256,7 @@ class ProjectSettingsAppPage extends AppPage {
               return null;
             },
           ),
-          _open(
+          opener(
             "memories",
             "Memories",
             () => MemoryAppPage(project: at, owner: "Project memories"),
@@ -319,33 +293,24 @@ class ProjectSettingsAppPage extends AppPage {
         shared(reader, scope, "turnMaxSteps"),
       ]),
       PageSection("temporary", "Temporary chats", [
-        ChoiceController<TempChatTtl>(
-          part("ttl", "Delete chats after", hint: UiHint.dropdown),
-          options: [
-            for (final MapEntry(key: ttl, value: label)
-                in tempChatTtlLabels.entries)
-              SettingOption(ttl, label),
-          ],
+        tempTtlChoice(
+          "Delete chats after",
           value: scope.own(SettingKeys.tempChatTtl),
-          unsettable: true,
           // What `ChatRepository._resolveTempTtl` falls to below this level.
-          inheritedLabel:
-              (builtIn?.tempChatTtl ??
-                      scope.inherited(SettingKeys.tempChatTtl)!)
-                  .label,
+          inherited: inheritedTempTtl(
+            project,
+            app: scope.inherited(SettingKeys.tempChatTtl)!,
+          ),
           // The notifier's setter, which a remote project's sends to its
           // device.
-          onSet: (ttl) async {
-            await app.read(projectSettingsOf(at).notifier).setTempChatTtl(ttl);
-            return null;
-          },
+          onSet: (ttl) =>
+              app.read(projectSettingsOf(at).notifier).setTempChatTtl(ttl),
         ),
       ]),
       if (builtIn == null)
         PageSection("delete", "", [
           ActionController(
             part("delete", "Delete Project", hint: UiHint.button),
-            label: "Delete Project",
             destructive: true,
             confirm: () async => SettingConfirm(
               title: "Delete project?",
@@ -428,7 +393,6 @@ class ProjectSettingsAppPage extends AppPage {
         // Folders come from the platform's picker, never typed.
         ActionController(
           part("addFolder", "Add Folder…", glyph: SettingGlyph.add),
-          label: "Add Folder…",
           run: () async {
             final picked = await app
                 .read(folderPickerProvider)

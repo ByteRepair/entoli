@@ -1,10 +1,11 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
+import "../../domain/agent_browser.dart" show AgentBrowser, BrowserTab;
 import "../../domain/models.dart";
+import "../../domain/plan.dart" show PlanSection;
 import "../../domain/room/room_state.dart" show ChatViewState;
 import "../settings/spec.dart" show SettingReader;
-import "hand_off.dart";
 
 /// What an icon in the conversation stands for. Each frontend picks its own
 /// picture for each, in one exhaustive switch.
@@ -170,21 +171,73 @@ class Run {
   );
 }
 
+/// What a frontend opens with a page of its own from the conversation: a
+/// file, an artifact, a skill the model drafted, the plan, a link, an
+/// activity's detail, the browser. Each frontend implements it where it can
+/// push a page — Flutter's over the context of what was tapped, the native
+/// one over its own navigation — and hands it to whatever the core asks to
+/// run.
+abstract interface class TranscriptHandOff {
+  Future<void> openFile(String path);
+
+  Future<void> openArtifact(
+    String chatId,
+    String artifactId, {
+    required String entryFile,
+    String? title,
+  });
+
+  Future<void> installSkill(String chatId, String installId);
+
+  Future<void> openPlan(String chatId);
+
+  Future<void> openLink(String href);
+
+  Future<void> openDetail(OpensDetail detail);
+
+  Future<void> openBrowser(AgentBrowser browser, BrowserTab tab);
+
+  /// Runs [action], saying what it threw the frontend's way.
+  Future<void> attempt(Future<void> Function() action);
+}
+
+/// Something on screen that opens a page when pressed: a node, a running
+/// pill. It knows what it opens; a frontend only hands it the way.
+abstract interface class Opens {
+  Future<void> open(TranscriptHandOff handOff);
+}
+
+/// An activity's detail for a run, following [source] while it is open.
+final class OpensDetail implements Opens {
+  const OpensDetail(this.activity, this.run, {this.source});
+
+  final Activity activity;
+  final Run run;
+  final ProviderListenable<LiveMessage>? source;
+
+  /// The detail as it stands: what an open detail page is drawn from.
+  ActivityDetail? detail(SettingReader reader) =>
+      activity.detailFollowing(reader, run, source);
+
+  @override
+  Future<void> open(TranscriptHandOff handOff) => handOff.openDetail(this);
+}
+
 /// What an activity is on screen. A sealed set, each a kind of drawing
 /// rather than a kind of activity, so a frontend's switch over them stays
 /// short and a new one is a compile error in every frontend until it draws
-/// it. Each knows the activity and run it came from, so opening it needs
-/// nothing else.
+/// it. Each knows the activity and run it came from, and what pressing it
+/// opens: its detail, following [source], unless the kind says otherwise.
 sealed class ActivityNode {
   const ActivityNode(this.activity, this.run);
 
   final Activity activity;
   final Run run;
 
-  ActivityDetail? detail(
-    SettingReader reader, {
+  Future<void> open(
+    TranscriptHandOff handOff, {
     ProviderListenable<LiveMessage>? source,
-  }) => activity.detailFollowing(reader, run, source);
+  }) => OpensDetail(activity, run, source: source).open(handOff);
 }
 
 /// The one line most activities are: an icon, what happened, and whether it
@@ -234,27 +287,60 @@ final class DiffNode extends ActivityNode {
 
 /// The plan put to the user, drawn as the plan.
 final class PlanNode extends ActivityNode {
-  const PlanNode(super.activity, super.run, {required this.title});
+  const PlanNode(
+    super.activity,
+    super.run, {
+    required this.title,
+    required this.sections,
+    required this.progress,
+  });
 
   final String title;
+
+  /// The plan as the file has it now; null until read, or where it cannot be.
+  final List<PlanSection>? sections;
+
+  /// How far along it is, or why that is not known.
+  final String progress;
+
+  /// The plan's own page rather than a detail.
+  @override
+  Future<void> open(
+    TranscriptHandOff handOff, {
+    ProviderListenable<LiveMessage>? source,
+  }) => handOff.openPlan(run.chatId);
 }
 
-enum OutputKind { artifact, skill }
+enum OutputKind {
+  artifact("Artifact"),
+  skill("Skill");
+
+  const OutputKind(this.caption);
+
+  /// What the card is headed with.
+  final String caption;
+}
 
 /// Something the turn made for the user, as a card to open: an artifact, a
-/// skill to install. Opening it is [open], through the frontend's hand-off.
+/// skill to install, which it opens rather than a detail.
 final class OutputNode extends ActivityNode {
   const OutputNode(
     super.activity,
     super.run, {
     required this.kind,
     required this.label,
-    required this.open,
+    required this._opens,
   });
 
   final OutputKind kind;
   final String label;
-  final Future<void> Function(TranscriptHandOff handOff) open;
+  final Future<void> Function(TranscriptHandOff handOff) _opens;
+
+  @override
+  Future<void> open(
+    TranscriptHandOff handOff, {
+    ProviderListenable<LiveMessage>? source,
+  }) => _opens(handOff);
 }
 
 /// A status line under a detail's title: "Running · pid 4001", "Exit code 1".

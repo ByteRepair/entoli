@@ -17,7 +17,8 @@ import SwiftUI
   /// The chat shown; nil while the conversation is Flutter's or not there.
   private(set) var chatId: String?
   private(set) var order: [String] = []
-  private(set) var rows: [String: RowSnapshot] = [:]
+  /// Each row observed on its own, so a row that changed redraws alone.
+  private(set) var rows: [String: RowEntry] = [:]
   /// Open but still being read, so an empty list is not an empty chat.
   private(set) var loading = false
   private(set) var reactions: [ReactionChoice] = []
@@ -51,7 +52,9 @@ extension TranscriptModel: NativeTranscript {
       rows = [:]
       chatId = snapshot.chatId
     }
-    for row in snapshot.changed { rows[row.key] = row }
+    for row in snapshot.changed {
+      if let kept = rows[row.key] { kept.snapshot = row } else { rows[row.key] = RowEntry(row) }
+    }
     if snapshot.order != order {
       order = snapshot.order
       let kept = Set(order)
@@ -72,6 +75,12 @@ extension TranscriptModel: NativeTranscript {
   func detail(snapshot: DetailSnapshot) throws {
     if snapshot != detail { detail = snapshot }
   }
+}
+
+/// One row as Dart last sent it.
+@Observable final class RowEntry {
+  var snapshot: RowSnapshot
+  init(_ snapshot: RowSnapshot) { self.snapshot = snapshot }
 }
 
 /// A typeset formula, decoded once.

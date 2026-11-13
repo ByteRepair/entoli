@@ -98,6 +98,10 @@ struct ConversationView: View {
         .padding(.leading, margin)
         .frame(maxWidth: .infinity, alignment: .leading)
       }
+      // A scroller per chat, made once its rows are in: the view stays up
+      // between chats, and the initial offset below is only a new
+      // scroller's, so the next chat otherwise opened at the last one's.
+      .id(model.loading ? nil : model.chatId)
       .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
       .onChange(of: chapterTops) { readChapter() }
       .onChange(of: atBottom) { readChapter() }
@@ -105,6 +109,7 @@ struct ConversationView: View {
       .onChange(of: model.chatId) {
         chapterTops = [:]
         current = nil
+        atEnd = true
       }
       .overlay(alignment: .trailing) {
         if railFits && model.chapters.count > 1 {
@@ -192,10 +197,11 @@ private extension View {
 
 /// A row by its kind: a message, or a line between them.
 private struct RowView: View {
-  let row: RowSnapshot
+  let entry: RowEntry
   let model: TranscriptModel
 
   var body: some View {
+    let row = entry.snapshot
     switch row.kind {
     case .message:
       if let message = row.message {
@@ -357,8 +363,8 @@ private struct Rows: View {
   private var rows: some View {
     let chapters = Set(model.chapters.map(\.row))
     return ForEach(model.order, id: \.self) { key in
-      if let row = model.rows[key] {
-        RowView(row: row, model: model).id(key)
+      if let entry = model.rows[key] {
+        RowView(entry: entry, model: model).id(key)
           .modifier(TopReport(key: key, reports: chapters.contains(key), report: chapterTop))
       }
     }

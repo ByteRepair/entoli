@@ -76,6 +76,19 @@ class SettingSpec {
   final ScopeAddress? at;
 
   final SettingController Function(SettingContext context) build;
+
+  /// This setting under another [id], everything else kept.
+  SettingSpec withId(String id) => SettingSpec(
+    id: id,
+    path: path,
+    weight: weight,
+    title: title,
+    hint: hint,
+    build: build,
+    description: description,
+    glyph: glyph,
+    at: at,
+  );
 }
 
 /// What a change has to say back, for the frontend to show: a restart a
@@ -252,7 +265,7 @@ final class ChoiceController<T> extends SettingController {
     required this.value,
     required Future<SettingNotice?> Function(T? value) onSet,
     this.unsettable = false,
-    this.inheritedLabel,
+    this._inheritedLabel,
     this.inherited,
     this.noneLabel,
     this.error,
@@ -271,9 +284,15 @@ final class ChoiceController<T> extends SettingController {
 
   final bool unsettable;
 
+  final String? _inheritedLabel;
+
   /// The label of what unset stands for — the "Relay" of "Default (Relay)" —
-  /// where it stands for an option.
-  final String? inheritedLabel;
+  /// given, or [inherited]'s option's.
+  String? get inheritedLabel =>
+      _inheritedLabel ??
+      (inherited == null
+          ? null
+          : options.where((o) => o.value == inherited).firstOrNull?.label);
 
   /// What unset stands for, where it stands for an option: what a slider
   /// shows while nothing is picked.
@@ -395,7 +414,7 @@ final class KeyValuesController extends SettingController {
 final class ActionController extends SettingController {
   ActionController(
     super.spec, {
-    required this.label,
+    this._label,
     this.glyphOverride,
     required Future<SettingNotice?> Function() run,
     Future<SettingConfirm?> Function()? confirm,
@@ -410,7 +429,10 @@ final class ActionController extends SettingController {
   }) : _action = run,
        _ask = confirm;
 
-  final String label;
+  final String? _label;
+
+  /// The button's words, the row's title where not given.
+  String get label => _label ?? title;
 
   /// The picture where it is not the spec's: a play button that is a stop
   /// button while it plays.
@@ -805,7 +827,6 @@ class CollectionItem {
     this.tap,
     this.badge,
     this.face,
-    this.bot,
     this.editable = true,
     this.takesImage = true,
     this.meters = const [],
@@ -845,11 +866,8 @@ class CollectionItem {
   /// "Bundled", "Inherited".
   final String? badge;
 
-  /// The agent whose face leads the row.
-  final ({String? project, String name})? face;
-
-  /// A Bot Avatar that leads the row itself, worn by no agent yet.
-  final BotAvatarSpec? bot;
+  /// Who leads the row, where someone does.
+  final RowFace? face;
 
   /// Whether it is edited through the list's form: an entry of another
   /// level's is shown and not changed.
@@ -861,6 +879,28 @@ class CollectionItem {
   /// The item action a tap on the row runs, where the row is not edited
   /// through a form: a device's own page.
   final String? tap;
+}
+
+/// Who leads a collection's row: an agent in their face, or a Bot Avatar
+/// worn by no agent yet.
+sealed class RowFace {
+  const RowFace();
+}
+
+final class AgentRowFace extends RowFace {
+  const AgentRowFace({required this.project, required this.name});
+
+  final String? project;
+  final String name;
+
+  /// The agent as the picture providers name one.
+  ({String? project, String name}) get agent => (project: project, name: name);
+}
+
+final class AvatarRowFace extends RowFace {
+  const AvatarRowFace(this.spec);
+
+  final BotAvatarSpec spec;
 }
 
 /// One thing an item has spent, said; [fraction] of it gone where it is
