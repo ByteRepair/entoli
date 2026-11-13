@@ -165,7 +165,9 @@ List<PageAction> _actions(
     final list = sections
         .expand((s) => s.controllers)
         .whereType<CollectionController>()
-        .firstWhere((c) => c.id == adds);
+        .where((c) => c.id == adds)
+        .firstOrNull;
+    if (list == null) return null;
     return () => list.typed(<V>(c) => editItem<V>(context, c));
   }
 

@@ -152,12 +152,14 @@ class WorkspaceAppPage extends AppPage {
             return null;
           },
         ),
-      ActionController(
-        part("newFolder", "New Folder", glyph: SettingGlyph.newFolder),
-        adds: part("entries", "Files").id,
-        secondary: true,
-        run: () async => null,
-      ),
+      // The list it adds to is drawn once the folder is read.
+      if (_entries != null)
+        ActionController(
+          part("newFolder", "New Folder", glyph: SettingGlyph.newFolder),
+          adds: part("entries", "Files").id,
+          secondary: true,
+          run: () async => null,
+        ),
     ];
   }
 }
