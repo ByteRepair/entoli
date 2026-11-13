@@ -85,7 +85,10 @@ void main() {
       "{ the line a kill landed in",
     ]);
     expect(decoy.readAsStringSync(), decoyBefore);
-    expect(File(migrationStamp(config.dataDir)).readAsStringSync(), "8.0.0");
+    expect(
+      File(migrationStamp(config.dataDir)).readAsStringSync(),
+      migrations.last.version,
+    );
   });
 
   test("a message's documents become the references they were keyed by, "

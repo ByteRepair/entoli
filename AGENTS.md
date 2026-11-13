@@ -298,10 +298,13 @@ entry this build has is a directory written by a newer build, and it is left
 exactly as it is. `AppConfig.load` runs the chain, and so does `restoreBackup` —
 a backup unpacks the layout of the build that made it, stamp included.
 
-**Migration code lives in `migrations.dart` and nowhere else.** A move of
-the data directory itself, which happens before there is a directory to
-stamp, is there too, beside the chain rather than in it: `relocateDataDir`,
-which iOS calls to move its data from Documents into the App Group.
+**Migration code lives in `migrations.dart` and nowhere else.** A reader
+knows today's shape and a later build's (an unknown name falls back), never
+an earlier one's: a file in an older shape is rewritten by an entry instead.
+A move of the data directory itself, which happens before there is a
+directory to stamp, is there too, beside the chain rather than in it:
+`relocateDataDir`, which iOS calls to move its data from Documents into the
+App Group.
 
 Three rules for writing one. **An entry that has shipped is never edited**: an
 installed copy has already run it and will not run it again, so a change reaches
@@ -321,7 +324,10 @@ participants" in `lib/domain/room/AGENTS.md`), and every message's
 `documents` map became `references`, its keys in order (see "Skills and
 agents" in `lib/domain/AGENTS.md`). A change of meaning in the log
 is a migration as much as a move is, so the reader is never left holding a
-fallback for the old shape.
+fallback for the old shape. 8.4.0's entry gathered what the readers had been
+holding: settings under the names they had before (`opencodeEnv`,
+`approveCommands`, `localModelKvCacheChats`, `useProjectMemory`), provider
+entries from 7.0.0 or older, and triggers in the reminder shape.
 
 ### Artifacts
 

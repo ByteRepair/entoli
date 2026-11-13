@@ -479,9 +479,8 @@ class AppSettings {
     }
   }
 
-  factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings.of(
-    SettingsDocument(json: json, root: true, upgrades: SettingKeys.upgrades),
-  );
+  factory AppSettings.fromJson(Map<String, dynamic> json) =>
+      AppSettings.of(SettingsDocument(json: json, root: true));
 
   /// A fresh instance holding the same values, for a notifier that has to hand
   /// out a new object to be noticed. The values are mutable, so a caller

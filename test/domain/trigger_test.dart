@@ -244,45 +244,14 @@ void main() {
       expect((back.source as ScheduleSource).repeat, ScheduleRepeat.off);
     });
 
-    test("a file written by an older build reads with defaults", () {
-      final trigger = Trigger.fromJson({
-        "id": "old",
-        "at": DateTime(2026, 1).toIso8601String(),
-      });
+    test("a record that says little reads with defaults", () {
+      final trigger = Trigger.fromJson({"id": "bare"});
       expect(trigger.name, "");
       expect(trigger.tempChatTtl, isNull);
       expect(trigger.enabled, isTrue);
       expect(trigger.requestCode, isNull);
-      // The same null every file before the field wrote: legacy reads as
-      // no member, which is what those records were.
       expect(trigger.member, isNull);
-      // The flat at/repeat keys are the schedule's: every reminder file
-      // ever written reads as triggers without a migration.
       expect(trigger.source, isA<ScheduleSource>());
-      expect((trigger.source as ScheduleSource).at, DateTime(2026, 1));
     });
-
-    test(
-      "the temporary bool an older build wrote reads as the TTL it meant",
-      () {
-        final at = DateTime(2026, 1).toIso8601String();
-        expect(
-          Trigger.fromJson({
-            "id": "kept",
-            "at": at,
-            "temporary": false,
-          }).tempChatTtl,
-          TempChatTtl.off,
-        );
-        expect(
-          Trigger.fromJson({
-            "id": "temp",
-            "at": at,
-            "temporary": true,
-          }).tempChatTtl,
-          isNull,
-        );
-      },
-    );
   });
 }

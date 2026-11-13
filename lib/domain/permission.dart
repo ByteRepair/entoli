@@ -42,23 +42,6 @@ const approveModeLabels = {
   ApproveMode.never: "Run everything without asking (DANGEROUS)",
 };
 
-/// Reads [ApproveMode] from its persisted form, migrating the legacy
-/// `approveCommands` bool (`true` → [ApproveMode.ask], `false` →
-/// [ApproveMode.never]). Null when neither key is present, so a nullable
-/// field reads as "inherit" and a non-null one falls back with `??`.
-ApproveMode? approveModeFromJson(Map<String, dynamic> json) {
-  final mode = json["approveMode"] as String?;
-  if (mode != null) {
-    return ApproveMode.values.asNameMap()[mode] ?? ApproveMode.ask;
-  }
-  final legacy = json["approveCommands"] as bool?;
-  return switch (legacy) {
-    true => ApproveMode.ask,
-    false => ApproveMode.never,
-    null => null,
-  };
-}
-
 /// Classifies a tool call as safe, uncertain, or dangerous. The one
 /// implementation reaches a provider; [NoClassifier] is the safe fallback
 /// that asks for everything, used when no classifier model is configured.

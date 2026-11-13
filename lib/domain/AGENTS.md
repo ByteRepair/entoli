@@ -1076,9 +1076,9 @@ headless turn or the same-chat drive, `trigger_runner.dart`). The platform
 halves are `ReminderAlarms` (the clock and the notifications) and
 `FileWatches` (`file_watches.dart`; the impls under `data/local/`). The store
 is `FileTriggerStore`, over `<dataDir>/reminders.json` — the file name the
-reminder feature gave it, kept because a rename is a migration; legacy
-records are triggers because `fromFromJson` — `Trigger.fromJson` — reads the
-flat `at`/`repeat` shape a reminder was.
+reminder feature gave it, kept because a rename is a migration. A record in
+the flat `at`/`repeat` shape a reminder was got its `source` from 8.4.0's
+migration, so `Trigger.fromJson` reads one shape.
 
 ### The layers
 

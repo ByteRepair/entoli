@@ -16,20 +16,6 @@ import "../tone.dart";
 import "../tristate.dart";
 import "setting.dart";
 
-// `opencodeEnv` is what the environment was called when a second backend
-// spawned servers.
-Map<String, String>? _opencodeEnv(Map<String, Object?> json) =>
-    const StringMapCodec().decode(json["opencodeEnv"]);
-
-// The setting's former key, read from files that still hold it.
-int? _kvCacheChats(Map<String, Object?> json) =>
-    const IntCodec().decode(json["localModelKvCacheChats"]);
-
-// A bool a file may hold in the tristate's place: true is a store of the
-// project's own.
-Tristate? _useProjectMemory(Map<String, Object?> json) =>
-    json["useProjectMemory"] == true ? Tristate.on : null;
-
 // A name this build does not know asks, the cautious answer.
 ApproveMode? _decodeApproveMode(Object? raw) => raw is String
     ? ApproveMode.values.asNameMap()[raw] ?? ApproveMode.ask
@@ -282,8 +268,6 @@ abstract final class SettingKeys {
     StringMapCodec(),
     scopes: {SettingScope.app, SettingScope.project},
     fallback: <String, String>{},
-    legacy: _opencodeEnv,
-    retired: ["opencodeEnv"],
   );
 
   /// How the agent handles a command before it runs. A chat can override it.
@@ -293,8 +277,6 @@ abstract final class SettingKeys {
     _approveModeCodec,
     scopes: {SettingScope.app, SettingScope.chat},
     fallback: ApproveMode.auto,
-    legacy: approveModeFromJson,
-    retired: ["approveCommands"],
   );
 
   /// The endpoints the agent can call. Empty until the user adds one, which is
@@ -531,8 +513,6 @@ abstract final class SettingKeys {
   static const localModelKvCachePrompts = Setting<int>(
     "localModelKvCachePrompts",
     IntCodec(),
-    legacy: _kvCacheChats,
-    retired: ["localModelKvCacheChats"],
   );
 
   /// This device's name as paired devices see it. Null falls back to
@@ -741,8 +721,6 @@ abstract final class SettingKeys {
     "memory",
     EnumCodec(Tristate.values),
     scopes: {SettingScope.project},
-    legacy: _useProjectMemory,
-    retired: ["useProjectMemory"],
   );
 
   /// Whether this project's chats can carry several agents in one round. A
@@ -818,12 +796,4 @@ abstract final class SettingKeys {
     BoolCodec(),
     scopes: {SettingScope.chat},
   );
-
-  /// The keys whose files may still hold them under an old name.
-  static const upgrades = <Setting>[
-    environment,
-    approveMode,
-    localModelKvCachePrompts,
-    memory,
-  ];
 }
