@@ -69,7 +69,6 @@ class BotAvatarInstallAppPage extends AppPage {
     if (import case BotAvatarImported(:final definitions))
       ActionController(
         part("install", "Install"),
-        label: "Install",
         run: () async {
           await app.read(importedBotAvatarsProvider.notifier).add(definitions);
           pages.leave(

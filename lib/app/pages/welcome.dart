@@ -243,19 +243,12 @@ class WelcomeAppPage extends AppPage {
 
   List<PageSection> _extras(SettingReader reader) => [
     PageSection("extras", "", [
-      ActionController(
-        part(
-          "marketplace",
-          "Marketplace",
-          hint: UiHint.open,
-          description: "Install skills and agents others have shared.",
-          glyph: SettingGlyph.skill,
-        ),
-        label: "",
-        run: () async {
-          pages.open(MarketplaceAppPage());
-          return null;
-        },
+      opener(
+        "marketplace",
+        "Marketplace",
+        MarketplaceAppPage.new,
+        description: "Install skills and agents others have shared.",
+        glyph: SettingGlyph.skill,
       ),
       ?_settingsRow(
         reader,
@@ -315,7 +308,6 @@ class WelcomeAppPage extends AppPage {
         if (agreed)
           ActionController(
             part("withdraw", "Untick the Licence…", hint: UiHint.button),
-            label: "Untick the Licence…",
             destructive: true,
             confirm: () async => const SettingConfirm(
               title: "Untick the licence?",
@@ -359,16 +351,10 @@ class WelcomeAppPage extends AppPage {
         _accepted || reader.watch(appSettingsProvider).licenceAccepted;
     return [
       if (last)
-        ActionController(
-          part("done", "Done"),
-          label: "Done",
-          enabled: agreed,
-          run: _done,
-        )
+        ActionController(part("done", "Done"), enabled: agreed, run: _done)
       else
         ActionController(
           part("next", "Next"),
-          label: "Next",
           enabled: !_gated(reader),
           run: () async {
             _step++;
@@ -379,7 +365,6 @@ class WelcomeAppPage extends AppPage {
       if (_step > 0)
         ActionController(
           part("back", "Back"),
-          label: "Back",
           secondary: true,
           run: () async {
             _step--;

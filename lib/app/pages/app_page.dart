@@ -3,6 +3,7 @@ import "dart:async";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
+import "../../domain/temp_chat_ttl.dart";
 import "../settings/controller.dart";
 import "../settings/scope.dart";
 import "../settings/settings.dart";
@@ -105,6 +106,58 @@ abstract class AppPage {
     NoticeController(part(id, ""), tone: tone, lines: [NoticeLine(text)]),
   ]);
 
+  /// A row that opens [page] over this one.
+  SettingController opener(
+    String id,
+    String title,
+    AppPage Function() page, {
+    String? description,
+    String label = "",
+    SettingGlyph? glyph,
+  }) => ActionController(
+    part(id, title, hint: UiHint.open, description: description, glyph: glyph),
+    label: label,
+    run: () async {
+      pages.open(page());
+      return null;
+    },
+  );
+
+  /// Where a mirrored [what] lives, and that it cannot be changed while
+  /// [device] is offline.
+  PageSection deviceNotice(
+    String what,
+    String device, {
+    required bool online,
+  }) => notice(
+    "device",
+    online
+        ? "This $what lives on $device."
+        : "$device is offline. These settings can be changed once it is "
+              "back.",
+    tone: online ? NoticeTone.plain : NoticeTone.warning,
+  );
+
+  /// How long a temporary chat lives, unset standing for [inherited].
+  ChoiceController<TempChatTtl> tempTtlChoice(
+    String title, {
+    required TempChatTtl? value,
+    required TempChatTtl inherited,
+    required Future<void> Function(TempChatTtl? ttl) onSet,
+  }) => ChoiceController<TempChatTtl>(
+    part("ttl", title, hint: UiHint.dropdown),
+    options: [
+      for (final ttl in TempChatTtl.values) SettingOption(ttl, ttl.label),
+    ],
+    value: value,
+    unsettable: true,
+    inherited: inherited,
+    onSet: (ttl) async {
+      await onSet(ttl);
+      return null;
+    },
+  );
+
   /// The settings' own [id], built at [scope] on this page under an id of
   /// the page's: the same rules and words as on the settings page, whatever
   /// level that spec is filed at there.
@@ -114,17 +167,9 @@ abstract class AppPage {
     String id,
   ) {
     final spec = reader.read(settingsSchemaProvider).settings[id]!;
-    final here = SettingSpec(
-      id: "page:$address/$id",
-      path: spec.path,
-      weight: spec.weight,
-      title: spec.title,
-      hint: spec.hint,
-      description: spec.description,
-      glyph: spec.glyph,
-      build: spec.build,
+    return spec.build(
+      SettingContext(reader, scope, spec.withId("page:$address/$id")),
     );
-    return spec.build(SettingContext(reader, scope, here));
   }
 
   /// [page] of the settings at [at], as this page's sections, each under

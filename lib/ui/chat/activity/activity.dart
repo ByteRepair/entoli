@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
+import "../../../app/running.dart" show OpensDetail;
 import "../../../app/settings/spec.dart" show WidgetReader;
 import "../../../app/transcript/activity.dart";
 import "card.dart";
@@ -37,44 +38,28 @@ Future<void> openActivityDetail(
   BuildContext context,
   ActivityNode node, {
   ProviderListenable<LiveMessage>? source,
-}) {
-  final from = source ?? ActivitySource.of(context);
-  return openActivityCard(
-    context,
-    (page) => _DetailCard(node: node, source: from, page: page),
-  );
-}
-
-/// Opens [activity]'s detail for [run] where no node was drawn for it: a
-/// running pill's job or sub-agent.
-Future<void> openRunDetail(
-  BuildContext context,
-  Activity activity,
-  Run run, {
-  ProviderListenable<LiveMessage>? source,
-}) => openActivityCard(
+}) => openRunDetail(
   context,
-  (page) => _DetailCard(
-    node: LabelNode(activity, run, glyph: TranscriptGlyph.terminal, text: ""),
-    source: source,
-    page: page,
+  OpensDetail(
+    node.activity,
+    node.run,
+    source: source ?? ActivitySource.of(context),
   ),
 );
 
-class _DetailCard extends ConsumerWidget {
-  const _DetailCard({
-    required this.node,
-    required this.source,
-    required this.page,
-  });
+/// Opens [opens]'s detail: a node's, or a running pill's job or sub-agent.
+Future<void> openRunDetail(BuildContext context, OpensDetail opens) =>
+    openActivityCard(context, (page) => _DetailCard(opens: opens, page: page));
 
-  final ActivityNode node;
-  final ProviderListenable<LiveMessage>? source;
+class _DetailCard extends ConsumerWidget {
+  const _DetailCard({required this.opens, required this.page});
+
+  final OpensDetail opens;
   final bool page;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final detail = node.detail(WidgetReader(ref), source: source);
+    final detail = opens.detail(WidgetReader(ref));
     if (detail == null) return const SizedBox.shrink();
     final nested = detail.transcript;
     return ActivityCard(

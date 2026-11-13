@@ -32,7 +32,8 @@ class TranscriptEncoder {
     required this.catalog,
     required this.prose,
     required this.resources,
-  });
+    Set<String>? present,
+  }) : _present = present ?? {};
 
   final SettingReader reader;
   final ActivityCatalog catalog;
@@ -42,6 +43,10 @@ class TranscriptEncoder {
 
   /// Where a chat's attachments are on this device.
   final String resources;
+
+  /// The attachments found on disk, kept across passes: one is written once
+  /// and locked, so it is not looked for again on every streamed event.
+  final Set<String> _present;
 
   final nodes = <String, EncodedNode>{};
 
@@ -197,7 +202,11 @@ class TranscriptEncoder {
     return wire.FileSnapshot(
       name: file.filename,
       mime: file.mimeType,
-      path: File(path).existsSync() ? path : null,
+      path:
+          _present.contains(path) ||
+              File(path).existsSync() && _present.add(path)
+          ? path
+          : null,
     );
   }
 
@@ -232,6 +241,8 @@ class TranscriptEncoder {
             ? wire.TranscriptIcon.artifact
             : wire.TranscriptIcon.skill,
         text: node.label,
+        output: wire.OutputKind.values.byName(node.kind.name),
+        caption: node.kind.caption,
       ),
     };
   }

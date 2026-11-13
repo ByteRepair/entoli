@@ -76,6 +76,19 @@ class SettingSpec {
   final ScopeAddress? at;
 
   final SettingController Function(SettingContext context) build;
+
+  /// This setting under another [id], everything else kept.
+  SettingSpec withId(String id) => SettingSpec(
+    id: id,
+    path: path,
+    weight: weight,
+    title: title,
+    hint: hint,
+    build: build,
+    description: description,
+    glyph: glyph,
+    at: at,
+  );
 }
 
 /// What a change has to say back, for the frontend to show: a restart a
@@ -252,7 +265,7 @@ final class ChoiceController<T> extends SettingController {
     required this.value,
     required Future<SettingNotice?> Function(T? value) onSet,
     this.unsettable = false,
-    this.inheritedLabel,
+    this._inheritedLabel,
     this.inherited,
     this.noneLabel,
     this.error,
@@ -271,9 +284,15 @@ final class ChoiceController<T> extends SettingController {
 
   final bool unsettable;
 
+  final String? _inheritedLabel;
+
   /// The label of what unset stands for — the "Relay" of "Default (Relay)" —
-  /// where it stands for an option.
-  final String? inheritedLabel;
+  /// given, or [inherited]'s option's.
+  String? get inheritedLabel =>
+      _inheritedLabel ??
+      (inherited == null
+          ? null
+          : options.where((o) => o.value == inherited).firstOrNull?.label);
 
   /// What unset stands for, where it stands for an option: what a slider
   /// shows while nothing is picked.
@@ -395,7 +414,7 @@ final class KeyValuesController extends SettingController {
 final class ActionController extends SettingController {
   ActionController(
     super.spec, {
-    required this.label,
+    this._label,
     this.glyphOverride,
     required Future<SettingNotice?> Function() run,
     Future<SettingConfirm?> Function()? confirm,
@@ -410,7 +429,10 @@ final class ActionController extends SettingController {
   }) : _action = run,
        _ask = confirm;
 
-  final String label;
+  final String? _label;
+
+  /// The button's words, the row's title where not given.
+  String get label => _label ?? title;
 
   /// The picture where it is not the spec's: a play button that is a stop
   /// button while it plays.

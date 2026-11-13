@@ -11,7 +11,7 @@ import "settings/spec.dart" show SettingReader;
 import "transcript/activities/command.dart" show JobActivity;
 import "transcript/activities/task.dart" show SubAgentActivity;
 import "transcript/activity.dart"
-    show Activity, LiveMessage, Run, liveMessageOf;
+    show Activity, ActivityDetail, LiveMessage, Run, liveMessageOf;
 
 /// What a chat has running beside the reply: the browser's tab, a
 /// background job, a sub-agent. Each frontend words and draws its own.
@@ -30,6 +30,10 @@ final class OpensDetail extends RunningOpens {
   final Activity activity;
   final Run run;
   final ProviderListenable<LiveMessage>? source;
+
+  /// The detail as it stands: what an open detail page is drawn from.
+  ActivityDetail? detail(SettingReader reader) =>
+      activity.detailFollowing(reader, run, source);
 }
 
 /// The chat's browser tab, watched live.

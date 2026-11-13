@@ -239,7 +239,15 @@ final class PlanNode extends ActivityNode {
   final String title;
 }
 
-enum OutputKind { artifact, skill }
+enum OutputKind {
+  artifact("Artifact"),
+  skill("Skill");
+
+  const OutputKind(this.caption);
+
+  /// What the card is headed with.
+  final String caption;
+}
 
 /// Something the turn made for the user, as a card to open: an artifact, a
 /// skill to install. Opening it is [open], through the frontend's hand-off.

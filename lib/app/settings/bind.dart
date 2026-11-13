@@ -49,15 +49,12 @@ extension BindSetting on SettingContext {
     bool visible = true,
     Future<void> Function(T? value)? write,
   }) {
-    final meaning = scope.inherited(setting) ?? unsetMeans;
-    final label = options.where((o) => o.value == meaning).firstOrNull?.label;
     return ChoiceController<T>(
       spec,
       options: options,
       value: _value(setting),
       unsettable: _unsettable(setting),
-      inheritedLabel: label,
-      inherited: meaning,
+      inherited: scope.inherited(setting) ?? unsetMeans,
       description: description,
       footnote: footnote,
       visible: visible,

@@ -94,7 +94,6 @@ class CliSignInAppPage extends AppPage {
         ),
         ActionController(
           part("copy", "Copy the Link"),
-          label: "Copy the Link",
           secondary: true,
           run: () async => SettingNotice("Copied link", copy: "$page"),
         ),
@@ -118,7 +117,6 @@ class CliSignInAppPage extends AppPage {
         _line("failed", reason, error: true),
         ActionController(
           part("retry", "Try Again"),
-          label: "Try Again",
           run: () async {
             _start();
             return null;

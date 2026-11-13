@@ -1431,7 +1431,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                       onTapLink: (href) => _openLink(context, href),
                     ),
                   ),
-                  MessageRow(:final message, :final last, :final reactions) =>
+                  final MessageRow row &&
+                      MessageRow(
+                        :final message,
+                        :final last,
+                        :final reactions,
+                      ) =>
                     KeyedSubtree(
                       key: message.role == MessageRole.user
                           ? _chapterKeys.putIfAbsent(message.id, GlobalKey.new)
@@ -1452,15 +1457,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                           onTapLink: (href) => _openLink(context, href),
                           onReply: (quote) => _reply(QuoteEmbed(quote)),
                           reactions: reactions,
-                          actions: MessageActions(
-                            message: message,
-                            driver: editing,
-                            running: view.isRunning,
-                            last: last,
-                            threads: editing == null
-                                ? null
-                                : chat.branches[message.id],
-                          ),
+                          actions: MessageActions.of(row, view, editing),
                           onSpeak: speechReady && message.hasText
                               ? () => readAloud(
                                   context,

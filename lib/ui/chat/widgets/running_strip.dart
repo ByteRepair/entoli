@@ -14,12 +14,7 @@ import "running_pill.dart";
 /// or the browser's live view.
 void openRunning(BuildContext context, RunningThing thing) =>
     switch (thing.opens) {
-      OpensDetail(:final activity, :final run, :final source) => openRunDetail(
-        context,
-        activity,
-        run,
-        source: source,
-      ),
+      final OpensDetail detail => openRunDetail(context, detail),
       OpensBrowser(:final browser, :final tab) => openBrowserTab(
         context,
         browser,

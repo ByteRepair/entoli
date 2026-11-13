@@ -12,7 +12,7 @@ null resolves to), the `promptForText` / `promptForPair` / `confirm` /
 and `showMenuAt`, `Choice` (a swatch, corner or icon to pick, with the one
 selected ring),
 `NavDrawer` and `navBreakpoint`, `SidePanelFrame` (below), `ActionIcon`, `AttachmentChip` /
-`AttachmentStrip`, `EmptyPane`, `Nothing`, `TempChatTtlField`, `TristateToggle`,
+`AttachmentStrip`, `Nothing`,
 `CompletionField`, `PromptField` (below), `DiscardGuard`, `SearchField`,
 `ListHeading`, `PageBar` and its `PageAction`s — every pushed page's bar,
 said as data and drawn as an `AppBar` or under Liquid Glass as the window's
@@ -103,10 +103,6 @@ Where a trigger is typed from a menu is the core's (`triggerOpened` in
 do is write its own trigger handling: `activeCompletionToken` has to keep
 agreeing with `prompt_library.dart`, and one copy of it can.
 
-`TempChatTtlField` is how long a chat lives, as the chat settings page asks it —
-`Default` naming the project's or the app's answer, and the value written
-straight onto `meta.json`.
-
 `text_input.dart` is the pair of things a field wants and Material does not
 give it. `replaceIn` writes over a range and leaves the caret after it —
 `CompletionField` types a completion with it and `TabIndents` an indent, and
@@ -143,13 +139,8 @@ than `pumpAndSettle`s, as a page with a spinner does. A tap or a drag anywhere o
 nearest point, the arrow keys step through them, and it is a slider to
 assistive technology.
 
-`EmptyPane` is the middle of a page with nothing on it. The workspace has two —
-a folder with no files in it, and a file the viewer could not read — and a
-placeholder differing between them by a few pixels of padding reads as a bug
-rather than as two states.
-
-`Nothing` is the one-line version of the same thing, for a strip of a page
-rather than a page: a project with no chats in it, a search nothing answered,
+`Nothing` is one muted line where a strip of a page would otherwise be
+blank: a project with no chats in it, a search nothing answered,
 a paired device's list with nothing picked out of it. It is here rather than in
 the sidebar it started in because two of them are on screen at once — the
 sidebar's list beside the chat pane — and they had already drifted a text style

@@ -10,6 +10,7 @@ import "../../app/bot_avatar/stage.dart" show botStageProvider;
 import "../../app/chat_controller.dart" show TurnDriver;
 import "../../domain/bot_avatar/pose.dart" show BotMood;
 import "../../app/read_aloud.dart";
+import "../../app/running.dart" show OpensDetail;
 import "../../app/settings/spec.dart" show SettingReader;
 import "../../app/transcript/activity.dart";
 import "../../app/transcript/chapters.dart";
@@ -71,9 +72,12 @@ class ConversationSurface implements wire.TranscriptIntents {
   SettingReader? _reader;
 
   /// The detail open, if any, and the node it is of.
-  EncodedNode? _open;
+  OpensDetail? _open;
 
   final _parsed = MarkdownBlocks();
+
+  /// The open chat's attachments found on disk.
+  final _present = <String>{};
 
   /// [chatId] open with nothing to show yet, while it is read: keeps the
   /// conversation up rather than gone between two chats, which would bring
@@ -81,6 +85,7 @@ class ConversationSurface implements wire.TranscriptIntents {
   void loading(String chatId) {
     if (_sentFor == chatId) return;
     _sent.clear();
+    _present.clear();
     _sentFor = chatId;
     _open = null;
     _send(
@@ -93,6 +98,7 @@ class ConversationSurface implements wire.TranscriptIntents {
   /// Takes the conversation off the client.
   void clear() {
     _sent.clear();
+    _present.clear();
     _sentFor = null;
     _sentDetail = null;
     _open = null;
@@ -122,7 +128,7 @@ class ConversationSurface implements wire.TranscriptIntents {
         reader.read(formulaRendererProvider),
         argb: ink,
         onReady: () {
-          _parsed.clear();
+          _parsed.landed();
           republish();
         },
       );
@@ -141,6 +147,7 @@ class ConversationSurface implements wire.TranscriptIntents {
       resources: reader
           .watch(appConfigProvider)
           .resourcesDir(chatId, project: project),
+      present: _present,
     );
     final speechReady = reader.watch(speechReadyProvider);
     final reading = reader.watch(readAloudProvider);
@@ -184,6 +191,7 @@ class ConversationSurface implements wire.TranscriptIntents {
 
     if (_sentFor != chatId) {
       _sent.clear();
+      _present.clear();
       _sentFor = chatId;
       _open = null;
     }
@@ -215,7 +223,7 @@ class ConversationSurface implements wire.TranscriptIntents {
           chapters: [
             for (final c in chapters)
               wire.ChapterSnapshot(
-                row: "message:${c.row}",
+                row: MessageRow.keyOf(c.row),
                 preview: c.preview,
                 threads: c.threads,
               ),
@@ -227,8 +235,7 @@ class ConversationSurface implements wire.TranscriptIntents {
   }
 
   void _publishDetail(SettingReader reader, TranscriptEncoder encoder) {
-    final open = _open;
-    final detail = open?.node.detail(reader, source: open.source);
+    final detail = _open?.detail(reader);
     final snapshot = detail == null
         ? wire.DetailSnapshot()
         : encoder.detail(
@@ -263,7 +270,8 @@ class ConversationSurface implements wire.TranscriptIntents {
     delete: actions.canDelete,
     deleteQuestion: actions.deleteQuestion.message,
     edit: actions.canEdit,
-    editText: actions.markdown,
+    // Only what can be edited needs its text: a user's message.
+    editText: actions.canEdit ? actions.markdown : "",
     regenerate: actions.canRegenerate,
     react: actions.canReact,
     speak: speak,
@@ -331,23 +339,16 @@ class ConversationSurface implements wire.TranscriptIntents {
         await open(_handOff);
       case PlanNode(:final run):
         plan_page.openPlan(at, run.chatId);
-      case _:
-        _open = found;
+      case final node:
+        _open = OpensDetail(node.activity, node.run, source: found.source);
         republish();
     }
   }
 
-  /// Opens [activity]'s detail for [run], following [source]: a running
-  /// pill's job or sub-agent, which has no node in the conversation.
-  void openRun(
-    Activity activity,
-    Run run, {
-    ProviderListenable<LiveMessage>? source,
-  }) {
-    _open = (
-      node: LabelNode(activity, run, glyph: TranscriptGlyph.terminal, text: ""),
-      source: source,
-    );
+  /// Opens [detail]: a running pill's job or sub-agent, which has no node
+  /// in the conversation.
+  void openRun(OpensDetail detail) {
+    _open = detail;
     republish();
   }
 
@@ -363,7 +364,7 @@ class ConversationSurface implements wire.TranscriptIntents {
     final open = _open;
     final reader = _reader;
     if (open == null || reader == null) return;
-    final detail = open.node.detail(reader, source: open.source);
+    final detail = open.detail(reader);
     final run = detail?.actions.elementAtOrNull(index)?.run;
     if (run != null) await run(_handOff);
   }

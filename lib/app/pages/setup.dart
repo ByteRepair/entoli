@@ -71,7 +71,6 @@ class SetupAppPage extends AppPage {
             ),
             ActionController(
               part("retry", "Retry"),
-              label: "Retry",
               run: () async {
                 step.start(app);
                 return null;
@@ -79,7 +78,6 @@ class SetupAppPage extends AppPage {
             ),
             ActionController(
               part("skip", "Skip"),
-              label: "Skip",
               secondary: true,
               run: () async {
                 _skipped.add(step);

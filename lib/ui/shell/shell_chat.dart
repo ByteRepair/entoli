@@ -162,11 +162,7 @@ final class _OpenChat implements _Screen {
     turn = TurnRunner(
       context: _shell._context,
       onWithdrawn: composer.restore,
-      openDetail: (detail) => conversation.openRun(
-        detail.activity,
-        detail.run,
-        source: detail.source,
-      ),
+      openDetail: (detail) => conversation.openRun(detail),
     );
     _conversationReader = TrackingReader(_container, conversationPass);
     _barReader = TrackingReader(_container, barPass);

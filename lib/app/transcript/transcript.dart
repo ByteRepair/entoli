@@ -84,7 +84,10 @@ final class MessageRow extends TranscriptRow {
   final List<String> reactions;
 
   @override
-  String get key => "message:${message.id}";
+  String get key => keyOf(message.id);
+
+  /// The key of message [id]'s row.
+  static String keyOf(String id) => "message:$id";
 }
 
 /// A line saying the room's mode changed before message [at].

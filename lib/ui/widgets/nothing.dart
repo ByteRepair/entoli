@@ -4,9 +4,6 @@ import "package:flutter/material.dart";
 /// chats in it, a search nothing answered, a paired device's list with nothing
 /// picked out of it. Shared because two of them are on screen at once, the
 /// sidebar's beside the chat pane's.
-///
-/// [EmptyPane] is the other size of the same idea: an icon, a heading and
-/// somewhere to go, for a page rather than a strip of one.
 class Nothing extends StatelessWidget {
   const Nothing(this.said, {super.key});
 

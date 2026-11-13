@@ -111,7 +111,6 @@ class MarketplaceAppPage extends AppPage {
             ),
             ActionController(
               part("retry", "Try Again"),
-              label: "Try Again",
               run: () async {
                 app.invalidate(marketplaceEntriesProvider(_kind));
                 return null;
@@ -220,7 +219,6 @@ class MarketplaceTagsAppPage extends AppPage {
     if (ticked.isNotEmpty)
       ActionController(
         part("clear", "Clear"),
-        label: "Clear",
         run: () async {
           ticked.clear();
           changed();
@@ -485,7 +483,6 @@ class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
           ),
           ActionController(
             part("retry", "Try Again"),
-            label: "Try Again",
             run: () async {
               await _load();
               return null;
@@ -556,7 +553,6 @@ class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
     return [
       ActionController(
         part("install", "Install"),
-        label: "Install",
         confirm: () async => switch (kind) {
           CompletionKind.skill => replacingSkill(preview.package!),
           CompletionKind.agent => _replacingAgent(),
@@ -686,7 +682,6 @@ class SkillInstallAppPage extends AppPage with InstallsPrompts {
     if (_package case final package?)
       ActionController(
         part("install", "Install"),
-        label: "Install",
         confirm: () async => replacingSkill(package),
         run: () => installSkill(package),
       ),

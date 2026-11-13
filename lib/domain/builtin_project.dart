@@ -309,6 +309,14 @@ BuiltinProject? builtinProjectOf(String? dir) {
   return null;
 }
 
+/// How long a chat in [project] lives where the chat says nothing: the
+/// project's [own] setting, the built-in's, else the [app]'s.
+TempChatTtl inheritedTempTtl(
+  String? project, {
+  TempChatTtl? own,
+  required TempChatTtl app,
+}) => own ?? builtinProjectOf(project)?.tempChatTtl ?? app;
+
 /// Whether [dir] names a built-in project, whatever its case.
 bool isBuiltinProject(String? dir) => builtinProjectOf(dir) != null;
 

@@ -190,16 +190,14 @@ class OutputNodeView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final (kind, icon, action, background, foreground) = switch (node.kind) {
+    final (icon, action, background, foreground) = switch (node.kind) {
       OutputKind.artifact => (
-        "Artifact",
         Icons.insert_chart_outlined,
         Icons.open_in_new,
         scheme.primaryContainer,
         scheme.onPrimaryContainer,
       ),
       OutputKind.skill => (
-        "Skill",
         Icons.extension,
         Icons.install_desktop,
         scheme.secondaryContainer,
@@ -237,7 +235,7 @@ class OutputNodeView extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          kind,
+                          node.kind.caption,
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: foreground.withValues(alpha: 0.75),
                             letterSpacing: 0.5,

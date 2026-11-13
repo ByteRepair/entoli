@@ -104,7 +104,7 @@ extension TextBlockSnapshot {
 enum CodeColours {
   static func of(_ scope: String, dark: Bool) -> Color? {
     let root = scope.split(separator: ".").first.map(String.init) ?? scope
-    let hex: (UInt32, UInt32)? =
+    let hex: (Int, Int)? =
       switch root {
       case "keyword", "selector-tag", "doctag", "template-tag": (0xCF222E, 0xFF7B72)
       case "string", "regexp", "meta-string", "char": (0x0A3069, 0xA5D6FF)
@@ -118,9 +118,6 @@ enum CodeColours {
       default: nil
       }
     guard let hex else { return nil }
-    let value = dark ? hex.1 : hex.0
-    return Color(
-      red: Double((value >> 16) & 0xFF) / 255, green: Double((value >> 8) & 0xFF) / 255,
-      blue: Double(value & 0xFF) / 255)
+    return Color(rgb: dark ? hex.1 : hex.0)
   }
 }

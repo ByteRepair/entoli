@@ -41,25 +41,27 @@ Future<Map<String, PastedFormula>> formulaPicturesOf(
   FormulaRenderer renderer,
 ) async {
   final out = <String, PastedFormula>{};
-  for (final MapEntry(key: written, value: (:tex, :display))
-      in MarkdownDocument.parse(markdown).formulas.entries) {
-    try {
-      final image = await renderer.render(
-        tex,
-        FormulaStyle(
-          display: display,
-          fontSize: display ? 18 : 16,
-          argb: 0xFF000000,
+  await Future.wait([
+    for (final MapEntry(key: written, value: (:tex, :display))
+        in MarkdownDocument.parse(markdown).formulas.entries)
+      Future.sync(
+        () => renderer.render(
+          tex,
+          FormulaStyle(
+            display: display,
+            fontSize: display ? 18 : 16,
+            argb: 0xFF000000,
+          ),
         ),
-      );
-      if (image.error == null) {
-        out[written] = (
-          png: image.png,
-          width: image.width,
-          height: image.height,
-        );
-      }
-    } catch (_) {}
-  }
+      ).then((image) {
+        if (image.error == null) {
+          out[written] = (
+            png: image.png,
+            width: image.width,
+            height: image.height,
+          );
+        }
+      }, onError: (_) {}),
+  ]);
   return out;
 }
