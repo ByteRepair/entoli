@@ -98,6 +98,10 @@ struct ConversationView: View {
         .padding(.leading, margin)
         .frame(maxWidth: .infinity, alignment: .leading)
       }
+      // A scroller per chat, made once its rows are in: the view stays up
+      // between chats, and the initial offset below is only a new
+      // scroller's, so the next chat otherwise opened at the last one's.
+      .id(model.loading ? nil : model.chatId)
       .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
       .onChange(of: chapterTops) { readChapter() }
       .onChange(of: atBottom) { readChapter() }
@@ -105,6 +109,7 @@ struct ConversationView: View {
       .onChange(of: model.chatId) {
         chapterTops = [:]
         current = nil
+        atEnd = true
       }
       .overlay(alignment: .trailing) {
         if railFits && model.chapters.count > 1 {
