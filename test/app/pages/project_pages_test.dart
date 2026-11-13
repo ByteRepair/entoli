@@ -1,12 +1,15 @@
+import "dart:async";
 import "dart:convert";
 import "dart:io";
 
 import "package:flutter/foundation.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/app/pages/app_page.dart";
 import "package:agent_chat/app/pages/memory.dart";
 import "package:agent_chat/app/pages/profile.dart";
 import "package:agent_chat/app/pages/project_settings.dart";
+import "package:agent_chat/app/pages/prompt.dart";
 import "package:agent_chat/app/settings/controller.dart";
 import "package:agent_chat/data/builtin/memory/store.dart";
 import "package:agent_chat/domain/confinement.dart";
@@ -110,14 +113,31 @@ void main() {
   group("the profile", () {
     Future<PageDriver<ProfileAppPage>> open({String? project}) async {
       final page = PageDriver(app, ProfileAppPage(project: project));
-      await page.until(() => page.find<TextController>("instructions") != null);
+      await page.until(
+        () => page.find<PromptController>("instructions") != null,
+      );
       return page;
+    }
+
+    /// The instructions' editor, opened over the page, [text] typed into it.
+    PromptAppPage edit(PageDriver<ProfileAppPage> page, String text) {
+      unawaited(page.at<PromptController>("instructions").run());
+      final editor = app.container.read(appPagesProvider).last as PromptAppPage;
+      final document =
+          editor.sections(page.reader).single.controllers.single
+              as DocumentController;
+      expect(document.editing, isTrue);
+      document.edit(text);
+      return editor;
     }
 
     test("what is typed is saved whole, and the page goes", () async {
       final page = await open();
       await page.at<TextController>("name").set("Ada");
-      await page.at<TextController>("instructions").set("Be brief.");
+      final editor = edit(page, "Be brief.");
+      await editor.toolbar(page.reader).single.run();
+      expect(app.container.read(appPagesProvider).last, page.page);
+      expect(page.at<PromptController>("instructions").text, "Be brief.");
       await page.at<ChoiceController<Tone>>("tone").set(Tone.values.last);
       expect(page.page.leaving(page.reader), isNotNull);
       await page.tool("save").run();
@@ -130,6 +150,17 @@ void main() {
         "Be brief.",
       );
     });
+
+    test(
+      "the instructions' editor asks before what it holds is lost",
+      () async {
+        final page = await open();
+        final editor = edit(page, "Be brief.");
+        expect(editor.leaving(page.reader), isNotNull);
+        app.container.read(appPagesProvider.notifier).close(editor.address);
+        expect(page.at<PromptController>("instructions").text, "");
+      },
+    );
 
     test("a date of birth not written as a date is refused", () async {
       final page = await open();

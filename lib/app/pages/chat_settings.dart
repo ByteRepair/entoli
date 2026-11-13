@@ -195,8 +195,9 @@ class ChatSettingsAppPage extends ChatSettingsFields {
         deviceNotice("chat", device.name, online: device.online),
       PageSection("chat", "", [
         ActionController(
-          part("id", "Chat ID", description: chatId),
+          part("id", "Chat ID", description: chatId, glyph: SettingGlyph.copy),
           label: "Copy",
+          iconOnly: true,
           run: () async => SettingNotice("Copied chat ID", copy: chatId),
         ),
         if (workspace != null)
@@ -248,7 +249,7 @@ class ChatSettingsAppPage extends ChatSettingsFields {
     final frozen = device != null && !device.online;
     return [
       ActionController(
-        part("save", "Save"),
+        part("save", "Save", glyph: SettingGlyph.check),
         enabled: meta != null && !_saving && !frozen,
         run: _save,
       ),
@@ -307,7 +308,7 @@ class NewChatSettingsAppPage extends ChatSettingsFields {
   @override
   List<ActionController> toolbar(SettingReader reader) => [
     ActionController(
-      part("save", "Save"),
+      part("save", "Save", glyph: SettingGlyph.check),
       run: () async {
         onSave(meta);
         pages.leave(this);

@@ -42,6 +42,10 @@ IconData? settingIcon(SettingGlyph? glyph) => switch (glyph) {
   SettingGlyph.check => Icons.check,
   SettingGlyph.info => Icons.info_outline,
   SettingGlyph.star => Icons.star_outline,
+  SettingGlyph.copy => Icons.copy,
+  SettingGlyph.reveal => Icons.open_in_new,
+  SettingGlyph.newFolder => Icons.create_new_folder_outlined,
+  SettingGlyph.restart => Icons.restart_alt,
   // Drawn as the app's own mark, not an icon.
   SettingGlyph.appMark || null => null,
 };

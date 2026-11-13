@@ -133,7 +133,8 @@ struct SettingsPageView: View {
           } header: {
             if !section.title.isEmpty { Text(section.title) }
           } footer: {
-            if let detail = section.detail { Text(detail) }
+            let words = [section.detail, section.footnote].compactMap { $0 }
+            if !words.isEmpty { Text(words.joined(separator: "\n\n")) }
           }
         }
       }
@@ -299,6 +300,7 @@ struct SettingRowView: View {
     case .setup: SetupRow(model: model, row: row)
     case .document: DocumentRow(model: model, row: row).frame(minHeight: 360)
     case .web: WebRow(model: model, row: row).frame(minHeight: 360)
+    case .prompt: PromptRow(model: model, row: row)
     }
   }
 
@@ -399,6 +401,10 @@ extension SettingIcon {
     case .check: "checkmark"
     case .info: "info.circle"
     case .star: "star"
+    case .copy: "doc.on.doc"
+    case .reveal: "arrow.up.forward.app"
+    case .newFolder: "folder.badge.plus"
+    case .restart: "arrow.counterclockwise"
     }
   }
 }

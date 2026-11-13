@@ -115,6 +115,10 @@ enum CodeColours {
       case "built_in", "type", "class", "params": (0x953800, 0xFFA657)
       case "name", "tag", "selector-id", "selector-class", "addition": (0x116329, 0x7EE787)
       case "deletion": (0x82071E, 0xFFDCD7)
+      // Markdown's own, for a document highlighted as markdown.
+      case "code": (0x0A3069, 0xA5D6FF)
+      case "bullet": (0xCF222E, 0xFF7B72)
+      case "link": (0x0550AE, 0x79C0FF)
       default: nil
       }
     guard let hex else { return nil }

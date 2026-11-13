@@ -232,20 +232,30 @@ abstract class AppPage {
 
 /// A titled run of a page's controllers.
 class PageSection {
-  const PageSection(this.id, this.title, this.controllers, {this.detail})
-    : fills = false;
+  const PageSection(
+    this.id,
+    this.title,
+    this.controllers, {
+    this.detail,
+    this.footnote,
+  }) : fills = false;
 
   /// [controller] as the whole of its page rather than a row of a form: a
   /// file, a web page. The page's only section.
   PageSection.whole(this.id, SettingController controller)
     : title = "",
       detail = null,
+      footnote = null,
       controllers = [controller],
       fills = true;
 
   final String id;
   final String title;
   final String? detail;
+
+  /// Said under the rows rather than over them: how what they show was
+  /// counted.
+  final String? footnote;
   final List<SettingController> controllers;
   final bool fills;
 }

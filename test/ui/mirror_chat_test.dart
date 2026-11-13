@@ -146,8 +146,8 @@ void main() {
 
       await tester.tap(find.text("On the desktop"));
       await settleIo(tester);
-      final save = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, "Save"),
+      final save = tester.widget<IconButton>(
+        find.widgetWithIcon(IconButton, Icons.check),
       );
       expect(save.onPressed, isNull);
       expect(find.text("Delete Chat"), findsNothing);

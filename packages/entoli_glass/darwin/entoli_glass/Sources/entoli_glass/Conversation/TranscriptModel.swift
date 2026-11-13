@@ -121,6 +121,10 @@ extension TranscriptModel {
     await entoli_glass.reply { documents.markdown(text: text, dark: dark, completion: $0) }
   }
   func documentLink(_ href: String) { documents.link(href: href) { _ in } }
+  /// [code] as the core's grammar for the file [name] splits it.
+  @MainActor func highlight(_ code: String, name: String) async -> [CodeTokenSnapshot]? {
+    await entoli_glass.reply { documents.highlight(code: code, name: name, completion: $0) }
+  }
   func openFile(_ row: String, block: Int, file: Int) {
     say.openFile(row: row, block: Int64(block), file: Int64(file)) { _ in }
   }

@@ -556,7 +556,7 @@ void main() {
       testWidgets("land on the chat the first message makes", (tester) async {
         await openEmpty(tester);
         await pickNeverAsk(tester);
-        await tester.tap(find.widgetWithText(FilledButton, "Save"));
+        await tester.tap(find.byTooltip("Save"));
         await settleIo(tester);
 
         await sendMessage(tester, "hello");

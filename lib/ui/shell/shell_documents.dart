@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/transcript/code.dart";
 import "../../app/transcript/formula.dart";
+import "../../core/code_grammars.dart" show grammarOfFile;
 import "../../core/log.dart";
 import "../../providers.dart";
 import "markdown_encoder.dart";
@@ -43,6 +44,15 @@ class ShellDocuments implements wire.DocumentIntents {
     }
     return blocks;
   }
+
+  @override
+  List<wire.CodeTokenSnapshot> highlight(String code, String name) => [
+    for (final token
+        in _container
+            .read(codeHighlighterProvider)
+            .tokens(code, grammarOfFile(name)?.name))
+      wire.CodeTokenSnapshot(text: token.text, scope: token.scope),
+  ];
 
   @override
   Future<void> link(String href) async {

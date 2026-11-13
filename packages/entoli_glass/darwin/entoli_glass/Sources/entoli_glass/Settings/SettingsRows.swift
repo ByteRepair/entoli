@@ -414,7 +414,15 @@ struct ActionRow: View {
         }
         Titled(title: row.title, detail: row.detail)
         Spacer()
-        ActionPress(model: model, row: row) { Text(row.label ?? row.title) }
+        if row.iconOnly, let icon = row.icon {
+          ActionPress(model: model, row: row) {
+            Label(row.label ?? row.title, systemImage: icon.symbol).labelStyle(.iconOnly)
+          }
+          .buttonStyle(.borderless)
+          .help(row.label ?? row.title)
+        } else {
+          ActionPress(model: model, row: row) { Text(row.label ?? row.title) }
+        }
       }
     } else {
       ActionPress(model: model, row: row, role: row.destructive ? .destructive : nil) {
@@ -520,16 +528,30 @@ struct TextRow: View {
   @State private var typed = ""
   @State private var editing = false
 
+  @ViewBuilder private var field: some View {
+    if row.secret {
+      SecureField(row.title, text: $typed, prompt: row.prompt.map(Text.init))
+    } else {
+      TextField(row.title, text: $typed, prompt: row.prompt.map(Text.init))
+    }
+  }
+
   var body: some View {
     switch row.hint {
     case .input:
       VStack(alignment: .leading) {
         HStack {
-          if row.secret {
-            SecureField(row.title, text: $typed, prompt: row.prompt.map(Text.init))
-          } else {
-            TextField(row.title, text: $typed, prompt: row.prompt.map(Text.init))
-          }
+          #if os(iOS)
+            // A form's field on iOS shows only its prompt: labelled as
+            // Settings labels one, the value trailing.
+            LabeledContent {
+              field.multilineTextAlignment(.trailing)
+            } label: {
+              Text(row.title)
+            }
+          #else
+            field
+          #endif
           if let submit = row.submitLabel {
             Button(submit) { model.say.setText(id: row.id, text: typed, completion: ignore) }
               .disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -540,6 +562,10 @@ struct TextRow: View {
           }
         }
         .onAppear { typed = row.submitLabel == nil ? row.text ?? "" : "" }
+        // Set from elsewhere — a page's Clear — rather than typed here.
+        .onChange(of: row.text) { was, now in
+          if row.submitLabel == nil, now != was, (now ?? "") != typed { typed = now ?? "" }
+        }
         .onChange(of: typed) { _, text in
           if row.submitLabel == nil { model.say.setText(id: row.id, text: text, completion: ignore) }
         }
